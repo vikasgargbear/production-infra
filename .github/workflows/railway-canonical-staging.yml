@@ -450,8 +450,6 @@ jobs:
           printf '%s\n' "$REVIEWED_SHA:$DEPLOYMENT_NONCE" > deploy/railway/mcp.force-deploy
           printf '%s\n' "$REVIEWED_SHA:$DEPLOYMENT_NONCE" > deploy/railway/frontend.force-deploy
 
-          message="canonical staging $REVIEWED_SHA"
-
           upload_failure_kind() {
             local stdout_file=$1
             local stderr_file=$2
@@ -468,15 +466,113 @@ jobs:
             printf '%s\n' non_retryable
           }
 
+          deployment_id_from_payload() {
+            jq -ser '
+              if length == 1 and
+                 (.[0] | type) == "object" and
+                 (.[0].deploymentId | type) == "string" and
+                 (.[0].deploymentId | test("^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"))
+              then .[0].deploymentId
+              else error("expected exactly one Railway deployment UUID document")
+              end' "$1"
+          }
+
+          report_upload_failure() {
+            local label=$1
+            local attempt=$2
+            local exit_code=$3
+            local failure_kind=$4
+            local stdout_file=$5
+            local stderr_file=$6
+            local stdout_bytes
+            local stderr_bytes
+            local stdout_sha256
+            local stderr_sha256
+            local stdout_shape
+            stdout_bytes=$(wc -c < "$stdout_file" | tr -d ' ')
+            stderr_bytes=$(wc -c < "$stderr_file" | tr -d ' ')
+            stdout_sha256=$(sha256sum "$stdout_file" | cut -d' ' -f1)
+            stderr_sha256=$(sha256sum "$stderr_file" | cut -d' ' -f1)
+            stdout_shape=$(jq -src '
+              if length == 1 then
+                {documents:1,type:(.[0]|type),deployment_id_present:(if (.[0]|type)=="object" then (.[0]|has("deploymentId")) else false end)}
+              else
+                {documents:length,type:"multiple_or_empty",deployment_id_present:false}
+              end' "$stdout_file" 2>/dev/null || printf '%s' '{"documents":0,"type":"invalid_json","deployment_id_present":false}')
+            echo "::error title=Railway source upload failed::service=$label attempt=$attempt exit_code=$exit_code kind=$failure_kind stdout_bytes=$stdout_bytes stdout_sha256=$stdout_sha256 stdout_shape=$stdout_shape stderr_bytes=$stderr_bytes stderr_sha256=$stderr_sha256"
+          }
+
+          recover_accepted_upload() {
+            local label=$1
+            local service=$2
+            local message=$3
+            local attempt=$4
+            local recovered_stdout=$5
+            local list_stdout="${label}-deploy.recovery-${attempt}.json"
+            local list_stderr="${label}-deploy.recovery-${attempt}.log"
+            local list_exit
+            local match_count
+            local deployment_id
+            local recovery_attempt
+            for recovery_attempt in $(seq 1 6); do
+              list_stdout="${label}-deploy.recovery-${attempt}-${recovery_attempt}.json"
+              list_stderr="${label}-deploy.recovery-${attempt}-${recovery_attempt}.log"
+              if railway deployment list \
+                --service "$service" \
+                --environment "$RAILWAY_ENVIRONMENT_ID" \
+                --limit 100 \
+                --json >"$list_stdout" 2>"$list_stderr"; then
+                list_exit=0
+              else
+                list_exit=$?
+                report_upload_failure "$label" "$attempt" "$list_exit" recovery_query_failed "$list_stdout" "$list_stderr"
+                return 2
+              fi
+              if ! jq -se 'length == 1 and (.[0] | type) == "array"' "$list_stdout" >/dev/null; then
+                report_upload_failure "$label" "$attempt" "$list_exit" invalid_recovery_payload "$list_stdout" "$list_stderr"
+                return 2
+              fi
+              match_count=$(jq -sr --arg message "$message" '[.[0][] | select(.meta.cliMessage == $message)] | length' "$list_stdout")
+              case "$match_count" in
+                0)
+                  if test "$recovery_attempt" -lt 6; then
+                    sleep 5
+                    continue
+                  fi
+                  return 1
+                  ;;
+                1)
+                  deployment_id=$(jq -ser --arg message "$message" '
+                    [.[0][] | select(.meta.cliMessage == $message)] | .[0].id |
+                    select(type == "string" and test("^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"))' \
+                    "$list_stdout") || {
+                      report_upload_failure "$label" "$attempt" "$list_exit" invalid_recovered_deployment_id "$list_stdout" "$list_stderr"
+                      return 2
+                    }
+                  jq -n --arg deployment_id "$deployment_id" '{deploymentId:$deployment_id}' > "$recovered_stdout"
+                  return 0
+                  ;;
+                *)
+                  report_upload_failure "$label" "$attempt" "$list_exit" ambiguous_recovered_deployments "$list_stdout" "$list_stderr"
+                  return 2
+                  ;;
+              esac
+            done
+            return 2
+          }
+
           upload_service() {
             local label=$1
             local service=$2
             local attempt=1
-            local max_attempts=3
+            local max_attempts=2
             local stdout_file
             local stderr_file
             local exit_code
             local failure_kind
+            local recovery_status
+            local message="canonical staging $REVIEWED_SHA $DEPLOYMENT_NONCE $label"
+            printf '%s\n' "$message" > "${label}-deployment-message"
             while test "$attempt" -le "$max_attempts"; do
               stdout_file="${label}-deploy.attempt-${attempt}.json"
               stderr_file="${label}-deploy.attempt-${attempt}.log"
@@ -486,7 +582,7 @@ jobs:
                 --project "$RAILWAY_PROJECT_ID" \
                 --message "$message" \
                 >"$stdout_file" 2>"$stderr_file"; then
-                if jq -e '.deploymentId | type == "string" and length > 0' "$stdout_file" >/dev/null; then
+                if deployment_id_from_payload "$stdout_file" >/dev/null 2>&1; then
                   mv "$stdout_file" "${label}-deploy.json"
                   mv "$stderr_file" "${label}-deploy.log"
                   echo "Railway source upload accepted: service=$label attempt=$attempt"
@@ -499,8 +595,19 @@ jobs:
                 failure_kind=$(upload_failure_kind "$stdout_file" "$stderr_file")
               fi
 
-              echo "::error title=Railway source upload failed::service=$label attempt=$attempt exit_code=$exit_code kind=$failure_kind"
+              report_upload_failure "$label" "$attempt" "$exit_code" "$failure_kind" "$stdout_file" "$stderr_file"
               if test "$failure_kind" != transient_transport && test "$failure_kind" != empty_cli_response; then
+                return 1
+              fi
+              if recover_accepted_upload "$label" "$service" "$message" "$attempt" "$stdout_file"; then
+                mv "$stdout_file" "${label}-deploy.json"
+                mv "$stderr_file" "${label}-deploy.log"
+                echo "Railway source upload recovered: service=$label attempt=$attempt"
+                return 0
+              else
+                recovery_status=$?
+              fi
+              if test "$recovery_status" != 1; then
                 return 1
               fi
               if test "$attempt" -eq "$max_attempts"; then
@@ -514,17 +621,13 @@ jobs:
 
           # The Railway CLI builds an archive in the shared working directory.
           # Serialize uploads so concurrent clients cannot race over that state.
-          status=0
-          upload_service api "$RAILWAY_API_SERVICE" || status=1
-          upload_service mcp "$RAILWAY_MCP_SERVICE" || status=1
-          upload_service frontend "$RAILWAY_FRONTEND_SERVICE" || status=1
-          if test "$status" != 0; then
-            exit 1
-          fi
+          upload_service api "$RAILWAY_API_SERVICE"
+          upload_service mcp "$RAILWAY_MCP_SERVICE"
+          upload_service frontend "$RAILWAY_FRONTEND_SERVICE"
 
-          jq -er '.deploymentId | select(type == "string" and length > 0)' api-deploy.json > api-deployment-id
-          jq -er '.deploymentId | select(type == "string" and length > 0)' mcp-deploy.json > mcp-deployment-id
-          jq -er '.deploymentId | select(type == "string" and length > 0)' frontend-deploy.json > frontend-deployment-id
+          deployment_id_from_payload api-deploy.json > api-deployment-id
+          deployment_id_from_payload mcp-deploy.json > mcp-deployment-id
+          deployment_id_from_payload frontend-deploy.json > frontend-deployment-id
           echo "api_deployment_id=$(<api-deployment-id)" >> "$GITHUB_OUTPUT"
 
       - name: Require each exact upload to become the active deployment
@@ -550,6 +653,7 @@ jobs:
             local dockerfile=$4
             local healthcheck=$5
             local expected_start=$6
+            local expected_message=$7
             railway deployment list \
               --service "$service" \
               --environment "$RAILWAY_ENVIRONMENT_ID" \
@@ -561,7 +665,7 @@ jobs:
                   --arg dockerfile "$dockerfile" \
                   --arg healthcheck "$healthcheck" \
                   --arg expected_start "$expected_start" \
-                  --arg message "canonical staging $REVIEWED_SHA" \
+                  --arg message "$expected_message" \
                   '[.[] | select(.id == $id)] |
                    length == 1 and
                    ((.[0].meta.rootDirectory // "/") == "/") and
@@ -580,6 +684,9 @@ jobs:
           api_deployment_id=$(<api-deployment-id)
           mcp_deployment_id=$(<mcp-deployment-id)
           frontend_deployment_id=$(<frontend-deployment-id)
+          api_deployment_message=$(<api-deployment-message)
+          mcp_deployment_message=$(<mcp-deployment-message)
+          frontend_deployment_message=$(<frontend-deployment-message)
 
           for attempt in $(seq 1 90); do
             api_status=$(deployment_status "$RAILWAY_API_SERVICE" "$api_deployment_id")
@@ -608,9 +715,9 @@ jobs:
           done
 
           mcp_start_command=$(jq -er '.deploy.startCommand | strings | select(length > 0)' deploy/railway/mcp.railway.json)
-          require_deployment_contract "$RAILWAY_API_SERVICE" "$api_deployment_id" /deploy/railway/api.railway.json /deploy/railway/api.Dockerfile /ready ""
-          require_deployment_contract "$RAILWAY_MCP_SERVICE" "$mcp_deployment_id" /deploy/railway/mcp.railway.json /deploy/railway/mcp.Dockerfile /health "$mcp_start_command"
-          require_deployment_contract "$RAILWAY_FRONTEND_SERVICE" "$frontend_deployment_id" /deploy/railway/frontend.railway.json /frontend/Dockerfile /health ""
+          require_deployment_contract "$RAILWAY_API_SERVICE" "$api_deployment_id" /deploy/railway/api.railway.json /deploy/railway/api.Dockerfile /ready "" "$api_deployment_message"
+          require_deployment_contract "$RAILWAY_MCP_SERVICE" "$mcp_deployment_id" /deploy/railway/mcp.railway.json /deploy/railway/mcp.Dockerfile /health "$mcp_start_command" "$mcp_deployment_message"
+          require_deployment_contract "$RAILWAY_FRONTEND_SERVICE" "$frontend_deployment_id" /deploy/railway/frontend.railway.json /frontend/Dockerfile /health "" "$frontend_deployment_message"
 
       - name: Verify all public services publish the reviewed SHA
         run: |

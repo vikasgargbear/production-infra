@@ -1,5 +1,8 @@
 import json
+import os
 import re
+import subprocess
+import textwrap
 from fnmatch import fnmatch
 from pathlib import Path
 
@@ -26,6 +29,15 @@ def _workflow() -> str:
     return (ROOT / ".github/workflows/railway-canonical-staging.yml").read_text(
         encoding="utf-8"
     )
+
+
+def _workflow_run_script(step_name: str, next_step_name: str) -> str:
+    workflow = _workflow()
+    section = workflow.split(f"- name: {step_name}", 1)[1].split(
+        f"- name: {next_step_name}", 1
+    )[0]
+    run_block = section.split("run: |", 1)[1]
+    return textwrap.dedent(run_block)
 
 
 def test_each_railway_service_is_a_single_singapore_docker_replica() -> None:
@@ -316,10 +328,23 @@ def test_workflow_uploads_fresh_source_and_polls_exact_deployment_ids() -> None:
     assert "transient_transport" in workflow
     assert "non_retryable" in workflow
     assert "invalid_success_payload" in workflow
-    assert "max_attempts=3" in workflow
+    assert "max_attempts=2" in workflow
+    assert "for recovery_attempt in $(seq 1 6)" in workflow
+    assert 'sleep 5' in workflow
     assert 'sleep "$((attempt * 2))"' in workflow
     assert "Railway source upload failed" in workflow
+    assert 'local message="canonical staging $REVIEWED_SHA $DEPLOYMENT_NONCE $label"' in workflow
+    assert 'recover_accepted_upload "$label" "$service" "$message"' in workflow
+    assert '.meta.cliMessage == $message' in workflow
+    assert "ambiguous_recovered_deployments" in workflow
+    assert "recovery_query_failed" in workflow
+    assert "invalid_recovery_payload" in workflow
+    assert "deployment_id_from_payload()" in workflow
+    assert "expected exactly one Railway deployment UUID document" in workflow
+    assert 'test("^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")' in workflow
     assert "service=$label attempt=$attempt exit_code=$exit_code kind=$failure_kind" in workflow
+    assert "stdout_bytes=$stdout_bytes stdout_sha256=$stdout_sha256 stdout_shape=$stdout_shape" in workflow
+    assert "stderr_bytes=$stderr_bytes stderr_sha256=$stderr_sha256" in workflow
     upload_step = workflow[
         workflow.index("Force-upload the exact source tree") :
         workflow.index("Require each exact upload to become the active deployment")
@@ -327,9 +352,15 @@ def test_workflow_uploads_fresh_source_and_polls_exact_deployment_ids() -> None:
     assert "sed -E" not in upload_step
     assert 'cat "$stdout_file"' not in upload_step
     assert 'cat "$stderr_file"' not in upload_step
+    assert 'keys:' not in upload_step
+    assert 'upload_service api "$RAILWAY_API_SERVICE" ||' not in upload_step
+    assert 'upload_service mcp "$RAILWAY_MCP_SERVICE" ||' not in upload_step
+    assert 'upload_service frontend "$RAILWAY_FRONTEND_SERVICE" ||' not in upload_step
 
     assert "railway redeploy" not in workflow
-    assert workflow.count("jq -er '.deploymentId") == 3
+    assert "deployment_id_from_payload api-deploy.json > api-deployment-id" in workflow
+    assert "deployment_id_from_payload mcp-deploy.json > mcp-deployment-id" in workflow
+    assert "deployment_id_from_payload frontend-deploy.json > frontend-deployment-id" in workflow
     assert "deployment_status()" in workflow
     assert "select(.id == $id)" in workflow
     assert (
@@ -340,6 +371,8 @@ def test_workflow_uploads_fresh_source_and_polls_exact_deployment_ids() -> None:
     assert workflow.count('meta.rootDirectory // "/"') == 1
     assert ".meta.configFile == $config_file" in workflow
     assert ".meta.cliMessage == $message" in workflow
+    assert 'local expected_message=$7' in workflow
+    assert '--arg message "$expected_message"' in workflow
     assert ".meta.fileServiceManifest.build.builder" in workflow
     assert ".meta.fileServiceManifest.build.dockerfilePath" in workflow
     assert ".meta.fileServiceManifest.deploy.startCommand" in workflow
@@ -349,6 +382,156 @@ def test_workflow_uploads_fresh_source_and_polls_exact_deployment_ids() -> None:
     assert 'require_deployment_contract "$RAILWAY_MCP_SERVICE" "$mcp_deployment_id" /deploy/railway/mcp.railway.json /deploy/railway/mcp.Dockerfile /health "$mcp_start_command"' in workflow
     assert ".meta.serviceManifest.deploy.healthcheckPath" in workflow
     assert ".meta.serviceManifest.deploy.sleepApplication == true" in workflow
+
+
+def test_exact_upload_shell_recovers_without_duplicates_and_fails_fast(
+    tmp_path: Path,
+) -> None:
+    script = _workflow_run_script(
+        "Force-upload the exact source tree to all three Railway services",
+        "Require each exact upload to become the active deployment",
+    )
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    railway = fake_bin / "railway"
+    railway.write_text(
+        """#!/usr/bin/env bash
+set -euo pipefail
+command=$1
+shift
+if test "$command" = up; then
+  service=""
+  message=""
+  while test "$#" -gt 0; do
+    case "$1" in
+      --service) service=$2; shift 2 ;;
+      --message) message=$2; shift 2 ;;
+      *) shift ;;
+    esac
+  done
+  printf 'up %s\\n' "$service" >> "$FAKE_RAILWAY_STATE/calls"
+  count_file="$FAKE_RAILWAY_STATE/count-$service"
+  count=0
+  test ! -f "$count_file" || count=$(<"$count_file")
+  count=$((count + 1))
+  printf '%s\\n' "$count" > "$count_file"
+  printf '%s' "$message" > "$FAKE_RAILWAY_STATE/message-$service"
+  if test "$FAKE_RAILWAY_SCENARIO" = nonretry_api && test "$service" = api-service; then
+    printf '%s\\n' 'configuration invalid SECRET_SHOULD_NOT_APPEAR' >&2
+    exit 9
+  fi
+  if test "$FAKE_RAILWAY_SCENARIO" = multidoc_api && test "$service" = api-service; then
+    printf '%s\\n%s\\n' '{"deploymentId":"11111111-1111-4111-8111-111111111111"}' '{"deploymentId":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"}'
+    exit 0
+  fi
+  if test "$service" = api-service && test "$count" = 1; then
+    case "$FAKE_RAILWAY_SCENARIO" in
+      recover_api|retry_api|ambiguous_api) exit 1 ;;
+    esac
+  fi
+  case "$service" in
+    api-service) deployment_id=11111111-1111-4111-8111-111111111111 ;;
+    mcp-service) deployment_id=22222222-2222-4222-8222-222222222222 ;;
+    frontend-service) deployment_id=33333333-3333-4333-8333-333333333333 ;;
+    *) exit 44 ;;
+  esac
+  jq -cn --arg deployment_id "$deployment_id" '{deploymentId:$deployment_id}'
+  exit 0
+fi
+if test "$command" = deployment && test "$1" = list; then
+  shift
+  service=""
+  while test "$#" -gt 0; do
+    case "$1" in
+      --service) service=$2; shift 2 ;;
+      *) shift ;;
+    esac
+  done
+  printf 'list %s\\n' "$service" >> "$FAKE_RAILWAY_STATE/calls"
+  message=$(<"$FAKE_RAILWAY_STATE/message-$service")
+  case "$FAKE_RAILWAY_SCENARIO" in
+    recover_api)
+      jq -cn --arg message "$message" '[{id:"11111111-1111-4111-8111-111111111111",meta:{cliMessage:$message}}]'
+      ;;
+    ambiguous_api)
+      jq -cn --arg message "$message" '[{id:"11111111-1111-4111-8111-111111111111",meta:{cliMessage:$message}},{id:"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",meta:{cliMessage:$message}}]'
+      ;;
+    *) printf '%s\\n' '[]' ;;
+  esac
+  exit 0
+fi
+exit 45
+""",
+        encoding="utf-8",
+    )
+    railway.chmod(0o755)
+    fake_sleep = fake_bin / "sleep"
+    fake_sleep.write_text(
+        "#!/usr/bin/env bash\nprintf 'sleep %s\\n' \"$1\" >> \"$FAKE_RAILWAY_STATE/calls\"\n",
+        encoding="utf-8",
+    )
+    fake_sleep.chmod(0o755)
+
+    def run_scenario(name: str) -> tuple[subprocess.CompletedProcess[str], list[str]]:
+        scenario_dir = tmp_path / name
+        (scenario_dir / "deploy/railway").mkdir(parents=True)
+        state_dir = scenario_dir / "state"
+        state_dir.mkdir()
+        output_path = scenario_dir / "github-output"
+        env = {
+            **os.environ,
+            "PATH": f"{fake_bin}:{os.environ['PATH']}",
+            "REVIEWED_SHA": "1" * 40,
+            "DEPLOYMENT_NONCE": "123:1",
+            "RAILWAY_API_SERVICE": "api-service",
+            "RAILWAY_MCP_SERVICE": "mcp-service",
+            "RAILWAY_FRONTEND_SERVICE": "frontend-service",
+            "RAILWAY_ENVIRONMENT_ID": "environment-id",
+            "RAILWAY_PROJECT_ID": "project-id",
+            "GITHUB_OUTPUT": str(output_path),
+            "FAKE_RAILWAY_STATE": str(state_dir),
+            "FAKE_RAILWAY_SCENARIO": name,
+        }
+        result = subprocess.run(
+            ["bash", "-c", script],
+            cwd=scenario_dir,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        calls_path = state_dir / "calls"
+        calls = calls_path.read_text(encoding="utf-8").splitlines()
+        return result, calls
+
+    success, success_calls = run_scenario("success")
+    assert success.returncode == 0, success.stderr
+    assert success_calls == ["up api-service", "up mcp-service", "up frontend-service"]
+
+    recovered, recovered_calls = run_scenario("recover_api")
+    assert recovered.returncode == 0, recovered.stderr
+    assert recovered_calls == [
+        "up api-service",
+        "list api-service",
+        "up mcp-service",
+        "up frontend-service",
+    ]
+
+    retried, retried_calls = run_scenario("retry_api")
+    assert retried.returncode == 0, retried.stderr
+    assert retried_calls.count("up api-service") == 2
+    assert retried_calls.count("list api-service") == 6
+    assert retried_calls[-2:] == ["up mcp-service", "up frontend-service"]
+
+    for failing_name in ("nonretry_api", "ambiguous_api", "multidoc_api"):
+        failed, failed_calls = run_scenario(failing_name)
+        assert failed.returncode != 0
+        assert "up mcp-service" not in failed_calls
+        assert "up frontend-service" not in failed_calls
+        assert "SECRET_SHOULD_NOT_APPEAR" not in failed.stdout
+        assert "SECRET_SHOULD_NOT_APPEAR" not in failed.stderr
+        assert "stdout_sha256=" in failed.stdout
+        assert "stderr_sha256=" in failed.stdout
 
 
 def test_workflow_requires_all_public_health_and_readiness_boundaries() -> None:
