@@ -1393,7 +1393,10 @@ def test_live18_is_opt_in_exact_sha_external_fixture_and_always_cleaned():
     recovery = live18[
         live18.index(recovery_step):live18.index(demo_step)
     ]
-    assert "live18_railway_database_phase.py cleanup-identities" in recovery
+    assert (
+        "live18_railway_database_phase.py recover-identities-before-demo"
+        in recovery
+    )
     assert 'touch "$LIVE18_RAILWAY_IDENTITY_ATTEMPTED_PATH"' in recovery
     assert 'rm -f "$LIVE18_RAILWAY_IDENTITY_ATTEMPTED_PATH"' not in recovery
     assert "Railway pre-demo recovery left disposable authority behind" in recovery

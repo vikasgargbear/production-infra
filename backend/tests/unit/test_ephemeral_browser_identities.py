@@ -508,6 +508,7 @@ def test_stale_recovery_preserves_unscoped_auth_bindings(
 ):
     fetches = iter(
         (
+            [],
             resolved,
             [("d4000000-0000-7000-8000-000000000001",)],
         )
@@ -519,6 +520,9 @@ def test_stale_recovery_preserves_unscoped_auth_bindings(
 
         def fetchall(self):
             return next(fetches)
+
+        def fetchone(self):
+            return (0,)
 
         def __enter__(self):
             return self
@@ -622,6 +626,8 @@ def test_stale_recovery_switches_from_demo_to_denial_audit_context(monkeypatch):
 
     class Cursor:
         last_statement = ""
+        fetchall_calls = 0
+        fetchone_calls = 0
 
         def execute(self, statement, *_args, **_kwargs):
             normalized = " ".join(statement.split())
@@ -630,6 +636,9 @@ def test_stale_recovery_switches_from_demo_to_denial_audit_context(monkeypatch):
                 raise DenialBoundaryReached
 
         def fetchall(self):
+            self.fetchall_calls += 1
+            if self.fetchall_calls == 1:
+                return []
             return [(
                 "d4000000-0000-7000-8000-000000000002",
                 "d4000000-0000-7000-8000-000000000001",
@@ -638,7 +647,8 @@ def test_stale_recovery_switches_from_demo_to_denial_audit_context(monkeypatch):
             )]
 
         def fetchone(self):
-            return (1,)
+            self.fetchone_calls += 1
+            return (0,) if self.fetchone_calls == 1 else (1,)
 
         def __enter__(self):
             return self
@@ -674,6 +684,84 @@ def test_stale_recovery_switches_from_demo_to_denial_audit_context(monkeypatch):
         )
 
     assert events == ["demo", "denial"]
+
+
+def test_stale_recovery_restores_run_scoped_baseline_grants_by_lineage(monkeypatch):
+    operator_grant_id = "d5000000-0000-7000-8000-000000000001"
+    reviewer_grant_id = "d5000000-0000-7000-8000-000000000002"
+    statements = []
+
+    class Cursor:
+        fetchone_values = iter(((2,), (2,)))
+        fetchall_values = iter((
+            [
+                (
+                    operator_grant_id,
+                    identities.DEMO_OPERATOR_MEMBERSHIP_ID,
+                    8,
+                ),
+                (
+                    reviewer_grant_id,
+                    identities.DEMO_REVIEWER_MEMBERSHIP_ID,
+                    13,
+                ),
+            ],
+            [],
+            [],
+        ))
+
+        def execute(self, statement, params=None):
+            statements.append((" ".join(statement.split()), params))
+
+        def fetchone(self):
+            return next(self.fetchone_values)
+
+        def fetchall(self):
+            return next(self.fetchall_values)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    class Connection:
+        def cursor(self):
+            return Cursor()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    monkeypatch.setattr(
+        identities, "_database_connection", lambda _token: Connection()
+    )
+    monkeypatch.setattr(identities, "_enter_migration_owner", lambda _cursor: False)
+    monkeypatch.setattr(identities, "_set_reviewer_context", lambda _cursor: None)
+    monkeypatch.setattr(identities, "_set_denial_context", lambda _cursor: None)
+    monkeypatch.setattr(identities, "_leave_migration_owner", lambda *_args: None)
+
+    identities._recover_stale_live18_database(
+        "management-token",
+        {
+            "d4000000-0000-7000-8000-000000000001",
+            "d4000000-0000-7000-8000-000000000002",
+        },
+    )
+
+    baseline_updates = [
+        params
+        for statement, params in statements
+        if statement.startswith("UPDATE automation.agent_grants")
+        and "id=ANY" in statement
+        and "SET status='active'" in statement
+    ]
+    assert len(baseline_updates) == 1
+    assert baseline_updates[0][2] == [operator_grant_id, reviewer_grant_id]
+    assert "d3000000-0000-7000-8000-000000000020" not in str(statements)
+    assert "d3000000-0000-7000-8000-000000000021" not in str(statements)
 
 
 def test_auth_deletion_retries_transient_admin_failure(monkeypatch):
@@ -1107,6 +1195,122 @@ def test_lost_live18_state_is_discovered_recovered_deleted_and_verified(
         "remaining_active_denial_authority_count": 0,
         "remaining_denial_auth_binding_count": 0,
     }
+
+
+def _pristine_live18_identity_boundary(**overrides):
+    values = {
+        name: None if name.endswith("auth_user_id") else 0
+        for name in identities.Live18IdentityBoundary._fields
+    }
+    values.update(overrides)
+    return identities.Live18IdentityBoundary(**values)
+
+
+def _seeded_live18_identity_boundary(**overrides):
+    values = {
+        "operator_auth_user_id": identities.DEMO_OPERATOR_AUTH_USER_ID,
+        "reviewer_auth_user_id": identities.DEMO_REVIEWER_AUTH_USER_ID,
+        "target_organization_count": 2,
+        "active_target_organization_count": 2,
+        "target_user_count": 2,
+        "exact_active_user_count": 2,
+        "target_demo_membership_count": 2,
+        "exact_active_demo_membership_count": 2,
+        "denial_creator_membership_count": 1,
+        "exact_active_denial_creator_membership_count": 1,
+        "active_demo_access_grant_count": 2,
+        "exact_active_demo_access_grant_count": 2,
+        "active_web_grant_count": 2,
+        "exact_active_baseline_web_grant_count": 2,
+        "active_temporary_grant_count": 0,
+    }
+    values.update(overrides)
+    return identities.Live18IdentityBoundary(**values)
+
+
+@pytest.mark.parametrize(
+    ("demo_state", "expected"),
+    (
+        (_pristine_live18_identity_boundary(), "identity_pristine"),
+        (_seeded_live18_identity_boundary(), "seeded"),
+    ),
+)
+def test_live18_database_boundary_classifies_only_exact_clean_states(
+    monkeypatch, demo_state, expected
+):
+    monkeypatch.setattr(
+        identities,
+        "_live18_database_boundary",
+        lambda _token: (demo_state, (0, 0, 0)),
+    )
+
+    assert identities._classify_live18_identity_boundary("management-token") == expected
+
+
+def test_live18_final_cleanup_rejects_identity_pristine_boundary(monkeypatch):
+    monkeypatch.setattr(
+        identities,
+        "_live18_database_boundary",
+        lambda _token: (_pristine_live18_identity_boundary(), (0, 0, 0)),
+    )
+
+    identities._assert_live18_pre_demo_database_boundary("management-token")
+    with pytest.raises(
+        identities.EphemeralIdentityError,
+        match="final cleanup requires the exact seeded",
+    ):
+        identities._assert_live18_database_boundary("management-token")
+
+
+@pytest.mark.parametrize(
+    ("demo_state", "denial_state"),
+    (
+        (_pristine_live18_identity_boundary(target_organization_count=1), (0, 0, 0)),
+        (_pristine_live18_identity_boundary(target_user_count=1), (0, 0, 0)),
+        (_seeded_live18_identity_boundary(operator_auth_user_id=None), (0, 0, 0)),
+        (_seeded_live18_identity_boundary(exact_active_user_count=1), (0, 0, 0)),
+        (
+            _seeded_live18_identity_boundary(
+                exact_active_demo_membership_count=1
+            ),
+            (0, 0, 0),
+        ),
+        (
+            _seeded_live18_identity_boundary(
+                exact_active_denial_creator_membership_count=0
+            ),
+            (0, 0, 0),
+        ),
+        (
+            _seeded_live18_identity_boundary(
+                exact_active_demo_access_grant_count=1
+            ),
+            (0, 0, 0),
+        ),
+        (
+            _seeded_live18_identity_boundary(
+                exact_active_baseline_web_grant_count=1
+            ),
+            (0, 0, 0),
+        ),
+        (_seeded_live18_identity_boundary(active_temporary_grant_count=1), (0, 0, 0)),
+        (_pristine_live18_identity_boundary(), (1, 0, 0)),
+    ),
+)
+def test_live18_database_boundary_rejects_partial_or_dirty_states(
+    monkeypatch, demo_state, denial_state
+):
+    monkeypatch.setattr(
+        identities,
+        "_live18_database_boundary",
+        lambda _token: (demo_state, denial_state),
+    )
+
+    with pytest.raises(
+        identities.EphemeralIdentityError,
+        match="denial authority|exact identity boundary",
+    ):
+        identities._assert_live18_pre_demo_database_boundary("management-token")
 
 
 def test_lost_state_preserves_auth_anchor_until_database_boundary_is_clean(

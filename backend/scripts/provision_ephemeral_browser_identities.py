@@ -18,7 +18,7 @@ import secrets
 import sys
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, NamedTuple
 from uuid import UUID, uuid4
 
 import psycopg2
@@ -204,6 +204,24 @@ CORE_IDENTITIES = (
 
 class EphemeralIdentityError(RuntimeError):
     pass
+
+
+class Live18IdentityBoundary(NamedTuple):
+    operator_auth_user_id: str | None
+    reviewer_auth_user_id: str | None
+    target_organization_count: int
+    active_target_organization_count: int
+    target_user_count: int
+    exact_active_user_count: int
+    target_demo_membership_count: int
+    exact_active_demo_membership_count: int
+    denial_creator_membership_count: int
+    exact_active_denial_creator_membership_count: int
+    active_demo_access_grant_count: int
+    exact_active_demo_access_grant_count: int
+    active_web_grant_count: int
+    exact_active_baseline_web_grant_count: int
+    active_temporary_grant_count: int
 
 
 def _live18_authority() -> tuple[tuple[tuple[str, str, str, str], ...], tuple[str, ...]]:
@@ -944,6 +962,91 @@ def _recover_stale_live18_database(
             _set_reviewer_context(cursor)
             cursor.execute(
                 """
+                SELECT count(*)
+                  FROM automation.agent_grants
+                 WHERE org_id=%s
+                   AND subject_membership_id IN (%s::uuid,%s::uuid)
+                   AND client_id=%s
+                   AND consent_version IN (
+                     'browser-e2e-v1','canonical-live-e2e-v1'
+                   )
+                   AND status='active'
+                """,
+                (
+                    DEMO_ORG_ID,
+                    DEMO_OPERATOR_MEMBERSHIP_ID,
+                    DEMO_REVIEWER_MEMBERSHIP_ID,
+                    WEB_CLIENT_ID,
+                ),
+            )
+            temporary_count_row = cursor.fetchone()
+            if (
+                not isinstance(temporary_count_row, tuple)
+                or len(temporary_count_row) != 1
+                or type(temporary_count_row[0]) is not int
+                or temporary_count_row[0] < 0
+            ):
+                raise EphemeralIdentityError(
+                    "Live18 temporary grant recovery count was not exact"
+                )
+            active_temporary_grant_count = temporary_count_row[0]
+            cursor.execute(
+                """
+                WITH expected(subject_membership_id,consent_version) AS (
+                  VALUES
+                    (%s::uuid,'demo-v2'::varchar),
+                    (%s::uuid,'demo-v2-approver'::varchar)
+                )
+                SELECT baseline.id::text,
+                       baseline.subject_membership_id::text,
+                       baseline.row_version
+                  FROM automation.agent_grants AS temporary
+                  JOIN expected
+                    ON expected.subject_membership_id=
+                       temporary.subject_membership_id
+                  JOIN automation.agent_grants AS baseline
+                    ON baseline.org_id=temporary.org_id
+                   AND baseline.subject_membership_id=
+                       temporary.subject_membership_id
+                   AND baseline.client_id=temporary.client_id
+                   AND baseline.consent_version=expected.consent_version
+                   AND baseline.status='suspended'
+                   AND baseline.suspended_at=temporary.granted_at
+                   AND baseline.expires_at>transaction_timestamp()
+                 WHERE temporary.org_id=%s
+                   AND temporary.client_id=%s
+                   AND temporary.consent_version IN (
+                     'browser-e2e-v1','canonical-live-e2e-v1'
+                   )
+                   AND temporary.status='active'
+                 ORDER BY baseline.subject_membership_id
+                 FOR UPDATE OF temporary,baseline
+                """,
+                (
+                    DEMO_OPERATOR_MEMBERSHIP_ID,
+                    DEMO_REVIEWER_MEMBERSHIP_ID,
+                    DEMO_ORG_ID,
+                    WEB_CLIENT_ID,
+                ),
+            )
+            baseline_rows = cursor.fetchall()
+            if active_temporary_grant_count not in (0, 2) or (
+                len(baseline_rows) != active_temporary_grant_count
+            ):
+                raise EphemeralIdentityError(
+                    "Live18 temporary grants do not have exact suspended baseline lineage"
+                )
+            if baseline_rows and {
+                row[1] for row in baseline_rows
+            } != {
+                DEMO_OPERATOR_MEMBERSHIP_ID,
+                DEMO_REVIEWER_MEMBERSHIP_ID,
+            }:
+                raise EphemeralIdentityError(
+                    "Live18 suspended baseline grants are not membership-complete"
+                )
+            cursor.execute(
+                """
                 UPDATE core.users
                    SET auth_user_id=CASE id
                          WHEN %s::uuid THEN %s::uuid
@@ -979,24 +1082,41 @@ def _recover_stale_live18_database(
                     DEMO_REVIEWER_MEMBERSHIP_ID,
                 ),
             )
-            cursor.execute(
-                """
-                UPDATE automation.agent_grants
-                   SET status='active',suspended_at=NULL,
-                       updated_at=transaction_timestamp(),
-                       updated_by_membership_id=%s,row_version=row_version+1
-                 WHERE org_id=%s
-                   AND id IN (%s::uuid,%s::uuid)
-                   AND consent_version IN ('demo-v2','demo-v2-approver')
-                   AND status='suspended' AND expires_at>transaction_timestamp()
-                """,
-                (
-                    DEMO_REVIEWER_MEMBERSHIP_ID,
-                    DEMO_ORG_ID,
-                    "d3000000-0000-7000-8000-000000000021",
-                    "d3000000-0000-7000-8000-000000000020",
-                ),
-            )
+            if baseline_rows:
+                baseline_ids = [row[0] for row in baseline_rows]
+                cursor.execute(
+                    """
+                    UPDATE automation.agent_grants
+                       SET status='active',suspended_at=NULL,
+                           updated_at=transaction_timestamp(),
+                           updated_by_membership_id=%s,row_version=row_version+1
+                     WHERE org_id=%s
+                       AND id=ANY(CAST(%s AS uuid[]))
+                       AND client_id=%s
+                       AND status='suspended'
+                       AND expires_at>transaction_timestamp()
+                    """,
+                    (
+                        DEMO_REVIEWER_MEMBERSHIP_ID,
+                        DEMO_ORG_ID,
+                        baseline_ids,
+                        WEB_CLIENT_ID,
+                    ),
+                )
+                cursor.execute(
+                    """
+                    SELECT count(*)
+                      FROM automation.agent_grants
+                     WHERE org_id=%s
+                       AND id=ANY(CAST(%s AS uuid[]))
+                       AND client_id=%s AND status='active'
+                    """,
+                    (DEMO_ORG_ID, baseline_ids, WEB_CLIENT_ID),
+                )
+                if cursor.fetchone() != (2,):
+                    raise EphemeralIdentityError(
+                        "Live18 suspended baseline grants were not restored exactly"
+                    )
             cursor.execute(
                 """
                 SELECT user_row.id::text,user_row.auth_user_id::text,
@@ -1115,7 +1235,7 @@ def _live18_denial_residue_counts(cursor) -> tuple[int, int, int]:
 
 def _live18_database_boundary(
     management_token: str,
-) -> tuple[tuple[str | None, str | None, int], tuple[int, int, int]]:
+) -> tuple[Live18IdentityBoundary, tuple[int, int, int]]:
     with _database_connection(management_token) as connection:
         with connection.cursor() as cursor:
             cursor.execute(
@@ -1125,44 +1245,242 @@ def _live18_database_boundary(
             membership_options = _enter_migration_owner(cursor)
             cursor.execute(
                 """
-                SELECT
-                  (SELECT auth_user_id::text FROM core.users WHERE id=%s::uuid),
-                  (SELECT auth_user_id::text FROM core.users WHERE id=%s::uuid),
-                  (SELECT count(*) FROM automation.agent_grants
-                    WHERE org_id=%s::uuid
-                      AND subject_membership_id IN (%s::uuid,%s::uuid)
-                      AND consent_version IN (
-                        'browser-e2e-v1','canonical-live-e2e-v1'
-                      ) AND status='active')
+                WITH ids AS (
+                  SELECT
+                    %s::uuid AS demo_org_id,
+                    %s::uuid AS denial_org_id,
+                    %s::uuid AS operator_user_id,
+                    %s::uuid AS reviewer_user_id,
+                    %s::uuid AS operator_auth_user_id,
+                    %s::uuid AS reviewer_auth_user_id,
+                    %s::uuid AS operator_membership_id,
+                    %s::uuid AS reviewer_membership_id,
+                    %s::uuid AS denial_creator_membership_id,
+                    %s::varchar AS web_client_id
+                )
+                SELECT jsonb_build_object(
+                  'operator_auth_user_id',
+                    (SELECT auth_user_id::text FROM core.users,ids
+                      WHERE id=ids.operator_user_id),
+                  'reviewer_auth_user_id',
+                    (SELECT auth_user_id::text FROM core.users,ids
+                      WHERE id=ids.reviewer_user_id),
+                  'target_organization_count',
+                    (SELECT count(*) FROM core.organizations,ids
+                      WHERE id IN (ids.demo_org_id,ids.denial_org_id)),
+                  'active_target_organization_count',
+                    (SELECT count(*) FROM core.organizations,ids
+                      WHERE id IN (ids.demo_org_id,ids.denial_org_id)
+                        AND status='active'),
+                  'target_user_count',
+                    (SELECT count(*) FROM core.users,ids
+                      WHERE id IN (ids.operator_user_id,ids.reviewer_user_id)),
+                  'exact_active_user_count',
+                    (SELECT count(*) FROM core.users,ids
+                      WHERE status='active' AND (
+                        (id=ids.operator_user_id AND
+                         auth_user_id=ids.operator_auth_user_id) OR
+                        (id=ids.reviewer_user_id AND
+                         auth_user_id=ids.reviewer_auth_user_id)
+                      )),
+                  'target_demo_membership_count',
+                    (SELECT count(*) FROM core.memberships,ids
+                      WHERE org_id=ids.demo_org_id AND id IN (
+                        ids.operator_membership_id,ids.reviewer_membership_id
+                      )),
+                  'exact_active_demo_membership_count',
+                    (SELECT count(*) FROM core.memberships,ids
+                      WHERE org_id=ids.demo_org_id AND status='active' AND (
+                        (id=ids.operator_membership_id AND
+                         user_id=ids.operator_user_id) OR
+                        (id=ids.reviewer_membership_id AND
+                         user_id=ids.reviewer_user_id)
+                      )),
+                  'denial_creator_membership_count',
+                    (SELECT count(*) FROM core.memberships,ids
+                      WHERE org_id=ids.denial_org_id
+                        AND id=ids.denial_creator_membership_id),
+                  'exact_active_denial_creator_membership_count',
+                    (SELECT count(*) FROM core.memberships,ids
+                      WHERE org_id=ids.denial_org_id
+                        AND id=ids.denial_creator_membership_id
+                        AND user_id=ids.operator_user_id AND status='active'),
+                  'active_demo_access_grant_count',
+                    (SELECT count(*) FROM core.access_grants,ids
+                      WHERE org_id=ids.demo_org_id
+                        AND membership_id IN (
+                          ids.operator_membership_id,ids.reviewer_membership_id
+                        )
+                        AND status='active'
+                        AND valid_from_at<=transaction_timestamp()
+                        AND (expires_at IS NULL OR
+                             expires_at>transaction_timestamp())),
+                  'exact_active_demo_access_grant_count',
+                    (SELECT count(DISTINCT access_grant.membership_id)
+                       FROM core.access_grants AS access_grant
+                       JOIN core.memberships AS membership
+                         ON membership.org_id=access_grant.org_id
+                        AND membership.id=access_grant.membership_id
+                       JOIN core.roles AS role
+                         ON role.org_id=access_grant.org_id
+                        AND role.id=access_grant.role_id
+                       CROSS JOIN ids
+                      WHERE access_grant.org_id=ids.demo_org_id
+                        AND access_grant.membership_id IN (
+                          ids.operator_membership_id,ids.reviewer_membership_id
+                        )
+                        AND access_grant.scope_kind='organization'
+                        AND access_grant.branch_id IS NULL
+                        AND access_grant.status='active'
+                        AND access_grant.valid_from_at<=transaction_timestamp()
+                        AND (access_grant.expires_at IS NULL OR
+                             access_grant.expires_at>transaction_timestamp())
+                        AND membership.status='active' AND role.status='active'),
+                  'active_web_grant_count',
+                    (SELECT count(*) FROM automation.agent_grants,ids
+                      WHERE org_id=ids.demo_org_id
+                        AND subject_membership_id IN (
+                          ids.operator_membership_id,ids.reviewer_membership_id
+                        )
+                        AND client_id=ids.web_client_id AND status='active'
+                        AND expires_at>transaction_timestamp()),
+                  'exact_active_baseline_web_grant_count',
+                    (SELECT count(*)
+                       FROM automation.agent_grants AS grant_row
+                       CROSS JOIN ids
+                      WHERE grant_row.org_id=ids.demo_org_id
+                        AND grant_row.client_id=ids.web_client_id
+                        AND grant_row.status='active'
+                        AND grant_row.expires_at>transaction_timestamp()
+                        AND (
+                          (grant_row.subject_membership_id=
+                             ids.operator_membership_id AND
+                           grant_row.consent_version='demo-v2') OR
+                          (grant_row.subject_membership_id=
+                             ids.reviewer_membership_id AND
+                           grant_row.consent_version='demo-v2-approver')
+                        )),
+                  'active_temporary_grant_count',
+                    (SELECT count(*) FROM automation.agent_grants,ids
+                      WHERE org_id=ids.demo_org_id
+                        AND subject_membership_id IN (
+                          ids.operator_membership_id,ids.reviewer_membership_id
+                        )
+                        AND client_id=ids.web_client_id
+                        AND consent_version IN (
+                          'browser-e2e-v1','canonical-live-e2e-v1'
+                        ) AND status='active')
+                )
                 """,
                 (
+                    DEMO_ORG_ID,
+                    DENIAL_ORG_ID,
                     DEMO_OPERATOR_USER_ID,
                     DEMO_REVIEWER_USER_ID,
-                    DEMO_ORG_ID,
+                    DEMO_OPERATOR_AUTH_USER_ID,
+                    DEMO_REVIEWER_AUTH_USER_ID,
                     DEMO_OPERATOR_MEMBERSHIP_ID,
                     DEMO_REVIEWER_MEMBERSHIP_ID,
+                    DENIAL_CREATOR_MEMBERSHIP_ID,
+                    WEB_CLIENT_ID,
                 ),
             )
-            demo_state = cursor.fetchone()
+            row = cursor.fetchone()
+            expected_fields = set(Live18IdentityBoundary._fields)
+            if (
+                not isinstance(row, tuple)
+                or len(row) != 1
+                or not isinstance(row[0], dict)
+                or set(row[0]) != expected_fields
+                or any(
+                    type(row[0][name]) is not int or row[0][name] < 0
+                    for name in expected_fields
+                    if name not in {
+                        "operator_auth_user_id",
+                        "reviewer_auth_user_id",
+                    }
+                )
+                or any(
+                    row[0][name] is not None
+                    and not isinstance(row[0][name], str)
+                    for name in {
+                        "operator_auth_user_id",
+                        "reviewer_auth_user_id",
+                    }
+                )
+            ):
+                raise EphemeralIdentityError(
+                    "Live18 demo identity boundary query was not exact"
+                )
+            demo_state = Live18IdentityBoundary(**row[0])
             denial_state = _live18_denial_residue_counts(cursor)
             _leave_migration_owner(cursor, membership_options)
     return demo_state, denial_state
 
 
-def _assert_live18_database_boundary(management_token: str) -> None:
+def _classify_live18_identity_boundary(management_token: str) -> str:
     demo_state, denial_state = _live18_database_boundary(management_token)
-    expected_demo_state = (
-        DEMO_OPERATOR_AUTH_USER_ID,
-        DEMO_REVIEWER_AUTH_USER_ID,
-        0,
+    identity_pristine = Live18IdentityBoundary(
+        operator_auth_user_id=None,
+        reviewer_auth_user_id=None,
+        target_organization_count=0,
+        active_target_organization_count=0,
+        target_user_count=0,
+        exact_active_user_count=0,
+        target_demo_membership_count=0,
+        exact_active_demo_membership_count=0,
+        denial_creator_membership_count=0,
+        exact_active_denial_creator_membership_count=0,
+        active_demo_access_grant_count=0,
+        exact_active_demo_access_grant_count=0,
+        active_web_grant_count=0,
+        exact_active_baseline_web_grant_count=0,
+        active_temporary_grant_count=0,
     )
-    if demo_state != expected_demo_state or denial_state != (0, 0, 0):
+    seeded = Live18IdentityBoundary(
+        operator_auth_user_id=DEMO_OPERATOR_AUTH_USER_ID,
+        reviewer_auth_user_id=DEMO_REVIEWER_AUTH_USER_ID,
+        target_organization_count=2,
+        active_target_organization_count=2,
+        target_user_count=2,
+        exact_active_user_count=2,
+        target_demo_membership_count=2,
+        exact_active_demo_membership_count=2,
+        denial_creator_membership_count=1,
+        exact_active_denial_creator_membership_count=1,
+        active_demo_access_grant_count=2,
+        exact_active_demo_access_grant_count=2,
+        active_web_grant_count=2,
+        exact_active_baseline_web_grant_count=2,
+        active_temporary_grant_count=0,
+    )
+    if denial_state != (0, 0, 0):
         raise EphemeralIdentityError(
-            "Live18 crash recovery did not restore the exact seeded database boundary"
+            "Live18 crash recovery left disposable denial authority"
+        )
+    if demo_state == identity_pristine:
+        return "identity_pristine"
+    if demo_state == seeded:
+        return "seeded"
+    raise EphemeralIdentityError(
+        "Live18 crash recovery did not restore an exact identity boundary"
+    )
+
+
+def _assert_live18_database_boundary(management_token: str) -> None:
+    if _classify_live18_identity_boundary(management_token) != "seeded":
+        raise EphemeralIdentityError(
+            "Live18 final cleanup requires the exact seeded identity boundary"
         )
 
 
-def recover_lost_live18_state() -> dict[str, int]:
+def _assert_live18_pre_demo_database_boundary(management_token: str) -> None:
+    _classify_live18_identity_boundary(management_token)
+
+
+def _recover_lost_live18_state(
+    boundary_assertion: Callable[[str], None],
+) -> dict[str, int]:
     """Reconcile Live18 mutations even when both transient state files were lost.
 
     Provisioning creates Auth identities before changing database bindings or
@@ -1182,7 +1500,7 @@ def recover_lost_live18_state() -> dict[str, int]:
     _recover_stale_live18_database(management_token, stale_auth_user_ids)
     # Never delete the durable Auth discovery anchors until every database
     # authority and binding has reached its exact terminal boundary.
-    _assert_live18_database_boundary(management_token)
+    boundary_assertion(management_token)
     if stale_auth_user_ids:
         for auth_user_id in sorted(stale_auth_user_ids):
             _delete_auth_user(auth_admin, auth_user_id)
@@ -1193,7 +1511,7 @@ def recover_lost_live18_state() -> dict[str, int]:
         raise EphemeralIdentityError(
             "Disposable live18 Auth identities remained after crash recovery"
         )
-    _assert_live18_database_boundary(management_token)
+    boundary_assertion(management_token)
     return {
         "recovered_auth_identity_count": len(stale_auth_user_ids),
         "remaining_auth_identity_count": 0,
@@ -1202,6 +1520,18 @@ def recover_lost_live18_state() -> dict[str, int]:
         "remaining_active_denial_authority_count": 0,
         "remaining_denial_auth_binding_count": 0,
     }
+
+
+def recover_lost_live18_state() -> dict[str, int]:
+    """Recover orphaned Live18 state and require the seeded final boundary."""
+
+    return _recover_lost_live18_state(_assert_live18_database_boundary)
+
+
+def recover_lost_live18_state_before_demo() -> dict[str, int]:
+    """Recover before demo seeding, accepting only identity-pristine or seeded."""
+
+    return _recover_lost_live18_state(_assert_live18_pre_demo_database_boundary)
 
 
 def _verify_live18_owner_delegation(management_token: str) -> None:

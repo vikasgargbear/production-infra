@@ -57,6 +57,7 @@ from provision_ephemeral_browser_identities import (  # noqa: E402
     cleanup as cleanup_browser_identities,
     provision as provision_browser_identities,
     recover_lost_live18_state,
+    recover_lost_live18_state_before_demo,
 )
 from provision_ephemeral_canonical_live import (  # noqa: E402
     cleanup as cleanup_mcp_identities,
@@ -859,7 +860,9 @@ def _restore_state(path: Path, value: Any, name: str) -> None:
     path.chmod(0o600)
 
 
-def _identity_cleanup(request: dict[str, Any]) -> dict[str, Any]:
+def _identity_cleanup(
+    request: dict[str, Any], *, before_demo: bool = False
+) -> dict[str, Any]:
     expected_sha, project_ref = _validated_boundary(request)
     environment = _secret_environment(request)
     environment["CANONICAL_STAGING_PROJECT_REF"] = project_ref
@@ -898,7 +901,11 @@ def _identity_cleanup(request: dict[str, Any]) -> dict[str, Any]:
                         f"browser cleanup failed: {_safe_error_detail(exc)}"
                     )
             try:
-                orphan_reconciliation = recover_lost_live18_state()
+                orphan_reconciliation = (
+                    recover_lost_live18_state_before_demo()
+                    if before_demo
+                    else recover_lost_live18_state()
+                )
             except BaseException as exc:
                 reconciliation_errors.append(
                     f"orphan reconciliation failed: {_safe_error_detail(exc)}"
@@ -922,7 +929,11 @@ def _identity_cleanup(request: dict[str, Any]) -> dict[str, Any]:
             directory.rmdir()
     response = {
         "schema": RESPONSE_SCHEMA,
-        "action": "cleanup-identities",
+        "action": (
+            "recover-identities-before-demo"
+            if before_demo
+            else "cleanup-identities"
+        ),
         **_response_boundary(request),
         "cleaned": True,
         "orphan_reconciliation": orphan_reconciliation,
@@ -1199,6 +1210,7 @@ def main(argv: list[str] | None = None) -> int:
         choices=(
             "provision-demo",
             "provision-identities",
+            "recover-identities-before-demo",
             "cleanup-identities",
             "capture-evidence",
         ),
@@ -1211,6 +1223,8 @@ def main(argv: list[str] | None = None) -> int:
         response = _demo_provision(request)
     elif arguments.action == "provision-identities":
         response = _identity_provision(request)
+    elif arguments.action == "recover-identities-before-demo":
+        response = _identity_cleanup(request, before_demo=True)
     elif arguments.action == "cleanup-identities":
         response = _identity_cleanup(request)
     elif arguments.action == "capture-evidence":

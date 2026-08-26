@@ -1467,7 +1467,7 @@ jobs:
             --service "$RAILWAY_API_SERVICE" \
             --deployment-instance "$RAILWAY_API_DEPLOYMENT_INSTANCE_ID" \
             --identity-file "$LIVE18_RAILWAY_SSH_PRIVATE_KEY" \
-            -- python scripts/live18_railway_database_phase.py cleanup-identities \
+            -- python scripts/live18_railway_database_phase.py recover-identities-before-demo \
               --input - --output - \
             < "$request" > "$response"
           PYTHONPATH=backend python3 - "$response" "$request" <<'PY'
@@ -1480,7 +1480,7 @@ jobs:
           request = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
           request["response"] = response
           _verify_response(request)
-          if response.get("action") != "cleanup-identities" or response.get("cleaned") is not True:
+          if response.get("action") != "recover-identities-before-demo" or response.get("cleaned") is not True:
               raise SystemExit("Railway pre-demo identity recovery was not attested")
           reconciliation = response.get("orphan_reconciliation")
           if not isinstance(reconciliation, dict):

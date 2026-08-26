@@ -611,6 +611,46 @@ def test_zero_remote_state_runs_durable_orphan_reconciliation(monkeypatch, tmp_p
     assert not any(tmp_path.iterdir())
 
 
+def test_pre_demo_cleanup_uses_the_identity_pristine_aware_recovery(
+    monkeypatch, tmp_path
+):
+    request = {
+        **_boundary_request(),
+        "supabase_url": f"https://{phase.EXPECTED_PROJECT_REF}.supabase.co",
+        "secrets": {key: "secret" for key in phase.SECRET_KEYS},
+    }
+    reconciliation = {
+        "recovered_auth_identity_count": 3,
+        "remaining_auth_identity_count": 0,
+        "remaining_active_temporary_grant_count": 0,
+        "remaining_denial_role_count": 0,
+        "remaining_active_denial_authority_count": 0,
+        "remaining_denial_auth_binding_count": 0,
+    }
+    monkeypatch.setattr(phase, "REMOTE_STATE_ROOT", tmp_path)
+    monkeypatch.setattr(
+        phase,
+        "_validated_boundary",
+        lambda _request: ("a" * 40, phase.EXPECTED_PROJECT_REF),
+    )
+    monkeypatch.setattr(
+        phase,
+        "recover_lost_live18_state_before_demo",
+        lambda: reconciliation,
+    )
+    monkeypatch.setattr(
+        phase,
+        "recover_lost_live18_state",
+        lambda: pytest.fail("pre-demo cleanup must not require seeded identities"),
+    )
+
+    response = phase._identity_cleanup(request, before_demo=True)
+
+    assert response["action"] == "recover-identities-before-demo"
+    assert response["cleaned"] is True
+    assert response["orphan_reconciliation"] == reconciliation
+
+
 def test_clean_orphan_reconciliation_supersedes_failed_stateful_cleanup(
     monkeypatch, tmp_path
 ):
@@ -825,6 +865,7 @@ def test_railway_live18_workflow_has_fail_closed_remote_lifecycle():
     assert "live18_railway_database_phase.py provision-demo" in live18
     assert "live18_railway_database_phase.py provision-identities" in live18
     assert "live18_railway_database_phase.py capture-evidence" in live18
+    assert "live18_railway_database_phase.py recover-identities-before-demo" in live18
     assert "live18_railway_database_phase.py cleanup-identities" in live18
     assert "railway ssh keys add" in live18
     assert "railway ssh keys remove" in live18
