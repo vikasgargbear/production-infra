@@ -252,6 +252,57 @@ def _reconcile_test_user(
     return user_id
 
 
+def _review_existing_web_auth_user(
+    authority: SupabaseAuthAdminAuthority,
+    web_auth_user_id: str,
+) -> dict[str, Any]:
+    """Resolve exactly the reviewed existing Auth identity without creating it."""
+
+    user = _auth_admin_json(authority, "GET", f"users/{web_auth_user_id}")
+    if not isinstance(user, dict) or user.get("id") != web_auth_user_id:
+        raise ProvisioningError(
+            "Reviewed staging web Auth UUID did not resolve to exactly one identity"
+        )
+    metadata = user.get("app_metadata")
+    if not isinstance(metadata, dict):
+        raise ProvisioningError(
+            "Reviewed staging web Auth identity omitted application metadata"
+        )
+    return user
+
+
+def _reconcile_web_auth_organization(
+    authority: SupabaseAuthAdminAuthority,
+    web_auth_user_id: str,
+) -> None:
+    """Bind the existing web identity to the sole reviewed staging organization."""
+
+    user = _review_existing_web_auth_user(authority, web_auth_user_id)
+    original_metadata = dict(user["app_metadata"])
+    expected_metadata = {**original_metadata, "org_id": DEMO_ORG_ID}
+    if original_metadata != expected_metadata:
+        updated = _auth_admin_json(
+            authority,
+            "PUT",
+            f"users/{web_auth_user_id}",
+            payload={"app_metadata": expected_metadata},
+        )
+        if not isinstance(updated, dict) or updated.get("id") != web_auth_user_id:
+            raise ProvisioningError(
+                "Reviewed staging web Auth identity update was ambiguous"
+            )
+    readback = _review_existing_web_auth_user(authority, web_auth_user_id)
+    readback_metadata = readback["app_metadata"]
+    if readback_metadata.get("org_id") != DEMO_ORG_ID or any(
+        readback_metadata.get(key) != value
+        for key, value in original_metadata.items()
+        if key != "org_id"
+    ):
+        raise ProvisioningError(
+            "Reviewed staging web Auth organization binding did not reconcile exactly"
+        )
+
+
 def _reviewed_database_url(database_url: str) -> str:
     """Reject every database target except the reviewed staging pooler binding."""
 
@@ -950,6 +1001,10 @@ def main(argv: list[str] | None = None) -> int:
         )
     demo_bound = False
     if mode != "client-only":
+        # Validate that the caller supplied one existing Auth identity before
+        # any database grant mutation. The organization claim is reconciled
+        # only after the canonical database binding succeeds.
+        _review_existing_web_auth_user(auth_admin, web_auth_user_id)
         demo_bound = _bind_demo(
             database_url,
             client_id,
@@ -960,6 +1015,7 @@ def main(argv: list[str] | None = None) -> int:
             raise ProvisioningError(
                 "Canonical demo organization must exist before OAuth grant binding"
             )
+        _reconcile_web_auth_organization(auth_admin, web_auth_user_id)
         print("Reconciled the isolated MCP and reviewed web demo grants")
     else:
         print("Deferred demo grant binding until canonical demo provisioning")

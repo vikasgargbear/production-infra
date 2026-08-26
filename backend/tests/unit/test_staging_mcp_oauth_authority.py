@@ -208,6 +208,156 @@ def test_provider_failure_does_not_include_response_body(
     assert "secret-provider-payload" not in str(caught.value)
 
 
+def test_web_auth_organization_reconciliation_preserves_existing_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    web_auth_user_id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+    original_metadata = {
+        "provider": "google",
+        "providers": ["google"],
+        "tenant_hint": "reviewed-staging",
+        "org_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    }
+    expected_metadata = {
+        **original_metadata,
+        "org_id": provision.DEMO_ORG_ID,
+    }
+    calls: list[tuple[str, str, dict | None]] = []
+    responses = iter(
+        (
+            {"id": web_auth_user_id, "app_metadata": original_metadata},
+            {"id": web_auth_user_id, "app_metadata": expected_metadata},
+            {"id": web_auth_user_id, "app_metadata": expected_metadata},
+        )
+    )
+
+    def request(_authority, method, path, *, payload=None, params=None):
+        assert params is None
+        calls.append((method, path, payload))
+        return next(responses)
+
+    monkeypatch.setattr(provision, "_auth_admin_json", request)
+
+    provision._reconcile_web_auth_organization(_auth_admin(), web_auth_user_id)
+
+    assert calls == [
+        ("GET", f"users/{web_auth_user_id}", None),
+        (
+            "PUT",
+            f"users/{web_auth_user_id}",
+            {"app_metadata": expected_metadata},
+        ),
+        ("GET", f"users/{web_auth_user_id}", None),
+    ]
+
+
+def test_web_auth_organization_reconciliation_is_idempotent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    web_auth_user_id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+    user = {
+        "id": web_auth_user_id,
+        "app_metadata": {
+            "provider": "google",
+            "providers": ["google"],
+            "org_id": provision.DEMO_ORG_ID,
+        },
+    }
+    calls: list[str] = []
+
+    def request(_authority, method, path, *, payload=None, params=None):
+        assert path == f"users/{web_auth_user_id}"
+        assert payload is None
+        assert params is None
+        calls.append(method)
+        return user
+
+    monkeypatch.setattr(provision, "_auth_admin_json", request)
+
+    provision._reconcile_web_auth_organization(_auth_admin(), web_auth_user_id)
+
+    assert calls == ["GET", "GET"]
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        None,
+        {},
+        {
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "app_metadata": {},
+        },
+        {"id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"},
+        {
+            "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "app_metadata": [],
+        },
+    ],
+)
+def test_reviewed_web_auth_identity_fails_closed_on_absent_or_ambiguous_response(
+    monkeypatch: pytest.MonkeyPatch,
+    response,
+) -> None:
+    monkeypatch.setattr(
+        provision,
+        "_auth_admin_json",
+        lambda *_args, **_kwargs: response,
+    )
+
+    with pytest.raises(provision.ProvisioningError, match="Auth"):
+        provision._review_existing_web_auth_user(
+            _auth_admin(),
+            "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        )
+
+
+def test_web_auth_organization_reconciliation_rejects_metadata_loss(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    web_auth_user_id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+    responses = iter(
+        (
+            {
+                "id": web_auth_user_id,
+                "app_metadata": {"provider": "google", "org_id": "old-org"},
+            },
+            {
+                "id": web_auth_user_id,
+                "app_metadata": {
+                    "provider": "google",
+                    "org_id": provision.DEMO_ORG_ID,
+                },
+            },
+            {
+                "id": web_auth_user_id,
+                "app_metadata": {"org_id": provision.DEMO_ORG_ID},
+            },
+        )
+    )
+    monkeypatch.setattr(
+        provision,
+        "_auth_admin_json",
+        lambda *_args, **_kwargs: next(responses),
+    )
+
+    with pytest.raises(provision.ProvisioningError, match="did not reconcile exactly"):
+        provision._reconcile_web_auth_organization(_auth_admin(), web_auth_user_id)
+
+
+def test_bind_flow_validates_auth_before_database_and_reconciles_afterward() -> None:
+    source = Path(provision.__file__).read_text(encoding="utf-8")
+    main = source[source.index("def main(") : source.index('\n\nif __name__ == "__main__"')]
+
+    preflight = main.index("_review_existing_web_auth_user(auth_admin, web_auth_user_id)")
+    database_bind = main.index("demo_bound = _bind_demo(")
+    auth_reconcile = main.index(
+        "_reconcile_web_auth_organization(auth_admin, web_auth_user_id)"
+    )
+
+    assert preflight < database_bind < auth_reconcile
+
+
 class _OwnerCursor:
     def __init__(self, server_version_num: int) -> None:
         self.server_version_num = server_version_num
