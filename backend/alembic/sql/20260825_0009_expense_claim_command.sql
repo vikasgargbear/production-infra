@@ -1,5 +1,7 @@
 -- Canonical member expense claim: verified receipts, separate approval, exact posting.
 
+SET LOCAL ROLE erp_migration_owner;
+
 DO $migration$
 DECLARE
   guard_definition text;

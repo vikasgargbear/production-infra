@@ -59,6 +59,24 @@ def test_canonical_migration_contract_is_linear_complete_and_declared() -> None:
     assert contract.canonical_table_count >= domain_contract["table_count"]
 
 
+def test_every_incremental_migration_assumes_the_canonical_owner_role() -> None:
+    contract = load_contract()
+    incremental_sql = [
+        REPOSITORY_ROOT / relative_path
+        for relative_path in contract.required_files
+        if relative_path.endswith(".sql")
+        and "20260820_0001_canonical_v1.sql" not in relative_path
+    ]
+
+    assert incremental_sql
+    for sql_path in incremental_sql:
+        sql = sql_path.read_text(encoding="utf-8")
+        assert "SET LOCAL ROLE erp_migration_owner;" in sql[:1000], (
+            f"{sql_path.name} mutates canonical owner objects without explicitly "
+            "assuming erp_migration_owner"
+        )
+
+
 def test_all_18_operation_relations_exist_in_the_migration_chain() -> None:
     matrix = json.loads(
         (REPOSITORY_ROOT / "docs/architecture/core-operation-authority-matrix.json")

@@ -20,7 +20,7 @@ branch_labels = None
 depends_on = None
 
 SQL_PATH = Path(__file__).resolve().parents[1] / "sql" / "20260825_0006_inventory_destruction_command.sql"
-EXPECTED_SQL_SHA256 = "4ab12fd357625e57ff41be0ba77b68c9896098489426175eba4ebce4615b1983"
+EXPECTED_SQL_SHA256 = "6b13ca8c295d4d5796b68ad0ba6357f345bfadd17349e97b113ab7cd84575c56"
 
 
 def _reviewed_sql() -> str:

@@ -1,3 +1,4 @@
+import hashlib
 from pathlib import Path
 
 
@@ -42,8 +43,9 @@ def test_return_reason_migration_preserves_full_purchase_return_resolver():
 
 def test_return_reason_revision_is_hash_bound_and_forward_only():
     revision = REVISION.read_text()
+    digest = hashlib.sha256(MIGRATION.read_bytes()).hexdigest()
     assert 'revision = "20260825_0010"' in revision
     assert 'down_revision = "20260825_0009"' in revision
-    assert 'EXPECTED_SQL_SHA256 = "10f57e023e0a97f14dcc619a025769554d1df6b6529010959c6390f9c3160023"' in revision
+    assert f'EXPECTED_SQL_SHA256 = "{digest}"' in revision
     assert "hashlib.sha256" in revision
     assert "downgrade is intentionally unavailable" in revision

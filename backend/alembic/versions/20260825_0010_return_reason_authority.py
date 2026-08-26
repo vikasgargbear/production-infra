@@ -20,7 +20,7 @@ branch_labels = None
 depends_on = None
 
 SQL_PATH = Path(__file__).resolve().parents[1] / "sql" / "20260825_0010_return_reason_authority.sql"
-EXPECTED_SQL_SHA256 = "10f57e023e0a97f14dcc619a025769554d1df6b6529010959c6390f9c3160023"
+EXPECTED_SQL_SHA256 = "2daddbfd43edd4ebb60610fcc982ad8efb53be7a09dde3b725ef630ce85727c8"
 
 
 def _reviewed_sql() -> str:

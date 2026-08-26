@@ -1,3 +1,5 @@
+SET LOCAL ROLE erp_migration_owner;
+
 CREATE OR REPLACE FUNCTION "erp_automation_commands"."resolve_inventory_destruction_prepare"(
   organization_id uuid, membership_id uuid, auth_user_id uuid,
   application_user_id uuid, grant_id uuid, caller_client_id varchar,

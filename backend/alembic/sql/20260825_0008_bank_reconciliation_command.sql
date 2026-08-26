@@ -1,3 +1,5 @@
+SET LOCAL ROLE erp_migration_owner;
+
 DO $migration$
 DECLARE
   guard_definition text;
