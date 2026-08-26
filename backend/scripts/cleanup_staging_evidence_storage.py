@@ -84,6 +84,8 @@ class WriterClosure:
     terminated_authenticator_session_count: int
     remaining_preclosure_authenticator_session_count: int
     verified_at: str
+    role_installed: bool = True
+    role_absence_verified: bool = False
 
 
 def _utc_now() -> str:
@@ -228,7 +230,9 @@ def _writer_membership_open(connection: Any) -> bool:
     return bool(row[0])
 
 
-def _writer_closure_catalog(connection: Any) -> tuple[bool, bool, int, int]:
+def _writer_closure_catalog(
+    connection: Any,
+) -> tuple[bool, bool, bool, int, int]:
     with connection.cursor() as cursor:
         cursor.execute(
             """
@@ -258,10 +262,8 @@ def _writer_closure_catalog(connection: Any) -> tuple[bool, bool, int, int]:
         row = cursor.fetchone()
     connection.commit()
     if row is None:
-        raise EvidenceResetCleanupError(
-            "canonical evidence writer role is missing"
-        )
-    return bool(row[0]), bool(row[1]), int(row[2]), int(row[3])
+        return False, False, True, 0, 0
+    return True, bool(row[0]), bool(row[1]), int(row[2]), int(row[3])
 
 
 def open_writer_authority(connection: Any) -> None:
@@ -279,9 +281,17 @@ def open_writer_authority(connection: Any) -> None:
 def close_writer_authority(connection: Any) -> WriterClosure:
     """Close the Storage role path and end sessions that could retain it."""
 
-    with connection.cursor() as cursor:
-        cursor.execute(CLOSE_WRITER_SQL)
-    connection.commit()
+    (
+        role_installed_before_closure,
+        _membership_open_before_closure,
+        _role_posture_safe_before_closure,
+        _unexpected_member_count_before_closure,
+        _inherited_role_count_before_closure,
+    ) = _writer_closure_catalog(connection)
+    if role_installed_before_closure:
+        with connection.cursor() as cursor:
+            cursor.execute(CLOSE_WRITER_SQL)
+        connection.commit()
 
     observed = 0
     terminated = 0
@@ -322,11 +332,13 @@ def close_writer_authority(connection: Any) -> WriterClosure:
     connection.commit()
 
     (
+        role_installed,
         membership_open,
         role_posture_safe,
         unexpected_member_count,
         inherited_role_count,
     ) = _writer_closure_catalog(connection)
+    role_absence_verified = not role_installed
     if (
         membership_open
         or not role_posture_safe
@@ -351,6 +363,8 @@ def close_writer_authority(connection: Any) -> WriterClosure:
         terminated_authenticator_session_count=terminated,
         remaining_preclosure_authenticator_session_count=0,
         verified_at=_utc_now(),
+        role_installed=role_installed,
+        role_absence_verified=role_absence_verified,
     )
 
 
@@ -436,6 +450,19 @@ def execute_cleanup(
         raise EvidenceResetCleanupError(
             "canonical evidence writer authority is open after cleanup"
         )
+    if writer_closure.role_installed == writer_closure.role_absence_verified:
+        raise EvidenceResetCleanupError(
+            "canonical evidence writer installation state is ambiguous"
+        )
+    if not writer_closure.role_installed and (
+        inventory.storage_object_keys
+        or inventory.attachments
+        or final_inventory.storage_object_keys
+        or final_inventory.attachments
+    ):
+        raise EvidenceResetCleanupError(
+            "canonical evidence writer role is absent but evidence inventory is not empty"
+        )
     if (
         not writer_closure.role_posture_safe
         or writer_closure.unexpected_member_count
@@ -457,6 +484,10 @@ def execute_cleanup(
         "object_key_set_sha256": _key_digest(keys),
         "legal_hold_count": 0,
         "evidence_writer_membership_open": False,
+        "evidence_writer_role_installed": writer_closure.role_installed,
+        "evidence_writer_role_absence_verified": (
+            writer_closure.role_absence_verified
+        ),
         "evidence_writer_role_posture_safe": True,
         "evidence_writer_unexpected_member_count": 0,
         "evidence_writer_inherited_role_count": 0,
@@ -493,11 +524,18 @@ def execute_fenced_cleanup(
     _validate_project_ref(project_ref)
     closure: WriterClosure | None = None
     primary_error: BaseException | None = None
+    writer_authority_may_be_open = False
     try:
         # Close first so an empty snapshot cannot race a valid Storage API write.
+        writer_authority_may_be_open = True
         closure = close_writer()
+        writer_authority_may_be_open = False
         inventory = load_current_inventory()
         keys = validated_cleanup_keys(inventory)
+        if not closure.role_installed and keys:
+            raise EvidenceResetCleanupError(
+                "canonical evidence writer role is absent but evidence inventory is not empty"
+            )
         if keys:
             try:
                 token_provider = token_provider_factory()
@@ -506,6 +544,7 @@ def execute_fenced_cleanup(
                     "evidence cleanup requires the reviewed service-user token provider"
                 ) from exc
             open_writer()
+            writer_authority_may_be_open = True
             try:
                 _delete_exact_keys(
                     project_ref=project_ref,
@@ -515,6 +554,7 @@ def execute_fenced_cleanup(
                 )
             finally:
                 closure = close_writer()
+                writer_authority_may_be_open = False
         # Re-read both sides only after the writer path is provably closed.
         final_inventory = load_current_inventory()
         return execute_cleanup(
@@ -527,10 +567,10 @@ def execute_fenced_cleanup(
         primary_error = error
         raise
     finally:
-        # Every failure path attempts closure again. If closure itself cannot be
-        # verified, that is the authoritative failure rather than a false-safe
-        # cleanup result.
-        if primary_error is not None:
+        # Compensate only when the writer may actually be open.  An already
+        # verified closure remains authoritative, so a second REVOKE cannot
+        # mask the primary inventory/API failure.
+        if primary_error is not None and writer_authority_may_be_open:
             try:
                 close_writer()
             except BaseException as closure_error:

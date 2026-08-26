@@ -481,6 +481,10 @@ jobs:
              and .remaining_object_count == 0
              and .legal_hold_count == 0
              and .evidence_writer_membership_open == false
+             and ((.evidence_writer_role_installed == true
+                   and .evidence_writer_role_absence_verified == false)
+                  or (.evidence_writer_role_installed == false
+                      and .evidence_writer_role_absence_verified == true))
              and (.observed_authenticator_session_count | type) == "number"
              and .observed_authenticator_session_count >= 0
              and (.terminated_authenticator_session_count | type) == "number"

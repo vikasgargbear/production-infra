@@ -64,7 +64,12 @@ def _inventory(
     )
 
 
-def _closure(*, observed: int = 0, terminated: int = 0) -> WriterClosure:
+def _closure(
+    *,
+    observed: int = 0,
+    terminated: int = 0,
+    role_installed: bool = True,
+) -> WriterClosure:
     return WriterClosure(
         membership_open=False,
         role_posture_safe=True,
@@ -74,6 +79,8 @@ def _closure(*, observed: int = 0, terminated: int = 0) -> WriterClosure:
         terminated_authenticator_session_count=terminated,
         remaining_preclosure_authenticator_session_count=0,
         verified_at=CLOSED_AT,
+        role_installed=role_installed,
+        role_absence_verified=not role_installed,
     )
 
 
@@ -207,9 +214,10 @@ def test_writer_closure_revokes_before_terminating_hosted_authenticator_sessions
         def __init__(self):
             self.cursors = iter(
                 (
-                        Cursor(()),
-                        Cursor(((101,), (102,)), ((True,), (False,), (0,))),
-                        Cursor((), ((False, True, 0, 0),)),
+                    Cursor((), ((False, True, 0, 0),)),
+                    Cursor(()),
+                    Cursor(((101,), (102,)), ((True,), (False,), (0,))),
+                    Cursor((), ((False, True, 0, 0),)),
                 )
             )
 
@@ -222,18 +230,68 @@ def test_writer_closure_revokes_before_terminating_hosted_authenticator_sessions
     connection = Connection()
     closure = close_writer_authority(connection)
 
-    assert executed[0] == (CLOSE_WRITER_SQL, None)
+    revoke_index = executed.index((CLOSE_WRITER_SQL, None))
     terminate_indexes = [
         index
         for index, (sql, _parameters) in enumerate(executed)
         if "pg_terminate_backend" in sql
     ]
-    assert terminate_indexes and min(terminate_indexes) > 0
+    assert terminate_indexes and min(terminate_indexes) > revoke_index
     assert closure.membership_open is False
     assert closure.observed_authenticator_session_count == 2
     assert closure.terminated_authenticator_session_count == 1
     assert closure.remaining_preclosure_authenticator_session_count == 0
-    assert connection.commits == 3
+    assert closure.role_installed is True
+    assert closure.role_absence_verified is False
+    assert connection.commits == 4
+
+
+def test_writer_closure_proves_absent_first_install_role_without_revoke():
+    executed: list[tuple[str, tuple[object, ...] | None]] = []
+
+    class Cursor:
+        def __init__(self, rows=(), singletons=()):
+            self.rows = list(rows)
+            self.singletons = list(singletons)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def execute(self, sql, parameters=None):
+            executed.append((sql, parameters))
+
+        def fetchall(self):
+            return self.rows
+
+        def fetchone(self):
+            return self.singletons.pop(0) if self.singletons else None
+
+    class Connection:
+        def __init__(self):
+            self.cursors = iter(
+                (
+                    Cursor(),
+                    Cursor(singletons=((0,),)),
+                    Cursor(),
+                )
+            )
+
+        def cursor(self):
+            return next(self.cursors)
+
+        def commit(self):
+            return None
+
+    closure = close_writer_authority(Connection())
+
+    assert all(sql != CLOSE_WRITER_SQL for sql, _parameters in executed)
+    assert closure.role_installed is False
+    assert closure.role_absence_verified is True
+    assert closure.role_posture_safe is True
+    assert closure.membership_open is False
 
 
 def test_writer_open_is_exact_and_verified():
@@ -404,6 +462,59 @@ def test_empty_bucket_needs_no_api_call_or_placeholder_credential():
     assert events == ["close"]
 
 
+def test_empty_first_install_accepts_only_explicitly_verified_role_absence():
+    receipt = _run_cleanup(
+        _inventory(storage_keys=(), attachments=()),
+        token_provider_factory=lambda: pytest.fail(
+            "empty first install must not resolve a credential"
+        ),
+        closure=_closure(role_installed=False),
+    )
+
+    assert receipt["evidence_writer_role_installed"] is False
+    assert receipt["evidence_writer_role_absence_verified"] is True
+
+
+def test_absent_writer_role_refuses_even_reconciled_nonempty_evidence():
+    events: list[str] = []
+    with pytest.raises(
+        EvidenceResetCleanupError,
+        match="role is absent but evidence inventory is not empty",
+    ):
+        _run_cleanup(
+            _inventory(),
+            events=events,
+            closure=_closure(role_installed=False),
+            token_provider_factory=lambda: pytest.fail(
+                "an absent writer role must fail before credentials"
+            ),
+        )
+    assert events == ["close"]
+
+
+def test_ambiguous_writer_installation_state_fails_closed():
+    ambiguous = WriterClosure(
+        membership_open=False,
+        role_posture_safe=True,
+        unexpected_member_count=0,
+        inherited_role_count=0,
+        observed_authenticator_session_count=0,
+        terminated_authenticator_session_count=0,
+        remaining_preclosure_authenticator_session_count=0,
+        verified_at=CLOSED_AT,
+        role_installed=False,
+        role_absence_verified=False,
+    )
+    with pytest.raises(
+        EvidenceResetCleanupError,
+        match="installation state is ambiguous",
+    ):
+        _run_cleanup(
+            _inventory(storage_keys=(), attachments=()),
+            closure=ambiguous,
+        )
+
+
 def test_cleanup_invalidates_one_rejected_service_token_and_retries_once():
     requests: list[httpx.Request] = []
     invalidated: list[str] = []
@@ -503,7 +614,7 @@ def test_write_after_initial_snapshot_is_caught_after_writer_closure():
         final_storage_keys=(KEY,),
             events=events,
         )
-    assert events == ["close", "close"]
+    assert events == ["close"]
 
 
 def test_metadata_write_after_initial_snapshot_is_caught_after_writer_closure():
@@ -514,7 +625,7 @@ def test_metadata_write_after_initial_snapshot_is_caught_after_writer_closure():
             final_attachments=(_attachment(),),
             events=events,
         )
-    assert events == ["close", "close"]
+    assert events == ["close"]
 
 
 def test_storage_failure_always_leaves_writer_closed():
@@ -527,7 +638,22 @@ def test_storage_failure_always_leaves_writer_closed():
                 lambda _request: httpx.Response(500, text="private-provider-body")
             ),
         )
-    assert events == ["close", "open", "close", "close"]
+    assert events == ["close", "open", "close"]
+
+
+def test_verified_closure_preserves_the_primary_inventory_failure():
+    events: list[str] = []
+    with pytest.raises(EvidenceResetCleanupError, match="metadata changed") as caught:
+        _run_cleanup(
+            _inventory(storage_keys=(), attachments=()),
+            final_attachments=(_attachment(),),
+            events=events,
+        )
+
+    assert str(caught.value) == (
+        "canonical evidence metadata changed during restricted cleanup"
+    )
+    assert events == ["close"]
 
 
 def test_cleanup_rerun_from_an_already_closed_writer_is_idempotent():
@@ -606,6 +732,12 @@ def test_workflow_decouples_empty_cleanup_from_post_reset_runtime_provisioning()
     assert "canonical-evidence-storage-reset-cleanup.json" in cleanup_step
     assert "canonical-evidence-reset-cleanup-v2" in cleanup_step
     assert ".evidence_writer_membership_open == false" in cleanup_step
+    assert ".evidence_writer_role_installed == true" in cleanup_step
+    assert ".evidence_writer_role_absence_verified == true" in cleanup_step
+    assert "check_staging_evidence_reset_first_install.py" in (
+        Path(__file__).resolve().parents[3]
+        / "database/canonical/ci/run_alembic_postgres15_gate.sh"
+    ).read_text(encoding="utf-8")
     assert "REVOKE erp_evidence_storage FROM authenticator" in (
         Path(__file__).resolve().parents[2]
         / "scripts/cleanup_staging_evidence_storage.py"

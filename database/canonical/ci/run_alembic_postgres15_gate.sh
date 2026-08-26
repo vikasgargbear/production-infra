@@ -50,6 +50,8 @@ python3 backend/scripts/canonical_migration_contract.py \
 )
 
 test "$(psql -X -Atqc 'SELECT version_num FROM public.alembic_version')" = "$expected_alembic_head"
+PYTHONPATH=backend \
+  python backend/tests/postgres/check_staging_evidence_reset_first_install.py
 test "$(psql -X -Atqc "SELECT to_regclass('tax.gstr1_reporting_rule_versions') IS NOT NULL")" = "t"
 test "$(psql -X -Atqc "SELECT has_table_privilege('erp_runtime', 'tax.gstr1_reporting_rule_versions', 'SELECT')")" = "t"
 test "$(psql -X -Atqc "SELECT has_function_privilege('erp_regulatory_importer', 'erp_regulatory_commands.import_gstr1_reporting_release(uuid,varchar,text,text,text,text,varchar,bytea,bytea,text,text,bytea,bytea,date,date,date,uuid,timestamptz,uuid,timestamptz,uuid)', 'EXECUTE')")" = "t"
