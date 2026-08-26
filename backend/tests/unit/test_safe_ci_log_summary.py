@@ -6,6 +6,17 @@ import json
 from scripts.safe_ci_log_summary import fingerprint_stream, safe_log_annotation
 
 
+def test_all_external_log_boundaries_have_fixed_annotation_titles(tmp_path):
+    log_path = tmp_path / "external.log"
+    log_path.write_bytes(b"provider secret and customer data")
+
+    for label in ("fixture", "readiness", "render", "reset", "runtime"):
+        annotation = safe_log_annotation(log_path, label=label)
+        assert "provider secret" not in annotation
+        assert '"byte_count":33' in annotation
+        assert '"sha256":' in annotation
+
+
 def test_api_log_annotation_emits_only_fixed_metadata(tmp_path) -> None:
     secret = (
         b"Bearer sk-live-ABC123\n"

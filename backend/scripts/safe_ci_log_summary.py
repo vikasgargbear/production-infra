@@ -11,7 +11,10 @@ from typing import BinaryIO
 
 
 _ANNOTATION_TITLES = {
+    "fixture": "Live canonical fixture failed",
     "readiness": "Canonical CI API failed readiness",
+    "render": "Render reconciliation blocked",
+    "reset": "Disposable canonical reset failed",
     "runtime": "Canonical CI API runtime diagnostic",
 }
 _CHUNK_SIZE = 1024 * 1024

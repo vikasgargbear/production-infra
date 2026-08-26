@@ -575,7 +575,7 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert 'detail = "canonical demo failure summary unavailable"' in workflow
     assert "raw[-2800:]" not in workflow
     assert 'detail = ((headlines[-1] + "\\n") if headlines else "")' not in workflow
-    assert workflow.count("backend/scripts/safe_ci_log_summary.py") == 2
+    assert workflow.count("backend/scripts/safe_ci_log_summary.py") == 6
     assert '--label readiness "$api_log"' in workflow
     assert '--label runtime "$api_log"' in workflow
     assert 'tail -c 3500 "$api_log"' not in workflow

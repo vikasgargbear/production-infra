@@ -254,14 +254,7 @@ jobs:
              );
           SQL
           then
-            python3 - "$reset_log" <<'PY'
-          import pathlib
-          import sys
-
-          text = pathlib.Path(sys.argv[1]).read_text(errors="replace")[-3500:]
-          text = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-          print(f"::error title=Canonical login quiesce failure::{text}")
-          PY
+            python3 backend/scripts/safe_ci_log_summary.py --label reset "$reset_log"
             exit 1
           fi
           if ! psql -X --echo-errors -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" >"$reset_log" 2>&1 <<'SQL'
@@ -354,17 +347,9 @@ jobs:
           COMMIT;
           SQL
           then
-            python3 - "$reset_log" <<'PY'
-          import pathlib
-          import sys
-
-          text = pathlib.Path(sys.argv[1]).read_text(errors="replace")[-3500:]
-          text = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-          print(f"::error title=Disposable canonical reset failure::{text}")
-          PY
+            python3 backend/scripts/safe_ci_log_summary.py --label reset "$reset_log"
             exit 1
           fi
-          cat "$reset_log"
           test "$(psql -X -Atqc "SELECT to_regclass('auth.users') IS NOT NULL" "$PSYCOPG_DATABASE_URL")" = t
           test "$(psql -X -Atqc "SELECT to_regclass('public.alembic_version') IS NULL" "$PSYCOPG_DATABASE_URL")" = t
           test "$(psql -X -Atqc "SELECT count(*) FROM pg_namespace WHERE nspname IN ('core','sales','erp_security')" "$PSYCOPG_DATABASE_URL")" = 0
@@ -857,19 +842,9 @@ jobs:
               break
             done
             if test "$fixture_passed" != true; then
-              cat "$fixture_log"
-              python3 - "$fixture" "$fixture_log" <<'PY'
-          import pathlib
-          import sys
-
-          fixture = sys.argv[1]
-          detail = pathlib.Path(sys.argv[2]).read_text(errors="replace")[-3000:]
-          detail = detail.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-          print(f"::error title=Live canonical fixture failed::{fixture}: {detail}")
-          PY
+              python3 backend/scripts/safe_ci_log_summary.py --label fixture "$fixture_log"
               exit 1
             fi
-            cat "$fixture_log"
             fixture_count=$((fixture_count + 1))
           done
           test "$fixture_count" = "${#canonical_fixtures[@]}"
@@ -966,14 +941,7 @@ jobs:
               --branch "$GITHUB_REF_NAME" \
               --commit-id "$deploy_sha" \
               > staging-evidence/render-pilot.json 2>"$provision_log"; then
-            python3 - "$provision_log" <<'PY'
-          import pathlib
-          import sys
-
-          detail = pathlib.Path(sys.argv[1]).read_text(errors="replace")[-2000:]
-          detail = detail.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-          print(f"::error title=Render reconciliation blocked::{detail}")
-          PY
+            python3 backend/scripts/safe_ci_log_summary.py --label render "$provision_log"
             exit 1
           fi
 
