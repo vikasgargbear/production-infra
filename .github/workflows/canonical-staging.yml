@@ -203,9 +203,6 @@ jobs:
           python3 backend/scripts/validate_canonical_model.py
           python3 database/canonical/domains/validate_domain_catalog.py
 
-      - name: Build and mask the staging bootstrap connection
-        run: python3 backend/scripts/verify_staging_pooler_roles.py --bootstrap-only
-
       - name: Refresh the reviewed free-tier Supavisor configuration
         if: inputs.refresh_pooler_configuration == true
         run: |
@@ -219,6 +216,9 @@ jobs:
           test "$(jq -r .default_pool_size <<<"$response")" = 5
           test "$(jq -r .pool_mode <<<"$response")" = transaction
           sleep 125
+
+      - name: Build and mask the staging bootstrap connection
+        run: python3 backend/scripts/verify_staging_pooler_roles.py --bootstrap-only
 
       - name: Reset canonical data on the pinned disposable project
         if: inputs.reset_disposable_data == true
