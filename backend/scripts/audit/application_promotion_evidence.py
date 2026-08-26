@@ -1041,6 +1041,7 @@ def capture_live18_acceptance(
     reviewer: str | None = None
     organization: str | None = None
     branch: str | None = None
+    screenshot_commitment_count = 0
     for row in browser:
         if not isinstance(row, dict):
             raise EvidenceError("Live18 browser evidence row is invalid")
@@ -1060,6 +1061,28 @@ def capture_live18_acceptance(
             raise EvidenceError("Live18 requester and reviewer must be distinct")
         if PREVIEW_SHA256.fullmatch(str(row.get("preview_hash", ""))) is None:
             raise EvidenceError("Live18 browser evidence lacks an immutable preview hash")
+        screenshots = row.get("screenshots")
+        if not isinstance(screenshots, list) or len(screenshots) != 2:
+            raise EvidenceError("Live18 browser evidence must contain two screenshot commitments")
+        for index, stage in enumerate(("missing-required", "posted")):
+            screenshot = screenshots[index]
+            if (
+                not isinstance(screenshot, dict)
+                or screenshot.get("stage") != stage
+                or screenshot.get("filename") != f"{operation_id}-{stage}.png"
+                or SHA256.fullmatch(str(screenshot.get("sha256", ""))) is None
+                or not isinstance(screenshot.get("byte_size"), int)
+                or isinstance(screenshot.get("byte_size"), bool)
+                or screenshot["byte_size"] <= 0
+                or not isinstance(screenshot.get("width"), int)
+                or isinstance(screenshot.get("width"), bool)
+                or screenshot["width"] <= 0
+                or not isinstance(screenshot.get("height"), int)
+                or isinstance(screenshot.get("height"), bool)
+                or screenshot["height"] <= 0
+            ):
+                raise EvidenceError("Live18 screenshot commitment is invalid")
+        screenshot_commitment_count += len(screenshots)
         current = (
             row["requester_user_id"], row["reviewer_user_id"],
             row["organization_id"], row["branch_id"],
@@ -1082,6 +1105,8 @@ def capture_live18_acceptance(
         by_operation[str(operation_id)] = row
     if set(by_operation) != set(required):
         raise EvidenceError("Live18 browser evidence does not cover the exact operation matrix")
+    if screenshot_commitment_count != 36:
+        raise EvidenceError("Live18 evidence must retain exactly 36 screenshot commitments")
 
     database = manifest.get("database")
     if not isinstance(database, dict):
@@ -1141,6 +1166,7 @@ def capture_live18_acceptance(
             "artifact_sha256": artifact_sha256,
             "artifact_digest": artifact_digest,
             "operation_count": 18,
+            "screenshot_commitment_count": screenshot_commitment_count,
             "operation_ids": sorted(required),
             "requester_user_id": requester,
             "reviewer_user_id": reviewer,

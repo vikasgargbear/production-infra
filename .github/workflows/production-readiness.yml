@@ -1844,6 +1844,7 @@ jobs:
             --database-evidence "$LIVE18_DATABASE_EVIDENCE_PATH" \
             --demo-evidence "$LIVE18_RAILWAY_DEMO_EVIDENCE_PATH" \
             --browser-outcome "${LIVE18_BROWSER_OUTCOME:-skipped}" \
+            --screenshot-dir "$LIVE18_PLAYWRIGHT_ARTIFACT_DIR/screenshots" \
             --output "$output"
           test "$(find "$RUNNER_TEMP/live18-upload" -type f | wc -l | tr -d ' ')" = 1
       - name: Upload scrubbed allowlisted live18 evidence only

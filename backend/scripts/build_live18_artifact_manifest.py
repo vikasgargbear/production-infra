@@ -14,6 +14,8 @@ import hashlib
 import json
 import os
 import re
+import stat
+import struct
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +35,9 @@ SAFE_UI_ACTIONS = {
     "expectDisabled",
 }
 SAFE_LOCATOR_KINDS = {"role", "label", "placeholder", "text", "testId"}
+SAFE_SCREENSHOT_STAGES = ("missing-required", "posted")
+SHA256 = re.compile(r"^[0-9a-f]{64}$")
+PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
 
 class ArtifactManifestError(RuntimeError):
@@ -101,7 +106,64 @@ def _http_summary(row: Any) -> dict[str, Any]:
     }
 
 
-def _browser_summary(path: Path) -> dict[str, Any]:
+def _screenshot_summaries(
+    value: dict[str, Any], operation_id: str, screenshot_dir: Path | None,
+) -> list[dict[str, Any]]:
+    rows = value.get("screenshots")
+    if not isinstance(rows, list) or len(rows) != len(SAFE_SCREENSHOT_STAGES):
+        raise ArtifactManifestError("browser evidence must contain exactly two screenshots")
+    if screenshot_dir is None:
+        raise ArtifactManifestError("browser screenshot directory is required")
+    root = screenshot_dir.resolve()
+    summaries: list[dict[str, Any]] = []
+    for index, expected_stage in enumerate(SAFE_SCREENSHOT_STAGES):
+        row = rows[index]
+        expected_filename = f"{operation_id}-{expected_stage}.png"
+        if not isinstance(row, dict) or row.get("stage") != expected_stage:
+            raise ArtifactManifestError("browser screenshot stages are invalid or out of order")
+        if row.get("filename") != expected_filename:
+            raise ArtifactManifestError("browser screenshot filename is not operation-bound")
+        screenshot = screenshot_dir / expected_filename
+        if screenshot.is_symlink() or not screenshot.is_file():
+            raise ArtifactManifestError("browser screenshot is missing or is a symlink")
+        try:
+            resolved = screenshot.resolve(strict=True)
+            resolved.relative_to(root)
+        except (OSError, ValueError) as exc:
+            raise ArtifactManifestError("browser screenshot escaped its reviewed directory") from exc
+        mode = stat.S_IMODE(resolved.stat().st_mode)
+        if mode & 0o077:
+            raise ArtifactManifestError("browser screenshot permissions are not owner-only")
+        content = resolved.read_bytes()
+        if len(content) < 24 or content[:8] != PNG_SIGNATURE or content[12:16] != b"IHDR":
+            raise ArtifactManifestError("browser screenshot is not a valid PNG")
+        width, height = struct.unpack(">II", content[16:24])
+        byte_size = row.get("byte_size")
+        if (
+            not isinstance(byte_size, int)
+            or isinstance(byte_size, bool)
+            or byte_size != len(content)
+            or row.get("width") != width
+            or row.get("height") != height
+            or width < 1
+            or height < 1
+        ):
+            raise ArtifactManifestError("browser screenshot metadata does not match the PNG")
+        digest = hashlib.sha256(content).hexdigest()
+        if row.get("sha256") != digest or SHA256.fullmatch(digest) is None:
+            raise ArtifactManifestError("browser screenshot SHA-256 does not match")
+        summaries.append({
+            "stage": expected_stage,
+            "filename": expected_filename,
+            "sha256": digest,
+            "byte_size": byte_size,
+            "width": width,
+            "height": height,
+        })
+    return summaries
+
+
+def _browser_summary(path: Path, screenshot_dir: Path | None) -> dict[str, Any]:
     value = _read_json(path)
     if value.get("evidence_schema") != "aasopharma.live18.browser.v1":
         raise ArtifactManifestError(f"{path.name} has the wrong browser evidence schema")
@@ -121,7 +183,7 @@ def _browser_summary(path: Path) -> dict[str, Any]:
     missing_rows = value.get("missing_required_http_evidence")
     if not isinstance(http_rows, list) or not isinstance(missing_rows, list):
         raise ArtifactManifestError("browser HTTP evidence must be arrays")
-    return {
+    summary = {
         "operation_id": operation_id,
         "command_operation": command_operation,
         "tested_sha": _required_text(value, "tested_sha", SHA),
@@ -136,8 +198,10 @@ def _browser_summary(path: Path) -> dict[str, Any]:
         "self_approval_status": self_approval_status,
         "missing_required_http": [_http_summary(row) for row in missing_rows],
         "http": [_http_summary(row) for row in http_rows],
-        "raw_evidence_sha256": _digest(path),
     }
+    summary["screenshots"] = _screenshot_summaries(value, operation_id, screenshot_dir)
+    summary["raw_evidence_sha256"] = _digest(path)
+    return summary
 
 
 def _browser_failure_summary(path: Path) -> dict[str, Any]:
@@ -254,6 +318,7 @@ def build_manifest(
     browser_outcome: str,
     run_id: str,
     run_attempt: str,
+    screenshot_dir: Path | None = None,
 ) -> dict[str, Any]:
     if browser_outcome not in {"success", "failure", "cancelled", "skipped"}:
         raise ArtifactManifestError("invalid browser outcome")
@@ -267,7 +332,7 @@ def build_manifest(
             continue
         schema = _read_json(path).get("evidence_schema")
         if schema == "aasopharma.live18.browser.v1":
-            browser.append(_browser_summary(path))
+            browser.append(_browser_summary(path, screenshot_dir))
         elif schema == "aasopharma.live18.browser-failure.v1":
             browser_failures.append(_browser_failure_summary(path))
         else:
@@ -278,6 +343,24 @@ def build_manifest(
         raise ArtifactManifestError("duplicate browser operation failure evidence")
     if browser_outcome == "success" and browser_failures:
         raise ArtifactManifestError("successful browser outcome cannot include failure evidence")
+    if browser_outcome == "success":
+        if len(browser) != 18:
+            raise ArtifactManifestError("successful browser outcome requires exactly 18 operations")
+        if screenshot_dir is None or not screenshot_dir.is_dir():
+            raise ArtifactManifestError("successful browser outcome requires screenshot evidence")
+        expected_files = {
+            row["filename"]
+            for operation in browser
+            for row in operation["screenshots"]
+        }
+        actual_files = {
+            path.name for path in screenshot_dir.iterdir()
+            if path.is_file() or path.is_symlink()
+        }
+        if len(expected_files) != 36 or actual_files != expected_files:
+            raise ArtifactManifestError(
+                "successful browser outcome requires exactly 36 reviewed screenshots"
+            )
     return {
         "schema": "aasopharma.live18.upload-manifest.v1",
         "run": {"id": run_id, "attempt": run_attempt, "browser_outcome": browser_outcome},
@@ -300,6 +383,7 @@ def main() -> None:
     parser.add_argument("--database-evidence", type=Path)
     parser.add_argument("--demo-evidence", type=Path)
     parser.add_argument("--browser-outcome", required=True)
+    parser.add_argument("--screenshot-dir", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args()
     manifest = build_manifest(
@@ -310,6 +394,7 @@ def main() -> None:
         browser_outcome=args.browser_outcome,
         run_id=os.getenv("GITHUB_RUN_ID", "local"),
         run_attempt=os.getenv("GITHUB_RUN_ATTEMPT", "local"),
+        screenshot_dir=args.screenshot_dir,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")

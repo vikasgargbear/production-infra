@@ -105,6 +105,17 @@ def _live18_manifest(git_commit: str, binding: dict) -> dict:
                 },
             ],
             "raw_evidence_sha256": f"{index:064x}",
+            "screenshots": [
+                {
+                    "stage": stage,
+                    "filename": f"{operation['id']}-{stage}.png",
+                    "sha256": f"{index * 2 + offset + 1000:064x}",
+                    "byte_size": 1000 + index + offset,
+                    "width": 1280,
+                    "height": 720,
+                }
+                for offset, stage in enumerate(("missing-required", "posted"))
+            ],
         })
         resources[operation["id"]] = {
             "command_operation": operation["command_operation"],
