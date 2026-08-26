@@ -23,6 +23,27 @@ from uuid import UUID
 
 import requests
 
+SCRIPT_DIRECTORY = Path(__file__).resolve().parent
+if str(SCRIPT_DIRECTORY) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIRECTORY))
+
+if __package__:
+    from .supabase_auth_admin import (
+        SupabaseAuthAdminAuthority,
+        SupabaseAuthAdminError,
+        auth_admin_request,
+        mask_auth_admin_secret,
+        resolve_auth_admin_authority,
+    )
+else:
+    from supabase_auth_admin import (
+        SupabaseAuthAdminAuthority,
+        SupabaseAuthAdminError,
+        auth_admin_request,
+        mask_auth_admin_secret,
+        resolve_auth_admin_authority,
+    )
+
 
 ROOT = Path(__file__).resolve().parents[2]
 IDENTITY_AUTHORITY_PATH = (
@@ -43,7 +64,6 @@ HOOK_URI = (
     "canonical_evidence_storage_access_token_hook"
 )
 RETIRED_KEY_NAME = "canonical-evidence-storage"
-AUTH_ADMIN_KEY_NAME = "default"
 SHA_RE = re.compile(r"[0-9a-f]{40}")
 
 if (
@@ -102,45 +122,6 @@ class Client:
                 "Supabase Management API response is not JSON",
             ) from error
 
-    def auth_admin(
-        self,
-        method: str,
-        path: str,
-        service_key: str,
-        *,
-        payload: Mapping[str, Any] | None = None,
-        params: Mapping[str, Any] | None = None,
-    ) -> Any:
-        try:
-            response = requests.request(
-                method,
-                f"{SUPABASE_URL}/auth/v1/admin/{path.lstrip('/')}",
-                headers={
-                    "Authorization": f"Bearer {service_key}",
-                    "apikey": service_key,
-                },
-                json=payload,
-                params=params,
-                timeout=30,
-            )
-        except requests.RequestException as error:
-            raise IdentityProvisioningError(
-                "AUTH_ADMIN_UNREACHABLE",
-                "Supabase Auth Admin request did not complete",
-            ) from error
-        if not response.ok:
-            raise IdentityProvisioningError(
-                "AUTH_ADMIN_REJECTED",
-                f"Supabase Auth Admin {method} failed with HTTP {response.status_code}",
-            )
-        try:
-            return response.json() if response.content else None
-        except ValueError as error:
-            raise IdentityProvisioningError(
-                "AUTH_ADMIN_RESPONSE_INVALID",
-                "Supabase Auth Admin response is not JSON",
-            ) from error
-
     def password_session(self, anon_key: str, email: str, password: str) -> Any:
         try:
             response = requests.post(
@@ -197,43 +178,13 @@ class Client:
             ) from error
 
 
-def _auth_admin_bootstrap_key(client: Client) -> str:
-    records = client.management("GET", f"/projects/{PROJECT_REF}/api-keys")
-    candidates = [
-        row
-        for row in records
-        if isinstance(row, dict)
-        and row.get("name") == AUTH_ADMIN_KEY_NAME
-        and (
-            row.get("type") == "secret"
-            or row.get("secret_jwt_template") == {"role": "service_role"}
-        )
-    ] if isinstance(records, list) else []
-    if len(candidates) != 1:
-        raise IdentityProvisioningError(
-            "SERVICE_ROLE_KEY_AMBIGUOUS",
-            "expected exactly one current hosted secret service-role key",
-        )
-    record = candidates[0]
-    api_key = record.get("api_key")
-    if (
-        record.get("type") != "secret"
-        or record.get("secret_jwt_template") != {"role": "service_role"}
-        or not isinstance(api_key, str)
-        or re.fullmatch(r"sb_secret_[A-Za-z0-9._-]{24,}", api_key) is None
-    ):
-        raise IdentityProvisioningError(
-            "SERVICE_ROLE_KEY_CONTRACT_DRIFT",
-            "hosted Auth Admin bootstrap key contract drifted",
-        )
-    return api_key
-
-
-def _all_auth_users(client: Client, service_key: str) -> list[dict[str, Any]]:
+def _all_auth_users(
+    authority: SupabaseAuthAdminAuthority,
+) -> list[dict[str, Any]]:
     users: list[dict[str, Any]] = []
     for page in range(1, 11):
-        response = client.auth_admin(
-            "GET", "users", service_key, params={"page": page, "per_page": 1000}
+        response = auth_admin_request(
+            authority, "GET", "users", params={"page": page, "per_page": 1000}
         )
         page_users = response.get("users") if isinstance(response, dict) else None
         if not isinstance(page_users, list) or not all(
@@ -281,9 +232,9 @@ def _validate_service_user(user: Mapping[str, Any]) -> None:
 
 
 def reconcile_service_user(
-    client: Client, service_key: str, password: str
+    authority: SupabaseAuthAdminAuthority, password: str
 ) -> tuple[dict[str, Any], bool]:
-    users = _all_auth_users(client, service_key)
+    users = _all_auth_users(authority)
     matches = [
         user for user in users
         if str(user.get("id", "")) == SERVICE_AUTH_USER_ID
@@ -311,9 +262,7 @@ def reconcile_service_user(
         "user_metadata": {},
     }
     if created:
-        user = client.auth_admin(
-            "POST", "users", service_key, payload=create_payload
-        )
+        user = auth_admin_request(authority, "POST", "users", payload=create_payload)
     else:
         # GoTrue's update contract treats the path UUID, audience, role, and
         # confirmed email as existing identity state.  Rotate only the two
@@ -326,10 +275,10 @@ def reconcile_service_user(
                 "erp_service_role": SERVICE_ROLE,
             },
         }
-        user = client.auth_admin(
+        user = auth_admin_request(
+            authority,
             "PUT",
             f"users/{SERVICE_AUTH_USER_ID}",
-            service_key,
             payload=update_payload,
         )
     if not isinstance(user, dict):
@@ -546,11 +495,13 @@ def main(argv: list[str] | None = None) -> int:
             raise IdentityProvisioningError(
                 "ANON_KEY_MISSING", "SUPABASE_ANON_KEY is required"
             )
-        client = Client(os.getenv("SUPABASE_ACCESS_TOKEN", ""))
-        service_key = _auth_admin_bootstrap_key(client)
+        management_token = os.getenv("SUPABASE_ACCESS_TOKEN", "")
+        client = Client(management_token)
+        authority = resolve_auth_admin_authority(management_token, PROJECT_REF)
+        mask_auth_admin_secret(authority)
         password = secrets.token_urlsafe(48)
         print(f"::add-mask::{password}")
-        _, created = reconcile_service_user(client, service_key, password)
+        _, created = reconcile_service_user(authority, password)
         hook = reconcile_hook_config(client)
         verify_password_session(client, anon_key, password)
         retired_key_id = retire_custom_api_key(client)
@@ -570,7 +521,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(json.dumps({"state": "ready", "project_ref": PROJECT_REF}))
         return 0
-    except IdentityProvisioningError as error:
+    except (IdentityProvisioningError, SupabaseAuthAdminError) as error:
         _write_receipt(
             args.receipt,
             {**base, "state": "blocked", "error_code": error.code},

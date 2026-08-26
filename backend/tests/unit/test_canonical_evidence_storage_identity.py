@@ -36,29 +36,36 @@ def user(**overrides):
     return value
 
 
-class AuthClient:
+AUTHORITY = provision.SupabaseAuthAdminAuthority(
+    provision.PROJECT_REF, "sb_secret_" + "a" * 32
+)
+
+
+class AuthAdminStub:
     def __init__(self, users, response=None):
         self.users = users
         self.response = response or user()
         self.calls = []
 
-    def auth_admin(self, method, path, _service_key, **kwargs):
+    def request(self, authority, method, path, **kwargs):
+        assert authority == AUTHORITY
         self.calls.append((method, path, kwargs))
         if method == "GET":
             return {"users": self.users}
         return self.response
 
 
-def test_service_identity_creation_uses_exact_uuid_email_marker_and_role() -> None:
-    client = AuthClient([])
+def test_service_identity_creation_uses_exact_uuid_email_marker_and_role(
+    monkeypatch,
+) -> None:
+    stub = AuthAdminStub([])
+    monkeypatch.setattr(provision, "auth_admin_request", stub.request)
 
-    resolved, created = provision.reconcile_service_user(
-        client, "runner-local-service-key", "random-password"
-    )
+    resolved, created = provision.reconcile_service_user(AUTHORITY, "random-password")
 
     assert resolved == user()
     assert created is True
-    method, path, kwargs = client.calls[-1]
+    method, path, kwargs = stub.calls[-1]
     assert (method, path) == ("POST", "users")
     payload = kwargs["payload"]
     assert payload == {
@@ -90,18 +97,17 @@ def test_platform_identity_constants_come_from_versioned_authority() -> None:
     assert authority["max_access_token_seconds"] == 900
 
 
-def test_existing_exact_identity_rotates_password_in_place() -> None:
-    client = AuthClient([user()])
+def test_existing_exact_identity_rotates_password_in_place(monkeypatch) -> None:
+    stub = AuthAdminStub([user()])
+    monkeypatch.setattr(provision, "auth_admin_request", stub.request)
 
-    _, created = provision.reconcile_service_user(
-        client, "runner-local-service-key", "new-random-password"
-    )
+    _, created = provision.reconcile_service_user(AUTHORITY, "new-random-password")
 
     assert created is False
-    assert client.calls[-1][0:2] == (
+    assert stub.calls[-1][0:2] == (
         "PUT", f"users/{provision.SERVICE_AUTH_USER_ID}"
     )
-    assert client.calls[-1][2]["payload"] == {
+    assert stub.calls[-1][2]["payload"] == {
         "password": "new-random-password",
         "app_metadata": {
             "erp_service_identity": provision.SERVICE_MARKER,
@@ -123,11 +129,13 @@ def test_existing_exact_identity_rotates_password_in_place() -> None:
         ],
     ],
 )
-def test_collision_or_duplicate_service_identity_fails_closed(users) -> None:
+def test_collision_or_duplicate_service_identity_fails_closed(
+    monkeypatch, users
+) -> None:
+    stub = AuthAdminStub(users)
+    monkeypatch.setattr(provision, "auth_admin_request", stub.request)
     with pytest.raises(provision.IdentityProvisioningError):
-        provision.reconcile_service_user(
-            AuthClient(users), "runner-local-service-key", "password"
-        )
+        provision.reconcile_service_user(AUTHORITY, "password")
 
 
 class ManagementClient:
@@ -138,39 +146,6 @@ class ManagementClient:
     def management(self, method, path, **kwargs):
         self.calls.append((method, path, kwargs))
         return self.responses.pop(0)
-
-
-def test_auth_admin_uses_only_the_current_exact_secret_service_role_key() -> None:
-    secret = "sb_secret_" + "a" * 32
-    client = ManagementClient([[
-        {"name": "default", "type": "publishable", "api_key": "sb_publishable_x"},
-        {
-            "name": provision.AUTH_ADMIN_KEY_NAME,
-            "type": "secret",
-            "api_key": secret,
-            "secret_jwt_template": {"role": "service_role"},
-        },
-        {"name": "service_role", "api_key": "legacy-must-not-be-used"},
-    ]])
-
-    assert provision._auth_admin_bootstrap_key(client) == secret
-
-
-@pytest.mark.parametrize(
-    "record",
-    [
-        {"name": "service_role", "api_key": "legacy"},
-        {
-            "name": "default",
-            "type": "secret",
-            "api_key": "sb_secret_" + "a" * 32,
-            "secret_jwt_template": {"role": "authenticated"},
-        },
-    ],
-)
-def test_legacy_or_drifted_auth_admin_key_fails_closed(record) -> None:
-    with pytest.raises(provision.IdentityProvisioningError):
-        provision._auth_admin_bootstrap_key(ManagementClient([[record]]))
 
 
 def test_auth_hook_configuration_is_enabled_without_overwriting_other_fields() -> None:

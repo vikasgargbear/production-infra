@@ -517,6 +517,13 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert '"requester_ip":true' in workflow
     assert "manage_render_pilot_lifecycle.py quiesce" in workflow
     assert "manage_render_pilot_lifecycle.py resume-owned" in workflow
+    auth_admin_preflight = (
+        "python3 backend/scripts/verify_supabase_auth_admin_secret.py"
+    )
+    assert auth_admin_preflight in workflow
+    assert workflow.index(auth_admin_preflight) < workflow.index(
+        "manage_render_pilot_lifecycle.py quiesce"
+    )
     assert workflow.index("manage_render_pilot_lifecycle.py quiesce") < workflow.index(
         "Restart the pinned free staging database"
     )
@@ -1079,7 +1086,7 @@ def test_free_staging_reset_is_explicit_and_preserves_supabase_schemas():
     assert "if: inputs.restart_staging_database == true" in workflow
     assert '"https://api.supabase.com/v1/projects/$CANONICAL_STAGING_PROJECT_REF/restart"' in workflow
     restart_step = workflow.split("Restart the pinned free staging database", 1)[1].split(
-        "Install the reviewed migration toolchain", 1
+        "Verify generated authority before network writes", 1
     )[0]
     assert "for attempt in $(seq 1 20)" in restart_step
     assert 'test "$attempt" -lt 20' in restart_step

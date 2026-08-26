@@ -156,6 +156,9 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements.txt
 
+      - name: Install the reviewed migration toolchain
+        run: pip install -r backend/requirements.txt
+
       - uses: actions/setup-node@v4
         if: inputs.deploy_render_pilot == true
         with:
@@ -223,6 +226,12 @@ jobs:
             echo "SUPABASE_POOLER_PORT=$pooler_port"
             echo "SUPABASE_SESSION_POOLER_PORT=5432"
           } >> "$GITHUB_ENV"
+
+      - name: Prove runner-only Supabase Auth Admin authority before mutation
+        run: |
+          set -euo pipefail
+          python3 backend/scripts/verify_supabase_auth_admin_secret.py \
+            --project-ref "$CANONICAL_STAGING_PROJECT_REF"
 
       - name: Validate the reviewed Render deployment transaction
         env:
@@ -335,9 +344,6 @@ jobs:
             test "$attempt" -lt 20
             sleep 15
           done
-
-      - name: Install the reviewed migration toolchain
-        run: pip install -r backend/requirements.txt
 
       - name: Verify generated authority before network writes
         run: |
@@ -1386,7 +1392,7 @@ jobs:
 
           discovery_url="$SUPABASE_URL/.well-known/oauth-authorization-server/auth/v1"
           discovery=''
-          for _ in 1 2 3 4 5; do
+          for attempt in 1 2 3 4 5; do
             if discovery=$(curl --fail --silent --show-error --max-time 15 "$discovery_url"); then
               break
             fi
@@ -1507,7 +1513,7 @@ jobs:
           }
           trap cleanup_demo_on_exit EXIT
           api_ready=false
-          for _ in 1 2 3 4 5; do
+          for attempt in 1 2 3 4 5; do
             if curl --fail --silent --show-error --max-time 10 \
               "$CANONICAL_DEMO_API_URL/health" >/dev/null \
               && curl --fail --silent --show-error --max-time 10 \
@@ -1515,6 +1521,7 @@ jobs:
               api_ready=true
               break
             fi
+            echo "Canonical demo API readiness attempt $attempt did not complete" >&2
             sleep 3
           done
           if [ "$api_ready" != true ]; then
