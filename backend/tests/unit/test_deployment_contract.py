@@ -605,6 +605,9 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
         in workflow
     )
     assert "/analytics/endpoints/logs" in workflow
+    assert '"iso_timestamp_start=$log_window_start"' in workflow
+    assert '"iso_timestamp_end=$log_window_end"' in workflow
+    assert "backend_refused_count" in workflow
     assert "source = 'supavisor_logs'" in workflow
     assert "jq -c '{result,error}'" not in workflow
     assert "Response shape was not the reviewed counter schema" in workflow

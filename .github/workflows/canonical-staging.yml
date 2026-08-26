@@ -1007,6 +1007,7 @@ jobs:
             countIf(positionCaseInsensitive(event_message, 'ECIRCUITBREAKER') > 0) AS circuit_breaker_count,
             countIf(positionCaseInsensitive(event_message, 'worker_not_found') > 0) AS worker_not_found_count,
             countIf(positionCaseInsensitive(event_message, 'authentication') > 0) AS authentication_count,
+            countIf(positionCaseInsensitive(event_message, 'econnrefused') > 0) AS backend_refused_count,
             count(*) AS supavisor_event_count
           FROM logs
           WHERE source = 'supavisor_logs'
@@ -1014,9 +1015,13 @@ jobs:
           SQL
           )
           response=$(mktemp)
+          log_window_end=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          log_window_start=$(date -u -d '30 minutes ago' +%Y-%m-%dT%H:%M:%SZ)
           if curl --fail --silent --show-error --get \
             --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
             --data-urlencode "sql=$query" \
+            --data-urlencode "iso_timestamp_start=$log_window_start" \
+            --data-urlencode "iso_timestamp_end=$log_window_end" \
             "https://api.supabase.com/v1/projects/$CANONICAL_STAGING_PROJECT_REF/analytics/endpoints/logs" \
             >"$response"; then
             if summary=$(jq -cer '
@@ -1033,6 +1038,7 @@ jobs:
                   circuit_breaker_count: (.circuit_breaker_count | bounded_uint),
                   worker_not_found_count: (.worker_not_found_count | bounded_uint),
                   authentication_count: (.authentication_count | bounded_uint),
+                  backend_refused_count: (.backend_refused_count | bounded_uint),
                   supavisor_event_count: (.supavisor_event_count | bounded_uint)
                 }
             ' "$response" 2>/dev/null); then
