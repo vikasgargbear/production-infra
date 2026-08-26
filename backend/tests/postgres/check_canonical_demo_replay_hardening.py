@@ -24,6 +24,18 @@ from scripts import provision_canonical_demo as fixture
 register_uuid()
 
 
+def _connect():
+    """Open only the explicitly supplied disposable PostgreSQL database."""
+
+    url = make_url(os.environ["DATABASE_URL"])
+    return psycopg2.connect(
+        host=url.host,
+        port=url.port or 5432,
+        dbname=url.database,
+        user=url.username,
+        password=url.password or "",
+    )
+
 
 def _configure_fixture_ids() -> None:
     namespace = uuid4()
