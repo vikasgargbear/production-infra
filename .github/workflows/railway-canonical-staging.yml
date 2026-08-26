@@ -116,6 +116,7 @@ jobs:
             --require-env RAILWAY_FRONTEND_SERVICE
           python3 backend/scripts/deployment_control.py \
             assert-active-provider railway
+          test "$CANONICAL_APPLICATION_DATABASE_TRANSPORT" = supabase_direct_ipv6
 
       - name: Install the pinned Railway CLI
         run: npm install --global @railway/cli@5.43.4
@@ -703,7 +704,7 @@ jobs:
           echo "Railway services did not converge on reviewed SHA $REVIEWED_SHA" >&2
           exit 1
 
-      - name: Prove Railway is selected and Render is inactive
+      - name: Prove selected provider authority and inactive standbys
         run: |
           set -euo pipefail
           python3 backend/scripts/deployment_control.py status \
