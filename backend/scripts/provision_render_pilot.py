@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import time
 from dataclasses import dataclass
@@ -39,6 +40,9 @@ BACKEND_REQUIRED = (
     "SUPABASE_ANON_KEY",
     "MCP_INTERNAL_SERVICE_TOKEN",
     "MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS",
+    "EVIDENCE_STORAGE_ENABLED",
+    "EVIDENCE_STORAGE_EXPECTED_PROJECT_REF",
+    "EVIDENCE_STORAGE_SERVER_API_KEY",
 )
 MCP_SHARED_REQUIRED = (
     "SUPABASE_OAUTH_ISSUER",
@@ -105,6 +109,23 @@ def operator_values(env_file: Optional[Path]) -> Dict[str, str]:
     if missing:
         raise ProvisioningError(
             "Missing required operator values: " + ", ".join(sorted(missing))
+        )
+    if values["EVIDENCE_STORAGE_ENABLED"] != "true":
+        raise ProvisioningError(
+            "EVIDENCE_STORAGE_ENABLED must be true for reviewed Render certification"
+        )
+    expected_project = values["EVIDENCE_STORAGE_EXPECTED_PROJECT_REF"]
+    expected_origin = f"https://{expected_project}.supabase.co"
+    if values["SUPABASE_URL"].rstrip("/") != expected_origin:
+        raise ProvisioningError(
+            "canonical evidence storage project authority does not match SUPABASE_URL"
+        )
+    if re.fullmatch(
+        r"sb_secret_[A-Za-z0-9._-]{24,}",
+        values["EVIDENCE_STORAGE_SERVER_API_KEY"],
+    ) is None:
+        raise ProvisioningError(
+            "canonical evidence storage requires a Supabase secret API key"
         )
     configured_smtp = [key for key in SMTP_KEYS if values.get(key, "").strip()]
     if configured_smtp and len(configured_smtp) != len(SMTP_KEYS):

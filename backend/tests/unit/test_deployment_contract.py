@@ -16,7 +16,7 @@ def test_live_promotion_is_exact_sha_canonical_and_disposable_org_bound():
 
     assert "deploy_render_pilot: ${{ inputs.deploy_canonical_staging && inputs.live18_provider == 'render' }}" in production
     assert "if: inputs.deploy_render_pilot == true" in staging
-    assert staging.count("if: inputs.deploy_render_pilot == true") == 8
+    assert staging.count("if: inputs.deploy_render_pilot == true") == 9
     assert "Close canonical writes before Render promotion" in staging
     assert "Open canonical writes after exact-SHA verification" in staging
     provision = staging.split("Provision and exercise the disposable demo organization", 1)[1]
@@ -616,7 +616,7 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert 'detail = "canonical demo failure summary unavailable"' in workflow
     assert "raw[-2800:]" not in workflow
     assert 'detail = ((headlines[-1] + "\\n") if headlines else "")' not in workflow
-    assert workflow.count("backend/scripts/safe_ci_log_summary.py") == 7
+    assert workflow.count("backend/scripts/safe_ci_log_summary.py") == 8
     assert "--label render-config" not in workflow
     assert '--label "render-$service_name"' not in workflow
     assert '--label readiness "$api_log"' in workflow

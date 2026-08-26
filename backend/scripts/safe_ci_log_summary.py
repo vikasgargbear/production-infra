@@ -52,6 +52,15 @@ def _safe_render_diagnostic(text: str) -> Optional[str]:
     """Classify known provisioner failures without emitting provider payloads."""
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     for line in reversed(lines):
+        evidence_key = re.fullmatch(
+            r"evidence storage key provisioning blocked: ([A-Za-z0-9 /_-]+)",
+            line,
+        )
+        if evidence_key:
+            message = evidence_key.group(1)
+            if "HTTP" in message:
+                return "evidence_storage_management_api_blocked"
+            return "evidence_storage_key_contract_blocked"
         missing = re.fullmatch(
             r"provisioning blocked: Missing required operator values: ([A-Z0-9_, ]+)",
             line,

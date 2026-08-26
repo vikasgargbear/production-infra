@@ -283,14 +283,14 @@ def test_evidence_storage_is_explicit_restricted_and_fail_closed() -> None:
         workflow.index("Force-upload the exact source tree")
     ]
 
-    assert "EVIDENCE_STORAGE_SERVER_JWT:" in workflow
-    assert "required: false" in workflow.split("EVIDENCE_STORAGE_SERVER_JWT:", 1)[1].splitlines()[1]
+    assert "EVIDENCE_STORAGE_SERVER_API_KEY:" in workflow
+    assert "required: false" in workflow.split("EVIDENCE_STORAGE_SERVER_API_KEY:", 1)[1].splitlines()[1]
     assert "evidence_storage_enabled=${EVIDENCE_STORAGE_ENABLED:-false}" in variable_step
     assert 'set_variable "$RAILWAY_API_SERVICE" EVIDENCE_STORAGE_ENABLED false' in variable_step
     assert 'test "$EVIDENCE_STORAGE_EXPECTED_PROJECT_REF" = "$CANONICAL_STAGING_PROJECT_REF"' in variable_step
-    assert 'test -n "$EVIDENCE_STORAGE_SERVER_JWT"' in variable_step
-    assert 'test "$evidence_role" = erp_evidence_storage' in variable_step
-    assert 'set_variable "$RAILWAY_API_SERVICE" EVIDENCE_STORAGE_SERVER_JWT "$EVIDENCE_STORAGE_SERVER_JWT"' in variable_step
+    assert 'test -n "$EVIDENCE_STORAGE_SERVER_API_KEY"' in variable_step
+    assert 'sb_secret_*)' in variable_step
+    assert 'set_variable "$RAILWAY_API_SERVICE" EVIDENCE_STORAGE_SERVER_API_KEY "$EVIDENCE_STORAGE_SERVER_API_KEY"' in variable_step
     assert 'set_variable "$RAILWAY_API_SERVICE" EVIDENCE_STORAGE_ENABLED true' in variable_step
     assert "EVIDENCE_STORAGE_ENABLED must be exactly true or false" in variable_step
     assert 'set_variable "$RAILWAY_MCP_SERVICE" EVIDENCE_STORAGE' not in variable_step

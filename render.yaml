@@ -40,7 +40,7 @@ services:
         sync: false
       - key: EVIDENCE_STORAGE_ENABLED
         sync: false
-      - key: EVIDENCE_STORAGE_SERVER_JWT
+      - key: EVIDENCE_STORAGE_SERVER_API_KEY
         sync: false
       - key: MCP_INTERNAL_SERVICE_TOKEN
         sync: false

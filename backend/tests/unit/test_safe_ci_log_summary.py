@@ -69,3 +69,21 @@ def test_render_annotation_exposes_only_allowlisted_contract_diagnostic(tmp_path
         "unreviewed_environment_keys:aasopharma-api-pilot:OLD_FLAG,UNUSED_KEY"
     )
     assert "secret-must-not-escape" not in annotation
+
+
+def test_render_annotation_classifies_evidence_key_failure_without_echoing_it(
+    tmp_path,
+) -> None:
+    log_path = tmp_path / "evidence-key.log"
+    log_path.write_text(
+        "evidence storage key provisioning blocked: Supabase Management API "
+        "GET /projects/private/api-keys failed with HTTP 403\n"
+        "sb_secret_private-must-not-escape\n",
+        encoding="utf-8",
+    )
+
+    annotation = safe_log_annotation(log_path, label="render")
+    metadata = json.loads(annotation.split("::", 2)[2])
+
+    assert metadata["diagnostic"] == "evidence_storage_management_api_blocked"
+    assert "private-must-not-escape" not in annotation

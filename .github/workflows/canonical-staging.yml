@@ -129,6 +129,7 @@ jobs:
       SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
       SUPABASE_OAUTH_ISSUER: ${{ vars.SUPABASE_OAUTH_ISSUER }}
       SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+      EVIDENCE_STORAGE_EXPECTED_PROJECT_REF: ${{ vars.CANONICAL_STAGING_PROJECT_REF }}
       CANONICAL_STAGING_WEB_TEST_AUTH_USER_ID: ${{ vars.CANONICAL_STAGING_WEB_TEST_AUTH_USER_ID }}
       TAX_PROVIDER_INTERNAL_HMAC_SECRET: ${{ secrets.TAX_PROVIDER_INTERNAL_HMAC_SECRET }}
       TAX_PROVIDER_INTERNAL_SERVICE_TOKEN: ${{ secrets.TAX_PROVIDER_INTERNAL_SERVICE_TOKEN }}
@@ -1026,6 +1027,39 @@ jobs:
           echo "DATABASE_URL=$runtime_url" >> "$GITHUB_ENV"
           echo "ERP_CALCULATOR_DATABASE_URL=$calculator_url" >> "$GITHUB_ENV"
           echo "TAX_PROVIDER_DATABASE_URL=$provider_url" >> "$GITHUB_ENV"
+
+      - name: Provision canonical private evidence storage
+        if: inputs.deploy_render_pilot == true
+        run: |
+          set -euo pipefail
+          test "$CANONICAL_STAGING_PROJECT_REF" = "$EVIDENCE_STORAGE_EXPECTED_PROJECT_REF"
+          test "$SUPABASE_URL" = "https://${CANONICAL_STAGING_PROJECT_REF}.supabase.co"
+          mkdir -p staging-evidence
+          psql -X -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" \
+            -f database/09-deployment/canonical-evidence-storage.sql >/dev/null
+          evidence_role=$(psql -X -Atqc \
+            "SELECT rolname FROM pg_catalog.pg_roles WHERE rolname='erp_evidence_storage' AND NOT rolcanlogin AND NOT rolsuper AND NOT rolbypassrls" \
+            "$PSYCOPG_DATABASE_URL")
+          test "$evidence_role" = erp_evidence_storage
+          test "$(psql -X -Atqc \
+            "SELECT pg_has_role('authenticator','erp_evidence_storage','MEMBER')" \
+            "$PSYCOPG_DATABASE_URL")" = t
+          test "$(psql -X -Atqc \
+            "SELECT count(*) FROM storage.buckets WHERE id='canonical-evidence-private-v1' AND public=false AND file_size_limit=10485760 AND allowed_mime_types=ARRAY['application/pdf']::text[]" \
+            "$PSYCOPG_DATABASE_URL")" = 1
+          test "$(psql -X -Atqc \
+            "SELECT count(*) FROM pg_catalog.pg_policy WHERE polrelid='storage.objects'::regclass AND polname IN ('canonical_evidence_server_select','canonical_evidence_server_insert','canonical_evidence_server_delete')" \
+            "$PSYCOPG_DATABASE_URL")" = 3
+          key_log=$(mktemp)
+          if ! python3 backend/scripts/provision_canonical_evidence_storage_key.py \
+              --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
+              --github-env "$GITHUB_ENV" \
+              --receipt staging-evidence/canonical-evidence-storage-key.json \
+              >staging-evidence/canonical-evidence-storage-key-summary.json \
+              2>"$key_log"; then
+            python3 backend/scripts/safe_ci_log_summary.py --label render "$key_log"
+            exit 1
+          fi
 
       - name: Capture and audit exact-SHA transaction integrity
         run: |

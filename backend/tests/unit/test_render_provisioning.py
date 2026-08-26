@@ -24,9 +24,12 @@ def _values():
         "TAX_PROVIDER_INTERNAL_SERVICE_TOKEN": "tax-provider-bearer-secret-value-123456",
         "TAX_PROVIDER_INTERNAL_HMAC_SECRET": "tax-provider-hmac-secret-value-1234567",
         "JWT_SECRET_KEY": "secret-jwt",
-        "SUPABASE_URL": "https://example.supabase.co",
+        "SUPABASE_URL": "https://canonicalcanonical12.supabase.co",
         "SUPABASE_ANON_KEY": "public-anon",
-        "SUPABASE_OAUTH_ISSUER": "https://example.supabase.co/auth/v1",
+        "SUPABASE_OAUTH_ISSUER": "https://canonicalcanonical12.supabase.co/auth/v1",
+        "EVIDENCE_STORAGE_ENABLED": "true",
+        "EVIDENCE_STORAGE_EXPECTED_PROJECT_REF": "canonicalcanonical12",
+        "EVIDENCE_STORAGE_SERVER_API_KEY": "sb_secret_" + "e" * 32,
         "MCP_INTERNAL_SERVICE_TOKEN": "internal-service-secret-value-123456",
         "MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS": "reviewed-client-id",
     }
@@ -114,6 +117,9 @@ def test_environment_mapping_uses_derived_service_origins():
         "JWT_SECRET_KEY",
         "SUPABASE_URL",
         "SUPABASE_ANON_KEY",
+        "EVIDENCE_STORAGE_ENABLED",
+        "EVIDENCE_STORAGE_EXPECTED_PROJECT_REF",
+        "EVIDENCE_STORAGE_SERVER_API_KEY",
         "MCP_INTERNAL_SERVICE_TOKEN",
         "MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS",
     }
@@ -121,7 +127,7 @@ def test_environment_mapping_uses_derived_service_origins():
     assert frontend["NODE_VERSION"] == "22"
     assert "SUPABASE_SERVICE_ROLE_KEY" not in frontend
     assert mcp == {
-        "SUPABASE_OAUTH_ISSUER": "https://example.supabase.co/auth/v1",
+        "SUPABASE_OAUTH_ISSUER": "https://canonicalcanonical12.supabase.co/auth/v1",
         "ERP_API_BASE_URL": "https://api.onrender.com",
         "MCP_INTERNAL_SERVICE_TOKEN": "internal-service-secret-value-123456",
         "MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS": "reviewed-client-id",
@@ -150,6 +156,32 @@ def test_redacted_payload_never_prints_operator_values():
     for value in _values().values():
         assert value not in rendered
     assert "secret-jwt" not in rendered
+
+
+@pytest.mark.parametrize(
+    ("key", "value", "message"),
+    [
+        ("EVIDENCE_STORAGE_ENABLED", "false", "must be true"),
+        (
+            "EVIDENCE_STORAGE_EXPECTED_PROJECT_REF",
+            "differentdifferent12",
+            "does not match SUPABASE_URL",
+        ),
+        (
+            "EVIDENCE_STORAGE_SERVER_API_KEY",
+            "not-a-secret-key",
+            "requires a Supabase secret API key",
+        ),
+    ],
+)
+def test_evidence_storage_configuration_fails_closed(monkeypatch, key, value, message):
+    values = _values()
+    for env_key, env_value in values.items():
+        monkeypatch.setenv(env_key, env_value)
+    monkeypatch.setenv(key, value)
+
+    with pytest.raises(provision.ProvisioningError, match=message):
+        provision.operator_values(None)
 
 
 class RecordingClient(provision.RenderClient):

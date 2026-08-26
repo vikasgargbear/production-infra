@@ -38,7 +38,7 @@ on:
         required: true
       TAX_PROVIDER_INTERNAL_HMAC_SECRET:
         required: true
-      EVIDENCE_STORAGE_SERVER_JWT:
+      EVIDENCE_STORAGE_SERVER_API_KEY:
         required: false
 
 permissions:
@@ -314,7 +314,7 @@ jobs:
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           TAX_PROVIDER_INTERNAL_SERVICE_TOKEN: ${{ secrets.TAX_PROVIDER_INTERNAL_SERVICE_TOKEN }}
           TAX_PROVIDER_INTERNAL_HMAC_SECRET: ${{ secrets.TAX_PROVIDER_INTERNAL_HMAC_SECRET }}
-          EVIDENCE_STORAGE_SERVER_JWT: ${{ secrets.EVIDENCE_STORAGE_SERVER_JWT }}
+          EVIDENCE_STORAGE_SERVER_API_KEY: ${{ secrets.EVIDENCE_STORAGE_SERVER_API_KEY }}
         run: |
           set -euo pipefail
 
@@ -394,27 +394,13 @@ jobs:
               ;;
             true)
               test "$EVIDENCE_STORAGE_EXPECTED_PROJECT_REF" = "$CANONICAL_STAGING_PROJECT_REF"
-              test -n "$EVIDENCE_STORAGE_SERVER_JWT"
-              evidence_role=$(
-                printf '%s' "$EVIDENCE_STORAGE_SERVER_JWT" | python3 -c '
-          import base64, json, sys
-          parts = sys.stdin.read().strip().split(".")
-          if len(parts) != 3:
-              raise SystemExit(2)
-          payload = parts[1] + "=" * (-len(parts[1]) % 4)
-          try:
-              value = json.loads(base64.urlsafe_b64decode(payload).decode("utf-8"))
-          except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
-              raise SystemExit(2)
-          role = value.get("role")
-          if not isinstance(role, str):
-              raise SystemExit(2)
-          print(role)
-          '
-              )
-              test "$evidence_role" = erp_evidence_storage
+              test -n "$EVIDENCE_STORAGE_SERVER_API_KEY"
+              case "$EVIDENCE_STORAGE_SERVER_API_KEY" in
+                sb_secret_*) ;;
+                *) echo "Evidence storage requires a restricted Supabase secret API key" >&2; exit 2 ;;
+              esac
               set_variable "$RAILWAY_API_SERVICE" EVIDENCE_STORAGE_EXPECTED_PROJECT_REF "$EVIDENCE_STORAGE_EXPECTED_PROJECT_REF"
-              set_variable "$RAILWAY_API_SERVICE" EVIDENCE_STORAGE_SERVER_JWT "$EVIDENCE_STORAGE_SERVER_JWT"
+              set_variable "$RAILWAY_API_SERVICE" EVIDENCE_STORAGE_SERVER_API_KEY "$EVIDENCE_STORAGE_SERVER_API_KEY"
               set_variable "$RAILWAY_API_SERVICE" EVIDENCE_STORAGE_ENABLED true
               ;;
             *)
