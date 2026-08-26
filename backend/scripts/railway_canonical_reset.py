@@ -338,7 +338,9 @@ def _temporary_owner_delegation(
         yield
     finally:
         _set_owner_delegation(database_url, enabled=False)
-        with psycopg2.connect(database_url) as connection:
+        # The verifier owns its transaction context.  Use closing() here so
+        # psycopg2 is not asked to re-enter the same connection context.
+        with contextlib.closing(psycopg2.connect(database_url)) as connection:
             verify_post_cleanup_role_state(connection, project_ref=project_ref)
 
 
@@ -517,7 +519,7 @@ def _upgrade_exact_migration_head(
         raise RailwayCanonicalResetError(
             "canonical Alembic upgrade did not reach the reviewed head"
         ) from error
-    with psycopg2.connect(database_url) as connection:
+    with contextlib.closing(psycopg2.connect(database_url)) as connection:
         return verify_reset_boundary(
             connection, authority=authority, project_ref=project_ref
         )
@@ -552,7 +554,7 @@ def prepare_reset_boundary(
         migration_receipt = _upgrade_exact_migration_head(
             database_url, authority=authority, project_ref=project_ref
         )
-    with psycopg2.connect(database_url) as connection:
+    with contextlib.closing(psycopg2.connect(database_url)) as connection:
         role_receipt = verify_post_cleanup_role_state(
             connection, project_ref=project_ref
         )
@@ -604,14 +606,14 @@ def reset_disposable_staging(
             evidence_cleanup_receipt_path, project_ref=project_ref
         )
         session_receipt = _terminate_isolated_sessions(database_url)
-        with psycopg2.connect(database_url) as connection:
+        with contextlib.closing(psycopg2.connect(database_url)) as connection:
             reset_receipt = execute_reset(
                 connection,
                 authority=authority,
                 project_ref=project_ref,
                 expected_evidence_object_count=0,
             )
-    with psycopg2.connect(database_url) as connection:
+    with contextlib.closing(psycopg2.connect(database_url)) as connection:
         role_receipt = verify_post_cleanup_role_state(
             connection, project_ref=project_ref
         )
@@ -680,7 +682,7 @@ def _set_fence_after_deploy(
             f"railway_write_fence_{action}_failed:"
             f"{_database_failure_code(error)}"
         ) from None
-    with psycopg2.connect(database_url) as connection:
+    with contextlib.closing(psycopg2.connect(database_url)) as connection:
         role_receipt = verify_post_cleanup_role_state(
             connection, project_ref=project_ref
         )

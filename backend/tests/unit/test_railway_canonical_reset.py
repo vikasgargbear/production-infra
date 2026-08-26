@@ -64,11 +64,24 @@ def _transport_receipt() -> dict[str, object]:
 
 
 class _Connection:
+    def __init__(self):
+        self._context_depth = 0
+        self.closed = False
+
     def __enter__(self):
+        if self._context_depth:
+            raise RESET.psycopg2.ProgrammingError(
+                "the connection cannot be re-entered recursively"
+            )
+        self._context_depth += 1
         return self
 
     def __exit__(self, *_args):
+        self._context_depth -= 1
         return False
+
+    def close(self):
+        self.closed = True
 
 
 def _common_stubs(monkeypatch: pytest.MonkeyPatch, calls: list[str]) -> None:
@@ -484,3 +497,34 @@ def test_database_failure_codes_are_stage_bound_without_error_text() -> None:
         "InjectedDatabaseError:sqlstate_42501"
     )
     assert "secret" not in RESET._database_failure_code(error)
+
+
+def test_temporary_owner_delegation_does_not_reenter_verifier_connection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+    connection = _Connection()
+    monkeypatch.setattr(
+        RESET,
+        "_set_owner_delegation",
+        lambda _database_url, *, enabled: calls.append(
+            "delegate" if enabled else "revoke"
+        ),
+    )
+    monkeypatch.setattr(RESET.psycopg2, "connect", lambda _url: connection)
+
+    def verify(candidate, *, project_ref):
+        assert candidate is connection
+        assert project_ref == PROJECT_REF
+        with candidate:
+            calls.append("verify")
+
+    monkeypatch.setattr(RESET, "verify_post_cleanup_role_state", verify)
+
+    with RESET._temporary_owner_delegation(
+        "postgresql://redacted", project_ref=PROJECT_REF
+    ):
+        calls.append("body")
+
+    assert calls == ["delegate", "body", "revoke", "verify"]
+    assert connection.closed is True
