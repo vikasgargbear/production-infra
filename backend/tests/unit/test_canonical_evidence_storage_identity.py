@@ -502,6 +502,8 @@ def test_blocked_main_writes_only_a_non_secret_error_code(tmp_path, monkeypatch)
     monkeypatch.setenv("SUPABASE_URL", provision.SUPABASE_URL)
     monkeypatch.setenv("SUPABASE_ANON_KEY", "anon-key")
     monkeypatch.delenv("SUPABASE_ACCESS_TOKEN", raising=False)
+    monkeypatch.delenv("GITHUB_RUN_ID", raising=False)
+    monkeypatch.delenv("GITHUB_RUN_ATTEMPT", raising=False)
 
     result = provision.main([
         "--phase", "prepare",
