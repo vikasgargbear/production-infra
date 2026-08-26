@@ -118,7 +118,7 @@ def _signed_database(*, provider: str, resources: dict[str, object]) -> dict[str
             "transport": (
                 "supabase_direct_ipv6_from_railway"
                 if provider == "railway"
-                else "supabase_session_pooler_from_github_actions"
+                else "supabase_direct_ipv4_from_github_actions"
             ),
         },
         "resources": resources,

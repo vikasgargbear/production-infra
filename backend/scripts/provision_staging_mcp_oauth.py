@@ -11,12 +11,15 @@ import secrets
 import sys
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, urlsplit
 from uuid import NAMESPACE_URL, UUID, uuid5
 import psycopg2
 import requests
 
 if __package__:
+    from .canonical_staging_database import (
+        build_direct_dsn,
+        load_direct_database_contract,
+    )
     from .supabase_auth_admin import (
         SupabaseAuthAdminAuthority,
         SupabaseAuthAdminError,
@@ -25,6 +28,10 @@ if __package__:
         resolve_auth_admin_authority,
     )
 else:
+    from canonical_staging_database import (
+        build_direct_dsn,
+        load_direct_database_contract,
+    )
     from supabase_auth_admin import (
         SupabaseAuthAdminAuthority,
         SupabaseAuthAdminError,
@@ -36,7 +43,6 @@ else:
 
 PROJECT_REF = "rgihahbmkrmhitjdjvev"
 SUPABASE_URL = f"https://{PROJECT_REF}.supabase.co"
-REVIEWED_POOLER_HOST = "aws-0-ap-south-1.pooler.supabase.com"
 CLIENT_NAME = "AASOPharma canonical staging MCP"
 WEB_CLIENT_ID = "aasopharma-erp-web"
 WEB_CLIENT_NAME = "AASOPharma canonical staging web"
@@ -304,43 +310,21 @@ def _reconcile_web_auth_organization(
 
 
 def _reviewed_database_url(database_url: str) -> str:
-    """Reject every database target except the reviewed staging pooler binding."""
+    """Reject every database target except the manifest-owned direct IPv4 DSN."""
 
-    try:
-        parsed = urlsplit(database_url)
-        port = parsed.port
-    except ValueError as exc:
+    contract = load_direct_database_contract()
+    if contract.project_ref != PROJECT_REF:
+        raise ProvisioningError("canonical database authority targets the wrong project")
+    expected = build_direct_dsn(
+        contract=contract,
+        role="postgres",
+        password=_required("SUPABASE_DB_PASSWORD"),
+        application_name="canonical_staging_ci",
+    )
+    if not secrets.compare_digest(database_url, expected):
         raise ProvisioningError(
-            "PSYCOPG_DATABASE_URL is not a valid reviewed DSN"
-        ) from exc
-    expected_host = _required("SUPABASE_POOLER_HOST")
-    expected_port = _required("CANONICAL_ACTIVE_POOLER_PORT")
-    active_mode = _required("CANONICAL_ACTIVE_POOLER_MODE")
-    if expected_host != REVIEWED_POOLER_HOST:
-        raise ProvisioningError("SUPABASE_POOLER_HOST is not the reviewed staging pooler")
-    if (active_mode, expected_port) not in {
-        ("session", "5432"),
-        ("transaction", "6543"),
-    }:
-        raise ProvisioningError("Canonical staging pooler mode and port are inconsistent")
-    query = parse_qs(parsed.query, keep_blank_values=True)
-    expected_query = {
-        "application_name": ["canonical_staging_ci"],
-        "connect_timeout": ["15"],
-        "gssencmode": ["disable"],
-        "sslmode": ["require"],
-    }
-    if (
-        parsed.scheme != "postgresql"
-        or parsed.username != f"postgres.{PROJECT_REF}"
-        or not parsed.password
-        or parsed.hostname != expected_host
-        or str(port) != expected_port
-        or parsed.path != "/postgres"
-        or parsed.fragment
-        or query != expected_query
-    ):
-        raise ProvisioningError("PSYCOPG_DATABASE_URL does not target reviewed staging")
+            "PSYCOPG_DATABASE_URL does not match reviewed staging direct IPv4"
+        )
     return database_url
 
 

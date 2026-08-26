@@ -54,11 +54,6 @@ on:
         required: true
         default: false
         type: boolean
-      refresh_canonical_staging_pooler:
-        description: Reapply the reviewed free-tier Supavisor configuration
-        required: true
-        default: false
-        type: boolean
       canonical_staging_render_sha:
         description: Reviewed application SHA for free-staging Render deployment
         required: false
@@ -145,7 +140,6 @@ jobs:
       reset_disposable_data: ${{ inputs.reset_canonical_staging }}
       restart_staging_database: ${{ inputs.restart_canonical_staging }}
       rotate_role_passwords: ${{ inputs.rotate_canonical_staging_roles }}
-      refresh_pooler_configuration: ${{ inputs.refresh_canonical_staging_pooler }}
       render_deploy_sha: ${{ inputs.canonical_staging_render_sha }}
       recover_render_suspension: ${{ inputs.recover_canonical_render_suspension }}
     secrets: inherit
@@ -776,6 +770,7 @@ jobs:
       PHARMA_CANONICAL_PRODUCTION_PROJECT_REFS: ${{ vars.CANONICAL_PRODUCTION_PROJECT_REFS }}
       PHARMA_CANONICAL_LIVE_API_BASE_URL: https://aasopharma-api-pilot.onrender.com
       CANONICAL_STAGING_PROJECT_REF: ${{ vars.CANONICAL_STAGING_PROJECT_REF }}
+      CANONICAL_EPHEMERAL_DATABASE_TRANSPORT: direct_ipv4
       SUPABASE_URL: ${{ vars.SUPABASE_URL }}
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
@@ -812,7 +807,7 @@ jobs:
           test "$CANONICAL_STAGING_PROJECT_REF" = rgihahbmkrmhitjdjvev
           test "$SUPABASE_URL" = https://rgihahbmkrmhitjdjvev.supabase.co
           encoded_password=$(jq -nr --arg value "$ERP_RUNTIME_PASSWORD" '$value|@uri')
-          runtime_url="postgresql://erp_runtime.${CANONICAL_STAGING_PROJECT_REF}:${encoded_password}@aws-0-ap-south-1.pooler.supabase.com:5432/postgres?sslmode=require&connect_timeout=15&application_name=canonical_live_reconciliation"
+          runtime_url="postgresql://erp_runtime:${encoded_password}@db.${CANONICAL_STAGING_PROJECT_REF}.supabase.co:5432/postgres?sslmode=require&gssencmode=disable&connect_timeout=15&application_name=canonical_live_reconciliation"
           echo "::add-mask::$runtime_url"
           echo "PHARMA_CANONICAL_LIVE_DATABASE_URL=$runtime_url" >> "$GITHUB_ENV"
       - name: Provision masked disposable requester and reviewer identities
@@ -898,6 +893,7 @@ jobs:
       PLAYWRIGHT_LIVE_BASE_URL: https://aasopharma-erp-pilot.onrender.com
       PLAYWRIGHT_LIVE_EXPECTED_ORG_ID: d3000000-0000-7000-8000-000000000001
       CANONICAL_STAGING_PROJECT_REF: ${{ vars.CANONICAL_STAGING_PROJECT_REF }}
+      CANONICAL_EPHEMERAL_DATABASE_TRANSPORT: direct_ipv4
       SUPABASE_URL: ${{ vars.SUPABASE_URL }}
       PLAYWRIGHT_LIVE_WRITES: "true"
       PLAYWRIGHT_USE_SYSTEM_CHROME: "true"
@@ -999,6 +995,7 @@ jobs:
       PLAYWRIGHT_LIVE_BASE_URL: "https://aasopharma-erp-pilot.onrender.com"
       PLAYWRIGHT_LIVE_EXPECTED_ORG_ID: "d3000000-0000-7000-8000-000000000001"
       CANONICAL_STAGING_PROJECT_REF: ${{ vars.CANONICAL_STAGING_PROJECT_REF }}
+      CANONICAL_EPHEMERAL_DATABASE_TRANSPORT: direct_ipv4
       SUPABASE_URL: ${{ vars.SUPABASE_URL }}
       PLAYWRIGHT_LIVE_RETURN_CUSTOMER_QUERY: "Demo Retail Customer"
       PLAYWRIGHT_LIVE_RETURN_INVOICE_PATTERN: "DEMO-SI-"
@@ -1132,6 +1129,7 @@ jobs:
       REVIEWED_DEPLOY_SHA: ${{ inputs.canonical_staging_render_sha }}
       LIVE18_PROVIDER: ${{ inputs.live18_provider }}
       CANONICAL_STAGING_PROJECT_REF: ${{ vars.CANONICAL_STAGING_PROJECT_REF }}
+      CANONICAL_EPHEMERAL_DATABASE_TRANSPORT: direct_ipv4
       SUPABASE_URL: ${{ vars.SUPABASE_URL }}
       PHARMA_CANONICAL_LIVE_WRITE_ACK: "true"
       PHARMA_CANONICAL_LIVE_TARGET_KIND: disposable_test
@@ -1589,7 +1587,7 @@ jobs:
         run: |
           set -euo pipefail
           encoded_password=$(jq -nr --arg value "$ERP_RUNTIME_PASSWORD" '$value|@uri')
-          runtime_url="postgresql://erp_runtime.${CANONICAL_STAGING_PROJECT_REF}:${encoded_password}@aws-0-ap-south-1.pooler.supabase.com:5432/postgres?sslmode=require&connect_timeout=15&application_name=canonical_live18"
+          runtime_url="postgresql://erp_runtime:${encoded_password}@db.${CANONICAL_STAGING_PROJECT_REF}.supabase.co:5432/postgres?sslmode=require&gssencmode=disable&connect_timeout=15&application_name=canonical_live18"
           echo "::add-mask::$runtime_url"
           echo "PHARMA_CANONICAL_LIVE_DATABASE_URL=$runtime_url" >> "$GITHUB_ENV"
           echo "LIVE18_DIRECT_DATABASE_EVIDENCE_OUTPUT_PATH=$LIVE18_DATABASE_EVIDENCE_PATH" >> "$GITHUB_ENV"

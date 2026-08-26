@@ -432,11 +432,19 @@ def test_render_pilot_diagnostics_emit_only_allowlisted_deploy_metadata():
     assert "redact(" not in job
 
 
-def test_free_staging_retries_only_transient_pooler_baseline_failures():
+def test_free_staging_uses_only_manifest_owned_direct_ipv4_database_transport():
     workflow = _read(".github/workflows/canonical-staging.yml")
-    pooler_verifier = _read("backend/scripts/verify_staging_pooler_roles.py")
+    direct_verifier = _read("backend/scripts/verify_staging_direct_roles.py")
 
-    assert "/config/database/pooler" in workflow
+    assert "/config/database/pooler" not in workflow
+    assert "Supavisor" not in workflow
+    assert "network-bans" not in workflow
+    assert "CANONICAL_ACTIVE_POOLER" not in workflow
+    assert "SUPABASE_POOLER" not in workflow
+    assert "verify_staging_pooler_roles.py" not in workflow
+    assert "verify_staging_direct_roles.py --bootstrap-only" in workflow
+    assert "verify_staging_direct_roles.py" in workflow
+    assert "load_direct_database_contract" in workflow
     project_preflight = workflow.split(
         "Refuse any target except the reviewed free staging project", 1
     )[1].split("Restart the pinned free staging database", 1)[0]
@@ -447,39 +455,21 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert 'test "$project_ready" = true' in project_preflight
     assert "/database/query/read-only" in workflow
     assert "Control plane verified exact canonical revision and topology" in workflow
-    assert 'test "$pooler_port" = 6543' in workflow
-    assert 'echo "SUPABASE_SESSION_POOLER_PORT=5432"' in workflow
-    assert "f\"@{host}:{port}/postgres?sslmode=require" in pooler_verifier
-    bootstrap = workflow.split("Build and mask the staging bootstrap connection", 1)[1].split(
-        "Reset canonical data", 1
-    )[0]
-    assert "verify_staging_pooler_roles.py --bootstrap-only" in bootstrap
-    assert "select_admin_pooler(" in pooler_verifier
-    assert "port=session_port" in pooler_verifier
-    assert "port=transaction_port" in pooler_verifier
-    assert workflow.index("Refresh the reviewed free-tier Supavisor configuration") < (
-        workflow.index("Build and mask the staging bootstrap connection")
-    )
     assert workflow.index("Build and mask the staging bootstrap connection") < (
         workflow.index("Reset canonical data on the pinned disposable project")
     )
-    assert "SUPABASE_POOLER_HOST" in workflow
-    assert "SUPABASE_POOLER_PORT" in workflow
-    assert "pooler.supabase.com:5432" not in workflow
-    assert workflow.count("connect_timeout=15") + pooler_verifier.count(
-        "connect_timeout=15"
-    ) == 6
-    assert "application_name=canonical_staging_ci" in pooler_verifier
-    assert "application_name=canonical_staging_verify" in pooler_verifier
-    assert workflow.count("gssencmode=disable") + pooler_verifier.count(
-        "gssencmode=disable"
-    ) >= 2
+    assert "SUPABASE_DIRECT_DATABASE_HOST" in workflow
+    assert "SUPABASE_DIRECT_DATABASE_PORT" in workflow
+    assert "CANONICAL_DATABASE_TRANSPORT" in workflow
+    assert "canonical_staging_ci" in direct_verifier
+    assert "canonical_staging_admin_verify" in direct_verifier
+    assert "canonical_staging_role_verify" in direct_verifier
     assert "for attempt in $(seq 1 3)" in workflow
-    assert "Supabase pooler unavailable; retrying baseline connection" in workflow
+    assert "Direct staging database unavailable; retrying baseline connection" in workflow
     assert "OperationalError|econnrefused|connection refused" in workflow
     assert "canceling statement due to (lock|statement) timeout" in workflow
     assert "server didn.t return client encoding" in workflow
-    assert "auth_query secret check timed out" in workflow
+    assert "auth_query secret check timed out" not in workflow
     assert 'if [ "$baseline_applied" != true ]' in workflow
     assert "SELECT to_regclass('public.alembic_version') IS NOT NULL" in workflow
     assert 'if [ "$version_table_exists" = f ]' in workflow
@@ -495,34 +485,17 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     assert "inputs.provision_demo_data" not in role_provisioning
     assert 're.fullmatch(r"[A-Za-z0-9_-]{48,96}", password)' in workflow
     assert "ALTER ROLE" in role_provisioning
-    assert 'session_url = os.environ["PSYCOPG_DATABASE_URL"]' in workflow
-    assert "os.environ['SUPABASE_SESSION_POOLER_PORT']" in role_provisioning
-    assert "os.environ['SUPABASE_POOLER_PORT']" in role_provisioning
-    assert '("session", session_url)' in role_provisioning
-    assert '("transaction", transaction_url)' in role_provisioning
-    assert "psycopg2.connect(database_url, connect_timeout=10)" in workflow
+    assert 'psycopg2.connect(os.environ["PSYCOPG_DATABASE_URL"])' in role_provisioning
     assert "SELECT rolcanlogin FROM pg_catalog.pg_roles WHERE rolname=%s" in workflow
     assert 'sql.SQL("ALTER ROLE {} LOGIN PASSWORD %s")' in workflow
     assert '"erp_regulatory_importer": os.environ["ERP_REGULATORY_IMPORTER_PASSWORD"]' in workflow
-    assert "for attempt in range(1, 3)" in role_provisioning
-    assert "range(1, 61)" not in workflow
-    assert "range(1, 19)" not in workflow
-    assert "seq 1 60" not in workflow
-    assert "if attempt < 2" in role_provisioning
-    assert "Allow rotated credentials to propagate through Supavisor" in workflow
-    assert "run: sleep 125" in workflow
+    assert "Rotated isolated roles atomically through direct IPv4 transport" in workflow
     assert "restart_requested" not in workflow
     assert "Canonical staging restart deferred" not in workflow
-    assert "python3 backend/scripts/verify_staging_pooler_roles.py" in workflow
-    assert "python3 backend/scripts/verify_staging_pooler_roles.py --bootstrap-only" in workflow
-    assert "def select_admin_pooler(" in pooler_verifier
     assert "ROLE_POSTURE_QUERY" in workflow
     assert "role.rolpassword IS NOT NULL AS password_present" in workflow
     assert "password_unexpired" in workflow
     assert "Canonical isolated role posture" in workflow
-    assert "/network-bans/retrieve" in workflow
-    assert "/network-bans/retrieve/enriched" in workflow
-    assert '"requester_ip":true' in workflow
     assert "manage_render_pilot_lifecycle.py quiesce" in workflow
     assert "manage_render_pilot_lifecycle.py resume-owned" in workflow
     auth_admin_preflight = (
@@ -560,70 +533,10 @@ def test_free_staging_retries_only_transient_pooler_baseline_failures():
     ) < render_deploy.index("deploy_one_service aasopharma-erp-pilot")
     assert "timeout-minutes: 360" in workflow
     assert "--request POST" in workflow
-    assert "Canonical staging network-ban count" in workflow
-    assert "def verify_role_set_once(" in pooler_verifier
-    assert "def verify_role_set_with_retry(" in pooler_verifier
-    assert "for role, password in roles.items():" in pooler_verifier
-    assert "verify_set(" in pooler_verifier
-    assert "port=session_port" in pooler_verifier
-    runtime_selector = pooler_verifier.split("def select_pooler(", 1)[1].split(
-        "def select_admin_pooler(", 1
-    )[0]
-    assert "transaction_port" not in runtime_selector
-    assert 'return session_port, "session"' in runtime_selector
-    bootstrap_selector = pooler_verifier.split("def select_admin_pooler(", 1)[1].split(
-        "def _validated_port(", 1
-    )[0]
-    assert "verify_admin: Callable[..., None] = verify_admin_once" in bootstrap_selector
-    assert 'modes = (("session", session_port), ("transaction", transaction_port))' in (
-        bootstrap_selector
-    )
-    assert "for sweep in range(MAX_ATTEMPTS):" in bootstrap_selector
-    assert "for mode, port in modes:" in bootstrap_selector
-    assert "all(failure.transient for failure in sweep_failures)" in bootstrap_selector
-    assert "sleep(RETRY_DELAY_SECONDS)" in bootstrap_selector
-    assert "attempts.append((mode, failure.kind))" in bootstrap_selector
-    assert "verify_admin_with_retry" not in bootstrap_selector
-    assert "attempts=tuple(attempts)" in bootstrap_selector
-    assert "rotation_cache_retries_remaining = 1 if rotation_scoped else 0" in pooler_verifier
-    assert 'return "invalid_credentials", False' in pooler_verifier
-    assert '"protocol_handshake_incomplete"' in pooler_verifier
-    assert "Require one complete role cohort to pass" in pooler_verifier
-    assert "CANONICAL_STAGING_ROTATION_SCOPED_VERIFY" in pooler_verifier
-    assert (
-        "CANONICAL_STAGING_ROTATION_SCOPED_VERIFY: ${{ inputs.rotate_role_passwords }}"
-        in workflow
-    )
-    assert "MAX_ATTEMPTS = 2" in pooler_verifier
-    assert "connect_timeout=5" in pooler_verifier
-    assert "str(error)" in pooler_verifier
-    role_verification = workflow.split(
-        "Verify baseline topology and isolated role posture", 1
-    )[1].split("Diagnose bounded Supavisor role verification failure", 1)[0]
-    assert "str(error)" not in role_verification
-    assert "message = str(last_error)" not in role_verification
-    assert "Diagnose bounded Supavisor role verification failure" in workflow
-    assert (
-        "if: ${{ failure() && steps.verify_pooler_roles.outcome == 'failure' }}"
-        in workflow
-    )
-    assert "/analytics/endpoints/logs" in workflow
-    assert '"iso_timestamp_start=$log_window_start"' in workflow
-    assert '"iso_timestamp_end=$log_window_end"' in workflow
-    assert "backend_refused_count" in workflow
-    assert "source = 'supavisor_logs'" in workflow
-    assert "jq -c '{result,error}'" not in workflow
-    assert "Response shape was not the reviewed counter schema" in workflow
-    assert "def bounded_uint:" in workflow
-    assert 'elif type == "string" and test("^[0-9]+$") then tonumber' in workflow
-    assert "echo \"::notice title=Bounded Supavisor diagnostic::$summary\"" in workflow
-    assert "EAUTHQUERY" in workflow
-    assert "ECIRCUITBREAKER" in workflow
-    assert "CANONICAL_ACTIVE_POOLER_PORT" in workflow
-    assert "CANONICAL_ACTIVE_POOLER_MODE" in workflow
-    assert 'port="$CANONICAL_ACTIVE_POOLER_PORT"' in workflow
-    assert "${CANONICAL_ACTIVE_POOLER_PORT}/postgres" in workflow
-    assert 'pooler_mode: $pooler_mode' in workflow
+    assert "ROLE_PASSWORD_ENV" in direct_verifier
+    assert "verify_direct_database(" in direct_verifier
+    assert "CANONICAL_DATABASE_TRANSPORT=direct_ipv4" in direct_verifier
+    assert 'database_transport: $database_transport' in workflow
     assert "/database/query\"" not in workflow
     verification = workflow.split(
         "Verify Alembic-owned canonical command definitions", 1
@@ -1040,7 +953,7 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     assert "CANONICAL_DEMO_API_URL=http://127.0.0.1:8090" in workflow
     assert "PYTHONPATH=backend PORT=8090 python3 -m uvicorn" in workflow
     assert "for attempt in 1 2 3 4 5" in workflow
-    assert "python3 backend/scripts/verify_staging_pooler_roles.py" in workflow
+    assert "python3 backend/scripts/verify_staging_direct_roles.py" in workflow
     assert "Canonical CI API traceback" not in workflow
     assert "Canonical CI API runtime diagnostic" not in workflow
     assert 'safe_ci_log_summary.py --label runtime "$api_log"' in workflow
@@ -1092,17 +1005,8 @@ def test_free_staging_reset_is_explicit_and_preserves_supabase_schemas():
     assert "reset_disposable_data: ${{ inputs.reset_canonical_staging }}" in production_workflow
     assert "rotate_canonical_staging_roles:" in production_workflow
     assert "rotate_role_passwords: ${{ inputs.rotate_canonical_staging_roles }}" in production_workflow
-    assert "refresh_canonical_staging_pooler:" in production_workflow
-    assert "refresh_pooler_configuration: ${{ inputs.refresh_canonical_staging_pooler }}" in production_workflow
-    assert "refresh_pooler_configuration:" in workflow
-    refresh_step = workflow.split(
-        "Refresh the reviewed free-tier Supavisor configuration", 1
-    )[1].split("Reset canonical data", 1)[0]
-    assert "if: inputs.refresh_pooler_configuration == true" in refresh_step
-    assert '"default_pool_size":5' in refresh_step
-    assert '"pool_mode":"transaction"' in refresh_step
-    assert "/config/database/pooler" in refresh_step
-    assert "sleep 125" in refresh_step
+    assert "refresh_canonical_staging_pooler:" not in production_workflow
+    assert "refresh_pooler_configuration:" not in workflow
     assert "pg_catalog.pg_terminate_backend(activity.pid)" in workflow
     assert "activity.usename IN" in workflow
     assert "restart_staging_database:" in workflow
@@ -1113,8 +1017,8 @@ def test_free_staging_reset_is_explicit_and_preserves_supabase_schemas():
     )[0]
     assert "for attempt in $(seq 1 20)" in restart_step
     assert 'test "$attempt" -lt 20' in restart_step
-    assert "Supavisor can retain a failed auth-query circuit for up to two minutes" in restart_step
-    assert "sleep 125" in restart_step
+    assert "Supavisor" not in restart_step
+    assert "sleep 125" not in restart_step
     assert "restart_canonical_staging:" in production_workflow
     assert "restart_staging_database: ${{ inputs.restart_canonical_staging }}" in production_workflow
 
@@ -1138,6 +1042,11 @@ def test_registered_readiness_workflow_delegates_promotion_evidence():
     assert "uses: ./.github/workflows/canonical-application-promotion-evidence.yml" in production
     assert "workflow_call:" in evidence
     assert "confirmation: CAPTURE_CANONICAL_PROMOTION_EVIDENCE" in production
+    assert "refresh_canonical_staging_pooler" not in production
+    assert "pooler.supabase.com" not in production
+    assert "postgres.${CANONICAL_STAGING_PROJECT_REF}" not in production
+    assert "db.${CANONICAL_STAGING_PROJECT_REF}.supabase.co:5432" in production
+    assert "CANONICAL_EPHEMERAL_DATABASE_TRANSPORT: direct_ipv4" in production
 
 
 def test_frontend_builds_use_the_reviewed_node_runtime():

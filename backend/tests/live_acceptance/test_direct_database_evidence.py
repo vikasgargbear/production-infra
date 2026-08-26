@@ -123,7 +123,7 @@ def test_direct_database_evidence_writes_one_hashed_owner_only_exact_18_artifact
         "migration_owner_member": False,
         "row_security": True,
         "network_family": 4,
-        "transport": "supabase_session_pooler_from_github_actions",
+        "transport": "supabase_direct_ipv4_from_github_actions",
     }
     assert set(artifact["resources"]) == set(_commands())
     assert len(artifact["resources"]) == 18

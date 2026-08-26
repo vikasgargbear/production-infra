@@ -19,7 +19,7 @@ from uuid import UUID
 OUTPUT_ENV = "LIVE18_DIRECT_DATABASE_EVIDENCE_OUTPUT_PATH"
 CAPTURED_EVIDENCE_ENV = "PHARMA_CANONICAL_LIVE_DATABASE_EVIDENCE_PATH"
 SCHEMA = "aasopharma.live18.database-evidence.v1"
-TRANSPORT = "supabase_session_pooler_from_github_actions"
+TRANSPORT = "supabase_direct_ipv4_from_github_actions"
 PROJECT_REF = re.compile(r"^[a-z0-9]{20}$")
 FORBIDDEN_KEYS = {
     "access_token",

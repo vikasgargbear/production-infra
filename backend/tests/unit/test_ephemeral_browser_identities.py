@@ -64,6 +64,42 @@ def test_refuses_every_project_except_the_pinned_staging_project(monkeypatch):
         identities._validate_target("management-token")
 
 
+def test_direct_ipv4_database_transport_uses_plain_admin_role(monkeypatch):
+    observed = {}
+    monkeypatch.setenv("SUPABASE_DB_PASSWORD", "database-password")
+    monkeypatch.setenv(
+        "CANONICAL_EPHEMERAL_DATABASE_TRANSPORT",
+        identities.DIRECT_IPV4_DATABASE_TRANSPORT,
+    )
+    monkeypatch.setattr(
+        identities.psycopg2,
+        "connect",
+        lambda **kwargs: observed.update(kwargs) or object(),
+    )
+
+    identities._database_connection("unused-management-token")
+
+    contract = identities.load_direct_database_contract()
+    assert observed["host"] == contract.host
+    assert observed["port"] == contract.port
+    assert observed["user"] == "postgres"
+    assert observed["application_name"].endswith("direct_ipv4")
+
+
+@pytest.mark.parametrize("transport", ["", "automatic", "session_pooler"])
+def test_database_transport_has_no_implicit_fallback(monkeypatch, transport):
+    monkeypatch.setenv("SUPABASE_DB_PASSWORD", "database-password")
+    monkeypatch.setenv("CANONICAL_EPHEMERAL_DATABASE_TRANSPORT", transport)
+    monkeypatch.setattr(
+        identities.psycopg2,
+        "connect",
+        lambda **_kwargs: pytest.fail("unsupported transport attempted a connection"),
+    )
+
+    with pytest.raises(identities.EphemeralIdentityError, match="implicit fallback"):
+        identities._database_connection("unused-management-token")
+
+
 def test_auth_creation_requires_confirmed_identity(monkeypatch):
     monkeypatch.setattr(
         identities,

@@ -41,10 +41,11 @@ from supabase_auth_admin import (  # noqa: E402
     auth_admin_request,
     mask_auth_admin_secret,
 )
+from canonical_staging_database import load_direct_database_contract  # noqa: E402
 
 
 EXPECTED_PROJECT_REF = "rgihahbmkrmhitjdjvev"
-EXPECTED_POOLER_HOST = "aws-0-ap-south-1.pooler.supabase.com"
+DIRECT_IPV4_DATABASE_TRANSPORT = "direct_ipv4"
 RAILWAY_DIRECT_DATABASE_TRANSPORT = "railway_direct_ipv6"
 WEB_CLIENT_ID = "aasopharma-erp-web"
 DEMO_ORG_ID = "d3000000-0000-7000-8000-000000000001"
@@ -562,11 +563,7 @@ def _delete_auth_user(
 def _database_connection(management_token: str):
     password = _required("SUPABASE_DB_PASSWORD")
     transport = os.getenv("CANONICAL_EPHEMERAL_DATABASE_TRANSPORT", "").strip()
-    if transport:
-        if transport != RAILWAY_DIRECT_DATABASE_TRANSPORT:
-            raise EphemeralIdentityError(
-                "Unsupported ephemeral database transport; refusing an implicit fallback"
-            )
+    if transport == RAILWAY_DIRECT_DATABASE_TRANSPORT:
         return psycopg2.connect(
             host=f"db.{EXPECTED_PROJECT_REF}.supabase.co",
             port=5432,
@@ -578,37 +575,25 @@ def _database_connection(management_token: str):
             connect_timeout=15,
             application_name="canonical_ephemeral_browser_identities_railway_direct",
         )
-    poolers = _request_json(
-        "GET",
-        (
-            "https://api.supabase.com/v1/projects/"
-            f"{EXPECTED_PROJECT_REF}/config/database/pooler"
-        ),
-        management_token,
-    )
-    primary = [
-        item.get("connection_string")
-        for item in poolers
-        if isinstance(item, dict) and item.get("database_type") == "PRIMARY"
-    ] if isinstance(poolers, list) else []
-    if len(primary) != 1 or not isinstance(primary[0], str):
-        raise EphemeralIdentityError("Expected one reviewed primary Supabase pooler")
-    match = re.match(r"^postgresql://[^@]+@([^:]+):(\d+)/", primary[0])
-    if not match or (match.group(1), match.group(2)) != (
-        EXPECTED_POOLER_HOST,
-        "6543",
-    ):
-        raise EphemeralIdentityError("Supabase pooler does not match the reviewed target")
+    if transport != DIRECT_IPV4_DATABASE_TRANSPORT:
+        raise EphemeralIdentityError(
+            "Unsupported ephemeral database transport; refusing an implicit fallback"
+        )
+    contract = load_direct_database_contract()
+    if contract.project_ref != EXPECTED_PROJECT_REF:
+        raise EphemeralIdentityError(
+            "Ephemeral identity project does not match direct database authority"
+        )
     return psycopg2.connect(
-        host=EXPECTED_POOLER_HOST,
-        port=5432,
-        dbname="postgres",
-        user=f"postgres.{EXPECTED_PROJECT_REF}",
+        host=contract.host,
+        port=contract.port,
+        dbname=contract.database,
+        user=contract.administrator_role,
         password=password,
         sslmode="require",
         gssencmode="disable",
-        connect_timeout=15,
-        application_name="canonical_ephemeral_browser_identities",
+        connect_timeout=contract.connect_timeout_seconds,
+        application_name="canonical_ephemeral_browser_identities_direct_ipv4",
     )
 
 

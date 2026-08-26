@@ -1656,7 +1656,7 @@ def capture_live18_acceptance(
         expected_runtime = {
             **runtime_common,
             "row_security": True,
-            "transport": "supabase_session_pooler_from_github_actions",
+            "transport": "supabase_direct_ipv4_from_github_actions",
         }
         runtime_valid = (
             isinstance(runtime, dict)

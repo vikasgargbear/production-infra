@@ -13,13 +13,13 @@ def _auth_admin() -> provision.SupabaseAuthAdminAuthority:
 
 
 def _set_reviewed_database_environment(monkeypatch: pytest.MonkeyPatch) -> str:
-    monkeypatch.setenv("SUPABASE_POOLER_HOST", provision.REVIEWED_POOLER_HOST)
-    monkeypatch.setenv("CANONICAL_ACTIVE_POOLER_PORT", "5432")
-    monkeypatch.setenv("CANONICAL_ACTIVE_POOLER_MODE", "session")
-    return (
-        f"postgresql://postgres.{provision.PROJECT_REF}:encoded-password@"
-        f"{provision.REVIEWED_POOLER_HOST}:5432/postgres?sslmode=require&"
-        "gssencmode=disable&connect_timeout=15&application_name=canonical_staging_ci"
+    monkeypatch.setenv("SUPABASE_DB_PASSWORD", "encoded-password")
+    contract = provision.load_direct_database_contract()
+    return provision.build_direct_dsn(
+        contract=contract,
+        role="postgres",
+        password="encoded-password",
+        application_name="canonical_staging_ci",
     )
 
 
@@ -137,7 +137,7 @@ def test_bind_existing_demo_missing_password_fails_before_oauth_mutation(
         provision.main(["--mode", "bind-existing-demo"])
 
 
-def test_reviewed_database_url_accepts_only_exact_staging_pooler(
+def test_reviewed_database_url_accepts_only_exact_direct_staging_dsn(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     database_url = _set_reviewed_database_environment(monkeypatch)
@@ -148,9 +148,9 @@ def test_reviewed_database_url_accepts_only_exact_staging_pooler(
 @pytest.mark.parametrize(
     "replacement",
     [
-        (f"postgres.{provision.PROJECT_REF}", "postgres.production-project"),
-        (provision.REVIEWED_POOLER_HOST, "127.0.0.1"),
-        (":5432/postgres", ":6543/postgres"),
+        ("postgres:encoded-password", "erp_runtime:encoded-password"),
+        (f"db.{provision.PROJECT_REF}.supabase.co", "127.0.0.1"),
+        (":5432/postgres", ":6432/postgres"),
         ("/postgres?", "/other_database?"),
         ("sslmode=require", "sslmode=disable"),
         ("sslmode=require", "sslmode=require&hostaddr=127.0.0.1"),

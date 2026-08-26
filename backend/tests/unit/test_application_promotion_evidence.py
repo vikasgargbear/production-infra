@@ -295,7 +295,7 @@ def _live18_manifest(git_commit: str, binding: dict) -> dict:
                 "current_user": "erp_runtime", "superuser": False,
                 "bypassrls": False, "migration_owner_member": False,
                 "row_security": True, "network_family": 4,
-                "transport": "supabase_session_pooler_from_github_actions",
+                "transport": "supabase_direct_ipv4_from_github_actions",
             }),
             "resources": resources,
             "raw_evidence_sha256": "b" * 64,
@@ -1162,6 +1162,12 @@ def test_workflow_is_read_only_and_never_changes_readiness():
     assert "canonical-live18-acceptance-evidence" in workflow
     assert "capture-live18" in workflow
     assert "verify_render_pilot_sha.py" not in workflow
+    assert "load_direct_database_contract" in workflow
+    assert "build_direct_dsn" in workflow
+    assert "verify_direct_database" in workflow
+    assert "/config/database/pooler" not in workflow
+    assert "pooler.supabase.com" not in workflow
+    assert "postgres.${CANONICAL_STAGING_PROJECT_REF}" not in workflow
     assert "postgres:15" in workflow
     assert "database/canonical/ci/bootstrap_supabase_auth.sql" in workflow
     assert "pg_dump --data-only --no-owner --no-privileges" in workflow

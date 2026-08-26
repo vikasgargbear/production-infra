@@ -297,13 +297,13 @@ def required(name: str) -> str:
 
 @contextmanager
 def database_connection(environment_variable: str):
-    """Open one bounded DB session and always release its pooler client slot.
+    """Open one bounded direct DB session and always release it.
 
     A psycopg2 connection's own context manager only commits or rolls back; it
     deliberately does not close the connection. The staging demo alternates
     among migration-owner, importer, runtime, and calculator principals while
-    a one-worker API is running, so retaining otherwise sequential connection
-    objects can exhaust the reviewed five-client Supavisor session pool.
+    a one-worker API is running, so retaining otherwise sequential connections
+    would leak database capacity across the certification lifecycle.
     """
 
     connection = psycopg2.connect(required(environment_variable))

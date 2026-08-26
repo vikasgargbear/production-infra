@@ -222,22 +222,48 @@ jobs:
             "https://api.supabase.com/v1/projects/$CANONICAL_STAGING_PROJECT_REF")
           test "$(jq -r .id <<<"$project_json")" = "$CANONICAL_STAGING_PROJECT_REF"
           test "$(jq -r .status <<<"$project_json")" = ACTIVE_HEALTHY
-          pooler_json=$(curl --fail --silent --show-error \
-            --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
-            "https://api.supabase.com/v1/projects/$CANONICAL_STAGING_PROJECT_REF/config/database/pooler")
-          pooler_url=$(jq -er \
-            '.[] | select(.database_type == "PRIMARY") | .connection_string' \
-            <<<"$pooler_json")
-          pooler_host=$(sed -E 's#^postgresql://[^@]+@([^:]+):([0-9]+)/.*#\1#' <<<"$pooler_url")
-          test "$pooler_host" = aws-0-ap-south-1.pooler.supabase.com
-          admin_password=$(jq -nr --arg value "$SUPABASE_DB_PASSWORD" '$value|@uri')
-          runtime_password=$(jq -nr --arg value "$ERP_RUNTIME_PASSWORD" '$value|@uri')
-          admin_url="postgresql://postgres.${CANONICAL_STAGING_PROJECT_REF}:${admin_password}@${pooler_host}:5432/postgres?sslmode=require&gssencmode=disable&connect_timeout=15&application_name=promotion_evidence"
-          runtime_url="postgresql://erp_runtime.${CANONICAL_STAGING_PROJECT_REF}:${runtime_password}@${pooler_host}:5432/postgres?sslmode=require&gssencmode=disable&connect_timeout=15&application_name=promotion_evidence"
-          echo "::add-mask::$admin_url"
-          echo "::add-mask::$runtime_url"
-          echo "PROMOTION_ADMIN_DATABASE_URL=$admin_url" >> "$GITHUB_ENV"
-          echo "PROMOTION_RUNTIME_DATABASE_URL=$runtime_url" >> "$GITHUB_ENV"
+          PYTHONPATH=backend python3 - <<'PY'
+          import os
+          from pathlib import Path
+          from scripts.canonical_staging_database import (
+              build_direct_dsn,
+              load_direct_database_contract,
+              verify_direct_database,
+          )
+
+          contract = load_direct_database_contract()
+          if os.environ["CANONICAL_STAGING_PROJECT_REF"] != contract.project_ref:
+              raise SystemExit("promotion project does not match direct database authority")
+          urls = {
+              "PROMOTION_ADMIN_DATABASE_URL": build_direct_dsn(
+                  contract=contract,
+                  role="postgres",
+                  password=os.environ["SUPABASE_DB_PASSWORD"],
+                  application_name="promotion_evidence_admin",
+              ),
+              "PROMOTION_RUNTIME_DATABASE_URL": build_direct_dsn(
+                  contract=contract,
+                  role="erp_runtime",
+                  password=os.environ["ERP_RUNTIME_PASSWORD"],
+                  application_name="promotion_evidence_runtime",
+              ),
+          }
+          bindings = (
+              ("postgres", "SUPABASE_DB_PASSWORD", "PROMOTION_ADMIN_DATABASE_URL"),
+              ("erp_runtime", "ERP_RUNTIME_PASSWORD", "PROMOTION_RUNTIME_DATABASE_URL"),
+          )
+          for role, password_variable, output_variable in bindings:
+              verify_direct_database(
+                  contract=contract,
+                  role=role,
+                  password=os.environ[password_variable],
+                  application_name="promotion_evidence_verify",
+              )
+              print(f"::add-mask::{urls[output_variable]}")
+          with Path(os.environ["GITHUB_ENV"]).open("a", encoding="utf-8") as stream:
+              for variable, value in urls.items():
+                  stream.write(f"{variable}={value}\n")
+          PY
 
       - name: Capture mounted route and exact database evidence
         run: |

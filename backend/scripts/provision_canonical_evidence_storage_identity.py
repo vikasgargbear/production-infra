@@ -62,6 +62,7 @@ from supabase_auth_admin import (  # noqa: E402
     mask_auth_admin_secret,
     resolve_auth_admin_authority,
 )
+from canonical_staging_database import load_direct_database_contract  # noqa: E402
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -73,7 +74,6 @@ IDENTITY_AUTHORITY = json.loads(IDENTITY_AUTHORITY_PATH.read_text(encoding="utf-
 PROJECT_REF = "rgihahbmkrmhitjdjvev"
 SUPABASE_URL = f"https://{PROJECT_REF}.supabase.co"
 MANAGEMENT_API = "https://api.supabase.com/v1"
-REVIEWED_POOLER_HOST = "aws-0-ap-south-1.pooler.supabase.com"
 SERVICE_AUTH_USER_ID = IDENTITY_AUTHORITY["auth_user_id"]
 SERVICE_EMAIL = IDENTITY_AUTHORITY["email"]
 SERVICE_MARKER = IDENTITY_AUTHORITY["app_metadata_marker"]
@@ -556,17 +556,25 @@ def probe_hosted_hook(database_url: str) -> dict[str, Any]:
             "HOSTED_HOOK_DATABASE_URL_INVALID",
             "hosted Auth hook database URL is malformed",
         ) from error
+    contract = load_direct_database_contract()
+    if contract.project_ref != PROJECT_REF:
+        raise IdentityProvisioningError(
+            "HOSTED_HOOK_DATABASE_AUTHORITY_DENIED",
+            "hosted Auth hook project does not match database authority",
+        )
     if (
-        dsn.get("host") != REVIEWED_POOLER_HOST
-        or dsn.get("port") != "5432"
+        dsn.get("host") != contract.host
+        or dsn.get("port") != str(contract.port)
         or dsn.get("dbname") != "postgres"
-        or dsn.get("user") != f"postgres.{PROJECT_REF}"
+        or dsn.get("user") != "postgres"
         or dsn.get("sslmode") != "require"
+        or dsn.get("gssencmode") != "disable"
+        or dsn.get("application_name") != "canonical_staging_ci"
         or dsn.get("hostaddr")
     ):
         raise IdentityProvisioningError(
             "HOSTED_HOOK_DATABASE_TARGET_DENIED",
-            "hosted Auth hook preflight requires the reviewed staging pooler",
+            "hosted Auth hook preflight requires reviewed direct IPv4 staging",
         )
     function_name = "erp_security.canonical_evidence_storage_access_token_hook"
     function_signature = function_name + "(jsonb)"

@@ -44,9 +44,10 @@ def auth_authority():
 
 
 def reviewed_database_url():
+    contract = provision.load_direct_database_contract()
     return (
-        f"postgresql://postgres.{provision.PROJECT_REF}:password@"
-        f"{provision.REVIEWED_POOLER_HOST}:5432/postgres?sslmode=require"
+        f"postgresql://postgres:password@{contract.host}:{contract.port}/postgres?"
+        "sslmode=require&gssencmode=disable&application_name=canonical_staging_ci"
     )
 
 
