@@ -451,18 +451,74 @@ jobs:
           printf '%s\n' "$REVIEWED_SHA:$DEPLOYMENT_NONCE" > deploy/railway/frontend.force-deploy
 
           message="canonical staging $REVIEWED_SHA"
-          railway up --detach --json --service "$RAILWAY_API_SERVICE" --environment "$RAILWAY_ENVIRONMENT_ID" --project "$RAILWAY_PROJECT_ID" --message "$message" >api-deploy.json 2>api-deploy.log &
-          api_pid=$!
-          railway up --detach --json --service "$RAILWAY_MCP_SERVICE" --environment "$RAILWAY_ENVIRONMENT_ID" --project "$RAILWAY_PROJECT_ID" --message "$message" >mcp-deploy.json 2>mcp-deploy.log &
-          mcp_pid=$!
-          railway up --detach --json --service "$RAILWAY_FRONTEND_SERVICE" --environment "$RAILWAY_ENVIRONMENT_ID" --project "$RAILWAY_PROJECT_ID" --message "$message" >frontend-deploy.json 2>frontend-deploy.log &
-          frontend_pid=$!
+
+          upload_failure_kind() {
+            local stdout_file=$1
+            local stderr_file=$2
+            if ! test -s "$stdout_file" && ! test -s "$stderr_file"; then
+              printf '%s\n' empty_cli_response
+              return 0
+            fi
+            if grep -Eqi \
+              '(http[^0-9]*(429|500|502|503|504)|status([_ ]?code)?[^0-9]*(429|500|502|503|504)|too many requests|rate limit|timed? out|timeout|connection (reset|refused|closed)|network error|temporary failure|temporarily unavailable|socket hang up|unexpected eof|tls handshake|service unavailable|bad gateway|gateway timeout)' \
+              "$stdout_file" "$stderr_file"; then
+              printf '%s\n' transient_transport
+              return 0
+            fi
+            printf '%s\n' non_retryable
+          }
+
+          upload_service() {
+            local label=$1
+            local service=$2
+            local attempt=1
+            local max_attempts=3
+            local stdout_file
+            local stderr_file
+            local exit_code
+            local failure_kind
+            while test "$attempt" -le "$max_attempts"; do
+              stdout_file="${label}-deploy.attempt-${attempt}.json"
+              stderr_file="${label}-deploy.attempt-${attempt}.log"
+              if railway up --detach --json \
+                --service "$service" \
+                --environment "$RAILWAY_ENVIRONMENT_ID" \
+                --project "$RAILWAY_PROJECT_ID" \
+                --message "$message" \
+                >"$stdout_file" 2>"$stderr_file"; then
+                if jq -e '.deploymentId | type == "string" and length > 0' "$stdout_file" >/dev/null; then
+                  mv "$stdout_file" "${label}-deploy.json"
+                  mv "$stderr_file" "${label}-deploy.log"
+                  echo "Railway source upload accepted: service=$label attempt=$attempt"
+                  return 0
+                fi
+                exit_code=0
+                failure_kind=invalid_success_payload
+              else
+                exit_code=$?
+                failure_kind=$(upload_failure_kind "$stdout_file" "$stderr_file")
+              fi
+
+              echo "::error title=Railway source upload failed::service=$label attempt=$attempt exit_code=$exit_code kind=$failure_kind"
+              if test "$failure_kind" != transient_transport && test "$failure_kind" != empty_cli_response; then
+                return 1
+              fi
+              if test "$attempt" -eq "$max_attempts"; then
+                return 1
+              fi
+              sleep "$((attempt * 2))"
+              attempt=$((attempt + 1))
+            done
+            return 1
+          }
+
+          # The Railway CLI builds an archive in the shared working directory.
+          # Serialize uploads so concurrent clients cannot race over that state.
           status=0
-          wait "$api_pid" || status=1
-          wait "$mcp_pid" || status=1
-          wait "$frontend_pid" || status=1
+          upload_service api "$RAILWAY_API_SERVICE" || status=1
+          upload_service mcp "$RAILWAY_MCP_SERVICE" || status=1
+          upload_service frontend "$RAILWAY_FRONTEND_SERVICE" || status=1
           if test "$status" != 0; then
-            sed -E 's#(postgres(ql)?://)[^@[:space:]]+@#\1[redacted]@#g' api-deploy.log mcp-deploy.log frontend-deploy.log
             exit 1
           fi
 

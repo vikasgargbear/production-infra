@@ -293,17 +293,43 @@ def test_workflow_uploads_fresh_source_and_polls_exact_deployment_ids() -> None:
     assert "group: railway-canonical-staging-pilot" in workflow
     assert "cancel-in-progress: false" in workflow
     assert "timeout-minutes: 45" in workflow
-    up_commands = re.findall(r"^\s+railway up .+$", workflow, flags=re.MULTILINE)
-    assert len(up_commands) == 3
+    up_commands = re.findall(r"^\s+if railway up .+$", workflow, flags=re.MULTILINE)
+    assert len(up_commands) == 1
     for command in up_commands:
         assert "--detach --json" in command
-        assert '--environment "$RAILWAY_ENVIRONMENT_ID"' in command
-        assert '--project "$RAILWAY_PROJECT_ID"' in command
-        assert ' --message "$message"' in command
         assert "railway up ." not in command
+    assert '--environment "$RAILWAY_ENVIRONMENT_ID"' in workflow
+    assert '--project "$RAILWAY_PROJECT_ID"' in workflow
+    assert '--message "$message"' in workflow
+    assert 'upload_service api "$RAILWAY_API_SERVICE"' in workflow
+    assert 'upload_service mcp "$RAILWAY_MCP_SERVICE"' in workflow
+    assert 'upload_service frontend "$RAILWAY_FRONTEND_SERVICE"' in workflow
+    assert workflow.index('upload_service api "$RAILWAY_API_SERVICE"') < workflow.index(
+        'upload_service mcp "$RAILWAY_MCP_SERVICE"'
+    ) < workflow.index('upload_service frontend "$RAILWAY_FRONTEND_SERVICE"')
+    assert "api_pid" not in workflow
+    assert "mcp_pid" not in workflow
+    assert "frontend_pid" not in workflow
+
+    assert "upload_failure_kind()" in workflow
+    assert "empty_cli_response" in workflow
+    assert "transient_transport" in workflow
+    assert "non_retryable" in workflow
+    assert "invalid_success_payload" in workflow
+    assert "max_attempts=3" in workflow
+    assert 'sleep "$((attempt * 2))"' in workflow
+    assert "Railway source upload failed" in workflow
+    assert "service=$label attempt=$attempt exit_code=$exit_code kind=$failure_kind" in workflow
+    upload_step = workflow[
+        workflow.index("Force-upload the exact source tree") :
+        workflow.index("Require each exact upload to become the active deployment")
+    ]
+    assert "sed -E" not in upload_step
+    assert 'cat "$stdout_file"' not in upload_step
+    assert 'cat "$stderr_file"' not in upload_step
 
     assert "railway redeploy" not in workflow
-    assert workflow.count(".deploymentId") == 3
+    assert workflow.count("jq -er '.deploymentId") == 3
     assert "deployment_status()" in workflow
     assert "select(.id == $id)" in workflow
     assert (
