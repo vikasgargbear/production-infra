@@ -948,6 +948,8 @@ def test_free_staging_reset_is_explicit_and_preserves_supabase_schemas():
     restart_step = workflow.split("Restart the pinned free staging database", 1)[1].split(
         "Install the reviewed migration toolchain", 1
     )[0]
+    assert "for attempt in $(seq 1 20)" in restart_step
+    assert 'test "$attempt" -lt 20' in restart_step
     assert "Supavisor can retain a failed auth-query circuit for up to two minutes" in restart_step
     assert "sleep 125" in restart_step
     assert "restart_canonical_staging:" in production_workflow
