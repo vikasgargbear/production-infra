@@ -118,3 +118,72 @@ def test_bind_existing_demo_missing_password_fails_before_oauth_mutation(
     )
     with pytest.raises(provision.ProvisioningError, match="TEST_PASSWORD is required"):
         provision.main(["--mode", "bind-existing-demo"])
+
+
+class _OwnerCursor:
+    def __init__(self, server_version_num: int) -> None:
+        self.server_version_num = server_version_num
+        self.statements: list[str] = []
+
+    def execute(self, statement: str) -> None:
+        self.statements.append(statement)
+
+    def fetchone(self) -> tuple[str]:
+        return (str(self.server_version_num),)
+
+
+def test_owner_boundary_is_transaction_scoped_on_postgresql_16_plus() -> None:
+    cursor = _OwnerCursor(170000)
+
+    supports_membership_options = provision._enter_migration_owner(cursor)
+    provision._leave_migration_owner(cursor, supports_membership_options)
+
+    assert cursor.statements == [
+        "SHOW server_version_num",
+        'GRANT "erp_migration_owner" TO CURRENT_USER '
+        "WITH INHERIT FALSE, SET TRUE",
+        'SET LOCAL ROLE "erp_migration_owner"',
+        "SET CONSTRAINTS ALL IMMEDIATE",
+        "RESET ROLE",
+        'GRANT "erp_migration_owner" TO CURRENT_USER '
+        "WITH INHERIT FALSE, SET FALSE",
+    ]
+
+
+def test_owner_boundary_revokes_temporary_membership_before_postgresql_16() -> None:
+    cursor = _OwnerCursor(150000)
+
+    supports_membership_options = provision._enter_migration_owner(cursor)
+    provision._leave_migration_owner(cursor, supports_membership_options)
+
+    assert cursor.statements == [
+        "SHOW server_version_num",
+        'GRANT "erp_migration_owner" TO CURRENT_USER',
+        'SET LOCAL ROLE "erp_migration_owner"',
+        "SET CONSTRAINTS ALL IMMEDIATE",
+        "RESET ROLE",
+        'REVOKE "erp_migration_owner" FROM CURRENT_USER',
+    ]
+
+
+def test_demo_binding_enters_and_leaves_owner_inside_connection_transaction() -> None:
+    source = Path(provision.__file__).read_text(encoding="utf-8")
+    bind_demo = source[source.index("def _bind_demo(") : source.index("\ndef _write_github_env")]
+
+    connection = bind_demo.index("with psycopg2.connect(database_url) as connection:")
+    enter = bind_demo.index("_enter_migration_owner(cursor)")
+    first_canonical_read = bind_demo.index("SELECT count(*) FROM core.organizations")
+    absent_demo_leave = bind_demo.index(
+        "_leave_migration_owner(cursor, supports_membership_options)"
+    )
+    absent_demo_return = bind_demo.index("return False")
+    final_reconciliation = bind_demo.index(
+        "Staging web test grant binding did not reconcile exactly"
+    )
+    success_leave = bind_demo.rindex(
+        "_leave_migration_owner(cursor, supports_membership_options)"
+    )
+
+    assert connection < enter < first_canonical_read
+    assert first_canonical_read < absent_demo_leave < absent_demo_return
+    assert final_reconciliation < success_leave

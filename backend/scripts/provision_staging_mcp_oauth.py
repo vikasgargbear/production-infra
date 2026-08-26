@@ -221,6 +221,36 @@ def _reconcile_test_user(service_key: str, password: str) -> str:
     return user_id
 
 
+def _enter_migration_owner(cursor) -> bool:
+    """Borrow canonical owner authority only for this fixture transaction."""
+
+    cursor.execute("SHOW server_version_num")
+    supports_membership_options = int(cursor.fetchone()[0]) >= 160000
+    if supports_membership_options:
+        cursor.execute(
+            'GRANT "erp_migration_owner" TO CURRENT_USER '
+            'WITH INHERIT FALSE, SET TRUE'
+        )
+    else:
+        cursor.execute('GRANT "erp_migration_owner" TO CURRENT_USER')
+    cursor.execute('SET LOCAL ROLE "erp_migration_owner"')
+    return supports_membership_options
+
+
+def _leave_migration_owner(cursor, supports_membership_options: bool) -> None:
+    """Restore the reviewed non-settable owner membership before commit."""
+
+    cursor.execute("SET CONSTRAINTS ALL IMMEDIATE")
+    cursor.execute("RESET ROLE")
+    if supports_membership_options:
+        cursor.execute(
+            'GRANT "erp_migration_owner" TO CURRENT_USER '
+            'WITH INHERIT FALSE, SET FALSE'
+        )
+    else:
+        cursor.execute('REVOKE "erp_migration_owner" FROM CURRENT_USER')
+
+
 def _bind_demo(
     database_url: str,
     client_id: str,
@@ -260,6 +290,7 @@ def _bind_demo(
     )
     with psycopg2.connect(database_url) as connection:
         with connection.cursor() as cursor:
+            supports_membership_options = _enter_migration_owner(cursor)
             cursor.execute(
                 """
                 SELECT count(*) FROM core.organizations
@@ -268,6 +299,7 @@ def _bind_demo(
                 (DEMO_ORG_ID,),
             )
             if cursor.fetchone() != (1,):
+                _leave_migration_owner(cursor, supports_membership_options)
                 return False
             cursor.execute("SET CONSTRAINTS ALL DEFERRED")
             for name, value in (
@@ -686,6 +718,7 @@ def _bind_demo(
                 expected_web_capabilities,
             ):
                 raise ProvisioningError("Staging web test grant binding did not reconcile exactly")
+            _leave_migration_owner(cursor, supports_membership_options)
     return True
 
 
