@@ -319,12 +319,13 @@ def _verify_sales_order_readback(
         raise ExerciseError("Live sales-order preview omitted one financial impact")
     preview_total = financial[0].get("grand_total")
     readback_total = document.get("grand_total")
-    if preview_total != readback_total:
+    preview_decimal = _decimal(preview_total, "sales-order preview grand_total")
+    readback_decimal = _decimal(readback_total, "sales-order readback grand_total")
+    if preview_decimal != readback_decimal:
         raise ExerciseError(
             f"Live sales-order total drifted between preview and readback: "
             f"{preview_total!r} != {readback_total!r}"
         )
-    _decimal(preview_total, "sales-order preview grand_total")
     lines = document.get("lines")
     if not isinstance(lines, list) or len(lines) != 1:
         raise ExerciseError("Live sales-order readback did not contain one exact product line")

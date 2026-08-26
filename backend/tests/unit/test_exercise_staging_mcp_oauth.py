@@ -179,6 +179,15 @@ def test_sales_order_readback_preserves_resource_quantities_and_preview_total() 
     }
 
 
+def test_sales_order_readback_compares_decimal_value_not_display_scale() -> None:
+    documents = _documents()
+    documents[0]["financial_impact"][0]["grand_total"] = "1650"
+
+    exact = exercise._verify_sales_order_readback(*documents)
+
+    assert exact["grand_total"] == "1650.00"
+
+
 @pytest.mark.parametrize(
     "mutation, message",
     [
