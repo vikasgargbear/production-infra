@@ -178,6 +178,11 @@ class EvidenceCredentialConfig:
 class _CachedAccessToken:
     value: str = field(repr=False)
     expires_at: int
+    refresh_token: str = field(repr=False)
+
+
+class _RefreshTokenRejected(EvidenceCredentialUnavailable):
+    """The hosted Auth service explicitly rejected a rotating refresh token."""
 
 
 class EvidenceServiceTokenProvider:
@@ -195,6 +200,7 @@ class EvidenceServiceTokenProvider:
         self._clock = clock
         self._lock = threading.Lock()
         self._cached: _CachedAccessToken | None = None
+        self._refresh_token: str | None = None
 
     def _client(self) -> httpx.Client:
         return httpx.Client(
@@ -285,7 +291,57 @@ class EvidenceServiceTokenProvider:
             )
         return expires_at
 
-    def _exchange(self) -> _CachedAccessToken:
+    def _verified_session(
+        self,
+        response: httpx.Response,
+        *,
+        operation: str,
+    ) -> _CachedAccessToken:
+        if response.status_code != 200:
+            raise EvidenceCredentialUnavailable(
+                f"Evidence service {operation} was rejected: "
+                f"http_status={response.status_code}"
+            )
+        payload = self._json_object(response, operation)
+        token = payload.get("access_token")
+        refresh_token = payload.get("refresh_token")
+        if not isinstance(token, str) or not token:
+            raise EvidenceCredentialUnavailable(
+                f"Evidence service {operation} omitted its access token"
+            )
+        if (
+            not isinstance(refresh_token, str)
+            or not refresh_token
+            or len(refresh_token) > 16_384
+            or any(character.isspace() for character in refresh_token)
+        ):
+            raise EvidenceCredentialUnavailable(
+                f"Evidence service {operation} omitted its refresh token"
+            )
+        try:
+            with self._client() as client:
+                user_response = client.get(
+                    f"{self.config.base_url}/auth/v1/user",
+                    headers={"Authorization": f"Bearer {token}"},
+                )
+        except httpx.RequestError as exc:
+            raise EvidenceCredentialUnavailable(
+                "Evidence credential authority could not be reached"
+            ) from exc
+        if user_response.status_code != 200:
+            raise EvidenceCredentialUnavailable(
+                "Evidence service access token verification was rejected: "
+                f"http_status={user_response.status_code}"
+            )
+        user = self._json_object(user_response, "user verification")
+        expires_at = self._validate_access_token(token, user)
+        return _CachedAccessToken(
+            value=token,
+            expires_at=expires_at,
+            refresh_token=refresh_token,
+        )
+
+    def _password_exchange(self) -> _CachedAccessToken:
         try:
             with self._client() as client:
                 response = client.post(
@@ -296,35 +352,31 @@ class EvidenceServiceTokenProvider:
                         "password": self.config.service_password,
                     },
                 )
-                if response.status_code != 200:
-                    raise EvidenceCredentialUnavailable(
-                        "Evidence service password grant was rejected: "
-                        f"http_status={response.status_code}"
-                    )
-                payload = self._json_object(response, "password grant")
-                token = payload.get("access_token")
-                if not isinstance(token, str) or not token:
-                    raise EvidenceCredentialUnavailable(
-                        "Evidence service password grant omitted its access token"
-                    )
-                user_response = client.get(
-                    f"{self.config.base_url}/auth/v1/user",
-                    headers={"Authorization": f"Bearer {token}"},
-                )
-                if user_response.status_code != 200:
-                    raise EvidenceCredentialUnavailable(
-                        "Evidence service access token verification was rejected: "
-                        f"http_status={user_response.status_code}"
-                    )
-                user = self._json_object(user_response, "user verification")
         except EvidenceCredentialUnavailable:
             raise
         except httpx.RequestError as exc:
             raise EvidenceCredentialUnavailable(
                 "Evidence credential authority could not be reached"
             ) from exc
-        expires_at = self._validate_access_token(token, user)
-        return _CachedAccessToken(value=token, expires_at=expires_at)
+        return self._verified_session(response, operation="password grant")
+
+    def _refresh_exchange(self, refresh_token: str) -> _CachedAccessToken:
+        try:
+            with self._client() as client:
+                response = client.post(
+                    f"{self.config.base_url}/auth/v1/token",
+                    params={"grant_type": "refresh_token"},
+                    json={"refresh_token": refresh_token},
+                )
+        except httpx.RequestError as exc:
+            raise EvidenceCredentialUnavailable(
+                "Evidence credential authority could not be reached"
+            ) from exc
+        if response.status_code in {400, 401}:
+            raise _RefreshTokenRejected(
+                "Evidence service refresh token was rejected"
+            )
+        return self._verified_session(response, operation="token refresh")
 
     def access_token(self) -> str:
         """Return a validated token, refreshing it once it approaches expiry."""
@@ -336,7 +388,19 @@ class EvidenceServiceTokenProvider:
                 and self._cached.expires_at - now > TOKEN_REFRESH_SKEW_SECONDS
             ):
                 return self._cached.value
-            self._cached = self._exchange()
+            if self._refresh_token is not None:
+                try:
+                    self._cached = self._refresh_exchange(self._refresh_token)
+                except _RefreshTokenRejected:
+                    # A rotated, expired, or explicitly revoked refresh token may
+                    # be replaced by the reviewed password grant. Network and 5xx
+                    # failures remain fail-closed and never create a grant storm.
+                    self._refresh_token = None
+                else:
+                    self._refresh_token = self._cached.refresh_token
+                    return self._cached.value
+            self._cached = self._password_exchange()
+            self._refresh_token = self._cached.refresh_token
             return self._cached.value
 
     def authorization_headers(self) -> dict[str, str]:
@@ -352,4 +416,5 @@ class EvidenceServiceTokenProvider:
 
         with self._lock:
             if self._cached is not None and self._cached.value == rejected_token:
+                self._refresh_token = self._cached.refresh_token
                 self._cached = None

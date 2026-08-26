@@ -24,6 +24,7 @@ SERVICE_EMAIL = "evidence-storage@canonical.invalid"
 SERVICE_PASSWORD = "evidence-password-" + "x" * 32
 SERVICE_USER_ID = "c1fe54d2-a6d9-4c63-9d08-dd4b02caf630"
 NOW = 1_800_000_000
+REFRESH_TOKEN = "reviewed-refresh-token"
 
 
 def _config() -> EvidenceCredentialConfig:
@@ -49,7 +50,7 @@ def _token(**overrides: Any) -> str:
     }
     claims.update(overrides)
     algorithm = claims.pop("test_algorithm", "HS256")
-    return jwt.encode(claims, "test-signing-key", algorithm=algorithm)
+    return jwt.encode(claims, "test-signing-key-" * 4, algorithm=algorithm)
 
 
 def _user(**overrides: Any) -> dict[str, Any]:
@@ -88,7 +89,13 @@ def test_password_grant_is_verified_and_returns_both_storage_headers():
     def handler(request: httpx.Request) -> httpx.Response:
         requests.append(request)
         if request.url.path == "/auth/v1/token":
-            return httpx.Response(200, json={"access_token": access_token})
+            return httpx.Response(
+                200,
+                json={
+                    "access_token": access_token,
+                    "refresh_token": REFRESH_TOKEN,
+                },
+            )
         if request.url.path == "/auth/v1/user":
             return httpx.Response(200, json=_user())
         raise AssertionError(request.url)
@@ -117,7 +124,13 @@ def test_token_is_cached_under_a_lock_for_concurrent_callers():
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/auth/v1/token":
             calls["token"] += 1
-            return httpx.Response(200, json={"access_token": access_token})
+            return httpx.Response(
+                200,
+                json={
+                    "access_token": access_token,
+                    "refresh_token": REFRESH_TOKEN,
+                },
+            )
         calls["user"] += 1
         return httpx.Response(200, json=_user())
 
@@ -131,31 +144,95 @@ def test_token_is_cached_under_a_lock_for_concurrent_callers():
 
 def test_token_refreshes_inside_skew_and_invalidation_is_token_specific():
     current_time = [NOW]
-    grants = 0
+    grants = {"password": 0, "refresh_token": 0}
 
     def handler(request: httpx.Request) -> httpx.Response:
-        nonlocal grants
         if request.url.path == "/auth/v1/token":
-            grants += 1
+            grant_type = request.url.params["grant_type"]
+            grants[grant_type] += 1
             token = _token(iat=current_time[0], exp=current_time[0] + 120)
-            return httpx.Response(200, json={"access_token": token})
+            return httpx.Response(
+                200,
+                json={
+                    "access_token": token,
+                    "refresh_token": f"refresh-{sum(grants.values())}",
+                },
+            )
         return httpx.Response(200, json=_user())
 
     provider = _provider(handler, clock=lambda: current_time[0])
     first = provider.access_token()
     provider.invalidate("some-other-token")
     assert provider.access_token() == first
-    assert grants == 1
+    assert grants == {"password": 1, "refresh_token": 0}
 
     current_time[0] += 61
     second = provider.access_token()
     assert second != first
-    assert grants == 2
+    assert grants == {"password": 1, "refresh_token": 1}
 
     provider.invalidate(second)
     third = provider.access_token()
     assert third == second
-    assert grants == 3
+    assert grants == {"password": 1, "refresh_token": 2}
+
+
+def test_explicitly_rejected_refresh_falls_back_to_one_password_grant():
+    current_time = [NOW]
+    grant_types: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/auth/v1/token":
+            grant_type = request.url.params["grant_type"]
+            grant_types.append(grant_type)
+            if grant_type == "refresh_token":
+                return httpx.Response(400, text="rotated")
+            return httpx.Response(
+                200,
+                json={
+                    "access_token": _token(
+                        iat=current_time[0], exp=current_time[0] + 120
+                    ),
+                    "refresh_token": f"refresh-{len(grant_types)}",
+                },
+            )
+        return httpx.Response(200, json=_user())
+
+    provider = _provider(handler, clock=lambda: current_time[0])
+    provider.access_token()
+    current_time[0] += 61
+    provider.access_token()
+
+    assert grant_types == ["password", "refresh_token", "password"]
+
+
+def test_refresh_network_or_server_failure_does_not_fall_back_to_password():
+    current_time = [NOW]
+    grant_types: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/auth/v1/token":
+            grant_type = request.url.params["grant_type"]
+            grant_types.append(grant_type)
+            if grant_type == "refresh_token":
+                return httpx.Response(503, text="unavailable")
+            return httpx.Response(
+                200,
+                json={
+                    "access_token": _token(
+                        iat=current_time[0], exp=current_time[0] + 120
+                    ),
+                    "refresh_token": REFRESH_TOKEN,
+                },
+            )
+        return httpx.Response(200, json=_user())
+
+    provider = _provider(handler, clock=lambda: current_time[0])
+    provider.access_token()
+    current_time[0] += 61
+    with pytest.raises(EvidenceCredentialUnavailable, match="token refresh"):
+        provider.access_token()
+    assert grant_types == ["password", "refresh_token"]
 
 
 @pytest.mark.parametrize(
@@ -184,7 +261,13 @@ def test_access_token_and_auth_readback_must_match_reviewed_identity(
 
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/auth/v1/token":
-            return httpx.Response(200, json={"access_token": access_token})
+            return httpx.Response(
+                200,
+                json={
+                    "access_token": access_token,
+                    "refresh_token": REFRESH_TOKEN,
+                },
+            )
         return httpx.Response(200, json=_user(**user_overrides))
 
     with pytest.raises(EvidenceCredentialUnavailable, match=message):
@@ -197,6 +280,11 @@ def test_access_token_and_auth_readback_must_match_reviewed_identity(
         ("/auth/v1/token", httpx.Response(400, text="secret body"), "rejected"),
         ("/auth/v1/token", httpx.Response(200, text="not json"), "invalid JSON"),
         ("/auth/v1/token", httpx.Response(200, json={}), "omitted"),
+        (
+            "/auth/v1/token",
+            httpx.Response(200, json={"access_token": _token()}),
+            "refresh token",
+        ),
         ("/auth/v1/user", httpx.Response(401, text="secret body"), "verification"),
         ("/auth/v1/user", httpx.Response(200, text="not json"), "invalid JSON"),
     ],
@@ -208,7 +296,13 @@ def test_credential_authority_failures_are_sanitized(path, response, message):
         if request.url.path == path:
             return response
         if request.url.path == "/auth/v1/token":
-            return httpx.Response(200, json={"access_token": access_token})
+            return httpx.Response(
+                200,
+                json={
+                    "access_token": access_token,
+                    "refresh_token": REFRESH_TOKEN,
+                },
+            )
         return httpx.Response(200, json=_user())
 
     with pytest.raises(EvidenceCredentialUnavailable, match=message) as failure:
@@ -276,7 +370,7 @@ def test_configuration_rejects_unreviewed_values(field, value, message):
 def test_configuration_accepts_only_anon_legacy_jwt_api_keys():
     anon_key = jwt.encode(
         {"iss": "supabase", "role": "anon"},
-        "legacy-project-secret",
+        "legacy-project-secret-32-bytes-minimum",
         algorithm="HS256",
     )
     config = EvidenceCredentialConfig(
@@ -291,7 +385,7 @@ def test_configuration_accepts_only_anon_legacy_jwt_api_keys():
 
     privileged_key = jwt.encode(
         {"iss": "supabase", "role": "service_role"},
-        "legacy-project-secret",
+        "legacy-project-secret-32-bytes-minimum",
         algorithm="HS256",
     )
     with pytest.raises(EvidenceCredentialUnavailable, match="privileged"):
@@ -334,7 +428,13 @@ def test_configuration_and_cache_repr_do_not_expose_the_password_or_token():
 
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/auth/v1/token":
-            return httpx.Response(200, json={"access_token": access_token})
+            return httpx.Response(
+                200,
+                json={
+                    "access_token": access_token,
+                    "refresh_token": REFRESH_TOKEN,
+                },
+            )
         return httpx.Response(200, json=_user())
 
     provider = _provider(handler)
