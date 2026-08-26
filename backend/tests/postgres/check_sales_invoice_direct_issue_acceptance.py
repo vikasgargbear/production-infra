@@ -442,6 +442,88 @@ def _assert_rollback(runtime_dsn: str, invoice_id: UUID, before: dict[UUID, tupl
             assert cursor.fetchone() == expected
 
 
+def _assert_runtime_resume_projection(
+    runtime_dsn: str,
+    command_id: UUID,
+    idempotency_key: str,
+) -> None:
+    """Prove resume lookup is typed while the backing table stays private."""
+
+    key_hash = hashlib.sha256(idempotency_key.encode("utf-8")).digest()
+    with psycopg2.connect(runtime_dsn) as connection, connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT erp_security.activate_context(%s,%s)",
+            (fixture.IDS["operator_auth_user"], fixture.IDS["org"]),
+        )
+        cursor.execute("SAVEPOINT raw_command_read_denial")
+        try:
+            cursor.execute("SELECT id FROM automation.command_requests WHERE false")
+        except psycopg2.errors.InsufficientPrivilege:
+            cursor.execute("ROLLBACK TO SAVEPOINT raw_command_read_denial")
+        else:
+            raise AssertionError("erp_runtime retained raw command-request SELECT")
+
+        cursor.execute(
+            """
+            SELECT id,status,completed_at,result_resource_id
+              FROM erp_automation_reads.requester_command_by_idempotency(
+                   %s,%s,%s,%s
+              )
+            """,
+            (
+                fixture.IDS["org"],
+                "sales.invoice.prepare",
+                fixture.CLIENT_ID,
+                psycopg2.Binary(key_hash),
+            ),
+        )
+        actual = cursor.fetchone()
+        assert actual is not None
+        assert UUID(str(actual[0])) == command_id
+        assert actual[1:] == ("prepared", None, None)
+
+        for client_id, candidate_hash in (
+            (f"{fixture.CLIENT_ID}-wrong", key_hash),
+            (fixture.CLIENT_ID, hashlib.sha256(b"wrong-key").digest()),
+        ):
+            cursor.execute(
+                """
+                SELECT count(*)
+                  FROM erp_automation_reads.requester_command_by_idempotency(
+                       %s,%s,%s,%s
+                  )
+                """,
+                (
+                    fixture.IDS["org"],
+                    "sales.invoice.prepare",
+                    client_id,
+                    psycopg2.Binary(candidate_hash),
+                ),
+            )
+            assert cursor.fetchone() == (0,)
+
+        cursor.execute("SAVEPOINT cross_tenant_resume_denial")
+        try:
+            cursor.execute(
+                """
+                SELECT *
+                  FROM erp_automation_reads.requester_command_by_idempotency(
+                       %s,%s,%s,%s
+                  )
+                """,
+                (
+                    fixture.IDS["denial_org"],
+                    "sales.invoice.prepare",
+                    fixture.CLIENT_ID,
+                    psycopg2.Binary(key_hash),
+                ),
+            )
+        except psycopg2.errors.InsufficientPrivilege:
+            cursor.execute("ROLLBACK TO SAVEPOINT cross_tenant_resume_denial")
+        else:
+            raise AssertionError("cross-tenant command resume lookup was not denied")
+
+
 def _reconcile(runtime_dsn: str, invoice_id: UUID, batch_ids: list[UUID]) -> None:
     with psycopg2.connect(runtime_dsn) as connection, connection.cursor() as cursor:
         cursor.execute(
@@ -594,6 +676,9 @@ def main() -> None:
 
         prepared = _prepare(service, payload, prepare_key)
         _assert_calculation_input(admin_dsn, prepared.command_request_id)
+        _assert_runtime_resume_projection(
+            runtime_dsn, prepared.command_request_id, prepare_key
+        )
         replay = _prepare(service, payload, prepare_key)
         assert replay.command_request_id == prepared.command_request_id
         assert replay.preview_hash == prepared.preview_hash

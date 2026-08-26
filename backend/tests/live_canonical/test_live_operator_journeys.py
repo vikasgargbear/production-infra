@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
@@ -62,31 +63,59 @@ def _assert_expected_money(preview: dict[str, Any], expected: dict[str, Any]) ->
         assert Decimal(str(actual)) == expected_value, field
 
 
-def _assert_prepare_has_no_result(db_query, org_id: str, command_request_id: str):
+def _command_by_idempotency(
+    db_query,
+    org_id: str,
+    operation_key: str,
+    client_id: str,
+    idempotency_key: str,
+):
     rows = db_query(
         """
-        SELECT status, result_resource_id, completed_at
-          FROM automation.command_requests
-         WHERE org_id = %s::uuid AND id = %s::uuid
+        SELECT id::text,status,result_resource_id::text,completed_at
+          FROM erp_automation_reads.requester_command_by_idempotency(
+               %s::uuid,%s,%s,%s
+          )
         """,
-        (org_id, command_request_id),
+        (
+            org_id,
+            operation_key,
+            client_id,
+            hashlib.sha256(idempotency_key.encode("utf-8")).digest(),
+        ),
     )
-    assert len(rows) == 1
-    assert rows[0]["result_resource_id"] is None
-    assert rows[0]["completed_at"] is None
-    assert rows[0]["status"] in {"prepared", "pending_approval"}
+    assert len(rows) <= 1
+    return rows[0] if rows else None
 
 
-def _command_count(db_query, org_id: str, operation_key: str) -> int:
-    rows = db_query(
-        """
-        SELECT count(*)::integer AS count
-          FROM automation.command_requests
-         WHERE org_id = %s::uuid AND capability_code = %s
-        """,
-        (org_id, operation_key),
+def _assert_prepare_has_no_result(
+    db_query,
+    org_id: str,
+    operation_key: str,
+    client_id: str,
+    idempotency_key: str,
+    command_request_id: str,
+):
+    command = _command_by_idempotency(
+        db_query, org_id, operation_key, client_id, idempotency_key
     )
-    return int(rows[0]["count"])
+    assert command is not None
+    assert command["id"] == command_request_id
+    assert command["result_resource_id"] is None
+    assert command["completed_at"] is None
+    assert command["status"] in {"prepared", "pending_approval"}
+
+
+def _command_exists_by_idempotency(
+    db_query,
+    org_id: str,
+    operation_key: str,
+    client_id: str,
+    idempotency_key: str,
+) -> bool:
+    return _command_by_idempotency(
+        db_query, org_id, operation_key, client_id, idempotency_key
+    ) is not None
 
 
 def _assert_prepare_rejected(
@@ -100,7 +129,14 @@ def _assert_prepare_rejected(
 ) -> None:
     operation_key = f"{probe['operation']}.prepare"
     payload.setdefault("idempotency_key", f"reject:{probe['id']}")
-    before = _command_count(db_query, org_id, operation_key)
+    client_id = rest_client.oauth_claims["requester"]["client_id"]
+    assert not _command_exists_by_idempotency(
+        db_query,
+        org_id,
+        operation_key,
+        client_id,
+        payload["idempotency_key"],
+    )
 
     with pytest.raises(TransportContractError) as rest_failure:
         rest_client.prepare(operation_key, copy.deepcopy(payload))
@@ -116,7 +152,13 @@ def _assert_prepare_rejected(
         assert expected_message.lower() in str(rest_failure.value).lower()
         assert expected_message.lower() in str(mcp_failure.value).lower()
 
-    assert _command_count(db_query, org_id, operation_key) == before
+    assert not _command_exists_by_idempotency(
+        db_query,
+        org_id,
+        operation_key,
+        client_id,
+        payload["idempotency_key"],
+    )
 
 
 def _execute_step(
@@ -159,7 +201,14 @@ def _execute_step(
     assert immutable_preview_projection(rest_prepared) == immutable_preview_projection(
         mcp_prepared
     )
-    _assert_prepare_has_no_result(db_query, org_id, rest_command_id)
+    _assert_prepare_has_no_result(
+        db_query,
+        org_id,
+        f"{step['operation']}.prepare",
+        rest_client.oauth_claims["requester"]["client_id"],
+        payload["idempotency_key"],
+        rest_command_id,
+    )
     preview = rest_prepared.get("preview", rest_prepared)
 
     expected = None

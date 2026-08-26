@@ -251,9 +251,10 @@ class CanonicalReconciler:
             raise AssertionError(f"operation has no reconciliation owner: {operation}")
         command = self.query(
             """
-            SELECT status, result_resource_id, preview_hash, response_hash, row_version
-              FROM automation.command_requests
-             WHERE org_id = %s::uuid AND id = %s::uuid
+            SELECT status,result_resource_id,preview_hash
+              FROM erp_automation_reads.command_authority_context(
+                   %s::uuid,%s::uuid
+              )
             """,
             (self.org_id, command_request_id),
         )

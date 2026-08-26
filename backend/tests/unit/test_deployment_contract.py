@@ -828,11 +828,11 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
         "sales_invoice_reconciliation",
         "customer_receipt_reconciliation",
         "sales_return_reconciliation",
-        "purchase_return_reconciliation",
-        "inventory_adjustment_reconciliation",
-        "cross_table_reconciliation",
-        "unavailable_action_reconciliation",
-    ):
+            "purchase_return_reconciliation",
+            "inventory_adjustment_reconciliation",
+            "cross_table_reconciliation",
+            "available_prepare_operation_count",
+        ):
         assert reconciliation in provisioner
     assert "import_gst_adjustment_rule_release" in provisioner
     assert "gst-council-return-of-goods-faq.pdf" in provisioner
@@ -895,7 +895,7 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     assert "item.outstanding_amount" not in provisioner
     operational_provisioner = provisioner.split("_SAFE_FAILURE_ERROR_CODES", 1)[0]
     assert "COMMAND_ADAPTER_UNAVAILABLE" not in operational_provisioner
-    assert '"unavailable_operation_count": 0' in provisioner
+    assert '"available_prepare_operation_count": len(PREPARE_CAPABILITIES)' in provisioner
     assert 'response.status_code != 503' not in provisioner
     cross_table = provisioner.split("def reconcile_cross_table_invariants", 1)[1].split(
         "\ndef main", 1

@@ -340,6 +340,22 @@ def database_connection(environment_variable: str):
         connection.close()
 
 
+@contextmanager
+def staging_owner_audit_connection():
+    """Open the explicit staging control-plane boundary for global audits.
+
+    Product/runtime decisions must use typed ``erp_automation_reads``
+    projections.  This owner connection is reserved for the final
+    cross-table certification audit and is available only while the workflow's
+    temporary migration-owner delegation is active.
+    """
+
+    with database_connection("PSYCOPG_DATABASE_URL") as connection:
+        with connection.cursor() as cursor:
+            cursor.execute('SET LOCAL ROLE "erp_migration_owner"')
+        yield connection
+
+
 def calculation_totals(cursor, command_request_id: str) -> dict[str, Decimal]:
     """Load exact immutable calculator totals for one consumed command."""
     cursor.execute(
@@ -2567,15 +2583,15 @@ def existing_demo_command(
             )
             cursor.execute(
                 """
-                SELECT id::text,status,encode(preview_hash,'hex'),
-                       result_resource_id::text
-                  FROM automation.command_requests
-                 WHERE org_id=%s AND agent_grant_id=%s
-                   AND capability_code=%s AND idempotency_key_hash=%s
+                SELECT command.id::text,command.status,
+                       pg_catalog.encode(command.preview_hash,'hex'),
+                       command.result_resource_id::text
+                  FROM erp_automation_reads.requester_command_by_idempotency(
+                       %s,%s,%s,%s
+                  ) AS command
                 """,
                 (
-                    IDS["org"], IDS["agent_grant"], operation,
-                    psycopg2.Binary(key_hash),
+                    IDS["org"], operation, CLIENT_ID, psycopg2.Binary(key_hash),
                 ),
             )
             rows = cursor.fetchall()
@@ -2827,35 +2843,6 @@ def exercise_action(
         json.dumps(evidence, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
     return evidence
-
-
-def assert_unavailable_actions(connection) -> dict[str, Any]:
-    """Prove the former destruction gap no longer needs an unavailable probe."""
-
-    with connection.cursor() as cursor:
-        cursor.execute(
-            "SELECT erp_security.activate_context(%s, %s)",
-            (IDS["reviewer_auth_user"], IDS["org"]),
-        )
-        cursor.execute(
-            "SELECT count(*) FROM automation.command_requests WHERE org_id=%s",
-            (IDS["org"],),
-        )
-        before = cursor.fetchone()[0]
-
-    with connection.cursor() as cursor:
-        cursor.execute(
-            "SELECT count(*) FROM automation.command_requests WHERE org_id=%s",
-            (IDS["org"],),
-        )
-        after = cursor.fetchone()[0]
-    if after != before:
-        raise RuntimeError("read-only adapter readiness check persisted a command request")
-    return {
-        "command_count_before": before,
-        "command_count_after": after,
-        "unavailable_operation_count": 0,
-    }
 
 
 def selected_customer_delivery_address_row_version(connection) -> int:
@@ -3498,18 +3485,12 @@ def reconcile_supplier_invoice_ui_fixture(
                    line.igst_amount,
                    line.cess_amount,
                    line.total_amount,
-                   (
-                     SELECT count(*)
-                       FROM automation.command_requests command
-                      WHERE command.org_id=line.org_id
-                        AND command.capability_code='procurement.supplier_invoice.prepare'
-                        AND command.operation='procurement.supplier_invoice.post'
-                        AND command.status NOT IN ('failed','expired','cancelled')
-                        AND NULLIF(
-                              pg_catalog.convert_from(command.request_bytes,'UTF8')::jsonb
-                                ->>'portal_document_line_id',''
-                            )::uuid=line.id
-                   ) AS consumed_count
+                   CASE WHEN erp_automation_reads.active_command_evidence_in_use(
+                     line.org_id,
+                     'procurement.supplier_invoice.prepare',
+                     'portal_document_line_id',
+                     line.id
+                   ) THEN 1 ELSE 0 END AS consumed_count
               FROM tax.portal_document_lines line
               JOIN tax.portal_documents document
                 ON document.org_id=line.org_id
@@ -5866,9 +5847,9 @@ def main() -> int:
         adjustment_reconciliation = reconcile_inventory_adjustment(
             runtime, adjustment_journey["executed"]["resource_id"]
         )
-        unavailable_reconciliation = assert_unavailable_actions(runtime)
+    with staging_owner_audit_connection() as owner:
         cross_table_reconciliation = reconcile_cross_table_invariants(
-            runtime,
+            owner,
             command_ids=[
                 str(journey["prepared"]["command_request_id"])
                 for journey in (
@@ -5926,7 +5907,7 @@ def main() -> int:
         "purchase_return_reconciliation": purchase_return_reconciliation,
         "inventory_adjustment_reconciliation": adjustment_reconciliation,
         "cross_table_reconciliation": cross_table_reconciliation,
-        "unavailable_action_reconciliation": unavailable_reconciliation,
+        "available_prepare_operation_count": len(PREPARE_CAPABILITIES),
         "challan_evidence": {
             "supplier_challan_number": receipt_payload["supplier_challan_number"],
             "supplier_challan_date": receipt_payload["supplier_challan_date"],

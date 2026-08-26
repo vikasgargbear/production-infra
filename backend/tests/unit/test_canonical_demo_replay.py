@@ -201,7 +201,11 @@ def test_existing_command_is_loaded_before_mutable_preflight(
         "preview_hash": f"sha256:{'b' * 64}",
         "resource_id": resource_id,
     }
-    assert "idempotency_key_hash=%s" in cursor.executions[1][0]
+    assert "erp_automation_reads.requester_command_by_idempotency" in cursor.executions[1][0]
+    assert cursor.executions[1][1][1:3] == (
+        "procurement.purchase_order.prepare",
+        module.CLIENT_ID,
+    )
 
 
 @pytest.mark.parametrize("sales_order", [False, True])

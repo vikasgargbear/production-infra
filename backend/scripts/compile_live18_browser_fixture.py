@@ -338,15 +338,11 @@ def resolve_authoritative_facts(
          AND portal_line.document_type='invoice'
          AND portal_line.supplier_gstin=supplier_registration.registration_number
          AND portal_line.invoice_number=%s
-         AND NOT EXISTS (
-           SELECT 1
-             FROM automation.command_requests AS command
-            WHERE command.org_id=portal_line.org_id
-              AND command.capability_code='procurement.supplier_invoice.prepare'
-              AND command.operation='procurement.supplier_invoice.post'
-              AND command.status NOT IN ('failed','expired','cancelled')
-              AND NULLIF(convert_from(command.request_bytes,'UTF8')::jsonb
-                    ->>'portal_document_line_id','')::uuid=portal_line.id
+         AND NOT erp_automation_reads.active_command_evidence_in_use(
+           portal_line.org_id,
+           'procurement.supplier_invoice.prepare',
+           'portal_document_line_id',
+           portal_line.id
          )
        ORDER BY portal_line.id
     """
@@ -538,13 +534,11 @@ def resolve_authoritative_facts(
                AND candidate.retention_until IS NOT NULL
                AND candidate.retention_until>=(transaction_timestamp() AT TIME ZONE organization.timezone)::date
                AND candidate.sha256 IS NOT NULL
-               AND NOT EXISTS (
-                   SELECT 1 FROM automation.command_requests prior
-                    WHERE prior.org_id=candidate.org_id
-                      AND prior.capability_code='inventory.adjustment.prepare'
-                      AND prior.status NOT IN ('failed','expired','cancelled')
-                      AND convert_from(prior.request_bytes,'UTF8')::jsonb
-                          ->>'evidence_attachment_id'=candidate.id::text
+               AND NOT erp_automation_reads.active_command_evidence_in_use(
+                   candidate.org_id,
+                   'inventory.adjustment.prepare',
+                   'evidence_attachment_id',
+                   candidate.id
                )
              ORDER BY candidate.verified_at DESC,candidate.id
              LIMIT 2
@@ -745,12 +739,12 @@ def resolve_authoritative_facts(
             GROUP BY source_lot.batch_id,restoration_ledger.location_id
            HAVING sum(restoration.applied_base_quantity)>=balance.on_hand_quantity
          )
-         AND NOT EXISTS (SELECT 1 FROM automation.command_requests command
-          WHERE command.org_id=certificate.org_id
-            AND command.capability_code='inventory.destruction.prepare'
-            AND command.status NOT IN ('failed','expired','cancelled')
-            AND convert_from(command.request_bytes,'UTF8')::jsonb
-                ->>'certificate_attachment_id'=certificate.id::text)
+         AND NOT erp_automation_reads.active_command_evidence_in_use(
+           certificate.org_id,
+           'inventory.destruction.prepare',
+           'certificate_attachment_id',
+           certificate.id
+         )
        GROUP BY balance.batch_id,batch.batch_number,batch.status,
                 balance.on_hand_quantity,balance.inventory_value,location.id,location.name,
                 conversion.id,conversion.from_uom_code,conversion.multiplier,
