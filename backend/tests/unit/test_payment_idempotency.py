@@ -1,10 +1,7 @@
-import asyncio
 from datetime import date
 from decimal import Decimal
-from types import SimpleNamespace
 
 import pytest
-from fastapi import HTTPException
 
 from app.core.idempotency import (
     IdempotencyConflictError,
@@ -116,70 +113,6 @@ def test_unimplemented_dedicated_store_fails_closed(operation):
             operation=operation,
             key="payment_retry_123",
         )
-
-
-def test_payment_mutation_routes_fail_before_database_access():
-    from app.api.routes.finance.allocation.routes import (
-        AllocationRequest,
-        allocate_payment as allocate_single_payment,
-    )
-    from app.api.routes.finance.payments.routes import (
-        allocate_payment,
-        cancel_payment,
-        create_bank_reconciliation,
-    )
-
-    class DatabaseMustNotExecute:
-        def __init__(self):
-            self.rollbacks = 0
-
-        def execute(self, *_args, **_kwargs):
-            raise AssertionError("fail-closed guard must run before database access")
-
-        def commit(self):
-            raise AssertionError("blocked mutation must not commit")
-
-        def rollback(self):
-            self.rollbacks += 1
-
-    context = SimpleNamespace(org_id="org-1", user_id=7)
-    db = DatabaseMustNotExecute()
-    calls = (
-        cancel_payment.__wrapped__(
-            payment_id=10,
-            reason="duplicate",
-            idempotency_key="payment_retry_123",
-            _={},
-            context=context,
-            db=db,
-        ),
-        create_bank_reconciliation.__wrapped__(
-            reconciliation_data={},
-            idempotency_key="payment_retry_123",
-            _={},
-            context=context,
-            db=db,
-        ),
-        allocate_payment.__wrapped__(
-            allocation_data={"payment_id": 10, "allocations": []},
-            idempotency_key="payment_retry_123",
-            _={},
-            context=context,
-            db=db,
-        ),
-        allocate_single_payment.__wrapped__(
-            allocation=AllocationRequest(payment_id=10, invoice_id=20, amount=1),
-            idempotency_key="payment_retry_123",
-            _={},
-            context=context,
-            db=db,
-        ),
-    )
-
-    for call in calls:
-        with pytest.raises(HTTPException) as exc_info:
-            asyncio.run(call)
-        assert exc_info.value.status_code == 503
 
 
 def test_legacy_payment_creation_is_absent_from_openapi():

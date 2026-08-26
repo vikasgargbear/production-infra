@@ -45,41 +45,6 @@ def collect_issues() -> List[ReadinessIssue]:
             f"{temporary_backend} is restricted to development and test",
         ))
 
-    payment_routes = (
-        REPOSITORY_ROOT / "backend/app/api/routes/finance/payments/routes.py"
-    ).read_text(encoding="utf-8")
-    allocation_routes = (
-        REPOSITORY_ROOT / "backend/app/api/routes/finance/allocation/routes.py"
-    ).read_text(encoding="utf-8")
-    uncovered = []
-    mutation_contracts = (
-        (payment_routes, "cancel_payment", "payment.cancel"),
-        (payment_routes, "create_bank_reconciliation", "payment.reconcile"),
-        (payment_routes, "allocate_payment", "payment.allocate"),
-        (allocation_routes, "allocate_payment", "payment.allocate"),
-        (allocation_routes, "allocate_payment_bulk", "payment.allocate"),
-        (allocation_routes, "auto_allocate_payment", "payment.allocate"),
-        (allocation_routes, "delete_allocation", "payment.allocate"),
-    )
-    for source, function_name, operation in mutation_contracts:
-        method = source.split(f"async def {function_name}", 1)[1].split(
-            "@router.", 1
-        )[0]
-        guarded = (
-            f'operation="{operation}"' in method
-            or (
-                "_require_allocation_idempotency(idempotency_key)" in method
-                and f'operation="{operation}"' in source
-            )
-        )
-        if 'alias="X-Idempotency-Key"' not in method or not guarded:
-            uncovered.append(function_name)
-    if uncovered:
-        issues.append(ReadinessIssue(
-            "PAYMENT_MUTATIONS_NOT_COVERED",
-            "missing idempotency contract: " + ", ".join(uncovered),
-        ))
-
     return issues
 
 

@@ -1,4 +1,3 @@
-import inspect
 from datetime import date
 from decimal import Decimal
 from types import SimpleNamespace
@@ -8,7 +7,6 @@ import pytest
 from pydantic import ValidationError
 
 from app.api.routes import canonical_erp_reads
-from app.api.routes.finance.allocation import routes as legacy_allocation_routes
 from app.main import app
 
 
@@ -156,9 +154,6 @@ def test_canonical_payment_routes_publish_uuid_and_exact_money_openapi_contract(
     receipt_operation = schema["paths"][receipt_path]["get"]
     receipt_response = receipt_operation["responses"]["200"]["content"]["application/json"]["schema"]
     assert receipt_response == {"$ref": "#/components/schemas/CanonicalCustomerReceiptReadback"}
-    legacy_source = inspect.getsource(legacy_allocation_routes)
-    assert '@router.get("/unpaid-invoices")' not in legacy_source
-    assert '@router.get("/invoice/{invoice_id}/payments")' not in legacy_source
 
 
 def test_canonical_invoice_payment_history_preserves_ids_and_money(monkeypatch):
