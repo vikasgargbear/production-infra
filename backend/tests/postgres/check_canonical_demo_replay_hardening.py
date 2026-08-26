@@ -27,14 +27,24 @@ register_uuid()
 def _connect():
     """Open only the explicitly supplied disposable PostgreSQL database."""
 
+    if os.getenv("CANONICAL_CI_ALLOW_DISPOSABLE") != "1":
+        raise RuntimeError("disposable PostgreSQL replay requires explicit opt-in")
     url = make_url(os.environ["DATABASE_URL"])
-    return psycopg2.connect(
+    if url.host not in {"localhost", "127.0.0.1"}:
+        raise RuntimeError("disposable PostgreSQL replay requires an exact loopback host")
+    if url.database != "canonical_alembic_ci":
+        raise RuntimeError("disposable PostgreSQL replay requires canonical_alembic_ci")
+    connection = psycopg2.connect(
         host=url.host,
         port=url.port or 5432,
         dbname=url.database,
         user=url.username,
         password=url.password or "",
     )
+    if connection.server_version // 10000 != 15:
+        connection.close()
+        raise RuntimeError("disposable PostgreSQL replay requires PostgreSQL 15")
+    return connection
 
 
 def _configure_fixture_ids() -> None:
