@@ -64,6 +64,13 @@ def test_storage_policy_has_no_update_or_service_role_authority():
     assert "FOR UPDATE TO erp_evidence_storage" not in policy
     assert "service_role" not in policy
     assert "NOBYPASSRLS" in policy
+    alter_role = policy.split(
+        "ALTER ROLE erp_evidence_storage", 1
+    )[1].split(";", 1)[0]
+    assert "NOSUPERUSER" not in alter_role
+    assert "NOREPLICATION" not in alter_role
+    assert "NOBYPASSRLS" not in alter_role
+    assert "protected role posture drifted" in policy
     assert "storage.allow_any_operation" in policy
     assert "storage.object.get_authenticated" in policy
     assert "storage.object.list" not in policy

@@ -16,14 +16,45 @@ BEGIN
 END
 $role$;
 
+DO $protected_role_authority$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+          FROM pg_catalog.pg_roles
+         WHERE rolname='erp_evidence_storage'
+           AND (rolsuper OR rolreplication OR rolbypassrls)
+    ) THEN
+        RAISE EXCEPTION 'erp_evidence_storage protected role posture drifted';
+    END IF;
+END
+$protected_role_authority$;
+
+-- Hosted Supabase deliberately exposes a non-superuser CREATEROLE principal.
+-- Reconcile only attributes that principal is allowed to change; mentioning
+-- SUPERUSER, REPLICATION, or BYPASSRLS in ALTER ROLE is itself forbidden.
 ALTER ROLE erp_evidence_storage
-    NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+    NOLOGIN NOINHERIT NOCREATEDB NOCREATEROLE;
 
 DO $role_authority$
 DECLARE
     evidence_role_oid oid := 'erp_evidence_storage'::regrole::oid;
     authenticator_oid oid := 'authenticator'::regrole::oid;
+    administrator_oid oid := current_user::regrole::oid;
 BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+          FROM pg_catalog.pg_roles
+         WHERE oid=evidence_role_oid
+           AND NOT rolcanlogin
+           AND NOT rolinherit
+           AND NOT rolsuper
+           AND NOT rolcreatedb
+           AND NOT rolcreaterole
+           AND NOT rolreplication
+           AND NOT rolbypassrls
+    ) THEN
+        RAISE EXCEPTION 'erp_evidence_storage role posture drifted';
+    END IF;
     IF EXISTS (
         SELECT 1 FROM pg_catalog.pg_auth_members
          WHERE member=evidence_role_oid
@@ -33,9 +64,17 @@ BEGIN
     IF EXISTS (
         SELECT 1 FROM pg_catalog.pg_auth_members
          WHERE roleid=evidence_role_oid
-           AND member<>authenticator_oid
+           AND member NOT IN (authenticator_oid,administrator_oid)
     ) THEN
         RAISE EXCEPTION 'erp_evidence_storage has an unexpected member';
+    END IF;
+    IF EXISTS (
+        SELECT 1 FROM pg_catalog.pg_auth_members
+         WHERE roleid=evidence_role_oid
+           AND member=administrator_oid
+           AND NOT admin_option
+    ) THEN
+        RAISE EXCEPTION 'erp_evidence_storage creator membership drifted';
     END IF;
     IF NOT (
         SELECT relrowsecurity
