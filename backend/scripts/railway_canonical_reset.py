@@ -227,6 +227,14 @@ def _admin_database_url(
                         """
                     )
                     row = cursor.fetchone()
+            try:
+                role_cleanup = verify_post_cleanup_role_state(
+                    connection, project_ref=contract.project_ref
+                )
+            except Exception:
+                raise RailwayCanonicalResetError(
+                    "railway_ipv6_role_cleanup_attestation_failed"
+                ) from None
     except RailwayCanonicalResetError:
         raise
     except Exception as error:
@@ -243,7 +251,6 @@ def _admin_database_url(
             "current_database": row[1] == contract.database,
             "server_ssl": row[2] == "on",
             "row_security": row[3] is True,
-            "migration_owner_membership": row[4] is False,
             "superuser": row[5] is False,
             "createrole": row[6] is True,
             "bypassrls": row[7] is True,
@@ -256,6 +263,14 @@ def _admin_database_url(
             "railway_ipv6_database_authority_attestation_mismatch:"
             + ",".join(sorted(mismatches))
         )
+    if (
+        role_cleanup.get("postgres_migration_owner_set") is not False
+        or role_cleanup.get("postgres_migration_owner_usage") is not False
+        or role_cleanup.get("verification_principal_superuser") is not False
+    ):
+        raise RailwayCanonicalResetError(
+            "railway_ipv6_migration_owner_authority_unsafe"
+        )
     return pinned_dsn, {
         "mode": CONTROL_TRANSPORT_RAILWAY_IPV6,
         "role": contract.administrator_role,
@@ -266,7 +281,12 @@ def _admin_database_url(
         "ipv6_answer_count": len(public_ipv6),
         "selected_ipv6_address": "verified-not-persisted",
         "row_security": True,
-        "migration_owner_member": False,
+        # PostgreSQL 16+ may retain a standing membership row with both SET
+        # and INHERIT disabled.  Report membership truthfully while attesting
+        # the executable SET/USAGE paths separately.
+        "migration_owner_member": bool(row[4]),
+        "migration_owner_set": False,
+        "migration_owner_usage": False,
     }
 
 

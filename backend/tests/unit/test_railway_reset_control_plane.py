@@ -605,6 +605,7 @@ class _Connection:
 
 @dataclass(frozen=True)
 class _Contract:
+    project_ref: str = PROJECT_REF
     administrator_role: str = "postgres"
     host: str = f"db.{PROJECT_REF}.supabase.co"
     port: int = 5432
@@ -615,13 +616,27 @@ class _Contract:
         return (self.administrator_role,)
 
 
+def _attest_safe_owner_paths(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        RESET,
+        "verify_post_cleanup_role_state",
+        lambda _connection, *, project_ref: {
+            "project_ref": project_ref,
+            "postgres_migration_owner_set": False,
+            "postgres_migration_owner_usage": False,
+            "verification_principal_superuser": False,
+        },
+    )
+
+
 def test_ipv6_admin_transport_attests_the_connected_server_and_hides_address(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     address = "2606:4700:4700::1111"
     connection = _Connection(
-        ("postgres", "postgres", "on", True, False, False, True, True)
+        ("postgres", "postgres", "on", True, True, False, True, True)
     )
+    _attest_safe_owner_paths(monkeypatch)
     monkeypatch.setattr(RESET, "load_direct_database_contract", lambda: _Contract())
     monkeypatch.setattr(RESET, "build_direct_dsn", lambda **_kwargs: "postgresql://redacted")
     monkeypatch.setattr(
@@ -646,6 +661,9 @@ def test_ipv6_admin_transport_attests_the_connected_server_and_hides_address(
     assert evidence["network_family"] == 6
     assert evidence["ipv6_answer_count"] == 1
     assert evidence["selected_ipv6_address"] == "verified-not-persisted"
+    assert evidence["migration_owner_member"] is True
+    assert evidence["migration_owner_set"] is False
+    assert evidence["migration_owner_usage"] is False
     assert address not in json.dumps(evidence)
     assert DB_PASSWORD not in json.dumps(evidence)
     assert all("inet_server_addr" not in statement for statement in connection.statements)
@@ -682,6 +700,7 @@ def test_ipv6_admin_transport_fails_before_connect_without_ipv6(
 def test_ipv6_admin_transport_rejects_wrong_role_or_network_family(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _attest_safe_owner_paths(monkeypatch)
     monkeypatch.setattr(RESET, "load_direct_database_contract", lambda: _Contract())
     monkeypatch.setattr(RESET, "build_direct_dsn", lambda **_kwargs: "postgresql://redacted")
     monkeypatch.setattr(
@@ -728,6 +747,7 @@ def test_ipv6_admin_transport_rejects_wrong_role_or_network_family(
 def test_ipv6_admin_transport_attests_libpq_destination_not_server_interface(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _attest_safe_owner_paths(monkeypatch)
     address = "2606:4700:4700::1111"
     connection = _Connection(
         ("postgres", "postgres", "on", True, False, False, True, True),
@@ -754,3 +774,42 @@ def test_ipv6_admin_transport_attests_libpq_destination_not_server_interface(
             control_transport=RESET.CONTROL_TRANSPORT_RAILWAY_IPV6,
         )
     assert all("inet_server_addr" not in statement for statement in connection.statements)
+
+
+def test_ipv6_admin_transport_rejects_executable_owner_authority(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    address = "2606:4700:4700::1111"
+    connection = _Connection(
+        ("postgres", "postgres", "on", True, True, False, True, True)
+    )
+    monkeypatch.setattr(RESET, "load_direct_database_contract", lambda: _Contract())
+    monkeypatch.setattr(RESET, "build_direct_dsn", lambda **_kwargs: "postgresql://redacted")
+    monkeypatch.setattr(
+        RESET.socket,
+        "getaddrinfo",
+        lambda *_args, **_kwargs: [
+            (socket.AF_INET6, socket.SOCK_STREAM, 6, "", (address, 5432, 0, 0))
+        ],
+    )
+    monkeypatch.setattr(RESET.psycopg2, "connect", lambda _dsn: connection)
+    monkeypatch.setattr(
+        RESET,
+        "verify_post_cleanup_role_state",
+        lambda _connection, *, project_ref: {
+            "project_ref": project_ref,
+            "postgres_migration_owner_set": True,
+            "postgres_migration_owner_usage": False,
+            "verification_principal_superuser": False,
+        },
+    )
+
+    with pytest.raises(
+        RESET.RailwayCanonicalResetError,
+        match="railway_ipv6_migration_owner_authority_unsafe",
+    ):
+        RESET._admin_database_url(
+            password=DB_PASSWORD,
+            application_name="canonical_test",
+            control_transport=RESET.CONTROL_TRANSPORT_RAILWAY_IPV6,
+        )
