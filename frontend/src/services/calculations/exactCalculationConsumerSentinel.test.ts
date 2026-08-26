@@ -40,7 +40,7 @@ describe('exact calculation consumer boundaries', () => {
     expect(consumers).not.toContain('preview may return JSON numbers');
   });
 
-  it('keeps sales dispatch valuation at the canonical command/readback boundary', () => {
+  it('keeps sales dispatch valuation out of the public browser readback', () => {
     const retiredCalculator = path.join(__dirname, 'challanCalculationService.ts');
     const dispatchHook = fs.readFileSync(
       path.join(__dirname, '../../components/sales/challan/hooks/useChallanLogic.ts'),
@@ -55,7 +55,8 @@ describe('exact calculation consumer boundaries', () => {
     expect(dispatchHook).not.toContain('/calculations/challan');
     expect(dispatchApi).toContain("prepareCanonicalAction('sales.dispatch.prepare'");
     expect(dispatchApi).toMatch(/\/canonical\/sales-dispatches\/\$\{id\}\/acceptance-readback/);
-    expect(dispatchApi).toContain('inventory_value');
+    expect(dispatchApi).not.toContain('inventory_value');
+    expect(dispatchApi).not.toContain('ledger_value');
   });
 
   it('keeps return valuation at the canonical command preview boundary', () => {
