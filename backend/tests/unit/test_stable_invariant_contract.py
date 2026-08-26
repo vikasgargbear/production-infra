@@ -189,6 +189,10 @@ def test_postgres15_fixture_is_rollback_only_and_wired_after_the_clean_baseline(
         "EXCEPTION WHEN check_violation OR object_not_in_prerequisite_state"
     ) == 2
     assert "set_config('app.request_id'" in fixture
+    assert fixture.count('SET LOCAL ROLE "erp_migration_owner";') == 1
+    assert fixture.index("INSERT INTO auth.users") < fixture.index(
+        'SET LOCAL ROLE "erp_migration_owner";'
+    ) < fixture.index("ALTER TABLE core.organizations DISABLE TRIGGER USER")
     assert "ALTER TABLE core.organizations DISABLE TRIGGER USER" in fixture
     assert fixture.index("INSERT INTO core.organizations") < fixture.index("INSERT INTO core.users")
     assert "'organization', 'Fixture Party', 'draft'" in fixture

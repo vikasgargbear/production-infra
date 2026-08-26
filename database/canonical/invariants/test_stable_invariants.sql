@@ -7,6 +7,10 @@ BEGIN;
 INSERT INTO auth.users (id) VALUES ('00000000-0000-0000-0000-000000000001');
 INSERT INTO auth.users (id) VALUES ('00000000-0000-0000-0000-000000000005');
 
+-- auth.users is Supabase-owned; all remaining fixture DDL and canonical rows
+-- must exercise the same migration-owner topology used outside local superuser CI.
+SET LOCAL ROLE "erp_migration_owner";
+
 SET CONSTRAINTS ALL DEFERRED;
 SELECT set_config('app.org_id', '00000000-0000-0000-0000-000000000010', true);
 SELECT set_config('app.request_id', '00000000-0000-0000-0000-000000000011', true);
