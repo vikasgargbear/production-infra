@@ -91,6 +91,16 @@ def _required(value: str, label: str) -> str:
     return normalized
 
 
+def _database_failure_code(error: Exception) -> str:
+    sqlstate = getattr(error, "pgcode", None)
+    suffix = (
+        f":sqlstate_{sqlstate}"
+        if isinstance(sqlstate, str) and re.fullmatch(r"[0-9A-Z]{5}", sqlstate)
+        else ""
+    )
+    return f"{type(error).__name__}{suffix}"
+
+
 def _validate_boundary(
     *, expected_sha: str, project_ref: str, production_project_refs: str
 ) -> None:
@@ -291,25 +301,32 @@ def _admin_database_url(
 
 
 def _set_owner_delegation(database_url: str, *, enabled: bool) -> None:
-    with psycopg2.connect(database_url) as connection:
-        connection.autocommit = True
-        with connection.cursor() as cursor:
-            cursor.execute("SHOW server_version_num")
-            supports_membership_options = int(cursor.fetchone()[0]) >= 160000
-            if enabled and supports_membership_options:
-                cursor.execute(
-                    'GRANT "erp_migration_owner" TO CURRENT_USER '
-                    "WITH INHERIT FALSE, SET TRUE"
-                )
-            elif enabled:
-                cursor.execute('GRANT "erp_migration_owner" TO CURRENT_USER')
-            elif supports_membership_options:
-                cursor.execute(
-                    'GRANT "erp_migration_owner" TO CURRENT_USER '
-                    "WITH INHERIT FALSE, SET FALSE"
-                )
-            else:
-                cursor.execute('REVOKE "erp_migration_owner" FROM CURRENT_USER')
+    try:
+        with psycopg2.connect(database_url) as connection:
+            connection.autocommit = True
+            with connection.cursor() as cursor:
+                cursor.execute("SHOW server_version_num")
+                supports_membership_options = int(cursor.fetchone()[0]) >= 160000
+                if enabled and supports_membership_options:
+                    cursor.execute(
+                        'GRANT "erp_migration_owner" TO CURRENT_USER '
+                        "WITH INHERIT FALSE, SET TRUE"
+                    )
+                elif enabled:
+                    cursor.execute('GRANT "erp_migration_owner" TO CURRENT_USER')
+                elif supports_membership_options:
+                    cursor.execute(
+                        'GRANT "erp_migration_owner" TO CURRENT_USER '
+                        "WITH INHERIT FALSE, SET FALSE"
+                    )
+                else:
+                    cursor.execute('REVOKE "erp_migration_owner" FROM CURRENT_USER')
+    except Exception as error:
+        action = "enable" if enabled else "disable"
+        raise RailwayCanonicalResetError(
+            f"railway_migration_owner_delegation_{action}_failed:"
+            f"{_database_failure_code(error)}"
+        ) from None
 
 
 @contextlib.contextmanager
@@ -647,10 +664,18 @@ def _set_fence_after_deploy(
         application_name=f"canonical_railway_fence_{action}",
         control_transport=control_transport,
     )
-    with _temporary_owner_delegation(database_url, project_ref=project_ref):
-        fence_receipt = apply_fence(
-            database_url, action=action, commit_sha=expected_sha
-        )
+    try:
+        with _temporary_owner_delegation(database_url, project_ref=project_ref):
+            fence_receipt = apply_fence(
+                database_url, action=action, commit_sha=expected_sha
+            )
+    except RailwayCanonicalResetError:
+        raise
+    except Exception as error:
+        raise RailwayCanonicalResetError(
+            f"railway_write_fence_{action}_failed:"
+            f"{_database_failure_code(error)}"
+        ) from None
     with psycopg2.connect(database_url) as connection:
         role_receipt = verify_post_cleanup_role_state(
             connection, project_ref=project_ref
