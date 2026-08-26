@@ -1,16 +1,21 @@
 #!/usr/bin/env python3
 """Fail-closed database schema and migration readiness audit.
 
-This tool is deliberately static. It does not connect to a database or infer that
-legacy bootstrap SQL matches production. A repository may claim
+This tool is deliberately read-only. It does not connect to a database or infer
+that legacy bootstrap SQL matches production. It evaluates the effective mounted
+callable graph, the canonical Alembic/model authority, and hash-bound external
+evidence. A repository may claim
 ``production_ready`` only after every blocker reported here is removed.
 """
 
 from __future__ import annotations
 
 import argparse
+from datetime import datetime
+import hashlib
 import json
 import re
+import subprocess
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -21,6 +26,25 @@ AUTHORITY_PATH = Path("database/schema-authority.json")
 READY_STATE = "production_ready"
 VALID_STATES = {"unbaselined", "migrating", READY_STATE}
 VALID_CLASSIFICATIONS = {"retain", "migrate", "retire", "pending-live-baseline"}
+SOURCE_REACHABILITY_ANALYZER = (
+    "canonical_alembic_source_graph_and_mounted_callable_relation_graph"
+)
+SHA256 = re.compile(r"^[0-9a-f]{64}$")
+GIT_COMMIT = re.compile(r"^[0-9a-f]{40}$")
+BUSINESS_SCHEMAS = {
+    "automation",
+    "calculation",
+    "catalog",
+    "compliance",
+    "core",
+    "finance",
+    "hr",
+    "inventory",
+    "parties",
+    "procurement",
+    "sales",
+    "tax",
+}
 
 
 @dataclass(frozen=True)
@@ -41,7 +65,7 @@ class TableDefinition:
 
     @property
     def has_org_id(self) -> bool:
-        return re.search(r"(?i)(?:^|,)\s*org_id\s+", self.body) is not None
+        return re.search(r'(?i)(?:^|,)\s*"?org_id"?\s+', self.body) is not None
 
     @property
     def references(self) -> set[str]:
@@ -91,6 +115,10 @@ def load_authority(repo_root: Path) -> dict:
         "readiness_state",
         "bootstrap_ddl_root",
         "canonical_migration_root",
+        "canonical_model_file",
+        "canonical_model_sha256",
+        "canonical_model_catalog_sha256",
+        "canonical_transaction_integrity_evidence",
         "rls_policy_file",
         "deployment_entrypoint",
         "source_classification_file",
@@ -115,6 +143,7 @@ def load_source_classification(authority: Mapping, root: Path) -> dict:
     required = {
         "readiness_state",
         "canonical_sources",
+        "source_reachability",
         "legacy_deployment_plan",
         "competing_authorities",
         "competing_authority_count",
@@ -129,10 +158,45 @@ def load_source_classification(authority: Mapping, root: Path) -> dict:
     return classification
 
 
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def load_canonical_model(authority: Mapping, root: Path) -> dict:
+    relative_path = authority["canonical_model_file"]
+    path = root / relative_path
+    if not path.is_file():
+        raise FileNotFoundError(f"Missing canonical model: {relative_path}")
+    expected_hash = authority["canonical_model_sha256"]
+    if not isinstance(expected_hash, str) or not SHA256.fullmatch(expected_hash):
+        raise ValueError("canonical_model_sha256 must be a lowercase SHA-256")
+    actual_hash = _sha256(path)
+    if actual_hash != expected_hash:
+        raise ValueError(
+            f"Canonical model hash differs: expected {expected_hash}, got {actual_hash}"
+        )
+    model = json.loads(path.read_text(encoding="utf-8"))
+    expected_catalog_hash = authority["canonical_model_catalog_sha256"]
+    if not isinstance(expected_catalog_hash, str) or not SHA256.fullmatch(
+        expected_catalog_hash
+    ):
+        raise ValueError(
+            "canonical_model_catalog_sha256 must be a lowercase SHA-256"
+        )
+    if model.get("catalog_sha256") != expected_catalog_hash:
+        raise ValueError(
+            "Canonical model catalog hash differs from schema authority"
+        )
+    if not isinstance(model.get("tables"), list) or not model["tables"]:
+        raise ValueError("Canonical model must contain a non-empty tables list")
+    return model
+
+
 def parse_table_definitions(paths: Iterable[Path]) -> list[TableDefinition]:
     pattern = re.compile(
-        r"(?is)\bCREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?"
-        r"(?P<name>[a-z_][\w]*\.[a-z_][\w]*)\s*\((?P<body>.*?)\)\s*"
+        r'(?is)\bCREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?'
+        r'"?(?P<schema>[a-z_][\w]*)"?\."?(?P<table>[a-z_][\w]*)"?\s*'
+        r"\((?P<body>.*?)\)\s*"
         r"(?:PARTITION\s+BY\s+[^;]+)?;"
     )
     definitions: list[TableDefinition] = []
@@ -141,7 +205,9 @@ def parse_table_definitions(paths: Iterable[Path]) -> list[TableDefinition]:
         for match in pattern.finditer(text):
             definitions.append(
                 TableDefinition(
-                    name=match.group("name").lower(),
+                    name=(
+                        f'{match.group("schema")}.{match.group("table")}'.lower()
+                    ),
                     path=path,
                     line=_line_number(text, match.start()),
                     body=match.group("body"),
@@ -282,7 +348,192 @@ def check_competing_ddl(authority: Mapping, root: Path) -> list[Issue]:
     return sorted(issues, key=lambda issue: (issue.code, issue.path, issue.line or 0))
 
 
-def check_source_classification(authority: Mapping, root: Path) -> list[Issue]:
+def _mounted_relation_dependencies(root: Path) -> set[str]:
+    backend_root = root / "backend"
+    if str(backend_root) not in sys.path:
+        sys.path.insert(0, str(backend_root))
+    from scripts.audit.application_promotion_evidence import _effective_route_probe
+
+    graph = _effective_route_probe(root)
+    relations = graph.get("relations")
+    if not isinstance(relations, dict) or not graph.get("routes"):
+        raise ValueError("Mounted callable route graph lacks routes or relation evidence")
+    return {str(relation).lower() for relation in relations}
+
+
+def _source_defined_relations(root: Path, relative_paths: Iterable[str]) -> set[str]:
+    paths = [root / relative_path for relative_path in relative_paths]
+    return {
+        definition.name
+        for definition in parse_table_definitions(
+            path for path in paths if path.is_file() and path.suffix == ".sql"
+        )
+    }
+
+
+def check_source_reachability(
+    authority: Mapping,
+    classification: Mapping,
+    root: Path,
+    *,
+    reachable_relations: set[str] | None = None,
+) -> list[Issue]:
+    """Prove that only canonical Alembic is a current executable schema source."""
+
+    classification_path = authority["source_classification_file"]
+    contract = classification.get("source_reachability")
+    if not isinstance(contract, dict):
+        return [Issue(
+            code="source_reachability_contract_missing",
+            message="Schema source classification requires a reachability contract.",
+            path=classification_path,
+        )]
+    issues: list[Issue] = []
+    if contract.get("analyzer") != SOURCE_REACHABILITY_ANALYZER:
+        issues.append(Issue(
+            code="invalid_source_reachability_analyzer",
+            message=(
+                "Source reachability must use the canonical Alembic source graph and "
+                "mounted callable relation graph."
+            ),
+            path=classification_path,
+        ))
+
+    current = contract.get("current_sources")
+    unreachable = contract.get("unreachable_sources")
+    if not isinstance(current, list) or not all(
+        isinstance(path, str) and path for path in current
+    ):
+        current = []
+        issues.append(Issue(
+            code="invalid_current_source_inventory",
+            message="current_sources must be a non-empty list of repository paths.",
+            path=classification_path,
+        ))
+    if not isinstance(unreachable, list) or not all(
+        isinstance(path, str) and path for path in unreachable
+    ):
+        unreachable = []
+        issues.append(Issue(
+            code="invalid_unreachable_source_inventory",
+            message="unreachable_sources must list every non-current schema source.",
+            path=classification_path,
+        ))
+
+    current_set = set(current)
+    unreachable_set = set(unreachable)
+    if current_set & unreachable_set:
+        issues.append(Issue(
+            code="source_reachability_overlap",
+            message="A schema source cannot be both current and unreachable.",
+            path=classification_path,
+        ))
+
+    declared_sources = {
+        str(source.get("path", ""))
+        for source in classification.get("canonical_sources", [])
+    }
+    declared_sources.add(str(classification.get("legacy_deployment_plan", {}).get("path", "")))
+    for group in classification.get("competing_authorities", []):
+        declared_sources.update(str(path) for path in group.get("paths", []))
+    declared_sources.discard("")
+    inventoried_sources = current_set | unreachable_set
+    for path in sorted(declared_sources - inventoried_sources):
+        issues.append(Issue(
+            code="schema_source_reachability_unclassified",
+            message="Classified schema source lacks a current/unreachable disposition.",
+            path=path,
+        ))
+    for path in sorted(inventoried_sources - declared_sources):
+        issues.append(Issue(
+            code="reachability_targets_unclassified_source",
+            message="Reachability inventory names a source absent from source classification.",
+            path=path,
+        ))
+
+    canonical_root = authority["canonical_migration_root"]
+    if current_set != {canonical_root}:
+        issues.append(Issue(
+            code="multiple_current_schema_authorities",
+            message="backend/alembic must be the only current executable schema authority.",
+            path=classification_path,
+        ))
+    retired_paths = {
+        path
+        for group in classification.get("competing_authorities", [])
+        if group.get("classification") == "retire"
+        for path in group.get("paths", [])
+    }
+    retired_paths.add(classification.get("legacy_deployment_plan", {}).get("path", ""))
+    for path in sorted(retired_paths - unreachable_set):
+        issues.append(Issue(
+            code="retired_schema_source_is_reachable",
+            message="A retired schema source must remain unreachable from deployment/runtime.",
+            path=path,
+        ))
+
+    migration_root = root / canonical_root
+    current_source_text = "\n".join(
+        path.read_text(encoding="utf-8", errors="replace")
+        for path in sorted(migration_root.rglob("*"))
+        if path.is_file() and path.suffix in {".py", ".sql", ".mako"}
+    )
+    for path in sorted(unreachable_set):
+        if path and path in current_source_text:
+            issues.append(Issue(
+                code="unreachable_source_referenced_by_canonical_authority",
+                message="Canonical Alembic references a source declared unreachable.",
+                path=path,
+            ))
+
+    try:
+        mounted_relations = (
+            {relation.lower() for relation in reachable_relations}
+            if reachable_relations is not None
+            else _mounted_relation_dependencies(root)
+        )
+    except (OSError, RuntimeError, ValueError, subprocess.CalledProcessError) as exc:
+        issues.append(Issue(
+            code="mounted_route_reachability_unavailable",
+            message=f"Mounted callable relation evidence could not be produced: {exc}",
+            path=classification_path,
+        ))
+        return issues
+
+    reachable_competing: dict[str, list[str]] = {}
+    for group in classification.get("competing_authorities", []):
+        defined = _source_defined_relations(root, group.get("paths", []))
+        overlap = sorted(defined & mounted_relations)
+        if overlap:
+            reachable_competing[str(group.get("id", ""))] = overlap
+    expected_count = contract.get("reachable_competing_source_count")
+    if expected_count != len(reachable_competing):
+        issues.append(Issue(
+            code="reachable_competing_source_count_mismatch",
+            message=(
+                "Declared reachable competing source count differs from the mounted "
+                "callable relation graph."
+            ),
+            path=classification_path,
+        ))
+    for group_id, relations in sorted(reachable_competing.items()):
+        issues.append(Issue(
+            code="reachable_competing_schema_source",
+            message=(
+                f"Competing source {group_id!r} defines mounted relations: "
+                + ", ".join(relations)
+            ),
+            path=classification_path,
+        ))
+    return issues
+
+
+def check_source_classification(
+    authority: Mapping,
+    root: Path,
+    *,
+    reachable_relations: set[str] | None = None,
+) -> list[Issue]:
     classification_path = authority["source_classification_file"]
     classification = load_source_classification(authority, root)
     issues: list[Issue] = []
@@ -451,6 +702,12 @@ def check_source_classification(authority: Mapping, root: Path) -> list[Issue]:
             path=classification_path,
         ))
 
+    issues.extend(check_source_reachability(
+        authority,
+        classification,
+        root,
+        reachable_relations=reachable_relations,
+    ))
     return issues
 
 
@@ -611,16 +868,360 @@ def check_rls_coverage(authority: Mapping, root: Path) -> list[Issue]:
     return issues
 
 
+def _canonical_migration_sql(authority: Mapping, root: Path) -> tuple[str, list[Path]]:
+    sql_root = root / authority["canonical_migration_root"] / "sql"
+    paths = sorted(sql_root.glob("*.sql"))
+    return "\n".join(
+        path.read_text(encoding="utf-8", errors="replace") for path in paths
+    ), paths
+
+
+def _altered_relations(sql: str, action: str) -> set[str]:
+    return {
+        f"{schema}.{table}".lower()
+        for schema, table in re.findall(
+            rf'(?i)ALTER\s+TABLE\s+"?([a-z_]\w*)"?\."?([a-z_]\w*)"?\s+{action}',
+            sql,
+        )
+    }
+
+
+def check_canonical_migration_sql_bindings(
+    authority: Mapping,
+    root: Path,
+    sql_paths: Iterable[Path],
+) -> list[Issue]:
+    """Require each Alembic SQL artifact to be hash-bound by its revision."""
+
+    versions_root = root / authority["canonical_migration_root"] / "versions"
+    issues: list[Issue] = []
+    for sql_path in sql_paths:
+        revision_path = versions_root / f"{sql_path.stem}.py"
+        if not revision_path.is_file():
+            issues.append(Issue(
+                code="canonical_migration_sql_revision_missing",
+                message="Canonical SQL artifact has no same-revision Alembic wrapper.",
+                path=_relative(sql_path, root),
+            ))
+            continue
+        source = revision_path.read_text(encoding="utf-8", errors="replace")
+        expected_match = re.search(
+            r'(?ms)^EXPECTED_SQL_SHA256\s*=\s*(?:\(\s*)?["\']([0-9a-f]{64})["\']',
+            source,
+        )
+        expected_hash = expected_match.group(1) if expected_match else None
+        if expected_hash is None:
+            manifest_path = sql_path.with_suffix(".manifest.json")
+            if manifest_path.is_file() and "load_packaged_baseline" in source:
+                try:
+                    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                except json.JSONDecodeError:
+                    manifest = {}
+                expected_hash = manifest.get("source_sql_sha256")
+        if expected_hash is None or (
+            sql_path.name not in source and "load_packaged_baseline" not in source
+        ):
+            issues.append(Issue(
+                code="canonical_migration_sql_hash_binding_missing",
+                message="Alembic wrapper must name and hash-bind its exact SQL artifact.",
+                path=_relative(revision_path, root),
+            ))
+            continue
+        actual_hash = _sha256(sql_path)
+        if expected_hash != actual_hash:
+            issues.append(Issue(
+                code="canonical_migration_sql_hash_mismatch",
+                message="Canonical migration SQL differs from its Alembic wrapper hash.",
+                path=_relative(sql_path, root),
+            ))
+    return issues
+
+
+def check_canonical_model_authority(authority: Mapping, root: Path) -> list[Issue]:
+    """Validate Alembic/RLS against the hash-bound canonical model, never legacy DDL."""
+
+    model_path = authority["canonical_model_file"]
+    try:
+        model = load_canonical_model(authority, root)
+    except (FileNotFoundError, ValueError, json.JSONDecodeError) as exc:
+        return [Issue(
+            code="canonical_model_authority_invalid",
+            message=str(exc),
+            path=model_path,
+        )]
+
+    table_rows = model["tables"]
+    model_tables: dict[str, Mapping] = {}
+    issues: list[Issue] = []
+    for row in table_rows:
+        name = row.get("name") if isinstance(row, dict) else None
+        tenant_class = row.get("tenant_class") if isinstance(row, dict) else None
+        if (
+            not isinstance(name, str)
+            or not re.fullmatch(r"[a-z_]\w*\.[a-z_]\w*", name)
+            or tenant_class not in {
+                "global_identity_root",
+                "global_reference",
+                "tenant_association",
+                "tenant_direct",
+                "tenant_projection",
+            }
+        ):
+            issues.append(Issue(
+                code="canonical_model_table_invalid",
+                message="Canonical model table requires a qualified name and tenant class.",
+                path=model_path,
+            ))
+            continue
+        if name in model_tables:
+            issues.append(Issue(
+                code="canonical_model_table_duplicate",
+                message=f"Canonical model repeats table {name}.",
+                path=model_path,
+            ))
+        model_tables[name] = row
+    if model.get("table_count") != len(model_tables):
+        issues.append(Issue(
+            code="canonical_model_table_count_mismatch",
+            message="Canonical model table_count does not match its unique table inventory.",
+            path=model_path,
+        ))
+
+    canonical_sql, sql_paths = _canonical_migration_sql(authority, root)
+    issues.extend(check_canonical_migration_sql_bindings(authority, root, sql_paths))
+    definitions = [
+        definition
+        for definition in parse_table_definitions(sql_paths)
+        if definition.name.split(".", 1)[0] in BUSINESS_SCHEMAS
+    ]
+    migration_tables = {definition.name: definition for definition in definitions}
+    for name in sorted(set(model_tables) - set(migration_tables)):
+        issues.append(Issue(
+            code="canonical_migration_missing_model_table",
+            message=f"Canonical model table is absent from the Alembic chain: {name}.",
+            path=model_path,
+        ))
+
+    enabled = _altered_relations(
+        canonical_sql, r"ENABLE\s+ROW\s+LEVEL\s+SECURITY"
+    )
+    forced = _altered_relations(
+        canonical_sql, r"FORCE\s+ROW\s+LEVEL\s+SECURITY"
+    )
+    tenant_tables = {
+        name
+        for name, row in model_tables.items()
+        if row.get("tenant_class") != "global_reference"
+    }
+    tenant_tables.update(
+        definition.name
+        for definition in migration_tables.values()
+        if definition.has_org_id
+    )
+    for name in sorted(tenant_tables - enabled):
+        issues.append(Issue(
+            code="canonical_tenant_table_missing_rls",
+            message=f"Canonical tenant table does not enable RLS: {name}.",
+            path=authority["canonical_migration_root"],
+        ))
+    for name in sorted(tenant_tables - forced):
+        issues.append(Issue(
+            code="canonical_tenant_table_missing_force_rls",
+            message=f"Canonical tenant table does not FORCE RLS: {name}.",
+            path=authority["canonical_migration_root"],
+        ))
+    for name in sorted(enabled - set(migration_tables)):
+        issues.append(Issue(
+            code="canonical_rls_targets_unknown_table",
+            message=f"Canonical migration RLS targets an undeclared table: {name}.",
+            path=authority["canonical_migration_root"],
+        ))
+
+    expected_setting = authority.get("expected_tenant_setting")
+    if expected_setting:
+        for path in sql_paths:
+            text = path.read_text(encoding="utf-8", errors="replace")
+            for match in re.finditer(
+                r"current_setting\(\s*'([^']+)'", text, re.IGNORECASE
+            ):
+                actual = match.group(1)
+                if actual != expected_setting and "org_id" in actual.lower():
+                    issues.append(Issue(
+                        code="canonical_conflicting_tenant_setting",
+                        message=(
+                            f"Canonical migration reads {actual!r}; authority requires "
+                            f"{expected_setting!r}."
+                        ),
+                        path=_relative(path, root),
+                        line=_line_number(text, match.start()),
+                    ))
+    return issues
+
+
+def check_transaction_integrity_evidence(
+    authority: Mapping,
+    root: Path,
+    *,
+    required: bool,
+) -> list[Issue]:
+    reference = authority.get("canonical_transaction_integrity_evidence")
+    if reference is None:
+        return ([Issue(
+            code="canonical_transaction_integrity_evidence_missing",
+            message=(
+                "Schema promotion requires a reviewed, hash-bound exact-SHA transaction "
+                "integrity capture from canonical staging."
+            ),
+            path=str(AUTHORITY_PATH),
+        )] if required else [])
+    if not isinstance(reference, dict):
+        return [Issue(
+            code="canonical_transaction_integrity_evidence_reference_invalid",
+            message="Transaction integrity evidence must be null or a hash-bound object.",
+            path=str(AUTHORITY_PATH),
+        )]
+
+    issues: list[Issue] = []
+    artifact = reference.get("artifact")
+    if not isinstance(artifact, str) or not artifact or Path(artifact).is_absolute():
+        return [Issue(
+            code="canonical_transaction_integrity_evidence_path_invalid",
+            message="Transaction integrity artifact must be a repository-relative file.",
+            path=str(AUTHORITY_PATH),
+        )]
+    artifact_path = (root / artifact).resolve()
+    try:
+        artifact_path.relative_to(root.resolve())
+    except ValueError:
+        return [Issue(
+            code="canonical_transaction_integrity_evidence_path_invalid",
+            message="Transaction integrity artifact escapes the repository.",
+            path=artifact,
+        )]
+    if not artifact_path.is_file():
+        return [Issue(
+            code="canonical_transaction_integrity_evidence_file_missing",
+            message="Hash-bound transaction integrity artifact does not exist.",
+            path=artifact,
+        )]
+    expected_hash = reference.get("artifact_sha256")
+    if not isinstance(expected_hash, str) or not SHA256.fullmatch(expected_hash):
+        issues.append(Issue(
+            code="canonical_transaction_integrity_evidence_hash_invalid",
+            message="Transaction integrity artifact_sha256 must be a lowercase SHA-256.",
+            path=str(AUTHORITY_PATH),
+        ))
+    elif _sha256(artifact_path) != expected_hash:
+        issues.append(Issue(
+            code="canonical_transaction_integrity_evidence_hash_mismatch",
+            message="Transaction integrity artifact differs from its authority hash.",
+            path=artifact,
+        ))
+    try:
+        payload = json.loads(artifact_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        issues.append(Issue(
+            code="canonical_transaction_integrity_evidence_payload_invalid",
+            message=f"Transaction integrity artifact is not valid JSON: {exc}",
+            path=artifact,
+        ))
+        return issues
+    if not isinstance(payload, dict):
+        issues.append(Issue(
+            code="canonical_transaction_integrity_evidence_payload_invalid",
+            message="Transaction integrity artifact must contain a JSON object.",
+            path=artifact,
+        ))
+        return issues
+
+    for key in ("project_ref", "git_commit", "alembic_revision"):
+        if reference.get(key) != payload.get(key):
+            issues.append(Issue(
+                code="canonical_transaction_integrity_evidence_binding_mismatch",
+                message=f"Schema authority {key} differs from the evidence payload.",
+                path=str(AUTHORITY_PATH),
+            ))
+    git_commit = reference.get("git_commit")
+    if not isinstance(git_commit, str) or not GIT_COMMIT.fullmatch(git_commit):
+        issues.append(Issue(
+            code="canonical_transaction_integrity_evidence_commit_invalid",
+            message="Transaction integrity binding requires an exact 40-character commit.",
+            path=str(AUTHORITY_PATH),
+        ))
+    if reference.get("project_ref") != authority.get("canonical_staging_project_ref"):
+        issues.append(Issue(
+            code="canonical_transaction_integrity_evidence_project_invalid",
+            message="Transaction integrity evidence is not bound to canonical staging.",
+            path=str(AUTHORITY_PATH),
+        ))
+    if not isinstance(reference.get("reviewer"), str) or not reference["reviewer"].strip():
+        issues.append(Issue(
+            code="canonical_transaction_integrity_evidence_reviewer_missing",
+            message="Transaction integrity evidence requires a named reviewer.",
+            path=str(AUTHORITY_PATH),
+        ))
+    try:
+        reviewed_at = datetime.fromisoformat(
+            str(reference.get("reviewed_at", "")).replace("Z", "+00:00")
+        )
+        if reviewed_at.tzinfo is None:
+            raise ValueError("timezone required")
+    except ValueError:
+        issues.append(Issue(
+            code="canonical_transaction_integrity_evidence_review_time_invalid",
+            message="Transaction integrity review needs a timezone-aware timestamp.",
+            path=str(AUTHORITY_PATH),
+        ))
+
+    try:
+        backend_root = root / "backend"
+        if str(backend_root) not in sys.path:
+            sys.path.insert(0, str(backend_root))
+        from scripts.audit.transaction_integrity_audit import _live_evidence_issues
+
+        live_issues = _live_evidence_issues(root, payload, git_commit)
+    except (OSError, RuntimeError, ValueError) as exc:
+        issues.append(Issue(
+            code="canonical_transaction_integrity_evidence_verification_failed",
+            message=str(exc),
+            path=artifact,
+        ))
+    else:
+        for live_issue in live_issues:
+            issues.append(Issue(
+                code=live_issue.code.lower(),
+                message=live_issue.message,
+                path=artifact,
+            ))
+    return issues
+
+
+def check_legacy_deployment_guard(authority: Mapping, root: Path) -> list[Issue]:
+    deployment_issues = check_deployment_includes(authority, root)
+    if [issue.code for issue in deployment_issues] == [
+        "deployment_blocked_pending_live_baseline"
+    ]:
+        return []
+    return deployment_issues + [Issue(
+        code="legacy_deployment_guard_missing",
+        message=(
+            "The retired mixed-SQL deployment entrypoint must remain fail-closed; "
+            "canonical Alembic is the only production migration authority."
+        ),
+        path=authority["deployment_entrypoint"],
+    )]
+
+
 def audit_repository(repo_root: Path) -> ReadinessReport:
     root = repo_root.resolve()
     authority = load_authority(root)
     issues: list[Issue] = []
     issues.extend(check_authority_state(authority, root))
     issues.extend(check_migration_infrastructure(authority, root))
-    issues.extend(check_competing_ddl(authority, root))
     issues.extend(check_source_classification(authority, root))
-    issues.extend(check_deployment_includes(authority, root))
-    issues.extend(check_rls_coverage(authority, root))
+    issues.extend(check_legacy_deployment_guard(authority, root))
+    issues.extend(check_canonical_model_authority(authority, root))
+    issues.extend(check_transaction_integrity_evidence(authority, root, required=True))
     issues.sort(key=lambda issue: (issue.code, issue.path, issue.line or 0))
     return ReadinessReport(authority_state=authority["readiness_state"], issues=tuple(issues))
 
@@ -638,19 +1239,9 @@ def audit_authority_contract(repo_root: Path) -> tuple[Issue, ...]:
     issues: list[Issue] = []
     issues.extend(check_migration_infrastructure(authority, root))
     issues.extend(check_source_classification(authority, root))
-    deployment_issues = check_deployment_includes(authority, root)
-    if [issue.code for issue in deployment_issues] != [
-        "deployment_blocked_pending_live_baseline"
-    ]:
-        issues.extend(deployment_issues)
-        issues.append(Issue(
-            code="legacy_deployment_guard_missing",
-            message=(
-                "The retired mixed-SQL deployment entrypoint must retain its reviewed "
-                "guard; canonical Alembic is the only production migration authority."
-            ),
-            path=authority["deployment_entrypoint"],
-        ))
+    issues.extend(check_legacy_deployment_guard(authority, root))
+    issues.extend(check_canonical_model_authority(authority, root))
+    issues.extend(check_transaction_integrity_evidence(authority, root, required=False))
     issues.sort(key=lambda issue: (issue.code, issue.path, issue.line or 0))
     return tuple(issues)
 
