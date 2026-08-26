@@ -222,7 +222,7 @@ def test_operator_authority_sql_revalidates_rbac_branches_and_approval_separatio
     for fragment in (
         "automation.agent_grants",
         "automation.agent_grant_capabilities",
-        "automation.command_requests",
+            "erp_automation_reads.command_authority_context",
         "command_capability.operation_mode=command.operation_mode",
         "command_capability.risk_class=command.risk_class",
         "command_capability.approval_policy=command.approval_policy",

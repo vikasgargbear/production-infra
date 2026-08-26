@@ -3776,16 +3776,9 @@ def canonical_challan_compatibility_detail(
                 ) inventory_line ON true
                 JOIN LATERAL (
                     SELECT candidate.command_request_id
-                      FROM (
-                            SELECT candidate_command.id AS command_request_id,
-                                   count(*) OVER () AS candidate_count
-                              FROM automation.command_requests candidate_command
-                             WHERE candidate_command.org_id=dispatch.org_id
-                               AND candidate_command.capability_code='sales.dispatch.prepare'
-                               AND candidate_command.status='succeeded'
-                               AND candidate_command.result_resource_id=dispatch.id
-                           ) candidate
-                     WHERE candidate.candidate_count=1
+                      FROM erp_automation_reads.sales_dispatch_post_provenance(
+                           dispatch.org_id, dispatch.id
+                      ) candidate
                 ) command ON true
                WHERE line.org_id=dispatch.org_id AND line.dispatch_id=dispatch.id
                  AND NOT EXISTS (

@@ -45,14 +45,16 @@ READBACK_BANK_RECONCILIATION_SQL = text(
            journal_line.transaction_debit AS journal_bank_debit,
            journal_line.transaction_credit AS journal_bank_credit,
            (SELECT count(*) FROM core.audit_events audit
-             WHERE audit.org_id=command.org_id AND audit.command_request_id=command.id) AS audit_event_count,
+             WHERE audit.org_id=:org_id AND audit.command_request_id=command.id) AS audit_event_count,
            (SELECT count(*) FROM core.outbox_events event
-             WHERE event.org_id=command.org_id AND
+             WHERE event.org_id=:org_id AND
                ((event.aggregate_type='command' AND event.aggregate_id=command.id)
                 OR (event.aggregate_type='reconciliation_match' AND event.aggregate_id=matched.id))) AS outbox_event_count
-      FROM automation.command_requests command
+      FROM erp_automation_reads.command_authority_context(
+           :org_id, :command_request_id
+      ) command
       JOIN finance.reconciliation_matches matched
-        ON matched.org_id=command.org_id AND matched.id=command.result_resource_id
+        ON matched.org_id=:org_id AND matched.id=command.result_resource_id
       JOIN finance.bank_statement_lines statement_line
         ON statement_line.org_id=matched.org_id AND statement_line.id=matched.bank_statement_line_id
       JOIN finance.bank_statements statement
@@ -64,7 +66,7 @@ READBACK_BANK_RECONCILIATION_SQL = text(
       JOIN finance.journal_lines journal_line
         ON journal_line.org_id=journal.org_id AND journal_line.journal_entry_id=journal.id
        AND journal_line.account_id=bank.account_id
-     WHERE command.org_id=:org_id AND command.id=:command_request_id
+     WHERE command.id=:command_request_id
        AND command.agent_grant_id=:agent_grant_id
        AND command.requested_by_membership_id=:membership_id
        AND command.capability_code='finance.bank_reconciliation.prepare'

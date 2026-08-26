@@ -284,7 +284,7 @@ def test_authenticated_context_and_posted_readback_routes_are_mounted() -> None:
     assert "tax.gst_adjustment_rule_versions" in source
     assert "legacy" not in source.lower()
     assert "command.requested_by_membership_id" in source
-    assert "approval.approver_membership_id<>command.requested_by_membership_id" in source
+    assert "erp_automation_reads.adjustment_note_post_provenance" in source
     assert "artifact.adjustment_note_id=note.id" in source
     assert "note.sales_return_id IS NULL AND note.purchase_return_id IS NULL" in source
 

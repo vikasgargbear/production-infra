@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import os
 import json
+from typing import Optional
 from uuid import UUID
 
 from sqlalchemy import create_engine, text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
 from app.api.routes.internal.mcp_canonical_reads import CanonicalDelegation
@@ -57,6 +59,18 @@ def _context(operation: str) -> CanonicalDelegation:
         branch_id=BRANCH,
         allow_sensitive_read=False,
     )
+
+
+def _expect_insufficient_privilege(
+    session: Session, statement: str, params: Optional[dict] = None
+) -> None:
+    try:
+        with session.begin_nested():
+            session.execute(text(statement), params or {})
+    except DBAPIError as exc:
+        assert getattr(exc.orig, "pgcode", None) == "42501"
+    else:
+        raise AssertionError("erp_runtime retained forbidden raw command-table access")
 
 
 def _seed(session: Session) -> None:
@@ -257,6 +271,41 @@ def main() -> None:
                 session.execute(
                     text("SELECT erp_security.activate_context(:auth,:org)"),
                     {"auth": AUTH, "org": ORG},
+                )
+
+                authority = session.execute(
+                    text(
+                        """
+                        SELECT id, capability_code, operation, branch_id,
+                               destination_branch_id,
+                               target_resource_id, result_resource_id
+                          FROM erp_automation_reads.command_authority_context(
+                               :org_id, :command_request_id)
+                        """
+                    ),
+                    {"org_id": ORG, "command_request_id": INVOICE_COMMAND},
+                ).one()
+                assert tuple(authority) == (
+                    INVOICE_COMMAND,
+                    "sales.invoice.prepare",
+                    "sales.invoice.post",
+                    BRANCH,
+                    None,
+                    INVOICE,
+                    INVOICE,
+                )
+                for statement in (
+                    "SELECT id FROM automation.command_requests WHERE false",
+                    "UPDATE automation.command_requests SET status=status WHERE false",
+                    "INSERT INTO automation.command_requests "
+                    "SELECT * FROM automation.command_requests WHERE false",
+                ):
+                    _expect_insufficient_privilege(session, statement)
+                _expect_insufficient_privilege(
+                    session,
+                    "SELECT * FROM erp_automation_reads.command_authority_context("
+                    ":org_id, :command_request_id)",
+                    {"org_id": OTHER_ORG, "command_request_id": INVOICE_COMMAND},
                 )
 
                 order = canonical_sales_order_get(

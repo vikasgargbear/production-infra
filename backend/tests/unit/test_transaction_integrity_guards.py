@@ -83,7 +83,7 @@ def test_legacy_stock_movement_write_is_retired_in_favor_of_canonical_commands()
     ).exists()
     assert '"/inventory-adjustment/eligibility"' in command_route
     assert '"/inventory-adjustment/commands/{command_request_id}/readback"' in command_route
-    assert "WHERE command.org_id=:org_id" in command_route
+    assert "erp_automation_reads.command_authority_context" in command_route
     assert 'operation = "automation.command.execute"' in command_route
 
 

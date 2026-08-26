@@ -182,23 +182,10 @@ class CanonicalPaymentDetail(CanonicalPaymentHistoryItem):
 
 _EVIDENCE_CTES = """
     WITH canonical_commands AS (
-        SELECT command.org_id, command.target_resource_id AS payment_id,
-               (ARRAY_AGG(command.id ORDER BY command.id))[1] AS command_request_id,
-               MIN(command.capability_code) AS capability_code,
-               COUNT(*) AS command_count
-          FROM automation.command_requests command
-         WHERE command.org_id=:org_id
-           AND command.status='succeeded'
-           AND command.operation='finance.payment.post'
-           AND command.target_resource_type='payment'
-           AND command.result_resource_type='payment'
-           AND command.target_resource_id=command.result_resource_id
-           AND command.capability_code IN (
-               'finance.customer_receipt.prepare',
-               'finance.supplier_payment.prepare'
-           )
-         GROUP BY command.org_id, command.target_resource_id
-        HAVING COUNT(*)=1
+        SELECT CAST(:org_id AS uuid) AS org_id, command.payment_id,
+               command.command_request_id, command.capability_code,
+               command.branch_id
+          FROM erp_automation_reads.payment_post_provenance(:org_id) command
     ), effective_allocations AS (
         SELECT allocation.org_id, allocation.id, allocation.payment_id,
                allocation.open_item_id, allocation.allocation_date,
@@ -317,12 +304,7 @@ _EVIDENCE_CTES = """
            AND payment.status='posted'
            AND payment.payment_purpose='commercial_settlement'
            AND payment.direction IN ('receipt','disbursement')
-           AND EXISTS (
-               SELECT 1 FROM automation.command_requests exact_command
-                WHERE exact_command.org_id=payment.org_id
-                  AND exact_command.id=command.command_request_id
-                  AND exact_command.branch_id=payment.branch_id
-           )
+           AND command.branch_id=payment.branch_id
            AND payment.reversal_of_payment_id IS NULL
            AND NOT EXISTS (
                SELECT 1 FROM finance.payments reversal

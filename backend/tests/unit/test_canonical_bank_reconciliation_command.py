@@ -205,7 +205,7 @@ class _BankSession:
                 "expires_at": datetime.now(timezone.utc).isoformat(),
                 "preview_hash": hashlib.sha256(params["preview_bytes"]).hexdigest(),
             }},))
-        if "FROM automation.command_requests command" in sql:
+        if "erp_automation_reads.command_authority_context" in sql:
             return _Result(() if self.readback is None else (self.readback,))
         raise AssertionError(sql)
 

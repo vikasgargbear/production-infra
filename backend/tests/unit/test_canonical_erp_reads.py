@@ -368,7 +368,7 @@ def test_order_and_challan_import_routes_publish_strict_authoritative_contracts(
         "'dispatch_line_id', line.id",
         "line.base_billed_quantity",
         "line.base_free_quantity",
-        "candidate_command.status='succeeded'",
+            "erp_automation_reads.sales_dispatch_post_provenance",
         "candidate_document.status='posted'",
         "source_item_count",
         "importable_item_count",

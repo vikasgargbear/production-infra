@@ -164,7 +164,7 @@ def test_sql_is_command_bound_branch_scoped_and_reversal_safe():
     source = reads._EVIDENCE_CTES
     assert "finance.customer_receipt.prepare" in source
     assert "finance.supplier_payment.prepare" in source
-    assert "command.status='succeeded'" in source
+    assert "erp_automation_reads.payment_post_provenance" in source
     assert "payment.payment_purpose='commercial_settlement'" in source
     assert "payment.branch_id=ANY" in source
     assert "reversal.reversal_of_payment_id=payment.id" in source

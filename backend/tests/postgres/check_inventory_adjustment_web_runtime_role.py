@@ -82,7 +82,7 @@ def main() -> None:
             readback_rows = session.execute(
                 text(_sql(
                     web_operator_actions.load_inventory_adjustment_readback,
-                    "FROM automation.command_requests AS command",
+                    "erp_automation_reads.command_authority_context",
                 )),
                 {"org_id": ORG_ID, "command_request_id": COMMAND_ID},
             ).fetchall()

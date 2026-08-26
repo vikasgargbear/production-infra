@@ -420,9 +420,9 @@ def _resolve_context(
                AND membership.id=grant_row.subject_membership_id
               JOIN core.users AS user_row ON user_row.id=membership.user_id
               JOIN core.organizations AS organization ON organization.id=grant_row.org_id
-              LEFT JOIN automation.command_requests AS command
-                ON command.org_id=grant_row.org_id
-               AND command.id=CAST(:command_request_id AS uuid)
+              LEFT JOIN LATERAL erp_automation_reads.command_authority_context(
+                   grant_row.org_id, CAST(:command_request_id AS uuid)
+              ) AS command ON true
              WHERE grant_row.org_id=:org_id
                AND grant_row.client_id=:client_id
                AND grant_row.status='active'
@@ -446,7 +446,9 @@ def _resolve_context(
                     OR (:command_request_id IS NULL
                         AND grant_row.branch_id=ANY(CAST(:branch_ids AS uuid[])))
                     OR (:command_request_id IS NOT NULL
-                        AND grant_row.branch_id IN (command.branch_id, command.destination_branch_id)))
+                        AND grant_row.branch_id=command.branch_id
+                        AND (command.destination_branch_id IS NULL
+                             OR grant_row.branch_id=command.destination_branch_id)))
              ORDER BY grant_row.id
              LIMIT 2
             """
@@ -718,9 +720,11 @@ def load_inventory_adjustment_readback(
                    ledger.quantity_delta AS ledger_quantity_delta,
                    ledger.value_delta AS ledger_value_delta,
                    balance.on_hand_quantity AS current_on_hand_quantity
-              FROM automation.command_requests AS command
+              FROM erp_automation_reads.command_authority_context(
+                   :org_id, :command_request_id
+              ) AS command
               JOIN inventory.inventory_documents AS document
-                ON document.org_id=command.org_id
+                ON document.org_id=:org_id
                AND document.id=command.target_resource_id
               JOIN inventory.inventory_document_lines AS document_line
                 ON document_line.org_id=document.org_id
@@ -743,8 +747,7 @@ def load_inventory_adjustment_readback(
               JOIN finance.journal_entries AS journal
                 ON journal.org_id=event.org_id
                AND journal.id=event.journal_entry_id
-             WHERE command.org_id=:org_id
-               AND command.id=:command_request_id
+             WHERE command.id=:command_request_id
                AND command.capability_code='inventory.adjustment.prepare'
                AND command.status='succeeded'
                AND document.status='posted'
@@ -1164,9 +1167,11 @@ def load_inventory_destruction_readback(
                    ledger.value_delta AS ledger_value_delta,
                    balance.on_hand_quantity AS remaining_on_hand_quantity,
                    balance.inventory_value AS remaining_inventory_value
-              FROM automation.command_requests AS command
+              FROM erp_automation_reads.command_authority_context(
+                   :org_id, :command_request_id
+              ) AS command
               JOIN compliance.destructions AS destruction
-                ON destruction.org_id=command.org_id
+                ON destruction.org_id=:org_id
                AND destruction.id=command.target_resource_id
               JOIN inventory.inventory_documents AS document
                 ON document.org_id=destruction.org_id
@@ -1197,8 +1202,7 @@ def load_inventory_destruction_readback(
               JOIN finance.journal_entries AS journal
                 ON journal.org_id=event.org_id
                AND journal.id=event.journal_entry_id
-             WHERE command.org_id=:org_id
-               AND command.id=:command_request_id
+             WHERE command.id=:command_request_id
                AND command.capability_code='inventory.destruction.prepare'
                AND command.operation='compliance.destruction.post'
                AND command.status='succeeded'

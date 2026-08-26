@@ -208,7 +208,7 @@ def test_rest_readback_requires_posted_destruction_ledger_and_journal() -> None:
         assert fragment in route
 
 
-def test_postgres15_fixture_compiles_readback_under_rls_app_role() -> None:
+def test_postgres15_fixture_compiles_readback_under_isolated_runtime_role() -> None:
     fixture_name = "check_inventory_destruction_web_runtime_role.py"
     fixture = (ROOT / "backend/tests/postgres" / fixture_name).read_text(
         encoding="utf-8"
@@ -217,8 +217,8 @@ def test_postgres15_fixture_compiles_readback_under_rls_app_role() -> None:
         ROOT / "database/canonical/ci/run_alembic_postgres15_gate.sh"
     ).read_text(encoding="utf-8")
     for fragment in (
-        'SET LOCAL ROLE "erp_app"',
-        "FROM automation.command_requests AS command",
+        'SET LOCAL ROLE "erp_runtime"',
+        "erp_automation_reads.command_authority_context",
         "other_org_rows",
         "assert rows == []",
     ):

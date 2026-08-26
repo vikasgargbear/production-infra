@@ -3,7 +3,7 @@
 The disposable baseline database has no tenant fixtures, so this gate verifies
 the executable runtime/calculator split, dispatcher-to-commercial-poster
 composition, idempotency constraints, forced RLS, and that both authenticated
-read projections compile under ``erp_app``. Business-effect lifecycle coverage
+read projections compile under ``erp_runtime``. Business-effect lifecycle coverage
 is supplied by the rollback commercial-command checks plus the live scenario
 matrix after a demo fixture pack is provisioned.
 """
@@ -204,7 +204,7 @@ def main() -> None:
             ).mappings().all()
             assert idempotency, "command prepare idempotency uniqueness is missing"
 
-            session.execute(text('SET LOCAL ROLE "erp_app"'))
+            session.execute(text('SET LOCAL ROLE "erp_runtime"'))
             session.execute(
                 text(
                     """

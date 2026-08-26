@@ -64,9 +64,11 @@ READBACK_EXPENSE_CLAIM_SQL = text(
            encode(receipt.sha256,'hex') AS receipt_sha256,
            line.claimed_amount AS line_claimed_amount,
            line.approved_amount AS line_approved_amount
-      FROM automation.command_requests command
+      FROM erp_automation_reads.command_authority_context(
+           :org_id, :command_request_id
+      ) command
       JOIN finance.expense_claims claim
-        ON claim.org_id=command.org_id AND claim.id=command.target_resource_id
+        ON claim.org_id=:org_id AND claim.id=command.target_resource_id
       JOIN finance.expense_claim_lines line
         ON line.org_id=claim.org_id AND line.expense_claim_id=claim.id
       JOIN core.attachments receipt
@@ -84,7 +86,7 @@ READBACK_EXPENSE_CLAIM_SQL = text(
          WHERE journal_line.org_id=journal.org_id
            AND journal_line.journal_entry_id=journal.id
       ) journal_totals ON true
-     WHERE command.org_id=:org_id AND command.id=:command_request_id
+     WHERE command.id=:command_request_id
        AND command.capability_code='finance.expense_claim.prepare'
        AND command.operation='finance.expense_claim.post'
        AND command.status='succeeded' AND claim.status='posted'

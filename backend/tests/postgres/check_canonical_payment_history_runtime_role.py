@@ -27,7 +27,7 @@ def main() -> None:
                 "SELECT rolsuper OR rolbypassrls FROM pg_catalog.pg_roles WHERE rolname=current_user"
             )) is False
             for table_name in (
-                "automation.command_requests", "finance.payments", "finance.allocations",
+                "finance.payments", "finance.allocations",
                 "finance.open_items", "finance.accounting_events", "finance.journal_entries",
                 "finance.journal_lines", "parties.parties", "parties.customer_accounts",
                 "parties.supplier_accounts", "sales.invoices", "procurement.supplier_invoices",
@@ -35,6 +35,15 @@ def main() -> None:
                 assert session.scalar(text(
                     "SELECT has_table_privilege(current_user, :table_name, 'SELECT')"
                 ), {"table_name": table_name}) is True
+            assert session.scalar(text(
+                "SELECT has_table_privilege("
+                "current_user, 'automation.command_requests', 'SELECT')"
+            )) is False
+            assert session.scalar(text(
+                "SELECT has_function_privilege("
+                "current_user, "
+                "'erp_automation_reads.payment_post_provenance(uuid)', 'EXECUTE')"
+            )) is True
             params = {
                 "org_id": ORG_ID,
                 "organization_scope": False,

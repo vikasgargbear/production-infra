@@ -39,11 +39,20 @@ def main() -> None:
                 "parties.supplier_accounts",
                 "parties.parties",
                 "catalog.products",
-                "automation.command_requests",
             ):
                 assert session.scalar(text(
                     "SELECT has_table_privilege(current_user, :table_name, 'SELECT')"
                 ), {"table_name": table_name}) is True
+            assert session.scalar(text(
+                "SELECT has_table_privilege("
+                "current_user, 'automation.command_requests', 'SELECT')"
+            )) is False
+            assert session.scalar(text(
+                "SELECT has_function_privilege("
+                "current_user, "
+                "'erp_automation_reads.purchase_order_uom_provenance(uuid,uuid)', "
+                "'EXECUTE')"
+            )) is True
             assert session.execute(
                 text(_line_sql()),
                 {"org_id": ORG_ID, "purchase_order_id": PURCHASE_ORDER_ID},

@@ -166,13 +166,13 @@ def test_postgres15_runtime_fixture_covers_two_actor_exactly_once_lifecycle() ->
         'Decimal("168.00")',
         "unverified receipt reached an expense claim command",
         "SELECT count(*) FROM core.organizations WHERE id=:other_org",
-        'SET SESSION AUTHORIZATION "erp_app"',
         "web_operator_actions.expense_claim_readback",
         "mcp_actions.expense_claim_readback",
         'journal_line_debit_total"] == Decimal("168.00")',
         "outer.rollback()",
     ):
         assert fragment in fixture
+    assert fixture.count('SET SESSION AUTHORIZATION "erp_runtime"') >= 2
     assert fixture.count("service.execute(") == 2
     assert fixture_name in gate
 

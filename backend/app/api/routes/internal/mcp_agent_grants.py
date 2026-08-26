@@ -246,15 +246,14 @@ def _operator_grant_rows(
                AND membership.id=grant_row.subject_membership_id
               JOIN core.users AS user_row ON user_row.id=membership.user_id
               JOIN core.organizations AS organization ON organization.id=grant_row.org_id
-              LEFT JOIN automation.command_requests AS command
-                ON :command_request_id IS NOT NULL
-               AND command.org_id=grant_row.org_id
-               AND command.id=:command_request_id
+              LEFT JOIN LATERAL erp_automation_reads.command_authority_context(
+                   grant_row.org_id, :command_request_id
+              ) AS command ON true
               LEFT JOIN automation.agent_grants AS command_grant
-                ON command_grant.org_id=command.org_id
+                ON command_grant.org_id=grant_row.org_id
                AND command_grant.id=command.agent_grant_id
               LEFT JOIN automation.agent_grant_capabilities AS command_capability
-                ON command_capability.org_id=command.org_id
+                ON command_capability.org_id=grant_row.org_id
                AND command_capability.agent_grant_id=command.agent_grant_id
                AND command_capability.capability_code=command.capability_code
               LEFT JOIN core.memberships AS command_membership
@@ -321,7 +320,7 @@ def _operator_grant_rows(
                        AND command.expires_at>transaction_timestamp()
                        AND NOT EXISTS (
                            SELECT 1 FROM automation.command_approvals AS rejection
-                            WHERE rejection.org_id=command.org_id
+                            WHERE rejection.org_id=grant_row.org_id
                               AND rejection.command_request_id=command.id
                               AND rejection.decision='rejected'
                               AND rejection.preview_hash=command.preview_hash
@@ -330,7 +329,7 @@ def _operator_grant_rows(
                        AND (
                            SELECT count(*)
                              FROM automation.command_approvals AS approval
-                            WHERE approval.org_id=command.org_id
+                            WHERE approval.org_id=grant_row.org_id
                               AND approval.command_request_id=command.id
                               AND approval.decision='approved'
                               AND approval.preview_hash=command.preview_hash

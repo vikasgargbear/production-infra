@@ -1,4 +1,4 @@
-"""Compile the canonical destruction readback as the restricted app role.
+"""Compile the canonical destruction readback as the isolated runtime role.
 
 The full command lifecycle is exercised by the service contract suite. This
 PostgreSQL-15 fixture proves that the REST readback uses real canonical tables,
@@ -27,7 +27,7 @@ def _readback_sql() -> str:
         value
         for value in web_operator_actions.load_inventory_destruction_readback.__code__.co_consts
         if isinstance(value, str)
-        and "FROM automation.command_requests AS command" in value
+        and "erp_automation_reads.command_authority_context" in value
     )
 
 
@@ -35,8 +35,8 @@ def main() -> None:
     engine = create_engine(os.environ["DATABASE_URL"])
     try:
         with Session(engine) as session, session.begin():
-            session.execute(text('SET LOCAL ROLE "erp_app"'))
-            assert session.scalar(text("SELECT current_user")) == "erp_app"
+            session.execute(text('SET LOCAL ROLE "erp_runtime"'))
+            assert session.scalar(text("SELECT current_user")) == "erp_runtime"
             assert int(session.scalar(text("SHOW server_version_num"))) // 10000 == 15
             session.execute(
                 text(

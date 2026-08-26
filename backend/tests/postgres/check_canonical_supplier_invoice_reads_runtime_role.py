@@ -65,13 +65,22 @@ def main() -> None:
                 "inventory.inventory_documents",
                 "inventory.inventory_document_lines",
                 "inventory.stock_ledger_entries",
-                "automation.command_requests",
                 "catalog.products",
                 "core.branches",
             ):
                 assert session.scalar(text(
                     "SELECT has_table_privilege(current_user, :table_name, 'SELECT')"
                 ), {"table_name": table_name}) is True
+            assert session.scalar(text(
+                "SELECT has_table_privilege("
+                "current_user, 'automation.command_requests', 'SELECT')"
+            )) is False
+            assert session.scalar(text(
+                "SELECT has_function_privilege("
+                "current_user, "
+                "'erp_automation_reads.supplier_invoice_portal_provenance(uuid,uuid)', "
+                "'EXECUTE')"
+            )) is True
 
             base = {
                 "org_id": ORG_ID,

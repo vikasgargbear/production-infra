@@ -320,7 +320,7 @@ def main() -> None:
                     ), {"other_org": OTHER_ORG}) == 0
 
                 connection.exec_driver_sql("RESET SESSION AUTHORIZATION")
-                connection.exec_driver_sql('SET SESSION AUTHORIZATION "erp_app"')
+                connection.exec_driver_sql('SET SESSION AUTHORIZATION "erp_runtime"')
                 connection.execute(
                     text("SELECT erp_security.activate_context(:auth_user_id,:org_id)"),
                     {"auth_user_id": CLAIMANT_AUTH, "org_id": ORG},

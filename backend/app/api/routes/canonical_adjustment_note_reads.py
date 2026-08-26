@@ -522,7 +522,7 @@ def load_adjustment_note_readback(
              note.gst_tax_treatment,note.recipient_itc_reversal_evidence_attachment_id,
              note.recipient_itc_reversal_confirmed_at,note.counterparty_portal_document_line_id,
              note.counterparty_payable_amount,note.posted_at,
-             command.id command_request_id,
+             command.command_request_id,
              'sha256:'||pg_catalog.encode(command.preview_hash,'hex') preview_hash,
              command.requested_by_membership_id,note.approved_by_membership_id,note.approved_at,
              artifact.id calculation_artifact_id,
@@ -555,19 +555,10 @@ def load_adjustment_note_readback(
         JOIN finance.open_items original_open ON original_open.org_id=note.org_id AND original_open.id=note.adjusts_open_item_id
         JOIN calculation.artifacts artifact ON artifact.org_id=note.org_id AND artifact.adjustment_note_id=note.id
           AND artifact.operation='finance.adjustment_note.post' AND artifact.status='consumed'
-        JOIN automation.command_requests command ON command.org_id=artifact.org_id AND command.id=artifact.command_request_id
-          AND command.capability_code='finance.adjustment_note.prepare'
-          AND command.operation='finance.adjustment_note.post' AND command.status='succeeded'
-          AND command.target_resource_type='adjustment_note' AND command.target_resource_id=note.id
-          AND command.result_resource_type='adjustment_note' AND command.result_resource_id=note.id
-          AND command.request_hash=artifact.request_sha256
-        JOIN automation.command_approvals approval ON approval.org_id=command.org_id
-          AND approval.command_request_id=command.id AND approval.decision='approved'
-          AND approval.preview_hash=command.preview_hash
-          AND approval.aggregate_version_hash=command.aggregate_version_hash
-          AND approval.approver_membership_id=note.approved_by_membership_id
-          AND approval.decided_at=note.approved_at
-          AND approval.approver_membership_id<>command.requested_by_membership_id
+        JOIN LATERAL erp_automation_reads.adjustment_note_post_provenance(
+          note.org_id,note.id,artifact.command_request_id,artifact.request_sha256,
+          note.approved_by_membership_id,note.approved_at
+        ) command ON true
         JOIN tax.documents original_tax ON original_tax.org_id=note.org_id
           AND original_tax.document_effect='original'
           AND ((note.side='sales' AND original_tax.sales_invoice_id=note.sales_invoice_id)
