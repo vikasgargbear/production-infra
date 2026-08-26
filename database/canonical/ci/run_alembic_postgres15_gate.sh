@@ -158,8 +158,12 @@ PYTHONPATH=backend \
 PYTHONPATH=backend \
   python backend/tests/postgres/check_sales_invoice_direct_issue_acceptance.py
 PYTHONPATH=backend \
+  python backend/tests/postgres/check_sales_dispatch_partial_input_credit_acceptance.py
+PYTHONPATH=backend \
   python backend/tests/postgres/check_canonical_demo_replay_hardening.py
 PYTHONPATH=backend \
   python backend/tests/postgres/check_application_promotion_content_digest.py
 PYTHONPATH=backend \
   python backend/tests/postgres/check_live18_ephemeral_identity_terminal_cleanup.py
+PYTHONPATH=backend \
+  python backend/tests/postgres/check_partial_input_credit_stock_lineage.py
