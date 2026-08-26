@@ -385,41 +385,9 @@ def _ddl_has_target(sql_sources: str, table: str, columns: Sequence[str]) -> boo
 def collect_issues() -> List[ConsistencyIssue]:
     issues: List[ConsistencyIssue] = []
     document_service = _read("backend/app/api/services/document_number_service.py")
-    public_sequence_ddl = _read("database/migrations/create_number_sequences.sql")
-    legacy_sequence_path = REPOSITORY_ROOT / "database/setup/create_document_sequences_table.sql"
-    system_sequence_ddl = (
-        legacy_sequence_path.read_text(encoding="utf-8")
-        if legacy_sequence_path.exists()
-        else ""
+    canonical_sequence_ddl = _read(
+        "backend/alembic/sql/20260820_0001_canonical_v1.sql"
     )
-
-    if (
-        'strftime("%Y%m%d")' in document_service
-        and "year_prefix VARCHAR(4)" in public_sequence_ddl
-    ):
-        issues.append(ConsistencyIssue(
-            "DOCUMENT_SEQUENCE_KEY_WIDTH_MISMATCH",
-            "document_number_service.py:221 generates an 8-character date key, but "
-            "database/migrations/create_number_sequences.sql:6 permits only VARCHAR(4)",
-        ))
-
-    if (
-        "public.document_number_sequences" in public_sequence_ddl
-        and "system.document_sequences" in system_sequence_ddl
-    ):
-        issues.append(ConsistencyIssue(
-            "COMPETING_DOCUMENT_SEQUENCE_AUTHORITIES",
-            "database/migrations/create_number_sequences.sql:2 uses daily organization "
-            "sequences while database/setup/create_document_sequences_table.sql:5 uses "
-            "fiscal-year, month, and optional branch sequences",
-        ))
-
-    if "org_id UUID," in public_sequence_ddl:
-        issues.append(ConsistencyIssue(
-            "NULLABLE_DOCUMENT_SEQUENCE_TENANT",
-            "database/migrations/create_number_sequences.sql:5 allows NULL org_id, for "
-            "which PostgreSQL UNIQUE does not prevent duplicate sequence keys",
-        ))
 
     if "org_id: Optional[str] = None" in document_service:
         issues.append(ConsistencyIssue(
@@ -552,7 +520,7 @@ def collect_issues() -> List[ConsistencyIssue]:
             "transaction: " + ", ".join(uncommitted_reservations),
         ))
 
-    sequence_schema = _read("database/migrations/create_number_sequences.sql")
+    sequence_schema = canonical_sequence_ddl
     has_standalone_reservation = any(
         _route_block(path, function_name)[1]
         for path, function_name in number_routes

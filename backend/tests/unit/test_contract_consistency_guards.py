@@ -328,7 +328,9 @@ def test_consistency_audit_keeps_unresolved_contracts_release_visible():
     assert "COMPETING_DOCUMENT_SEQUENCE_AUTHORITIES" not in codes
     assert "NULLABLE_DOCUMENT_SEQUENCE_TENANT" not in codes
     assert "DOCUMENT_TYPE_ALIAS_PREFIX_DIVERGENCE" not in codes
-    assert "DOCUMENT_CONFIG_TARGETS_UNBASELINED" not in codes
+    # The retired bootstrap DDL no longer masks this mounted legacy number
+    # service. Keep the gap release-visible until that product flow is retired.
+    assert "DOCUMENT_CONFIG_TARGETS_UNBASELINED" in codes
     assert "DOCUMENT_CONFIG_WITHOUT_PROVEN_CALLER" not in codes
     assert "AD_HOC_REFERENCE_GENERATORS" not in codes
     assert "DUPLICATE_PURCHASE_SERVICE_SURFACES" not in codes
