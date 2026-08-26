@@ -302,6 +302,9 @@ def test_denial_cleanup_sets_exact_audit_context_and_escapes_like_pattern():
         def execute(self, statement, params=None):
             statements.append((" ".join(statement.split()), params))
 
+        def fetchone(self):
+            return (1,)
+
     identities._cleanup_live18_denial_database(
         Cursor(),
         {
@@ -332,21 +335,188 @@ def test_denial_cleanup_sets_exact_audit_context_and_escapes_like_pattern():
     UUID(context["app.request_id"])
     mutations = [
         statement for statement, _params in statements
-        if statement.startswith(("UPDATE ", "DELETE "))
+        if " UPDATE " in f" {statement} " or " DELETE " in f" {statement} "
     ]
     assert len(mutations) == 6
-    assert not any(statement.startswith("DELETE ") for statement in mutations)
-    role_update = next(
-        statement for statement, _params in statements
-        if statement.startswith("UPDATE core.roles")
+    assert not any(" DELETE " in f" {statement} " for statement in mutations)
+    role_update, role_params = next(
+        (statement, params) for statement, params in statements
+        if "UPDATE core.roles" in statement
     )
-    assert "LIKE 'live18_denial_%%'" in role_update
+    assert "role.code LIKE %s" in role_update
+    assert f"{identities.LIVE18_DENIAL_ROLE_PREFIX}%" in role_params
+    all_params = [
+        value
+        for _statement, params in statements
+        if params
+        for value in params
+    ]
+    assert identities.LIVE18_DENIAL_CONSENT_VERSION in all_params
+    assert identities.LIVE18_DENIAL_CLEANUP_REASON in all_params
     assert all("status='active'" in statement for statement in mutations[:1])
     assert "status IN ('active','suspended')" in mutations[1]
     assert "status='active'" in mutations[2]
     assert "status='active'" in mutations[3]
     assert "status IN ('active','suspended')" in mutations[4]
     assert "auth_user_id=NULL,status='disabled'" in mutations[5]
+
+
+def test_denial_cleanup_rejects_a_nonterminal_exact_user_auth_pair():
+    statements = []
+    results = iter(((1,), (0,)))
+
+    class Cursor:
+        def execute(self, statement, params=None):
+            statements.append((" ".join(statement.split()), params))
+
+        def fetchone(self):
+            return next(results)
+
+    with pytest.raises(
+        identities.EphemeralIdentityError, match="exact terminal boundary"
+    ):
+        identities._terminalize_live18_denial_authority(
+            Cursor(),
+            [
+                (
+                    "d4000000-0000-7000-8000-000000000002",
+                    "d4000000-0000-7000-8000-000000000001",
+                )
+            ],
+        )
+
+    transported_targets = json.loads(statements[0][1][0])
+    assert transported_targets == [
+        {
+            "user_id": "d4000000-0000-7000-8000-000000000002",
+            "auth_user_id": "d4000000-0000-7000-8000-000000000001",
+        }
+    ]
+
+
+def test_denial_cleanup_rejects_cross_tenant_pair_before_any_mutation():
+    statements = []
+
+    class Cursor:
+        def execute(self, statement, params=None):
+            statements.append((" ".join(statement.split()), params))
+
+        def fetchone(self):
+            return (0,)
+
+    with pytest.raises(
+        identities.EphemeralIdentityError, match="not exact and tenant-scoped"
+    ):
+        identities._terminalize_live18_denial_authority(
+            Cursor(),
+            [
+                (
+                    "d4000000-0000-7000-8000-000000000002",
+                    "d4000000-0000-7000-8000-000000000001",
+                )
+            ],
+        )
+
+    assert len(statements) == 1
+    assert " UPDATE " not in f" {statements[0][0]} "
+
+
+def test_denial_residue_counts_pending_consent_as_nonterminal():
+    statements = []
+
+    class Cursor:
+        def execute(self, statement, params=None):
+            statements.append((" ".join(statement.split()), params))
+
+        def fetchone(self):
+            return (0, 0, 0)
+
+    assert identities._live18_denial_residue_counts(Cursor()) == (0, 0, 0)
+    assert "status IN ('pending_consent','active','suspended')" in statements[0][0]
+    assert identities.LIVE18_DENIAL_CONSENT_VERSION in statements[0][1]
+    assert f"{identities.LIVE18_DENIAL_ROLE_PREFIX}%" in statements[0][1]
+
+
+def test_denial_lifecycle_policy_literals_have_one_source_authority():
+    source = SCRIPT.read_text(encoding="utf-8")
+    assert source.count("live18-denial-v1") == 1
+    assert source.count('"live18_denial_"') == 1
+    assert "LIKE 'live18_denial_" not in source
+    assert source.count("Live18 disposable identity cleanup") == 1
+
+
+@pytest.mark.parametrize(
+    "resolved,expected_error",
+    [
+        (
+            [
+                (
+                    "d4000000-0000-7000-8000-000000000002",
+                    "d4000000-0000-7000-8000-000000000001",
+                    True,
+                    True,
+                )
+            ],
+            "bound across organizations",
+        ),
+        ([], "unclassified database binding"),
+    ],
+)
+def test_stale_recovery_preserves_unscoped_auth_bindings(
+    monkeypatch, resolved, expected_error
+):
+    fetches = iter(
+        (
+            resolved,
+            [("d4000000-0000-7000-8000-000000000001",)],
+        )
+    )
+
+    class Cursor:
+        def execute(self, *_args, **_kwargs):
+            pass
+
+        def fetchall(self):
+            return next(fetches)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    class Connection:
+        def cursor(self):
+            return Cursor()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    monkeypatch.setattr(
+        identities, "_database_connection", lambda _token: Connection()
+    )
+    monkeypatch.setattr(identities, "_enter_migration_owner", lambda _cursor: False)
+    monkeypatch.setattr(identities, "_set_reviewer_context", lambda _cursor: None)
+    monkeypatch.setattr(identities, "_set_denial_context", lambda _cursor: None)
+    monkeypatch.setattr(identities, "_leave_migration_owner", lambda *_args: None)
+    monkeypatch.setattr(
+        identities,
+        "_terminalize_live18_denial_authority",
+        lambda _cursor, targets: (
+            None
+            if not targets
+            else pytest.fail("unscoped identity must not be terminalized")
+        ),
+    )
+
+    with pytest.raises(identities.EphemeralIdentityError, match=expected_error):
+        identities._recover_stale_live18_database(
+            "management-token",
+            {"d4000000-0000-7000-8000-000000000001"},
+        )
 
 
 def test_denial_provision_sets_context_before_reading_or_mutating_tenant(
@@ -410,10 +580,24 @@ def test_stale_recovery_switches_from_demo_to_denial_audit_context(monkeypatch):
         pass
 
     class Cursor:
+        last_statement = ""
+
         def execute(self, statement, *_args, **_kwargs):
             normalized = " ".join(statement.split())
-            if normalized.startswith("UPDATE automation.agent_grant_capabilities"):
+            self.last_statement = normalized
+            if "UPDATE automation.agent_grant_capabilities" in normalized:
                 raise DenialBoundaryReached
+
+        def fetchall(self):
+            return [(
+                "d4000000-0000-7000-8000-000000000002",
+                "d4000000-0000-7000-8000-000000000001",
+                True,
+                False,
+            )]
+
+        def fetchone(self):
+            return (1,)
 
         def __enter__(self):
             return self
@@ -843,36 +1027,6 @@ def test_lost_live18_state_is_discovered_recovered_deleted_and_verified(
     recovered = []
     deleted = []
 
-    class Cursor:
-        def execute(self, _statement, _parameters=None):
-            pass
-
-        def fetchone(self):
-            return (
-                "d3000000-0000-7000-8000-000000000022",
-                "d3000000-0000-7000-8000-000000000002",
-                0,
-                0,
-                0,
-                0,
-            )
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *_args):
-            return False
-
-    class Connection:
-        def cursor(self):
-            return Cursor()
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *_args):
-            return False
-
     monkeypatch.setenv("SUPABASE_ACCESS_TOKEN", "management-token")
     monkeypatch.setattr(identities, "_validate_target", lambda _token: None)
     monkeypatch.setattr(identities, "_service_role_key", lambda _token: "service-key")
@@ -892,16 +1046,18 @@ def test_lost_live18_state_is_discovered_recovered_deleted_and_verified(
         "_delete_auth_user",
         lambda _key, auth_user_id: deleted.append(auth_user_id),
     )
-    monkeypatch.setattr(identities, "_database_connection", lambda _token: Connection())
-    monkeypatch.setattr(identities, "_enter_migration_owner", lambda _cursor: True)
+    boundaries = []
     monkeypatch.setattr(
-        identities, "_leave_migration_owner", lambda _cursor, _options: None
+        identities,
+        "_assert_live18_database_boundary",
+        lambda _token: boundaries.append(tuple(deleted)),
     )
 
     result = identities.recover_lost_live18_state()
 
     assert recovered == [stale_ids]
     assert deleted == sorted(stale_ids)
+    assert boundaries == [(), tuple(sorted(stale_ids))]
     assert result == {
         "recovered_auth_identity_count": 3,
         "remaining_auth_identity_count": 0,
@@ -910,6 +1066,39 @@ def test_lost_live18_state_is_discovered_recovered_deleted_and_verified(
         "remaining_active_denial_authority_count": 0,
         "remaining_denial_auth_binding_count": 0,
     }
+
+
+def test_lost_state_preserves_auth_anchor_until_database_boundary_is_clean(
+    monkeypatch,
+):
+    stale_id = "d4000000-0000-7000-8000-000000000001"
+    monkeypatch.setenv("SUPABASE_ACCESS_TOKEN", "management-token")
+    monkeypatch.setattr(identities, "_validate_target", lambda _token: None)
+    monkeypatch.setattr(identities, "_service_role_key", lambda _token: "service-key")
+    monkeypatch.setattr(identities, "_mask", lambda _value: None)
+    monkeypatch.setattr(
+        identities,
+        "_list_purpose_auth_user_ids",
+        lambda _key, _purpose: {stale_id},
+    )
+    monkeypatch.setattr(
+        identities, "_recover_stale_live18_database", lambda *_args: None
+    )
+    monkeypatch.setattr(
+        identities,
+        "_assert_live18_database_boundary",
+        lambda _token: (_ for _ in ()).throw(
+            identities.EphemeralIdentityError("residue remained")
+        ),
+    )
+    monkeypatch.setattr(
+        identities,
+        "_delete_auth_user",
+        lambda *_args: pytest.fail("Auth anchor must survive a dirty DB boundary"),
+    )
+
+    with pytest.raises(identities.EphemeralIdentityError, match="residue remained"):
+        identities.recover_lost_live18_state()
 
 
 def test_auth_users_receive_the_exact_canonical_org_claim(monkeypatch):
@@ -1042,6 +1231,9 @@ def test_live18_denial_cleanup_handles_commit_before_state_flag(monkeypatch):
         def execute(self, statement, *_args, **_kwargs):
             statements.append(" ".join(statement.split()))
 
+        def fetchone(self):
+            return (1,)
+
     monkeypatch.setattr(
         identities,
         "_enter_migration_owner",
@@ -1070,7 +1262,7 @@ def test_live18_denial_cleanup_handles_commit_before_state_flag(monkeypatch):
     )
 
     assert any("UPDATE core.users" in statement for statement in statements)
-    assert not any(statement.startswith("DELETE ") for statement in statements)
+    assert not any(" DELETE " in f" {statement} " for statement in statements)
 
 
 def test_live18_recovers_stale_purpose_users_before_creating_new_ones(

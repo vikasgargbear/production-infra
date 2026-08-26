@@ -70,6 +70,9 @@ OPERATION_MATRIX_PATH = (
 )
 DEPLOYMENT_PROVENANCE_PATH = Path("/app/.railway-deployment-provenance")
 REMOTE_STATE_ROOT = Path("/tmp")
+EXPECTED_RAILWAY_API_ORIGIN = (
+    "https://aasopharma-api-pilot-production.up.railway.app"
+)
 SECRET_KEYS = {
     "SUPABASE_ACCESS_TOKEN",
     "SUPABASE_DB_PASSWORD",
@@ -163,6 +166,15 @@ def _deployed_oauth_client_id() -> str:
             "The exact API deployment does not expose one reviewed OAuth client ID"
         )
     return client_id
+
+
+def _validated_railway_api_origin(request: dict[str, Any]) -> str:
+    origin = _required_text(request, "api_origin").rstrip("/")
+    if origin != EXPECTED_RAILWAY_API_ORIGIN:
+        raise RailwayDatabasePhaseError(
+            "API origin is not the reviewed Railway API"
+        )
+    return origin
 
 
 def _read_request(path: str) -> dict[str, Any]:
@@ -514,9 +526,7 @@ def _demo_provision(request: dict[str, Any]) -> dict[str, Any]:
     expected_sha, project_ref = _validated_boundary(request)
     _deployed_oauth_client_id()
     secrets = _exact_secret_environment(request, DEMO_SECRET_KEYS)
-    api_origin = _required_text(request, "api_origin").rstrip("/")
-    if api_origin != "https://aasopharma-api-pilot-production.up.railway.app":
-        raise RailwayDatabasePhaseError("Demo API origin is not the reviewed Railway API")
+    api_origin = _validated_railway_api_origin(request)
     production_refs = _required_text(request, "production_project_refs")
     if project_ref in {item.strip() for item in production_refs.split(",")}:
         raise RailwayDatabasePhaseError("Refusing demo provisioning in production")
@@ -692,21 +702,15 @@ def _identity_provision(request: dict[str, Any]) -> dict[str, Any]:
         {
             "CANONICAL_STAGING_PROJECT_REF": project_ref,
             "SUPABASE_URL": _required_text(request, "supabase_url"),
-            "PHARMA_CANONICAL_LIVE_API_BASE_URL": _required_text(
-                request, "api_origin"
-            ).rstrip("/"),
+            "PHARMA_CANONICAL_LIVE_API_BASE_URL": _validated_railway_api_origin(
+                request
+            ),
             "PHARMA_CANONICAL_MCP_URL": _required_text(request, "mcp_url"),
             "PHARMA_CANONICAL_LIVE_FIXTURE_IDENTITY_EVIDENCE_PATH": "",
         }
     )
     if environment["SUPABASE_URL"] != f"https://{project_ref}.supabase.co":
         raise RailwayDatabasePhaseError("Supabase URL differs from the reviewed project")
-    if (
-        environment["PHARMA_CANONICAL_LIVE_API_BASE_URL"]
-        != "https://aasopharma-api-pilot-production.up.railway.app"
-    ):
-        raise RailwayDatabasePhaseError("Identity API origin is not the reviewed Railway API")
-
     directory = REMOTE_STATE_ROOT / (
         "live18-railway-identities-" + _required_text(request, "request_nonce")
     )

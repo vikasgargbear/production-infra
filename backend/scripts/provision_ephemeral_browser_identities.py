@@ -56,6 +56,9 @@ LOCK_KEY = "canonical-staging-live-browser-identities"
 TWO_USER_PURPOSE = "canonical-staging-two-user-browser-e2e"
 CORE_OPERATOR_PURPOSE = "canonical-staging-core-browser-e2e"
 LIVE18_PURPOSE = "canonical-staging-live18-browser-e2e"
+LIVE18_DENIAL_CONSENT_VERSION = "live18-denial-v1"
+LIVE18_DENIAL_ROLE_PREFIX = "live18_denial_"
+LIVE18_DENIAL_CLEANUP_REASON = "Live18 disposable identity cleanup"
 STATE_VERSION = 1
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY_ROOT = BACKEND_ROOT.parent
@@ -634,124 +637,303 @@ def _leave_migration_owner(cursor, supports_membership_options: bool) -> None:
 
 
 def _terminalize_live18_denial_authority(
-    cursor, auth_user_ids: list[str]
+    cursor, targets: list[tuple[str, str]]
 ) -> None:
     """Revoke disposable denial authority without erasing consent history."""
 
-    if not auth_user_ids:
+    if not targets:
         return
+    normalized_targets: list[dict[str, str]] = []
+    for user_id, auth_user_id in targets:
+        try:
+            normalized_targets.append(
+                {
+                    "user_id": str(UUID(user_id)),
+                    "auth_user_id": str(UUID(auth_user_id)),
+                }
+            )
+        except (TypeError, ValueError) as exc:
+            raise EphemeralIdentityError(
+                "Disposable denial cleanup target is not an exact UUID pair"
+            ) from exc
+    target_json = json.dumps(normalized_targets, separators=(",", ":"))
     cursor.execute(
         """
+        WITH targets AS (
+          SELECT * FROM jsonb_to_recordset(%s::jsonb)
+            AS target(user_id uuid,auth_user_id uuid)
+        )
+        SELECT count(*)
+          FROM targets
+          JOIN core.users AS user_row ON user_row.id=targets.user_id
+         WHERE (
+                 user_row.auth_user_id=targets.auth_user_id
+                 OR (user_row.auth_user_id IS NULL AND user_row.status='disabled')
+               )
+           AND EXISTS (
+                 SELECT 1 FROM core.memberships AS denial_membership
+                  WHERE denial_membership.user_id=user_row.id
+                    AND denial_membership.org_id=%s
+                    AND denial_membership.id<>%s
+               )
+           AND NOT EXISTS (
+                 SELECT 1 FROM core.memberships AS other_membership
+                  WHERE other_membership.user_id=user_row.id
+                    AND other_membership.org_id<>%s
+               )
+        """,
+        (
+            target_json,
+            DENIAL_ORG_ID,
+            DENIAL_CREATOR_MEMBERSHIP_ID,
+            DENIAL_ORG_ID,
+        ),
+    )
+    if cursor.fetchone() != (len(normalized_targets),):
+        raise EphemeralIdentityError(
+            "Disposable denial cleanup target is not exact and tenant-scoped"
+        )
+    cursor.execute(
+        """
+        WITH targets AS (
+          SELECT * FROM jsonb_to_recordset(%s::jsonb)
+            AS target(user_id uuid,auth_user_id uuid)
+        )
         UPDATE automation.agent_grant_capabilities AS capability
            SET status='revoked',revoked_at=transaction_timestamp(),
                revoked_by_membership_id=%s
           FROM automation.agent_grants AS grant_row,
-               core.memberships AS membership,core.users AS user_row
+               core.memberships AS membership,core.users AS user_row,targets
          WHERE capability.org_id=grant_row.org_id
            AND capability.agent_grant_id=grant_row.id
            AND grant_row.org_id=%s
-           AND grant_row.consent_version='live18-denial-v1'
+           AND grant_row.consent_version=%s
            AND membership.org_id=grant_row.org_id
            AND membership.id=grant_row.subject_membership_id
            AND user_row.id=membership.user_id
-           AND user_row.auth_user_id=ANY(CAST(%s AS uuid[]))
+           AND targets.user_id=user_row.id
+           AND targets.auth_user_id=user_row.auth_user_id
            AND capability.status='active'
         """,
-        (DENIAL_CREATOR_MEMBERSHIP_ID, DENIAL_ORG_ID, auth_user_ids),
-    )
-    cursor.execute(
-        """
-        UPDATE automation.agent_grants AS grant_row
-           SET status='revoked',revoked_at=transaction_timestamp(),
-               revoked_by_membership_id=%s,
-               revocation_reason='Live18 disposable identity cleanup',
-               updated_at=transaction_timestamp(),
-               updated_by_membership_id=%s,row_version=grant_row.row_version+1
-          FROM core.memberships AS membership,core.users AS user_row
-         WHERE grant_row.org_id=%s
-           AND membership.org_id=grant_row.org_id
-           AND membership.id=grant_row.subject_membership_id
-           AND user_row.id=membership.user_id
-           AND user_row.auth_user_id=ANY(CAST(%s AS uuid[]))
-           AND grant_row.consent_version='live18-denial-v1'
-           AND grant_row.status IN ('active','suspended')
-        """,
         (
-            DENIAL_CREATOR_MEMBERSHIP_ID,
+            target_json,
             DENIAL_CREATOR_MEMBERSHIP_ID,
             DENIAL_ORG_ID,
-            auth_user_ids,
+            LIVE18_DENIAL_CONSENT_VERSION,
         ),
     )
     cursor.execute(
         """
+        WITH targets AS (
+          SELECT * FROM jsonb_to_recordset(%s::jsonb)
+            AS target(user_id uuid,auth_user_id uuid)
+        )
+        UPDATE automation.agent_grants AS grant_row
+           SET status='revoked',revoked_at=transaction_timestamp(),
+               revoked_by_membership_id=%s,
+               revocation_reason=%s,
+               updated_at=transaction_timestamp(),
+               updated_by_membership_id=%s,row_version=grant_row.row_version+1
+          FROM core.memberships AS membership,core.users AS user_row,targets
+         WHERE grant_row.org_id=%s
+           AND membership.org_id=grant_row.org_id
+           AND membership.id=grant_row.subject_membership_id
+           AND user_row.id=membership.user_id
+           AND targets.user_id=user_row.id
+           AND targets.auth_user_id=user_row.auth_user_id
+           AND grant_row.consent_version=%s
+           AND grant_row.status IN ('active','suspended')
+        """,
+        (
+            target_json,
+            DENIAL_CREATOR_MEMBERSHIP_ID,
+            LIVE18_DENIAL_CLEANUP_REASON,
+            DENIAL_CREATOR_MEMBERSHIP_ID,
+            DENIAL_ORG_ID,
+            LIVE18_DENIAL_CONSENT_VERSION,
+        ),
+    )
+    cursor.execute(
+        """
+        WITH targets AS (
+          SELECT * FROM jsonb_to_recordset(%s::jsonb)
+            AS target(user_id uuid,auth_user_id uuid)
+        )
         UPDATE core.access_grants AS access_grant
            SET status='revoked',revoked_at=transaction_timestamp(),
                revoked_by_membership_id=%s,
-               revocation_reason='Live18 disposable identity cleanup',
+               revocation_reason=%s,
                row_version=access_grant.row_version+1
           FROM core.memberships AS membership,core.users AS user_row,
-               core.roles AS role
+               core.roles AS role,targets
          WHERE access_grant.org_id=%s
            AND membership.org_id=access_grant.org_id
            AND membership.id=access_grant.membership_id
            AND user_row.id=membership.user_id
-           AND user_row.auth_user_id=ANY(CAST(%s AS uuid[]))
+           AND targets.user_id=user_row.id
+           AND targets.auth_user_id=user_row.auth_user_id
            AND role.org_id=access_grant.org_id
            AND role.id=access_grant.role_id
-           AND role.code LIKE 'live18_denial_%%'
+           AND role.code LIKE %s
            AND access_grant.status='active'
         """,
-        (DENIAL_CREATOR_MEMBERSHIP_ID, DENIAL_ORG_ID, auth_user_ids),
+        (
+            target_json,
+            DENIAL_CREATOR_MEMBERSHIP_ID,
+            LIVE18_DENIAL_CLEANUP_REASON,
+            DENIAL_ORG_ID,
+            f"{LIVE18_DENIAL_ROLE_PREFIX}%",
+        ),
     )
     cursor.execute(
         """
+        WITH targets AS (
+          SELECT * FROM jsonb_to_recordset(%s::jsonb)
+            AS target(user_id uuid,auth_user_id uuid)
+        )
         UPDATE core.roles AS role
            SET status='disabled',updated_at=transaction_timestamp(),
                updated_by_membership_id=%s,row_version=role.row_version+1
           FROM core.access_grants AS access_grant,
-               core.memberships AS membership,core.users AS user_row
-         WHERE role.org_id=%s AND role.code LIKE 'live18_denial_%%'
+               core.memberships AS membership,core.users AS user_row,targets
+         WHERE role.org_id=%s AND role.code LIKE %s
            AND access_grant.org_id=role.org_id
            AND access_grant.role_id=role.id
            AND membership.org_id=access_grant.org_id
            AND membership.id=access_grant.membership_id
            AND user_row.id=membership.user_id
-           AND user_row.auth_user_id=ANY(CAST(%s AS uuid[]))
+           AND targets.user_id=user_row.id
+           AND targets.auth_user_id=user_row.auth_user_id
            AND role.status='active'
         """,
-        (DENIAL_CREATOR_MEMBERSHIP_ID, DENIAL_ORG_ID, auth_user_ids),
+        (
+            target_json,
+            DENIAL_CREATOR_MEMBERSHIP_ID,
+            DENIAL_ORG_ID,
+            f"{LIVE18_DENIAL_ROLE_PREFIX}%",
+        ),
     )
     cursor.execute(
         """
+        WITH targets AS (
+          SELECT * FROM jsonb_to_recordset(%s::jsonb)
+            AS target(user_id uuid,auth_user_id uuid)
+        )
         UPDATE core.memberships AS membership
            SET status='revoked',revoked_at=transaction_timestamp(),
-               revocation_reason='Live18 disposable identity cleanup',
+               revocation_reason=%s,
                updated_at=transaction_timestamp(),
                updated_by_membership_id=%s,row_version=membership.row_version+1
-          FROM core.users AS user_row
+          FROM core.users AS user_row,targets
          WHERE membership.org_id=%s AND user_row.id=membership.user_id
-           AND user_row.auth_user_id=ANY(CAST(%s AS uuid[]))
+           AND targets.user_id=user_row.id
+           AND targets.auth_user_id=user_row.auth_user_id
            AND membership.id<>%s
            AND membership.status IN ('active','suspended')
         """,
         (
+            target_json,
+            LIVE18_DENIAL_CLEANUP_REASON,
             DENIAL_CREATOR_MEMBERSHIP_ID,
             DENIAL_ORG_ID,
-            auth_user_ids,
             DENIAL_CREATOR_MEMBERSHIP_ID,
         ),
     )
     cursor.execute(
         """
-        UPDATE core.users
+        WITH targets AS (
+          SELECT * FROM jsonb_to_recordset(%s::jsonb)
+            AS target(user_id uuid,auth_user_id uuid)
+        )
+        UPDATE core.users AS user_row
            SET auth_user_id=NULL,status='disabled',
-               updated_at=transaction_timestamp(),row_version=row_version+1
-         WHERE auth_user_id=ANY(CAST(%s AS uuid[]))
-           AND id NOT IN (%s::uuid,%s::uuid) AND status<>'anonymized'
+               updated_at=transaction_timestamp(),
+               row_version=user_row.row_version+1
+          FROM targets
+         WHERE targets.user_id=user_row.id
+           AND targets.auth_user_id=user_row.auth_user_id
+           AND user_row.id NOT IN (%s::uuid,%s::uuid)
+           AND user_row.status<>'anonymized'
         """,
-        (auth_user_ids, DEMO_OPERATOR_USER_ID, DEMO_REVIEWER_USER_ID),
+        (target_json, DEMO_OPERATOR_USER_ID, DEMO_REVIEWER_USER_ID),
     )
+    cursor.execute(
+        """
+        WITH targets AS (
+          SELECT * FROM jsonb_to_recordset(%s::jsonb)
+            AS target(user_id uuid,auth_user_id uuid)
+        )
+        SELECT count(*)
+          FROM targets
+         WHERE EXISTS (
+                 SELECT 1 FROM core.users AS user_row
+                  WHERE user_row.id=targets.user_id
+                    AND user_row.auth_user_id IS NULL
+                    AND user_row.status='disabled'
+               )
+           AND 1=(
+                 SELECT count(*) FROM core.memberships AS membership
+                  WHERE membership.org_id=%s
+                    AND membership.user_id=targets.user_id
+                    AND membership.id<>%s
+                    AND membership.status='revoked'
+               )
+           AND 1=(
+                 SELECT count(*) FROM core.access_grants AS access_grant
+                   JOIN core.memberships AS membership
+                     ON membership.org_id=access_grant.org_id
+                    AND membership.id=access_grant.membership_id
+                   JOIN core.roles AS role
+                     ON role.org_id=access_grant.org_id
+                    AND role.id=access_grant.role_id
+                  WHERE membership.user_id=targets.user_id
+                    AND membership.org_id=%s
+                    AND role.code LIKE %s
+                    AND access_grant.status IN ('revoked','expired')
+                    AND role.status='disabled'
+               )
+           AND 1=(
+                 SELECT count(*) FROM automation.agent_grants AS grant_row
+                   JOIN core.memberships AS membership
+                     ON membership.org_id=grant_row.org_id
+                    AND membership.id=grant_row.subject_membership_id
+                  WHERE membership.user_id=targets.user_id
+                    AND membership.org_id=%s
+                    AND grant_row.consent_version=%s
+                    AND grant_row.status IN ('revoked','expired')
+               )
+           AND 1=(
+                 SELECT count(*)
+                   FROM automation.agent_grant_capabilities AS capability
+                   JOIN automation.agent_grants AS grant_row
+                     ON grant_row.org_id=capability.org_id
+                    AND grant_row.id=capability.agent_grant_id
+                   JOIN core.memberships AS membership
+                     ON membership.org_id=grant_row.org_id
+                    AND membership.id=grant_row.subject_membership_id
+                  WHERE membership.user_id=targets.user_id
+                    AND membership.org_id=%s
+                    AND grant_row.consent_version=%s
+                    AND capability.status='revoked'
+               )
+        """,
+        (
+            target_json,
+            DENIAL_ORG_ID,
+            DENIAL_CREATOR_MEMBERSHIP_ID,
+            DENIAL_ORG_ID,
+            f"{LIVE18_DENIAL_ROLE_PREFIX}%",
+            DENIAL_ORG_ID,
+            LIVE18_DENIAL_CONSENT_VERSION,
+            DENIAL_ORG_ID,
+            LIVE18_DENIAL_CONSENT_VERSION,
+        ),
+    )
+    verified = cursor.fetchone()
+    if verified != (len(normalized_targets),):
+        raise EphemeralIdentityError(
+            "Disposable denial authority did not reach its exact terminal boundary"
+        )
 
 
 def _recover_stale_live18_database(
@@ -824,9 +1006,169 @@ def _recover_stale_live18_database(
                     "d3000000-0000-7000-8000-000000000020",
                 ),
             )
+            cursor.execute(
+                """
+                SELECT user_row.id::text,user_row.auth_user_id::text,
+                       EXISTS (
+                         SELECT 1 FROM core.memberships AS denial_membership
+                          WHERE denial_membership.user_id=user_row.id
+                            AND denial_membership.org_id=%s
+                            AND denial_membership.id<>%s
+                       ),
+                       EXISTS (
+                         SELECT 1 FROM core.memberships AS other_membership
+                          WHERE other_membership.user_id=user_row.id
+                            AND other_membership.org_id<>%s
+                       )
+                  FROM core.users AS user_row
+                 WHERE user_row.auth_user_id=ANY(CAST(%s AS uuid[]))
+                """,
+                (
+                    DENIAL_ORG_ID,
+                    DENIAL_CREATOR_MEMBERSHIP_ID,
+                    DENIAL_ORG_ID,
+                    stale_ids,
+                ),
+            )
+            denial_targets = []
+            for (
+                user_id,
+                auth_user_id,
+                has_denial_membership,
+                has_other_membership,
+            ) in cursor.fetchall():
+                if has_denial_membership and has_other_membership:
+                    raise EphemeralIdentityError(
+                        "Disposable denial Auth identity is bound across organizations"
+                    )
+                if has_denial_membership:
+                    denial_targets.append((user_id, auth_user_id))
             _set_denial_context(cursor)
-            _terminalize_live18_denial_authority(cursor, stale_ids)
+            _terminalize_live18_denial_authority(cursor, denial_targets)
+            cursor.execute(
+                """
+                SELECT auth_user_id::text
+                  FROM core.users
+                 WHERE auth_user_id=ANY(CAST(%s AS uuid[]))
+                """,
+                (stale_ids,),
+            )
+            unclassified_bindings = cursor.fetchall()
+            if unclassified_bindings:
+                raise EphemeralIdentityError(
+                    "Disposable Auth identity has an unclassified database binding"
+                )
             _leave_migration_owner(cursor, membership_options)
+
+
+def _live18_denial_residue_counts(cursor) -> tuple[int, int, int]:
+    """Count denial residue without depending on intact access/role joins."""
+
+    cursor.execute(
+        """
+        SELECT
+          (SELECT count(*) FROM core.roles
+            WHERE org_id=%s::uuid AND code LIKE %s
+              AND status='active'),
+          (
+            (SELECT count(*) FROM automation.agent_grant_capabilities AS capability
+              JOIN automation.agent_grants AS grant_row
+                ON grant_row.org_id=capability.org_id
+               AND grant_row.id=capability.agent_grant_id
+             WHERE capability.org_id=%s::uuid
+               AND grant_row.consent_version=%s
+               AND capability.status='active')
+            +(SELECT count(*) FROM automation.agent_grants
+               WHERE org_id=%s::uuid
+                 AND consent_version=%s
+                 AND status IN ('pending_consent','active','suspended'))
+            +(SELECT count(*) FROM core.access_grants
+               WHERE org_id=%s::uuid AND membership_id<>%s::uuid
+                 AND status='active')
+            +(SELECT count(*) FROM core.memberships
+               WHERE org_id=%s::uuid AND id<>%s::uuid
+                 AND status IN ('active','suspended'))
+          ),
+          (SELECT count(DISTINCT user_row.id)
+             FROM core.users AS user_row
+             JOIN core.memberships AS membership
+               ON membership.user_id=user_row.id
+            WHERE membership.org_id=%s::uuid
+              AND membership.id<>%s::uuid
+              AND user_row.auth_user_id IS NOT NULL)
+        """,
+        (
+            DENIAL_ORG_ID,
+            f"{LIVE18_DENIAL_ROLE_PREFIX}%",
+            DENIAL_ORG_ID,
+            LIVE18_DENIAL_CONSENT_VERSION,
+            DENIAL_ORG_ID,
+            LIVE18_DENIAL_CONSENT_VERSION,
+            DENIAL_ORG_ID,
+            DENIAL_CREATOR_MEMBERSHIP_ID,
+            DENIAL_ORG_ID,
+            DENIAL_CREATOR_MEMBERSHIP_ID,
+            DENIAL_ORG_ID,
+            DENIAL_CREATOR_MEMBERSHIP_ID,
+        ),
+    )
+    value = cursor.fetchone()
+    if (
+        not isinstance(value, tuple)
+        or len(value) != 3
+        or any(type(count) is not int or count < 0 for count in value)
+    ):
+        raise EphemeralIdentityError("Live18 denial residue query was not exact")
+    return value
+
+
+def _live18_database_boundary(
+    management_token: str,
+) -> tuple[tuple[str | None, str | None, int], tuple[int, int, int]]:
+    with _database_connection(management_token) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
+                (LOCK_KEY,),
+            )
+            membership_options = _enter_migration_owner(cursor)
+            cursor.execute(
+                """
+                SELECT
+                  (SELECT auth_user_id::text FROM core.users WHERE id=%s::uuid),
+                  (SELECT auth_user_id::text FROM core.users WHERE id=%s::uuid),
+                  (SELECT count(*) FROM automation.agent_grants
+                    WHERE org_id=%s::uuid
+                      AND subject_membership_id IN (%s::uuid,%s::uuid)
+                      AND consent_version IN (
+                        'browser-e2e-v1','canonical-live-e2e-v1'
+                      ) AND status='active')
+                """,
+                (
+                    DEMO_OPERATOR_USER_ID,
+                    DEMO_REVIEWER_USER_ID,
+                    DEMO_ORG_ID,
+                    DEMO_OPERATOR_MEMBERSHIP_ID,
+                    DEMO_REVIEWER_MEMBERSHIP_ID,
+                ),
+            )
+            demo_state = cursor.fetchone()
+            denial_state = _live18_denial_residue_counts(cursor)
+            _leave_migration_owner(cursor, membership_options)
+    return demo_state, denial_state
+
+
+def _assert_live18_database_boundary(management_token: str) -> None:
+    demo_state, denial_state = _live18_database_boundary(management_token)
+    expected_demo_state = (
+        DEMO_OPERATOR_AUTH_USER_ID,
+        DEMO_REVIEWER_AUTH_USER_ID,
+        0,
+    )
+    if demo_state != expected_demo_state or denial_state != (0, 0, 0):
+        raise EphemeralIdentityError(
+            "Live18 crash recovery did not restore the exact seeded database boundary"
+        )
 
 
 def recover_lost_live18_state() -> dict[str, int]:
@@ -847,6 +1189,9 @@ def recover_lost_live18_state() -> dict[str, int]:
         service_key, LIVE18_PURPOSE
     )
     _recover_stale_live18_database(management_token, stale_auth_user_ids)
+    # Never delete the durable Auth discovery anchors until every database
+    # authority and binding has reached its exact terminal boundary.
+    _assert_live18_database_boundary(management_token)
     if stale_auth_user_ids:
         for auth_user_id in sorted(stale_auth_user_ids):
             _delete_auth_user(service_key, auth_user_id)
@@ -857,100 +1202,7 @@ def recover_lost_live18_state() -> dict[str, int]:
         raise EphemeralIdentityError(
             "Disposable live18 Auth identities remained after crash recovery"
         )
-
-    with _database_connection(management_token) as connection:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))",
-                (LOCK_KEY,),
-            )
-            membership_options = _enter_migration_owner(cursor)
-            cursor.execute(
-                """
-                SELECT
-                  (SELECT auth_user_id::text FROM core.users WHERE id=%s::uuid),
-                  (SELECT auth_user_id::text FROM core.users WHERE id=%s::uuid),
-                  (SELECT count(*) FROM automation.agent_grants
-                    WHERE org_id=%s::uuid
-                      AND subject_membership_id IN (%s::uuid,%s::uuid)
-                      AND consent_version IN (
-                        'browser-e2e-v1','canonical-live-e2e-v1'
-                      ) AND status='active'),
-                  (SELECT count(*) FROM core.roles
-                    WHERE org_id=%s::uuid AND code LIKE 'live18_denial_%%'
-                      AND status='active'),
-                  (
-                    (SELECT count(*) FROM automation.agent_grant_capabilities AS capability
-                      JOIN automation.agent_grants AS grant_row
-                        ON grant_row.org_id=capability.org_id
-                       AND grant_row.id=capability.agent_grant_id
-                     WHERE capability.org_id=%s::uuid
-                       AND grant_row.consent_version='live18-denial-v1'
-                       AND capability.status='active')
-                    +(SELECT count(*) FROM automation.agent_grants
-                       WHERE org_id=%s::uuid
-                         AND consent_version='live18-denial-v1'
-                         AND status IN ('active','suspended'))
-                    +(SELECT count(*) FROM core.access_grants AS access_grant
-                        JOIN core.roles AS role
-                          ON role.org_id=access_grant.org_id
-                         AND role.id=access_grant.role_id
-                       WHERE access_grant.org_id=%s::uuid
-                         AND role.code LIKE 'live18_denial_%%'
-                         AND access_grant.status='active')
-                    +(SELECT count(*) FROM core.memberships AS membership
-                        JOIN core.access_grants AS access_grant
-                          ON access_grant.org_id=membership.org_id
-                         AND access_grant.membership_id=membership.id
-                        JOIN core.roles AS role
-                          ON role.org_id=access_grant.org_id
-                         AND role.id=access_grant.role_id
-                       WHERE membership.org_id=%s::uuid
-                         AND role.code LIKE 'live18_denial_%%'
-                         AND membership.status IN ('active','suspended'))
-                  ),
-                  (SELECT count(DISTINCT user_row.id)
-                     FROM core.users AS user_row
-                     JOIN core.memberships AS membership
-                       ON membership.user_id=user_row.id
-                     JOIN core.access_grants AS access_grant
-                       ON access_grant.org_id=membership.org_id
-                      AND access_grant.membership_id=membership.id
-                     JOIN core.roles AS role
-                       ON role.org_id=access_grant.org_id
-                      AND role.id=access_grant.role_id
-                    WHERE membership.org_id=%s::uuid
-                      AND role.code LIKE 'live18_denial_%%'
-                      AND user_row.auth_user_id IS NOT NULL)
-                """,
-                (
-                    DEMO_OPERATOR_USER_ID,
-                    DEMO_REVIEWER_USER_ID,
-                    DEMO_ORG_ID,
-                    DEMO_OPERATOR_MEMBERSHIP_ID,
-                    DEMO_REVIEWER_MEMBERSHIP_ID,
-                    DENIAL_ORG_ID,
-                    DENIAL_ORG_ID,
-                    DENIAL_ORG_ID,
-                    DENIAL_ORG_ID,
-                    DENIAL_ORG_ID,
-                    DENIAL_ORG_ID,
-                ),
-            )
-            database_state = cursor.fetchone()
-            _leave_migration_owner(cursor, membership_options)
-    expected_state = (
-        "d3000000-0000-7000-8000-000000000022",
-        "d3000000-0000-7000-8000-000000000002",
-        0,
-        0,
-        0,
-        0,
-    )
-    if database_state != expected_state:
-        raise EphemeralIdentityError(
-            "Live18 crash recovery did not restore the exact seeded database boundary"
-        )
+    _assert_live18_database_boundary(management_token)
     return {
         "recovered_auth_identity_count": len(stale_auth_user_ids),
         "remaining_auth_identity_count": 0,
@@ -1042,7 +1294,7 @@ def _provision_live18_denial_database(
                 (
                     DENIAL_ORG_ID,
                     denial["role_id"],
-                    f"live18_denial_{state['run_token'].replace('-', '')[:20]}",
+                    f"{LIVE18_DENIAL_ROLE_PREFIX}{state['run_token'].replace('-', '')[:20]}",
                     DENIAL_CREATOR_MEMBERSHIP_ID,
                     DENIAL_CREATOR_MEMBERSHIP_ID,
                 ),
@@ -1083,7 +1335,7 @@ def _provision_live18_denial_database(
                     updated_by_membership_id
                 ) VALUES (
                     %s,%s,%s,%s,'Ephemeral live18 denial observer',NULL,
-                    'self_consent','live18-denial-v1',extensions.digest(%s,'sha256'),
+                    'self_consent',%s,extensions.digest(%s,'sha256'),
                     %s,transaction_timestamp(),%s,transaction_timestamp(),
                     transaction_timestamp()+interval '2 hours','active',%s,%s
                 )
@@ -1093,6 +1345,7 @@ def _provision_live18_denial_database(
                     denial["agent_grant_id"],
                     denial["membership_id"],
                     WEB_CLIENT_ID,
+                    LIVE18_DENIAL_CONSENT_VERSION,
                     f"{LIVE18_PURPOSE}:{state['run_token']}:denial",
                     denial["membership_id"],
                     DENIAL_CREATOR_MEMBERSHIP_ID,
@@ -1219,7 +1472,10 @@ def _cleanup_live18_denial_database(cursor, state: dict[str, Any]) -> None:
             "Committed live18 denial state omitted its Auth UUID"
         )
     _set_denial_context(cursor)
-    _terminalize_live18_denial_authority(cursor, [denial["auth_user_id"]])
+    _terminalize_live18_denial_authority(
+        cursor,
+        [(denial["user_id"], denial["auth_user_id"])],
+    )
 
 
 def _set_audit_context(
