@@ -241,6 +241,17 @@ def main() -> None:
                     "SELECT session_user,current_user,rolsuper,rolbypassrls FROM pg_roles WHERE rolname=current_user"
                 )).one()
                 assert tuple(principal) == ("erp_runtime", "erp_runtime", False, False)
+                connection.execute(
+                    text("SELECT erp_security.activate_context(:auth_user_id,:org_id)"),
+                    {"auth_user_id": CLAIMANT_AUTH, "org_id": ORG},
+                )
+                assert connection.scalar(
+                    text(
+                        "SELECT erp_security.has_permission("
+                        "'automation.command.execute',:branch_id)"
+                    ),
+                    {"branch_id": BRANCH},
+                ) is True
                 runtime_sessions = sessionmaker(
                     bind=connection, expire_on_commit=False, join_transaction_mode="create_savepoint"
                 )
