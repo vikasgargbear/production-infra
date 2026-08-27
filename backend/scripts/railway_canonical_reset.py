@@ -34,6 +34,7 @@ import psycopg2
 
 try:
     from .canonical_data_reset_authority import (
+        ResetAuthorityError,
         execute_reset,
         load_reset_authority,
         verify_post_cleanup_role_state,
@@ -52,6 +53,7 @@ try:
     from .manage_canonical_write_fence import FenceError, apply_fence
 except ImportError:  # direct ``python backend/scripts/...`` execution
     from canonical_data_reset_authority import (
+        ResetAuthorityError,
         execute_reset,
         load_reset_authority,
         verify_post_cleanup_role_state,
@@ -99,6 +101,36 @@ def _database_failure_code(error: Exception) -> str:
         else ""
     )
     return f"{type(error).__name__}{suffix}"
+
+
+def _role_cleanup_failure_code(error: Exception) -> str:
+    """Return one credential-free diagnostic for a closed role assertion."""
+
+    if not isinstance(error, ResetAuthorityError):
+        return _database_failure_code(error)
+    message = str(error)
+    exact_codes = {
+        "role cleanup verification is restricted to canonical staging": "wrong_project",
+        "canonical managed role set is incomplete": "managed_role_set_incomplete",
+        "canonical managed role credential set is incomplete": "credential_set_incomplete",
+        "postgres retains temporary migration-owner delegation": "migration_owner_delegation_present",
+        "canonical login-role password presence is incomplete": "login_role_password_missing",
+        "canonical NOLOGIN roles retain stored passwords": "nonlogin_role_password_present",
+    }
+    if message in exact_codes:
+        return exact_codes[message]
+    if message.startswith("unsafe canonical role posture: "):
+        role_name = message.removeprefix("unsafe canonical role posture: ")
+        if role_name in {
+            "erp_app",
+            "erp_calculator",
+            "erp_migration_owner",
+            "erp_regulatory_importer",
+            "erp_runtime",
+            "erp_tax_provider",
+        }:
+            return f"unsafe_role_posture_{role_name}"
+    return "unclassified_reset_authority_error"
 
 
 def _validate_boundary(
@@ -241,9 +273,10 @@ def _admin_database_url(
                 role_cleanup = verify_post_cleanup_role_state(
                     connection, project_ref=contract.project_ref
                 )
-            except Exception:
+            except Exception as error:
                 raise RailwayCanonicalResetError(
-                    "railway_ipv6_role_cleanup_attestation_failed"
+                    "railway_ipv6_role_cleanup_attestation_failed:"
+                    f"{_role_cleanup_failure_code(error)}"
                 ) from None
     except RailwayCanonicalResetError:
         raise

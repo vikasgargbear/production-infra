@@ -536,6 +536,50 @@ def test_database_failure_codes_are_stage_bound_without_error_text() -> None:
     assert "secret" not in RESET._database_failure_code(error)
 
 
+@pytest.mark.parametrize(
+    ("message", "expected_code"),
+    [
+        (
+            "canonical managed role set is incomplete",
+            "managed_role_set_incomplete",
+        ),
+        (
+            "canonical managed role credential set is incomplete",
+            "credential_set_incomplete",
+        ),
+        (
+            "postgres retains temporary migration-owner delegation",
+            "migration_owner_delegation_present",
+        ),
+        (
+            "canonical login-role password presence is incomplete",
+            "login_role_password_missing",
+        ),
+        (
+            "canonical NOLOGIN roles retain stored passwords",
+            "nonlogin_role_password_present",
+        ),
+        (
+            "unsafe canonical role posture: erp_runtime",
+            "unsafe_role_posture_erp_runtime",
+        ),
+    ],
+)
+def test_role_cleanup_failure_codes_are_specific_and_credential_free(
+    message: str, expected_code: str
+) -> None:
+    error = RESET.ResetAuthorityError(message)
+    assert RESET._role_cleanup_failure_code(error) == expected_code
+
+
+def test_role_cleanup_failure_code_rejects_unclassified_message_content() -> None:
+    error = RESET.ResetAuthorityError("unexpected sensitive diagnostic")
+    assert (
+        RESET._role_cleanup_failure_code(error)
+        == "unclassified_reset_authority_error"
+    )
+
+
 def test_temporary_owner_delegation_does_not_reenter_verifier_connection(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
