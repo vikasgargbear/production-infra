@@ -139,7 +139,10 @@ test('searches the exact approved PO before business-date bootstrap finishes', a
   await act(async () => { jest.advanceTimersByTime(500); });
 
   expect(canonicalDocumentHistoryApi.get).toHaveBeenLastCalledWith(
-    expect.objectContaining({ search: purchaseOrderId }),
+    expect.objectContaining({
+      document_kind: 'purchase_order',
+      search: purchaseOrderId,
+    }),
   );
   expect(screen.getByRole('button', {
     name: `Record canonical receipt for purchase order ${purchaseOrderId}`,

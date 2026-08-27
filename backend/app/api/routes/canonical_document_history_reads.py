@@ -452,6 +452,7 @@ def _filter_sql() -> str:
         AND (:status IS NULL OR status=:status OR payment_status=:status)
         AND (:date_from IS NULL OR document_date>=CAST(:date_from AS date))
         AND (:date_to IS NULL OR document_date<=CAST(:date_to AS date))
+        AND (:document_id IS NULL OR document_id=CAST(:document_id AS uuid))
         AND (:search IS NULL OR document_id::text=CAST(:search AS text)
              OR document_number ILIKE '%' || CAST(:search AS text) || '%'
              OR party_name ILIKE '%' || CAST(:search AS text) || '%')
@@ -462,6 +463,7 @@ def _filter_sql() -> str:
 def canonical_document_history(
     document_kind: Optional[DocumentKind] = Query(None),
     document_group: Optional[DocumentGroup] = Query(None),
+    document_id: Optional[UUID] = Query(None),
     search: Optional[str] = Query(None, min_length=1, max_length=120),
     status_filter: Optional[str] = Query(None, alias="status", min_length=1, max_length=40),
     date_from: Optional[date] = Query(None),
@@ -489,6 +491,7 @@ def canonical_document_history(
         "branch_ids": branch_ids,
         "document_kind": document_kind,
         "document_group": document_group,
+        "document_id": document_id,
         "search": search.strip() if search else None,
         "status": status_filter,
         "date_from": date_from,

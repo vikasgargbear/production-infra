@@ -102,6 +102,7 @@ def test_populated_supplier_invoice_endpoint_preserves_complete_provenance(monke
     result = history_reads.canonical_document_history(
         document_kind="supplier_invoice",
         document_group=None,
+        document_id=None,
         search=None,
         status_filter="posted",
         date_from=None,
@@ -115,6 +116,43 @@ def test_populated_supplier_invoice_endpoint_preserves_complete_provenance(monke
     assert response.items[0].source_document_type == "goods_receipt"
     assert response.items[0].source_document_id == UUID("d3000000-0000-7000-8000-000000000004")
     assert response.items[0].source_document_number == "GRN-EXACT-1"
+
+
+def test_exact_document_identity_is_forwarded_to_the_typed_uuid_filter(monkeypatch):
+    target = UUID("d3000000-0000-7000-8000-000000000004")
+    observed_params = []
+
+    class FakeSession:
+        def execute(self, statement, params):
+            observed_params.append(dict(params))
+            if "SELECT COUNT(*)" in str(statement):
+                return SimpleNamespace(scalar_one=lambda: 0)
+            return SimpleNamespace(fetchall=lambda: [])
+
+    monkeypatch.setattr(history_reads, "_activate", lambda _db, _user: UUID(
+        "d3000000-0000-7000-8000-000000000005"
+    ))
+    monkeypatch.setattr(history_reads, "_organization_business_date", lambda _db, _org_id: date(2026, 8, 25))
+    monkeypatch.setattr(history_reads, "_scope", lambda _user: (True, []))
+    monkeypatch.setattr(history_reads, "check_module_access", lambda _user, _module: True)
+
+    result = history_reads.canonical_document_history(
+        document_kind="purchase_order",
+        document_group=None,
+        document_id=target,
+        search=None,
+        status_filter=None,
+        date_from=None,
+        date_to=None,
+        page=1,
+        page_size=25,
+        user={},
+        db=FakeSession(),
+    )
+
+    assert result["items"] == []
+    assert len(observed_params) == 2
+    assert all(params["document_id"] == target for params in observed_params)
 
 
 def test_non_settlement_histories_never_claim_paid_or_outstanding_amounts():
@@ -143,6 +181,7 @@ def test_query_is_branch_scoped_filtered_paginated_and_reversal_safe():
     assert "branch_id=ANY" in filters
     assert "document_kind IN ('sales_return','purchase_return')" in filters
     assert ":date_from" in filters and ":date_to" in filters and ":search" in filters and ":status" in filters
+    assert "document_id=CAST(:document_id AS uuid)" in filters
     assert "document_id::text=CAST(:search AS text)" in filters
     assert source.count("allocation.reversal_of_allocation_id IS NULL") == 2
     assert source.count("reversal.reversal_of_allocation_id=allocation.id") == 2

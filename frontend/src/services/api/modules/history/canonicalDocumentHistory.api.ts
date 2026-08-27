@@ -12,6 +12,7 @@ export type CanonicalDocumentKind =
 export interface CanonicalDocumentHistoryParams {
   document_kind?: CanonicalDocumentKind;
   document_group?: 'returns';
+  document_id?: string;
   search?: string;
   status?: string;
   date_from?: string;
@@ -185,7 +186,27 @@ export const canonicalDocumentHistoryApi = {
     if ((params.document_kind === undefined) === (params.document_group === undefined)) {
       throw new Error('Select exactly one canonical document history kind or group.');
     }
-    const response = await apiHelpers.get('/canonical/document-history', { params });
+    const normalizedDocumentId = params.document_id?.trim();
+    if (normalizedDocumentId && !UUID.test(normalizedDocumentId)) {
+      throw new Error('Document id must be a canonical UUID.');
+    }
+    const normalizedSearch = params.search?.trim();
+    const exactSearchId = normalizedSearch && UUID.test(normalizedSearch)
+      ? normalizedSearch
+      : undefined;
+    if (normalizedDocumentId && exactSearchId
+      && normalizedDocumentId.toLowerCase() !== exactSearchId.toLowerCase()) {
+      throw new Error('Document id conflicts with the canonical UUID search.');
+    }
+    const { document_id: _documentId, search: _search, ...boundedParams } = params;
+    const requestParams = {
+      ...boundedParams,
+      ...((normalizedDocumentId || exactSearchId)
+        ? { document_id: normalizedDocumentId || exactSearchId }
+        : {}),
+      ...(!exactSearchId && normalizedSearch ? { search: normalizedSearch } : {}),
+    };
+    const response = await apiHelpers.get('/canonical/document-history', { params: requestParams });
     return normalizeCanonicalDocumentHistory(response.data);
   },
 };

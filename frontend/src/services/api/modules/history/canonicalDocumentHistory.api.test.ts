@@ -89,6 +89,32 @@ it('sends all server-side filters and returns the strict response', async () => 
   } });
 });
 
+it('routes a canonical UUID search through the typed document identity filter', async () => {
+  get.mockResolvedValue({ data: { items: [row], business_date, page: 1, page_size: 25, total: 1 } });
+  await canonicalDocumentHistoryApi.get({
+    document_kind: 'purchase_order',
+    search: row.document_id,
+    page: 1,
+  });
+  expect(get).toHaveBeenCalledWith('/canonical/document-history', { params: {
+    document_kind: 'purchase_order',
+    document_id: row.document_id,
+    page: 1,
+  } });
+});
+
+it('rejects malformed or conflicting explicit document identities before transport', async () => {
+  await expect(canonicalDocumentHistoryApi.get({
+    document_kind: 'purchase_order', document_id: 'not-a-uuid',
+  })).rejects.toThrow(/canonical UUID/i);
+  await expect(canonicalDocumentHistoryApi.get({
+    document_kind: 'purchase_order',
+    document_id: 'd3000000-0000-7000-8000-000000000001',
+    search: 'd3000000-0000-7000-8000-000000000002',
+  })).rejects.toThrow(/conflicts/i);
+  expect(get).not.toHaveBeenCalled();
+});
+
 it('requires one bounded kind or the returns-only group', async () => {
   await expect(canonicalDocumentHistoryApi.get({ page: 1 })).rejects.toThrow(/exactly one/i);
   await expect(canonicalDocumentHistoryApi.get({
