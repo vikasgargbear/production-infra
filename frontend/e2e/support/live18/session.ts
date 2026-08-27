@@ -8,6 +8,7 @@ export interface CapturedSession {
   userId: string;
   orgId: string;
   branchIds: string[];
+  branchScope: 'all' | 'multi' | 'single';
 }
 
 const decodeClaims = (token: string): Record<string, unknown> => {
@@ -18,6 +19,10 @@ const decodeClaims = (token: string): Record<string, unknown> => {
 
 export function sessionIdentityFromToken(token: string): Omit<CapturedSession, 'token'> {
   const claims = decodeClaims(token);
+  const branchScope = String(claims.branch_scope || '');
+  if (!['all', 'multi', 'single'].includes(branchScope)) {
+    throw new Error('ERP session token omitted its canonical branch scope.');
+  }
   const branchIds = Array.isArray(claims.branch_ids)
     ? claims.branch_ids.map(String)
     : claims.branch_id ? [String(claims.branch_id)] : [];
@@ -25,6 +30,7 @@ export function sessionIdentityFromToken(token: string): Omit<CapturedSession, '
     userId: String(claims.user_id || claims.sub || ''),
     orgId: String(claims.org_id || claims.organization_id || ''),
     branchIds,
+    branchScope: branchScope as CapturedSession['branchScope'],
   };
 }
 
@@ -75,6 +81,11 @@ export function assertSessionIsolation(
   expect(requester.userId).not.toBe(reviewer.userId);
   expect(requester.orgId).toBe(config.expectedOrgId);
   expect(reviewer.orgId).toBe(config.expectedOrgId);
-  expect(requester.branchIds).toContain(config.expectedBranchId);
-  expect(reviewer.branchIds).toContain(config.expectedBranchId);
+  for (const session of [requester, reviewer]) {
+    if (session.branchScope === 'all') {
+      expect(session.branchIds).toEqual([]);
+    } else {
+      expect(session.branchIds).toContain(config.expectedBranchId);
+    }
+  }
 }

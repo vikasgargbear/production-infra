@@ -56,3 +56,13 @@ test('live Stock Hub readback binds API calls to the authenticated backend origi
   expect(source).toContain(backendFetch);
   expect(source).not.toContain(relativeFetch);
 });
+
+test('Live18 accepts only canonical explicit-branch or organization-wide session authority', () => {
+  const source = support('live18/session.ts');
+
+  expect(source).toContain("if (!['all', 'multi', 'single'].includes(branchScope))");
+  expect(source).toContain("if (session.branchScope === 'all')");
+  expect(source).toContain('expect(session.branchIds).toEqual([]);');
+  expect(source).toContain('expect(session.branchIds).toContain(config.expectedBranchId);');
+  expect(source).not.toContain('expect(requester.branchIds).toContain(config.expectedBranchId);');
+});
