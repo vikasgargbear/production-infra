@@ -26,7 +26,7 @@ RESOLVER_SIGNATURE = (
 )
 INVENTORY_SIGNATURE = "erp_trade_commands.assert_inventory_document(uuid,uuid)"
 RESOLVER_CURRENT_SHA256 = (
-    "1c3e7b3c0be0312bf18eda68ae177604a960734ffe87a6b56a8d6331068e21e1"
+    "7d78e0792ce2c55237d806d7f021e0a214bf49456929629bee1f452a8780918f"
 )
 INVENTORY_CURRENT_SHA256 = (
     "7ded2c77a3a18d3ef9ca37d5366c16656c56ed44b12929e47fda3ba3f7be5a5b"
@@ -71,8 +71,13 @@ def _exercise_resolver(cursor) -> None:
     current = _definition(cursor, RESOLVER_SIGNATURE)
     assert _sha256(current) == RESOLVER_CURRENT_SHA256
 
-    # Exact current definitions are the only idempotent no-op.
-    cursor.execute(UOM_MIGRATION)
+    # The immutable older migration must not mistake a forward chronology
+    # definition for its own historical idempotent no-op.
+    _expect_drift_rejection(
+        cursor,
+        UOM_MIGRATION,
+        "sales-invoice FEFO UOM source differs from the reviewed migration precondition",
+    )
     assert _sha256(_definition(cursor, RESOLVER_SIGNATURE)) == RESOLVER_CURRENT_SHA256
 
     old_requested = _migration_literal(UOM_MIGRATION, "old_requested", "old")
