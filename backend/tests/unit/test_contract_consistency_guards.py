@@ -7,11 +7,6 @@ from uuid import UUID
 import pytest
 from fastapi import HTTPException
 
-from app.api.services.document_number_service import (
-    DOCUMENT_CONFIGS,
-    DocumentNumberService,
-)
-from app.api.services.inventory.inventory_service import InventoryService
 from app.main import app
 from app.core.auth import org_context
 from app.core.auth.org_context import BranchScope
@@ -59,69 +54,6 @@ def _load_audit():
     return module
 
 
-def test_document_number_validator_matches_generated_format():
-    assert DocumentNumberService.validate_format("RCT-202608190001", "receipt")
-    assert not DocumentNumberService.validate_format("RCT-2608190001", "receipt")
-    assert not DocumentNumberService.validate_format("PAY-202608190001", "receipt")
-
-
-def test_document_number_generation_requires_tenant_before_database_access():
-    class Database:
-        def execute(self, *_args, **_kwargs):
-            pytest.fail("database must not be accessed without an organization")
-
-    with pytest.raises(ValueError, match="org_id is required"):
-        DocumentNumberService.generate_number(Database(), "receipt", "")
-
-
-def test_document_number_registry_has_only_owned_types_and_canonical_targets():
-    retired_types = {
-        "purchase", "quotation", "stock_adjustment", "stock_count", "scheme",
-        "stock_receipt", "stock_issue", "writeoff", "gst_filing",
-        "adjustment", "credit_note", "debit_note", "purchase_return",
-        "sales_return", "stock_transfer",
-    }
-    assert retired_types.isdisjoint(DOCUMENT_CONFIGS)
-    assert set(DOCUMENT_CONFIGS) == {"grn", "payment", "receipt"}
-    assert DOCUMENT_CONFIGS["receipt"]["table"] == "financial.payments"
-    assert DOCUMENT_CONFIGS["receipt"]["column"] == "payment_number"
-
-
-def test_stock_transfer_persists_same_reference_on_both_movements(monkeypatch):
-    movements = []
-
-    monkeypatch.setattr(
-        InventoryService,
-        "get_location_wise_stock",
-        lambda *_args: {"quantity_available": 10},
-    )
-
-    def record_movement(_db, movement):
-        movements.append(movement)
-        return SimpleNamespace(movement_id=len(movements))
-
-    monkeypatch.setattr(InventoryService, "record_stock_movement", record_movement)
-
-    result = InventoryService.record_stock_transfer(
-        db=object(),
-        org_id=UUID("e78d6777-35f6-4b19-994f-caaede2f021a"),
-        product_id=1,
-        batch_id=2,
-        quantity=3,
-        source_location_id=10,
-        destination_location_id=11,
-        created_by=8,
-        reference_number="ST-202608190001",
-    )
-
-    assert result["out_movement_id"] == 1
-    assert result["in_movement_id"] == 2
-    assert [movement.reference_number for movement in movements] == [
-        "ST-202608190001",
-        "ST-202608190001",
-    ]
-
-
 def test_purchase_service_barrels_do_not_eagerly_import_legacy_services():
     import app.api.services.purchase as purchase_services
 
@@ -132,29 +64,13 @@ def test_purchase_service_barrels_do_not_eagerly_import_legacy_services():
     retired = (
         "backend/app/api/services/purchase/purchase_service.py",
         "backend/app/api/services/purchase/grn_service.py",
+        "backend/app/api/services/purchase/grn/grn_service.py",
+        "backend/app/api/services/purchase/grn/grn_repository.py",
         "backend/app/api/services/purchase/supplier_invoice_service.py",
         "backend/app/api/services/purchase/supplier_invoice/supplier_invoice_service.py",
         "backend/app/api/services/purchase/supplier_invoice/supplier_invoice_repository.py",
     )
     assert all(not (REPOSITORY_ROOT / path).exists() for path in retired)
-
-
-def test_standalone_document_number_reservation_source_is_retired():
-    retired_route_functions = {
-        "backend/app/api/routes/sales/invoices/routes.py": "generate_invoice_number",
-        "backend/app/api/routes/sales/orders/routes.py": "generate_sales_order_number",
-        "backend/app/api/routes/purchase/grn.py": "generate_grn_number",
-        "backend/app/api/routes/finance/payments/routes.py": "generate_receipt_number",
-        "backend/app/api/routes/finance/journal/routes.py": "generate_journal_number",
-        "backend/app/api/routes/finance/expenses/routes.py": "generate_claim_number",
-    }
-
-    assert not (REPOSITORY_ROOT / "backend/app/api/routes/documents.py").exists()
-    assert not hasattr(DocumentNumberService, "reserve_number")
-    for relative_path, function_name in retired_route_functions.items():
-        path = REPOSITORY_ROOT / relative_path
-        source = path.read_text() if path.exists() else ""
-        assert f"def {function_name}(" not in source
 
 
 def test_canonical_document_allocation_is_tenant_scoped_and_idempotent():

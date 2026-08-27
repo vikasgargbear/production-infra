@@ -1,5 +1,6 @@
 """Fail-closed checks for features intentionally outside the wholesale runtime."""
 
+import json
 from pathlib import Path
 
 from app.api.routes import canonical_erp_reads
@@ -39,13 +40,6 @@ def test_deferred_backend_modules_cannot_be_imported_accidentally() -> None:
     assert [path for path in deferred_paths if (BACKEND_ROOT / path).exists()] == []
 
 
-def test_deferred_document_number_types_are_absent() -> None:
-    source = (BACKEND_ROOT / "app/api/services/document_number_service.py").read_text()
-
-    assert '"payroll_run"' not in source
-    assert '"salary_slip"' not in source
-
-
 def test_deferred_compliance_tables_are_not_queried_by_runtime_routes() -> None:
     assert not (BACKEND_ROOT / "app/api/routes/compliance/compliance.py").exists()
 
@@ -69,20 +63,71 @@ def test_zero_consumer_backend_archaeology_stays_retired() -> None:
         "app/api/routes/sales/conversions/routes.py",
         "app/api/services/dashboard_service.py",
         "app/api/services/email/email_service.py",
+        "app/api/services/document_number_service.py",
+        "app/api/services/finance/allocation/service.py",
         "app/api/services/finance/expense",
+        "app/api/services/finance/journal/service.py",
         "app/api/services/finance/outstanding",
+        "app/api/services/finance/payment/service.py",
         "app/api/services/finance/tax",
+        "app/api/services/inventory/inventory_service.py",
+        "app/api/services/master/bank_account_service.py",
         "app/api/services/master/department_branch_service.py",
         "app/api/services/master/employee",
         "app/api/services/purchase/shared",
+        "app/api/services/purchase/grn/grn_service.py",
+        "app/api/services/purchase/grn/grn_repository.py",
         "app/api/services/purchase/supplier_invoice",
         "app/api/services/sales/challan",
         "app/api/services/sales/conversion",
         "app/api/services/sales/shared",
         "app/api/services/settings/settings_service.py",
+        "app/core/idempotency.py",
     )
 
     assert [path for path in retired_paths if (BACKEND_ROOT / path).exists()] == []
+
+
+def test_retired_mutation_services_have_canonical_command_owners() -> None:
+    matrix_path = (
+        BACKEND_ROOT.parent
+        / "docs/architecture/core-operation-authority-matrix.json"
+    )
+    operations = {
+        operation["id"]: operation
+        for operation in json.loads(matrix_path.read_text(encoding="utf-8"))["operations"]
+    }
+    replacements = {
+        "goods_receipt",
+        "customer_receipt",
+        "supplier_payment",
+        "supplier_advance",
+        "inventory_transfer",
+        "inventory_adjustment",
+        "inventory_destruction",
+        "bank_reconciliation",
+    }
+
+    for operation_id in replacements:
+        operation = operations[operation_id]
+        assert operation["operation_key"].endswith(".prepare")
+        assert operation["mcp_prepare_tool"].startswith("erp_")
+        assert operation["rest_readback"].startswith("/api/")
+        assert operation["prepare_sql"].startswith("erp_")
+        assert operation["execute_sql"]
+        assert operation["authoritative_tables"]
+
+
+def test_retired_numbering_and_bank_reads_have_canonical_owners() -> None:
+    core_commands = (
+        BACKEND_ROOT.parent
+        / "database/canonical/commands_core/generate_core_commands_contract.py"
+    ).read_text(encoding="utf-8")
+    paths = app.openapi()["paths"]
+
+    assert '"allocate_document_number"' in core_commands
+    assert "core.idempotency_keys" in core_commands
+    assert set(paths["/api/bank-accounts"]) == {"get"}
 
 
 def test_retired_audit_and_settings_routes_are_absent() -> None:
