@@ -22,7 +22,6 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, NamedTuple
 from uuid import NAMESPACE_URL, UUID, uuid5
-from zoneinfo import ZoneInfo
 
 import jwt
 import pdfplumber
@@ -167,9 +166,6 @@ IDS = {
     "expense_claim_expense_account": "d3210000-0000-7000-8000-000000000014",
     "expense_claim_reimbursement_account": "d3210000-0000-7000-8000-000000000015",
 }
-INDIA_BUSINESS_DATE = datetime.now(timezone.utc).astimezone(
-    ZoneInfo("Asia/Kolkata")
-).date()
 DEMO_EXPENSE_RECEIPT_RETENTION_MONTHS = Decimal("84")
 DEMO_RUN_ID = os.getenv("GITHUB_RUN_ID", "local")
 DEMO_RUN_ATTEMPT = os.getenv("GITHUB_RUN_ATTEMPT", "1")
@@ -187,7 +183,10 @@ IDS["live18_cycle_count_evidence"] = (
 IDS["cycle_count_evidence"] = str(
     uuid5(
         NAMESPACE_URL,
-        f"canonical-staging-cycle-count:{IDS['org']}:{DEMO_RUN_ID}:{INDIA_BUSINESS_DATE.isoformat()}",
+        (
+            f"canonical-staging-cycle-count:{IDS['org']}:"
+            f"{DEMO_RUN_ID}:{DEMO_RUN_ATTEMPT}"
+        ),
     )
 )
 for resource_key in ("expense_receipt_evidence",):
@@ -502,6 +501,32 @@ def demo_ui_fixture_gstin(state_code: str, label: str) -> str:
         total += product // 36 + product % 36
         factor = 1 if factor == 2 else 2
     return f"{body}{alphabet[(36 - total % 36) % 36]}"
+
+
+def require_business_date(value: date) -> date:
+    """Require one database-resolved organization-local date for demo facts."""
+
+    if not isinstance(value, date) or isinstance(value, datetime):
+        raise ValueError(
+            "canonical demo requires the authoritative organization business date"
+        )
+    return value
+
+
+def fiscal_year_start(business_date: date) -> date:
+    business_date = require_business_date(business_date)
+    year = business_date.year if business_date.month >= 4 else business_date.year - 1
+    return date(year, 4, 1)
+
+
+def monthly_period(business_date: date) -> tuple[date, date, date]:
+    business_date = require_business_date(business_date)
+    period_start = business_date.replace(day=1)
+    period_end = (
+        (period_start.replace(day=28) + timedelta(days=4)).replace(day=1)
+        - timedelta(days=1)
+    )
+    return period_start, period_end, period_end + timedelta(days=20)
 
 
 for resource_key in (
@@ -1454,7 +1479,7 @@ def adjustment_dataset_bytes(connection) -> bytes:
             "deadline_days": "",
             "portal_evidence_required": False,
             "tax_effect": "statutory",
-            "effective_from": SOURCE_RETRIEVED_ON.isoformat(),
+            "effective_from": ADJUSTMENT_SOURCE_PUBLICATION_DATE.isoformat(),
             "effective_to": "",
         },
         {
@@ -1469,7 +1494,7 @@ def adjustment_dataset_bytes(connection) -> bytes:
             "deadline_days": "",
             "portal_evidence_required": True,
             "tax_effect": "statutory",
-            "effective_from": SOURCE_RETRIEVED_ON.isoformat(),
+            "effective_from": ADJUSTMENT_SOURCE_PUBLICATION_DATE.isoformat(),
             "effective_to": "",
         },
     ]
@@ -1849,7 +1874,8 @@ def reconcile_demo_gstr1_reporting_authority(
     )
 
 
-def seed_business_master(connection) -> None:
+def seed_business_master(connection, *, business_date: date) -> None:
+    business_date = require_business_date(business_date)
     with connection.cursor() as cursor:
         cursor.execute('SET LOCAL ROLE "erp_migration_owner"')
         cursor.execute("SET CONSTRAINTS ALL DEFERRED")
@@ -1943,7 +1969,7 @@ def seed_business_master(connection) -> None:
             """,
             (
                 IDS["org"], IDS["customer_address"], IDS["customer_party"],
-                SOURCE_RETRIEVED_ON, IDS["reviewer_membership"], IDS["reviewer_membership"],
+                business_date, IDS["reviewer_membership"], IDS["reviewer_membership"],
             ),
         )
         cursor.executemany(
@@ -1960,7 +1986,7 @@ def seed_business_master(connection) -> None:
             [
                 (
                     IDS["org"], address_id, party_id, line1,
-                    SOURCE_RETRIEVED_ON, IDS["reviewer_membership"],
+                    business_date, IDS["reviewer_membership"],
                     IDS["reviewer_membership"],
                 )
                 for address_id, party_id, line1 in variant_addresses
@@ -1980,7 +2006,7 @@ def seed_business_master(connection) -> None:
             """,
             (
                 IDS["org"], IDS["customer_gstin"], IDS["customer_party"],
-                SOURCE_RETRIEVED_ON, IDS["reviewer_membership"], IDS["reviewer_membership"],
+                business_date, IDS["reviewer_membership"], IDS["reviewer_membership"],
             ),
         )
         cursor.executemany(
@@ -2000,14 +2026,14 @@ def seed_business_master(connection) -> None:
                     IDS["org"], IDS["interstate_customer_gstin"],
                     IDS["interstate_customer_party"], INTERSTATE_CUSTOMER_GSTIN,
                     f"Synthetic Interstate Customer {DEMO_UI_FIXTURE_ID}",
-                    "regular", SOURCE_RETRIEVED_ON,
+                    "regular", business_date,
                     IDS["reviewer_membership"], IDS["reviewer_membership"],
                 ),
                 (
                     IDS["org"], IDS["sez_customer_gstin"],
                     IDS["sez_customer_party"], SEZ_CUSTOMER_GSTIN,
                     f"Synthetic SEZ Customer {DEMO_UI_FIXTURE_ID}",
-                    "sez_unit", SOURCE_RETRIEVED_ON,
+                    "sez_unit", business_date,
                     IDS["reviewer_membership"], IDS["reviewer_membership"],
                 ),
             ] if LIVE23_VARIANTS_REQUIRED else [],
@@ -2119,7 +2145,7 @@ def seed_business_master(connection) -> None:
             """,
             (
                 IDS["org"], IDS["uom_conversion"], IDS["product"],
-                SOURCE_RETRIEVED_ON, IDS["reviewer_membership"],
+                business_date, IDS["reviewer_membership"],
             ),
         )
         cursor.execute(
@@ -2132,7 +2158,7 @@ def seed_business_master(connection) -> None:
             """,
             (
                 IDS["org"], IDS["count_uom_conversion"], IDS["product"],
-                SOURCE_RETRIEVED_ON, IDS["reviewer_membership"],
+                business_date, IDS["reviewer_membership"],
             ),
         )
         cursor.execute(
@@ -2142,17 +2168,24 @@ def seed_business_master(connection) -> None:
                 prefix, suffix, padding, next_value, status,
                 created_by_membership_id, updated_by_membership_id
             ) VALUES (
-                %s, %s, %s, 'sales_order', DATE '2026-04-01',
+                %s, %s, %s, 'sales_order', %s,
                 'DEMO-SO-', '', 6, 1, 'active', %s, %s
             ) ON CONFLICT (org_id, id) DO NOTHING
             """,
-            (IDS["org"], IDS["sales_order_sequence"], IDS["branch"], IDS["reviewer_membership"], IDS["reviewer_membership"]),
+            (
+                IDS["org"], IDS["sales_order_sequence"], IDS["branch"],
+                fiscal_year_start(business_date), IDS["reviewer_membership"],
+                IDS["reviewer_membership"],
+            ),
         )
 
 
-def reconcile_reviewed_expense_receipt_metadata(cursor, receipt_bytes: bytes) -> str:
+def reconcile_reviewed_expense_receipt_metadata(
+    cursor, receipt_bytes: bytes, *, business_date: date
+) -> str:
     """Create or reuse the one content-addressed receipt metadata row."""
 
+    business_date = require_business_date(business_date)
     receipt_sha256 = hashlib.sha256(receipt_bytes).digest()
     requested_id = IDS["expense_receipt_evidence"]
     cursor.execute(
@@ -2221,8 +2254,8 @@ def reconcile_reviewed_expense_receipt_metadata(cursor, receipt_bytes: bytes) ->
             f"LIVE18-EXPENSE-{DEMO_RUN_ID}-{DEMO_RUN_ATTEMPT}.pdf",
             len(receipt_bytes),
             psycopg2.Binary(receipt_sha256),
-            INDIA_BUSINESS_DATE,
-            INDIA_BUSINESS_DATE + timedelta(days=3650),
+            business_date,
+            business_date + timedelta(days=3650),
             IDS["operator_membership"],
         ),
     )
@@ -2232,9 +2265,12 @@ def reconcile_reviewed_expense_receipt_metadata(cursor, receipt_bytes: bytes) ->
 def seed_end_to_end_master(
     connection,
     *,
+    business_date: date,
     expense_receipt_bytes: bytes | None = None,
 ) -> None:
     """Add the synthetic supplier, tax, inventory, banking, and ledger facts."""
+
+    business_date = require_business_date(business_date)
 
     with connection.cursor() as cursor:
         cursor.execute('SET LOCAL ROLE "erp_migration_owner"')
@@ -2253,28 +2289,28 @@ def seed_end_to_end_master(
                 IDS["tax_profile_evidence"],
                 "supplier_tax_profile",
                 "supplier-pan-verification.json",
-                SOURCE_RETRIEVED_ON,
+                business_date,
                 "supplier_tax_profile",
             ),
             (
                 IDS["fiscal_fact_evidence"],
                 "organization_fiscal_tax_profile",
-                "fy-2026-tax-facts.json",
-                SOURCE_RETRIEVED_ON,
+                f"fy-{fiscal_year_start(business_date).year}-tax-facts.json",
+                business_date,
                 "organization_fiscal_tax_profile",
             ),
             (
                 IDS["cycle_count_evidence"],
                 "inventory_cycle_count_sheet",
                 f"cycle-count-sheet-{DEMO_RUN_ID}.json",
-                INDIA_BUSINESS_DATE,
+                business_date,
                 f"inventory_cycle_count_sheet:{DEMO_RUN_ID}",
             ),
             (
                 IDS["recipient_itc_evidence"],
                 "recipient_itc_reversal",
                 "recipient-itc-reversal.json",
-                SOURCE_RETRIEVED_ON,
+                business_date,
                 "recipient_itc_reversal",
             ),
         )
@@ -2294,13 +2330,16 @@ def seed_end_to_end_master(
                 (
                     IDS["org"], attachment_id, f"demo/{filename}", filename,
                     f"canonical-demo:{digest_key}", evidence_kind,
-                    document_date, date(2034, 8, 20), IDS["reviewer_membership"],
+                    document_date, business_date + timedelta(days=3650),
+                    IDS["reviewer_membership"],
                 )
                 for attachment_id, evidence_kind, filename, document_date, digest_key in attachments
             ],
         )
         if expense_receipt_bytes is not None:
-            reconcile_reviewed_expense_receipt_metadata(cursor, expense_receipt_bytes)
+            reconcile_reviewed_expense_receipt_metadata(
+                cursor, expense_receipt_bytes, business_date=business_date
+            )
 
         cursor.execute(
             """
@@ -2352,7 +2391,7 @@ def seed_end_to_end_master(
             """,
             (
                 IDS["org"], IDS["supplier_address"], IDS["supplier_party"],
-                SOURCE_RETRIEVED_ON, IDS["reviewer_membership"], IDS["reviewer_membership"],
+                business_date, IDS["reviewer_membership"], IDS["reviewer_membership"],
             ),
         )
         cursor.execute(
@@ -2369,7 +2408,7 @@ def seed_end_to_end_master(
             """,
             (
                 IDS["org"], IDS["supplier_gstin"], IDS["supplier_party"],
-                SOURCE_RETRIEVED_ON, IDS["reviewer_membership"], IDS["reviewer_membership"],
+                business_date, IDS["reviewer_membership"], IDS["reviewer_membership"],
             ),
         )
         cursor.execute(
@@ -2601,7 +2640,7 @@ def seed_end_to_end_master(
             ) ON CONFLICT (org_id,id) DO NOTHING
             """,
             (
-                IDS["org"], IDS["org_gst_registration"], SOURCE_RETRIEVED_ON,
+                IDS["org"], IDS["org_gst_registration"], business_date,
                 IDS["reviewer_membership"], IDS["reviewer_membership"],
             ),
         )
@@ -2615,7 +2654,7 @@ def seed_end_to_end_master(
             """,
             (
                 IDS["org"], IDS["org_gst_registration"], IDS["branch"],
-                SOURCE_RETRIEVED_ON, IDS["reviewer_membership"],
+                business_date, IDS["reviewer_membership"],
             ),
         )
         cursor.executemany(
@@ -2652,14 +2691,15 @@ def seed_end_to_end_master(
             INSERT INTO core.document_sequences (
                 org_id,id,branch_id,document_type,fiscal_year_start,prefix,suffix,
                 padding,next_value,status,created_by_membership_id,updated_by_membership_id
-            ) VALUES (%s,%s,%s,%s,DATE '2026-04-01',%s,'',6,1,'active',%s,%s)
+            ) VALUES (%s,%s,%s,%s,%s,%s,'',6,1,'active',%s,%s)
             ON CONFLICT DO NOTHING
             """,
             [
                 (
                     IDS["org"],
                     str(uuid5(NAMESPACE_URL, f"aasopharma-demo-sequence:{document_type}")),
-                    IDS["branch"], document_type, prefix,
+                    IDS["branch"], document_type, fiscal_year_start(business_date),
+                    prefix,
                     IDS["reviewer_membership"], IDS["reviewer_membership"],
                 )
                 for document_type, prefix in sorted(sequence_types.items())
@@ -2667,14 +2707,15 @@ def seed_end_to_end_master(
         )
 
 
-def verify_fiscal_tax_fact(connection) -> None:
+def verify_fiscal_tax_fact(connection, *, business_date: date) -> None:
     """Create the fiscal fact through its maker-checker command boundary."""
 
+    fiscal_start_year = fiscal_year_start(business_date).year
     key_bytes = b"canonical-demo-fiscal-tax-fact-v1"
     request_bytes = json.dumps(
         {
             "fact_id": IDS["fiscal_tax_fact"],
-            "fiscal_year_start_year": 2026,
+            "fiscal_year_start_year": fiscal_start_year,
             "organization_person_type": "company",
             "prior_fiscal_year_turnover": "50000000.00",
             "gst_tds_notified_deductor": False,
@@ -2692,13 +2733,14 @@ def verify_fiscal_tax_fact(connection) -> None:
         cursor.execute(
             """
             SELECT erp_compliance_commands.verify_organization_fiscal_tax_fact(
-                %s::uuid,%s::uuid,%s::uuid,2026::smallint,'company'::varchar,
+                %s::uuid,%s::uuid,%s::uuid,%s::smallint,'company'::varchar,
                 50000000::numeric,false,NULL::varchar,%s::uuid,%s::bytea,%s::bytea,
                 transaction_timestamp() + interval '30 minutes'
             )
             """,
             (
                 IDS["org"], IDS["fiscal_tax_fact"], IDS["operator_membership"],
+                fiscal_start_year,
                 IDS["fiscal_fact_evidence"],
                 psycopg2.Binary(hashlib.sha256(key_bytes).digest()),
                 psycopg2.Binary(hashlib.sha256(request_bytes).digest()),
@@ -3128,8 +3170,12 @@ def exercise_action(
     return evidence
 
 
-def selected_customer_delivery_address_row_version(connection) -> int:
+def selected_customer_delivery_address_row_version(
+    connection, *, business_date: date
+) -> int:
     """Resolve the exact active delivery-address version used by sales writes."""
+
+    business_date = require_business_date(business_date)
 
     with connection.cursor() as cursor:
         cursor.execute(
@@ -3150,8 +3196,8 @@ def selected_customer_delivery_address_row_version(connection) -> int:
                 IDS["org"],
                 IDS["customer_address"],
                 IDS["customer_party"],
-                SOURCE_RETRIEVED_ON,
-                SOURCE_RETRIEVED_ON,
+                business_date,
+                business_date,
             ),
         )
         rows = cursor.fetchall()
@@ -3221,7 +3267,8 @@ def sales_order_payload(
     }
 
 
-def purchase_order_payload() -> dict[str, Any]:
+def purchase_order_payload(*, business_date: date) -> dict[str, Any]:
+    business_date = require_business_date(business_date)
     no_discount = {
         "line_discount_kind": "none",
         "line_discount_basis": "taxable_value",
@@ -3230,8 +3277,8 @@ def purchase_order_payload() -> dict[str, Any]:
     return {
         "idempotency_key": f"demo-purchase-order-{os.getenv('GITHUB_RUN_ID', 'local')}",
         "branch_id": IDS["branch"],
-        "order_date": SOURCE_RETRIEVED_ON.isoformat(),
-        "expected_on": (SOURCE_RETRIEVED_ON + timedelta(days=5)).isoformat(),
+        "order_date": business_date.isoformat(),
+        "expected_on": (business_date + timedelta(days=5)).isoformat(),
         "supplier_account_id": IDS["supplier_account"],
         "tax_charge_mechanism": "normal",
         "document_discount": {
@@ -3313,8 +3360,8 @@ def live18_supplier_invoice_purchase_order_payload(
     }
 
 
-def live18_business_date(connection) -> date:
-    """Resolve the same organization-local date used by the browser compiler."""
+def organization_business_date(connection) -> date:
+    """Resolve the canonical organization-local business date once per run."""
 
     with connection.cursor() as cursor:
         cursor.execute(
@@ -3322,16 +3369,11 @@ def live18_business_date(connection) -> date:
             (IDS["reviewer_auth_user"], IDS["org"]),
         )
         cursor.execute(
-            """
-            SELECT (transaction_timestamp() AT TIME ZONE organization.timezone)::date
-              FROM core.organizations organization
-             WHERE organization.id=%s AND organization.status='active'
-            """,
-            (IDS["org"],),
+            "SELECT erp_core_commands.current_organization_business_date()",
         )
         rows = cursor.fetchall()
     if len(rows) != 1 or not isinstance(rows[0][0], date):
-        raise RuntimeError("Live18 organization-local business date is unavailable")
+        raise RuntimeError("canonical organization-local business date is unavailable")
     return rows[0][0]
 
 
@@ -3374,11 +3416,17 @@ def reconcile_purchase_order(
         return result
 
 
-def supplier_advance_payload(purchase_order_id: str, purchase_order_line_id: str) -> dict[str, Any]:
+def supplier_advance_payload(
+    purchase_order_id: str,
+    purchase_order_line_id: str,
+    *,
+    business_date: date,
+) -> dict[str, Any]:
+    business_date = require_business_date(business_date)
     return {
         "idempotency_key": f"demo-supplier-advance-{os.getenv('GITHUB_RUN_ID', 'local')}",
         "branch_id": IDS["branch"],
-        "payment_date": SOURCE_RETRIEVED_ON.isoformat(),
+        "payment_date": business_date.isoformat(),
         "supplier_account_id": IDS["supplier_account"],
         "purchase_order_id": purchase_order_id,
         "settlement_account_id": IDS["bank_ledger"],
@@ -3392,7 +3440,13 @@ def supplier_advance_payload(purchase_order_id: str, purchase_order_line_id: str
     }
 
 
-def goods_receipt_payload(purchase_order_id: str, purchase_order_line_id: str) -> dict[str, Any]:
+def goods_receipt_payload(
+    purchase_order_id: str,
+    purchase_order_line_id: str,
+    *,
+    business_date: date,
+) -> dict[str, Any]:
+    business_date = require_business_date(business_date)
     received_at = datetime.now(timezone.utc).replace(microsecond=0)
     return {
         "idempotency_key": f"demo-goods-receipt-{os.getenv('GITHUB_RUN_ID', 'local')}",
@@ -3401,7 +3455,7 @@ def goods_receipt_payload(purchase_order_id: str, purchase_order_line_id: str) -
         "purchase_order_id": purchase_order_id,
         "supplier_account_id": IDS["supplier_account"],
         "supplier_challan_number": f"DEMO-CH-{os.getenv('GITHUB_RUN_ID', 'local')}",
-        "supplier_challan_date": SOURCE_RETRIEVED_ON.isoformat(),
+        "supplier_challan_date": business_date.isoformat(),
         "lines": [
             {
                 "purchase_order_line_id": purchase_order_line_id,
@@ -3425,7 +3479,11 @@ def goods_receipt_payload(purchase_order_id: str, purchase_order_line_id: str) -
     }
 
 
-def seed_supplier_invoice_portal_evidence(connection) -> dict[str, str]:
+def seed_supplier_invoice_portal_evidence(
+    connection, *, business_date: date
+) -> dict[str, str]:
+    business_date = require_business_date(business_date)
+    period_start, period_end, due_date = monthly_period(business_date)
     supplier_invoice_number = f"DEMO-SUP-{os.getenv('GITHUB_RUN_ID', 'local')}"
     supplier_credit_note_number = f"DEMO-SUP-CN-{os.getenv('GITHUB_RUN_ID', 'local')}"
     source_attachment_id = demo_run_uuid("gstr2b-source-attachment")
@@ -3459,7 +3517,8 @@ def seed_supplier_invoice_portal_evidence(connection) -> dict[str, str]:
                 IDS["org"], source_attachment_id,
                 f"demo/{os.getenv('GITHUB_RUN_ID', 'local')}/synthetic-gstr2b.json",
                 f"synthetic-gstr2b:{supplier_invoice_number}",
-                SOURCE_RETRIEVED_ON, date(2034, 8, 20), IDS["reviewer_membership"],
+                business_date, business_date + timedelta(days=3650),
+                IDS["reviewer_membership"],
             ),
         )
         cursor.execute(
@@ -3468,13 +3527,14 @@ def seed_supplier_invoice_portal_evidence(connection) -> dict[str, str]:
                 org_id,id,registration_id,period_start,period_end,due_date,
                 period_kind,status,created_by_membership_id,updated_by_membership_id
             ) VALUES (
-                %s,%s,%s,DATE '2026-08-01',DATE '2026-08-31',DATE '2026-09-20',
+                %s,%s,%s,%s,%s,%s,
                 'monthly','open',%s,%s
             ) ON CONFLICT (org_id,registration_id,period_start,period_end) DO NOTHING
             RETURNING id
             """,
             (
                 IDS["org"], return_period_id, IDS["org_gst_registration"],
+                period_start, period_end, due_date,
                 IDS["reviewer_membership"], IDS["reviewer_membership"],
             ),
         )
@@ -3485,10 +3545,13 @@ def seed_supplier_invoice_portal_evidence(connection) -> dict[str, str]:
                 SELECT id
                   FROM tax.return_periods
                  WHERE org_id=%s AND registration_id=%s
-                   AND period_start=DATE '2026-08-01'
-                   AND period_end=DATE '2026-08-31'
+                   AND period_start=%s
+                   AND period_end=%s
                 """,
-                (IDS["org"], IDS["org_gst_registration"]),
+                (
+                    IDS["org"], IDS["org_gst_registration"],
+                    period_start, period_end,
+                ),
             )
             inserted_period = cursor.fetchone()
         if inserted_period is None:
@@ -3507,7 +3570,7 @@ def seed_supplier_invoice_portal_evidence(connection) -> dict[str, str]:
             """,
             (
                 IDS["org"], portal_document_id, IDS["org_gst_registration"],
-                return_period_id, SOURCE_RETRIEVED_ON, source_attachment_id,
+                return_period_id, business_date, source_attachment_id,
                 f"synthetic-gstr2b:{supplier_invoice_number}", IDS["reviewer_membership"],
             ),
         )
@@ -3526,7 +3589,7 @@ def seed_supplier_invoice_portal_evidence(connection) -> dict[str, str]:
                             "supplier_gstin": "27DEMOC5678D1Z5",
                             "counterparty_name": "Synthetic Medicines Distributor Private Limited",
                             "invoice_number": supplier_invoice_number,
-                            "invoice_date": SOURCE_RETRIEVED_ON.isoformat(),
+                            "invoice_date": business_date.isoformat(),
                             "document_type": "invoice",
                             "place_of_supply_state_code": "27",
                             "taxable_amount": "5000.00",
@@ -3546,7 +3609,7 @@ def seed_supplier_invoice_portal_evidence(connection) -> dict[str, str]:
                             "supplier_gstin": "27DEMOC5678D1Z5",
                             "counterparty_name": "Synthetic Medicines Distributor Private Limited",
                             "invoice_number": supplier_credit_note_number,
-                            "invoice_date": SOURCE_RETRIEVED_ON.isoformat(),
+                            "invoice_date": business_date.isoformat(),
                             "document_type": "credit_note",
                             "place_of_supply_state_code": "27",
                             "taxable_amount": "1000.00",
@@ -3889,12 +3952,15 @@ def supplier_invoice_payload(
     goods_receipt_id: str,
     goods_receipt_line_id: str,
     portal_evidence: dict[str, str],
+    *,
+    business_date: date,
 ) -> dict[str, Any]:
+    business_date = require_business_date(business_date)
     return {
         "idempotency_key": f"demo-supplier-invoice-{os.getenv('GITHUB_RUN_ID', 'local')}",
         "branch_id": IDS["branch"],
-        "invoice_date": SOURCE_RETRIEVED_ON.isoformat(),
-        "received_date": SOURCE_RETRIEVED_ON.isoformat(),
+        "invoice_date": business_date.isoformat(),
+        "received_date": business_date.isoformat(),
         "supplier_account_id": IDS["supplier_account"],
         "supplier_tax_registration_id": IDS["supplier_gstin"],
         "supplier_invoice_number": portal_evidence["supplier_invoice_number"],
@@ -4098,21 +4164,17 @@ def release_received_batch(connection, goods_receipt_id: str, batch_id: str) -> 
 
 
 def seed_inventory_destruction_ui_fixture(
-    connection, batch_id: str
+    connection, batch_id: str, *, business_date: date
 ) -> dict[str, Any]:
     """Seed only governed authority around an exact returned-stock lineage."""
 
-    period_start = INDIA_BUSINESS_DATE.replace(day=1)
-    period_end = (
-        (period_start.replace(day=28) + timedelta(days=4)).replace(day=1)
-        - timedelta(days=1)
-    )
-    due_date = period_end + timedelta(days=20)
+    business_date = require_business_date(business_date)
+    period_start, period_end, due_date = monthly_period(business_date)
     certificate_digest = (
-        f"destruction-certificate:{DEMO_UI_FIXTURE_ID}:{batch_id}:{INDIA_BUSINESS_DATE}"
+        f"destruction-certificate:{DEMO_UI_FIXTURE_ID}:{batch_id}:{business_date}"
     )
     reversal_digest = (
-        f"section-17-5-h-reversal:{DEMO_UI_FIXTURE_ID}:{batch_id}:{INDIA_BUSINESS_DATE}"
+        f"section-17-5-h-reversal:{DEMO_UI_FIXTURE_ID}:{batch_id}:{business_date}"
     )
     with connection.cursor() as cursor:
         cursor.execute('SET LOCAL ROLE "erp_migration_owner"')
@@ -4211,8 +4273,8 @@ def seed_inventory_destruction_ui_fixture(
                     IDS["org"], attachment_id,
                     f"demo/{DEMO_UI_FIXTURE_ID}/{filename}", filename,
                     "application/pdf" if filename.endswith(".pdf") else "application/json",
-                    digest_text, evidence_kind, INDIA_BUSINESS_DATE,
-                    INDIA_BUSINESS_DATE + timedelta(days=3650),
+                    digest_text, evidence_kind, business_date,
+                    business_date + timedelta(days=3650),
                     IDS["reviewer_membership"],
                 ),
             )
@@ -4292,7 +4354,7 @@ def seed_inventory_destruction_ui_fixture(
             "return_period_id": return_period_id,
             "gstr3b_return_id": str(filing[0]),
             "itc_reversal_rule_version_id": IDS["destruction_itc_rule_version"],
-            "business_date": INDIA_BUSINESS_DATE.isoformat(),
+            "business_date": business_date.isoformat(),
         }
 
 
@@ -4348,11 +4410,14 @@ def reconcile_supplier_invoice(
         return result
 
 
-def supplier_payment_payload(open_item_id: str) -> dict[str, Any]:
+def supplier_payment_payload(
+    open_item_id: str, *, business_date: date
+) -> dict[str, Any]:
+    business_date = require_business_date(business_date)
     return {
         "idempotency_key": f"demo-supplier-payment-{os.getenv('GITHUB_RUN_ID', 'local')}",
         "branch_id": IDS["branch"],
-        "payment_date": SOURCE_RETRIEVED_ON.isoformat(),
+        "payment_date": business_date.isoformat(),
         "supplier_account_id": IDS["supplier_account"],
         "settlement_account_id": IDS["bank_ledger"],
         "bank_account_id": IDS["bank_account"],
@@ -4888,7 +4953,10 @@ def reconcile(
         return result
 
 
-def resolve_fefo_dispatch_allocations(connection) -> list[dict[str, str]]:
+def resolve_fefo_dispatch_allocations(
+    connection, *, business_date: date
+) -> list[dict[str, str]]:
+    business_date = require_business_date(business_date)
     billed_remaining = Decimal("12")
     free_remaining = Decimal("2")
     allocations: list[dict[str, str]] = []
@@ -4915,7 +4983,7 @@ def resolve_fefo_dispatch_allocations(connection) -> list[dict[str, str]]:
             """,
             (
                 IDS["uom_conversion"], IDS["org"], IDS["branch"],
-                IDS["saleable_location"], IDS["product"], SOURCE_RETRIEVED_ON,
+                IDS["saleable_location"], IDS["product"], business_date,
             ),
         )
         candidates = cursor.fetchall()
@@ -4947,26 +5015,32 @@ def sales_dispatch_payload(
     sales_order_line_id: str,
     batch_allocations: list[dict[str, str]],
     *,
+    business_date: date,
     requested_delivery_date: str,
 ) -> dict[str, Any]:
+    business_date = require_business_date(business_date)
     if not isinstance(requested_delivery_date, str):
         raise ValueError(
             "sales dispatch requires the approved order requested delivery date"
         )
     try:
-        dispatch_date = date.fromisoformat(requested_delivery_date)
+        planned_delivery_date = date.fromisoformat(requested_delivery_date)
     except ValueError as error:
         raise ValueError(
             "sales dispatch requires the approved order requested delivery date"
         ) from error
-    if dispatch_date.isoformat() != requested_delivery_date:
+    if planned_delivery_date.isoformat() != requested_delivery_date:
         raise ValueError(
             "sales dispatch requires the canonical requested delivery date"
+        )
+    if planned_delivery_date < business_date:
+        raise ValueError(
+            "sales dispatch requested delivery date precedes the business date"
         )
     return {
         "idempotency_key": f"demo-sales-dispatch-{os.getenv('GITHUB_RUN_ID', 'local')}",
         "branch_id": IDS["branch"],
-        "dispatch_date": requested_delivery_date,
+        "dispatch_date": business_date.isoformat(),
         "sales_order_id": sales_order_id,
         "from_location_id": IDS["saleable_location"],
         "lines": [
@@ -4984,7 +5058,7 @@ def sales_dispatch_payload(
             "vehicle_number": "MH01DE2026",
             "vehicle_type": "regular",
             "transport_document_number": f"DEMO-DC-{os.getenv('GITHUB_RUN_ID', 'local')}",
-            "transport_document_date": requested_delivery_date,
+            "transport_document_date": business_date.isoformat(),
         },
     }
 
@@ -5076,17 +5150,21 @@ def reconcile_sales_dispatch(
 
 
 def sales_invoice_payload(
-    dispatch_lines: list[dict[str, str]], delivery_address_row_version: int
+    dispatch_lines: list[dict[str, str]],
+    delivery_address_row_version: int,
+    *,
+    business_date: date,
 ) -> dict[str, Any]:
     if (
         isinstance(delivery_address_row_version, bool)
         or delivery_address_row_version < 1
     ):
         raise ValueError("delivery address row version must be a positive integer")
+    business_date = require_business_date(business_date)
     return {
         "idempotency_key": f"demo-sales-invoice-{os.getenv('GITHUB_RUN_ID', 'local')}",
         "branch_id": IDS["branch"],
-        "invoice_date": SOURCE_RETRIEVED_ON.isoformat(),
+        "invoice_date": business_date.isoformat(),
         "customer_account_id": IDS["customer_account"],
         "delivery_address_id": IDS["customer_address"],
         "delivery_address_row_version": str(delivery_address_row_version),
@@ -5199,11 +5277,14 @@ def reconcile_sales_invoice(
         return result
 
 
-def customer_receipt_payload(open_item_id: str) -> dict[str, Any]:
+def customer_receipt_payload(
+    open_item_id: str, *, business_date: date
+) -> dict[str, Any]:
+    business_date = require_business_date(business_date)
     return {
         "idempotency_key": f"demo-customer-receipt-{os.getenv('GITHUB_RUN_ID', 'local')}",
         "branch_id": IDS["branch"],
-        "payment_date": SOURCE_RETRIEVED_ON.isoformat(),
+        "payment_date": business_date.isoformat(),
         "customer_account_id": IDS["customer_account"],
         "settlement_account_id": IDS["bank_ledger"],
         "bank_account_id": IDS["bank_account"],
@@ -5218,7 +5299,10 @@ def sales_return_payload(
     invoice_id: str,
     invoice_line_id: str,
     dispatch_allocations: list[dict[str, str]],
+    *,
+    business_date: date,
 ) -> dict[str, Any]:
+    business_date = require_business_date(business_date)
     allocation = max(
         dispatch_allocations,
         key=lambda item: Decimal(item["allocated_base_billed_quantity"]),
@@ -5233,7 +5317,7 @@ def sales_return_payload(
     return {
         "idempotency_key": f"demo-sales-return-{os.getenv('GITHUB_RUN_ID', 'local')}",
         "branch_id": IDS["branch"],
-        "return_date": SOURCE_RETRIEVED_ON.isoformat(),
+        "return_date": business_date.isoformat(),
         "original_invoice_id": invoice_id,
         "reason_code": "customer_rejection",
         "gst_tax_treatment": "statutory",
@@ -5324,11 +5408,14 @@ def purchase_return_payload(
     receipt_allocation_id: str,
     batch_id: str,
     portal_evidence: dict[str, str],
+    *,
+    business_date: date,
 ) -> dict[str, Any]:
+    business_date = require_business_date(business_date)
     return {
         "idempotency_key": f"demo-purchase-return-{os.getenv('GITHUB_RUN_ID', 'local')}",
         "branch_id": IDS["branch"],
-        "return_date": SOURCE_RETRIEVED_ON.isoformat(),
+        "return_date": business_date.isoformat(),
         "return_source_kind": "invoiced",
         "original_supplier_invoice_id": supplier_invoice_id,
         "supplier_credit_note_portal_line_id": portal_evidence[
@@ -5344,7 +5431,7 @@ def purchase_return_payload(
             "vehicle_number": "MH01PR2026",
             "vehicle_type": "regular",
             "transport_document_number": f"DEMO-PR-DC-{os.getenv('GITHUB_RUN_ID', 'local')}",
-            "transport_document_date": SOURCE_RETRIEVED_ON.isoformat(),
+            "transport_document_date": business_date.isoformat(),
         },
         "lines": [
             {
@@ -5425,19 +5512,19 @@ def reconcile_purchase_return(
         return result
 
 
-def inventory_adjustment_payload(batch_id: str, counted_base_quantity: str) -> dict[str, Any]:
+def inventory_adjustment_payload(
+    batch_id: str, counted_base_quantity: str, *, business_date: date
+) -> dict[str, Any]:
+    business_date = require_business_date(business_date)
     counted_instant = datetime.now(timezone.utc)
     counted_at = counted_instant.isoformat()
-    adjustment_date = counted_instant.astimezone(ZoneInfo("Asia/Kolkata")).date()
-    if adjustment_date != INDIA_BUSINESS_DATE:
-        raise RuntimeError("India-local business date changed during demo provisioning")
     counted_packs = str(
         (Decimal(counted_base_quantity) + Decimal("1")) / Decimal("10")
     )
     return {
         "idempotency_key": f"demo-inventory-adjustment-{os.getenv('GITHUB_RUN_ID', 'local')}",
         "branch_id": IDS["branch"],
-        "adjustment_date": adjustment_date.isoformat(),
+        "adjustment_date": business_date.isoformat(),
         "counted_at": counted_at,
         "counted_by_membership_id": IDS["operator_membership"],
         "location_id": IDS["saleable_location"],
@@ -5521,16 +5608,12 @@ def current_saleable_quantity(connection, batch_id: str) -> str:
         return str(row[0])
 
 
-def seed_live18_cycle_count_evidence(connection) -> dict[str, str]:
+def seed_live18_cycle_count_evidence(
+    connection, *, business_date: date
+) -> dict[str, str]:
     """Create the unused, run-bound cycle-count sheet for browser acceptance."""
 
-    current_business_date = datetime.now(timezone.utc).astimezone(
-        ZoneInfo("Asia/Kolkata")
-    ).date()
-    if current_business_date != INDIA_BUSINESS_DATE:
-        raise RuntimeError(
-            "India-local business date changed before Live18 evidence seeding"
-        )
+    business_date = require_business_date(business_date)
     attachment_id = LIVE18_CYCLE_COUNT_AUTHORITY.attachment_id
     storage_object_path = LIVE18_CYCLE_COUNT_AUTHORITY.storage_object_path
     original_filename = LIVE18_CYCLE_COUNT_AUTHORITY.original_filename
@@ -5559,8 +5642,8 @@ def seed_live18_cycle_count_evidence(connection) -> dict[str, str]:
             """,
             (
                 IDS["org"], attachment_id, storage_object_path,
-                original_filename, digest_input, INDIA_BUSINESS_DATE,
-                INDIA_BUSINESS_DATE + timedelta(days=3650),
+                original_filename, digest_input, business_date,
+                business_date + timedelta(days=3650),
                 IDS["reviewer_membership"],
             ),
         )
@@ -5582,8 +5665,8 @@ def seed_live18_cycle_count_evidence(connection) -> dict[str, str]:
             """,
             (
                 IDS["org"], attachment_id, storage_object_path,
-                original_filename, INDIA_BUSINESS_DATE, digest_input,
-                INDIA_BUSINESS_DATE,
+                original_filename, business_date, digest_input,
+                business_date,
             ),
         )
         row = cursor.fetchone()
@@ -5926,6 +6009,8 @@ def main() -> int:
     ).strip()
     with database_connection("PSYCOPG_DATABASE_URL") as bootstrap:
         bootstrap_identity(bootstrap)
+    with database_connection("ERP_RUNTIME_DATABASE_URL") as runtime:
+        demo_business_date = organization_business_date(runtime)
 
     with database_connection("PSYCOPG_DATABASE_URL") as bootstrap:
         release_exists = demo_tax_release_exists(bootstrap)
@@ -5966,18 +6051,18 @@ def main() -> int:
         gstr1_reporting_reconciliation = reconcile_demo_gstr1_reporting_authority(
             bootstrap, gstr1_reporting_bytes
         )
-        seed_business_master(bootstrap)
+        seed_business_master(bootstrap, business_date=demo_business_date)
         seed_end_to_end_master(
             bootstrap,
+            business_date=demo_business_date,
             expense_receipt_bytes=expense_receipt_bytes,
         )
     with database_connection("ERP_RUNTIME_DATABASE_URL") as runtime:
         party_master_reconciliation = reconcile_party_master(runtime)
-        verify_fiscal_tax_fact(runtime)
+        verify_fiscal_tax_fact(runtime, business_date=demo_business_date)
         activate_demo_product(runtime)
-        reviewed_live18_business_date = live18_business_date(runtime)
 
-    purchase_payload = purchase_order_payload()
+    purchase_payload = purchase_order_payload(business_date=demo_business_date)
     preflight_action("procurement.purchase_order.prepare", purchase_payload)
     purchase_journey = exercise_action(
         evidence_dir,
@@ -5994,7 +6079,9 @@ def main() -> int:
 
     purchase_order_id = purchase_reconciliation["id"]
     advance_payload = supplier_advance_payload(
-        purchase_order_id, purchase_reconciliation["line_ids"][0]
+        purchase_order_id,
+        purchase_reconciliation["line_ids"][0],
+        business_date=demo_business_date,
     )
     preflight_action("finance.supplier_advance.prepare", advance_payload)
     advance_journey = exercise_action(
@@ -6012,7 +6099,9 @@ def main() -> int:
         )
 
     receipt_payload = goods_receipt_payload(
-        purchase_order_id, purchase_reconciliation["line_ids"][1]
+        purchase_order_id,
+        purchase_reconciliation["line_ids"][1],
+        business_date=demo_business_date,
     )
     preflight_action("procurement.goods_receipt.prepare", receipt_payload)
     receipt_journey = exercise_action(
@@ -6041,11 +6130,14 @@ def main() -> int:
     )
 
     with database_connection("PSYCOPG_DATABASE_URL") as bootstrap:
-        portal_evidence = seed_supplier_invoice_portal_evidence(bootstrap)
+        portal_evidence = seed_supplier_invoice_portal_evidence(
+            bootstrap, business_date=demo_business_date
+        )
     supplier_invoice_request = supplier_invoice_payload(
         receipt_reconciliation["id"],
         receipt_reconciliation["goods_receipt_line_id"],
         portal_evidence,
+        business_date=demo_business_date,
     )
     preflight_action("procurement.supplier_invoice.prepare", supplier_invoice_request)
     supplier_invoice_journey = exercise_action(
@@ -6062,7 +6154,7 @@ def main() -> int:
         )
 
     live18_purchase_payload = live18_supplier_invoice_purchase_order_payload(
-        reviewed_live18_scalars, reviewed_live18_business_date
+        reviewed_live18_scalars, demo_business_date
     )
     live18_purchase_totals = preflight_action(
         "procurement.purchase_order.prepare", live18_purchase_payload
@@ -6073,7 +6165,7 @@ def main() -> int:
     with database_connection("PSYCOPG_DATABASE_URL") as bootstrap:
         ui_portal_evidence = seed_supplier_invoice_ui_portal_evidence(
             bootstrap, live18_portal_economics, reviewed_live18_scalars,
-            reviewed_live18_business_date,
+            demo_business_date,
         )
     with database_connection("ERP_RUNTIME_DATABASE_URL") as runtime:
         supplier_invoice_ui_fixture = reconcile_supplier_invoice_ui_fixture(
@@ -6081,7 +6173,8 @@ def main() -> int:
         )
 
     supplier_payment_request = supplier_payment_payload(
-        supplier_invoice_reconciliation["open_item_id"]
+        supplier_invoice_reconciliation["open_item_id"],
+        business_date=demo_business_date,
     )
     preflight_action("finance.supplier_payment.prepare", supplier_payment_request)
     supplier_payment_journey = exercise_action(
@@ -6100,11 +6193,11 @@ def main() -> int:
 
     with database_connection("ERP_RUNTIME_DATABASE_URL") as runtime:
         delivery_address_row_version = selected_customer_delivery_address_row_version(
-            runtime
+            runtime, business_date=demo_business_date
         )
     payload = sales_order_payload(
         delivery_address_row_version,
-        business_date=reviewed_live18_business_date,
+        business_date=demo_business_date,
         delivery_offset_days=reviewed_live18_scalars[
             "sales_order_delivery_offset_days"
         ],
@@ -6119,11 +6212,14 @@ def main() -> int:
         )
 
     with database_connection("ERP_RUNTIME_DATABASE_URL") as runtime:
-        dispatch_allocations = resolve_fefo_dispatch_allocations(runtime)
+        dispatch_allocations = resolve_fefo_dispatch_allocations(
+            runtime, business_date=demo_business_date
+        )
     dispatch_request = sales_dispatch_payload(
         reconciliation["id"],
         reconciliation["line_ids"][0],
         dispatch_allocations,
+        business_date=demo_business_date,
         requested_delivery_date=payload["requested_delivery_date"],
     )
     preflight_action("sales.dispatch.prepare", dispatch_request)
@@ -6142,7 +6238,9 @@ def main() -> int:
         )
 
     invoice_request = sales_invoice_payload(
-        dispatch_reconciliation["dispatch_lines"], delivery_address_row_version
+        dispatch_reconciliation["dispatch_lines"],
+        delivery_address_row_version,
+        business_date=demo_business_date,
     )
     preflight_action("sales.invoice.prepare", invoice_request)
     invoice_journey = exercise_action(
@@ -6159,7 +6257,7 @@ def main() -> int:
         )
 
     customer_receipt_request = customer_receipt_payload(
-        invoice_reconciliation["open_item_id"]
+        invoice_reconciliation["open_item_id"], business_date=demo_business_date
     )
     preflight_action("finance.customer_receipt.prepare", customer_receipt_request)
     customer_receipt_journey = exercise_action(
@@ -6185,6 +6283,7 @@ def main() -> int:
         invoice_reconciliation["id"],
         invoice_reconciliation["invoice_line_id"],
         invoice_reconciliation["dispatch_allocations"],
+        business_date=demo_business_date,
     )
     preflight_action("sales.return.prepare", sales_return_request)
     sales_return_journey = exercise_action(
@@ -6204,6 +6303,7 @@ def main() -> int:
         inventory_destruction_ui_fixture = seed_inventory_destruction_ui_fixture(
             bootstrap,
             sales_return_request["lines"][0]["batch_allocation"]["batch_id"],
+            business_date=demo_business_date,
         )
 
     with database_connection("PSYCOPG_DATABASE_URL") as bootstrap:
@@ -6214,6 +6314,7 @@ def main() -> int:
         supplier_invoice_reconciliation["receipt_allocation_id"],
         receipt_reconciliation["batch_id"],
         purchase_return_portal,
+        business_date=demo_business_date,
     )
     preflight_action("procurement.purchase_return.prepare", purchase_return_request)
     purchase_return_journey = exercise_action(
@@ -6234,7 +6335,9 @@ def main() -> int:
         )
 
     adjustment_request = inventory_adjustment_payload(
-        receipt_reconciliation["batch_id"], saleable_quantity
+        receipt_reconciliation["batch_id"],
+        saleable_quantity,
+        business_date=demo_business_date,
     )
     preflight_action("inventory.adjustment.prepare", adjustment_request)
     adjustment_journey = exercise_action(
@@ -6249,7 +6352,9 @@ def main() -> int:
             runtime, adjustment_journey["executed"]["resource_id"]
         )
     with database_connection("PSYCOPG_DATABASE_URL") as bootstrap:
-        live18_cycle_count_fixture = seed_live18_cycle_count_evidence(bootstrap)
+        live18_cycle_count_fixture = seed_live18_cycle_count_evidence(
+            bootstrap, business_date=demo_business_date
+        )
     with staging_owner_audit_connection() as owner:
         cross_table_reconciliation = reconcile_cross_table_invariants(
             owner,
@@ -6283,6 +6388,7 @@ def main() -> int:
 
     summary = {
         "project_ref": PROJECT_REF,
+        "business_date": demo_business_date.isoformat(),
         "organization_id": IDS["org"],
         "rls_denial_organization_id": IDS["denial_org"],
         "organization_classification": "disposable_synthetic_demo",

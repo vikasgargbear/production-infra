@@ -309,11 +309,13 @@ def main() -> None:
         assert len(rows) == 1
         fixture.IDS["tax_version"] = str(rows[0][0])
         fixture.IDS["tax_release"] = str(rows[0][1])
-        fixture.seed_business_master(connection)
-        fixture.seed_end_to_end_master(connection)
+    with psycopg2.connect(runtime_dsn) as connection:
+        business_date = fixture.organization_business_date(connection)
+    with psycopg2.connect(admin_dsn) as connection:
+        fixture.seed_business_master(connection, business_date=business_date)
+        fixture.seed_end_to_end_master(connection, business_date=business_date)
     with psycopg2.connect(runtime_dsn) as connection:
         fixture.activate_demo_product(connection)
-        business_date = fixture.live18_business_date(connection)
 
     batch_id = _seed_opening_stock(runtime_dsn)
     lot_id, other_lot_id, other_org = _seed_partial_itc(admin_dsn, batch_id)
@@ -349,6 +351,7 @@ def main() -> None:
             [{
                 "batch_id": str(batch_id), "billed_quantity": "12", "free_quantity": "2",
             }],
+            business_date=business_date,
             requested_delivery_date=order_payload["requested_delivery_date"],
         )
         policy = ACTION_POLICIES["sales.dispatch.prepare"]

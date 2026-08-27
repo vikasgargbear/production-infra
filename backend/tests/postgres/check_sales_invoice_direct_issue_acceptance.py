@@ -644,8 +644,11 @@ def main() -> None:
         fixture.bootstrap_identity(connection)
     with psycopg2.connect(admin_dsn) as connection:
         _seed_reference_authority(connection)
-        fixture.seed_business_master(connection)
-        fixture.seed_end_to_end_master(connection)
+    with psycopg2.connect(runtime_dsn) as connection:
+        business_date = fixture.organization_business_date(connection)
+    with psycopg2.connect(admin_dsn) as connection:
+        fixture.seed_business_master(connection, business_date=business_date)
+        fixture.seed_end_to_end_master(connection, business_date=business_date)
     with psycopg2.connect(runtime_dsn) as connection:
         fixture.activate_demo_product(connection)
 

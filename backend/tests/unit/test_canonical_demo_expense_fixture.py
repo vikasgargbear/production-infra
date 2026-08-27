@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+from datetime import date
 from pathlib import Path
 from uuid import UUID
 
@@ -94,9 +95,9 @@ def test_reviewed_expense_receipt_reuses_exact_retained_content() -> None:
         ]
     )
 
-    assert module.reconcile_reviewed_expense_receipt_metadata(cursor, value) == str(
-        existing_id
-    )
+    assert module.reconcile_reviewed_expense_receipt_metadata(
+        cursor, value, business_date=date(2026, 8, 28)
+    ) == str(existing_id)
     assert module.IDS["expense_receipt_evidence"] == str(existing_id)
     assert len(cursor.statements) == 1
 
@@ -119,7 +120,9 @@ def test_reviewed_expense_receipt_rejects_contradictory_existing_metadata() -> N
     )
 
     with pytest.raises(RuntimeError, match="metadata contradicts"):
-        module.reconcile_reviewed_expense_receipt_metadata(cursor, value)
+        module.reconcile_reviewed_expense_receipt_metadata(
+            cursor, value, business_date=date(2026, 8, 28)
+        )
 
 
 def test_expense_prerequisites_use_only_canonical_evidence_accounts_and_role() -> None:

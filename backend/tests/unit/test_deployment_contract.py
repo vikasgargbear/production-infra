@@ -742,16 +742,16 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     assert "ORDER BY batch.expires_on,batch.id" in provisioner
     assert 'dispatch_reconciliation["dispatch_lines"]' in provisioner
     assert 'invoice_reconciliation["dispatch_allocations"]' in provisioner
-    assert 'ZoneInfo("Asia/Kolkata")' in provisioner
-    assert '"adjustment_date": adjustment_date.isoformat()' in provisioner
+    assert "erp_core_commands.current_organization_business_date()" in provisioner
+    assert '"adjustment_date": business_date.isoformat()' in provisioner
     assert 'canonical-staging-cycle-count:' in provisioner
     assert 'f"cycle-count-sheet-{DEMO_RUN_ID}.json"' in provisioner
     assert 'f"inventory_cycle_count_sheet:{DEMO_RUN_ID}"' in provisioner
-    assert 'def seed_live18_cycle_count_evidence(connection)' in provisioner
+    assert "def seed_live18_cycle_count_evidence(\n    connection, *, business_date: date" in provisioner
     assert 'IDS["live18_cycle_count_evidence"]' in provisioner
     assert "canonical_live18_cycle_count_authority" in provisioner
     assert "LIVE18_CYCLE_COUNT_AUTHORITY.storage_object_path" in provisioner
-    assert "India-local business date changed before Live18 evidence seeding" in provisioner
+    assert "India-local business date changed" not in provisioner
     assert provisioner.index("adjustment_reconciliation = reconcile_inventory_adjustment") < provisioner.index(
         "live18_cycle_count_fixture = seed_live18_cycle_count_evidence"
     )
@@ -906,7 +906,8 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     assert provisioner.count("27DEMOC5678D1Z5") == 4
     assert "ON CONFLICT (org_id,registration_id,branch_id,effective_from) DO NOTHING" in provisioner
     assert "verify_organization_fiscal_tax_fact" in provisioner
-    assert "2026::smallint" in provisioner
+    assert "%s::smallint,'company'::varchar" in provisioner
+    assert "fiscal_start_year = fiscal_year_start(business_date).year" in provisioner
     assert "NULL::varchar" in provisioner
     assert "INSERT INTO tax.organization_fiscal_tax_facts" not in provisioner
     assert 'IDS["operator_auth_user"], IDS["org"]' in provisioner

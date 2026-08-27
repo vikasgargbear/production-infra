@@ -51,7 +51,10 @@ def test_sales_order_uses_exact_database_address_identity_and_version() -> None:
     module = _module()
     connection = _Connection()
 
-    row_version = module.selected_customer_delivery_address_row_version(connection)
+    business_date = date(2026, 8, 26)
+    row_version = module.selected_customer_delivery_address_row_version(
+        connection, business_date=business_date
+    )
     payload = module.sales_order_payload(
         row_version,
         business_date=date(2026, 8, 26),
@@ -69,7 +72,9 @@ def test_sales_order_uses_exact_database_address_identity_and_version() -> None:
     assert "address.valid_from" in authority_sql
     assert "address.valid_until" in authority_sql
 
-    invoice_payload = module.sales_invoice_payload([], row_version)
+    invoice_payload = module.sales_invoice_payload(
+        [], row_version, business_date=business_date
+    )
     assert invoice_payload["delivery_address_id"] == module.IDS["customer_address"]
     assert invoice_payload["delivery_address_row_version"] == "7"
     assert "place_of_supply_state_code" not in invoice_payload

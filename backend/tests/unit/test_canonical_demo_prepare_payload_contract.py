@@ -20,6 +20,7 @@ SCRIPT = ROOT / "backend/scripts/provision_canonical_demo.py"
 UUID_A = "d3000000-0000-7000-8000-0000000000aa"
 UUID_B = "d3000000-0000-7000-8000-0000000000ab"
 UUID_C = "d3000000-0000-7000-8000-0000000000ac"
+BUSINESS_DATE = date(2026, 8, 26)
 
 
 def _reviewed_po_grn_scalars() -> dict[str, str]:
@@ -114,8 +115,11 @@ def _cases() -> list[tuple[str, str, dict[str, Any], dict[str, Any]]]:
         (
             "purchase_order",
             "procurement.purchase_order.prepare",
-            module.purchase_order_payload(),
-            {"supplier_account_id": module.IDS["supplier_account"]},
+            module.purchase_order_payload(business_date=BUSINESS_DATE),
+            {
+                "supplier_account_id": module.IDS["supplier_account"],
+                "order_date": BUSINESS_DATE.isoformat(),
+            },
         ),
         (
             "live18_purchase_order_economics",
@@ -128,26 +132,41 @@ def _cases() -> list[tuple[str, str, dict[str, Any], dict[str, Any]]]:
         (
             "supplier_advance",
             "finance.supplier_advance.prepare",
-            module.supplier_advance_payload(UUID_A, UUID_B),
-            {"purchase_order_id": UUID_A},
+            module.supplier_advance_payload(
+                UUID_A, UUID_B, business_date=BUSINESS_DATE
+            ),
+            {"purchase_order_id": UUID_A, "payment_date": BUSINESS_DATE.isoformat()},
         ),
         (
             "goods_receipt",
             "procurement.goods_receipt.prepare",
-            module.goods_receipt_payload(UUID_A, UUID_B),
-            {"purchase_order_id": UUID_A},
+            module.goods_receipt_payload(
+                UUID_A, UUID_B, business_date=BUSINESS_DATE
+            ),
+            {
+                "purchase_order_id": UUID_A,
+                "supplier_challan_date": BUSINESS_DATE.isoformat(),
+            },
         ),
         (
             "supplier_invoice",
             "procurement.supplier_invoice.prepare",
-            module.supplier_invoice_payload(UUID_A, UUID_B, portal),
-            {"portal_document_line_id": UUID_A},
+            module.supplier_invoice_payload(
+                UUID_A, UUID_B, portal, business_date=BUSINESS_DATE
+            ),
+            {
+                "portal_document_line_id": UUID_A,
+                "invoice_date": BUSINESS_DATE.isoformat(),
+            },
         ),
         (
             "supplier_payment",
             "finance.supplier_payment.prepare",
-            module.supplier_payment_payload(UUID_A),
-            {"allocations.0.open_item_id": UUID_A},
+            module.supplier_payment_payload(UUID_A, business_date=BUSINESS_DATE),
+            {
+                "allocations.0.open_item_id": UUID_A,
+                "payment_date": BUSINESS_DATE.isoformat(),
+            },
         ),
         (
             "sales_dispatch",
@@ -156,45 +175,65 @@ def _cases() -> list[tuple[str, str, dict[str, Any], dict[str, Any]]]:
                 UUID_A,
                 UUID_B,
                 dispatch_batches,
+                business_date=BUSINESS_DATE,
                 requested_delivery_date="2026-08-28",
             ),
             {
                 "sales_order_id": UUID_A,
-                "dispatch_date": "2026-08-28",
-                "logistics.transport_document_date": "2026-08-28",
+                "dispatch_date": BUSINESS_DATE.isoformat(),
+                "logistics.transport_document_date": BUSINESS_DATE.isoformat(),
             },
         ),
         (
             "sales_invoice",
             "sales.invoice.prepare",
-            module.sales_invoice_payload([dispatch_line], 7),
+            module.sales_invoice_payload(
+                [dispatch_line], 7, business_date=BUSINESS_DATE
+            ),
             {
                 "delivery_address_id": module.IDS["customer_address"],
                 "delivery_address_row_version": "7",
+                "invoice_date": BUSINESS_DATE.isoformat(),
             },
         ),
         (
             "customer_receipt",
             "finance.customer_receipt.prepare",
-            module.customer_receipt_payload(UUID_A),
-            {"allocations.0.open_item_id": UUID_A},
+            module.customer_receipt_payload(UUID_A, business_date=BUSINESS_DATE),
+            {
+                "allocations.0.open_item_id": UUID_A,
+                "payment_date": BUSINESS_DATE.isoformat(),
+            },
         ),
         (
             "sales_return",
             "sales.return.prepare",
-            module.sales_return_payload(UUID_A, UUID_B, [dispatch_line]),
-            {"original_invoice_id": UUID_A},
+            module.sales_return_payload(
+                UUID_A, UUID_B, [dispatch_line], business_date=BUSINESS_DATE
+            ),
+            {
+                "original_invoice_id": UUID_A,
+                "return_date": BUSINESS_DATE.isoformat(),
+            },
         ),
         (
             "purchase_return",
             "procurement.purchase_return.prepare",
-            module.purchase_return_payload(UUID_A, UUID_B, UUID_C, UUID_A, portal),
-            {"original_supplier_invoice_id": UUID_A},
+            module.purchase_return_payload(
+                UUID_A, UUID_B, UUID_C, UUID_A, portal,
+                business_date=BUSINESS_DATE,
+            ),
+            {
+                "original_supplier_invoice_id": UUID_A,
+                "return_date": BUSINESS_DATE.isoformat(),
+            },
         ),
         (
             "inventory_adjustment",
             "inventory.adjustment.prepare",
-            module.inventory_adjustment_payload(UUID_A, "100"),
+            module.inventory_adjustment_payload(
+                UUID_A, "100", business_date=BUSINESS_DATE
+            ),
             {"lines.0.batch_counts.0.batch_id": UUID_A},
         ),
     ]
@@ -303,19 +342,30 @@ def test_demo_chain_keeps_exact_lineage_between_each_prepare_payload() -> None:
         "uom_conversion_factor": "1",
     }
 
-    advance = module.supplier_advance_payload(UUID_A, UUID_B)
-    receipt = module.goods_receipt_payload(UUID_A, UUID_B)
-    supplier_invoice = module.supplier_invoice_payload(UUID_A, UUID_B, portal)
+    advance = module.supplier_advance_payload(
+        UUID_A, UUID_B, business_date=BUSINESS_DATE
+    )
+    receipt = module.goods_receipt_payload(
+        UUID_A, UUID_B, business_date=BUSINESS_DATE
+    )
+    supplier_invoice = module.supplier_invoice_payload(
+        UUID_A, UUID_B, portal, business_date=BUSINESS_DATE
+    )
     dispatch = module.sales_dispatch_payload(
         UUID_A,
         UUID_B,
         [{"batch_id": UUID_C, "billed_quantity": "12", "free_quantity": "2"}],
+        business_date=BUSINESS_DATE,
         requested_delivery_date="2026-08-28",
     )
-    invoice = module.sales_invoice_payload([dispatch_line], 7)
-    sales_return = module.sales_return_payload(UUID_A, UUID_B, [dispatch_line])
+    invoice = module.sales_invoice_payload(
+        [dispatch_line], 7, business_date=BUSINESS_DATE
+    )
+    sales_return = module.sales_return_payload(
+        UUID_A, UUID_B, [dispatch_line], business_date=BUSINESS_DATE
+    )
     purchase_return = module.purchase_return_payload(
-        UUID_A, UUID_B, UUID_C, UUID_A, portal
+        UUID_A, UUID_B, UUID_C, UUID_A, portal, business_date=BUSINESS_DATE
     )
 
     assert advance["allocations"][0]["purchase_order_line_id"] == UUID_B

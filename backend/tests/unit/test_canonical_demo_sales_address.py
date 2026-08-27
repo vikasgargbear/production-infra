@@ -31,7 +31,9 @@ def test_sales_payloads_bind_the_exact_selected_delivery_address_version() -> No
         business_date=date(2026, 8, 26),
         delivery_offset_days="2",
     )
-    invoice = module.sales_invoice_payload([], 7)
+    invoice = module.sales_invoice_payload(
+        [], 7, business_date=date(2026, 8, 26)
+    )
 
     for payload in (order, invoice):
         assert payload["delivery_address_id"] == module.IDS["customer_address"]
@@ -57,7 +59,7 @@ def test_sales_order_requested_date_is_derived_from_reviewed_authority() -> None
     }
 
 
-def test_sales_dispatch_uses_the_exact_derived_order_delivery_date() -> None:
+def test_sales_dispatch_posts_on_business_date_not_future_delivery_plan() -> None:
     module = _module()
     order = module.sales_order_payload(
         7,
@@ -75,14 +77,16 @@ def test_sales_dispatch_uses_the_exact_derived_order_delivery_date() -> None:
                 "free_quantity": "2",
             }
         ],
+        business_date=date(2026, 8, 26),
         requested_delivery_date=order["requested_delivery_date"],
     )
 
-    assert dispatch["dispatch_date"] == order["requested_delivery_date"]
+    assert dispatch["dispatch_date"] == order["order_date"]
     assert (
         dispatch["logistics"]["transport_document_date"]
-        == order["requested_delivery_date"]
+        == order["order_date"]
     )
+    assert dispatch["dispatch_date"] < order["requested_delivery_date"]
     assert dispatch["dispatch_date"] != module.SOURCE_RETRIEVED_ON.isoformat()
 
 
@@ -99,7 +103,21 @@ def test_sales_dispatch_rejects_noncanonical_delivery_date_authority(
             str(UUID(int=1)),
             str(UUID(int=2)),
             [],
+            business_date=date(2026, 8, 26),
             requested_delivery_date=requested_delivery_date,
+        )
+
+
+def test_sales_dispatch_rejects_a_delivery_plan_before_business_date() -> None:
+    module = _module()
+
+    with pytest.raises(ValueError, match="precedes the business date"):
+        module.sales_dispatch_payload(
+            str(UUID(int=1)),
+            str(UUID(int=2)),
+            [],
+            business_date=date(2026, 8, 26),
+            requested_delivery_date="2026-08-25",
         )
 
 
@@ -182,4 +200,6 @@ def test_sales_payloads_reject_invalid_delivery_address_versions(
             delivery_offset_days="2",
         )
     with pytest.raises(ValueError, match="positive integer"):
-        module.sales_invoice_payload([], row_version)
+        module.sales_invoice_payload(
+            [], row_version, business_date=date(2026, 8, 26)
+        )

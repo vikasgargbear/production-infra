@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import date, datetime
 
 import pytest
 
@@ -34,7 +34,10 @@ class RecordingConnection:
 def test_live18_cycle_count_seed_uses_one_exact_unused_authority() -> None:
     connection = RecordingConnection()
 
-    result = demo.seed_live18_cycle_count_evidence(connection)
+    business_date = date(2026, 8, 28)
+    result = demo.seed_live18_cycle_count_evidence(
+        connection, business_date=business_date
+    )
 
     authority = demo.LIVE18_CYCLE_COUNT_AUTHORITY
     assert result == {
@@ -51,6 +54,7 @@ def test_live18_cycle_count_seed_uses_one_exact_unused_authority() -> None:
         authority.original_filename,
         authority.digest_input,
     )
+    assert insert_parameters[5] == business_date
     assert "active_command_evidence_in_use" in verify_query
     assert verify_parameters[1:4] == (
         authority.attachment_id,
@@ -60,10 +64,11 @@ def test_live18_cycle_count_seed_uses_one_exact_unused_authority() -> None:
     assert verify_parameters[5] == authority.digest_input
 
 
-def test_live18_cycle_count_seed_fails_if_india_date_changed(monkeypatch) -> None:
-    monkeypatch.setattr(
-        demo, "INDIA_BUSINESS_DATE", demo.INDIA_BUSINESS_DATE - timedelta(days=1)
-    )
-
-    with pytest.raises(RuntimeError, match="India-local business date changed"):
-        demo.seed_live18_cycle_count_evidence(RecordingConnection())
+@pytest.mark.parametrize("business_date", ["2026-08-28", datetime(2026, 8, 28)])
+def test_live18_cycle_count_seed_requires_database_business_date(
+    business_date: object,
+) -> None:
+    with pytest.raises(ValueError, match="authoritative organization business date"):
+        demo.seed_live18_cycle_count_evidence(
+            RecordingConnection(), business_date=business_date
+        )
