@@ -142,7 +142,11 @@ export const invoiceCalculationsApi = {
     preview: (
         data: InvoiceCalculationRequest
     ): Promise<AxiosResponse<InvoiceCalculationResponse>> => {
-        return apiHelpers.post<InvoiceCalculationResponse>('/calculations/invoice', data);
+        return apiHelpers.post<InvoiceCalculationResponse>(
+            '/calculations/invoice',
+            data,
+            { preserveExactDecimals: true },
+        );
     }
 };
 
