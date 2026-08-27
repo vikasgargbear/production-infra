@@ -388,7 +388,6 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                                         decimalPlaces={visibleQuantityDecimalPlaces(item.quantity)}
                                         maxDecimalPlaces={QUANTITY_DECIMAL_PLACES}
                                         decimalPlacesErrorMessage={QUANTITY_PRECISION_ERROR}
-                                        onChange={(val) => onUpdateItem?.(index, 'quantity', val)}
                                         onSave={(val) => onUpdateItem?.(index, 'quantity', val)}
                                         onNavigate={(dir) => handleNavigate(index, 'quantity', dir as NavigationDirection)}
                                         readOnly={readOnly}
@@ -409,9 +408,6 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                                         min={0}
                                         decimalPlaces={2}
                                         prefix={currencySymbol}
-                                        onChange={(val) => {
-                                            onUpdateItem?.(index, 'unit_price', val);
-                                        }}
                                         onSave={(val) => {
                                             onUpdateItem?.(index, 'unit_price', val);
                                         }}
@@ -432,7 +428,6 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                                         max={100}
                                         decimalPlaces={2}
                                         suffix="%"
-                                        onChange={(val) => onUpdateItem?.(index, 'discount_percent', val)}
                                         onSave={(val) => onUpdateItem?.(index, 'discount_percent', val)}
                                         onNavigate={(dir) => handleNavigate(index, 'discount_percent', dir as NavigationDirection)}
                                         readOnly={readOnly}

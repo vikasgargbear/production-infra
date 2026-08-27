@@ -177,6 +177,33 @@ test('exact-decimal mode preserves canonical input strings while default mode st
   expect(defaultUpdate).toHaveBeenCalledWith(0, 'quantity', 2);
 });
 
+test('desktop numeric editors commit each blur exactly once', () => {
+  const onUpdateItem = jest.fn();
+  render(
+    <ItemsTable
+      items={[{
+        product_id: 'd3000000-0000-7000-8000-000000000015',
+        batch_id: 'd3000000-0000-7000-8000-000000000016',
+        product_name: 'Canonical Carton',
+        batch_number: 'BATCH-EXACT',
+        quantity: '1.000000',
+        unit_price: '84.1250',
+        discount_percent: '0.000000',
+      }]}
+      onUpdateItem={onUpdateItem}
+      preserveExactDecimals
+    />,
+  );
+
+  const rate = screen.getByLabelText('Canonical Carton rate');
+  fireEvent.focus(rate);
+  fireEvent.change(rate, { target: { value: '85.2500' } });
+  fireEvent.blur(rate);
+
+  expect(onUpdateItem).toHaveBeenCalledTimes(1);
+  expect(onUpdateItem).toHaveBeenCalledWith(0, 'unit_price', '85.2500');
+});
+
 test('requires an explicit free-supply treatment only when free quantity is positive', () => {
   const onUpdateItem = jest.fn();
   const { rerender } = render(

@@ -167,6 +167,7 @@ const OrderItemsStep: React.FC<OrderItemsStepProps> = ({
                         onRemoveItem={onRemoveItem}
                         productSearchRef={productSearchRef as any}
                         currencySymbol="₹"
+                        preserveExactDecimals
                     />
                 </div>
             )}
