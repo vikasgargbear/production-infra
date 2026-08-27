@@ -272,6 +272,7 @@ ACCOUNT_ROLE_SETTINGS = {
         "purchase_return_inventory_variance": "active expense account",
         "inventory_asset": "active asset account",
         "inventory_count_gain": "active income account without party posting",
+        "inventory_count_loss": "active expense account without party posting",
         "cost_of_goods_sold": "active expense account",
         "purchase_price_variance": "active expense account without party posting",
         "rounding_gain": "active income account",

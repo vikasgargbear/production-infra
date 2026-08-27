@@ -1,7 +1,7 @@
 {
   "blocked_count": 0,
   "blocked_invariants": {},
-  "catalog_sha256": "387ca25682ab4f0254afb42d0266f0f6eb20cbbb2457660a17879b9fe8a582c5",
+  "catalog_sha256": "c108fd1f487f88a306a9eb08ca2d3c6c0efc215b08252703bc4f56beb02fe8fc",
   "dispatcher": {
     "adjustment_note_pilot_scope": {
       "required_matching": [
@@ -188,13 +188,15 @@
         "effective_product_uom_conversion_and_exact_base_count",
         "branch_forms_20b_and_21b_for_medicine_custody",
         "no_pending_inventory_document_for_the_lot",
-        "atomic_count_gain_ledger_and_two_line_inventory_valuation_journal"
+        "expected_stock_balance_row_version",
+        "canonical_inventory_count_gain_or_loss_account",
+        "atomic_signed_count_ledger_and_two_line_inventory_valuation_journal"
       ],
       "supported_currency": "INR",
-      "supported_effect": "same_day_positive_cycle_count_gain_only",
+      "supported_effect": "same_day_homogeneous_cycle_count_gain_or_loss",
       "tax_effect": "no_supply_no_gst_no_itc_claim_or_reversal",
       "unsupported_fail_closed": [
-        "zero_loss_or_mixed_variance",
+        "zero_or_mixed_sign_variance",
         "backdated_or_stale_count",
         "cold_chain_h_h1_x_ndps_or_recalled_product",
         "unowned_zero_balance_or_pending_source_stock",
@@ -473,7 +475,7 @@
   },
   "manifest_version": "1.0.0",
   "mapping_file": "baseline-automation-command-enforcements.json",
-  "mapping_sha256": "7f3b4190826b7c28772fa60598c4e6a6bd7e836939c2cf8533c80fcf28d3da98",
+  "mapping_sha256": "12e1aedaeb6355f1d23d8052d5e30e99eeb29e9eed52ecf2ad60d286401489ae",
   "postgresql": "15+",
   "resolved_count": 3,
   "resolved_invariants": [

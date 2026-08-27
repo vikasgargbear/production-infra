@@ -4,7 +4,7 @@ import type {
   CanonicalCommandPreview,
 } from '../../../../services/api/canonicalOperatorActions';
 import { isCanonicalUuid } from '../../../../utils/canonicalUuid';
-import { exactDecimalUnits } from '../../../../utils/exactDecimal';
+import { exactDecimalUnits, type ExactDecimalOptions } from '../../../../utils/exactDecimal';
 import { requireCanonicalUtcEventTimestamp } from './canonicalEventTimestamp';
 
 const MICRO = 1_000_000n;
@@ -35,6 +35,7 @@ export type CycleCountEligibility = {
   product_id: string;
   batch_id: string;
   system_base_quantity: string;
+  stock_balance_row_version: number;
   uom_conversions: CycleCountUom[];
   evidence: CycleCountEvidence[];
 };
@@ -48,6 +49,7 @@ export type CycleCountItem = {
   uomMultiplier: string;
   countedQuantity: string;
   systemBaseQuantity: string;
+  stockBalanceRowVersion: number;
 };
 
 export type CycleCountCommandInput = {
@@ -70,18 +72,20 @@ export type CycleCountReadback = {
   journal_debit_total: string;
   journal_credit_total: string;
   accounting_event_id: string;
-  total_gain_base_quantity: string;
-  total_gain_value: string;
+  variance_effect: 'gain' | 'loss';
+  total_variance_base_quantity: string;
+  total_variance_value: string;
   lines: Array<{
     inventory_document_line_id: string;
     product_id: string;
     batch_id: string;
+    location_id: string;
     ledger_entry_id: string;
     system_base_quantity: string;
     counted_base_quantity: string;
-    gain_base_quantity: string;
+    variance_base_quantity: string;
     unit_cost: string;
-    gain_value: string;
+    variance_value: string;
     ledger_quantity_delta: string;
     ledger_value_delta: string;
     current_on_hand_quantity: string;
@@ -98,7 +102,7 @@ const requireCommandPreview = (preview: CanonicalCommandPreview): CanonicalComma
 const exactStringUnits = (
   value: unknown,
   field: string,
-  options: typeof QUANTITY_OPTIONS | typeof MONEY_OPTIONS | typeof UNIT_COST_OPTIONS,
+  options: ExactDecimalOptions,
 ): bigint => {
   if (typeof value !== 'string' || value.trim() !== value) {
     throw new Error(`${field} must remain an exact decimal string.`);
@@ -109,6 +113,13 @@ const exactStringUnits = (
 const quantityUnits = (value: unknown, field: string): bigint => (
   exactStringUnits(value, field, QUANTITY_OPTIONS)
 );
+
+const signedQuantityUnits = (value: unknown, field: string): bigint => {
+  if (typeof value !== 'string' || value.trim() !== value) {
+    throw new Error(`${field} must remain an exact decimal string.`);
+  }
+  return exactDecimalUnits(value, field, { ...QUANTITY_OPTIONS, allowNegative: true });
+};
 
 const moneyUnits = (value: unknown, field: string): bigint => (
   exactStringUnits(value, field, MONEY_OPTIONS)
@@ -121,8 +132,8 @@ const unitCostUnits = (value: unknown, field: string): bigint => (
 const multipliedBaseUnits = (quantity: string, multiplier: string): bigint => {
   const inputUnits = quantityUnits(quantity, 'Physical count');
   const multiplierUnits = quantityUnits(multiplier, 'UOM multiplier');
-  if (inputUnits <= 0n || multiplierUnits <= 0n) {
-    throw new Error('Physical count and UOM multiplier must be positive.');
+  if (inputUnits < 0n || multiplierUnits <= 0n) {
+    throw new Error('Physical count must be nonnegative and UOM multiplier must be positive.');
   }
   const product = inputUnits * multiplierUnits;
   const rounded = (product + MICRO / 2n) / MICRO;
@@ -162,6 +173,10 @@ export const loadCycleCountEligibility = async (params: {
   if (quantityUnits(eligibility.system_base_quantity, 'System base quantity') <= 0n) {
     throw new Error('System base quantity must be positive.');
   }
+  if (!Number.isSafeInteger(eligibility.stock_balance_row_version)
+    || eligibility.stock_balance_row_version <= 0) {
+    throw new Error('Stock balance row version is invalid.');
+  }
   if (!Array.isArray(eligibility.uom_conversions) || eligibility.uom_conversions.length === 0) {
     throw new Error('No eligible cycle-count UOM is configured for this product.');
   }
@@ -178,7 +193,7 @@ export const loadCycleCountEligibility = async (params: {
   return eligibility;
 };
 
-export const buildCycleCountGainPayload = (input: CycleCountCommandInput): Record<string, unknown> => {
+export const buildCycleCountPayload = (input: CycleCountCommandInput): Record<string, unknown> => {
   if (!/^erp-web-inventory-adjustment-prepare:[A-Za-z0-9-]{8,}$/.test(input.idempotencyKey)) {
     throw new Error('Cycle-count idempotency identity is invalid.');
   }
@@ -198,7 +213,8 @@ export const buildCycleCountGainPayload = (input: CycleCountCommandInput): Recor
   }
   if (batchIds.size !== input.items.length) throw new Error('Each batch may appear only once in a cycle count.');
 
-  const grouped = new Map<string, { product_id: string; uom_conversion_id: string; batch_counts: Array<{ batch_id: string; counted_quantity: string }> }>();
+  let commandEffect: 'gain' | 'loss' | null = null;
+  const grouped = new Map<string, { product_id: string; uom_conversion_id: string; batch_counts: Array<{ batch_id: string; counted_quantity: string; stock_balance_row_version: number }> }>();
   input.items.forEach((item) => {
     for (const [field, value] of [
       ['product_id', item.productId], ['batch_id', item.batchId],
@@ -209,8 +225,16 @@ export const buildCycleCountGainPayload = (input: CycleCountCommandInput): Recor
     }
     const countedBaseUnits = multipliedBaseUnits(item.countedQuantity, item.uomMultiplier);
     const systemBaseUnits = quantityUnits(item.systemBaseQuantity, 'System base quantity');
-    if (countedBaseUnits <= systemBaseUnits) {
-      throw new Error('This pilot supports only a positive cycle-count gain; counted stock must exceed system stock.');
+    if (!Number.isSafeInteger(item.stockBalanceRowVersion) || item.stockBalanceRowVersion <= 0) {
+      throw new Error('Cycle-count item requires the authoritative stock balance row version.');
+    }
+    if (countedBaseUnits === systemBaseUnits) {
+      throw new Error('Cycle count requires a nonzero variance.');
+    }
+    const itemEffect = countedBaseUnits > systemBaseUnits ? 'gain' : 'loss';
+    if (commandEffect === null) commandEffect = itemEffect;
+    else if (commandEffect !== itemEffect) {
+      throw new Error('One cycle-count command cannot mix gain and loss variances.');
     }
     const key = `${item.productId}:${item.uomConversionId}`;
     const line = grouped.get(key) || {
@@ -218,7 +242,11 @@ export const buildCycleCountGainPayload = (input: CycleCountCommandInput): Recor
       uom_conversion_id: item.uomConversionId,
       batch_counts: [],
     };
-    line.batch_counts.push({ batch_id: item.batchId, counted_quantity: item.countedQuantity });
+    line.batch_counts.push({
+      batch_id: item.batchId,
+      counted_quantity: item.countedQuantity,
+      stock_balance_row_version: item.stockBalanceRowVersion,
+    });
     grouped.set(key, line);
   });
 
@@ -258,47 +286,53 @@ export const loadAndVerifyCycleCountReadback = async (
   ) {
     throw new Error('Cycle-count execution did not reconcile to posted stock and journal data.');
   }
-  const totalGainQuantity = quantityUnits(readback.total_gain_base_quantity, 'Total gain quantity');
-  const totalGainValue = moneyUnits(readback.total_gain_value, 'Total gain value');
+  const totalVarianceQuantity = quantityUnits(readback.total_variance_base_quantity, 'Total variance quantity');
+  const totalVarianceValue = moneyUnits(readback.total_variance_value, 'Total variance value');
   if (
-    totalGainQuantity <= 0n
-    || totalGainValue <= 0n
-    || moneyUnits(readback.journal_debit_total, 'Journal debit total') !== totalGainValue
-    || moneyUnits(readback.journal_credit_total, 'Journal credit total') !== totalGainValue
+    !['gain', 'loss'].includes(readback.variance_effect)
+    || totalVarianceQuantity <= 0n
+    || totalVarianceValue <= 0n
+    || moneyUnits(readback.journal_debit_total, 'Journal debit total') !== totalVarianceValue
+    || moneyUnits(readback.journal_credit_total, 'Journal credit total') !== totalVarianceValue
   ) {
     throw new Error('Cycle-count totals do not reconcile to the posted valuation journal.');
   }
-  let lineGainQuantity = 0n;
-  let lineGainValue = 0n;
+  let lineVarianceQuantity = 0n;
+  let lineVarianceValue = 0n;
   readback.lines.forEach((line) => {
     if (
       !isCanonicalUuid(line.inventory_document_line_id)
       || !isCanonicalUuid(line.product_id)
       || !isCanonicalUuid(line.batch_id)
+      || !isCanonicalUuid(line.location_id)
       || !isCanonicalUuid(line.ledger_entry_id)
     ) {
       throw new Error('Cycle-count readback returned an invalid canonical line identity.');
     }
     const systemQuantity = quantityUnits(line.system_base_quantity, 'System quantity');
     const countedQuantity = quantityUnits(line.counted_base_quantity, 'Counted quantity');
-    const gainQuantity = quantityUnits(line.gain_base_quantity, 'Gain quantity');
-    const gainValue = moneyUnits(line.gain_value, 'Gain value');
+    const varianceQuantity = signedQuantityUnits(line.variance_base_quantity, 'Variance quantity');
+    const varianceValue = moneyUnits(line.variance_value, 'Variance value');
+    const ledgerQuantity = signedQuantityUnits(line.ledger_quantity_delta, 'Ledger quantity');
+    const ledgerValue = exactStringUnits(
+      line.ledger_value_delta, 'Ledger value', { ...MONEY_OPTIONS, allowNegative: true },
+    );
     const unitCost = unitCostUnits(line.unit_cost, 'Unit cost');
     if (
-      gainQuantity <= 0n
-      || gainValue <= 0n
+      varianceQuantity === 0n
+      || varianceValue <= 0n
       || unitCost <= 0n
-      || countedQuantity !== systemQuantity + gainQuantity
-      || gainQuantity !== quantityUnits(line.ledger_quantity_delta, 'Ledger quantity')
-      || gainValue !== moneyUnits(line.ledger_value_delta, 'Ledger value')
-      || countedQuantity !== quantityUnits(line.current_on_hand_quantity, 'Current stock')
+      || countedQuantity !== systemQuantity + varianceQuantity
+      || varianceQuantity !== ledgerQuantity
+      || varianceValue !== (ledgerValue < 0n ? -ledgerValue : ledgerValue)
+      || (varianceQuantity > 0n ? 'gain' : 'loss') !== readback.variance_effect
     ) {
       throw new Error('Cycle-count readback differs from its posted ledger evidence.');
     }
-    lineGainQuantity += gainQuantity;
-    lineGainValue += gainValue;
+    lineVarianceQuantity += varianceQuantity < 0n ? -varianceQuantity : varianceQuantity;
+    lineVarianceValue += varianceValue;
   });
-  if (lineGainQuantity !== totalGainQuantity || lineGainValue !== totalGainValue) {
+  if (lineVarianceQuantity !== totalVarianceQuantity || lineVarianceValue !== totalVarianceValue) {
     throw new Error('Cycle-count document totals differ from its posted line evidence.');
   }
   return readback;

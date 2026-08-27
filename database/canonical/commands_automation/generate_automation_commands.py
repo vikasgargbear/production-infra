@@ -4220,14 +4220,14 @@ DECLARE branch_id uuid:=NULLIF(request_document->>'branch_id','')::uuid;
         product catalog.products%ROWTYPE; conversion catalog.uom_conversions%ROWTYPE;
         batch inventory.batches%ROWTYPE; balance inventory.stock_balances%ROWTYPE;
         last_ledger inventory.stock_ledger_entries%ROWTYPE;
-        inventory_account finance.accounts%ROWTYPE; gain_account finance.accounts%ROWTYPE;
+        inventory_account finance.accounts%ROWTYPE; variance_account finance.accounts%ROWTYPE;
         requested_line jsonb; requested_count jsonb; resolved_lines jsonb:='[]'::jsonb;
         source_versions jsonb:='[]'::jsonb; counted_base numeric(20,6);
         variance_base numeric(20,6); extended_cost numeric(20,2);
         total_base numeric(20,6):=0; total_value numeric(20,2):=0;
         pending_count integer; recall_count integer; line_no integer:=0;
         medicine_count integer:=0; license_type_count integer; license_sources jsonb;
-        conversion_version_hash text;
+        conversion_version_hash text; variance_effect text; line_effect text;
 BEGIN
   IF organization_id IS NULL OR membership_id IS NULL OR auth_user_id IS NULL OR application_user_id IS NULL
      OR grant_id IS NULL OR inventory_document_id IS NULL OR branch_id IS NULL OR adjustment_date IS NULL
@@ -4235,7 +4235,7 @@ BEGIN
      OR request_document->>'reason_code'<>'cycle_count'
      OR pg_catalog.jsonb_typeof(request_document->'lines')<>'array'
      OR pg_catalog.jsonb_array_length(request_document->'lines') NOT BETWEEN 1 AND 500 THEN
-    RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='cycle-count gain input is incomplete'; END IF;
+    RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='cycle-count input is incomplete'; END IF;
   SELECT * INTO STRICT organization FROM core.organizations WHERE id=organization_id AND status='active'
     AND country_code='IN' AND base_currency='INR' FOR SHARE;
   IF adjustment_date IS DISTINCT FROM (counted_at AT TIME ZONE organization.timezone)::date
@@ -4298,9 +4298,6 @@ BEGIN
   SELECT * INTO STRICT inventory_account FROM finance.accounts WHERE org_id=organization_id
     AND id=erp_commercial_commands.resolve_role_account(organization_id,branch.id,'inventory_asset','asset','INR',false)
     AND status='active' AND account_type='asset' AND currency_code='INR' AND NOT allows_party_posting FOR SHARE;
-  SELECT * INTO STRICT gain_account FROM finance.accounts WHERE org_id=organization_id
-    AND id=erp_commercial_commands.resolve_role_account(organization_id,branch.id,'inventory_count_gain','income','INR',false)
-    AND status='active' AND account_type='income' AND currency_code='INR' AND NOT allows_party_posting FOR SHARE;
   source_versions:=pg_catalog.jsonb_build_array(
     pg_catalog.jsonb_build_object('resource_type','organization','id',organization.id,'row_version',organization.row_version),
     pg_catalog.jsonb_build_object('resource_type','branch','id',branch.id,'row_version',branch.row_version),
@@ -4309,8 +4306,7 @@ BEGIN
       'evidence_kind',evidence.evidence_kind,'document_date',evidence.document_date,'verified_at',evidence.verified_at,
       'retention_until',evidence.retention_until,'sha256',pg_catalog.encode(evidence.sha256,'hex')),
     pg_catalog.jsonb_build_object('resource_type','membership','role','physical_counter','id',counted_by),
-    pg_catalog.jsonb_build_object('resource_type','finance_account','role','inventory_asset','id',inventory_account.id,'row_version',inventory_account.row_version),
-    pg_catalog.jsonb_build_object('resource_type','finance_account','role','inventory_count_gain','id',gain_account.id,'row_version',gain_account.row_version));
+    pg_catalog.jsonb_build_object('resource_type','finance_account','role','inventory_asset','id',inventory_account.id,'row_version',inventory_account.row_version));
   PERFORM balance.batch_id FROM inventory.stock_balances balance
     JOIN (SELECT DISTINCT (count_row.value->>'batch_id')::uuid batch_id
       FROM pg_catalog.jsonb_array_elements(request_document->'lines') line(value)
@@ -4335,8 +4331,9 @@ BEGIN
       line_no:=line_no+1;
       IF NULLIF(requested_count->>'inventory_document_line_id','')::uuid IS NULL
          OR NULLIF(requested_count->>'batch_id','')::uuid IS NULL
-         OR NULLIF(requested_count->>'counted_quantity','')::numeric<=0 THEN
-        RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='cycle-count lot identity and positive counted quantity are required'; END IF;
+         OR NULLIF(requested_count->>'stock_balance_row_version','')::bigint IS NULL
+         OR NULLIF(requested_count->>'counted_quantity','')::numeric<0 THEN
+        RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='cycle-count lot, expected stock version, and nonnegative count are required'; END IF;
       SELECT * INTO STRICT batch FROM inventory.batches WHERE org_id=organization_id
         AND id=(requested_count->>'batch_id')::uuid AND product_id=product.id AND lot_kind='manufacturer_batch'
         AND status='released' AND released_at IS NOT NULL AND released_at<=counted_at
@@ -4350,7 +4347,8 @@ BEGIN
        WHERE stock_balance.org_id=organization_id AND stock_balance.branch_id=branch.id
         AND stock_balance.location_id=location.id AND stock_balance.product_id=product.id
         AND stock_balance.batch_id=batch.id AND stock_balance.on_hand_quantity>0
-        AND stock_balance.inventory_value>0 AND stock_balance.average_unit_cost>0 FOR UPDATE;
+        AND stock_balance.inventory_value>0 AND stock_balance.average_unit_cost>0
+        AND stock_balance.row_version=(requested_count->>'stock_balance_row_version')::bigint FOR UPDATE;
       SELECT * INTO STRICT last_ledger FROM inventory.stock_ledger_entries AS ledger_entry
        WHERE ledger_entry.org_id=organization_id AND ledger_entry.id=balance.last_ledger_entry_id
         AND ledger_entry.branch_id=branch.id AND ledger_entry.location_id=location.id
@@ -4364,9 +4362,15 @@ BEGIN
       IF pending_count<>0 THEN RAISE EXCEPTION USING ERRCODE='55000', MESSAGE='cycle-count lot has a pending inventory source or movement document'; END IF;
       counted_base:=pg_catalog.round((requested_count->>'counted_quantity')::numeric*conversion.multiplier,6);
       variance_base:=counted_base-balance.on_hand_quantity;
-      extended_cost:=pg_catalog.round(variance_base*balance.average_unit_cost,2);
-      IF variance_base<=0 OR extended_cost<=0 THEN
-        RAISE EXCEPTION USING ERRCODE='0A000', MESSAGE='pilot supports only a positive cycle-count gain with nonzero MWA value'; END IF;
+      extended_cost:=CASE WHEN pg_catalog.abs(variance_base)=balance.on_hand_quantity
+        THEN balance.inventory_value
+        ELSE pg_catalog.round(pg_catalog.abs(variance_base)*balance.average_unit_cost,2) END;
+      IF variance_base=0 OR extended_cost<=0 OR counted_base<0 THEN
+        RAISE EXCEPTION USING ERRCODE='0A000', MESSAGE='cycle count requires one nonzero valued variance'; END IF;
+      line_effect:=CASE WHEN variance_base>0 THEN 'gain' ELSE 'loss' END;
+      IF variance_effect IS NULL THEN variance_effect:=line_effect;
+      ELSIF variance_effect<>line_effect THEN
+        RAISE EXCEPTION USING ERRCODE='0A000', MESSAGE='one cycle-count command cannot mix gain and loss variances'; END IF;
       resolved_lines:=resolved_lines||pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
         'line_number',line_no,'inventory_document_line_id',requested_count->>'inventory_document_line_id',
         'product_id',product.id,'batch_id',batch.id,'uom_conversion_id',conversion.id,'uom_code',product.base_uom_code,
@@ -4374,7 +4378,7 @@ BEGIN
         'counted_quantity',(requested_count->>'counted_quantity'),'system_base_quantity',balance.on_hand_quantity::text,
         'counted_base_quantity',counted_base::text,'variance_base_quantity',variance_base::text,
         'unit_cost',balance.average_unit_cost::text,'extended_cost',extended_cost::text));
-      total_base:=total_base+variance_base; total_value:=total_value+extended_cost;
+      total_base:=total_base+pg_catalog.abs(variance_base); total_value:=total_value+extended_cost;
       source_versions:=source_versions||pg_catalog.jsonb_build_array(
         pg_catalog.jsonb_build_object('resource_type','product','id',product.id,'row_version',product.row_version,
           'drug_schedule',product.drug_schedule,'ndps_regulated',product.ndps_regulated,'cold_chain_required',product.cold_chain_required),
@@ -4383,7 +4387,7 @@ BEGIN
           'valid_from',conversion.valid_from,'valid_until',conversion.valid_until),
         pg_catalog.jsonb_build_object('resource_type','inventory_batch','id',batch.id,'row_version',batch.row_version,
           'status',batch.status,'expires_on',batch.expires_on,'mrp',batch.mrp::text,'mrp_uom_conversion_id',batch.mrp_uom_conversion_id),
-        pg_catalog.jsonb_build_object('resource_type','stock_balance','id',last_ledger.id,'branch_id',branch.id,
+        pg_catalog.jsonb_build_object('resource_type','stock_balance','branch_id',branch.id,
           'location_id',location.id,'product_id',product.id,'batch_id',batch.id,'row_version',balance.row_version,
           'on_hand_quantity',balance.on_hand_quantity::text,'inventory_value',balance.inventory_value::text,
           'average_unit_cost',balance.average_unit_cost::text,'last_ledger_entry_id',balance.last_ledger_entry_id,
@@ -4392,6 +4396,15 @@ BEGIN
         pg_catalog.jsonb_build_object('resource_type','pending_inventory_document_state','batch_id',batch.id,'active_count',pending_count));
     END LOOP;
   END LOOP;
+  SELECT * INTO STRICT variance_account FROM finance.accounts WHERE org_id=organization_id
+    AND id=erp_commercial_commands.resolve_role_account(organization_id,branch.id,
+      CASE variance_effect WHEN 'gain' THEN 'inventory_count_gain' ELSE 'inventory_count_loss' END,
+      CASE variance_effect WHEN 'gain' THEN 'income' ELSE 'expense' END,'INR',false)
+    AND status='active' AND account_type=CASE variance_effect WHEN 'gain' THEN 'income' ELSE 'expense' END
+    AND currency_code='INR' AND NOT allows_party_posting FOR SHARE;
+  source_versions:=source_versions||pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
+    'resource_type','finance_account','role',CASE variance_effect WHEN 'gain' THEN 'inventory_count_gain' ELSE 'inventory_count_loss' END,
+    'id',variance_account.id,'row_version',variance_account.row_version));
   IF medicine_count>0 THEN
     SELECT count(DISTINCT license.license_type_code),
            pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
@@ -4416,12 +4429,12 @@ BEGIN
   RETURN pg_catalog.jsonb_build_object('branch_id',branch.id,'adjustment_date',adjustment_date,
     'counted_at',counted_at,'counted_by_membership_id',counted_by,'location_id',location.id,
     'evidence_attachment_id',evidence.id,'inventory_asset_account_id',inventory_account.id,
-    'inventory_count_gain_account_id',gain_account.id,'lines',resolved_lines,
+    'inventory_variance_account_id',variance_account.id,'variance_effect',variance_effect,'lines',resolved_lines,
     'total_base_quantity',total_base::text,'total_value',total_value::text,'source_versions',source_versions,
     'legal_scope',pg_catalog.jsonb_build_object('country','IN','currency','INR','reason','cycle_count',
-      'supported_effect','positive_gain_only','valuation','current_moving_weighted_average',
+      'supported_effect','homogeneous_gain_or_loss','variance_effect',variance_effect,'valuation','current_moving_weighted_average',
       'tax_effect','no_supply_no_gst_no_itc_claim_or_reversal','physical_movement_required',false,
-      'unsupported_fail_closed',pg_catalog.jsonb_build_array('zero_loss_or_mixed_variance','backdated_count',
+      'unsupported_fail_closed',pg_catalog.jsonb_build_array('zero_or_mixed_variance','backdated_count',
         'cold_chain_or_controlled_product','active_recall','pending_inventory_source','reversal')));
 END
 ''',
@@ -4450,8 +4463,8 @@ BEGIN
                AND (expected.value->>'line_number')::integer=line.line_number AND line.movement_kind='count_adjustment'
                AND (expected.value->>'product_id')::uuid=line.product_id AND (expected.value->>'batch_id')::uuid=line.batch_id
                AND expected.value->>'uom_code'=line.uom_code
-               AND (expected.value->>'variance_base_quantity')::numeric=line.entered_quantity
-               AND (expected.value->>'variance_base_quantity')::numeric=line.base_quantity
+               AND pg_catalog.abs((expected.value->>'variance_base_quantity')::numeric)=line.entered_quantity
+               AND pg_catalog.abs((expected.value->>'variance_base_quantity')::numeric)=line.base_quantity
                AND (resolved_document->>'location_id')::uuid=line.from_location_id AND line.to_location_id IS NULL
                AND (expected.value->>'system_base_quantity')::numeric=line.system_quantity
                AND (expected.value->>'counted_base_quantity')::numeric=line.counted_quantity
@@ -4466,12 +4479,16 @@ BEGIN
        (resolved_document->>'total_value')::numeric,(resolved_document->>'total_value')::numeric)
      OR (SELECT count(*) FROM finance.journal_lines line WHERE line.org_id=organization_id AND line.journal_entry_id=journal_id)<>2
      OR NOT EXISTS(SELECT 1 FROM finance.journal_lines line WHERE line.org_id=organization_id AND line.journal_entry_id=journal_id
-       AND line.line_number=1 AND line.account_id=(resolved_document->>'inventory_asset_account_id')::uuid
+       AND line.line_number=1 AND line.account_id=CASE resolved_document->>'variance_effect'
+         WHEN 'gain' THEN (resolved_document->>'inventory_asset_account_id')::uuid
+         ELSE (resolved_document->>'inventory_variance_account_id')::uuid END
        AND line.branch_id=(resolved_document->>'branch_id')::uuid AND line.party_id IS NULL
        AND line.transaction_debit=(resolved_document->>'total_value')::numeric AND line.transaction_credit=0
        AND line.functional_debit=(resolved_document->>'total_value')::numeric AND line.functional_credit=0)
      OR NOT EXISTS(SELECT 1 FROM finance.journal_lines line WHERE line.org_id=organization_id AND line.journal_entry_id=journal_id
-       AND line.line_number=2 AND line.account_id=(resolved_document->>'inventory_count_gain_account_id')::uuid
+       AND line.line_number=2 AND line.account_id=CASE resolved_document->>'variance_effect'
+         WHEN 'gain' THEN (resolved_document->>'inventory_variance_account_id')::uuid
+         ELSE (resolved_document->>'inventory_asset_account_id')::uuid END
        AND line.branch_id=(resolved_document->>'branch_id')::uuid AND line.party_id IS NULL
        AND line.transaction_debit=0 AND line.transaction_credit=(resolved_document->>'total_value')::numeric
        AND line.functional_debit=0 AND line.functional_credit=(resolved_document->>'total_value')::numeric) THEN
@@ -4544,8 +4561,8 @@ BEGIN
       variance_quantity,unit_cost,extended_cost)
     VALUES(organization_id,(resolved_line->>'inventory_document_line_id')::uuid,inventory_document_id,
       (resolved_line->>'line_number')::integer,'count_adjustment',(resolved_line->>'product_id')::uuid,
-      (resolved_line->>'batch_id')::uuid,resolved_line->>'uom_code',(resolved_line->>'variance_base_quantity')::numeric,
-      (resolved_line->>'variance_base_quantity')::numeric,(resolved_document->>'location_id')::uuid,
+      (resolved_line->>'batch_id')::uuid,resolved_line->>'uom_code',pg_catalog.abs((resolved_line->>'variance_base_quantity')::numeric),
+      pg_catalog.abs((resolved_line->>'variance_base_quantity')::numeric),(resolved_document->>'location_id')::uuid,
       (resolved_line->>'system_base_quantity')::numeric,(resolved_line->>'counted_base_quantity')::numeric,
       (resolved_line->>'variance_base_quantity')::numeric,(resolved_line->>'unit_cost')::numeric,
       (resolved_line->>'extended_cost')::numeric);
@@ -4553,17 +4570,21 @@ BEGIN
   INSERT INTO finance.journal_entries(org_id,id,journal_number,posting_date,description,transaction_currency,functional_currency,
     fx_rate,transaction_debit_total,transaction_credit_total,functional_debit_total,functional_credit_total,status)
   VALUES(organization_id,journal_id,journal_number,(resolved_document->>'adjustment_date')::date,
-    'Physical cycle-count gain '||document_number,'INR','INR',1,(resolved_document->>'total_value')::numeric,
+    'Physical cycle-count '||(resolved_document->>'variance_effect')||' '||document_number,'INR','INR',1,(resolved_document->>'total_value')::numeric,
     (resolved_document->>'total_value')::numeric,(resolved_document->>'total_value')::numeric,
     (resolved_document->>'total_value')::numeric,'draft');
   INSERT INTO finance.journal_lines(org_id,id,journal_entry_id,line_number,account_id,branch_id,description,
     transaction_debit,transaction_credit,functional_debit,functional_credit)
   VALUES
-    (organization_id,pg_catalog.gen_random_uuid(),journal_id,1,(resolved_document->>'inventory_asset_account_id')::uuid,
-      (resolved_document->>'branch_id')::uuid,'Inventory gain from verified physical count',
+    (organization_id,pg_catalog.gen_random_uuid(),journal_id,1,CASE resolved_document->>'variance_effect'
+        WHEN 'gain' THEN (resolved_document->>'inventory_asset_account_id')::uuid
+        ELSE (resolved_document->>'inventory_variance_account_id')::uuid END,
+      (resolved_document->>'branch_id')::uuid,'Cycle-count '||(resolved_document->>'variance_effect')||' debit',
       (resolved_document->>'total_value')::numeric,0,(resolved_document->>'total_value')::numeric,0),
-    (organization_id,pg_catalog.gen_random_uuid(),journal_id,2,(resolved_document->>'inventory_count_gain_account_id')::uuid,
-      (resolved_document->>'branch_id')::uuid,'Cycle-count gain income',0,(resolved_document->>'total_value')::numeric,
+    (organization_id,pg_catalog.gen_random_uuid(),journal_id,2,CASE resolved_document->>'variance_effect'
+        WHEN 'gain' THEN (resolved_document->>'inventory_variance_account_id')::uuid
+        ELSE (resolved_document->>'inventory_asset_account_id')::uuid END,
+      (resolved_document->>'branch_id')::uuid,'Cycle-count '||(resolved_document->>'variance_effect')||' credit',0,(resolved_document->>'total_value')::numeric,
       0,(resolved_document->>'total_value')::numeric);
   PERFORM "{SCHEMA}"."assert_inventory_adjustment_draft"(organization_id,inventory_document_id,journal_id,resolved_document);
   RETURN pg_catalog.jsonb_build_object('command_request_id',command_id,'expires_at',expires_at,
@@ -6880,8 +6901,8 @@ DECLARE
     posted_allocation_total numeric(20,2);
     approving_membership_id uuid;
     approval_decided_at timestamptz;
-    count_gain_ledger_count integer;
-    count_gain_ledger_value numeric(20,2);
+    count_variance_ledger_count integer;
+    count_variance_ledger_value numeric(20,2);
     transfer_out_count integer;
     transfer_in_count integer;
     transfer_quantity_net numeric(20,6);
@@ -7688,18 +7709,21 @@ BEGIN
                      AND destination_entry.value_delta=(expected.value->>'extended_cost')::numeric)) THEN
             RAISE EXCEPTION USING ERRCODE='40001', MESSAGE='posted transfer ledger is not the exact balanced approved quantity and valuation'; END IF;
         ELSE
-          SELECT count(*),coalesce(sum(entry.value_delta),0) INTO count_gain_ledger_count,count_gain_ledger_value
+          SELECT count(*),coalesce(sum(pg_catalog.abs(entry.value_delta)),0)
+            INTO count_variance_ledger_count,count_variance_ledger_value
             FROM inventory.stock_ledger_entries entry WHERE entry.org_id=organization_id
-             AND entry.inventory_document_id=request_row.target_resource_id AND entry.entry_kind='count_gain';
-          IF count_gain_ledger_count<>pg_catalog.jsonb_array_length(current_resolution->'lines')
-             OR count_gain_ledger_value<>(current_resolution->>'total_value')::numeric THEN
-            RAISE EXCEPTION USING ERRCODE='40001', MESSAGE='posted count-gain ledger differs from the approved MWA preview'; END IF;
+             AND entry.inventory_document_id=request_row.target_resource_id
+             AND entry.entry_kind=CASE current_resolution->>'variance_effect'
+               WHEN 'gain' THEN 'count_gain' ELSE 'count_loss' END;
+          IF count_variance_ledger_count<>pg_catalog.jsonb_array_length(current_resolution->'lines')
+             OR count_variance_ledger_value<>(current_resolution->>'total_value')::numeric THEN
+            RAISE EXCEPTION USING ERRCODE='40001', MESSAGE='posted count-variance ledger differs from the approved MWA preview'; END IF;
           UPDATE finance.journal_entries SET status='posted',posted_at=pg_catalog.transaction_timestamp(),
             posted_by_membership_id=actor_id,updated_at=pg_catalog.transaction_timestamp(),
             updated_by_membership_id=actor_id,row_version=row_version+1
            WHERE org_id=organization_id AND id=(request_document->>'journal_id')::uuid AND status='draft'
-             AND transaction_debit_total=count_gain_ledger_value AND transaction_credit_total=count_gain_ledger_value
-             AND functional_debit_total=count_gain_ledger_value AND functional_credit_total=count_gain_ledger_value;
+             AND transaction_debit_total=count_variance_ledger_value AND transaction_credit_total=count_variance_ledger_value
+             AND functional_debit_total=count_variance_ledger_value AND functional_credit_total=count_variance_ledger_value;
           IF NOT FOUND THEN RAISE EXCEPTION USING ERRCODE='40001', MESSAGE='cycle-count valuation journal changed before atomic posting'; END IF;
           INSERT INTO finance.accounting_events(org_id,id,event_type,inventory_document_id,journal_entry_id,
             occurred_at,source_posted_at,created_by_membership_id)
@@ -8028,7 +8052,7 @@ def generated_artifacts() -> tuple[str, str]:
                 ],
             },
             "inventory_adjustment_pilot_scope": {
-                "supported_effect": "same_day_positive_cycle_count_gain_only",
+                "supported_effect": "same_day_homogeneous_cycle_count_gain_or_loss",
                 "supported_currency": "INR",
                 "valuation": "locked_current_moving_weighted_average",
                 "required_matching": [
@@ -8040,11 +8064,13 @@ def generated_artifacts() -> tuple[str, str]:
                     "effective_product_uom_conversion_and_exact_base_count",
                     "branch_forms_20b_and_21b_for_medicine_custody",
                     "no_pending_inventory_document_for_the_lot",
-                    "atomic_count_gain_ledger_and_two_line_inventory_valuation_journal",
+                    "expected_stock_balance_row_version",
+                    "canonical_inventory_count_gain_or_loss_account",
+                    "atomic_signed_count_ledger_and_two_line_inventory_valuation_journal",
                 ],
                 "tax_effect": "no_supply_no_gst_no_itc_claim_or_reversal",
                 "unsupported_fail_closed": [
-                    "zero_loss_or_mixed_variance",
+                    "zero_or_mixed_sign_variance",
                     "backdated_or_stale_count",
                     "cold_chain_h_h1_x_ndps_or_recalled_product",
                     "unowned_zero_balance_or_pending_source_stock",

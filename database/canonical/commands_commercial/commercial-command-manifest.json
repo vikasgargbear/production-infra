@@ -14,6 +14,7 @@
       "input_sgst": "active asset account",
       "inventory_asset": "active asset account",
       "inventory_count_gain": "active income account without party posting",
+      "inventory_count_loss": "active expense account without party posting",
       "output_cess": "active liability account",
       "output_cgst": "active liability account",
       "output_igst": "active liability account",
@@ -45,7 +46,11 @@
   ],
   "blocked_count": 0,
   "blocked_invariants": {},
+<<<<<<< HEAD
   "catalog_sha256": "387ca25682ab4f0254afb42d0266f0f6eb20cbbb2457660a17879b9fe8a582c5",
+=======
+  "catalog_sha256": "4fa6410081b69aa91c1afbfd51ab4194a80a6254b5f47225b95aedd70dcfba13",
+>>>>>>> 32568f46 (Post ordinary signed cycle-count variances)
   "generic_adjustment_tax_boundary": {
     "blocked_count": 0,
     "blocked_invariants": {},
@@ -551,6 +556,10 @@
     "tax.documents:documents_cross_row_guard"
   ],
   "source_manifest": "commands_trade_v2/trade-posting-manifest.json",
+<<<<<<< HEAD
   "source_manifest_sha256": "9d22deb2d6d279dcf5a7be75a24d41f87b1d55f19a24778f47490cbc81d31e01",
+=======
+  "source_manifest_sha256": "34f9e705d20d5f620a56ab61f5bbccfb94722192267796c69de840b30b6c84fc",
+>>>>>>> 32568f46 (Post ordinary signed cycle-count variances)
   "target_resolved_count_after_catalog_correction": 11
 }

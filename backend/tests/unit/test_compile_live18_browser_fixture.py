@@ -490,7 +490,7 @@ def test_stock_adjustment_runs_before_mutating_sales_and_uses_authoritative_stoc
         "sales_invoice_quantity": "1.000000",
         "sales_invoice_free_quantity": "0.500000",
         "sales_order_quantity": "2.000000",
-        "stock_adjustment_gain_quantity": "1.000000",
+        "stock_adjustment_loss_quantity": "1.000000",
     }
     facts = {
         "identity": {
@@ -524,11 +524,11 @@ def test_stock_adjustment_runs_before_mutating_sales_and_uses_authoritative_stoc
         used,
     )
     _validate_compiled_steps("stock_adjustment", operation, "separate_approver")
-    assert used == {"stock_adjustment_gain_quantity"}
+    assert used == {"stock_adjustment_loss_quantity"}
     operation_ids = [row["id"] for row in matrix["operations"]]
     assert operation_ids.index("stock_adjustment") < operation_ids.index("sales_invoice")
     assert operation_facts["choice"] == {
-        "stock_adjustment_counted_quantity": "11.000000",
+        "stock_adjustment_counted_quantity": "9.000000",
         "stock_adjustment_expected_system_base_quantity": "100.000000",
     }
     assert operation["prepare_steps"][5]["locator"]["name"] == (
@@ -544,7 +544,7 @@ def test_stock_adjustment_runs_before_mutating_sales_and_uses_authoritative_stoc
         _operation_facts(
             "stock_adjustment",
             facts,
-            {**scalars, "stock_adjustment_gain_quantity": "0.000000"},
+            {**scalars, "stock_adjustment_loss_quantity": "0.000000"},
             set(),
         )
 
@@ -559,8 +559,8 @@ def test_delivery_challan_proves_ordered_selected_batch_stock_prerequisite() -> 
         },
     }
     scalars = {
-        "stock_adjustment_gain_quantity": "1.000000",
-        "sales_invoice_quantity": "9.000000",
+        "stock_adjustment_loss_quantity": "1.000000",
+        "sales_invoice_quantity": "7.000000",
         "sales_invoice_free_quantity": "1.000000",
         "sales_order_quantity": "1.000000",
     }

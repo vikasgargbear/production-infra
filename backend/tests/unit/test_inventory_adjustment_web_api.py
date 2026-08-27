@@ -54,6 +54,7 @@ def test_cycle_count_eligibility_returns_only_server_owned_facts(monkeypatch):
             "product_id": product_id,
             "batch_id": batch_id,
             "system_base_quantity": Decimal("12.345678"),
+            "stock_balance_row_version": 7,
             "uom_conversion_id": conversion_id,
             "from_uom_code": "PK",
             "to_uom_code": "EA",
@@ -79,6 +80,7 @@ def test_cycle_count_eligibility_returns_only_server_owned_facts(monkeypatch):
 
     assert response.counted_by_membership_id == membership_id
     assert response.system_base_quantity == Decimal("12.345678")
+    assert response.stock_balance_row_version == 7
     assert response.uom_conversions[0].uom_conversion_id == conversion_id
     assert response.evidence[0].evidence_attachment_id == evidence_id
     assert "conversion.from_uom_code<>conversion.to_uom_code" in db.calls[0][0]
@@ -98,6 +100,7 @@ def test_cycle_count_eligibility_fails_closed_without_evidence(monkeypatch):
             "product_id": product_id,
             "batch_id": batch_id,
             "system_base_quantity": Decimal("1.000000"),
+            "stock_balance_row_version": 7,
             "uom_conversion_id": conversion_id,
             "from_uom_code": "PK",
             "to_uom_code": "EA",
@@ -132,8 +135,9 @@ def test_posted_cycle_count_readback_reconciles_stock_value_and_journal(monkeypa
         "document_number": "SC-2026-000001",
         "status": "posted",
         "branch_id": branch_id,
-        "total_gain_base_quantity": Decimal("2.500000"),
-        "total_gain_value": Decimal("25.00"),
+        "variance_effect": "gain",
+        "total_variance_base_quantity": Decimal("2.500000"),
+        "total_variance_value": Decimal("25.00"),
         "journal_entry_id": journal_id,
         "journal_status": "posted",
         "journal_debit_total": Decimal("25.00"),
@@ -142,11 +146,12 @@ def test_posted_cycle_count_readback_reconciles_stock_value_and_journal(monkeypa
         "inventory_document_line_id": line_id,
         "product_id": product_id,
         "batch_id": batch_id,
+        "location_id": uuid4(),
         "system_base_quantity": Decimal("10.000000"),
         "counted_base_quantity": Decimal("12.500000"),
-        "gain_base_quantity": Decimal("2.500000"),
+        "variance_base_quantity": Decimal("2.500000"),
         "unit_cost": Decimal("10.0000"),
-        "gain_value": Decimal("25.00"),
+        "variance_value": Decimal("25.00"),
         "ledger_entry_id": ledger_id,
         "ledger_quantity_delta": Decimal("2.500000"),
         "ledger_value_delta": Decimal("25.00"),
@@ -162,7 +167,40 @@ def test_posted_cycle_count_readback_reconciles_stock_value_and_journal(monkeypa
     assert response.lines[0].ledger_quantity_delta == Decimal("2.500000")
 
 
-def test_posted_cycle_count_readback_rejects_stock_drift(monkeypatch):
+def test_posted_cycle_count_loss_readback_preserves_exact_negative_lineage(monkeypatch):
+    command_id = uuid4()
+    monkeypatch.setattr(
+        web,
+        "_command_context",
+        lambda *_args, **_kwargs: _context(),
+    )
+    row = {
+        "command_request_id": command_id,
+        "inventory_document_id": uuid4(), "document_number": "SC-LOSS-1", "status": "posted",
+        "branch_id": uuid4(), "variance_effect": "loss",
+        "total_variance_base_quantity": Decimal("2.500000"),
+        "total_variance_value": Decimal("25.00"), "journal_entry_id": uuid4(),
+        "journal_status": "posted", "journal_debit_total": Decimal("25.00"),
+        "journal_credit_total": Decimal("25.00"), "accounting_event_id": uuid4(),
+        "inventory_document_line_id": uuid4(), "product_id": uuid4(), "batch_id": uuid4(),
+        "location_id": uuid4(), "system_base_quantity": Decimal("10.000000"),
+        "counted_base_quantity": Decimal("7.500000"),
+        "variance_base_quantity": Decimal("-2.500000"), "unit_cost": Decimal("10.0000"),
+        "variance_value": Decimal("25.00"), "ledger_entry_id": uuid4(),
+        "ledger_quantity_delta": Decimal("-2.500000"),
+        "ledger_value_delta": Decimal("-25.00"), "current_on_hand_quantity": Decimal("7.500000"),
+    }
+
+    response = web.inventory_adjustment_readback(
+        command_request_id=command_id, user={}, db=_Db([[row]])
+    )
+
+    assert response.variance_effect == "loss"
+    assert response.lines[0].variance_base_quantity == Decimal("-2.500000")
+    assert response.lines[0].location_id == row["location_id"]
+
+
+def test_posted_cycle_count_readback_rejects_ledger_drift(monkeypatch):
     monkeypatch.setattr(
         web,
         "_command_context",
@@ -172,14 +210,15 @@ def test_posted_cycle_count_readback_rejects_stock_drift(monkeypatch):
     row = {
         "command_request_id": command_id,
         "inventory_document_id": uuid4(), "document_number": "SC-1", "status": "posted",
-        "branch_id": uuid4(), "total_gain_base_quantity": Decimal("1"),
-        "total_gain_value": Decimal("2"), "journal_entry_id": uuid4(),
+        "branch_id": uuid4(), "variance_effect": "gain",
+        "total_variance_base_quantity": Decimal("1"),
+        "total_variance_value": Decimal("2"), "journal_entry_id": uuid4(),
         "journal_status": "posted", "journal_debit_total": Decimal("2"),
         "journal_credit_total": Decimal("2"), "accounting_event_id": uuid4(),
-        "inventory_document_line_id": uuid4(), "product_id": uuid4(), "batch_id": uuid4(),
+        "inventory_document_line_id": uuid4(), "product_id": uuid4(), "batch_id": uuid4(), "location_id": uuid4(),
         "system_base_quantity": Decimal("5"), "counted_base_quantity": Decimal("6"),
-        "gain_base_quantity": Decimal("1"), "unit_cost": Decimal("2"), "gain_value": Decimal("2"),
-        "ledger_entry_id": uuid4(), "ledger_quantity_delta": Decimal("1"),
+        "variance_base_quantity": Decimal("1"), "unit_cost": Decimal("2"), "variance_value": Decimal("2"),
+        "ledger_entry_id": uuid4(), "ledger_quantity_delta": Decimal("0.5"),
         "ledger_value_delta": Decimal("2"), "current_on_hand_quantity": Decimal("5"),
     }
     with pytest.raises(HTTPException) as error:

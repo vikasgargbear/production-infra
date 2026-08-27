@@ -148,7 +148,7 @@ _PREPARE_BINDINGS = {
         operation_key="inventory.adjustment.prepare",
         available=True,
         prepare_function="erp_automation_commands.persist_inventory_adjustment_prepare",
-        execute_function="erp_automation_commands.execute_approved_command:inventory_count_gain",
+        execute_function="erp_automation_commands.execute_approved_command:signed_cycle_count",
         unavailable_reason=None,
     ),
     "inventory.destruction.prepare": ActionAdapterBinding(

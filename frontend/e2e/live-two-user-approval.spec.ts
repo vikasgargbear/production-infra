@@ -186,21 +186,27 @@ function reconcileCycleCount(readback: Json, commandId: string, resourceId: stri
   expect(text(readback.inventory_document_id, 'inventory_document_id')).toBe(resourceId);
   expect(readback.status).toBe('posted');
   expect(readback.journal_status).toBe('posted');
-  const totalQuantity = decimalUnits(readback.total_gain_base_quantity, 'total_gain_base_quantity');
-  const totalValue = decimalUnits(readback.total_gain_value, 'total_gain_value');
+  const effect = text(readback.variance_effect, 'variance_effect');
+  expect(['gain', 'loss']).toContain(effect);
+  const totalQuantity = decimalUnits(readback.total_variance_base_quantity, 'total_variance_base_quantity');
+  const totalValue = decimalUnits(readback.total_variance_value, 'total_variance_value');
   expect(decimalUnits(readback.journal_debit_total, 'cycle journal_debit_total')).toBe(totalValue);
   expect(decimalUnits(readback.journal_credit_total, 'cycle journal_credit_total')).toBe(totalValue);
   const lines = array(readback.lines, 'cycle lines').map((line, index) => record(line, `cycle line ${index}`));
   expect(lines.length).toBeGreaterThan(0);
-  expect(sum(lines.map((line, index) => decimalUnits(line.gain_base_quantity, `cycle line ${index} gain_base_quantity`)))).toBe(totalQuantity);
-  expect(sum(lines.map((line, index) => decimalUnits(line.gain_value, `cycle line ${index} gain_value`)))).toBe(totalValue);
+  expect(sum(lines.map((line, index) => {
+    const quantity = decimalUnits(line.variance_base_quantity, `cycle line ${index} variance_base_quantity`);
+    return quantity < 0n ? -quantity : quantity;
+  }))).toBe(totalQuantity);
+  expect(sum(lines.map((line, index) => decimalUnits(line.variance_value, `cycle line ${index} variance_value`)))).toBe(totalValue);
   lines.forEach((line, index) => {
-    expect(decimalUnits(line.gain_base_quantity, `cycle line ${index} gain_base_quantity`))
+    const quantity = decimalUnits(line.variance_base_quantity, `cycle line ${index} variance_base_quantity`);
+    const value = decimalUnits(line.variance_value, `cycle line ${index} variance_value`);
+    const ledgerValue = decimalUnits(line.ledger_value_delta, `cycle line ${index} ledger_value_delta`);
+    expect(quantity)
       .toBe(decimalUnits(line.ledger_quantity_delta, `cycle line ${index} ledger_quantity_delta`));
-    expect(decimalUnits(line.gain_value, `cycle line ${index} gain_value`))
-      .toBe(decimalUnits(line.ledger_value_delta, `cycle line ${index} ledger_value_delta`));
-    expect(decimalUnits(line.counted_base_quantity, `cycle line ${index} counted_base_quantity`))
-      .toBe(decimalUnits(line.current_on_hand_quantity, `cycle line ${index} current_on_hand_quantity`));
+    expect(value).toBe(ledgerValue < 0n ? -ledgerValue : ledgerValue);
+    expect(quantity > 0n ? 'gain' : 'loss').toBe(effect);
   });
 }
 
@@ -494,7 +500,7 @@ test.describe('live disposable-org two-user approvals', () => {
       await expect(requester.getByRole('button', { name: 'Post Approved Return' })).toHaveCount(0);
       expect(executeCounts.get(purchaseCommandId)).toBe(1);
 
-      // Maker prepares a one-UOM cycle-count gain from canonical eligibility strings.
+      // Maker prepares a one-UOM ordinary cycle-count shortage from canonical eligibility strings.
       await openAdjustment(requester);
       const productSearch = requester.getByPlaceholder('Search and select product...');
       await productSearch.fill(configuration.productQuery);
@@ -510,7 +516,8 @@ test.describe('live disposable-org two-user approvals', () => {
       const uom = record(array(eligibility.uom_conversions, 'eligibility UOM conversions')[0], 'eligibility UOM');
       const multiplierUnits = decimalUnits(uom.multiplier, 'eligibility UOM multiplier');
       expect(systemUnits % multiplierUnits, 'seeded stock must convert exactly to its chosen count UOM').toBe(0n);
-      const countedQuantity = decimalText((systemUnits * SCALE) / multiplierUnits + SCALE);
+      expect(systemUnits, 'seeded stock must cover the ordinary one-UOM shortage').toBeGreaterThanOrEqual(multiplierUnits);
+      const countedQuantity = decimalText((systemUnits * SCALE) / multiplierUnits - SCALE);
       const evidenceSection = requester.getByRole('heading', { name: 'Adjustment Details' }).locator('..');
       const evidenceCombobox = evidenceSection.getByRole('combobox');
       await evidenceCombobox.click();

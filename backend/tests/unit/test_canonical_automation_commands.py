@@ -71,7 +71,7 @@ def test_dispatcher_is_closed_typed_and_not_mcp_mounted() -> None:
     assert "compliance.destruction.post" in dispatcher["execution_operations"]
     assert "inventory.document.post" in dispatcher["execution_operations"]
     assert dispatcher["inventory_adjustment_pilot_scope"]["supported_effect"] == (
-        "same_day_positive_cycle_count_gain_only"
+        "same_day_homogeneous_cycle_count_gain_or_loss"
     )
     assert dispatcher["inventory_destruction_pilot_scope"]["status"] == (
         "available_reviewed_certified_full_balance_gst_registered"
@@ -251,7 +251,7 @@ def test_supplier_payment_prepare_and_execute_reauthorize_exact_inr_payables() -
         assert fragment in mapping
 
 
-def test_inventory_cycle_count_gain_prepare_and_execute_are_closed_and_atomic() -> None:
+def test_inventory_cycle_count_signed_prepare_and_execute_are_closed_and_atomic() -> None:
     mapping = _sql()
     for fragment in (
         '"resolve_inventory_adjustment_prepare"',
@@ -274,13 +274,15 @@ def test_inventory_cycle_count_gain_prepare_and_execute_are_closed_and_atomic() 
         "expires_on>adjustment_date",
         "pending.status IN ('draft','submitted','approved')",
         "variance_base:=counted_base-balance.on_hand_quantity",
-        "extended_cost:=pg_catalog.round(variance_base*balance.average_unit_cost,2)",
-        "'inventory_count_gain','income','INR',false",
+        "pg_catalog.abs(variance_base)*balance.average_unit_cost",
+        "one cycle-count command cannot mix gain and loss variances",
+        "'inventory_count_gain' ELSE 'inventory_count_loss'",
+        "stock_balance.row_version=(requested_count->>'stock_balance_row_version')::bigint",
         "license.license_type_code IN ('drug_wholesale_form_20b','drug_wholesale_form_21b')",
         "inventory_document.status<>'submitted'",
         "approval.approver_membership_id<>request_row.requested_by_membership_id",
         "PERFORM erp_trade_commands.post_locked_document",
-        "entry.entry_kind='count_gain'",
+        "entry.entry_kind=CASE current_resolution->>'variance_effect'",
         "INSERT INTO finance.accounting_events",
         "'inventory_valuation'",
     ):

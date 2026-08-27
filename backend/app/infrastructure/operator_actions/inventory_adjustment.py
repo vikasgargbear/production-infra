@@ -1,4 +1,4 @@
-"""Canonical same-day inventory cycle-count gain persistence boundary."""
+"""Canonical same-day signed inventory cycle-count persistence boundary."""
 
 from sqlalchemy import text
 

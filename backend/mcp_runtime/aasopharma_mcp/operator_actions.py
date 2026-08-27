@@ -40,7 +40,7 @@ OPERATOR_TOOL_DESCRIPTIONS: Mapping[str, str] = {
     "erp_supplier_advance_prepare": "Prepare an INR supplier advance allocated to one approved purchase-order line.",
     "erp_adjustment_note_prepare": "Prepare a standalone canonical customer credit note or supplier debit note against exact posted invoice lines and the authoritative open item.",
     "erp_inventory_transfer_prepare": "Prepare an exact canonical inter-branch stock transfer with explicit source batches and destination location.",
-    "erp_inventory_adjustment_prepare": "Prepare an evidenced positive cycle-count inventory adjustment for exact product batches.",
+    "erp_inventory_adjustment_prepare": "Prepare an evidenced homogeneous gain or ordinary-loss cycle-count inventory adjustment for exact product batches.",
     "erp_inventory_destruction_prepare": "Prepare certified same-day destruction of exact non-regulated stock with a reviewed Section 17(5)(h) GST input-credit reversal.",
     "erp_bank_reconciliation_prepare": "Prepare an exact full match between one imported bank-statement line and one posted bank-ledger journal entry without changing either owner.",
     "erp_expense_claim_prepare": "Submit an INR member expense claim with verified receipts, exact expense accounts, and a separately reviewed reimbursement journal.",
@@ -56,7 +56,7 @@ OPERATOR_TOOL_DESCRIPTIONS: Mapping[str, str] = {
     "erp_supplier_payment_readback": "Read one posted supplier payment with its exact payable allocations, residual open items, withholding identity, and balanced settlement journal.",
     "erp_supplier_advance_readback": "Read one posted supplier advance with its exact purchase-order-line allocation, prepayment open item, withholding identity, and balanced journal.",
     "erp_inventory_transfer_readback": "Read one posted inventory transfer with its exact paired source and destination stock-ledger evidence and unchanged value.",
-    "erp_inventory_adjustment_readback": "Read one posted cycle-count gain with its exact count, stock ledger, valuation journal, and accounting-event evidence.",
+    "erp_inventory_adjustment_readback": "Read one posted signed cycle-count variance with its exact count, stock ledger, valuation journal, and accounting-event evidence.",
     "erp_expense_claim_readback": "Read a posted expense claim with approved lines, verified receipt hashes, balanced journal totals, and accounting-event identity.",
 }
 PUBLISHED_PREPARE_TOOL_NAMES = frozenset(
@@ -951,8 +951,13 @@ def _prepare_actions() -> dict[str, OperatorAction]:
         {
             "batch_id": _uuid("Canonical manufacturer batch selected for this movement."),
             "counted_quantity": _decimal("Exact physical count in the selected effective UOM."),
+            "stock_balance_row_version": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "Exact authoritative stock-balance row version selected before prepare.",
+            },
         },
-        ("batch_id", "counted_quantity"),
+        ("batch_id", "counted_quantity", "stock_balance_row_version"),
         "One unique existing lot count. The backend derives system quantity, base quantity, variance, and MWA value.",
     )
     inventory_adjustment = _header("adjustment_date", "India-local posting date of the same-day physical cycle count.")
@@ -961,7 +966,7 @@ def _prepare_actions() -> dict[str, OperatorAction]:
             "counted_at": _datetime("Recent nonfuture physical count timestamp with timezone offset."),
             "counted_by_membership_id": _uuid("Active membership that performed the physical count."),
             "location_id": _uuid("Active same-branch saleable, non-cold inventory location."),
-            "reason_code": _string("Fixed reviewed cycle-count gain reason.", enum=["cycle_count"]),
+            "reason_code": _string("Fixed reviewed cycle-count reason.", enum=["cycle_count"]),
             "evidence_attachment_id": _uuid(
                 "Verified retained inventory_cycle_count_sheet certifying organization ownership and no pending source document."
             ),
@@ -973,9 +978,9 @@ def _prepare_actions() -> dict[str, OperatorAction]:
                         "batch_counts": _array(STOCK_COUNT_BATCH, "Exact existing lots physically counted."),
                     },
                     ("product_id", "uom_conversion_id", "batch_counts"),
-                    "Cycle-count gain product and its unique existing lots.",
+                    "Signed cycle-count product and its unique existing lots.",
                 ),
-                "Gain-only cycle-count lines. Shortage, mixed, zero, cold-chain, controlled, recalled, and reversal flows are unavailable.",
+                "All lines must be gains or ordinary losses. Mixed, zero, damage, expiry, cold-chain, controlled, recalled, and reversal flows are unavailable.",
             ),
         }
     )

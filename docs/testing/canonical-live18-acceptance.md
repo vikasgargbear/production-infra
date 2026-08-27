@@ -161,12 +161,12 @@ label, and GST-treatment label. It selects the exact certified sales-invoice
 UUID produced earlier, then uses only its dispatch allocation, batch, and
 server-published quarantine locations. The return remains intentionally
 dependent on the sales-invoice operation; no older invoice fallback is used.
-Stock adjustment reviews only `stock_adjustment_gain_quantity`, expressed in
+Stock adjustment reviews only `stock_adjustment_loss_quantity`, expressed in
 the exact canonical count UOM. The compiler resolves the requester membership,
 the exact run-and-attempt-bound unused retained cycle-count evidence, eligible
 released batch, UOM multiplier,
 evidence verification instant, and pre-run base stock from canonical staging.
-It derives one exactly representable physical count above that system stock.
+It derives one exactly representable ordinary-shortage count below that system stock.
 Before compiling the later dispatch, the compiler proves that this exact batch's
 ordered adjustment and direct-invoice effects leave enough stock for the exact
 sales-order quantity. The UI independently reloads eligibility, visibly

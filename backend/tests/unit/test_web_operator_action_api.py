@@ -272,6 +272,7 @@ def test_web_cycle_count_preserves_exact_strings_and_rejects_inexact_quantities(
             "batch_counts": [{
                 "batch_id": str(uuid4()),
                 "counted_quantity": "12.000001",
+                "stock_balance_row_version": 7,
             }],
         }],
     }
@@ -286,7 +287,7 @@ def test_web_cycle_count_preserves_exact_strings_and_rejects_inexact_quantities(
     assert response.command_request_id == command_id
     assert calls[0]["payload"]["lines"][0]["batch_counts"][0]["counted_quantity"] == "12.000001"
 
-    for invalid_quantity in (12, "9007199254740993", "12.0000001", "0", "-1", "NaN"):
+    for invalid_quantity in (12, "9007199254740993", "12.0000001", "-1", "NaN"):
         invalid_payload = {
             **payload,
             "lines": [{

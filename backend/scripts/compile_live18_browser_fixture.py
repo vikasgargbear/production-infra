@@ -1301,8 +1301,8 @@ def _operation_facts(
             )
         adjusted_base = (
             initial_base
-            + Decimal(_leaf(
-                scalars, "stock_adjustment_gain_quantity", "reviewed scalar"
+            - Decimal(_leaf(
+                scalars, "stock_adjustment_loss_quantity", "reviewed scalar"
             )) * count_multiplier
         )
         invoice_base = (
@@ -1540,17 +1540,17 @@ def _operation_facts(
             )
         return facts
     if operation_id == "stock_adjustment":
-        gain_text = _leaf(
-            scalars, "stock_adjustment_gain_quantity", "reviewed scalar"
+        loss_text = _leaf(
+            scalars, "stock_adjustment_loss_quantity", "reviewed scalar"
         )
-        if not re.fullmatch(r"(?:0|[1-9][0-9]{0,13})(?:\.[0-9]{1,6})?", gain_text):
+        if not re.fullmatch(r"(?:0|[1-9][0-9]{0,13})(?:\.[0-9]{1,6})?", loss_text):
             raise FixtureCompileError(
-                "stock_adjustment_gain_quantity must be a positive plain decimal with at most 6 fractional digits"
+                "stock_adjustment_loss_quantity must be a positive plain decimal with at most 6 fractional digits"
             )
-        gain_quantity = Decimal(gain_text)
-        if gain_quantity <= 0:
+        loss_quantity = Decimal(loss_text)
+        if loss_quantity <= 0:
             raise FixtureCompileError(
-                "stock_adjustment_gain_quantity must be greater than zero"
+                "stock_adjustment_loss_quantity must be greater than zero"
             )
         initial_base = Decimal(_leaf(
             facts, "display.cycle_count_system_base_quantity", "canonical fact"
@@ -1563,13 +1563,17 @@ def _operation_facts(
             raise FixtureCompileError(
                 "authoritative cycle-count stock and selected UOM multiplier must be positive"
             )
-        counted_quantity = expected_system_base / count_multiplier + gain_quantity
+        counted_quantity = expected_system_base / count_multiplier - loss_quantity
+        if counted_quantity < 0:
+            raise FixtureCompileError(
+                "stock_adjustment_loss_quantity exceeds exact authoritative stock"
+            )
         exact_counted_quantity = counted_quantity.quantize(Decimal("0.000001"))
         if counted_quantity != exact_counted_quantity:
             raise FixtureCompileError(
                 "derived cycle-count quantity is not exactly representable at canonical scale 6"
             )
-        used.add("stock_adjustment_gain_quantity")
+        used.add("stock_adjustment_loss_quantity")
         return {
             **facts,
             "choice": {

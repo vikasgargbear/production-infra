@@ -3497,7 +3497,7 @@ class SqlAlchemyOperatorActionService:
                 if len(rows) != 1:
                     raise OperatorActionError(
                         ActionErrorCode.POLICY_BLOCKED,
-                        "Canonical cycle-count gain resolution is unavailable",
+                        "Canonical signed cycle-count resolution is unavailable",
                     )
                 resolution = _json_document(rows[0]["resolution"])
                 source_versions = tuple(resolution["source_versions"])
@@ -3517,18 +3517,28 @@ class SqlAlchemyOperatorActionService:
                         "batch_id": line["batch_id"],
                         "system_base_quantity": line["system_base_quantity"],
                         "counted_base_quantity": line["counted_base_quantity"],
-                        "gain_base_quantity": line["variance_base_quantity"],
+                        "variance_base_quantity": line["variance_base_quantity"],
                         "moving_weighted_average": line["unit_cost"],
-                        "gain_value": line["extended_cost"],
+                        "variance_value": line["extended_cost"],
+                        "variance_effect": resolution["variance_effect"],
                     }
                     for line in resolution["lines"]
                 )
                 financial_impact = (
                     {
                         "currency_code": "INR",
-                        "debit_account_id": resolution["inventory_asset_account_id"],
-                        "credit_account_id": resolution["inventory_count_gain_account_id"],
+                        "debit_account_id": resolution[
+                            "inventory_asset_account_id"
+                            if resolution["variance_effect"] == "gain"
+                            else "inventory_variance_account_id"
+                        ],
+                        "credit_account_id": resolution[
+                            "inventory_variance_account_id"
+                            if resolution["variance_effect"] == "gain"
+                            else "inventory_asset_account_id"
+                        ],
                         "amount": resolution["total_value"],
+                        "effect": resolution["variance_effect"],
                     },
                 )
                 preview = {
@@ -3565,13 +3575,13 @@ class SqlAlchemyOperatorActionService:
                 if len(persisted) != 1:
                     raise OperatorActionError(
                         ActionErrorCode.POLICY_BLOCKED,
-                        "Canonical cycle-count gain prepare did not persist exactly once",
+                        "Canonical signed cycle-count prepare did not persist exactly once",
                     )
                 result = _json_document(persisted[0]["command_request_id"])
                 if UUID(str(result["command_request_id"])) != identifiers["command_request_id"]:
                     raise OperatorActionError(
                         ActionErrorCode.IDEMPOTENCY_CONFLICT,
-                        "Canonical cycle-count gain idempotency replay differs",
+                        "Canonical signed cycle-count idempotency replay differs",
                     )
                 return PreparedCommand(
                     command_request_id=identifiers["command_request_id"],

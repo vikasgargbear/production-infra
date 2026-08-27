@@ -139,6 +139,7 @@ class InventoryAdjustmentEligibility(StrictDTO):
     product_id: UUID
     batch_id: UUID
     system_base_quantity: Decimal
+    stock_balance_row_version: int
     uom_conversions: list[InventoryAdjustmentUom]
     evidence: list[InventoryAdjustmentEvidence]
 
@@ -147,11 +148,12 @@ class InventoryAdjustmentReadbackLine(StrictDTO):
     inventory_document_line_id: UUID
     product_id: UUID
     batch_id: UUID
+    location_id: UUID
     system_base_quantity: Decimal
     counted_base_quantity: Decimal
-    gain_base_quantity: Decimal
+    variance_base_quantity: Decimal
     unit_cost: Decimal
-    gain_value: Decimal
+    variance_value: Decimal
     ledger_entry_id: UUID
     ledger_quantity_delta: Decimal
     ledger_value_delta: Decimal
@@ -164,8 +166,9 @@ class InventoryAdjustmentReadback(StrictDTO):
     document_number: str
     status: Literal["posted"]
     branch_id: UUID
-    total_gain_base_quantity: Decimal
-    total_gain_value: Decimal
+    variance_effect: Literal["gain", "loss"]
+    total_variance_base_quantity: Decimal
+    total_variance_value: Decimal
     journal_entry_id: UUID
     journal_status: Literal["posted"]
     journal_debit_total: Decimal
@@ -558,7 +561,7 @@ def inventory_adjustment_eligibility(
     user: dict = Depends(_web_user),
     db: Session = Depends(get_db),
 ) -> InventoryAdjustmentEligibility:
-    """Return only server-proven facts needed to prepare a cycle-count gain.
+    """Return only server-proven facts needed to prepare a signed cycle count.
 
     The browser must not derive membership, evidence, UOM, location, or current
     stock authority from display data.  Unsupported lots and missing physical
@@ -577,6 +580,7 @@ def inventory_adjustment_eligibility(
             SELECT product.id AS product_id,
                    batch.id AS batch_id,
                    balance.on_hand_quantity AS system_base_quantity,
+                   balance.row_version AS stock_balance_row_version,
                    conversion.id AS uom_conversion_id,
                    conversion.from_uom_code,
                    conversion.to_uom_code,
@@ -692,6 +696,7 @@ def inventory_adjustment_eligibility(
         product_id=first["product_id"],
         batch_id=first["batch_id"],
         system_base_quantity=first["system_base_quantity"],
+        stock_balance_row_version=first["stock_balance_row_version"],
         uom_conversions=[
             InventoryAdjustmentUom(
                 uom_conversion_id=row._mapping["uom_conversion_id"],
@@ -741,8 +746,9 @@ def load_inventory_adjustment_readback(
                    document.document_number,
                    document.status,
                    document.branch_id,
-                   document.total_abs_base_quantity AS total_gain_base_quantity,
-                   document.total_value AS total_gain_value,
+                   CASE ledger.entry_kind WHEN 'count_gain' THEN 'gain' ELSE 'loss' END AS variance_effect,
+                   document.total_abs_base_quantity AS total_variance_base_quantity,
+                   document.total_value AS total_variance_value,
                    journal.id AS journal_entry_id,
                    journal.status AS journal_status,
                    journal.transaction_debit_total AS journal_debit_total,
@@ -751,11 +757,12 @@ def load_inventory_adjustment_readback(
                    document_line.id AS inventory_document_line_id,
                    document_line.product_id,
                    document_line.batch_id,
+                   ledger.location_id,
                    document_line.system_quantity AS system_base_quantity,
                    document_line.counted_quantity AS counted_base_quantity,
-                   document_line.variance_quantity AS gain_base_quantity,
+                   document_line.variance_quantity AS variance_base_quantity,
                    document_line.unit_cost,
-                   document_line.extended_cost AS gain_value,
+                   document_line.extended_cost AS variance_value,
                    ledger.id AS ledger_entry_id,
                    ledger.quantity_delta AS ledger_quantity_delta,
                    ledger.value_delta AS ledger_value_delta,
@@ -773,7 +780,7 @@ def load_inventory_adjustment_readback(
                 ON ledger.org_id=document_line.org_id
                AND ledger.inventory_document_id=document.id
                AND ledger.inventory_document_line_id=document_line.id
-               AND ledger.entry_kind='count_gain'
+               AND ledger.entry_kind IN ('count_gain','count_loss')
               JOIN inventory.stock_balances AS balance
                 ON balance.org_id=ledger.org_id
                AND balance.branch_id=ledger.branch_id
@@ -812,17 +819,18 @@ def load_inventory_adjustment_readback(
     line_values = [row._mapping for row in rows]
     if (
         any(
-            row["gain_base_quantity"] != row["ledger_quantity_delta"]
-            or row["gain_value"] != row["ledger_value_delta"]
-            or row["counted_base_quantity"] != row["current_on_hand_quantity"]
+            row["variance_base_quantity"] != row["ledger_quantity_delta"]
+            or row["variance_value"] != abs(row["ledger_value_delta"])
+            or (row["variance_base_quantity"] > 0) != (row["variance_effect"] == "gain")
             for row in line_values
         )
-        or sum((row["gain_base_quantity"] for row in line_values), Decimal("0"))
-        != header["total_gain_base_quantity"]
-        or sum((row["gain_value"] for row in line_values), Decimal("0"))
-        != header["total_gain_value"]
-        or header["journal_debit_total"] != header["total_gain_value"]
-        or header["journal_credit_total"] != header["total_gain_value"]
+        or any(row["variance_effect"] != header["variance_effect"] for row in line_values)
+        or sum((abs(row["variance_base_quantity"]) for row in line_values), Decimal("0"))
+        != header["total_variance_base_quantity"]
+        or sum((row["variance_value"] for row in line_values), Decimal("0"))
+        != header["total_variance_value"]
+        or header["journal_debit_total"] != header["total_variance_value"]
+        or header["journal_credit_total"] != header["total_variance_value"]
     ):
         raise HTTPException(
             status_code=409,
@@ -837,8 +845,9 @@ def load_inventory_adjustment_readback(
         document_number=header["document_number"],
         status=header["status"],
         branch_id=header["branch_id"],
-        total_gain_base_quantity=header["total_gain_base_quantity"],
-        total_gain_value=header["total_gain_value"],
+        variance_effect=header["variance_effect"],
+        total_variance_base_quantity=header["total_variance_base_quantity"],
+        total_variance_value=header["total_variance_value"],
         journal_entry_id=header["journal_entry_id"],
         journal_status=header["journal_status"],
         journal_debit_total=header["journal_debit_total"],
@@ -849,11 +858,12 @@ def load_inventory_adjustment_readback(
                 inventory_document_line_id=row["inventory_document_line_id"],
                 product_id=row["product_id"],
                 batch_id=row["batch_id"],
+                location_id=row["location_id"],
                 system_base_quantity=row["system_base_quantity"],
                 counted_base_quantity=row["counted_base_quantity"],
-                gain_base_quantity=row["gain_base_quantity"],
+                variance_base_quantity=row["variance_base_quantity"],
                 unit_cost=row["unit_cost"],
-                gain_value=row["gain_value"],
+                variance_value=row["variance_value"],
                 ledger_entry_id=row["ledger_entry_id"],
                 ledger_quantity_delta=row["ledger_quantity_delta"],
                 ledger_value_delta=row["ledger_value_delta"],

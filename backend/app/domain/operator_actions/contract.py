@@ -534,8 +534,8 @@ def validate_prepare_payload_semantics(
         for line_index, line in enumerate(values["lines"]):
             for batch_index, batch in enumerate(line["batch_counts"]):
                 prefix = f"lines[{line_index}].batch_counts[{batch_index}]"
-                if Decimal(batch["counted_quantity"]) <= 0:
-                    raise ValueError(f"{prefix} counted_quantity must be positive")
+                if Decimal(batch["counted_quantity"]) < 0:
+                    raise ValueError(f"{prefix} counted_quantity must be nonnegative")
                 if batch["batch_id"] in seen_batch_ids:
                     raise ValueError(
                         f"{prefix} repeats batch_id; each batch may be counted only once"

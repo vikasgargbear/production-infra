@@ -1346,7 +1346,7 @@ class FakeInventoryAdjustmentSession:
                         "id": str(uuid4()),
                         "product_id": line["product_id"],
                         "batch_id": count["batch_id"],
-                        "row_version": 7,
+                        "row_version": count["stock_balance_row_version"],
                     })
             return FakeResult(({"resolution": {
                 "branch_id": request["branch_id"],
@@ -1356,7 +1356,8 @@ class FakeInventoryAdjustmentSession:
                 "location_id": request["location_id"],
                 "evidence_attachment_id": request["evidence_attachment_id"],
                 "inventory_asset_account_id": str(uuid4()),
-                "inventory_count_gain_account_id": str(uuid4()),
+                "inventory_variance_account_id": str(uuid4()),
+                "variance_effect": "gain",
                 "lines": resolved_lines,
                 "total_base_quantity": "20.000000",
                 "total_value": "50.00",
@@ -1364,7 +1365,7 @@ class FakeInventoryAdjustmentSession:
                 "legal_scope": {
                     "country": "IN",
                     "currency": "INR",
-                    "supported_effect": "positive_gain_only",
+                    "supported_effect": "homogeneous_gain_or_loss",
                     "tax_effect": "no_supply_no_gst_no_itc_claim_or_reversal",
                 },
             }},))
@@ -3237,12 +3238,12 @@ def _inventory_adjustment_service_payload():
         "lines": [{
             "product_id": uuid4(),
             "uom_conversion_id": uuid4(),
-            "batch_counts": [{"batch_id": uuid4(), "counted_quantity": "12.000000"}],
+            "batch_counts": [{"batch_id": uuid4(), "counted_quantity": "12.000000", "stock_balance_row_version": 7}],
         }],
     }
 
 
-def test_inventory_adjustment_prepare_is_one_runtime_transaction_with_exact_gain_preview():
+def test_inventory_adjustment_prepare_is_one_runtime_transaction_with_exact_signed_preview():
     session = FakeInventoryAdjustmentSession()
     payload = _inventory_adjustment_service_payload()
     context = ActionContext(
@@ -3264,8 +3265,8 @@ def test_inventory_adjustment_prepare_is_one_runtime_transaction_with_exact_gain
     assert prepared.command_type == "inventory.document.post"
     assert prepared.calculation_ruleset == ()
     assert prepared.inventory_impact[0]["system_base_quantity"] == "100.000000"
-    assert prepared.inventory_impact[0]["gain_base_quantity"] == "20.000000"
-    assert prepared.inventory_impact[0]["gain_value"] == "50.00"
+    assert prepared.inventory_impact[0]["variance_base_quantity"] == "20.000000"
+    assert prepared.inventory_impact[0]["variance_value"] == "50.00"
     assert prepared.financial_impact[0]["amount"] == "50.00"
     assert prepared.tax_impact[0]["supply_created"] is False
     assert session.transaction_entries == session.transaction_exits == 1
@@ -3276,7 +3277,7 @@ def test_inventory_adjustment_prepare_is_one_runtime_transaction_with_exact_gain
     assert request["lines"][0]["batch_counts"][0]["inventory_document_line_id"]
     preview = json.loads(session.executions[2][1]["preview_bytes"])
     assert preview["operation"] == "inventory.document.post"
-    assert preview["legal_scope"]["supported_effect"] == "positive_gain_only"
+    assert preview["legal_scope"]["supported_effect"] == "homogeneous_gain_or_loss"
 
 
 def test_inventory_adjustment_prepare_failure_rolls_back_the_only_transaction():

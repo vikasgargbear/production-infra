@@ -1541,7 +1541,7 @@ def test_routes_are_hidden_from_public_openapi_and_keep_auth_dependency():
     )
 
 
-def test_inventory_adjustment_prepare_accepts_only_typed_cycle_count_gain_facts(enabled_boundary):
+def test_inventory_adjustment_prepare_accepts_only_typed_signed_cycle_count_facts(enabled_boundary):
     fake = FakeOperatorActionService()
     policy = ACTION_POLICIES["inventory.adjustment.prepare"]
     holder = {"value": _context(policy.operation_key, policy.permission)}
@@ -1564,6 +1564,7 @@ def test_inventory_adjustment_prepare_accepts_only_typed_cycle_count_gain_facts(
             "batch_counts": [{
                 "batch_id": str(uuid4()),
                 "counted_quantity": "12.000000",
+                "stock_balance_row_version": 7,
             }],
         }],
     }
@@ -1583,7 +1584,6 @@ def test_inventory_adjustment_prepare_accepts_only_typed_cycle_count_gain_facts(
         12,
         "9007199254740993",
         "12.0000001",
-        "0",
         "-1",
         "NaN",
     ):
