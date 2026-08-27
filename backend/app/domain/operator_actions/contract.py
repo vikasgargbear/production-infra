@@ -571,3 +571,22 @@ def validate_prepare_payload_semantics(
                 raise ValueError(
                     f"lines[{line_index}] requires a positive billed or free base quantity"
                 )
+            if line["landed_cost_allocation_method"] not in {
+                "direct", "quantity_weighted", "value_weighted"
+            }:
+                raise ValueError(
+                    f"lines[{line_index}] requires an explicit reviewed landed-cost allocation method"
+                )
+        for line_index, line in enumerate(values.get("expense_charge_lines") or ()):
+            treatment = line["charge_inventory_cost_treatment"]
+            method = line.get("landed_cost_allocation_method")
+            if treatment == "capitalize" and method not in {
+                "direct", "quantity_weighted", "value_weighted"
+            }:
+                raise ValueError(
+                    f"expense_charge_lines[{line_index}] capitalized charge requires an explicit reviewed allocation method"
+                )
+            if treatment == "expense" and method is not None:
+                raise ValueError(
+                    f"expense_charge_lines[{line_index}] expensed charge must not carry a landed-cost allocation method"
+                )

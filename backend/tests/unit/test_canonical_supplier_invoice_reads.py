@@ -49,6 +49,7 @@ def _posted_line(allocation=None, **overrides):
         "gst_taxable_value": Decimal("100.00"),
         "itc_eligibility": "eligible",
         "inventory_cost_treatment": "capitalize",
+        "landed_cost_allocation_method": "direct",
         "cgst_amount": Decimal("6.00"),
         "sgst_amount": Decimal("6.00"),
         "igst_amount": Decimal("0.00"),
@@ -109,6 +110,8 @@ def _posted(**overrides):
         "journal_credit_total": Decimal("112.00"),
         "supplier_invoice_inventory_document_count": 0,
         "supplier_invoice_inventory_value_delta": Decimal("0.00"),
+        "consumed_variance_amount": Decimal("0.00"),
+        "landed_cost_adjustments": [],
         "lines": [_posted_line()],
         "journal_lines": [
             {
@@ -194,21 +197,24 @@ def test_routes_are_uuid_only_and_registered():
     )
 
 
-def test_po_charges_fail_closed_without_inventing_an_account_column():
+def test_po_landed_charges_require_canonical_inventory_account_identity():
+    account_id = uuid4()
     charge = reads.SupplierInvoiceContextCharge(
         purchase_order_line_id=uuid4(),
         expense_charge_code="freight",
         quoted_amount=Decimal("10.00"),
         expense_price_basis="tax_exclusive",
         expense_document_discount_eligible=True,
-        net_value_account_id=None,
-        account_code=None,
-        account_name=None,
+        inventory_cost_treatment="capitalize",
+        net_value_account_id=account_id,
+        account_code="INV",
+        account_name="Inventory asset",
     )
-    assert charge.net_value_account_id is None
+    assert charge.net_value_account_id == account_id
     source = inspect.getsource(reads.supplier_invoice_context)
     assert "order_line.net_value_account_id" not in source
-    assert "authoritative effective expense-account mapping" in source
+    assert "finance.account_roles" in source
+    assert "inventory_asset" in source
 
 
 def test_context_preserves_exact_quantities_and_inventory_value():
@@ -332,13 +338,61 @@ def test_posted_readback_reconciles_all_domains_and_serializes_decimals():
     assert wire["supplier_invoice_inventory_value_delta"] == "0.00"
 
 
+def test_posted_readback_reconciles_zero_quantity_landed_cost_and_consumed_variance():
+    data = _posted()
+    supplier_line_id = data["lines"][0]["supplier_invoice_line_id"]
+    document_id = uuid4()
+    adjustment = {
+        "inventory_document_id": document_id,
+        "inventory_document_line_id": uuid4(),
+        "stock_ledger_entry_id": uuid4(),
+        "supplier_invoice_line_id": supplier_line_id,
+        "location_id": uuid4(),
+        "product_id": data["lines"][0]["product_id"],
+        "batch_id": uuid4(),
+        "allocation_method": "quantity_weighted",
+        "allocation_weight": Decimal("1.000000000000"),
+        "basis_quantity": Decimal("0.600000"),
+        "basis_value": None,
+        "quantity_delta": Decimal("0.000000"),
+        "value_delta": Decimal("12.00"),
+    }
+    document = reads.PostedSupplierInvoiceResponse(**{
+        **data,
+        "supplier_invoice_inventory_document_count": 1,
+        "supplier_invoice_inventory_value_delta": Decimal("12.00"),
+        "consumed_variance_amount": Decimal("8.00"),
+        "landed_cost_adjustments": [adjustment],
+        "journal_debit_total": Decimal("120.00"),
+        "journal_credit_total": Decimal("120.00"),
+        "journal_lines": [
+            *data["journal_lines"],
+            {
+                "journal_line_id": uuid4(), "line_number": 4,
+                "account_id": uuid4(), "account_code": "PPV",
+                "account_name": "Purchase price variance", "party_id": None,
+                "debit": Decimal("8.00"), "credit": Decimal("0.00"),
+            },
+            {
+                "journal_line_id": uuid4(), "line_number": 5,
+                "account_id": data["journal_lines"][0]["account_id"],
+                "account_code": "INV", "account_name": "Inventory", "party_id": None,
+                "debit": Decimal("0.00"), "credit": Decimal("8.00"),
+            },
+        ],
+    })
+    assert document.landed_cost_adjustments[0].quantity_delta == 0
+    assert document.supplier_invoice_inventory_value_delta == Decimal("12.00")
+    assert document.consumed_variance_amount == Decimal("8.00")
+
+
 @pytest.mark.parametrize(
     ("override", "message"),
     [
         ({"open_item_principal": Decimal("111.99")}, "payable"),
         ({"journal_credit_total": Decimal("111.99")}, "journal is not balanced"),
         ({"portal_cgst_total": Decimal("5.99")}, "GSTR-2B CGST"),
-        ({"supplier_invoice_inventory_document_count": 1}, "second inventory movement"),
+        ({"supplier_invoice_inventory_document_count": 1}, "document count is not exact"),
         ({"grand_total": Decimal("111.99")}, "grand total"),
     ],
 )
@@ -358,7 +412,7 @@ def test_detail_query_reads_command_portal_evidence_not_a_legacy_link(monkeypatc
 
     def fake_one(_db, sql, _params):
         captured.append(sql)
-        return {key: value for key, value in data.items() if key not in {"lines", "journal_lines"}}
+        return {key: value for key, value in data.items() if key not in {"lines", "journal_lines", "landed_cost_adjustments"}}
 
     def fake_rows(_db, sql, _params):
         captured.append(sql)
@@ -366,6 +420,8 @@ def test_detail_query_reads_command_portal_evidence_not_a_legacy_link(monkeypatc
             return [{key: value for key, value in data["lines"][0].items() if key != "allocations"}]
         if "FROM procurement.supplier_invoice_receipt_allocations" in sql:
             return [{"supplier_invoice_line_id": data["lines"][0]["supplier_invoice_line_id"], **data["lines"][0]["allocations"][0]}]
+        if "FROM inventory.inventory_documents document" in sql:
+            return data["landed_cost_adjustments"]
         return data["journal_lines"]
 
     monkeypatch.setattr(reads, "_one", fake_one)

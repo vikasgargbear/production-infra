@@ -106,6 +106,7 @@ def main() -> None:
                 (_sql(reads.posted_supplier_invoice, "SELECT line.id AS supplier_invoice_line_id"), base),
                 (_sql(reads.posted_supplier_invoice, "SELECT allocation.supplier_invoice_line_id"), base),
                 (_sql(reads.posted_supplier_invoice, "SELECT line.id AS journal_line_id"), base),
+                (_sql(reads.posted_supplier_invoice, "SELECT document.id AS inventory_document_id"), base),
             )
             for sql, params in statements:
                 session.execute(text(sql), params).fetchall()

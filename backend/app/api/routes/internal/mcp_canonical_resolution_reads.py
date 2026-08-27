@@ -1192,8 +1192,24 @@ class SupplierInvoiceLine(StrictDTO):
     tax_code_version_id: UUID
     taxability_snapshot: str
     itc_eligibility: str
+    inventory_cost_treatment: str
+    landed_cost_allocation_method: Optional[str]
     line_total: Decimal
     receipt_allocations: list[SupplierInvoiceReceiptAllocation]
+
+
+class SupplierInvoiceLandedCostAdjustment(StrictDTO):
+    inventory_document_id: UUID
+    inventory_document_line_id: UUID
+    stock_ledger_entry_id: UUID
+    supplier_invoice_line_id: UUID
+    location_id: UUID
+    product_id: UUID
+    batch_id: UUID
+    allocation_method: str
+    allocation_weight: Decimal
+    quantity_delta: Decimal
+    value_delta: Decimal
 
 
 class SupplierInvoiceDocument(StrictDTO):
@@ -1212,10 +1228,13 @@ class SupplierInvoiceDocument(StrictDTO):
     grand_total: Decimal
     payable_open_item_id: Optional[UUID]
     payable_outstanding_amount: Optional[Decimal]
+    landed_cost_inventory_value_delta: Decimal
+    consumed_variance_amount: Decimal
     calculation_ruleset_version: str
     posted_at: datetime
     row_version: int
     lines: list[SupplierInvoiceLine]
+    landed_cost_adjustments: list[SupplierInvoiceLandedCostAdjustment]
 
 
 class SupplierInvoiceResolutionResponse(DocumentResolution):
@@ -1513,6 +1532,24 @@ def canonical_supplier_invoice_get(
                    invoice.supply_type, invoice.currency_code, invoice.grand_total,
                    payable.open_item_id AS payable_open_item_id,
                    payable.outstanding_amount AS payable_outstanding_amount,
+                   COALESCE((SELECT sum(ledger.value_delta)
+                     FROM inventory.inventory_documents AS document
+                     JOIN inventory.stock_ledger_entries AS ledger
+                       ON ledger.org_id=document.org_id
+                      AND ledger.inventory_document_id=document.id
+                      AND ledger.entry_kind='value_adjustment'
+                    WHERE document.org_id=invoice.org_id
+                      AND document.supplier_invoice_id=invoice.id
+                      AND document.document_type='cost_adjustment'
+                      AND document.status='posted'),0) AS landed_cost_inventory_value_delta,
+                   COALESCE((SELECT sum(journal_line.transaction_debit-journal_line.transaction_credit)
+                     FROM finance.accounting_events AS invoice_event
+                     JOIN finance.journal_lines AS journal_line
+                       ON journal_line.org_id=invoice_event.org_id
+                      AND journal_line.journal_entry_id=invoice_event.journal_entry_id
+                      AND journal_line.description='Consumed supplier price or landed-cost variance'
+                    WHERE invoice_event.org_id=invoice.org_id
+                      AND invoice_event.supplier_invoice_id=invoice.id),0) AS consumed_variance_amount,
                    invoice.calculation_ruleset_version, invoice.posted_at,
                    invoice.row_version
               FROM procurement.supplier_invoices AS invoice
@@ -1572,7 +1609,8 @@ def canonical_supplier_invoice_get(
                      GREATEST(line.base_free_quantity-COALESCE(returned.base_free_quantity,0),0)
                    END AS returnable_base_free_quantity,
                    line.tax_code_version_id, line.taxability_snapshot,
-                   line.itc_eligibility, line.line_total
+                   line.itc_eligibility, line.inventory_cost_treatment,
+                   line.landed_cost_allocation_method, line.line_total
               FROM procurement.supplier_invoice_lines AS line
               LEFT JOIN LATERAL (
                   SELECT SUM(return_line.base_billed_quantity) AS base_billed_quantity,
@@ -1613,6 +1651,37 @@ def canonical_supplier_invoice_get(
         )
         line_models.append(SupplierInvoiceLine(**line))
     header["lines"] = line_models
+    adjustment_rows = db.execute(
+        text(
+            """
+            SELECT document.id AS inventory_document_id,
+                   document_line.id AS inventory_document_line_id,
+                   ledger.id AS stock_ledger_entry_id,
+                   document_line.supplier_invoice_line_id,
+                   ledger.location_id, ledger.product_id, ledger.batch_id,
+                   document_line.cost_allocation_method AS allocation_method,
+                   document_line.cost_allocation_weight AS allocation_weight,
+                   ledger.quantity_delta, ledger.value_delta
+              FROM inventory.inventory_documents AS document
+              JOIN inventory.inventory_document_lines AS document_line
+                ON document_line.org_id=document.org_id
+               AND document_line.inventory_document_id=document.id
+               AND document_line.movement_kind='value_adjustment'
+              JOIN inventory.stock_ledger_entries AS ledger
+                ON ledger.org_id=document_line.org_id
+               AND ledger.inventory_document_line_id=document_line.id
+               AND ledger.entry_kind='value_adjustment'
+             WHERE document.org_id=:org_id
+               AND document.supplier_invoice_id=:document_id
+               AND document.document_type='cost_adjustment'
+               AND document.status='posted'
+             ORDER BY document_line.line_number, document_line.id, ledger.id
+            """
+        ), {"org_id": context.organization_id, "document_id": header["supplier_invoice_id"]},
+    ).fetchall()
+    header["landed_cost_adjustments"] = [
+        SupplierInvoiceLandedCostAdjustment(**_mapping(row)) for row in adjustment_rows
+    ]
     return SupplierInvoiceResolutionResponse(
         match_state="matched", requires_selection=False, matched_count=1,
         document=SupplierInvoiceDocument(**header),

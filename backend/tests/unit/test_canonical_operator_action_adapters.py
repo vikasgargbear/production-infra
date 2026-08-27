@@ -847,8 +847,18 @@ class FakeSupplierInvoiceSession:
                         "allocated_base_free_quantity": product[
                             "allocated_base_free_quantity"
                         ],
+                        "receipt_unit_cost": "10.0000",
+                        "location_id": str(uuid4()),
+                        "product_id": str(uuid4()),
+                        "batch_id": str(uuid4()),
+                        "stock_on_hand_quantity": "30.000000",
+                        "stock_inventory_value": "300.00",
+                        "stock_average_unit_cost": "10.0000",
+                        "stock_row_version": 3,
+                        "exact_receipt_source_provenance": True,
                     }],
                     "inventory_cost_treatment": "capitalize",
+                    "landed_cost_allocation_method": "direct",
                     "net_value_account_id": str(uuid4()),
                     "input": product,
                 }, {
@@ -1846,6 +1856,7 @@ def _supplier_invoice_service_payload():
             "allocated_base_billed_quantity": "20.000000",
             "allocated_base_free_quantity": "10.000000",
             "product_inventory_cost_treatment": "capitalize",
+            "landed_cost_allocation_method": "direct",
             "itc_eligibility": "eligible",
             "itc_eligibility_basis": (
                 "taxable_resale_not_blocked_under_section_17"
@@ -2493,10 +2504,9 @@ def test_supplier_invoice_prepare_is_atomic_and_pins_attested_grn_portal_facts()
     )
 
     assert prepared.command_type == "procurement.supplier_invoice.post"
-    assert prepared.inventory_impact == ({
-        "effect": "receipt_cost_match_no_landed_cost",
-        "inventory_value_delta": "0.00",
-    },)
+    assert prepared.inventory_impact[0]["allocation_method"] == "direct"
+    assert prepared.inventory_impact[0]["landed_cost_inventory_value_delta"] == "0.00"
+    assert prepared.inventory_impact[0]["consumed_variance_amount"] == "0.00"
     assert prepared.financial_impact[0]["supplier_payable"] == "365.80"
     assert prepared.tax_impact[0]["igst_total"] == "55.80"
     assert prepared.tax_impact[0]["itc_eligibility"] == "eligible"
@@ -2517,7 +2527,7 @@ def test_supplier_invoice_prepare_is_atomic_and_pins_attested_grn_portal_facts()
     assert preview["itc_eligibility_basis"] == (
         "taxable_resale_not_blocked_under_section_17"
     )
-    assert preview["inventory_impact"][0]["inventory_value_delta"] == "0.00"
+    assert preview["inventory_impact"][0]["landed_cost_inventory_value_delta"] == "0.00"
     assert calculation_input["operation"] == "procurement.supplier_invoice.post"
     assert calculation_input["document"]["products"][0][
         "free_supply_tax_treatment"

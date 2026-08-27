@@ -640,6 +640,10 @@ def _prepare_actions() -> dict[str, OperatorAction]:
                 "Explicit accounting treatment. The pilot accepts capitalize for received product lines.",
                 enum=["capitalize"],
             ),
+            "landed_cost_allocation_method": _string(
+                "Reviewed allocation authority for invoice price variance. No implicit weighting or fallback is allowed.",
+                enum=["direct", "quantity_weighted", "value_weighted"],
+            ),
             "itc_eligibility": _string(
                 "Explicit ITC treatment backed by the exact GSTR-2B portal line.",
                 enum=["eligible"],
@@ -656,6 +660,7 @@ def _prepare_actions() -> dict[str, OperatorAction]:
             "allocated_base_billed_quantity",
             "allocated_base_free_quantity",
             "product_inventory_cost_treatment",
+            "landed_cost_allocation_method",
             "itc_eligibility",
             "itc_eligibility_basis",
         ]
@@ -666,8 +671,12 @@ def _prepare_actions() -> dict[str, OperatorAction]:
         "properties": {
             **supplier_invoice_charge["properties"],
             "charge_inventory_cost_treatment": _string(
-                "Reviewed expense treatment; capitalized and uncertain charges remain unavailable.",
-                enum=["expense"],
+                "Explicit reviewed expense or capitalized landed-cost treatment.",
+                enum=["expense", "capitalize"],
+            ),
+            "landed_cost_allocation_method": _string(
+                "Reviewed allocation authority for invoice price variance. No implicit weighting or fallback is allowed.",
+                enum=["direct", "quantity_weighted", "value_weighted"],
             ),
             "net_value_account_id": _uuid(
                 "Active canonical expense account for the reviewed charge."

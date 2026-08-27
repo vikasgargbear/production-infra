@@ -60,6 +60,7 @@ from .supplier_invoice import (
     PERSIST_SUPPLIER_INVOICE_SQL,
     RESOLVE_SUPPLIER_INVOICE_SQL,
     calculation_documents as supplier_invoice_calculation_documents,
+    landed_cost_preview as supplier_invoice_landed_cost_preview,
 )
 from .sales_return import (
     PERSIST_SALES_RETURN_SQL,
@@ -1035,6 +1036,9 @@ class SqlAlchemyOperatorActionService:
         journal_id = uuid5(NAMESPACE_URL, identity + ":journal")
         event_id = uuid5(NAMESPACE_URL, identity + ":accounting-event")
         open_item_id = uuid5(NAMESPACE_URL, identity + ":open-item")
+        inventory_document_id = uuid5(
+            NAMESPACE_URL, identity + ":landed-cost-document"
+        )
         expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
         normalized = {key: _json_value(value) for key, value in payload.items()}
         normalized.update(
@@ -1044,6 +1048,7 @@ class SqlAlchemyOperatorActionService:
                 "journal_id": str(journal_id),
                 "event_id": str(event_id),
                 "open_item_id": str(open_item_id),
+                "inventory_document_id": str(inventory_document_id),
             }
         )
         normalized_lines = []
@@ -1139,6 +1144,18 @@ class SqlAlchemyOperatorActionService:
                     for source in source_versions
                 )
                 totals = calculation_output["totals"]
+                try:
+                    landed_effects, capitalized_variance, consumed_variance = (
+                        supplier_invoice_landed_cost_preview(
+                            resolution, calculation_output
+                        )
+                    )
+                except (KeyError, TypeError, ValueError) as exc:
+                    raise OperatorActionError(
+                        ActionErrorCode.VALIDATION_FAILED,
+                        "Supplier-invoice landed-cost allocation is invalid",
+                        metadata={"reason": str(exc)},
+                    ) from exc
                 calculation_ruleset = ({
                     "engine_version": calculation_output["engine_version"],
                     "ruleset_version": calculation_output["ruleset_version"],
@@ -1154,12 +1171,14 @@ class SqlAlchemyOperatorActionService:
                     "financial_impact": [{
                         "currency_code": "INR",
                         "supplier_payable": totals["grand_total"],
-                        "inventory_value_delta": "0.00",
+                        "landed_cost_inventory_value_delta": format(
+                            capitalized_variance, ".2f"
+                        ),
+                        "consumed_variance_amount": format(
+                            consumed_variance, ".2f"
+                        ),
                     }],
-                    "inventory_impact": [{
-                        "effect": "receipt_cost_match_no_landed_cost",
-                        "inventory_value_delta": "0.00",
-                    }],
+                    "inventory_impact": landed_effects,
                     "itc_eligibility_basis": (
                         "taxable_resale_not_blocked_under_section_17"
                     ),
