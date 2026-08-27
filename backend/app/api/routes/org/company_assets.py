@@ -1,28 +1,45 @@
 """Canonical company asset reads and fail-closed mutation boundaries."""
 
+from typing import Any, Dict
+from uuid import UUID, uuid4
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import text
+from sqlalchemy.orm import Session
 
-from ....core.auth.org_context import OrgContext, get_org_context
-from ....core.auth.tenant_service import (
-    TenantAwareSession,
-    get_tenant_aware_db,
-    with_tenant_context,
-)
+from ....core.database import get_db
 from ....core.security.permissions import PermissionChecker
 
 
 router = APIRouter(tags=["Company"])
 
 
+def _activate(db: Session, user: Dict[str, Any]) -> UUID:
+    """Activate the signed canonical actor before forced-RLS asset reads."""
+    org_id = UUID(str(user["org_id"]))
+    db.execute(
+        text(
+            """
+            SELECT erp_security.activate_context(:auth_user_id, :org_id),
+                   pg_catalog.set_config('app.request_id', :request_id, true)
+            """
+        ),
+        {
+            "auth_user_id": UUID(str(user["auth_user_id"])),
+            "org_id": org_id,
+            "request_id": str(uuid4()),
+        },
+    )
+    return org_id
+
+
 @router.get("/logo")
-@with_tenant_context
 async def get_company_logo(
-    _: dict = Depends(PermissionChecker("master", "view")),
-    db: TenantAwareSession = Depends(get_tenant_aware_db),
-    context: OrgContext = Depends(get_org_context),
+    user: dict = Depends(PermissionChecker("master", "view")),
+    db: Session = Depends(get_db),
 ):
     """Read the current organization logo from canonical versioned settings."""
+    org_id = _activate(db, user)
     row = db.execute(
         text(
             """
@@ -39,7 +56,7 @@ async def get_company_logo(
              LIMIT 1
             """
         ),
-        {"org_id": str(context.org_id)},
+        {"org_id": org_id},
     ).first()
     return {"success": True, "logo": row.value_text if row else None}
 
@@ -59,11 +76,8 @@ def _company_write_unavailable() -> None:
 @router.post("/logo")
 @router.delete("/logo")
 @router.post("/qr-code")
-@with_tenant_context
 async def reject_company_mutation(
     _: dict = Depends(PermissionChecker("master", "edit")),
-    context: OrgContext = Depends(get_org_context),
 ):
     """Reject legacy direct writes without reading or mutating request data."""
-    del context
     _company_write_unavailable()
