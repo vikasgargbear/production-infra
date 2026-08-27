@@ -153,16 +153,19 @@ def test_demo_transaction_chains_are_monotonic_on_one_business_clock() -> None:
     assert dispatch["dispatch_date"] < sales_order["requested_delivery_date"]
 
 
-def test_source_retrieval_date_is_only_regulatory_provenance() -> None:
+def test_adjustment_release_effective_bound_matches_its_rule_rows() -> None:
     source = SCRIPT.read_text(encoding="utf-8")
 
-    assert source.count("SOURCE_RETRIEVED_ON") == 2
+    assert "SOURCE_RETRIEVED_ON" not in source
     assert "INDIA_BUSINESS_DATE" not in source
     adjustment_import = source.split("def import_adjustment_release", 1)[1].split(
         "\ndef itc_reversal_dataset_bytes", 1
     )[0]
-    assert "SOURCE_RETRIEVED_ON" in adjustment_import
-    assert "ADJUSTMENT_SOURCE_PUBLICATION_DATE" in adjustment_import
+    assert (
+        "ADJUSTMENT_SOURCE_PUBLICATION_DATE,\n"
+        "                ADJUSTMENT_SOURCE_PUBLICATION_DATE,\n"
+        "                None,"
+    ) in adjustment_import
 
 
 def test_business_calendar_helpers_derive_periods_without_fixed_years() -> None:

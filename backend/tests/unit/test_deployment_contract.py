@@ -821,7 +821,11 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     adjustment_import = provisioner.split("def import_adjustment_release", 1)[1].split(
         "\ndef seed_business_master", 1
     )[0]
-    assert "ADJUSTMENT_SOURCE_PUBLICATION_DATE,\n                SOURCE_RETRIEVED_ON,\n                None," in adjustment_import
+    assert (
+        "ADJUSTMENT_SOURCE_PUBLICATION_DATE,\n"
+        "                ADJUSTMENT_SOURCE_PUBLICATION_DATE,\n"
+        "                None,"
+    ) in adjustment_import
     assert '"gst_tax_treatment": "statutory"' in provisioner
     assert "supplier_challan_number" in provisioner
     receipt_payload = provisioner.split("def goods_receipt_payload", 1)[1].split(

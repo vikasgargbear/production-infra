@@ -52,7 +52,6 @@ except ModuleNotFoundError:  # Direct execution places this script directory on 
 
 PROJECT_REF = "rgihahbmkrmhitjdjvev"
 SOURCE_URI = "https://gstcouncil.gov.in/sites/default/files/2024-09/02_2024_ctr_eng.pdf"
-SOURCE_RETRIEVED_ON = date(2026, 8, 20)
 SOURCE_PUBLICATION_DATE = date(2024, 7, 12)
 SOURCE_EFFECTIVE_FROM = date(2024, 7, 15)
 ADJUSTMENT_SOURCE_URI = (
@@ -1552,7 +1551,7 @@ def import_adjustment_release(
                 psycopg2.Binary(dataset_bytes),
                 psycopg2.Binary(hashlib.sha256(dataset_bytes).digest()),
                 ADJUSTMENT_SOURCE_PUBLICATION_DATE,
-                SOURCE_RETRIEVED_ON,
+                ADJUSTMENT_SOURCE_PUBLICATION_DATE,
                 None,
                 IDS["reviewer_user"],
                 IDS["request"],
