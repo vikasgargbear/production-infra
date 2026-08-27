@@ -407,11 +407,18 @@ def test_workflow_uploads_fresh_source_and_polls_exact_deployment_ids() -> None:
     assert "deployment_id_from_payload mcp-deploy.json > mcp-deployment-id" in workflow
     assert "deployment_id_from_payload frontend-deploy.json > frontend-deployment-id" in workflow
     assert "deployment_status()" in workflow
+    assert "deployment_list_json()" in workflow
+    assert 'deployment_poll_deadline=$((SECONDS + 900))' in workflow
+    assert 'timeout --signal=TERM "${query_timeout}s" railway deployment list' in workflow
+    assert 'jq -e \'type == "array"\'' in workflow
+    assert "after bounded attempts" in workflow
+    assert "QUERY_UNAVAILABLE" in workflow
     assert "select(.id == $id)" in workflow
     assert (
         "FAILED|CRASHED|SKIPPED|REMOVED|REMOVING|CANCELLED" in workflow
     )
-    assert "service_status" in workflow
+    assert "fail_on_terminal_status()" in workflow
+    assert 'service=$service_label deployment=$deployment_id status=$service_status' in workflow
     assert "require_deployment_contract()" in workflow
     assert workflow.count('meta.rootDirectory // "/"') == 1
     assert ".meta.configFile == $config_file" in workflow
@@ -434,6 +441,143 @@ def test_workflow_uploads_fresh_source_and_polls_exact_deployment_ids() -> None:
     assert workflow.count('multiRegionConfig == {"asia-southeast1-eqsg3a":{"numReplicas":1}}') == 3
     assert ".meta.fileServiceManifest.deploy.sleepApplication == true" in workflow
     assert ".meta.serviceManifest.deploy.sleepApplication == true" in workflow
+
+
+def test_exact_deployment_poll_recovers_from_malformed_provider_response(
+    tmp_path: Path,
+) -> None:
+    script = _workflow_run_script(
+        "Require each exact upload to become the active deployment",
+        "Prove exact Railway authority before reopening reset fence",
+    )
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    state_dir = tmp_path / "state"
+    state_dir.mkdir()
+    railway = fake_bin / "railway"
+    railway.write_text(
+        """#!/usr/bin/env bash
+set -euo pipefail
+test "$1" = deployment
+test "$2" = list
+shift 2
+service=""
+while test "$#" -gt 0; do
+  case "$1" in
+    --service) service=$2; shift 2 ;;
+    *) shift ;;
+  esac
+done
+count_file="$FAKE_RAILWAY_STATE/count-$service"
+count=0
+test ! -f "$count_file" || count=$(<"$count_file")
+count=$((count + 1))
+printf '%s\n' "$count" > "$count_file"
+printf 'list %s\n' "$service" >> "$FAKE_RAILWAY_STATE/calls"
+if test "$service" = api-service && test "$count" = 1; then
+  printf '%s\n' 'Failed to fetch: error decoding response body' >&2
+  printf '%s\n' 'not-json'
+  exit 4
+fi
+case "$service" in
+  api-service)
+    id=11111111-1111-4111-8111-111111111111
+    config=/deploy/railway/api.railway.json
+    dockerfile=/deploy/railway/api.Dockerfile
+    health=/ready
+    start=""
+    ipv6=true
+    message=$(<api-deployment-message)
+    ;;
+  mcp-service)
+    id=22222222-2222-4222-8222-222222222222
+    config=/deploy/railway/mcp.railway.json
+    dockerfile=/deploy/railway/mcp.Dockerfile
+    health=/health
+    start=$FAKE_MCP_START_COMMAND
+    ipv6=false
+    message=$(<mcp-deployment-message)
+    ;;
+  frontend-service)
+    id=33333333-3333-4333-8333-333333333333
+    config=/deploy/railway/frontend.railway.json
+    dockerfile=/frontend/Dockerfile
+    health=/health
+    start=""
+    ipv6=false
+    message=$(<frontend-deployment-message)
+    ;;
+  *) exit 44 ;;
+esac
+jq -cn \
+  --arg id "$id" \
+  --arg config "$config" \
+  --arg dockerfile "$dockerfile" \
+  --arg health "$health" \
+  --arg start "$start" \
+  --arg message "$message" \
+  --argjson ipv6 "$ipv6" \
+  '[{id:$id,status:"SUCCESS",meta:{rootDirectory:"/",configFile:$config,cliMessage:$message,fileServiceManifest:{build:{builder:"DOCKERFILE",dockerfilePath:$dockerfile},deploy:{startCommand:$start,multiRegionConfig:{"asia-southeast1-eqsg3a":{numReplicas:1}},sleepApplication:true}},serviceManifest:{build:{builder:"DOCKERFILE",dockerfilePath:$dockerfile},deploy:{startCommand:$start,healthcheckPath:$health,ipv6EgressEnabled:$ipv6,multiRegionConfig:{"asia-southeast1-eqsg3a":{numReplicas:1}},sleepApplication:true}}}}]'
+""",
+        encoding="utf-8",
+    )
+    railway.chmod(0o755)
+    fake_sleep = fake_bin / "sleep"
+    fake_sleep.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    fake_sleep.chmod(0o755)
+    fake_timeout = fake_bin / "timeout"
+    fake_timeout.write_text(
+        "#!/usr/bin/env bash\n"
+        "test \"$1\" = --signal=TERM\n"
+        "shift 2\n"
+        "exec \"$@\"\n",
+        encoding="utf-8",
+    )
+    fake_timeout.chmod(0o755)
+
+    deployment_ids = {
+        "api": "11111111-1111-4111-8111-111111111111",
+        "mcp": "22222222-2222-4222-8222-222222222222",
+        "frontend": "33333333-3333-4333-8333-333333333333",
+    }
+    for label, deployment_id in deployment_ids.items():
+        (tmp_path / f"{label}-deployment-id").write_text(
+            deployment_id, encoding="utf-8"
+        )
+        (tmp_path / f"{label}-deployment-message").write_text(
+            f"exact-{label}-message", encoding="utf-8"
+        )
+    (tmp_path / "deploy/railway").mkdir(parents=True)
+    (tmp_path / "deploy/railway/mcp.railway.json").write_text(
+        json.dumps({"deploy": {"startCommand": MCP_RAILWAY_START_COMMAND}}),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        ["bash", "-c", script],
+        cwd=tmp_path,
+        env={
+            **os.environ,
+            "PATH": f"{fake_bin}:{os.environ['PATH']}",
+            "RUNNER_TEMP": str(state_dir),
+            "RAILWAY_API_SERVICE": "api-service",
+            "RAILWAY_MCP_SERVICE": "mcp-service",
+            "RAILWAY_FRONTEND_SERVICE": "frontend-service",
+            "RAILWAY_ENVIRONMENT_ID": "environment-id",
+            "FAKE_RAILWAY_STATE": str(state_dir),
+            "FAKE_MCP_START_COMMAND": MCP_RAILWAY_START_COMMAND,
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Railway deployment query is not ready for api-service" in result.stderr
+    calls = (state_dir / "calls").read_text(encoding="utf-8").splitlines()
+    assert calls.count("list api-service") == 3
+    assert calls.count("list mcp-service") == 2
+    assert calls.count("list frontend-service") == 2
 
 
 def test_exact_upload_shell_recovers_without_duplicates_and_fails_fast(

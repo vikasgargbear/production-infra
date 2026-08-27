@@ -885,17 +885,76 @@ jobs:
       - name: Require each exact upload to become the active deployment
         run: |
           set -euo pipefail
+          deployment_poll_deadline=$((SECONDS + 900))
+
+          deployment_list_json() {
+            local service=$1
+            local attempt
+            local query_rc
+            local query_timeout
+            local remaining
+            local stdout_file
+            local stderr_file
+            stdout_file=$(mktemp "$RUNNER_TEMP/railway-deployments-stdout.XXXXXX")
+            stderr_file=$(mktemp "$RUNNER_TEMP/railway-deployments-stderr.XXXXXX")
+
+            for attempt in $(seq 1 3); do
+              remaining=$((deployment_poll_deadline - SECONDS))
+              if test "$remaining" -le 0; then
+                break
+              fi
+              query_timeout=20
+              if test "$remaining" -lt "$query_timeout"; then
+                query_timeout=$remaining
+              fi
+              query_rc=0
+              timeout --signal=TERM "${query_timeout}s" railway deployment list \
+                --service "$service" \
+                --environment "$RAILWAY_ENVIRONMENT_ID" \
+                --limit 100 \
+                --json >"$stdout_file" 2>"$stderr_file" || query_rc=$?
+              if test "$query_rc" -eq 0 && jq -e 'type == "array"' "$stdout_file" >/dev/null 2>&1; then
+                cat "$stdout_file"
+                rm -f "$stdout_file" "$stderr_file"
+                return 0
+              fi
+
+              echo "Railway deployment query is not ready for $service " \
+                "(attempt $attempt/3, status $query_rc)" >&2
+              if test "$attempt" -lt 3 && test "$SECONDS" -lt "$deployment_poll_deadline"; then
+                sleep $((attempt * 2))
+              fi
+            done
+
+            echo "Railway deployment query failed for $service after bounded attempts" >&2
+            rm -f "$stdout_file" "$stderr_file"
+            return 1
+          }
 
           deployment_status() {
             local service=$1
             local deployment_id=$2
-            railway deployment list \
-              --service "$service" \
-              --environment "$RAILWAY_ENVIRONMENT_ID" \
-              --limit 100 \
-              --json \
-              | jq -er --arg id "$deployment_id" \
-                  '[.[] | select(.id == $id) | .status] | if length == 1 then .[0] else "NOT_FOUND" end'
+            local payload
+            if ! payload=$(deployment_list_json "$service"); then
+              printf '%s\n' QUERY_UNAVAILABLE
+              return 0
+            fi
+            jq -er --arg id "$deployment_id" \
+              '[.[] | select(.id == $id) | .status] | if length == 1 then .[0] else "NOT_FOUND" end' \
+              <<<"$payload"
+          }
+
+          fail_on_terminal_status() {
+            local service_label=$1
+            local deployment_id=$2
+            local service_status=$3
+            case "$service_status" in
+              FAILED|CRASHED|SKIPPED|REMOVED|REMOVING|CANCELLED)
+                echo "Exact Railway upload reached a terminal failure: " \
+                  "service=$service_label deployment=$deployment_id status=$service_status" >&2
+                exit 1
+                ;;
+            esac
           }
 
           require_deployment_contract() {
@@ -907,11 +966,7 @@ jobs:
             local expected_start=$6
             local expected_message=$7
             local expected_ipv6=$8
-            railway deployment list \
-              --service "$service" \
-              --environment "$RAILWAY_ENVIRONMENT_ID" \
-              --limit 100 \
-              --json \
+            deployment_list_json "$service" \
               | jq -e \
                   --arg id "$deployment_id" \
                   --arg config_file "$config_file" \
@@ -955,16 +1010,11 @@ jobs:
               break
             fi
 
-            for service_status in "$api_status" "$mcp_status" "$frontend_status"; do
-              case "$service_status" in
-                FAILED|CRASHED|SKIPPED|REMOVED|REMOVING|CANCELLED)
-                  echo "An exact Railway upload reached terminal failure state: $service_status" >&2
-                  exit 1
-                  ;;
-              esac
-            done
+            fail_on_terminal_status api "$api_deployment_id" "$api_status"
+            fail_on_terminal_status mcp "$mcp_deployment_id" "$mcp_status"
+            fail_on_terminal_status frontend "$frontend_deployment_id" "$frontend_status"
 
-            if test "$attempt" = 90; then
+            if test "$attempt" = 90 || test "$SECONDS" -ge "$deployment_poll_deadline"; then
               echo "Exact Railway uploads did not reach SUCCESS before timeout" >&2
               exit 1
             fi
