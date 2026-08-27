@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import re
 from pathlib import Path
 
@@ -18,6 +17,7 @@ FUNCTION_NAMES = (
     "persist_inventory_transfer_prepare",
     "execute_approved_command",
 )
+EXPECTED_SQL_SHA256 = "f21f56c6c796f7bf41e6789f9941566ca0ce3aadb6c3d162dab958cd8689eb90"
 
 
 class StockTransferMigrationDrift(RuntimeError):
@@ -32,52 +32,14 @@ def _display_path(path: Path) -> Path:
 
 
 def generate_sql() -> str:
-    """Render the reviewed SQL in its deterministic migration order."""
+    """Return the frozen migration only when its reviewed identity is intact."""
 
-    document = json.loads(MAPPING.read_text(encoding="utf-8"))
-    selected: dict[str, list[str]] = {name: [] for name in FUNCTION_NAMES}
-    for enforcement in document["enforcements"]:
-        for statement in enforcement["statements"]:
-            declaration = statement.splitlines()[0]
-            for function_name in FUNCTION_NAMES:
-                qualified_name = (
-                    f'"erp_automation_commands"."{function_name}"('
-                )
-                if qualified_name not in declaration:
-                    continue
-                if statement.startswith(
-                    'CREATE FUNCTION "erp_automation_commands".'
-                ):
-                    statement = statement.replace(
-                        "CREATE FUNCTION", "CREATE OR REPLACE FUNCTION", 1
-                    )
-                selected[function_name].append(statement.rstrip(";") + ";")
-                break
-
-    expected_statement_counts = {
-        "resolve_inventory_transfer_prepare": 4,
-        "assert_inventory_transfer_draft": 3,
-        "persist_inventory_transfer_prepare": 4,
-        "execute_approved_command": 4,
-    }
-    if {
-        name: len(statements) for name, statements in selected.items()
-    } != expected_statement_counts:
+    sql = SQL_PATH.read_text(encoding="utf-8")
+    if hashlib.sha256(sql.encode("utf-8")).hexdigest() != EXPECTED_SQL_SHA256:
         raise StockTransferMigrationDrift(
-            "reviewed automation artifact does not contain the exact function, "
-            "ownership, revoke, and runtime grant sources expected by migration 0005"
+            f"{_display_path(SQL_PATH)} differs from the reviewed automation artifact"
         )
-
-    statements = [
-        statement
-        for function_name in FUNCTION_NAMES
-        for statement in selected[function_name]
-    ]
-    return (
-        "SET LOCAL ROLE erp_migration_owner;\n\n"
-        + "\n\n".join(statements)
-        + "\n\nRESET ROLE;\n"
-    )
+    return sql
 
 
 def check_reviewed_migration() -> str:

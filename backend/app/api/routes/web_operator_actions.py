@@ -139,6 +139,7 @@ class InventoryAdjustmentEligibility(StrictDTO):
     product_id: UUID
     batch_id: UUID
     system_base_quantity: Decimal
+    stock_balance_row_version: int
     uom_conversions: list[InventoryAdjustmentUom]
     evidence: list[InventoryAdjustmentEvidence]
 
@@ -147,11 +148,12 @@ class InventoryAdjustmentReadbackLine(StrictDTO):
     inventory_document_line_id: UUID
     product_id: UUID
     batch_id: UUID
+    location_id: UUID
     system_base_quantity: Decimal
     counted_base_quantity: Decimal
-    gain_base_quantity: Decimal
+    variance_base_quantity: Decimal
     unit_cost: Decimal
-    gain_value: Decimal
+    variance_value: Decimal
     ledger_entry_id: UUID
     ledger_quantity_delta: Decimal
     ledger_value_delta: Decimal
@@ -164,14 +166,63 @@ class InventoryAdjustmentReadback(StrictDTO):
     document_number: str
     status: Literal["posted"]
     branch_id: UUID
-    total_gain_base_quantity: Decimal
-    total_gain_value: Decimal
+    variance_effect: Literal["gain", "loss"]
+    total_variance_base_quantity: Decimal
+    total_variance_value: Decimal
     journal_entry_id: UUID
     journal_status: Literal["posted"]
     journal_debit_total: Decimal
     journal_credit_total: Decimal
     accounting_event_id: UUID
     lines: list[InventoryAdjustmentReadbackLine]
+
+
+class CommercialReversalStockEntry(StrictDTO):
+    ledger_entry_id: UUID
+    reverses_entry_id: UUID
+    product_id: UUID
+    batch_id: UUID
+    location_id: UUID
+    quantity_delta: Decimal
+    value_delta: Decimal
+
+
+class CommercialReversalReadback(StrictDTO):
+    command_request_id: UUID
+    operation: Literal[
+        "sales.return.reversal.post",
+        "procurement.purchase_return.reversal.post",
+        "finance.adjustment_note.reversal.post",
+    ]
+    reversal_adjustment_note_id: UUID
+    reversal_note_status: Literal["posted"]
+    original_adjustment_note_id: UUID
+    original_note_status: Literal["reversed"]
+    original_return_status: Optional[Literal["reversed"]]
+    reversal_journal_id: UUID
+    reversal_journal_status: Literal["posted"]
+    original_journal_id: UUID
+    original_journal_status: Literal["reversed"]
+    journal_debit_total: Decimal
+    journal_credit_total: Decimal
+    reversal_tax_document_id: Optional[UUID]
+    original_tax_document_id: Optional[UUID]
+    reversal_inventory_document_id: Optional[UUID]
+    original_inventory_document_id: Optional[UUID]
+    reversed_allocation_count: int
+    stock_entries: list[CommercialReversalStockEntry]
+
+
+class CommercialReversalSource(StrictDTO):
+    reversal_kind: Literal["sales_return", "purchase_return", "adjustment_note"]
+    original_resource_id: UUID
+    expected_row_version: int
+    branch_id: UUID
+    original_adjustment_note_id: UUID
+    original_note_date: date
+    reported: bool
+    amendment_evidence_required: bool
+    inventory_document_id: Optional[UUID]
 
 
 class ExpenseClaimReadbackLine(StrictDTO):
@@ -558,7 +609,7 @@ def inventory_adjustment_eligibility(
     user: dict = Depends(_web_user),
     db: Session = Depends(get_db),
 ) -> InventoryAdjustmentEligibility:
-    """Return only server-proven facts needed to prepare a cycle-count gain.
+    """Return only server-proven facts needed to prepare a signed cycle count.
 
     The browser must not derive membership, evidence, UOM, location, or current
     stock authority from display data.  Unsupported lots and missing physical
@@ -577,6 +628,7 @@ def inventory_adjustment_eligibility(
             SELECT product.id AS product_id,
                    batch.id AS batch_id,
                    balance.on_hand_quantity AS system_base_quantity,
+                   balance.row_version AS stock_balance_row_version,
                    conversion.id AS uom_conversion_id,
                    conversion.from_uom_code,
                    conversion.to_uom_code,
@@ -692,6 +744,7 @@ def inventory_adjustment_eligibility(
         product_id=first["product_id"],
         batch_id=first["batch_id"],
         system_base_quantity=first["system_base_quantity"],
+        stock_balance_row_version=first["stock_balance_row_version"],
         uom_conversions=[
             InventoryAdjustmentUom(
                 uom_conversion_id=row._mapping["uom_conversion_id"],
@@ -702,6 +755,96 @@ def inventory_adjustment_eligibility(
             for row in rows
         ],
         evidence=[InventoryAdjustmentEvidence(**dict(row._mapping)) for row in evidence_rows],
+    )
+
+
+@router.get(
+    "/commercial-reversal/source",
+    response_model=CommercialReversalSource,
+)
+def commercial_reversal_source(
+    reversal_kind: Literal["sales_return", "purchase_return", "adjustment_note"],
+    original_resource_id: UUID,
+    user: dict = Depends(_web_user),
+    db: Session = Depends(get_db),
+) -> CommercialReversalSource:
+    """Resolve one exact posted source; the browser never guesses its row version."""
+
+    org_id = _uuid(user.get("org_id"), "organization")
+    auth_user_id = _uuid(user.get("auth_user_id"), "identity")
+    db.execute(
+        text("SELECT erp_security.activate_context(:auth_user_id, :org_id)"),
+        {"auth_user_id": auth_user_id, "org_id": org_id},
+    )
+    operation_key = {
+        "sales_return": "sales.return.reversal.prepare",
+        "purchase_return": "procurement.purchase_return.reversal.prepare",
+        "adjustment_note": "finance.adjustment_note.reversal.prepare",
+    }[reversal_kind]
+    source_sql = {
+        "sales_return": """
+          SELECT source.id AS original_resource_id, source.row_version AS expected_row_version,
+                 source.branch_id, note.id AS original_adjustment_note_id, note.note_date AS original_note_date,
+                 document.id AS inventory_document_id
+            FROM sales.returns source
+            JOIN finance.adjustment_notes note ON note.org_id=source.org_id
+             AND note.sales_return_id=source.id AND note.status='posted'
+            JOIN inventory.inventory_documents document ON document.org_id=source.org_id
+             AND document.sales_return_id=source.id AND document.document_type='sales_return_receipt'
+             AND document.status='posted'
+           WHERE source.org_id=:org_id AND source.id=:source_id AND source.status='posted'
+        """,
+        "purchase_return": """
+          SELECT source.id AS original_resource_id, source.row_version AS expected_row_version,
+                 source.branch_id, note.id AS original_adjustment_note_id, note.note_date AS original_note_date,
+                 document.id AS inventory_document_id
+            FROM procurement.purchase_returns source
+            JOIN finance.adjustment_notes note ON note.org_id=source.org_id
+             AND note.purchase_return_id=source.id AND note.status='posted'
+            JOIN inventory.inventory_documents document ON document.org_id=source.org_id
+             AND document.purchase_return_id=source.id AND document.document_type='purchase_return_issue'
+             AND document.status='posted'
+           WHERE source.org_id=:org_id AND source.id=:source_id AND source.status='posted'
+        """,
+        "adjustment_note": """
+          SELECT source.id AS original_resource_id, source.row_version AS expected_row_version,
+                 coalesce(invoice.branch_id,supplier.branch_id) AS branch_id,
+                 source.id AS original_adjustment_note_id, source.note_date AS original_note_date,
+                 NULL::uuid AS inventory_document_id
+            FROM finance.adjustment_notes source
+            LEFT JOIN sales.invoices invoice ON invoice.org_id=source.org_id AND invoice.id=source.sales_invoice_id
+            LEFT JOIN procurement.supplier_invoices supplier ON supplier.org_id=source.org_id AND supplier.id=source.supplier_invoice_id
+           WHERE source.org_id=:org_id AND source.id=:source_id AND source.status='posted'
+             AND source.sales_return_id IS NULL AND source.purchase_return_id IS NULL
+        """,
+    }[reversal_kind]
+    params = {"org_id": org_id, "source_id": original_resource_id}
+    source = db.execute(text(source_sql), params).mappings().one_or_none()
+    if source is None or source["branch_id"] is None:
+        raise HTTPException(status_code=404, detail="Exact posted commercial source is unavailable")
+    context = _resolve_context(
+        db, user, operation_key, branch_ids=(source["branch_id"],)
+    )
+    reported = bool(db.execute(
+        text(
+            """
+            SELECT EXISTS(
+              SELECT 1 FROM tax.documents document
+              JOIN tax.return_documents membership
+                ON membership.org_id=document.org_id
+               AND membership.tax_document_id=document.id
+             WHERE document.org_id=:org_id
+               AND document.adjustment_note_id=:note_id
+            )
+            """
+        ),
+        {"org_id": context.organization_id, "note_id": source["original_adjustment_note_id"]},
+    ).scalar_one())
+    return CommercialReversalSource(
+        reversal_kind=reversal_kind,
+        **dict(source),
+        reported=reported,
+        amendment_evidence_required=reported,
     )
 
 
@@ -741,8 +884,9 @@ def load_inventory_adjustment_readback(
                    document.document_number,
                    document.status,
                    document.branch_id,
-                   document.total_abs_base_quantity AS total_gain_base_quantity,
-                   document.total_value AS total_gain_value,
+                   CASE ledger.entry_kind WHEN 'count_gain' THEN 'gain' ELSE 'loss' END AS variance_effect,
+                   document.total_abs_base_quantity AS total_variance_base_quantity,
+                   document.total_value AS total_variance_value,
                    journal.id AS journal_entry_id,
                    journal.status AS journal_status,
                    journal.transaction_debit_total AS journal_debit_total,
@@ -751,11 +895,12 @@ def load_inventory_adjustment_readback(
                    document_line.id AS inventory_document_line_id,
                    document_line.product_id,
                    document_line.batch_id,
+                   ledger.location_id,
                    document_line.system_quantity AS system_base_quantity,
                    document_line.counted_quantity AS counted_base_quantity,
-                   document_line.variance_quantity AS gain_base_quantity,
+                   document_line.variance_quantity AS variance_base_quantity,
                    document_line.unit_cost,
-                   document_line.extended_cost AS gain_value,
+                   document_line.extended_cost AS variance_value,
                    ledger.id AS ledger_entry_id,
                    ledger.quantity_delta AS ledger_quantity_delta,
                    ledger.value_delta AS ledger_value_delta,
@@ -773,7 +918,7 @@ def load_inventory_adjustment_readback(
                 ON ledger.org_id=document_line.org_id
                AND ledger.inventory_document_id=document.id
                AND ledger.inventory_document_line_id=document_line.id
-               AND ledger.entry_kind='count_gain'
+               AND ledger.entry_kind IN ('count_gain','count_loss')
               JOIN inventory.stock_balances AS balance
                 ON balance.org_id=ledger.org_id
                AND balance.branch_id=ledger.branch_id
@@ -812,17 +957,18 @@ def load_inventory_adjustment_readback(
     line_values = [row._mapping for row in rows]
     if (
         any(
-            row["gain_base_quantity"] != row["ledger_quantity_delta"]
-            or row["gain_value"] != row["ledger_value_delta"]
-            or row["counted_base_quantity"] != row["current_on_hand_quantity"]
+            row["variance_base_quantity"] != row["ledger_quantity_delta"]
+            or row["variance_value"] != abs(row["ledger_value_delta"])
+            or (row["variance_base_quantity"] > 0) != (row["variance_effect"] == "gain")
             for row in line_values
         )
-        or sum((row["gain_base_quantity"] for row in line_values), Decimal("0"))
-        != header["total_gain_base_quantity"]
-        or sum((row["gain_value"] for row in line_values), Decimal("0"))
-        != header["total_gain_value"]
-        or header["journal_debit_total"] != header["total_gain_value"]
-        or header["journal_credit_total"] != header["total_gain_value"]
+        or any(row["variance_effect"] != header["variance_effect"] for row in line_values)
+        or sum((abs(row["variance_base_quantity"]) for row in line_values), Decimal("0"))
+        != header["total_variance_base_quantity"]
+        or sum((row["variance_value"] for row in line_values), Decimal("0"))
+        != header["total_variance_value"]
+        or header["journal_debit_total"] != header["total_variance_value"]
+        or header["journal_credit_total"] != header["total_variance_value"]
     ):
         raise HTTPException(
             status_code=409,
@@ -837,8 +983,9 @@ def load_inventory_adjustment_readback(
         document_number=header["document_number"],
         status=header["status"],
         branch_id=header["branch_id"],
-        total_gain_base_quantity=header["total_gain_base_quantity"],
-        total_gain_value=header["total_gain_value"],
+        variance_effect=header["variance_effect"],
+        total_variance_base_quantity=header["total_variance_base_quantity"],
+        total_variance_value=header["total_variance_value"],
         journal_entry_id=header["journal_entry_id"],
         journal_status=header["journal_status"],
         journal_debit_total=header["journal_debit_total"],
@@ -849,11 +996,12 @@ def load_inventory_adjustment_readback(
                 inventory_document_line_id=row["inventory_document_line_id"],
                 product_id=row["product_id"],
                 batch_id=row["batch_id"],
+                location_id=row["location_id"],
                 system_base_quantity=row["system_base_quantity"],
                 counted_base_quantity=row["counted_base_quantity"],
-                gain_base_quantity=row["gain_base_quantity"],
+                variance_base_quantity=row["variance_base_quantity"],
                 unit_cost=row["unit_cost"],
-                gain_value=row["gain_value"],
+                variance_value=row["variance_value"],
                 ledger_entry_id=row["ledger_entry_id"],
                 ledger_quantity_delta=row["ledger_quantity_delta"],
                 ledger_value_delta=row["ledger_value_delta"],
@@ -861,6 +1009,199 @@ def load_inventory_adjustment_readback(
             )
             for row in line_values
         ],
+    )
+
+
+@router.get(
+    "/commercial-reversal/commands/{command_request_id}/readback",
+    response_model=CommercialReversalReadback,
+)
+def commercial_reversal_readback(
+    command_request_id: UUID,
+    user: dict = Depends(_web_user),
+    db: Session = Depends(get_db),
+) -> CommercialReversalReadback:
+    """Reconcile one compensating return/note reversal to exact evidence."""
+
+    context = _command_context(
+        db, user, "automation.command.execute", command_request_id
+    )
+    return load_commercial_reversal_readback(
+        command_request_id=command_request_id,
+        context=context,
+        db=db,
+    )
+
+
+def load_commercial_reversal_readback(
+    *,
+    command_request_id: UUID,
+    context: ActionContext,
+    db: Session,
+) -> CommercialReversalReadback:
+    """Load exact source/counter-document, allocation, journal, and stock lineage."""
+
+    row = db.execute(
+        text(
+            """
+            WITH command AS (
+              SELECT *
+                FROM erp_automation_reads.command_authority_context(
+                     :org_id, :command_request_id
+                )
+               WHERE status='succeeded'
+                 AND capability_code IN (
+                   'sales.return.reversal.prepare',
+                   'procurement.purchase_return.reversal.prepare',
+                   'finance.adjustment_note.reversal.prepare'
+                 )
+                 AND target_resource_type='adjustment_note_reversal'
+            ), evidence AS (
+              SELECT command.id AS command_request_id,
+                     command.operation,
+                     reversal.id AS reversal_adjustment_note_id,
+                     reversal.status AS reversal_note_status,
+                     original.id AS original_adjustment_note_id,
+                     original.status AS original_note_status,
+                     CASE command.capability_code
+                       WHEN 'sales.return.reversal.prepare' THEN sales_return.status
+                       WHEN 'procurement.purchase_return.reversal.prepare' THEN purchase_return.status
+                       ELSE NULL
+                     END AS original_return_status,
+                     reversal_journal.id AS reversal_journal_id,
+                     reversal_journal.status AS reversal_journal_status,
+                     original_journal.id AS original_journal_id,
+                     original_journal.status AS original_journal_status,
+                     reversal_journal.transaction_debit_total AS journal_debit_total,
+                     reversal_journal.transaction_credit_total AS journal_credit_total,
+                     reversal_tax.id AS reversal_tax_document_id,
+                     original_tax.id AS original_tax_document_id,
+                     reversal_inventory.id AS reversal_inventory_document_id,
+                     original_inventory.id AS original_inventory_document_id,
+                     (
+                       SELECT count(*)::integer
+                         FROM finance.allocations allocation
+                        WHERE allocation.org_id=reversal.org_id
+                          AND allocation.adjustment_note_id=reversal.id
+                          AND allocation.reversal_of_allocation_id IS NOT NULL
+                     ) AS reversed_allocation_count
+                FROM command
+                JOIN finance.adjustment_notes reversal
+                  ON reversal.org_id=:org_id
+                 AND reversal.id=command.target_resource_id
+                 AND reversal.status='posted'
+                JOIN finance.adjustment_notes original
+                  ON original.org_id=reversal.org_id
+                 AND original.id=reversal.reversal_of_adjustment_note_id
+                 AND original.status='reversed'
+                JOIN finance.accounting_events reversal_event
+                  ON reversal_event.org_id=reversal.org_id
+                 AND reversal_event.adjustment_note_id=reversal.id
+                JOIN finance.accounting_events original_event
+                  ON original_event.org_id=original.org_id
+                 AND original_event.adjustment_note_id=original.id
+                JOIN finance.journal_entries reversal_journal
+                  ON reversal_journal.org_id=reversal_event.org_id
+                 AND reversal_journal.id=reversal_event.journal_entry_id
+                 AND reversal_journal.status='posted'
+                JOIN finance.journal_entries original_journal
+                  ON original_journal.org_id=original_event.org_id
+                 AND original_journal.id=original_event.journal_entry_id
+                 AND original_journal.status='reversed'
+                 AND reversal_journal.reversal_of_journal_entry_id=original_journal.id
+                LEFT JOIN sales.returns sales_return
+                  ON sales_return.org_id=original.org_id
+                 AND sales_return.id=original.sales_return_id
+                LEFT JOIN procurement.purchase_returns purchase_return
+                  ON purchase_return.org_id=original.org_id
+                 AND purchase_return.id=original.purchase_return_id
+                LEFT JOIN tax.documents original_tax
+                  ON original_tax.org_id=original.org_id
+                 AND original_tax.adjustment_note_id=original.id
+                LEFT JOIN tax.documents reversal_tax
+                  ON reversal_tax.org_id=reversal.org_id
+                 AND reversal_tax.adjustment_note_id=reversal.id
+                 AND reversal_tax.adjusts_tax_document_id=original_tax.id
+                LEFT JOIN inventory.inventory_documents original_inventory
+                  ON original_inventory.org_id=original.org_id
+                 AND (
+                   original_inventory.sales_return_id=sales_return.id
+                   OR original_inventory.purchase_return_id=purchase_return.id
+                 )
+                LEFT JOIN inventory.inventory_documents reversal_inventory
+                  ON reversal_inventory.org_id=original_inventory.org_id
+                 AND reversal_inventory.reverses_document_id=original_inventory.id
+                 AND reversal_inventory.status='posted'
+            ), stock AS (
+              SELECT evidence.command_request_id,
+                     coalesce(
+                       pg_catalog.jsonb_agg(
+                         pg_catalog.jsonb_build_object(
+                           'ledger_entry_id', reversal_entry.id,
+                           'reverses_entry_id', reversal_entry.reverses_entry_id,
+                           'product_id', reversal_entry.product_id,
+                           'batch_id', reversal_entry.batch_id,
+                           'location_id', reversal_entry.location_id,
+                           'quantity_delta', reversal_entry.quantity_delta,
+                           'value_delta', reversal_entry.value_delta
+                         ) ORDER BY reversal_entry.id
+                       ) FILTER (WHERE reversal_entry.id IS NOT NULL),
+                       '[]'::jsonb
+                     ) AS stock_entries
+                FROM evidence
+                LEFT JOIN inventory.stock_ledger_entries reversal_entry
+                  ON reversal_entry.org_id=:org_id
+                 AND reversal_entry.inventory_document_id=evidence.reversal_inventory_document_id
+                 AND reversal_entry.entry_kind='reversal'
+                LEFT JOIN inventory.stock_ledger_entries original_entry
+                  ON original_entry.org_id=reversal_entry.org_id
+                 AND original_entry.id=reversal_entry.reverses_entry_id
+                 AND reversal_entry.quantity_delta=-original_entry.quantity_delta
+                 AND reversal_entry.value_delta=-original_entry.value_delta
+               GROUP BY evidence.command_request_id
+            )
+            SELECT evidence.*, stock.stock_entries
+              FROM evidence
+              JOIN stock USING (command_request_id)
+            """
+        ),
+        {
+            "org_id": context.organization_id,
+            "command_request_id": command_request_id,
+        },
+    ).mappings().one_or_none()
+    if row is None:
+        raise HTTPException(
+            status_code=409,
+            detail=_detail(
+                ActionErrorCode.POLICY_BLOCKED,
+                "Compensating reversal readback is incomplete or not authoritative",
+            ),
+        )
+    if row["journal_debit_total"] != row["journal_credit_total"]:
+        raise HTTPException(
+            status_code=409,
+            detail=_detail(
+                ActionErrorCode.STALE_VERSION,
+                "Compensating reversal journal is not balanced",
+            ),
+        )
+    stock_entries = row["stock_entries"]
+    if row["original_inventory_document_id"] is not None and not stock_entries:
+        raise HTTPException(
+            status_code=409,
+            detail=_detail(
+                ActionErrorCode.STALE_VERSION,
+                "Compensating reversal has no exact stock-ledger inversion",
+            ),
+        )
+    return CommercialReversalReadback(
+        **{
+            key: value
+            for key, value in row.items()
+            if key != "stock_entries"
+        },
+        stock_entries=[CommercialReversalStockEntry(**item) for item in stock_entries],
     )
 
 

@@ -65,7 +65,7 @@ const context = (): CanonicalSupplierInvoiceContext => ({
     suggested_line_discount_value: '0.000000',
   }],
   expense_charge_lines: [],
-  inventory_effect: 'already_capitalized_by_goods_receipt',
+  inventory_effect: 'grn_quantity_owner_invoice_value_adjustment',
   supplier_invoice_inventory_value_delta: '0.00',
 });
 
@@ -75,7 +75,11 @@ const draft = () => ({
   invoiceDate: '2026-08-25',
   receivedDate: '2026-08-25',
   itcBusinessUseAttested: true,
-  lines: [{ goodsReceiptLineId: id('9'), quotedUnitRate: '77.1428' }],
+  lines: [{
+    goodsReceiptLineId: id('9'),
+    quotedUnitRate: '77.1428',
+    landedCostAllocationMethod: 'direct' as const,
+  }],
 });
 
 test('builds exact canonical receipt allocation without JS numeric conversion', () => {
@@ -92,6 +96,7 @@ test('builds exact canonical receipt allocation without JS numeric conversion', 
     allocated_base_billed_quantity: '1.234567',
     allocated_base_free_quantity: '0.000001',
     product_inventory_cost_treatment: 'capitalize',
+    landed_cost_allocation_method: 'direct',
     itc_eligibility: 'eligible',
     itc_eligibility_basis: 'taxable_resale_not_blocked_under_section_17',
   });
@@ -109,11 +114,14 @@ test('preserves reviewed discounts, rounding, and expense-charge account identit
     quoted_amount: '12.34',
     expense_price_basis: 'tax_exclusive',
     expense_document_discount_eligible: false,
+    inventory_cost_treatment: 'capitalize',
     net_value_account_id: id('13'),
     account_code: 'FREIGHT-IN',
     account_name: 'Freight Inward',
   }];
-  const payload: any = buildCanonicalSupplierInvoicePreparePayload(source, draft());
+  const payload: any = buildCanonicalSupplierInvoicePreparePayload(source, {
+    ...draft(), chargeAllocationMethods: { [id('12')]: 'value_weighted' },
+  });
   expect(payload.document_discount).toEqual({
     document_discount_kind: 'percent',
     document_discount_basis: 'taxable_value',
@@ -124,7 +132,8 @@ test('preserves reviewed discounts, rounding, and expense-charge account identit
     expense_charge_code: 'freight',
     quoted_amount: '12.34',
     net_value_account_id: id('13'),
-    charge_inventory_cost_treatment: 'expense',
+    charge_inventory_cost_treatment: 'capitalize',
+    landed_cost_allocation_method: 'value_weighted',
     itc_eligibility: 'eligible',
   });
 });
@@ -147,7 +156,9 @@ test('rejects float-shaped and over-precision rates instead of rounding', () => 
   for (const quotedUnitRate of ['77.14289', '7.7e1', 'NaN', '-1']) {
     expect(() => buildCanonicalSupplierInvoicePreparePayload(
       context(),
-      { ...draft(), lines: [{ goodsReceiptLineId: id('9'), quotedUnitRate }] },
+      { ...draft(), lines: [{
+        goodsReceiptLineId: id('9'), quotedUnitRate, landedCostAllocationMethod: 'direct',
+      }] },
     )).toThrow('exact positive decimal string');
   }
 });
@@ -176,7 +187,11 @@ test('accepts only an exact supplier-invoice preview tied to selected GSTR-2B ev
     preview_hash: `sha256:${'a'.repeat(64)}`,
     command_type: 'procurement.supplier_invoice.post',
     financial_impact: [{ currency_code: 'INR', supplier_payable: '106.67', inventory_value_delta: '0.00' }],
-    inventory_impact: [{ effect: 'receipt_cost_match_no_landed_cost', inventory_value_delta: '0.00' }],
+    inventory_impact: [{
+      allocation_method: 'direct',
+      landed_cost_inventory_value_delta: '0.00',
+      consumed_variance_amount: '0.00',
+    }],
     tax_impact: [{
       cgst_total: '5.71', sgst_total: '5.72', igst_total: '0.00', cess_total: '0.00',
       itc_eligibility: 'eligible', portal_document_line_id: id('8'),
@@ -185,8 +200,12 @@ test('accepts only an exact supplier-invoice preview tied to selected GSTR-2B ev
   expect(validateCanonicalSupplierInvoicePreview(preview, context())).toBe(preview);
   expect(() => validateCanonicalSupplierInvoicePreview({
     ...preview,
-    inventory_impact: [{ effect: 'receipt_cost_match_no_landed_cost', inventory_value_delta: '0.01' }],
-  }, context())).toThrow('zero second inventory movement');
+    inventory_impact: [{
+      allocation_method: 'fallback',
+      landed_cost_inventory_value_delta: '0.01',
+      consumed_variance_amount: '0.00',
+    }],
+  }, context())).toThrow('reviewed landed-cost split');
   expect(() => validateCanonicalSupplierInvoicePreview({
     ...preview,
     tax_impact: [{ ...preview.tax_impact[0], portal_document_line_id: id('99') }],

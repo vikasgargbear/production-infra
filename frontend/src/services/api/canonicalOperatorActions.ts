@@ -14,6 +14,8 @@ export type CanonicalOperationKey =
   | 'procurement.supplier_invoice.prepare'
   | 'procurement.purchase_return.prepare'
   | 'finance.customer_receipt.prepare'
+  | 'finance.customer_cheque_clearance.prepare'
+  | 'finance.customer_cheque_bounce.prepare'
   | 'finance.supplier_payment.prepare'
   | 'finance.supplier_advance.prepare'
   | 'finance.adjustment_note.prepare'
@@ -21,7 +23,10 @@ export type CanonicalOperationKey =
   | 'finance.expense_claim.prepare'
   | 'inventory.adjustment.prepare'
   | 'inventory.transfer.prepare'
-  | 'inventory.destruction.prepare';
+  | 'inventory.destruction.prepare'
+  | 'sales.return.reversal.prepare'
+  | 'procurement.purchase_return.reversal.prepare'
+  | 'finance.adjustment_note.reversal.prepare';
 
 export interface CanonicalCommandPreview {
   command_request_id: string;

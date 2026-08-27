@@ -233,9 +233,14 @@ def test_customer_receipt_readback_reconciles_open_item_and_two_line_journal(mon
     queued = iter([
         [{
             "payment_id": payment_id, "payment_number": "RCPT-4",
+            "row_version": 3,
             "payment_date": date(2026, 8, 25), "branch_id": branch_id,
             "party_id": party_id, "settlement_account_id": settlement_id,
-            "payment_method": "upi", "external_reference": "UPI-168",
+            "bank_account_id": uuid4(), "payment_method": "upi",
+            "payment_purpose": "commercial_settlement", "sales_order_id": None,
+            "evidence_attachment_id": uuid4(), "instrument_number": None,
+            "instrument_date": None, "drawee_bank_name": None,
+            "account_payee_confirmed": None, "external_reference": "UPI-168",
             "amount": Decimal("168.00"), "status": "posted",
             "journal_entry_id": journal_id, "journal_number": "JV-4",
             "journal_debit_total": Decimal("168.00"),
@@ -245,6 +250,7 @@ def test_customer_receipt_readback_reconciles_open_item_and_two_line_journal(mon
             "allocation_id": uuid4(), "open_item_id": open_item_id,
             "amount": Decimal("168.00"), "allocation_date": date(2026, 8, 25),
         }],
+        [],
         [
             {"journal_line_id": uuid4(), "line_number": 1,
              "account_id": settlement_id, "party_id": None,
@@ -255,6 +261,8 @@ def test_customer_receipt_readback_reconciles_open_item_and_two_line_journal(mon
              "transaction_debit": Decimal("0"), "transaction_credit": Decimal("168.00"),
              "functional_debit": Decimal("0"), "functional_credit": Decimal("168.00")},
         ],
+        [],
+        [],
     ])
     statements = []
 
@@ -272,19 +280,120 @@ def test_customer_receipt_readback_reconciles_open_item_and_two_line_journal(mon
     assert validated.journal_balanced is True
     assert validated.allocations[0].open_item_id == open_item_id
     assert "payment.status='posted'" in statements[0]
-    assert "journal.status='posted'" in statements[0]
+    assert "journal.status IN ('posted','reversed')" in statements[0]
 
 
 def test_customer_receipt_readback_model_rejects_missing_evidence():
     base = {
         "payment_id": uuid4(), "payment_number": "RCPT-4",
+        "row_version": 3,
         "payment_date": date(2026, 8, 25), "branch_id": uuid4(),
         "party_id": uuid4(), "settlement_account_id": uuid4(),
-        "payment_method": "upi", "external_reference": "UPI-168",
+        "bank_account_id": uuid4(), "payment_method": "upi",
+        "payment_purpose": "commercial_settlement", "sales_order_id": None,
+        "evidence_attachment_id": uuid4(), "instrument_number": None,
+        "instrument_date": None, "drawee_bank_name": None,
+        "account_payee_confirmed": None, "external_reference": "UPI-168",
         "amount": "168.00", "status": "posted", "journal_entry_id": uuid4(),
         "journal_number": "JV-4", "journal_debit_total": "168.00",
-        "journal_credit_total": "168.00", "allocations": [], "journal_lines": [],
+        "journal_credit_total": "168.00", "allocations": [],
+        "reversed_allocations": [], "advance": None,
+        "terminal_actions": [], "journal_lines": [],
         "allocation_reconciled": True, "journal_balanced": True,
     }
-    with pytest.raises(ValidationError, match="allocation evidence"):
+    with pytest.raises(ValidationError, match="allocations do not reconcile"):
         canonical_erp_reads.CanonicalCustomerReceiptReadback(**base)
+
+
+def test_customer_advance_readback_requires_zero_invoice_allocations() -> None:
+    party_id, settlement_id = uuid4(), uuid4()
+    sales_order_id = uuid4()
+    amount = "250.00"
+    base = {
+        "payment_id": uuid4(), "payment_number": "ADV-1",
+        "row_version": 3,
+        "payment_date": date(2026, 8, 25), "branch_id": uuid4(),
+        "party_id": party_id, "settlement_account_id": settlement_id,
+        "bank_account_id": None, "payment_method": "cash",
+        "payment_purpose": "customer_advance", "sales_order_id": sales_order_id,
+        "evidence_attachment_id": uuid4(), "instrument_number": None,
+        "instrument_date": None, "drawee_bank_name": None,
+        "account_payee_confirmed": None, "external_reference": "CASH-ADV-1",
+        "amount": amount, "status": "posted", "journal_entry_id": uuid4(),
+        "journal_number": "JV-ADV-1", "journal_debit_total": amount,
+        "journal_credit_total": amount, "allocations": [],
+        "reversed_allocations": [],
+        "advance": {
+            "open_item_id": uuid4(), "sales_order_id": sales_order_id,
+            "principal_amount": amount, "allocated_amount": "0.00",
+            "residual_amount": amount, "status": "open",
+        },
+        "terminal_actions": [],
+        "journal_lines": [
+            {"journal_line_id": uuid4(), "line_number": 1,
+             "account_id": settlement_id, "party_id": None,
+             "transaction_debit": amount, "transaction_credit": "0.00",
+             "functional_debit": amount, "functional_credit": "0.00"},
+            {"journal_line_id": uuid4(), "line_number": 2,
+             "account_id": uuid4(), "party_id": party_id,
+             "transaction_debit": "0.00", "transaction_credit": amount,
+             "functional_debit": "0.00", "functional_credit": amount},
+        ],
+        "allocation_reconciled": True, "journal_balanced": True,
+    }
+
+    validated = canonical_erp_reads.CanonicalCustomerReceiptReadback(**base)
+    assert validated.advance is not None
+    invalid = {**base, "allocations": [{
+        "allocation_id": uuid4(), "open_item_id": uuid4(),
+        "amount": amount, "allocation_date": date(2026, 8, 25),
+    }]}
+    with pytest.raises(ValidationError, match="zero invoice allocations"):
+        canonical_erp_reads.CanonicalCustomerReceiptReadback(**invalid)
+
+
+def test_bounced_cheque_readback_requires_exact_compensating_allocation_evidence() -> None:
+    party_id, settlement_id, open_item_id = uuid4(), uuid4(), uuid4()
+    amount = "168.00"
+    base = {
+        "payment_id": uuid4(), "payment_number": "CHQ-1", "row_version": 3,
+        "payment_date": date(2026, 8, 25), "branch_id": uuid4(),
+        "party_id": party_id, "settlement_account_id": settlement_id,
+        "bank_account_id": None, "payment_method": "cheque",
+        "payment_purpose": "commercial_settlement", "sales_order_id": None,
+        "evidence_attachment_id": uuid4(), "instrument_number": "000091",
+        "instrument_date": date(2026, 8, 25), "drawee_bank_name": "Demo Bank",
+        "account_payee_confirmed": True, "external_reference": "CHQ-1",
+        "amount": amount, "status": "posted", "journal_entry_id": uuid4(),
+        "journal_number": "JV-CHQ-1", "journal_debit_total": amount,
+        "journal_credit_total": amount, "allocations": [], "advance": None,
+        "reversed_allocations": [{
+            "reversal_allocation_id": uuid4(), "original_allocation_id": uuid4(),
+            "open_item_id": open_item_id, "amount": amount,
+            "reversal_date": date(2026, 8, 27),
+        }],
+        "terminal_actions": [{
+            "action_payment_id": uuid4(), "action": "cheque_bounce",
+            "action_date": date(2026, 8, 27), "evidence_attachment_id": uuid4(),
+            "journal_entry_id": uuid4(), "journal_number": "JV-BOUNCE-1",
+            "journal_debit_total": amount, "journal_credit_total": amount,
+        }],
+        "journal_lines": [
+            {"journal_line_id": uuid4(), "line_number": 1,
+             "account_id": settlement_id, "party_id": None,
+             "transaction_debit": amount, "transaction_credit": "0.00",
+             "functional_debit": amount, "functional_credit": "0.00"},
+            {"journal_line_id": uuid4(), "line_number": 2,
+             "account_id": uuid4(), "party_id": party_id,
+             "transaction_debit": "0.00", "transaction_credit": amount,
+             "functional_debit": "0.00", "functional_credit": amount},
+        ],
+        "allocation_reconciled": True, "journal_balanced": True,
+    }
+
+    validated = canonical_erp_reads.CanonicalCustomerReceiptReadback(**base)
+    assert validated.reversed_allocations[0].open_item_id == open_item_id
+    with pytest.raises(ValidationError, match="allocations do not reconcile"):
+        canonical_erp_reads.CanonicalCustomerReceiptReadback(
+            **{**base, "reversed_allocations": []}
+        )

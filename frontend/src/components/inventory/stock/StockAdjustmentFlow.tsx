@@ -16,7 +16,7 @@ import { parseStockAdjustmentCsv, type StockAdjustmentCsvResult } from './utils/
 import { clientUuid } from '../../../utils/clientUuid';
 import { formatCalendarDate, requireCalendarDate } from '../../../utils/calendarDate';
 import {
-  buildCycleCountGainPayload,
+  buildCycleCountPayload,
   approveCycleCountReview,
   executeApprovedCycleCount,
   loadAndVerifyCycleCountReadback,
@@ -40,6 +40,7 @@ type AdjustmentItem = {
   branch_id: string;
   location_id: string;
   quantity_available: string;
+  stock_balance_row_version: number;
   counted_quantity: string;
   uom_conversion_id: string;
   uom_multiplier: string;
@@ -232,6 +233,7 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
         branch_id: eligibility.branch_id,
         location_id: eligibility.location_id,
         quantity_available: eligibility.system_base_quantity,
+        stock_balance_row_version: eligibility.stock_balance_row_version,
         counted_quantity: '',
         uom_conversion_id: '',
         uom_multiplier: '',
@@ -381,7 +383,7 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
     setIsPreparing(true);
     setError(null);
     try {
-      const payload = buildCycleCountGainPayload({
+      const payload = buildCycleCountPayload({
         idempotencyKey: `erp-web-inventory-adjustment-prepare:${prepareIdentityRef.current}`,
         adjustmentDate: adjustmentData.adjustment_date,
         countedAt: requireCanonicalUtcEventTimestamp(
@@ -399,6 +401,7 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
           uomMultiplier: item.uom_multiplier,
           countedQuantity: item.counted_quantity,
           systemBaseQuantity: item.quantity_available,
+          stockBalanceRowVersion: item.stock_balance_row_version,
         })),
       });
       const prepared = await prepareCanonicalAction('inventory.adjustment.prepare', payload);
@@ -555,8 +558,8 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
                         </td>
                         <td className="px-2 py-2 text-right">{String(impact.system_base_quantity)}</td>
                         <td className="px-2 py-2 text-right">{String(impact.counted_base_quantity)}</td>
-                        <td className="px-2 py-2 text-right">{String(impact.gain_base_quantity)}</td>
-                        <td className="px-2 py-2 text-right">₹{String(impact.gain_value)}</td>
+                        <td className="px-2 py-2 text-right">{String(impact.variance_base_quantity)}</td>
+                        <td className="px-2 py-2 text-right">₹{String(impact.variance_value)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -593,11 +596,11 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
           <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
             <div className="flex items-center gap-2 font-semibold">
               <TrendingUp className="h-5 w-5" />
-              Verified cycle-count gain
+              Verified signed cycle count
             </div>
             <p className="mt-1">
-              Only a same-day physical count above system stock is supported. Shortages, damage,
-              expiry, transfer, opening stock, returns, samples, and reversals use separate canonical workflows.
+              A command may contain gains or ordinary shortages, but never both. Damage, expiry,
+              regulated stock, recalls, transfer, opening stock, returns, samples, and reversals use separate canonical workflows.
             </p>
           </div>
           <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -1019,7 +1022,7 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
               <h3 id="adjustment-confirm-title" className="text-lg font-semibold text-gray-900">Confirm Stock Adjustment</h3>
             </div>
             <p className="text-sm text-gray-700 mb-2">
-              You are about to post a verified <strong>cycle-count gain</strong>
+              You are about to post a verified <strong>signed cycle-count variance</strong>
               for <strong>{adjustmentData.items.length}</strong> product(s) on{' '}
               <strong>{adjustmentData.adjustment_date}</strong>.
             </p>
@@ -1031,7 +1034,7 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
                 {(preparedPreview.inventory_impact as Array<Record<string, unknown>>).map((impact, index) => (
                   <div key={`${String(impact.batch_id)}-${index}`} className="border-b border-gray-100 p-2 text-xs last:border-b-0">
                     <span className="font-mono">{String(impact.batch_id)}</span>: {String(impact.system_base_quantity)} →{' '}
-                    {String(impact.counted_base_quantity)} base units; gain {String(impact.gain_base_quantity)}; value ₹{String(impact.gain_value)}
+                    {String(impact.counted_base_quantity)} base units; {String(impact.variance_effect)} {String(impact.variance_base_quantity)}; value ₹{String(impact.variance_value)}
                   </div>
                 ))}
               </div>

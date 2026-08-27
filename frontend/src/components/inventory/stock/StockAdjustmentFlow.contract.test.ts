@@ -6,7 +6,8 @@ const source = readFileSync(join(__dirname, 'StockAdjustmentFlow.tsx'), 'utf8');
 describe('StockAdjustmentFlow canonical lifecycle contract', () => {
   it('uses server-resolved cycle-count authority and exact command payloads', () => {
     expect(source).toContain('loadCycleCountEligibility');
-    expect(source).toContain('buildCycleCountGainPayload');
+    expect(source).toContain('buildCycleCountPayload');
+    expect(source).toContain('stockBalanceRowVersion: item.stock_balance_row_version');
     expect(source).toContain('canonicalBusinessContextApi.get()');
     expect(source).toContain('adjustment_date: context.business_date');
     expect(source).not.toContain('indiaLocalDate');

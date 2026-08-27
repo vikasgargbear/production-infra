@@ -40,6 +40,14 @@ MANDATORY_LINEAGE_PATHS = {
     "finance.customer_receipt.prepare": (
         "customer_account_id", "settlement_account_id", "allocations.0.open_item_id",
     ),
+    "finance.customer_cheque_clearance.prepare": (
+        "branch_id", "original_payment_id", "original_payment_row_version",
+        "bank_account_id", "evidence_attachment_id",
+    ),
+    "finance.customer_cheque_bounce.prepare": (
+        "branch_id", "original_payment_id", "original_payment_row_version",
+        "evidence_attachment_id",
+    ),
     "finance.supplier_payment.prepare": (
         "supplier_account_id", "settlement_account_id", "allocations.0.open_item_id",
     ),
@@ -49,6 +57,15 @@ MANDATORY_LINEAGE_PATHS = {
     ),
     "finance.adjustment_note.prepare": (
         "original_document_id", "lines.0.original_line_id",
+    ),
+    "sales.return.reversal.prepare": (
+        "original_resource_id", "expected_row_version",
+    ),
+    "procurement.purchase_return.reversal.prepare": (
+        "original_resource_id", "expected_row_version",
+    ),
+    "finance.adjustment_note.reversal.prepare": (
+        "original_resource_id", "expected_row_version",
     ),
     "finance.bank_reconciliation.prepare": (
         "bank_statement_id", "bank_statement_line_id", "journal_entry_id",

@@ -64,7 +64,15 @@ def test_demo_prepare_authority_matches_generated_operator_contract():
     )
 
     assert module.PREPARE_CAPABILITIES == expected
-    assert len(module.PREPARE_CAPABILITIES) == 17
+    assert len(module.PREPARE_CAPABILITIES) >= 17
+    operations = {operation for operation, _ in module.PREPARE_CAPABILITIES}
+    assert {
+        "finance.customer_cheque_clearance.prepare",
+        "finance.customer_cheque_bounce.prepare",
+        "sales.return.reversal.prepare",
+        "procurement.purchase_return.reversal.prepare",
+        "finance.adjustment_note.reversal.prepare",
+    }.issubset(operations)
     assert (
         "finance.bank_reconciliation.prepare",
         "separate_approver",
@@ -232,7 +240,7 @@ def _cases() -> list[tuple[str, str, dict[str, Any], dict[str, Any]]]:
             "inventory_adjustment",
             "inventory.adjustment.prepare",
             module.inventory_adjustment_payload(
-                UUID_A, "100", business_date=BUSINESS_DATE
+                UUID_A, "100", 1, business_date=BUSINESS_DATE
             ),
             {"lines.0.batch_counts.0.batch_id": UUID_A},
         ),

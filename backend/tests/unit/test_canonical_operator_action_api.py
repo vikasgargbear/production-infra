@@ -22,12 +22,32 @@ from app.domain.operator_actions import (
     PreparedCommand,
     get_operator_action_service,
 )
+from app.domain.operator_actions.contract import _schema_type
 from mcp_runtime.aasopharma_mcp.operator_actions import PREPARE_ACTIONS
 
 
 PREVIEW_HASH = "sha256:" + "a" * 64
 BRANCH_ID = uuid4()
 COMMAND_ID = uuid4()
+
+
+def test_operator_schema_integer_compiles_to_strict_bounded_int() -> None:
+    from pydantic import BaseModel, ConfigDict, create_model
+
+    integer_type = _schema_type(
+        {"type": "integer", "minimum": 1, "maximum": 9},
+        "StrictRowVersion",
+    )
+    model = create_model(
+        "StrictIntegerEnvelope",
+        __config__=ConfigDict(extra="forbid"),
+        row_version=(integer_type, ...),
+    )
+    assert issubclass(model, BaseModel)
+    assert model.model_validate({"row_version": 1}).row_version == 1
+    for invalid in (True, "1", 0, 10):
+        with pytest.raises(ValidationError):
+            model.model_validate({"row_version": invalid})
 
 
 class FakeOperatorActionService:
@@ -343,6 +363,7 @@ def _supplier_invoice_payload():
             "allocated_base_billed_quantity": "20.000000",
             "allocated_base_free_quantity": "10.000000",
             "product_inventory_cost_treatment": "capitalize",
+            "landed_cost_allocation_method": "direct",
             "itc_eligibility": "eligible",
             "itc_eligibility_basis": (
                 "taxable_resale_not_blocked_under_section_17"
@@ -618,13 +639,14 @@ def test_customer_receipt_requires_reviewed_non_cash_bank_identity(enabled_bound
         "branch_id": str(BRANCH_ID),
         "payment_date": "2026-08-20",
         "customer_account_id": str(uuid4()),
-        "settlement_account_id": str(uuid4()),
         "payment_method": "upi",
+        "receipt_purpose": "invoice_settlement",
         "amount": "118.00",
         "allocations": [
             {"open_item_id": str(uuid4()), "amount": "118.00"}
         ],
         "external_reference": "UPI-TEST-0001",
+        "evidence_attachment_id": str(uuid4()),
     }
 
     response = client.post(
@@ -671,15 +693,16 @@ def test_customer_receipt_rejects_duplicate_partial_or_unapplied_allocations(ena
         "branch_id": str(BRANCH_ID),
         "payment_date": "2026-08-20",
         "customer_account_id": str(uuid4()),
-        "settlement_account_id": str(uuid4()),
         "bank_account_id": str(uuid4()),
         "payment_method": "bank_transfer",
+        "receipt_purpose": "invoice_settlement",
         "amount": "118.00",
         "allocations": [
             {"open_item_id": open_item_id, "amount": "50.00"},
             {"open_item_id": open_item_id, "amount": "50.00"},
         ],
         "external_reference": "BANK-RECEIPT-0001",
+        "evidence_attachment_id": str(uuid4()),
     }
     response = client.post(
         "/api/internal/mcp/actions/finance.customer_receipt.prepare/prepare",
@@ -696,7 +719,7 @@ def test_customer_receipt_rejects_duplicate_partial_or_unapplied_allocations(ena
     )
     assert response.status_code == 422
     assert response.json()["detail"]["message"] == (
-        "customer receipt allocations must exactly equal amount"
+        "invoice-settlement allocations must exactly equal amount"
     )
 
 
@@ -711,7 +734,6 @@ def test_supplier_advance_requires_one_exact_non_cheque_goods_allocation(enabled
         "payment_date": "2026-08-20",
         "supplier_account_id": str(uuid4()),
         "purchase_order_id": str(uuid4()),
-        "settlement_account_id": str(uuid4()),
         "bank_account_id": str(uuid4()),
         "payment_method": "bank_transfer",
         "gross_amount": "50000.00",
@@ -780,13 +802,12 @@ def test_supplier_payment_requires_exact_inr_bank_allocations(enabled_boundary):
         "branch_id": str(BRANCH_ID),
         "payment_date": "2026-08-20",
         "supplier_account_id": str(uuid4()),
-        "settlement_account_id": str(uuid4()),
         "bank_account_id": str(uuid4()),
         "payment_method": "bank_transfer",
-        "gross_amount": "900.00",
+        "expected_gross_amount": "900.00",
         "allocations": [
-            {"open_item_id": first_open_item_id, "amount": "400.00"},
-            {"open_item_id": str(uuid4()), "amount": "500.00"},
+            {"open_item_id": first_open_item_id, "cash_amount": "400.00"},
+            {"open_item_id": str(uuid4()), "cash_amount": "500.00"},
         ],
         "external_reference": "UTR-SUPPLIER-0001",
     }
@@ -796,8 +817,8 @@ def test_supplier_payment_requires_exact_inr_bank_allocations(enabled_boundary):
         json=payload,
     )
     assert response.status_code == 200, response.text
-    assert fake.calls[-1][2]["gross_amount"] == "900.00"
-    assert [item["amount"] for item in fake.calls[-1][2]["allocations"]] == [
+    assert fake.calls[-1][2]["expected_gross_amount"] == "900.00"
+    assert [item["cash_amount"] for item in fake.calls[-1][2]["allocations"]] == [
         "400.00",
         "500.00",
     ]
@@ -811,19 +832,20 @@ def test_supplier_payment_requires_exact_inr_bank_allocations(enabled_boundary):
     assert response.json()["detail"]["code"] == "VALIDATION_FAILED"
 
     payload["payment_method"] = "upi"
-    payload["allocations"][1]["amount"] = "499.00"
+    payload["allocations"][0]["cash_amount"] = "0.00"
+    payload["allocations"][1]["cash_amount"] = "0.00"
     response = client.post(
         "/api/internal/mcp/actions/finance.supplier_payment.prepare/prepare",
         json=payload,
     )
     assert response.status_code == 422
     assert response.json()["detail"]["message"] == (
-        "supplier payment allocations must exactly equal gross_amount"
+        "supplier payment must select at least one settlement component"
     )
 
     payload["allocations"] = [
-        {"open_item_id": first_open_item_id, "amount": "450.00"},
-        {"open_item_id": first_open_item_id, "amount": "450.00"},
+        {"open_item_id": first_open_item_id, "cash_amount": "450.00"},
+        {"open_item_id": first_open_item_id, "cash_amount": "450.00"},
     ]
     response = client.post(
         "/api/internal/mcp/actions/finance.supplier_payment.prepare/prepare",
@@ -1565,7 +1587,7 @@ def test_routes_are_hidden_from_public_openapi_and_keep_auth_dependency():
         if path.startswith("/api/internal/mcp/")
         for route in routes
     ]
-    assert len(action_routes) == 16
+    assert len(action_routes) == 21
     assert all(route.include_in_schema is False for route in action_routes)
     assert all(
         mcp_actions.get_action_context
@@ -1574,7 +1596,7 @@ def test_routes_are_hidden_from_public_openapi_and_keep_auth_dependency():
     )
 
 
-def test_inventory_adjustment_prepare_accepts_only_typed_cycle_count_gain_facts(enabled_boundary):
+def test_inventory_adjustment_prepare_accepts_only_typed_signed_cycle_count_facts(enabled_boundary):
     fake = FakeOperatorActionService()
     policy = ACTION_POLICIES["inventory.adjustment.prepare"]
     holder = {"value": _context(policy.operation_key, policy.permission)}
@@ -1597,6 +1619,7 @@ def test_inventory_adjustment_prepare_accepts_only_typed_cycle_count_gain_facts(
             "batch_counts": [{
                 "batch_id": str(uuid4()),
                 "counted_quantity": "12.000000",
+                "stock_balance_row_version": 7,
             }],
         }],
     }
@@ -1616,7 +1639,6 @@ def test_inventory_adjustment_prepare_accepts_only_typed_cycle_count_gain_facts(
         12,
         "9007199254740993",
         "12.0000001",
-        "0",
         "-1",
         "NaN",
     ):

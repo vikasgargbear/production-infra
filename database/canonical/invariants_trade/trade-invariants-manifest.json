@@ -80,7 +80,7 @@
       "reason": "Return calculation and fan-out to tax, receivable, accounting, and inventory require one reviewed idempotent posting command spanning domains."
     }
   },
-  "catalog_invariant_sha256": "4b58e8f097737d256876f9dab94fc65ed93fafd9658b234be39927dedf43d2de",
+  "catalog_invariant_sha256": "cf74457aa0d2fbdfd5d892a9b504df8f07bb0bec0e9c538b8d7f71b6c07cf925",
   "manifest_version": "1.0.0",
   "mapping_file": "baseline-trade-enforcements.json",
   "mapping_sha256": "5a3f68fb2a4ee70751cf9942c0c2215ec269bc2cab24fd6121ab167bc30da35c",

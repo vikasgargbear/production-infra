@@ -40,6 +40,7 @@ from ....domain.operator_actions import (
 from .mcp_agent_grants import _internal_auth, bearer
 from ..canonical_erp_reads import (
     CanonicalCustomerReceiptReadback,
+    canonical_customer_cheque_action_readback,
     canonical_customer_receipt_readback,
 )
 from ..canonical_inventory_transfers import (
@@ -64,9 +65,11 @@ from ..canonical_supplier_payment_reads import (
     posted_supplier_payment,
 )
 from ..web_operator_actions import (
+    CommercialReversalReadback,
     ExpenseClaimReadback,
     InventoryAdjustmentReadback,
     activate_inventory_adjustment_readback_context,
+    load_commercial_reversal_readback,
     load_inventory_adjustment_readback,
 )
 
@@ -736,6 +739,16 @@ CORE_READBACK_CONTRACTS = {
     "customer_receipt": CanonicalReadbackContract(
         "finance.customer_receipt.prepare", "finance.payment.post", "payment"
     ),
+    "customer_cheque_clearance": CanonicalReadbackContract(
+        "finance.customer_cheque_clearance.prepare",
+        "finance.customer_cheque_clearance.post",
+        "payment",
+    ),
+    "customer_cheque_bounce": CanonicalReadbackContract(
+        "finance.customer_cheque_bounce.prepare",
+        "finance.customer_cheque_bounce.post",
+        "payment",
+    ),
     "supplier_payment": CanonicalReadbackContract(
         "finance.supplier_payment.prepare", "finance.payment.post", "payment"
     ),
@@ -748,6 +761,21 @@ CORE_READBACK_CONTRACTS = {
         "inventory.adjustment.prepare",
         "inventory.document.post",
         "inventory_document",
+    ),
+    "sales_return_reversal": CanonicalReadbackContract(
+        "sales.return.reversal.prepare",
+        "sales.return.reversal.post",
+        "adjustment_note_reversal",
+    ),
+    "purchase_return_reversal": CanonicalReadbackContract(
+        "procurement.purchase_return.reversal.prepare",
+        "procurement.purchase_return.reversal.post",
+        "adjustment_note_reversal",
+    ),
+    "adjustment_note_reversal": CanonicalReadbackContract(
+        "finance.adjustment_note.reversal.prepare",
+        "finance.adjustment_note.reversal.post",
+        "adjustment_note_reversal",
     ),
 }
 
@@ -886,6 +914,63 @@ def customer_receipt_readback(
     )
 
 
+def _customer_cheque_readback(
+    *,
+    command_request_id: UUID,
+    contract_name: str,
+    context: ActionContext,
+    service: OperatorActionService,
+    db: Session,
+) -> CanonicalCustomerReceiptReadback:
+    payment_id = _succeeded_resource(
+        command_request_id=command_request_id,
+        context=context,
+        service=service,
+        contract=CORE_READBACK_CONTRACTS[contract_name],
+    )
+    return canonical_customer_cheque_action_readback(
+        payment_id=payment_id, user=_projection_user(context), db=db
+    )
+
+
+@router.get(
+    "/commands/{command_request_id}/customer-cheque-clearance-readback",
+    response_model=CanonicalCustomerReceiptReadback,
+)
+def customer_cheque_clearance_readback(
+    command_request_id: UUID,
+    context: ActionContext = Depends(get_action_context),
+    service: OperatorActionService = Depends(get_operator_action_service),
+    db: Session = Depends(get_db),
+) -> CanonicalCustomerReceiptReadback:
+    return _customer_cheque_readback(
+        command_request_id=command_request_id,
+        contract_name="customer_cheque_clearance",
+        context=context,
+        service=service,
+        db=db,
+    )
+
+
+@router.get(
+    "/commands/{command_request_id}/customer-cheque-bounce-readback",
+    response_model=CanonicalCustomerReceiptReadback,
+)
+def customer_cheque_bounce_readback(
+    command_request_id: UUID,
+    context: ActionContext = Depends(get_action_context),
+    service: OperatorActionService = Depends(get_operator_action_service),
+    db: Session = Depends(get_db),
+) -> CanonicalCustomerReceiptReadback:
+    return _customer_cheque_readback(
+        command_request_id=command_request_id,
+        contract_name="customer_cheque_bounce",
+        context=context,
+        service=service,
+        db=db,
+    )
+
+
 @router.get(
     "/commands/{command_request_id}/supplier-payment-readback",
     response_model=PostedSupplierPaymentResponse,
@@ -956,6 +1041,89 @@ def inventory_adjustment_readback(
     return load_inventory_adjustment_readback(
         command_request_id=command_request_id,
         context=context,
+        db=db,
+    )
+
+
+def _commercial_reversal_readback(
+    *,
+    command_request_id: UUID,
+    contract_name: str,
+    context: ActionContext,
+    service: OperatorActionService,
+    db: Session,
+) -> CommercialReversalReadback:
+    _succeeded_resource(
+        command_request_id=command_request_id,
+        context=context,
+        service=service,
+        contract=CORE_READBACK_CONTRACTS[contract_name],
+    )
+    activate_inventory_adjustment_readback_context(
+        db=db,
+        context=context,
+        command_request_id=command_request_id,
+    )
+    return load_commercial_reversal_readback(
+        command_request_id=command_request_id,
+        context=context,
+        db=db,
+    )
+
+
+@router.get(
+    "/commands/{command_request_id}/sales-return-reversal-readback",
+    response_model=CommercialReversalReadback,
+)
+def sales_return_reversal_readback(
+    command_request_id: UUID,
+    context: ActionContext = Depends(get_action_context),
+    service: OperatorActionService = Depends(get_operator_action_service),
+    db: Session = Depends(get_db),
+) -> CommercialReversalReadback:
+    return _commercial_reversal_readback(
+        command_request_id=command_request_id,
+        contract_name="sales_return_reversal",
+        context=context,
+        service=service,
+        db=db,
+    )
+
+
+@router.get(
+    "/commands/{command_request_id}/purchase-return-reversal-readback",
+    response_model=CommercialReversalReadback,
+)
+def purchase_return_reversal_readback(
+    command_request_id: UUID,
+    context: ActionContext = Depends(get_action_context),
+    service: OperatorActionService = Depends(get_operator_action_service),
+    db: Session = Depends(get_db),
+) -> CommercialReversalReadback:
+    return _commercial_reversal_readback(
+        command_request_id=command_request_id,
+        contract_name="purchase_return_reversal",
+        context=context,
+        service=service,
+        db=db,
+    )
+
+
+@router.get(
+    "/commands/{command_request_id}/adjustment-note-reversal-readback",
+    response_model=CommercialReversalReadback,
+)
+def adjustment_note_reversal_readback(
+    command_request_id: UUID,
+    context: ActionContext = Depends(get_action_context),
+    service: OperatorActionService = Depends(get_operator_action_service),
+    db: Session = Depends(get_db),
+) -> CommercialReversalReadback:
+    return _commercial_reversal_readback(
+        command_request_id=command_request_id,
+        contract_name="adjustment_note_reversal",
+        context=context,
+        service=service,
         db=db,
     )
 

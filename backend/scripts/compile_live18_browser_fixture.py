@@ -288,6 +288,10 @@ def resolve_authoritative_facts(
              destination_branch.code,destination_branch.name,
              destination.code,destination.name,bank.bank_name,bank.account_holder_name,
              ledger.code,ledger.name,
+             cash_account.id::text,cash_account.code,cash_account.name,
+             cheque_account.id::text,cheque_account.code,cheque_account.name,
+             customer_advance_account.id::text,customer_advance_account.code,
+             customer_advance_account.name,
              delivery_address.id::text,delivery_address.row_version,
              direct_issue_batch.id::text,direct_issue_batch.batch_number,
              direct_issue_batch.available_base_quantity,uom.multiplier,
@@ -346,6 +350,41 @@ def resolve_authoritative_facts(
         JOIN inventory.locations destination ON destination.org_id=destination_branch.org_id AND destination.id=%s AND destination.branch_id=destination_branch.id
         JOIN finance.bank_accounts bank ON bank.org_id=branch.org_id AND bank.id=%s
         JOIN finance.accounts ledger ON ledger.org_id=branch.org_id AND ledger.id=%s
+        JOIN core.settings cash_role
+          ON cash_role.org_id=branch.org_id AND cash_role.status='active'
+         AND cash_role.namespace='finance.account_roles' AND cash_role.key='cash_on_hand'
+         AND cash_role.value_type='text'
+         AND (cash_role.branch_id IS NULL OR cash_role.branch_id=branch.id)
+        JOIN finance.accounts cash_account
+          ON cash_account.org_id=cash_role.org_id
+         AND cash_account.id=cash_role.value_text::uuid
+         AND cash_account.status='active' AND cash_account.account_type='asset'
+         AND cash_account.currency_code='INR' AND NOT cash_account.allows_party_posting
+        JOIN core.settings cheque_role
+          ON cheque_role.org_id=branch.org_id AND cheque_role.status='active'
+         AND cheque_role.namespace='finance.account_roles' AND cheque_role.key='cheques_in_hand'
+         AND cheque_role.value_type='text'
+         AND (cheque_role.branch_id IS NULL OR cheque_role.branch_id=branch.id)
+        JOIN finance.accounts cheque_account
+          ON cheque_account.org_id=cheque_role.org_id
+         AND cheque_account.id=cheque_role.value_text::uuid
+         AND cheque_account.status='active' AND cheque_account.account_type='asset'
+         AND cheque_account.currency_code='INR' AND NOT cheque_account.allows_party_posting
+        JOIN core.settings customer_advance_role
+          ON customer_advance_role.org_id=branch.org_id
+         AND customer_advance_role.status='active'
+         AND customer_advance_role.namespace='finance.account_roles'
+         AND customer_advance_role.key='customer_advance'
+         AND customer_advance_role.value_type='text'
+         AND (customer_advance_role.branch_id IS NULL
+              OR customer_advance_role.branch_id=branch.id)
+        JOIN finance.accounts customer_advance_account
+          ON customer_advance_account.org_id=customer_advance_role.org_id
+         AND customer_advance_account.id=customer_advance_role.value_text::uuid
+         AND customer_advance_account.status='active'
+         AND customer_advance_account.account_type='liability'
+         AND customer_advance_account.currency_code='INR'
+         AND customer_advance_account.allows_party_posting
        WHERE branch.org_id=%s AND branch.id=%s
          AND branch.status='active' AND customer.status='active' AND supplier.status='active'
          AND product.status='active' AND source.status='active' AND quarantine.status='active'
@@ -373,7 +412,8 @@ def resolve_authoritative_facts(
              portal_line.taxable_amount::text, portal_line.cgst_amount::text,
              portal_line.sgst_amount::text, portal_line.igst_amount::text,
              portal_line.cess_amount::text, portal_line.total_amount::text,
-             pg_catalog.encode(portal_line.source_row_hash,'hex')
+             pg_catalog.encode(portal_line.source_row_hash,'hex'),
+             variance_account.id::text
         FROM tax.portal_document_lines AS portal_line
         JOIN tax.portal_documents AS portal_document
           ON portal_document.org_id=portal_line.org_id
@@ -398,6 +438,21 @@ def resolve_authoritative_facts(
          AND supplier_registration.party_id=supplier.party_id
          AND supplier_registration.registration_type='GSTIN'
          AND supplier_registration.status='active'
+        JOIN core.settings AS variance_role
+          ON variance_role.org_id=portal_line.org_id
+         AND variance_role.scope_kind='organization'
+         AND variance_role.branch_id IS NULL
+         AND variance_role.namespace='finance.account_roles'
+         AND variance_role.key='purchase_price_variance'
+         AND variance_role.value_type='text'
+         AND variance_role.status='active'
+        JOIN finance.accounts AS variance_account
+          ON variance_account.org_id=variance_role.org_id
+         AND variance_account.id=variance_role.value_text::uuid
+         AND variance_account.account_type='expense'
+         AND variance_account.currency_code='INR'
+         AND variance_account.status='active'
+         AND NOT variance_account.allows_party_posting
        WHERE portal_line.org_id=%s
          AND portal_line.document_type='invoice'
          AND portal_line.supplier_gstin=supplier_registration.registration_number
@@ -965,6 +1020,11 @@ def resolve_authoritative_facts(
         "destination_branch_code", "destination_branch_name",
         "destination_location_code", "destination_location_name",
         "bank_name", "bank_account_holder", "bank_ledger_code", "bank_ledger_name",
+        "cash_on_hand_account_id", "cash_on_hand_account_code",
+        "cash_on_hand_account_name", "cheques_in_hand_account_id",
+        "cheques_in_hand_account_code", "cheques_in_hand_account_name",
+        "customer_advance_account_id", "customer_advance_account_code",
+        "customer_advance_account_name",
         "delivery_address_id", "delivery_address_row_version",
         "direct_issue_batch_id", "direct_issue_batch_number",
         "direct_issue_available_base_quantity", "sales_uom_multiplier",
@@ -1002,6 +1062,7 @@ def resolve_authoritative_facts(
         supplier_invoice_portal_cess_amount,
         supplier_invoice_portal_total_amount,
         supplier_invoice_portal_source_row_hash,
+        supplier_invoice_variance_account_id,
     ) = supplier_invoice_rows[0]
     if resolved_invoice_number != supplier_invoice_number:
         raise FixtureCompileError("run-scoped supplier-invoice authority drifted")
@@ -1221,6 +1282,7 @@ def resolve_authoritative_facts(
             "supplier_invoice_portal_cess_amount": supplier_invoice_portal_cess_amount,
             "supplier_invoice_portal_total_amount": supplier_invoice_portal_total_amount,
             "supplier_invoice_portal_source_row_hash": supplier_invoice_portal_source_row_hash,
+            "supplier_invoice_variance_account_id": supplier_invoice_variance_account_id,
         },
     }
 
@@ -1283,8 +1345,8 @@ def _operation_facts(
             )
         adjusted_base = (
             initial_base
-            + Decimal(_leaf(
-                scalars, "stock_adjustment_gain_quantity", "reviewed scalar"
+            - Decimal(_leaf(
+                scalars, "stock_adjustment_loss_quantity", "reviewed scalar"
             )) * count_multiplier
         )
         invoice_quantity = Decimal(_leaf(
@@ -1549,17 +1611,17 @@ def _operation_facts(
             )
         return facts
     if operation_id == "stock_adjustment":
-        gain_text = _leaf(
-            scalars, "stock_adjustment_gain_quantity", "reviewed scalar"
+        loss_text = _leaf(
+            scalars, "stock_adjustment_loss_quantity", "reviewed scalar"
         )
-        if not re.fullmatch(r"(?:0|[1-9][0-9]{0,13})(?:\.[0-9]{1,6})?", gain_text):
+        if not re.fullmatch(r"(?:0|[1-9][0-9]{0,13})(?:\.[0-9]{1,6})?", loss_text):
             raise FixtureCompileError(
-                "stock_adjustment_gain_quantity must be a positive plain decimal with at most 6 fractional digits"
+                "stock_adjustment_loss_quantity must be a positive plain decimal with at most 6 fractional digits"
             )
-        gain_quantity = Decimal(gain_text)
-        if gain_quantity <= 0:
+        loss_quantity = Decimal(loss_text)
+        if loss_quantity <= 0:
             raise FixtureCompileError(
-                "stock_adjustment_gain_quantity must be greater than zero"
+                "stock_adjustment_loss_quantity must be greater than zero"
             )
         initial_base = Decimal(_leaf(
             facts, "display.cycle_count_system_base_quantity", "canonical fact"
@@ -1572,13 +1634,17 @@ def _operation_facts(
             raise FixtureCompileError(
                 "authoritative cycle-count stock and selected UOM multiplier must be positive"
             )
-        counted_quantity = expected_system_base / count_multiplier + gain_quantity
+        counted_quantity = expected_system_base / count_multiplier - loss_quantity
+        if counted_quantity < 0:
+            raise FixtureCompileError(
+                "stock_adjustment_loss_quantity exceeds exact authoritative stock"
+            )
         exact_counted_quantity = counted_quantity.quantize(Decimal("0.000001"))
         if counted_quantity != exact_counted_quantity:
             raise FixtureCompileError(
                 "derived cycle-count quantity is not exactly representable at canonical scale 6"
             )
-        used.add("stock_adjustment_gain_quantity")
+        used.add("stock_adjustment_loss_quantity")
         return {
             **facts,
             "choice": {

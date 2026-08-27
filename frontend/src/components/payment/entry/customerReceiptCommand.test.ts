@@ -9,6 +9,8 @@ const customerId = '0198ea37-2b1d-7c8d-9123-123456789abc';
 const branchId = '0198ea37-2b1e-7c8d-9123-123456789abc';
 const bankId = '0198ea37-2b20-7c8d-9123-123456789abc';
 const settlementId = '0198ea37-2b21-7c8d-9123-123456789abc';
+const evidenceId = '0198ea37-2b26-7c8d-9123-123456789abc';
+const salesOrderId = '0198ea37-2b27-7c8d-9123-123456789abc';
 const invoiceA = {
   invoice_id: '0198ea37-2b22-7c8d-9123-123456789abc',
   open_item_id: '0198ea37-2b23-7c8d-9123-123456789abc',
@@ -31,6 +33,8 @@ describe('canonical customer receipt command', () => {
       reference_number: ' UPI-E2E-168 ',
       bank_account_id: bankId,
       settlement_account_id: settlementId,
+      evidence_attachment_id: evidenceId,
+      receipt_purpose: 'invoice_settlement',
       allocation_method: 'fifo',
       allocations,
     }, [invoiceA], 'erp-web-customer-receipt-prepare:0198ea37-2b1f-7c8d-9123-123456789abc')).toEqual({
@@ -38,9 +42,10 @@ describe('canonical customer receipt command', () => {
       branch_id: branchId,
       payment_date: '2026-08-25',
       customer_account_id: customerId,
-      settlement_account_id: settlementId,
       bank_account_id: bankId,
       payment_method: 'upi',
+      receipt_purpose: 'invoice_settlement',
+      evidence_attachment_id: evidenceId,
       amount: '168.00',
       allocations: [{ open_item_id: invoiceA.open_item_id, amount: '168.00' }],
       external_reference: 'UPI-E2E-168',
@@ -65,9 +70,9 @@ describe('canonical customer receipt command', () => {
     expect(() => buildCustomerReceiptPreparePayload({
       customer_account_id: customerId, payment_date: '2026-08-25', business_date: '2026-08-25', payment_mode,
       amount: '168.00', reference_number: 'REF', bank_account_id: bankId,
-      settlement_account_id: settlementId, allocation_method: 'fifo',
+      settlement_account_id: settlementId, allocation_method: 'fifo', evidence_attachment_id: evidenceId,
       allocations: [{ invoice_id: invoiceA.invoice_id, invoice_number: invoiceA.invoice_number, amount: '168.00' }],
-    }, [invoiceA], 'receipt:test')).toThrow('supports UPI, Card, or Bank Transfer');
+    }, [invoiceA], 'receipt:test')).toThrow('supported canonical receipt method');
   });
 
   it('rejects advance, unallocated residue, missing lineage, and overprecision', () => {
@@ -75,9 +80,12 @@ describe('canonical customer receipt command', () => {
       customer_account_id: customerId, payment_date: '2026-08-25', business_date: '2026-08-25', payment_mode: 'upi',
       amount: '168.00', reference_number: 'REF', bank_account_id: bankId,
       settlement_account_id: settlementId, allocation_method: 'fifo',
+      evidence_attachment_id: evidenceId, receipt_purpose: 'invoice_settlement' as const,
       allocations: [{ invoice_id: invoiceA.invoice_id, invoice_number: invoiceA.invoice_number, amount: '168.00' }],
     };
-    expect(() => buildCustomerReceiptPreparePayload({ ...base, allocation_method: 'advance', allocations: [] }, [invoiceA], 'receipt:test')).toThrow('advance posting is unavailable');
+    expect(buildCustomerReceiptPreparePayload({ ...base, receipt_purpose: 'customer_advance',
+      allocation_method: 'advance', allocations: [], branch_id: branchId,
+      sales_order_id: salesOrderId }, [invoiceA], 'receipt:test').allocations).toEqual([]);
     expect(() => buildCustomerReceiptPreparePayload({ ...base, amount: '169.00' }, [invoiceA], 'receipt:test')).toThrow('exactly equal');
     expect(() => buildCustomerReceiptPreparePayload(base, [{ ...invoiceA, open_item_id: undefined }], 'receipt:test')).toThrow('lacks canonical allocation evidence');
     expect(() => buildCustomerReceiptPreparePayload({ ...base, amount: '168.001' }, [invoiceA], 'receipt:test')).toThrow('at most two decimal places');

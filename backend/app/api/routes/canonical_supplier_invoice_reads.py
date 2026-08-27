@@ -180,9 +180,10 @@ class SupplierInvoiceContextCharge(BaseModel):
     quoted_amount: Decimal
     expense_price_basis: Literal["tax_exclusive", "tax_inclusive"]
     expense_document_discount_eligible: bool
-    net_value_account_id: Optional[UUID]
-    account_code: Optional[str]
-    account_name: Optional[str]
+    inventory_cost_treatment: Literal["capitalize"]
+    net_value_account_id: UUID
+    account_code: str
+    account_name: str
 
 
 class SupplierInvoiceContextResponse(BaseModel):
@@ -208,8 +209,8 @@ class SupplierInvoiceContextResponse(BaseModel):
     portal_evidence: Optional[PortalEvidence]
     lines: list[SupplierInvoiceContextLine]
     expense_charge_lines: list[SupplierInvoiceContextCharge]
-    inventory_effect: Literal["already_capitalized_by_goods_receipt"] = (
-        "already_capitalized_by_goods_receipt"
+    inventory_effect: Literal["grn_quantity_owner_invoice_value_adjustment"] = (
+        "grn_quantity_owner_invoice_value_adjustment"
     )
     supplier_invoice_inventory_value_delta: Decimal = Decimal("0.00")
 
@@ -271,6 +272,9 @@ class PostedSupplierInvoiceLine(BaseModel):
     gst_taxable_value: Decimal
     itc_eligibility: Literal["eligible"]
     inventory_cost_treatment: Literal["capitalize", "expense"]
+    landed_cost_allocation_method: Optional[
+        Literal["direct", "quantity_weighted", "value_weighted"]
+    ]
     cgst_amount: Decimal
     sgst_amount: Decimal
     igst_amount: Decimal
@@ -287,10 +291,38 @@ class PostedSupplierInvoiceLine(BaseModel):
                 raise ValueError("posted supplier-invoice billed allocation does not reconcile")
             if sum((a.allocated_base_free_quantity for a in self.allocations), Decimal("0")) != self.base_free_quantity:
                 raise ValueError("posted supplier-invoice free allocation does not reconcile")
-            if sum((a.capitalized_value for a in self.allocations), Decimal("0")) != self.net_value_amount:
-                raise ValueError("posted supplier-invoice value differs from receipt capitalisation")
+            if self.inventory_cost_treatment != "capitalize" or not self.landed_cost_allocation_method:
+                raise ValueError("posted supplier-invoice product line lacks reviewed landed-cost authority")
         elif self.allocations:
             raise ValueError("posted supplier-invoice charge line must not allocate receipt stock")
+        elif self.inventory_cost_treatment == "capitalize" and not self.landed_cost_allocation_method:
+            raise ValueError("capitalized supplier-invoice charge lacks reviewed landed-cost authority")
+        return self
+
+
+class LandedCostValueAdjustment(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    inventory_document_id: UUID
+    inventory_document_line_id: UUID
+    stock_ledger_entry_id: UUID
+    supplier_invoice_line_id: UUID
+    location_id: UUID
+    product_id: UUID
+    batch_id: UUID
+    allocation_method: Literal["direct", "quantity_weighted", "value_weighted"]
+    allocation_weight: Decimal
+    basis_quantity: Optional[Decimal]
+    basis_value: Optional[Decimal]
+    quantity_delta: Decimal
+    value_delta: Decimal
+
+    @model_validator(mode="after")
+    def require_zero_quantity_value_evidence(self):
+        if self.quantity_delta != 0 or self.value_delta == 0:
+            raise ValueError("landed-cost evidence must be a nonzero zero-quantity value adjustment")
+        if self.allocation_weight <= 0:
+            raise ValueError("landed-cost allocation weight must be positive")
         return self
 
 
@@ -357,6 +389,8 @@ class PostedSupplierInvoiceResponse(BaseModel):
     journal_credit_total: Decimal
     supplier_invoice_inventory_document_count: int
     supplier_invoice_inventory_value_delta: Decimal
+    consumed_variance_amount: Decimal
+    landed_cost_adjustments: list[LandedCostValueAdjustment]
     lines: list[PostedSupplierInvoiceLine]
     journal_lines: list[JournalLine]
 
@@ -399,14 +433,22 @@ class PostedSupplierInvoiceResponse(BaseModel):
         for actual, expected, label in regulatory_checks:
             if actual != expected:
                 raise ValueError(f"posted supplier-invoice {label} does not reconcile")
-        if self.journal_debit_total != self.journal_credit_total or self.journal_debit_total != self.grand_total:
-            raise ValueError("posted supplier-invoice journal is not balanced to payable")
+        if self.journal_debit_total != self.journal_credit_total:
+            raise ValueError("posted supplier-invoice journal is not balanced")
         if sum((line.debit for line in self.journal_lines), Decimal("0")) != self.journal_debit_total:
             raise ValueError("posted supplier-invoice journal debits do not reconcile")
         if sum((line.credit for line in self.journal_lines), Decimal("0")) != self.journal_credit_total:
             raise ValueError("posted supplier-invoice journal credits do not reconcile")
-        if self.supplier_invoice_inventory_document_count != 0 or self.supplier_invoice_inventory_value_delta != 0:
-            raise ValueError("supplier invoice must not post a second inventory movement")
+        evidence_delta = sum(
+            (line.value_delta for line in self.landed_cost_adjustments), Decimal("0")
+        )
+        document_ids = {
+            line.inventory_document_id for line in self.landed_cost_adjustments
+        }
+        if evidence_delta != self.supplier_invoice_inventory_value_delta:
+            raise ValueError("supplier-invoice landed-cost readback does not reconcile")
+        if len(document_ids) != self.supplier_invoice_inventory_document_count:
+            raise ValueError("supplier-invoice landed-cost document count is not exact")
         return self
 
 
@@ -648,9 +690,32 @@ def supplier_invoice_context(
                order_line.quoted_unit_rate AS quoted_amount,
                order_line.price_basis AS expense_price_basis,
                order_line.document_discount_eligible AS expense_document_discount_eligible,
-               NULL::uuid AS net_value_account_id,
-               NULL::text AS account_code, NULL::text AS account_name
+               'capitalize'::text AS inventory_cost_treatment,
+               account.id AS net_value_account_id,
+               account.code AS account_code, account.name AS account_name
           FROM procurement.purchase_order_lines order_line
+          JOIN procurement.purchase_orders purchase
+            ON purchase.org_id=order_line.org_id
+           AND purchase.id=order_line.purchase_order_id
+          JOIN core.settings role
+            ON role.org_id=order_line.org_id
+           AND role.namespace='finance.account_roles'
+           AND role.key='inventory_asset' AND role.value_type='text'
+           AND role.status='active'
+           AND (role.branch_id=purchase.branch_id OR (
+             role.branch_id IS NULL AND NOT EXISTS (
+               SELECT 1 FROM core.settings branch_role
+                WHERE branch_role.org_id=role.org_id
+                  AND branch_role.namespace=role.namespace
+                  AND branch_role.key=role.key AND branch_role.value_type='text'
+                  AND branch_role.status='active'
+                  AND branch_role.branch_id=purchase.branch_id
+             )
+           ))
+          JOIN finance.accounts account
+            ON account.org_id=role.org_id AND account.id=role.value_text::uuid
+           AND account.account_type='asset' AND account.currency_code='INR'
+           AND account.status='active' AND NOT account.allows_party_posting
          WHERE order_line.org_id=:org_id
            AND order_line.purchase_order_id=:purchase_order_id
            AND order_line.line_kind='charge'
@@ -658,17 +723,18 @@ def supplier_invoice_context(
          ORDER BY order_line.line_number, order_line.id
     """, {**params, "purchase_order_id": header["purchase_order_id"]})
     charge_count = _one(db, """
-        SELECT count(*) AS count
+        SELECT count(*) AS count,
+               count(*) FILTER (WHERE charge_code IN ('freight','packing','insurance','handling'))
+                 AS supported_count
           FROM procurement.purchase_order_lines
          WHERE org_id=:org_id AND purchase_order_id=:purchase_order_id
            AND line_kind='charge'
     """, {**params, "purchase_order_id": header["purchase_order_id"]})
-    if charge_count and int(charge_count["count"]) != len(expense_charge_lines):
+    if charge_count and int(charge_count["count"]) != int(charge_count["supported_count"]):
         blockers.append("Every PO charge must use freight, packing, insurance, or handling")
-    if expense_charge_lines:
+    elif charge_count and int(charge_count["supported_count"]) != len(expense_charge_lines):
         blockers.append(
-            "PO charge lines lack an authoritative effective expense-account mapping; "
-            "supplier-invoice posting remains unavailable"
+            "Every PO landed charge requires one effective canonical inventory-asset account role"
         )
 
     payload = {
@@ -729,8 +795,24 @@ def posted_supplier_invoice(
                journal.transaction_credit_total AS journal_credit_total,
                (SELECT count(*) FROM inventory.inventory_documents inventory_document
                  WHERE inventory_document.org_id=invoice.org_id
-                   AND inventory_document.supplier_invoice_id=invoice.id) AS supplier_invoice_inventory_document_count,
-               0::numeric(20,2) AS supplier_invoice_inventory_value_delta
+                   AND inventory_document.supplier_invoice_id=invoice.id
+                   AND inventory_document.document_type='cost_adjustment'
+                   AND inventory_document.status='posted') AS supplier_invoice_inventory_document_count,
+               COALESCE((SELECT sum(ledger.value_delta)
+                  FROM inventory.inventory_documents inventory_document
+                  JOIN inventory.stock_ledger_entries ledger
+                    ON ledger.org_id=inventory_document.org_id
+                   AND ledger.inventory_document_id=inventory_document.id
+                   AND ledger.entry_kind='value_adjustment'
+                 WHERE inventory_document.org_id=invoice.org_id
+                   AND inventory_document.supplier_invoice_id=invoice.id
+                   AND inventory_document.document_type='cost_adjustment'
+                   AND inventory_document.status='posted'),0) AS supplier_invoice_inventory_value_delta,
+               COALESCE((SELECT sum(line.transaction_debit-line.transaction_credit)
+                  FROM finance.journal_lines line
+                 WHERE line.org_id=journal.org_id AND line.journal_entry_id=journal.id
+                   AND line.description='Consumed supplier price or landed-cost variance'),0)
+                 AS consumed_variance_amount
           FROM procurement.supplier_invoices invoice
           JOIN tax.documents tax_document
             ON tax_document.org_id=invoice.org_id AND tax_document.supplier_invoice_id=invoice.id
@@ -766,7 +848,8 @@ def posted_supplier_invoice(
                line.quoted_unit_rate, line.gross_amount, line.line_discount_amount,
                line.document_discount_amount, line.net_value_amount,
                line.gst_taxable_value, line.itc_eligibility,
-               line.inventory_cost_treatment, line.cgst_amount, line.sgst_amount,
+               line.inventory_cost_treatment, line.landed_cost_allocation_method,
+               line.cgst_amount, line.sgst_amount,
                line.igst_amount, line.cess_amount, line.line_total
           FROM procurement.supplier_invoice_lines line
           LEFT JOIN catalog.products product
@@ -829,6 +912,32 @@ def posted_supplier_invoice(
          WHERE line.org_id=:org_id AND line.journal_entry_id=:journal_entry_id
          ORDER BY line.line_number, line.id
     """, {**params, "journal_entry_id": header["journal_entry_id"]})
+    header["landed_cost_adjustments"] = _rows(db, """
+        SELECT document.id AS inventory_document_id,
+               document_line.id AS inventory_document_line_id,
+               ledger.id AS stock_ledger_entry_id,
+               document_line.supplier_invoice_line_id,
+               ledger.location_id, ledger.product_id, ledger.batch_id,
+               document_line.cost_allocation_method AS allocation_method,
+               document_line.cost_allocation_weight AS allocation_weight,
+               document_line.cost_allocation_basis_quantity AS basis_quantity,
+               document_line.cost_allocation_basis_value AS basis_value,
+               ledger.quantity_delta, ledger.value_delta
+          FROM inventory.inventory_documents document
+          JOIN inventory.inventory_document_lines document_line
+            ON document_line.org_id=document.org_id
+           AND document_line.inventory_document_id=document.id
+           AND document_line.movement_kind='value_adjustment'
+          JOIN inventory.stock_ledger_entries ledger
+            ON ledger.org_id=document_line.org_id
+           AND ledger.inventory_document_line_id=document_line.id
+           AND ledger.entry_kind='value_adjustment'
+         WHERE document.org_id=:org_id
+           AND document.supplier_invoice_id=:supplier_invoice_id
+           AND document.document_type='cost_adjustment'
+           AND document.status='posted'
+         ORDER BY document_line.line_number, document_line.id, ledger.id
+    """, params)
     return PostedSupplierInvoiceResponse(**header)
 
 

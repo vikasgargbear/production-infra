@@ -78,10 +78,10 @@ FIELDS_BY_OPERATION: dict[str, tuple[ProjectionField, ...]] = {
             "inventory_document_id", "inventory_document_id", "header.id"
         ),
         ProjectionField(
-            "total_gain_base_quantity", "total_gain_base_quantity",
+            "total_variance_base_quantity", "total_variance_base_quantity",
             "stock.quantity_delta", True,
         ),
-        ProjectionField("total_gain_value", "total_gain_value", "stock.value_delta", True),
+        ProjectionField("total_variance_value", "total_variance_value", "stock.value_delta", True),
         ProjectionField("status", "status", "header.status"),
     ),
     "inventory.transfer": (

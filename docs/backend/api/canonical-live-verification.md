@@ -214,7 +214,7 @@ The 18-step supported run covers:
   withholding non-applicability, GRN, supplier invoice, supplier payment with
   verified withholding non-applicability, allocations, and partial/final
   purchase returns;
-- same-day positive cycle-count gain with exact batch, evidence, MWA valuation,
+- same-day ordinary negative cycle-count variance with exact batch, evidence, MWA valuation,
   journal, ledger, and stock-balance projection;
 - inter-branch transfer using the earliest-expiry FEFO tier, exact paired stock
   ledger entries, unchanged total inventory value, and idempotent execution;

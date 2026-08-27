@@ -503,7 +503,7 @@ def test_stock_adjustment_runs_before_mutating_sales_and_uses_authoritative_stoc
         "sales_invoice_quantity": "1.000000",
         "sales_invoice_free_quantity": "0.500000",
         "sales_order_quantity": "2.000000",
-        "stock_adjustment_gain_quantity": "1.000000",
+        "stock_adjustment_loss_quantity": "1.000000",
     }
     facts = {
         "identity": {
@@ -537,13 +537,13 @@ def test_stock_adjustment_runs_before_mutating_sales_and_uses_authoritative_stoc
         used,
     )
     _validate_compiled_steps("stock_adjustment", operation, "separate_approver")
-    assert used == {"stock_adjustment_gain_quantity"}
+    assert used == {"stock_adjustment_loss_quantity"}
     operation_ids = [row["id"] for row in matrix["operations"]]
     assert operation_ids.index("stock_adjustment") < operation_ids.index("sales_order")
     assert operation_ids.index("sales_order") < operation_ids.index("delivery_challan")
     assert operation_ids.index("delivery_challan") < operation_ids.index("sales_invoice")
     assert operation_facts["choice"] == {
-        "stock_adjustment_counted_quantity": "11.000000",
+        "stock_adjustment_counted_quantity": "9.000000",
         "stock_adjustment_expected_system_base_quantity": "100.000000",
     }
     assert operation["prepare_steps"][5]["locator"]["name"] == (
@@ -559,7 +559,7 @@ def test_stock_adjustment_runs_before_mutating_sales_and_uses_authoritative_stoc
         _operation_facts(
             "stock_adjustment",
             facts,
-            {**scalars, "stock_adjustment_gain_quantity": "0.000000"},
+            {**scalars, "stock_adjustment_loss_quantity": "0.000000"},
             set(),
         )
 
@@ -574,8 +574,8 @@ def test_delivery_challan_proves_ordered_selected_batch_stock_prerequisite() -> 
         },
     }
     scalars = {
-        "stock_adjustment_gain_quantity": "1.000000",
-        "sales_invoice_quantity": "1.000000",
+        "stock_adjustment_loss_quantity": "1.000000",
+        "sales_invoice_quantity": "7.000000",
         "sales_invoice_free_quantity": "1.000000",
         "sales_order_quantity": "1.000000",
     }
@@ -950,7 +950,8 @@ def test_live18_templates_use_only_canonical_hash_routes() -> None:
         "/#/returns/sales-return",
         "/#/returns/purchase-return",
         "/#/returns/approval-inbox",
-        "/#/returns/resume-post",
+            "/#/returns/resume-post",
+            "/#/returns/commercial-reversal",
         "/#/stock-management/stock-adjustment",
         "/#/stock-management/stock-transfer",
         "/#/stock-management/inventory-destruction",
@@ -1056,7 +1057,11 @@ def test_supplier_invoice_template_uses_run_scoped_authority_and_reviewed_attest
     assert used == set(scalars)
     assert operation["prepare_steps"][1]["value"] == "{{resource_goods_receipt}}"
     assert operation["prepare_steps"][2]["value"] == facts["choice"]["supplier_invoice_number"]
-    assert operation["prepare_steps"][6]["locator"]["name"] == attestation
+    assert operation["prepare_steps"][6]["locator"]["name"] == (
+        "Landed-cost basis for Demo Product"
+    )
+    assert operation["prepare_steps"][6]["value"] == "direct"
+    assert operation["prepare_steps"][7]["locator"]["name"] == attestation
 
 
 def test_supplier_invoice_chain_normalizes_exact_reviewed_economics() -> None:
@@ -1471,3 +1476,32 @@ def test_sales_return_template_targets_prior_sales_invoice_and_split_review() ->
     assert operation["execute_steps"][2]["locator"]["name"] == (
         "open-return-{{command_request_id}}"
     )
+
+
+@pytest.mark.parametrize(
+    ("operation_id", "source_operation"),
+    (
+        ("sales_return_reversal", "sales_return"),
+        ("purchase_return_reversal", "purchase_return"),
+        ("adjustment_note_reversal", "customer_credit_note"),
+    ),
+)
+def test_commercial_reversal_templates_use_exact_prior_resources_and_split_lifecycle(
+    operation_id: str,
+    source_operation: str,
+) -> None:
+    root = Path(__file__).resolve().parents[3]
+    template = json.loads(
+        (root / f"frontend/e2e/live18/templates/{operation_id}.json").read_text()
+    )
+    assert template["template_schema"] == TEMPLATE_SCHEMA
+    assert template["operation_id"] == operation_id
+    rendered = json.dumps(template, sort_keys=True)
+    assert f"{{{{resource_{source_operation}}}}}" in rendered
+    assert "row_version}}" not in rendered
+    assert "intercept" not in rendered.lower()
+    operation = {
+        "lifecycle_mode": template["lifecycle_mode"],
+        **template["steps"],
+    }
+    _validate_compiled_steps(operation_id, operation, "separate_approver")

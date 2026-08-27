@@ -94,7 +94,7 @@ export async function reconcileSupplierPayment(
 ): Promise<PostedSupplierPayment> {
   if (!isCanonicalUuid(paymentId)) throw new Error('Cannot reconcile an invalid supplier-payment identity.');
   const posted = (await canonicalSupplierPaymentsApi.getPosted(paymentId)).data;
-  const expected = new Map(payload.allocations.map(row => [row.open_item_id, supplierMoneyToMinor(row.amount)]));
+  const expected = new Map(payload.allocations.map(row => [row.open_item_id, supplierMoneyToMinor(row.cash_amount)]));
   const actual = new Map(posted.allocations.map(row => [row.open_item_id, supplierMoneyToMinor(row.amount)]));
   const exact = expected.size === actual.size
     && [...expected].every(([openItemId, amount]) => actual.get(openItemId) === amount);
@@ -107,9 +107,8 @@ export async function reconcileSupplierPayment(
     || posted.supplier_account_id !== payload.supplier_account_id
     || posted.branch_id !== payload.branch_id
     || posted.bank_account_id !== payload.bank_account_id
-    || posted.settlement_account_id !== payload.settlement_account_id
     || posted.external_reference !== payload.external_reference.toUpperCase()
-    || supplierMoneyToMinor(posted.amount) !== supplierMoneyToMinor(payload.gross_amount)
+    || supplierMoneyToMinor(posted.amount) !== supplierMoneyToMinor(payload.expected_gross_amount)
     || !posted.allocation_reconciled || !posted.journal_balanced
     || !posted.payable_residuals_reconciled || !exact || !residuals) {
     throw new Error('Supplier payment executed, but authoritative allocation, payable residual, or journal readback did not reconcile. Do not execute again.');

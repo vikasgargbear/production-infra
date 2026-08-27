@@ -71,7 +71,7 @@ def test_dispatcher_is_closed_typed_and_not_mcp_mounted() -> None:
     assert "compliance.destruction.post" in dispatcher["execution_operations"]
     assert "inventory.document.post" in dispatcher["execution_operations"]
     assert dispatcher["inventory_adjustment_pilot_scope"]["supported_effect"] == (
-        "same_day_positive_cycle_count_gain_only"
+        "same_day_homogeneous_cycle_count_gain_or_loss"
     )
     assert dispatcher["inventory_destruction_pilot_scope"]["status"] == (
         "available_reviewed_certified_full_balance_gst_registered"
@@ -121,11 +121,11 @@ def test_prepare_resolvers_activate_only_the_verified_auth_user_context() -> Non
     mapping = _sql()
     assert mapping.count(
         "erp_security.activate_context(auth_user_id,organization_id)"
-    ) == 13
+    ) == 14
     assert "erp_security.activate_context(organization_id,membership_id)" not in mapping
     assert mapping.count(
         "erp_security.current_membership_id() IS DISTINCT FROM membership_id"
-    ) == 13
+    ) == 14
 
 
 def test_purchase_return_prepare_and_execute_reauthorize_exact_invoiced_lineage() -> None:
@@ -165,7 +165,7 @@ def test_customer_receipt_prepare_and_execute_reauthorize_exact_non_cash_allocat
     mapping = _sql()
     for fragment in (
         '"resolve_customer_receipt_prepare"',
-        "method NOT IN ('bank_transfer','card','upi')",
+        "method NOT IN ('cash','cheque','bank_transfer','card','upi')",
         "finance.payment.allocate",
         "accounts_receivable",
         "allows_bank_reconciliation",
@@ -177,16 +177,15 @@ def test_customer_receipt_prepare_and_execute_reauthorize_exact_non_cash_allocat
         "status='posted' FOR SHARE",
         "customer receipt allocation exceeds live receivable balance",
         "allocation_state_hash",
-        "customer receipt allocations must exactly equal payment amount",
+        "receipt allocations do not match the selected settlement purpose",
         '"assert_customer_receipt_draft"',
         "line_count<>2",
         "SESSION_USER<>'erp_runtime'",
         "document_type='customer_receipt'",
         "request_row.operation='finance.payment.post'",
         "current_resolution->'source_versions' IS DISTINCT FROM preview_document->'source_versions'",
-        "erp_finance_commands.post_payment",
-        "INSERT INTO finance.allocations",
-        "posted allocation set differs from approved preview",
+        "erp_finance_commands.post_customer_receipt",
+        "customer receipt resolution or immutable preview changed",
     ):
         assert fragment in mapping
 
@@ -265,18 +264,32 @@ def test_supplier_payment_prepare_and_execute_reauthorize_exact_inr_payables() -
         "existing.reversal_of_payment_id IS NULL",
         "supplier payment bank reference was already consumed",
         "supplier payment allocation exceeds live payable balance",
-        "supplier payment allocations must exactly equal gross liability and bank cash",
+        "supplier payment components must exactly equal expected gross liability",
         '"assert_supplier_payment_draft"',
         "supplier payment exact two-line journal changed",
         "request_row.operation='finance.payment.post' AND request_row.capability_code='finance.supplier_payment.prepare'",
         "current_resolution->'source_versions' IS DISTINCT FROM preview_document->'source_versions'",
-        "supplier payment posted allocation set differs from approved preview",
-        "erp_finance_commands.post_payment",
+        "supplier payment resolution or immutable preview changed",
+        "erp_finance_commands.post_supplier_payment",
     ):
         assert fragment in mapping
 
 
-def test_inventory_cycle_count_gain_prepare_and_execute_are_closed_and_atomic() -> None:
+def test_supplier_advance_derives_settlement_account_from_selected_bank() -> None:
+    mapping = _sql()
+    resolver = mapping.split(
+        'CREATE FUNCTION "erp_automation_commands"."resolve_supplier_advance_prepare"',
+        1,
+    )[1].split(
+        'ALTER FUNCTION "erp_automation_commands"."resolve_supplier_advance_prepare"',
+        1,
+    )[0]
+    assert "settlement_id uuid;" in resolver
+    assert "settlement_account_id','')::uuid" not in resolver
+    assert "id=bank.account_id" in resolver
+
+
+def test_inventory_cycle_count_signed_prepare_and_execute_are_closed_and_atomic() -> None:
     mapping = _sql()
     for fragment in (
         '"resolve_inventory_adjustment_prepare"',
@@ -299,13 +312,15 @@ def test_inventory_cycle_count_gain_prepare_and_execute_are_closed_and_atomic() 
         "expires_on>adjustment_date",
         "pending.status IN ('draft','submitted','approved')",
         "variance_base:=counted_base-balance.on_hand_quantity",
-        "extended_cost:=pg_catalog.round(variance_base*balance.average_unit_cost,2)",
-        "'inventory_count_gain','income','INR',false",
+        "pg_catalog.abs(variance_base)*balance.average_unit_cost",
+        "one cycle-count command cannot mix gain and loss variances",
+        "'inventory_count_gain' ELSE 'inventory_count_loss'",
+        "stock_balance.row_version=(requested_count->>'stock_balance_row_version')::bigint",
         "license.license_type_code IN ('drug_wholesale_form_20b','drug_wholesale_form_21b')",
         "inventory_document.status<>'submitted'",
         "approval.approver_membership_id<>request_row.requested_by_membership_id",
         "PERFORM erp_trade_commands.post_locked_document",
-        "entry.entry_kind='count_gain'",
+        "entry.entry_kind=CASE current_resolution->>'variance_effect'",
         "INSERT INTO finance.accounting_events",
         "'inventory_valuation'",
     ):
@@ -882,14 +897,17 @@ def test_supplier_invoice_prepare_and_execute_are_closed_typed_and_atomic() -> N
         "supplier invoice exceeds separate posted receipt billed or free ceiling",
         "taxable_resale_not_blocked_under_section_17",
         "product_kind IN ('medicine','medical_device','consumable')",
-        "product invoice price variance requires reviewed unsold-stock landed-cost allocation",
+        "landed_cost_allocation_method' NOT IN ('direct','quantity_weighted','value_weighted')",
+        "'exact_receipt_source_provenance',exact_receipt_source_provenance",
+        "'purchase_price_variance','expense','INR',false",
         "INSERT INTO procurement.supplier_invoices",
         "INSERT INTO procurement.supplier_invoice_lines",
         "INSERT INTO procurement.supplier_invoice_receipt_allocations",
         "erp_commercial_commands.assert_supplier_invoice_artifact(",
         "erp_calculation_authority.issue_artifact(",
         "erp_commercial_commands.post_supplier_invoice(",
-        "NULL::uuid,NULL::bytea,NULL::bytea",
+        "(request_document->>'inventory_document_id')::uuid",
+        "pg_catalog.convert_to(':landed-cost','UTF8')",
     ):
         assert fragment in mapping
     function_at = mapping.index(

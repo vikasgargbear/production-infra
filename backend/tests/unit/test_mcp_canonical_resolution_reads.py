@@ -384,6 +384,10 @@ def test_resolution_sql_returns_exact_action_lineage_identifiers():
     assert "allocation.id AS supplier_invoice_receipt_allocation_id" in resolution_source
     assert "return_line.invoice_dispatch_allocation_id=allocation.id" in resolution_source
     assert "return_line.supplier_invoice_receipt_allocation_id=allocation.id" in resolution_source
+    assert "landed_cost_inventory_value_delta" in resolution_source
+    assert "Consumed supplier price or landed-cost variance" in resolution_source
+    assert "document_line.cost_allocation_method AS allocation_method" in resolution_source
+    assert "ledger.quantity_delta, ledger.value_delta" in resolution_source
 
 
 def test_sales_invoice_resolution_associates_batch_dispatch_allocation_balances():

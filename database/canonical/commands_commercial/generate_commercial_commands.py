@@ -254,6 +254,9 @@ ACCOUNT_ROLE_SETTINGS = {
         "accounts_payable": "active liability account with allows_party_posting",
         "sales_revenue": "active income account without party posting",
         "supplier_prepayment": "active asset account with allows_party_posting",
+        "customer_advance": "active liability account with allows_party_posting",
+        "cash_on_hand": "active asset account without party posting",
+        "cheques_in_hand": "active asset account without party posting",
         "income_tax_tds_payable": "active liability account",
         "gst_tds_payable": "active liability account",
         "input_cgst": "active asset account",
@@ -272,7 +275,9 @@ ACCOUNT_ROLE_SETTINGS = {
         "purchase_return_inventory_variance": "active expense account",
         "inventory_asset": "active asset account",
         "inventory_count_gain": "active income account without party posting",
+        "inventory_count_loss": "active expense account without party posting",
         "cost_of_goods_sold": "active expense account",
+        "purchase_price_variance": "active expense account without party posting",
         "rounding_gain": "active income account",
         "rounding_loss": "active expense account",
     },
@@ -375,29 +380,55 @@ def _common_definitions() -> list[str]:
         f'CREATE SCHEMA "{SCHEMA}" AUTHORIZATION "erp_migration_owner"',
         f'REVOKE ALL ON SCHEMA "{SCHEMA}" FROM PUBLIC, "erp_app", "erp_runtime"',
         f'GRANT USAGE ON SCHEMA "{SCHEMA}" TO "erp_app", "erp_runtime"',
+        f'''CREATE TABLE "{SCHEMA}"."reversal_scopes" (
+    backend_pid integer NOT NULL, transaction_id bigint NOT NULL, org_id uuid NOT NULL,
+    original_resource_id uuid NOT NULL, PRIMARY KEY (backend_pid,transaction_id,org_id,original_resource_id)
+)''',
+        f'ALTER TABLE "{SCHEMA}"."reversal_scopes" OWNER TO "erp_migration_owner"',
+        f'REVOKE ALL ON TABLE "{SCHEMA}"."reversal_scopes" FROM PUBLIC, "erp_app", "erp_runtime"',
+        *_function(
+            "reversal_scope_active(organization_id uuid, original_resource_id uuid)",
+            "boolean",
+            f'''BEGIN
+  RETURN EXISTS(SELECT 1 FROM "{SCHEMA}"."reversal_scopes" scope
+    WHERE scope.backend_pid=pg_catalog.pg_backend_pid() AND scope.transaction_id=pg_catalog.txid_current()
+      AND scope.org_id=organization_id AND scope.original_resource_id=original_resource_id);
+END''',
+        ),
         *_function(
             "resolve_role_account(organization_id uuid, target_branch_id uuid, role_key varchar, expected_type text, currency char, require_party boolean)",
             "uuid",
             '''
 DECLARE setting_value text; account_id uuid; account finance.accounts%ROWTYPE;
+        setting_count bigint;
 BEGIN
-    SELECT value_text INTO setting_value FROM core.settings
+    SELECT count(*),min(value_text) INTO setting_count,setting_value FROM core.settings
      WHERE org_id=organization_id AND status='active' AND namespace='finance.account_roles'
-       AND key=role_key AND value_type='text' AND core.settings.branch_id=target_branch_id
-     FOR SHARE;
-    IF setting_value IS NULL THEN
-        SELECT value_text INTO setting_value FROM core.settings
+       AND key=role_key AND value_type='text' AND core.settings.branch_id=target_branch_id;
+    IF setting_count>1 THEN
+        RAISE EXCEPTION USING ERRCODE='21000', MESSAGE='active branch finance account-role mapping is ambiguous';
+    END IF;
+    IF setting_count=0 THEN
+        SELECT count(*),min(value_text) INTO setting_count,setting_value FROM core.settings
          WHERE org_id=organization_id AND status='active' AND namespace='finance.account_roles'
-           AND key=role_key AND value_type='text' AND core.settings.branch_id IS NULL FOR SHARE;
+           AND key=role_key AND value_type='text' AND core.settings.branch_id IS NULL;
+        IF setting_count>1 THEN
+            RAISE EXCEPTION USING ERRCODE='21000', MESSAGE='active organization finance account-role mapping is ambiguous';
+        END IF;
     END IF;
     IF setting_value IS NULL OR setting_value !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' THEN
         RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='active finance account-role UUID setting is missing';
     END IF;
+    PERFORM id FROM core.settings
+     WHERE org_id=organization_id AND status='active' AND namespace='finance.account_roles'
+       AND key=role_key AND value_type='text'
+       AND (branch_id=target_branch_id OR (branch_id IS NULL AND setting_count=1))
+     ORDER BY branch_id NULLS LAST,id FOR SHARE;
     account_id:=setting_value::uuid;
     SELECT * INTO account FROM finance.accounts
      WHERE org_id=organization_id AND id=account_id FOR SHARE;
     IF account.id IS NULL OR account.status<>'active' OR account.account_type<>expected_type
-       OR account.currency_code<>currency OR (require_party AND NOT account.allows_party_posting) THEN
+       OR account.currency_code<>currency OR account.allows_party_posting IS DISTINCT FROM require_party THEN
         RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='finance account-role target is inactive or incompatible';
     END IF;
     RETURN account_id;
@@ -694,7 +725,10 @@ BEGIN
       RETURN NEW;
     END IF;
     IF OLD.status='posted' AND NEW.status='reversed' THEN
-      RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='return reversal requires a reviewed compensating command for tax, finance, allocation, and inventory effects';
+      IF erp_commercial_commands.reversal_scope_active(NEW.org_id,NEW.id) IS DISTINCT FROM true THEN
+        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='return reversal requires a reviewed compensating command for tax, finance, allocation, and inventory effects';
+      END IF;
+      RETURN NEW;
     END IF;
     IF OLD.status IN ('posted','reversed','cancelled') AND NEW IS DISTINCT FROM OLD THEN
       RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='posted or terminal return evidence is immutable';
@@ -789,6 +823,21 @@ def _invoice_command(*, sales: bool) -> list[str]:
         END IF;
         PERFORM "{SCHEMA}".add_journal_line(organization_id,journal_id,line_no,line.{account_line},header.branch_id,NULL,
           'Supplier invoice net value and noncreditable tax',line.net_value_amount+noncreditable_tax,0,actor_id); line_no:=line_no+1;
+        IF line.inventory_cost_treatment='capitalize' THEN
+          consumed_variance:=erp_trade_commands_v2.consumed_landed_cost_pool(organization_id,line.id);
+          IF consumed_variance<>0 THEN
+            role_account:=erp_commercial_commands.resolve_role_account(
+              organization_id,header.branch_id,'purchase_price_variance','expense',header.currency_code,false);
+            PERFORM "{SCHEMA}".add_journal_line(organization_id,journal_id,line_no,role_account,header.branch_id,NULL,
+              'Consumed supplier price or landed-cost variance',
+              CASE WHEN consumed_variance>0 THEN consumed_variance ELSE 0 END,
+              CASE WHEN consumed_variance<0 THEN -consumed_variance ELSE 0 END,actor_id); line_no:=line_no+1;
+            PERFORM "{SCHEMA}".add_journal_line(organization_id,journal_id,line_no,line.{account_line},header.branch_id,NULL,
+              'Reclassify consumed variance out of inventory',
+              CASE WHEN consumed_variance<0 THEN -consumed_variance ELSE 0 END,
+              CASE WHEN consumed_variance>0 THEN consumed_variance ELSE 0 END,actor_id); line_no:=line_no+1;
+          END IF;
+        END IF;
     END LOOP;'''
     )
     party_line = (
@@ -837,13 +886,17 @@ def _invoice_command(*, sales: bool) -> list[str]:
           IF inventory_entries=0 OR inventory_value<=0 THEN RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='posted sales issue has no authoritative ledger value'; END IF;
         END IF;'''
         if sales
-        else "NULL;"
+        else '''IF inventory_document_id IS NOT NULL THEN
+          inventory_document_id:=erp_trade_commands_v2.prepare_supplier_invoice_landed_cost_adjustment(
+            organization_id,resource_id,inventory_document_id,actor_id);
+        END IF;'''
     )
     inventory_after = (
         "NULL;"
         if sales
         else '''IF inventory_document_id IS NOT NULL THEN
-          PERFORM erp_trade_commands_v2.post_landed_cost_adjustment(organization_id,inventory_document_id,actor_id,inventory_key_hash,inventory_request_hash,expires_at);
+          PERFORM erp_trade_commands_v2.post_landed_cost_adjustment(
+            organization_id,inventory_document_id,actor_id,inventory_key_hash,inventory_request_hash,expires_at);
         END IF;'''
     )
     inventory_journal = (
@@ -884,7 +937,7 @@ def _invoice_command(*, sales: bool) -> list[str]:
 DECLARE header {header_table}%ROWTYPE; artifact calculation.artifacts%ROWTYPE; line record;
         claim_id uuid; replay_id uuid; input_doc jsonb; output_doc jsonb; consumed bytea;
         party_id uuid; party_account uuid; party_default_account uuid; posted_time timestamptz:=pg_catalog.transaction_timestamp();
-        line_no integer:=2; component_amount numeric(20,2); role_account uuid; role_key varchar;
+        line_no integer:=2; component_amount numeric(20,2); consumed_variance numeric(20,2); role_account uuid; role_key varchar;
         total_debit numeric(20,2); total_credit numeric(20,2); tax_effective date; source_hash bytea; noncreditable_tax numeric(20,2);
         eligible_cgst numeric(20,2):=0; eligible_sgst numeric(20,2):=0; eligible_igst numeric(20,2):=0; eligible_cess numeric(20,2):=0;
         inventory_value numeric(20,2):=0; inventory_entries bigint:=0; product_lines boolean:=false; allocated_lines boolean:=false;
@@ -1894,7 +1947,7 @@ BEGIN
     IF invoiced THEN
       applied:=least(header.grand_total,outstanding); residual:=header.grand_total-applied;
       IF applied>0 THEN INSERT INTO finance.allocations(org_id,id,adjustment_note_id,open_item_id,allocation_date,currency_code,amount,functional_amount,status,created_by_membership_id) VALUES(organization_id,allocation_id,adjustment_note_id,original_open.id,header.{return_date},original_open.currency_code,applied,applied,'posted',actor_id); END IF;
-      IF applied=outstanding AND outstanding>0 THEN UPDATE finance.open_items SET status='settled',settled_at=posted_time WHERE org_id=organization_id AND id=original_open.id; END IF;
+      IF applied>0 THEN PERFORM erp_finance_commands.synchronize_open_item_status(organization_id,original_open.id); END IF;
       IF residual>0 THEN INSERT INTO finance.open_items(org_id,id,accounting_event_id,party_id,item_side,document_number,document_date,due_date,currency_code,principal_amount,functional_principal_amount,status,created_by_membership_id) VALUES(organization_id,residual_open_item_id,event_id,party_id,'{'payable' if sales else 'receivable'}',adjustment_note_number,header.{return_date},header.{return_date},original_open.currency_code,residual,residual,'open',actor_id); END IF;
     END IF;
     PERFORM erp_trade_commands.finish_claim(organization_id,claim_id,'{header_table}',resource_id);
@@ -2308,6 +2361,7 @@ BEGIN
         IF allocation_id IS NULL THEN RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='decrease allocation identity is required'; END IF;
         INSERT INTO finance.allocations(org_id,id,adjustment_note_id,open_item_id,allocation_date,currency_code,amount,functional_amount,status,created_by_membership_id)
         VALUES(organization_id,allocation_id,resource_id,original_open.id,note.note_date,note.currency_code,applied,applied,'posted',actor_id);
+        PERFORM erp_finance_commands.synchronize_open_item_status(organization_id,original_open.id);
       END IF;
       IF residual>0 THEN INSERT INTO finance.open_items(org_id,id,accounting_event_id,party_id,item_side,document_number,document_date,due_date,currency_code,principal_amount,functional_principal_amount,status,created_by_membership_id)
         VALUES(organization_id,new_open_item_id,event_id,note.party_id,CASE WHEN note.side='sales' THEN 'payable' ELSE 'receivable' END,note.note_number,note.note_date,note.note_date,note.currency_code,residual,residual,'open',actor_id); END IF;
@@ -2324,6 +2378,395 @@ END
     )
 
 
+def _reversal_definitions() -> list[str]:
+    statements = _function(
+        "resolve_commercial_reversal_prepare(organization_id uuid, reversal_kind text, original_resource_id uuid, expected_row_version bigint, reversal_date date, reason text, amendment_evidence_attachment_id uuid)",
+        "jsonb",
+        r'''
+DECLARE note finance.adjustment_notes%ROWTYPE; source_version bigint; branch_id uuid;
+        tax_document tax.documents%ROWTYPE; reported_count bigint; inventory_document_id uuid;
+BEGIN
+  IF organization_id IS DISTINCT FROM erp_security.current_org_id()
+     OR reversal_kind NOT IN ('sales_return','purchase_return','adjustment_note')
+     OR reason IS NULL OR pg_catalog.btrim(reason)='' OR reversal_date IS NULL THEN
+    RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='commercial reversal prepare context is invalid'; END IF;
+  IF reversal_kind='sales_return' THEN
+    SELECT row_version,branch_id INTO STRICT source_version,branch_id FROM sales.returns
+     WHERE org_id=organization_id AND id=original_resource_id AND status='posted' FOR UPDATE;
+    SELECT * INTO STRICT note FROM finance.adjustment_notes
+     WHERE org_id=organization_id AND sales_return_id=original_resource_id AND status='posted' FOR SHARE;
+    SELECT id INTO STRICT inventory_document_id FROM inventory.inventory_documents
+     WHERE org_id=organization_id AND sales_return_id=original_resource_id
+       AND document_type='sales_return_receipt' AND status='posted' FOR SHARE;
+  ELSIF reversal_kind='purchase_return' THEN
+    SELECT row_version,branch_id INTO STRICT source_version,branch_id FROM procurement.purchase_returns
+     WHERE org_id=organization_id AND id=original_resource_id AND status='posted' FOR UPDATE;
+    SELECT * INTO STRICT note FROM finance.adjustment_notes
+     WHERE org_id=organization_id AND purchase_return_id=original_resource_id AND status='posted' FOR SHARE;
+    SELECT id INTO STRICT inventory_document_id FROM inventory.inventory_documents
+     WHERE org_id=organization_id AND purchase_return_id=original_resource_id
+       AND document_type='purchase_return_issue' AND status='posted' FOR SHARE;
+  ELSE
+    SELECT * INTO STRICT note FROM finance.adjustment_notes
+     WHERE org_id=organization_id AND id=original_resource_id AND status='posted'
+       AND sales_return_id IS NULL AND purchase_return_id IS NULL FOR UPDATE;
+    source_version:=note.row_version;
+    SELECT coalesce(invoice.branch_id,supplier.branch_id) INTO STRICT branch_id
+      FROM finance.adjustment_notes source
+      LEFT JOIN sales.invoices invoice ON invoice.org_id=source.org_id AND invoice.id=source.sales_invoice_id
+      LEFT JOIN procurement.supplier_invoices supplier ON supplier.org_id=source.org_id AND supplier.id=source.supplier_invoice_id
+     WHERE source.org_id=organization_id AND source.id=note.id;
+  END IF;
+  IF source_version IS DISTINCT FROM expected_row_version OR reversal_date<note.note_date
+     OR EXISTS(SELECT 1 FROM finance.adjustment_notes reversal
+       WHERE reversal.org_id=organization_id AND reversal.reversal_of_adjustment_note_id=note.id) THEN
+    RAISE EXCEPTION USING ERRCODE='40001', MESSAGE='posted commercial source changed or was already reversed'; END IF;
+  IF erp_security.can_access_branch(branch_id) IS DISTINCT FROM true
+     OR erp_security.has_permission('finance.adjustment_note.manage',branch_id) IS DISTINCT FROM true
+     OR erp_security.has_permission('finance.journal.post',branch_id) IS DISTINCT FROM true THEN
+    RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='commercial reversal branch permission denied'; END IF;
+  SELECT * INTO tax_document FROM tax.documents
+   WHERE org_id=organization_id AND adjustment_note_id=note.id FOR SHARE;
+  SELECT count(*) INTO reported_count FROM tax.return_documents membership
+   WHERE membership.org_id=organization_id AND membership.tax_document_id=tax_document.id;
+  IF reported_count>0 THEN
+    PERFORM 1 FROM core.attachments evidence WHERE evidence.org_id=organization_id
+      AND evidence.id=amendment_evidence_attachment_id
+      AND evidence.evidence_kind='statutory_amendment_or_counter_note'
+      AND evidence.status IN ('verified','retained') AND evidence.verified_at IS NOT NULL FOR SHARE;
+    IF NOT FOUND THEN RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='reported return or note requires explicit verified amendment or counter-note evidence'; END IF;
+  ELSIF amendment_evidence_attachment_id IS NOT NULL THEN
+    RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='unreported return or note must use direct counter-document reversal without amendment evidence';
+  END IF;
+  IF EXISTS(SELECT 1 FROM finance.open_items residual
+      WHERE residual.org_id=organization_id
+        AND residual.accounting_event_id=(SELECT event.id FROM finance.accounting_events event
+          WHERE event.org_id=organization_id AND event.adjustment_note_id=note.id)
+        AND EXISTS(SELECT 1 FROM finance.allocations allocation WHERE allocation.org_id=organization_id
+          AND (allocation.source_open_item_id=residual.id OR allocation.open_item_id=residual.id)
+          AND allocation.status='posted' AND NOT EXISTS(SELECT 1 FROM finance.allocations reversal
+            WHERE reversal.org_id=allocation.org_id AND reversal.reversal_of_allocation_id=allocation.id))) THEN
+    RAISE EXCEPTION USING ERRCODE='55000', MESSAGE='commercial reversal is blocked because residual credit or debit was consumed'; END IF;
+  RETURN pg_catalog.jsonb_build_object('reversal_kind',reversal_kind,'original_resource_id',original_resource_id,
+    'original_adjustment_note_id',note.id,'expected_row_version',source_version,'branch_id',branch_id,
+    'inventory_document_id',inventory_document_id,'original_tax_document_id',tax_document.id,
+    'counterparty_payable_amount',note.counterparty_payable_amount,
+    'reported_return_membership_count',reported_count,'reversal_date',reversal_date,'reason',reason,
+    'amendment_evidence_attachment_id',amendment_evidence_attachment_id,
+    'source_versions',pg_catalog.jsonb_build_array(
+      pg_catalog.jsonb_build_object('resource_type',reversal_kind,'id',original_resource_id,'row_version',source_version),
+      pg_catalog.jsonb_build_object('resource_type','adjustment_note','id',note.id,'row_version',note.row_version)),
+    'legal_scope',pg_catalog.jsonb_build_object('correction_kind','compensating_counter_document',
+      'reported',reported_count>0,'deletion',false,'requires_exact_stock_lineage',reversal_kind<>'adjustment_note'));
+END
+''',
+    )
+    for kind, name in (
+        ("sales_return", "prepare_sales_return_reversal"),
+        ("purchase_return", "prepare_purchase_return_reversal"),
+        ("adjustment_note", "prepare_adjustment_note_reversal"),
+    ):
+        statements += _function(
+            f"{name}(organization_id uuid, original_resource_id uuid, expected_row_version bigint, reversal_date date, reason text, amendment_evidence_attachment_id uuid)",
+            "jsonb",
+            f"""BEGIN
+  RETURN erp_commercial_commands.resolve_commercial_reversal_prepare(
+    organization_id,'{kind}',original_resource_id,expected_row_version,reversal_date,reason,amendment_evidence_attachment_id);
+END""",
+            runtime=True,
+        )
+    statements += _function(
+        "post_commercial_reversal(organization_id uuid, reversal_kind text, original_resource_id uuid, expected_row_version bigint, reversal_adjustment_note_id uuid, reversal_note_number varchar, reversal_inventory_document_id uuid, reversal_inventory_document_number varchar, reversal_journal_id uuid, reversal_journal_number varchar, reversal_event_id uuid, reversal_tax_document_id uuid, reversal_date date, reason text, amendment_evidence_attachment_id uuid, key_hash bytea, request_hash bytea, expires_at timestamptz)",
+        "uuid",
+        r'''
+DECLARE preview jsonb; note finance.adjustment_notes%ROWTYPE; original_event finance.accounting_events%ROWTYPE;
+        original_journal finance.journal_entries%ROWTYPE; original_inventory inventory.inventory_documents%ROWTYPE;
+        original_tax tax.documents%ROWTYPE; claim_id uuid; replay_id uuid; actor uuid:=erp_security.current_membership_id();
+        posted_time timestamptz:=pg_catalog.transaction_timestamp(); allocation record; residual record;
+BEGIN
+  SELECT p_claim_id,p_replay_resource_id INTO claim_id,replay_id FROM erp_trade_commands.claim(
+    organization_id,actor,reversal_kind||'.reversal.post',key_hash,request_hash,expires_at);
+  IF replay_id IS NOT NULL THEN
+    IF replay_id IS DISTINCT FROM reversal_adjustment_note_id THEN RAISE EXCEPTION USING ERRCODE='23505', MESSAGE='commercial reversal replay differs'; END IF;
+    RETURN replay_id;
+  END IF;
+  preview:=erp_commercial_commands.resolve_commercial_reversal_prepare(organization_id,reversal_kind,
+    original_resource_id,expected_row_version,reversal_date,reason,amendment_evidence_attachment_id);
+  SELECT * INTO STRICT note FROM finance.adjustment_notes
+   WHERE org_id=organization_id AND id=(preview->>'original_adjustment_note_id')::uuid FOR UPDATE;
+  SELECT event.* INTO STRICT original_event FROM finance.accounting_events event
+   WHERE event.org_id=organization_id AND event.adjustment_note_id=note.id FOR SHARE;
+  SELECT * INTO STRICT original_journal FROM finance.journal_entries
+   WHERE org_id=organization_id AND id=original_event.journal_entry_id AND status='posted' FOR UPDATE;
+  INSERT INTO erp_commercial_commands.reversal_scopes
+  SELECT pg_catalog.pg_backend_pid(),pg_catalog.txid_current(),organization_id,scope_id
+    FROM (VALUES(original_resource_id),(note.id)) scope(scope_id) ON CONFLICT DO NOTHING;
+  INSERT INTO finance.adjustment_notes
+  SELECT (pg_catalog.jsonb_populate_record(NULL::finance.adjustment_notes,
+    pg_catalog.to_jsonb(note)||pg_catalog.jsonb_build_object(
+      'id',reversal_adjustment_note_id,'note_number',reversal_note_number,'note_date',reversal_date,
+      'direction',CASE note.direction WHEN 'credit' THEN 'debit' ELSE 'credit' END,
+      'sales_return_id',NULL,'purchase_return_id',NULL,'document_effect','increase',
+      'reason','Reversal: '||reason,'reversal_of_adjustment_note_id',note.id,'status','approved',
+      'approved_at',posted_time,'approved_by_membership_id',actor,'posted_at',NULL,'posted_by_membership_id',NULL,
+      'created_at',posted_time,'created_by_membership_id',actor,'updated_at',posted_time,
+      'updated_by_membership_id',actor,'row_version',1))).*;
+  INSERT INTO finance.adjustment_note_lines
+  SELECT (pg_catalog.jsonb_populate_record(NULL::finance.adjustment_note_lines,
+    pg_catalog.to_jsonb(line)||pg_catalog.jsonb_build_object('id',pg_catalog.gen_random_uuid(),
+      'adjustment_note_id',reversal_adjustment_note_id,'created_at',posted_time,'created_by_membership_id',actor))).*
+    FROM finance.adjustment_note_lines line WHERE line.org_id=organization_id AND line.adjustment_note_id=note.id;
+  INSERT INTO finance.journal_entries
+  SELECT (pg_catalog.jsonb_populate_record(NULL::finance.journal_entries,
+    pg_catalog.to_jsonb(original_journal)||pg_catalog.jsonb_build_object('id',reversal_journal_id,
+      'journal_number',reversal_journal_number,'posting_date',reversal_date,'description','Commercial reversal: '||reason,
+      'transaction_debit_total',original_journal.transaction_credit_total,
+      'transaction_credit_total',original_journal.transaction_debit_total,
+      'functional_debit_total',original_journal.functional_credit_total,
+      'functional_credit_total',original_journal.functional_debit_total,
+      'reversal_of_journal_entry_id',original_journal.id,'reversal_reason',reason,'status','draft',
+      'posted_at',NULL,'posted_by_membership_id',NULL,'created_at',posted_time,'created_by_membership_id',actor,
+      'updated_at',posted_time,'updated_by_membership_id',actor,'row_version',1))).*;
+  INSERT INTO finance.journal_lines
+  SELECT (pg_catalog.jsonb_populate_record(NULL::finance.journal_lines,
+    pg_catalog.to_jsonb(line)||pg_catalog.jsonb_build_object('id',pg_catalog.gen_random_uuid(),
+      'journal_entry_id',reversal_journal_id,'transaction_debit',line.transaction_credit,
+      'transaction_credit',line.transaction_debit,'functional_debit',line.functional_credit,
+      'functional_credit',line.functional_debit,'created_at',posted_time,'created_by_membership_id',actor))).*
+    FROM finance.journal_lines line WHERE line.org_id=organization_id AND line.journal_entry_id=original_journal.id;
+  IF reversal_kind<>'adjustment_note' THEN
+    SELECT * INTO STRICT original_inventory FROM inventory.inventory_documents
+     WHERE org_id=organization_id AND id=(preview->>'inventory_document_id')::uuid AND status='posted' FOR UPDATE;
+    INSERT INTO inventory.inventory_documents
+    SELECT (pg_catalog.jsonb_populate_record(NULL::inventory.inventory_documents,
+      pg_catalog.to_jsonb(original_inventory)||pg_catalog.jsonb_build_object('id',reversal_inventory_document_id,
+        'document_type','reversal','document_number',reversal_inventory_document_number,'document_date',reversal_date,
+        'status','approved','sales_return_id',NULL,'purchase_return_id',NULL,'reverses_document_id',original_inventory.id,
+        'approved_at',posted_time,'approved_by_membership_id',actor,'posted_at',NULL,'posted_by_membership_id',NULL,
+        'created_at',posted_time,'created_by_membership_id',actor,'updated_at',posted_time,
+        'updated_by_membership_id',actor,'row_version',1))).*;
+    INSERT INTO inventory.inventory_document_lines
+    SELECT (pg_catalog.jsonb_populate_record(NULL::inventory.inventory_document_lines,
+      pg_catalog.to_jsonb(line)||pg_catalog.jsonb_build_object('id',pg_catalog.gen_random_uuid(),
+        'inventory_document_id',reversal_inventory_document_id,'created_at',posted_time,
+        'created_by_membership_id',actor))).*
+      FROM inventory.inventory_document_lines line
+     WHERE line.org_id=organization_id AND line.inventory_document_id=original_inventory.id;
+    PERFORM erp_trade_commands.post_locked_document(organization_id,reversal_inventory_document_id,actor,posted_time);
+  ELSIF reversal_inventory_document_id IS NOT NULL OR reversal_inventory_document_number IS NOT NULL THEN
+    RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='standalone note reversal cannot create inventory evidence';
+  END IF;
+  SELECT * INTO original_tax FROM tax.documents WHERE org_id=organization_id AND adjustment_note_id=note.id FOR SHARE;
+  IF original_tax.id IS NOT NULL THEN
+    IF reversal_tax_document_id IS NULL THEN RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='statutory reversal requires counter tax-document identity'; END IF;
+    INSERT INTO tax.documents
+    SELECT (pg_catalog.jsonb_populate_record(NULL::tax.documents,
+      pg_catalog.to_jsonb(original_tax)||pg_catalog.jsonb_build_object('id',reversal_tax_document_id,
+        'adjustment_note_id',reversal_adjustment_note_id,'document_number',reversal_note_number,
+        'document_date',reversal_date,'document_effect','increase','adjusts_tax_document_id',original_tax.id,
+        'source_hash',extensions.digest(pg_catalog.convert_to(note.id::text||':'||reason,'UTF8'),'sha256'),
+        'posted_at',posted_time,'created_at',posted_time,'created_by_membership_id',actor))).*;
+  ELSIF reversal_tax_document_id IS NOT NULL THEN
+    RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='commercial-only reversal cannot create tax evidence';
+  END IF;
+  UPDATE finance.journal_entries SET status='posted',posted_at=posted_time,posted_by_membership_id=actor,
+    updated_at=posted_time,updated_by_membership_id=actor,row_version=row_version+1
+   WHERE org_id=organization_id AND id=reversal_journal_id AND status='draft';
+  UPDATE finance.adjustment_notes SET status='posted',posted_at=posted_time,posted_by_membership_id=actor,
+    updated_at=posted_time,updated_by_membership_id=actor,row_version=row_version+1
+   WHERE org_id=organization_id AND id=reversal_adjustment_note_id AND status='approved';
+  INSERT INTO finance.accounting_events(org_id,id,event_type,adjustment_note_id,journal_entry_id,
+    occurred_at,source_posted_at,created_by_membership_id)
+  VALUES(organization_id,reversal_event_id,'adjustment_note',reversal_adjustment_note_id,reversal_journal_id,
+    posted_time,posted_time,actor);
+  FOR allocation IN SELECT original.* FROM finance.allocations original
+    WHERE original.org_id=organization_id AND original.adjustment_note_id=note.id
+      AND original.status='posted' AND original.reversal_of_allocation_id IS NULL FOR UPDATE LOOP
+    INSERT INTO finance.allocations
+    SELECT (pg_catalog.jsonb_populate_record(NULL::finance.allocations,
+      pg_catalog.to_jsonb(allocation)||pg_catalog.jsonb_build_object('id',pg_catalog.gen_random_uuid(),
+        'reversal_of_allocation_id',allocation.id,'reversal_reason',reason,'status','reversed',
+        'reversed_at',posted_time,'reversed_by_membership_id',actor,'created_at',posted_time,
+        'created_by_membership_id',actor))).*;
+    PERFORM erp_finance_commands.synchronize_open_item_status(organization_id,allocation.open_item_id);
+  END LOOP;
+  FOR residual IN SELECT item.* FROM finance.open_items item
+    WHERE item.org_id=organization_id AND item.accounting_event_id=original_event.id FOR UPDATE LOOP
+    IF EXISTS(SELECT 1 FROM finance.allocations active WHERE active.org_id=organization_id
+       AND (active.source_open_item_id=residual.id OR active.open_item_id=residual.id)
+       AND active.status='posted' AND NOT EXISTS(SELECT 1 FROM finance.allocations reversed
+         WHERE reversed.org_id=active.org_id AND reversed.reversal_of_allocation_id=active.id)) THEN
+      RAISE EXCEPTION USING ERRCODE='55000', MESSAGE='commercial reversal residual was consumed'; END IF;
+  END LOOP;
+  PERFORM erp_finance_commands.mark_journal_reversed(organization_id,original_journal.id,reversal_journal_id);
+  UPDATE finance.open_items SET status='reversed',reversed_at=posted_time
+   WHERE org_id=organization_id AND accounting_event_id=original_event.id AND status='open';
+  UPDATE finance.adjustment_notes SET status='reversed',updated_at=posted_time,
+    updated_by_membership_id=actor,row_version=row_version+1 WHERE org_id=organization_id AND id=note.id AND status='posted';
+  IF reversal_kind='sales_return' THEN
+    UPDATE sales.returns SET status='reversed',updated_at=posted_time,updated_by_membership_id=actor,
+      row_version=row_version+1 WHERE org_id=organization_id AND id=original_resource_id AND status='posted';
+  ELSIF reversal_kind='purchase_return' THEN
+    UPDATE procurement.purchase_returns SET status='reversed',updated_at=posted_time,updated_by_membership_id=actor,
+      row_version=row_version+1 WHERE org_id=organization_id AND id=original_resource_id AND status='posted';
+  END IF;
+  DELETE FROM erp_commercial_commands.reversal_scopes scope WHERE scope.backend_pid=pg_catalog.pg_backend_pid()
+    AND scope.transaction_id=pg_catalog.txid_current() AND scope.org_id=organization_id
+    AND scope.original_resource_id IN (original_resource_id,note.id);
+  PERFORM erp_trade_commands.finish_claim(organization_id,claim_id,'finance.adjustment_notes',reversal_adjustment_note_id);
+  RETURN reversal_adjustment_note_id;
+END
+''',
+    )
+    for kind, name in (
+        ("sales_return", "post_sales_return_reversal"),
+        ("purchase_return", "post_purchase_return_reversal"),
+        ("adjustment_note", "post_adjustment_note_reversal"),
+    ):
+        statements += _function(
+            f"{name}(organization_id uuid, original_resource_id uuid, expected_row_version bigint, reversal_adjustment_note_id uuid, reversal_note_number varchar, reversal_inventory_document_id uuid, reversal_inventory_document_number varchar, reversal_journal_id uuid, reversal_journal_number varchar, reversal_event_id uuid, reversal_tax_document_id uuid, reversal_date date, reason text, amendment_evidence_attachment_id uuid, key_hash bytea, request_hash bytea, expires_at timestamptz)",
+            "uuid",
+            f"""BEGIN
+  RETURN erp_commercial_commands.post_commercial_reversal(organization_id,'{kind}',original_resource_id,
+    expected_row_version,reversal_adjustment_note_id,reversal_note_number,reversal_inventory_document_id,
+    reversal_inventory_document_number,reversal_journal_id,reversal_journal_number,reversal_event_id,
+    reversal_tax_document_id,reversal_date,reason,amendment_evidence_attachment_id,key_hash,request_hash,expires_at);
+END""",
+            runtime=True,
+        )
+    statements += _function(
+        "persist_commercial_reversal_prepare(organization_id uuid, reversal_kind text, original_resource_id uuid, reversal_adjustment_note_id uuid, command_request_id uuid, grant_id uuid, key_hash bytea, request_bytes bytea, resolved_bytes bytea, preview_bytes bytea, expires_at timestamptz)",
+        "jsonb",
+        r'''
+DECLARE request_document jsonb:=pg_catalog.convert_from(request_bytes,'UTF8')::jsonb;
+        resolved_document jsonb:=pg_catalog.convert_from(resolved_bytes,'UTF8')::jsonb;
+        preview_document jsonb:=pg_catalog.convert_from(preview_bytes,'UTF8')::jsonb;
+        current_resolution jsonb; capability_name text; persisted_id uuid;
+BEGIN
+  IF SESSION_USER<>'erp_runtime' OR reversal_kind NOT IN ('sales_return','purchase_return','adjustment_note')
+     OR request_document->>'original_resource_id' IS DISTINCT FROM original_resource_id::text
+     OR request_document->>'reversal_adjustment_note_id' IS DISTINCT FROM reversal_adjustment_note_id::text THEN
+    RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='commercial reversal persistence boundary is invalid'; END IF;
+  current_resolution:=erp_commercial_commands.resolve_commercial_reversal_prepare(organization_id,reversal_kind,
+    original_resource_id,(request_document->>'expected_row_version')::bigint,
+    (request_document->>'reversal_date')::date,request_document->>'reason',
+    NULLIF(request_document->>'amendment_evidence_attachment_id','')::uuid);
+  capability_name:=CASE reversal_kind WHEN 'sales_return' THEN 'sales.return.reversal.prepare'
+    WHEN 'purchase_return' THEN 'procurement.purchase_return.reversal.prepare'
+    ELSE 'finance.adjustment_note.reversal.prepare' END;
+  IF current_resolution IS DISTINCT FROM resolved_document
+     OR preview_document->>'capability_code' IS DISTINCT FROM capability_name
+     OR preview_document->>'target_resource_id' IS DISTINCT FROM reversal_adjustment_note_id::text
+     OR preview_document->'source_versions' IS DISTINCT FROM resolved_document->'source_versions'
+     OR preview_document->'legal_scope' IS DISTINCT FROM resolved_document->'legal_scope'
+     OR preview_document->'calculation_ruleset'<>'[]'::jsonb THEN
+    RAISE EXCEPTION USING ERRCODE='40001', MESSAGE='commercial reversal resolution or immutable preview changed'; END IF;
+  PERFORM pg_catalog.set_config('app.request_id',command_request_id::text,true);
+  persisted_id:=erp_automation_commands.prepare_operator_command(organization_id,command_request_id,grant_id,
+    capability_name,(resolved_document->>'branch_id')::uuid,NULL,reversal_adjustment_note_id,
+    (resolved_document->>'counterparty_payable_amount')::numeric,'INR',key_hash,request_bytes,preview_bytes,NULL,
+    extensions.digest(pg_catalog.convert_to((resolved_document->'source_versions')::text,'UTF8'),'sha256'),expires_at);
+  RETURN pg_catalog.jsonb_build_object('command_request_id',persisted_id,'expires_at',expires_at,
+    'preview_hash',pg_catalog.encode(extensions.digest(preview_bytes,'sha256'),'hex'),
+    'replayed',persisted_id IS DISTINCT FROM command_request_id);
+END
+''',
+        runtime=True,
+    )
+    statements += _function(
+        "execute_approved_commercial_reversal(organization_id uuid, command_request_id uuid)",
+        "bytea",
+        r'''
+DECLARE command automation.command_requests%ROWTYPE; request_document jsonb; actor uuid:=erp_security.current_membership_id();
+        approval_count bigint; reversal_kind text; fiscal_year integer; note_sequence uuid; journal_sequence uuid;
+        inventory_sequence uuid; note_number text; journal_number text; inventory_number text; result_id uuid;
+        response_document jsonb; response_body bytea;
+BEGIN
+  IF organization_id IS DISTINCT FROM erp_security.current_org_id()
+     OR NULLIF(pg_catalog.current_setting('app.command_request_id',true),'')::uuid IS DISTINCT FROM command_request_id
+     OR actor IS NULL THEN RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='commercial reversal execute context is invalid'; END IF;
+  SELECT * INTO STRICT command FROM automation.command_requests
+   WHERE org_id=organization_id AND id=command_request_id FOR UPDATE;
+  IF command.status='succeeded' THEN RETURN command.response_bytes; END IF;
+  IF command.status<>'approved' OR command.requested_by_membership_id IS DISTINCT FROM actor
+     OR command.expires_at<=pg_catalog.transaction_timestamp()
+     OR command.request_hash IS DISTINCT FROM extensions.digest(command.request_bytes,'sha256')
+     OR command.preview_hash IS DISTINCT FROM extensions.digest(command.preview_bytes,'sha256') THEN
+    RAISE EXCEPTION USING ERRCODE='55000', MESSAGE='commercial reversal command is not exactly executable'; END IF;
+  SELECT count(*) INTO approval_count FROM automation.command_approvals approval
+   WHERE approval.org_id=organization_id AND approval.command_request_id=command.id
+     AND approval.decision='approved' AND approval.preview_hash=command.preview_hash
+     AND approval.aggregate_version_hash=command.aggregate_version_hash
+     AND approval.valid_until_at>pg_catalog.transaction_timestamp()
+     AND approval.approver_membership_id<>command.requested_by_membership_id;
+  IF approval_count<1 THEN RAISE EXCEPTION USING ERRCODE='55000', MESSAGE='commercial reversal lacks independent immutable approval'; END IF;
+  request_document:=pg_catalog.convert_from(command.request_bytes,'UTF8')::jsonb;
+  reversal_kind:=CASE command.capability_code WHEN 'sales.return.reversal.prepare' THEN 'sales_return'
+    WHEN 'procurement.purchase_return.reversal.prepare' THEN 'purchase_return'
+    WHEN 'finance.adjustment_note.reversal.prepare' THEN 'adjustment_note' ELSE NULL END;
+  IF reversal_kind IS NULL THEN RAISE EXCEPTION USING ERRCODE='0A000', MESSAGE='command is not a typed commercial reversal'; END IF;
+  fiscal_year:=CASE WHEN pg_catalog.date_part('month',(request_document->>'reversal_date')::date)>=4
+    THEN pg_catalog.date_part('year',(request_document->>'reversal_date')::date)::integer
+    ELSE pg_catalog.date_part('year',(request_document->>'reversal_date')::date)::integer-1 END;
+  SELECT id INTO STRICT note_sequence FROM core.document_sequences WHERE org_id=organization_id
+    AND branch_id=command.branch_id AND document_type='adjustment_note'
+    AND fiscal_year_start=pg_catalog.make_date(fiscal_year,4,1) AND status='active' FOR SHARE;
+  SELECT id INTO STRICT journal_sequence FROM core.document_sequences WHERE org_id=organization_id
+    AND branch_id=command.branch_id AND document_type='journal_entry'
+    AND fiscal_year_start=pg_catalog.make_date(fiscal_year,4,1) AND status='active' FOR SHARE;
+  note_number:=erp_core_commands.allocate_document_number(organization_id,note_sequence,
+    extensions.digest(command.idempotency_key_hash||pg_catalog.convert_to(':reversal-note','UTF8'),'sha256'),command.expires_at);
+  journal_number:=erp_core_commands.allocate_document_number(organization_id,journal_sequence,
+    extensions.digest(command.idempotency_key_hash||pg_catalog.convert_to(':reversal-journal','UTF8'),'sha256'),command.expires_at);
+  IF reversal_kind<>'adjustment_note' THEN
+    SELECT id INTO STRICT inventory_sequence FROM core.document_sequences WHERE org_id=organization_id
+      AND branch_id=command.branch_id AND document_type='inventory_reversal'
+      AND fiscal_year_start=pg_catalog.make_date(fiscal_year,4,1) AND status='active' FOR SHARE;
+    inventory_number:=erp_core_commands.allocate_document_number(organization_id,inventory_sequence,
+      extensions.digest(command.idempotency_key_hash||pg_catalog.convert_to(':inventory-reversal','UTF8'),'sha256'),command.expires_at);
+  END IF;
+  IF reversal_kind='sales_return' THEN
+    result_id:=erp_commercial_commands.post_sales_return_reversal(organization_id,
+      (request_document->>'original_resource_id')::uuid,(request_document->>'expected_row_version')::bigint,
+      command.target_resource_id,note_number,(request_document->>'reversal_inventory_document_id')::uuid,inventory_number,
+      (request_document->>'reversal_journal_id')::uuid,journal_number,(request_document->>'reversal_event_id')::uuid,
+      NULLIF(request_document->>'reversal_tax_document_id','')::uuid,(request_document->>'reversal_date')::date,
+      request_document->>'reason',NULLIF(request_document->>'amendment_evidence_attachment_id','')::uuid,
+      command.idempotency_key_hash,command.request_hash,command.expires_at);
+  ELSIF reversal_kind='purchase_return' THEN
+    result_id:=erp_commercial_commands.post_purchase_return_reversal(organization_id,
+      (request_document->>'original_resource_id')::uuid,(request_document->>'expected_row_version')::bigint,
+      command.target_resource_id,note_number,(request_document->>'reversal_inventory_document_id')::uuid,inventory_number,
+      (request_document->>'reversal_journal_id')::uuid,journal_number,(request_document->>'reversal_event_id')::uuid,
+      NULLIF(request_document->>'reversal_tax_document_id','')::uuid,(request_document->>'reversal_date')::date,
+      request_document->>'reason',NULLIF(request_document->>'amendment_evidence_attachment_id','')::uuid,
+      command.idempotency_key_hash,command.request_hash,command.expires_at);
+  ELSE
+    result_id:=erp_commercial_commands.post_adjustment_note_reversal(organization_id,
+      (request_document->>'original_resource_id')::uuid,(request_document->>'expected_row_version')::bigint,
+      command.target_resource_id,note_number,NULL,NULL,(request_document->>'reversal_journal_id')::uuid,journal_number,
+      (request_document->>'reversal_event_id')::uuid,NULLIF(request_document->>'reversal_tax_document_id','')::uuid,
+      (request_document->>'reversal_date')::date,request_document->>'reason',
+      NULLIF(request_document->>'amendment_evidence_attachment_id','')::uuid,
+      command.idempotency_key_hash,command.request_hash,command.expires_at);
+  END IF;
+  response_document:=pg_catalog.jsonb_build_object('command_request_id',command.id,'operation',command.operation,
+    'resource_id',result_id,'resource_type','adjustment_note_reversal','status','succeeded');
+  response_body:=pg_catalog.convert_to(response_document::text,'UTF8');
+  UPDATE automation.command_requests SET status='succeeded',completed_at=pg_catalog.transaction_timestamp(),
+    result_resource_type='adjustment_note_reversal',result_resource_id=result_id,response_status=200,
+    response_media_type='application/vnd.aasopharma.command-result+json',response_bytes=response_body,
+    response_hash=extensions.digest(response_body,'sha256'),row_version=row_version+1
+   WHERE org_id=organization_id AND id=command.id AND status='approved';
+  IF NOT FOUND THEN RAISE EXCEPTION USING ERRCODE='40001', MESSAGE='commercial reversal finish boundary lost ownership'; END IF;
+  RETURN response_body;
+END
+''',
+        runtime=True,
+    )
+    return statements
+
+
 def _adjustment_companion_guards() -> list[str]:
     statements = _function(
         "guard_adjustment_note_companions()",
@@ -2337,7 +2780,10 @@ BEGIN
       RETURN OLD;
     END IF;
     IF NEW.status='reversed' AND OLD.status IS DISTINCT FROM 'reversed' THEN
-      RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='adjustment reversal requires a separate reviewed compensating-note command';
+      IF erp_commercial_commands.reversal_scope_active(NEW.org_id,NEW.id) IS DISTINCT FROM true THEN
+        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='adjustment reversal requires a separate reviewed compensating-note command';
+      END IF;
+      RETURN NEW;
     END IF;
     IF TG_OP='UPDATE' AND OLD.status IN ('posted','reversed','cancelled') AND NEW IS DISTINCT FROM OLD THEN
       RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='posted or terminal adjustment evidence is immutable';
@@ -2345,13 +2791,17 @@ BEGIN
     IF NEW.status='posted' THEN
       IF NEW.sales_return_id IS NULL AND NEW.purchase_return_id IS NULL THEN
         IF NEW.reversal_of_adjustment_note_id IS NOT NULL THEN
-          RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='linked adjustment reversal requires the reviewed compensating-note command'; END IF;
+          IF erp_commercial_commands.reversal_scope_active(NEW.org_id,NEW.reversal_of_adjustment_note_id) IS DISTINCT FROM true THEN
+            RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='linked adjustment reversal requires the reviewed compensating-note command';
+          END IF;
+        ELSE
         SELECT count(*),(pg_catalog.array_agg(id))[1] INTO companion_count,artifact.id FROM calculation.artifacts
          WHERE org_id=NEW.org_id AND adjustment_note_id=NEW.id AND operation='finance.adjustment_note.post' AND status='consumed';
         IF companion_count<>1 THEN RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='generic adjustment requires exactly one consumed typed calculation artifact'; END IF;
         SELECT * INTO STRICT artifact FROM calculation.artifacts stored WHERE stored.org_id=NEW.org_id AND stored.id=artifact.id;
         input_doc:=pg_catalog.convert_from(artifact.input_bytes,'UTF8')::jsonb; output_doc:=pg_catalog.convert_from(artifact.output_bytes,'UTF8')::jsonb;
         PERFORM erp_commercial_commands.assert_adjustment_note_artifact(NEW.org_id,NEW.id,input_doc,output_doc);
+        END IF;
       END IF;
       SELECT count(*) INTO companion_count FROM tax.documents WHERE org_id=NEW.org_id AND adjustment_note_id=NEW.id AND document_class='adjustment_note';
       IF companion_count<>(CASE WHEN NEW.gst_tax_treatment='statutory' THEN 1 ELSE 0 END) THEN
@@ -2361,6 +2811,7 @@ BEGIN
        WHERE event.org_id=NEW.org_id AND event.adjustment_note_id=NEW.id AND event.event_type='adjustment_note';
       IF companion_count<>1 THEN RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='posted adjustment requires exactly one accounting event and journal'; END IF;
       IF NEW.sales_return_id IS NULL AND NEW.purchase_return_id IS NULL THEN
+        IF NEW.reversal_of_adjustment_note_id IS NOT NULL THEN RETURN NEW; END IF;
         SELECT coalesce(sum(amount),0) INTO allocation_total FROM finance.allocations
          WHERE org_id=NEW.org_id AND adjustment_note_id=NEW.id AND status='posted';
         SELECT coalesce(sum(principal_amount),0) INTO residual_total FROM finance.open_items
@@ -2448,6 +2899,25 @@ BEGIN
     ELSE
       SELECT * INTO note FROM finance.adjustment_notes WHERE org_id=NEW.org_id AND id=NEW.adjustment_note_id FOR SHARE;
       SELECT * INTO original FROM tax.documents WHERE org_id=NEW.org_id AND id=NEW.adjusts_tax_document_id FOR SHARE;
+      IF note.reversal_of_adjustment_note_id IS NOT NULL THEN
+        IF erp_commercial_commands.reversal_scope_active(NEW.org_id,note.reversal_of_adjustment_note_id) IS DISTINCT FROM true
+           OR note.status NOT IN ('approved','posted') OR note.gst_tax_treatment<>'statutory'
+           OR original.adjustment_note_id IS DISTINCT FROM note.reversal_of_adjustment_note_id
+           OR NEW.document_effect<>'increase' OR NEW.document_class<>'adjustment_note'
+           OR ROW(NEW.registration_id,NEW.direction,NEW.counterparty_party_id,NEW.counterparty_gstin,
+                  NEW.place_of_supply_state_code,NEW.supply_type,NEW.zero_rated_payment_mode,NEW.tax_charge_mechanism,
+                  NEW.tax_liability_party,NEW.currency_code,NEW.net_value_amount,NEW.gst_taxable_value,
+                  NEW.cgst_amount,NEW.sgst_amount,NEW.igst_amount,NEW.cess_amount,NEW.self_assessed_tax_amount,
+                  NEW.rounding_adjustment,NEW.counterparty_payable_amount,NEW.tax_ruleset_version,NEW.tax_ruleset_effective_date)
+              IS DISTINCT FROM ROW(original.registration_id,original.direction,original.counterparty_party_id,original.counterparty_gstin,
+                  original.place_of_supply_state_code,original.supply_type,original.zero_rated_payment_mode,original.tax_charge_mechanism,
+                  original.tax_liability_party,original.currency_code,original.net_value_amount,original.gst_taxable_value,
+                  original.cgst_amount,original.sgst_amount,original.igst_amount,original.cess_amount,original.self_assessed_tax_amount,
+                  original.rounding_adjustment,original.counterparty_payable_amount,original.tax_ruleset_version,original.tax_ruleset_effective_date) THEN
+          RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='counter tax document differs from exact reported adjustment lineage';
+        END IF;
+        RETURN NEW;
+      END IF;
       IF note.counterparty_portal_document_line_id IS NOT NULL THEN
         SELECT * INTO STRICT portal_line FROM tax.portal_document_lines source
          WHERE source.org_id=NEW.org_id AND source.id=note.counterparty_portal_document_line_id FOR SHARE;
@@ -2481,7 +2951,7 @@ END
 
 
 def _generic_header_definitions() -> list[str]:
-    return [*_adjustment_artifact_assertion(), *_generic_adjustment_command(), *_adjustment_companion_guards()[:4]]
+    return [*_adjustment_artifact_assertion(), *_generic_adjustment_command(), *_reversal_definitions(), *_adjustment_companion_guards()[:4]]
 
 
 def _generic_line_definitions() -> list[str]:

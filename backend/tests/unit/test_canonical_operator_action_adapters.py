@@ -875,8 +875,18 @@ class FakeSupplierInvoiceSession:
                         "allocated_base_free_quantity": product[
                             "allocated_base_free_quantity"
                         ],
+                        "receipt_unit_cost": "10.0000",
+                        "location_id": str(uuid4()),
+                        "product_id": str(uuid4()),
+                        "batch_id": str(uuid4()),
+                        "stock_on_hand_quantity": "30.000000",
+                        "stock_inventory_value": "300.00",
+                        "stock_average_unit_cost": "10.0000",
+                        "stock_row_version": 3,
+                        "exact_receipt_source_provenance": True,
                     }],
                     "inventory_cost_treatment": "capitalize",
+                    "landed_cost_allocation_method": "direct",
                     "net_value_account_id": str(uuid4()),
                     "input": product,
                 }, {
@@ -1183,13 +1193,14 @@ class FakeSupplierPaymentSession:
                 invoice_id = str(uuid4())
                 allocations.append({
                     "allocation_id": item["allocation_id"],
+                    "cash_allocation_id": item["allocation_id"],
                     "open_item_id": item["open_item_id"],
                     "supplier_invoice_id": invoice_id,
                     "document_number": f"SUP-INV-{index}",
                     "principal_amount": "1000.00",
-                    "prior_cash_allocated_amount": "100.00",
-                    "amount": item["amount"],
-                    "residual_after": str(900 - float(item["amount"])),
+                    "prior_allocated_amount": "100.00",
+                    "cash_amount": item["cash_amount"],
+                    "residual_after": str(900 - float(item["cash_amount"])),
                 })
                 sources.extend((
                     {
@@ -1217,15 +1228,16 @@ class FakeSupplierPaymentSession:
                 "supplier_account_id": request["supplier_account_id"],
                 "supplier_party_id": supplier_party_id,
                 "bank_account_id": request["bank_account_id"],
-                "settlement_account_id": request["settlement_account_id"],
+                "settlement_account_id": str(uuid4()),
                 "accounts_payable_account_id": payable_account_id,
                 "payment_method": request["payment_method"],
                 "external_reference": request["external_reference"].upper(),
-                "gross_amount": request["gross_amount"],
-                "cash_amount": request["gross_amount"],
+                "gross_amount": request["expected_gross_amount"],
+                "cash_amount": request["expected_gross_amount"],
                 "withheld_amount": "0.00",
                 "currency_code": "INR",
                 "allocations": allocations,
+                "settlement_components": allocations,
                 "legal_scope": {
                     "country_code": "IN",
                     "currency_code": "INR",
@@ -1374,7 +1386,7 @@ class FakeInventoryAdjustmentSession:
                         "id": str(uuid4()),
                         "product_id": line["product_id"],
                         "batch_id": count["batch_id"],
-                        "row_version": 7,
+                        "row_version": count["stock_balance_row_version"],
                     })
             return FakeResult(({"resolution": {
                 "branch_id": request["branch_id"],
@@ -1384,7 +1396,8 @@ class FakeInventoryAdjustmentSession:
                 "location_id": request["location_id"],
                 "evidence_attachment_id": request["evidence_attachment_id"],
                 "inventory_asset_account_id": str(uuid4()),
-                "inventory_count_gain_account_id": str(uuid4()),
+                "inventory_variance_account_id": str(uuid4()),
+                "variance_effect": "gain",
                 "lines": resolved_lines,
                 "total_base_quantity": "20.000000",
                 "total_value": "50.00",
@@ -1392,7 +1405,7 @@ class FakeInventoryAdjustmentSession:
                 "legal_scope": {
                     "country": "IN",
                     "currency": "INR",
-                    "supported_effect": "positive_gain_only",
+                    "supported_effect": "homogeneous_gain_or_loss",
                     "tax_effect": "no_supply_no_gst_no_itc_claim_or_reversal",
                 },
             }},))
@@ -1889,6 +1902,7 @@ def _supplier_invoice_service_payload():
             "allocated_base_billed_quantity": "20.000000",
             "allocated_base_free_quantity": "10.000000",
             "product_inventory_cost_treatment": "capitalize",
+            "landed_cost_allocation_method": "direct",
             "itc_eligibility": "eligible",
             "itc_eligibility_basis": (
                 "taxable_resale_not_blocked_under_section_17"
@@ -1957,7 +1971,7 @@ def _command_row(command_request_id):
 
 def test_registry_covers_every_contract_action_and_stays_fail_closed():
     prepare_keys = {action.operation_key for action in PREPARE_ACTIONS.values()}
-    assert len(prepare_keys) == 17
+    assert len(prepare_keys) == 22
     assert set(ACTION_ADAPTER_BINDINGS) == set(ACTION_POLICIES)
     assert ACTION_ADAPTER_BINDINGS["sales.order.prepare"].available is True
     assert ACTION_ADAPTER_BINDINGS["sales.dispatch.prepare"].available is True
@@ -1968,6 +1982,8 @@ def test_registry_covers_every_contract_action_and_stays_fail_closed():
     assert ACTION_ADAPTER_BINDINGS["sales.return.prepare"].available is True
     assert ACTION_ADAPTER_BINDINGS["procurement.purchase_return.prepare"].available is True
     assert ACTION_ADAPTER_BINDINGS["finance.customer_receipt.prepare"].available is True
+    assert ACTION_ADAPTER_BINDINGS["finance.customer_cheque_clearance.prepare"].available is True
+    assert ACTION_ADAPTER_BINDINGS["finance.customer_cheque_bounce.prepare"].available is True
     assert ACTION_ADAPTER_BINDINGS["finance.supplier_advance.prepare"].available is True
     assert ACTION_ADAPTER_BINDINGS["finance.supplier_payment.prepare"].available is True
     assert ACTION_ADAPTER_BINDINGS["finance.adjustment_note.prepare"].available is True
@@ -1976,6 +1992,9 @@ def test_registry_covers_every_contract_action_and_stays_fail_closed():
     assert ACTION_ADAPTER_BINDINGS["inventory.transfer.prepare"].available is True
     assert ACTION_ADAPTER_BINDINGS["inventory.destruction.prepare"].available is True
     assert ACTION_ADAPTER_BINDINGS["finance.bank_reconciliation.prepare"].available is True
+    assert ACTION_ADAPTER_BINDINGS["sales.return.reversal.prepare"].available is True
+    assert ACTION_ADAPTER_BINDINGS["procurement.purchase_return.reversal.prepare"].available is True
+    assert ACTION_ADAPTER_BINDINGS["finance.adjustment_note.reversal.prepare"].available is True
     assert all(
         not ACTION_ADAPTER_BINDINGS[key].available
         for key in prepare_keys
@@ -1988,7 +2007,9 @@ def test_registry_covers_every_contract_action_and_stays_fail_closed():
             "procurement.supplier_invoice.prepare",
             "sales.return.prepare",
             "procurement.purchase_return.prepare",
-            "finance.customer_receipt.prepare",
+                "finance.customer_receipt.prepare",
+                "finance.customer_cheque_clearance.prepare",
+                "finance.customer_cheque_bounce.prepare",
             "finance.supplier_advance.prepare",
             "finance.supplier_payment.prepare",
             "finance.adjustment_note.prepare",
@@ -1997,6 +2018,9 @@ def test_registry_covers_every_contract_action_and_stays_fail_closed():
             "inventory.transfer.prepare",
             "inventory.destruction.prepare",
             "finance.bank_reconciliation.prepare",
+            "sales.return.reversal.prepare",
+            "procurement.purchase_return.reversal.prepare",
+            "finance.adjustment_note.reversal.prepare",
         }
     )
     assert all(
@@ -2013,6 +2037,8 @@ def test_registry_covers_every_contract_action_and_stays_fail_closed():
             "sales.return.prepare",
             "procurement.purchase_return.prepare",
             "finance.customer_receipt.prepare",
+            "finance.customer_cheque_clearance.prepare",
+            "finance.customer_cheque_bounce.prepare",
             "finance.supplier_advance.prepare",
             "finance.supplier_payment.prepare",
             "finance.adjustment_note.prepare",
@@ -2021,6 +2047,9 @@ def test_registry_covers_every_contract_action_and_stays_fail_closed():
             "inventory.transfer.prepare",
             "inventory.destruction.prepare",
             "finance.bank_reconciliation.prepare",
+            "sales.return.reversal.prepare",
+            "procurement.purchase_return.reversal.prepare",
+            "finance.adjustment_note.reversal.prepare",
         }
     )
     assert ACTION_ADAPTER_BINDINGS["sales.order.prepare"].prepare_function == (
@@ -2053,6 +2082,12 @@ def test_registry_covers_every_contract_action_and_stays_fail_closed():
     assert ACTION_ADAPTER_BINDINGS[
         "finance.adjustment_note.prepare"
     ].prepare_function == "erp_automation_commands.persist_adjustment_note_prepare"
+    assert ACTION_ADAPTER_BINDINGS[
+        "finance.customer_cheque_clearance.prepare"
+    ].prepare_function == "erp_automation_commands.persist_customer_cheque_clearance_prepare"
+    assert ACTION_ADAPTER_BINDINGS[
+        "finance.customer_cheque_bounce.prepare"
+    ].prepare_function == "erp_automation_commands.persist_customer_cheque_bounce_prepare"
     assert ACTION_ADAPTER_BINDINGS["automation.command.approve"].available is True
     assert ACTION_ADAPTER_BINDINGS["automation.command.execute"].available is True
     assert ACTION_ADAPTER_BINDINGS["automation.command.status.get"].available is True
@@ -2534,10 +2569,9 @@ def test_supplier_invoice_prepare_is_atomic_and_pins_attested_grn_portal_facts()
     )
 
     assert prepared.command_type == "procurement.supplier_invoice.post"
-    assert prepared.inventory_impact == ({
-        "effect": "receipt_cost_match_no_landed_cost",
-        "inventory_value_delta": "0.00",
-    },)
+    assert prepared.inventory_impact[0]["allocation_method"] == "direct"
+    assert prepared.inventory_impact[0]["landed_cost_inventory_value_delta"] == "0.00"
+    assert prepared.inventory_impact[0]["consumed_variance_amount"] == "0.00"
     assert prepared.financial_impact[0]["supplier_payable"] == "365.80"
     assert prepared.tax_impact[0]["igst_total"] == "55.80"
     assert prepared.tax_impact[0]["itc_eligibility"] == "eligible"
@@ -2558,7 +2592,7 @@ def test_supplier_invoice_prepare_is_atomic_and_pins_attested_grn_portal_facts()
     assert preview["itc_eligibility_basis"] == (
         "taxable_resale_not_blocked_under_section_17"
     )
-    assert preview["inventory_impact"][0]["inventory_value_delta"] == "0.00"
+    assert preview["inventory_impact"][0]["landed_cost_inventory_value_delta"] == "0.00"
     assert calculation_input["operation"] == "procurement.supplier_invoice.post"
     assert calculation_input["document"]["products"][0][
         "free_supply_tax_treatment"
@@ -3151,13 +3185,12 @@ def _supplier_payment_service_payload():
         "branch_id": uuid4(),
         "payment_date": datetime(2026, 8, 20, tzinfo=timezone.utc).date(),
         "supplier_account_id": uuid4(),
-        "settlement_account_id": uuid4(),
         "bank_account_id": uuid4(),
         "payment_method": "upi",
-        "gross_amount": "900.00",
+        "expected_gross_amount": "900.00",
         "allocations": [
-            {"open_item_id": uuid4(), "amount": "400.00"},
-            {"open_item_id": uuid4(), "amount": "500.00"},
+            {"open_item_id": uuid4(), "cash_amount": "400.00"},
+            {"open_item_id": uuid4(), "cash_amount": "500.00"},
         ],
         "external_reference": "upi-supplier-0001",
     }
@@ -3193,7 +3226,7 @@ def test_supplier_payment_prepare_is_one_runtime_transaction_with_exact_multi_in
     assert prepared.financial_impact[0]["cash_disbursed_amount"] == "900.00"
     assert prepared.financial_impact[0]["withheld_amount"] == "0.00"
     assert [
-        item["allocated_amount"]
+        item["cash_allocated_amount"]
         for item in prepared.financial_impact[0]["allocations"]
     ] == ["400.00", "500.00"]
     assert session.transaction_entries == session.transaction_exits == 1
@@ -3338,12 +3371,12 @@ def _inventory_adjustment_service_payload():
         "lines": [{
             "product_id": uuid4(),
             "uom_conversion_id": uuid4(),
-            "batch_counts": [{"batch_id": uuid4(), "counted_quantity": "12.000000"}],
+            "batch_counts": [{"batch_id": uuid4(), "counted_quantity": "12.000000", "stock_balance_row_version": 7}],
         }],
     }
 
 
-def test_inventory_adjustment_prepare_is_one_runtime_transaction_with_exact_gain_preview():
+def test_inventory_adjustment_prepare_is_one_runtime_transaction_with_exact_signed_preview():
     session = FakeInventoryAdjustmentSession()
     payload = _inventory_adjustment_service_payload()
     context = ActionContext(
@@ -3365,8 +3398,8 @@ def test_inventory_adjustment_prepare_is_one_runtime_transaction_with_exact_gain
     assert prepared.command_type == "inventory.document.post"
     assert prepared.calculation_ruleset == ()
     assert prepared.inventory_impact[0]["system_base_quantity"] == "100.000000"
-    assert prepared.inventory_impact[0]["gain_base_quantity"] == "20.000000"
-    assert prepared.inventory_impact[0]["gain_value"] == "50.00"
+    assert prepared.inventory_impact[0]["variance_base_quantity"] == "20.000000"
+    assert prepared.inventory_impact[0]["variance_value"] == "50.00"
     assert prepared.financial_impact[0]["amount"] == "50.00"
     assert prepared.tax_impact[0]["supply_created"] is False
     assert session.transaction_entries == session.transaction_exits == 1
@@ -3377,7 +3410,7 @@ def test_inventory_adjustment_prepare_is_one_runtime_transaction_with_exact_gain
     assert request["lines"][0]["batch_counts"][0]["inventory_document_line_id"]
     preview = json.loads(session.executions[2][1]["preview_bytes"])
     assert preview["operation"] == "inventory.document.post"
-    assert preview["legal_scope"]["supported_effect"] == "positive_gain_only"
+    assert preview["legal_scope"]["supported_effect"] == "homogeneous_gain_or_loss"
 
 
 def test_inventory_adjustment_prepare_failure_rolls_back_the_only_transaction():
@@ -4181,7 +4214,7 @@ def test_infrastructure_adapter_has_no_legacy_service_or_table_dependency():
     assert "execute(text(" not in source
     assert "erp_automation_commands.execute_approved_command" in source
     assert "pg_advisory_xact_lock" in source
-    assert source.count("_lock_prepare_idempotency(") == 18
+    assert source.count("_lock_prepare_idempotency(") == 20
 
 
 def test_calculator_database_requires_the_isolated_principal(monkeypatch):

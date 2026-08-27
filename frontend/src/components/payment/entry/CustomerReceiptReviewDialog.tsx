@@ -88,6 +88,10 @@ const CustomerReceiptReviewDialog: React.FC<CustomerReceiptReviewDialogProps> = 
               ['Receipt amount', formatExactCurrency(payload.amount, 'Receipt amount')],
               ['Payment date', payload.payment_date],
               ['Method', payload.payment_method.replace('_', ' ')],
+              ['Purpose', payload.receipt_purpose.replace('_', ' ')],
+              ...(payload.sales_order_id ? [['Goods order', payload.sales_order_id]] : []),
+              ...(payload.instrument_number ? [['Cheque instrument', `${payload.instrument_number} · ${payload.instrument_date} · ${payload.drawee_bank_name}`]] : []),
+              ['Evidence', payload.evidence_attachment_id],
               ['Reference', payload.external_reference],
               ['Command', preview.command_request_id],
             ].map(([term, detail]) => <React.Fragment key={term}>

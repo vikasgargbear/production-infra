@@ -38,6 +38,8 @@ OPERATOR_COMMANDS = {
     "procurement.supplier_invoice.prepare": ("procurement.supplier_invoice.post", "supplier_invoice"),
     "procurement.purchase_return.prepare": ("procurement.purchase_return.post", "purchase_return"),
     "finance.customer_receipt.prepare": ("finance.payment.post", "payment"),
+    "finance.customer_cheque_clearance.prepare": ("finance.customer_cheque_clearance.post", "payment"),
+    "finance.customer_cheque_bounce.prepare": ("finance.customer_cheque_bounce.post", "payment"),
     "finance.supplier_payment.prepare": ("finance.payment.post", "payment"),
     "finance.supplier_advance.prepare": ("finance.supplier_advance.post", "payment"),
     "finance.adjustment_note.prepare": ("finance.adjustment_note.post", "adjustment_note"),
@@ -46,6 +48,9 @@ OPERATOR_COMMANDS = {
     "inventory.transfer.prepare": ("inventory.document.post", "inventory_document"),
     "inventory.adjustment.prepare": ("inventory.document.post", "inventory_document"),
     "inventory.destruction.prepare": ("compliance.destruction.post", "destruction"),
+    "sales.return.reversal.prepare": ("sales.return.reversal.post", "adjustment_note_reversal"),
+    "procurement.purchase_return.reversal.prepare": ("procurement.purchase_return.reversal.post", "adjustment_note_reversal"),
+    "finance.adjustment_note.reversal.prepare": ("finance.adjustment_note.reversal.post", "adjustment_note_reversal"),
 }
 BASELINE_OPERATOR_COMMANDS = {
     capability: binding
@@ -1696,8 +1701,9 @@ DECLARE requested_branch_id uuid:=NULLIF(request_document->>'branch_id','')::uui
         payable_account finance.accounts%ROWTYPE; input_cgst_account finance.accounts%ROWTYPE;
         input_sgst_account finance.accounts%ROWTYPE; input_igst_account finance.accounts%ROWTYPE;
         input_cess_account finance.accounts%ROWTYPE; rounding_gain_account finance.accounts%ROWTYPE;
-        rounding_loss_account finance.accounts%ROWTYPE;
+        rounding_loss_account finance.accounts%ROWTYPE; variance_account finance.accounts%ROWTYPE;
         receipt_line procurement.goods_receipt_lines%ROWTYPE; receipt procurement.goods_receipts%ROWTYPE;
+        balance inventory.stock_balances%ROWTYPE;
         order_line procurement.purchase_order_lines%ROWTYPE; purchase_order procurement.purchase_orders%ROWTYPE;
         product catalog.products%ROWTYPE;
         tax_version tax.tax_code_versions%ROWTYPE; tax_release core.reference_data_releases%ROWTYPE;
@@ -1707,9 +1713,10 @@ DECLARE requested_branch_id uuid:=NULLIF(request_document->>'branch_id','')::uui
         resolved_receipt_ids jsonb:='[]'::jsonb; source_purchase_order_id uuid;
         base_billed numeric(20,6); base_free numeric(20,6); prior_billed numeric(20,6); prior_free numeric(20,6);
         receipt_cost numeric(20,2); line_product_id uuid; line_purchase_order_line_id uuid;
-        line_uom text; line_factor numeric(20,6);
+        line_uom text; line_factor numeric(20,6); receipt_business_date date;
         ruleset_version text; supply_type text; candidate_count integer; address_count integer;
-        allocation_count integer; distinct_allocation_count integer;
+        allocation_count integer; distinct_allocation_count integer; foreign_positive_count integer;
+        exact_receipt_source_provenance boolean;
 BEGIN
     IF organization_id IS NULL OR membership_id IS NULL OR auth_user_id IS NULL OR application_user_id IS NULL
        OR grant_id IS NULL OR supplier_invoice_id IS NULL OR requested_branch_id IS NULL
@@ -1731,13 +1738,20 @@ BEGIN
           <>(SELECT count(DISTINCT value) FROM pg_catalog.jsonb_array_elements_text(request_document->'goods_receipt_ids')) THEN
       RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='supplier invoice requires unique receipt lines and a unique exact GRN set'; END IF;
     IF EXISTS (SELECT 1 FROM pg_catalog.jsonb_array_elements(request_document->'lines') line(value)
-      WHERE line.value->>'product_inventory_cost_treatment'<>'capitalize' OR line.value->>'itc_eligibility'<>'eligible'
+      WHERE line.value->>'product_inventory_cost_treatment'<>'capitalize'
+         OR line.value->>'landed_cost_allocation_method' NOT IN ('direct','quantity_weighted','value_weighted')
+         OR line.value->>'itc_eligibility'<>'eligible'
          OR line.value->>'itc_eligibility_basis'<>'taxable_resale_not_blocked_under_section_17')
        OR EXISTS (SELECT 1 FROM pg_catalog.jsonb_array_elements(COALESCE(request_document->'expense_charge_lines','[]'::jsonb)) line(value)
-      WHERE line.value->>'charge_inventory_cost_treatment'<>'expense' OR line.value->>'itc_eligibility'<>'eligible'
+      WHERE line.value->>'charge_inventory_cost_treatment' NOT IN ('expense','capitalize')
+         OR (line.value->>'charge_inventory_cost_treatment'='capitalize'
+             AND line.value->>'landed_cost_allocation_method' NOT IN ('direct','quantity_weighted','value_weighted'))
+         OR (line.value->>'charge_inventory_cost_treatment'='expense'
+             AND line.value ? 'landed_cost_allocation_method')
+         OR line.value->>'itc_eligibility'<>'eligible'
          OR line.value->>'itc_eligibility_basis'<>'taxable_resale_not_blocked_under_section_17'
          OR line.value->>'expense_charge_code' NOT IN ('freight','packing','insurance','handling')) THEN
-      RAISE EXCEPTION USING ERRCODE='0A000', MESSAGE='supplier-invoice pilot requires reviewed eligible resale ITC, capitalized products, and reviewed expense charges'; END IF;
+      RAISE EXCEPTION USING ERRCODE='0A000', MESSAGE='supplier-invoice requires reviewed ITC and explicit product or charge landed-cost treatment'; END IF;
     PERFORM 1 FROM core.memberships membership JOIN core.users user_row ON user_row.id=membership.user_id
       JOIN core.organizations organization_row ON organization_row.id=membership.org_id
       JOIN automation.agent_grants grant_row ON grant_row.org_id=membership.org_id AND grant_row.subject_membership_id=membership.id
@@ -1761,6 +1775,9 @@ BEGIN
       RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='supplier-invoice cross-domain permission is inactive'; END IF;
     SELECT * INTO STRICT organization FROM core.organizations WHERE id=organization_id AND status='active' FOR SHARE;
     SELECT * INTO STRICT branch FROM core.branches WHERE org_id=organization_id AND id=requested_branch_id AND status='active' FOR SHARE;
+    IF invoice_date>"erp_core_commands"."current_organization_business_date"()
+       OR received_date>"erp_core_commands"."current_organization_business_date"() THEN
+      RAISE EXCEPTION USING ERRCODE='22007', MESSAGE='supplier invoice or received date cannot be in the future'; END IF;
     IF organization.country_code<>'IN' OR organization.base_currency<>'INR' THEN
       RAISE EXCEPTION USING ERRCODE='0A000', MESSAGE='supplier-invoice pilot supports only Indian INR organizations'; END IF;
     SELECT count(*) INTO candidate_count FROM tax.registration_branches association JOIN tax.registrations registration
@@ -1835,6 +1852,8 @@ BEGIN
        AND id=erp_commercial_commands.resolve_role_account(organization_id,branch.id,'rounding_gain','income','INR',false) FOR SHARE;
     SELECT * INTO STRICT rounding_loss_account FROM finance.accounts WHERE org_id=organization_id
        AND id=erp_commercial_commands.resolve_role_account(organization_id,branch.id,'rounding_loss','expense','INR',false) FOR SHARE;
+    SELECT * INTO STRICT variance_account FROM finance.accounts WHERE org_id=organization_id
+       AND id=erp_commercial_commands.resolve_role_account(organization_id,branch.id,'purchase_price_variance','expense','INR',false) FOR SHARE;
     source_versions:=pg_catalog.jsonb_build_array(
       pg_catalog.jsonb_build_object('resource_type','organization','id',organization.id,'row_version',organization.row_version),
       pg_catalog.jsonb_build_object('resource_type','branch','id',branch.id,'row_version',branch.row_version),
@@ -1853,7 +1872,8 @@ BEGIN
       pg_catalog.jsonb_build_object('resource_type','finance_account','role','input_igst','id',input_igst_account.id,'row_version',input_igst_account.row_version),
       pg_catalog.jsonb_build_object('resource_type','finance_account','role','input_cess','id',input_cess_account.id,'row_version',input_cess_account.row_version),
       pg_catalog.jsonb_build_object('resource_type','finance_account','role','rounding_gain','id',rounding_gain_account.id,'row_version',rounding_gain_account.row_version),
-      pg_catalog.jsonb_build_object('resource_type','finance_account','role','rounding_loss','id',rounding_loss_account.id,'row_version',rounding_loss_account.row_version));
+      pg_catalog.jsonb_build_object('resource_type','finance_account','role','rounding_loss','id',rounding_loss_account.id,'row_version',rounding_loss_account.row_version),
+      pg_catalog.jsonb_build_object('resource_type','finance_account','role','purchase_price_variance','id',variance_account.id,'row_version',variance_account.row_version));
     PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
         organization_id::text||':supplier-receipt:'||locked.goods_receipt_line_id,630195401))
       FROM (
@@ -1880,6 +1900,12 @@ BEGIN
            AND line.purchase_order_line_id IS NOT NULL FOR SHARE OF line,header;
         SELECT * INTO STRICT receipt FROM procurement.goods_receipts
          WHERE org_id=organization_id AND id=receipt_line.goods_receipt_id AND status='posted' FOR SHARE;
+        receipt_business_date:=(receipt.received_at AT TIME ZONE organization.timezone)::date;
+        IF received_date<receipt_business_date THEN
+          RAISE EXCEPTION USING ERRCODE='22007', MESSAGE='supplier invoice received date cannot precede the organization-local goods receipt date'; END IF;
+        SELECT * INTO STRICT balance FROM inventory.stock_balances
+         WHERE org_id=organization_id AND location_id=receipt_line.location_id
+           AND product_id=receipt_line.product_id AND batch_id=receipt_line.batch_id FOR SHARE;
         SELECT * INTO STRICT order_line FROM procurement.purchase_order_lines
          WHERE org_id=organization_id AND id=receipt_line.purchase_order_line_id AND line_kind='product' FOR SHARE;
         SELECT * INTO STRICT purchase_order FROM procurement.purchase_orders
@@ -1922,21 +1948,47 @@ BEGIN
            OR prior_billed+(requested_allocation->>'allocated_base_billed_quantity')::numeric>receipt_line.base_accepted_quantity
            OR prior_free+(requested_allocation->>'allocated_base_free_quantity')::numeric>receipt_line.base_free_quantity THEN
           RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='supplier invoice exceeds separate posted receipt billed or free ceiling'; END IF;
+        SELECT count(*) INTO foreign_positive_count
+          FROM inventory.stock_ledger_entries AS entry
+          JOIN inventory.inventory_document_lines AS document_line
+            ON document_line.org_id=entry.org_id
+           AND document_line.id=entry.inventory_document_line_id
+         WHERE entry.org_id=organization_id
+           AND entry.location_id=receipt_line.location_id
+           AND entry.product_id=receipt_line.product_id
+           AND entry.batch_id=receipt_line.batch_id
+           AND entry.quantity_delta>0
+           AND document_line.goods_receipt_line_id IS DISTINCT FROM receipt_line.id;
+        exact_receipt_source_provenance:=
+          (requested_allocation->>'allocated_base_billed_quantity')::numeric
+            IS NOT DISTINCT FROM receipt_line.base_accepted_quantity
+          AND (requested_allocation->>'allocated_base_free_quantity')::numeric
+            IS NOT DISTINCT FROM receipt_line.base_free_quantity
+          AND foreign_positive_count=0;
         base_billed:=base_billed+(requested_allocation->>'allocated_base_billed_quantity')::numeric;
         base_free:=base_free+(requested_allocation->>'allocated_base_free_quantity')::numeric;
         receipt_cost:=receipt_cost+pg_catalog.round(((requested_allocation->>'allocated_base_billed_quantity')::numeric+
           (requested_allocation->>'allocated_base_free_quantity')::numeric)*receipt_line.unit_cost,2);
         resolved_allocations:=resolved_allocations||pg_catalog.jsonb_build_array(requested_allocation||pg_catalog.jsonb_build_object(
           'goods_receipt_id',receipt.id,'goods_receipt_row_version',receipt.row_version,'goods_receipt_line_row_id',receipt_line.id,
+          'goods_receipt_received_at',receipt.received_at,'goods_receipt_business_date',receipt_business_date,
           'product_id',product.id,'receipt_unit_cost',receipt_line.unit_cost::text,'receipt_base_accepted_quantity',receipt_line.base_accepted_quantity::text,
           'receipt_base_free_quantity',receipt_line.base_free_quantity::text,'prior_allocated_base_billed_quantity',prior_billed::text,
-          'prior_allocated_base_free_quantity',prior_free::text));
+          'prior_allocated_base_free_quantity',prior_free::text,'location_id',receipt_line.location_id,'batch_id',receipt_line.batch_id,
+          'stock_on_hand_quantity',balance.on_hand_quantity::text,'stock_inventory_value',balance.inventory_value::text,
+          'stock_average_unit_cost',balance.average_unit_cost::text,'stock_row_version',balance.row_version,
+          'exact_receipt_source_provenance',exact_receipt_source_provenance));
         resolved_receipt_ids:=resolved_receipt_ids||pg_catalog.jsonb_build_array(receipt.id::text);
         source_versions:=source_versions||pg_catalog.jsonb_build_array(
-          pg_catalog.jsonb_build_object('resource_type','purchase_order','id',purchase_order.id,'row_version',purchase_order.row_version,'status',purchase_order.status),
+          pg_catalog.jsonb_build_object('resource_type','purchase_order','id',purchase_order.id,'row_version',purchase_order.row_version,
+            'status',purchase_order.status,'order_date',purchase_order.order_date),
           pg_catalog.jsonb_build_object('resource_type','purchase_order_line','id',order_line.id,'purchase_order_id',purchase_order.id),
-          pg_catalog.jsonb_build_object('resource_type','goods_receipt','id',receipt.id,'row_version',receipt.row_version,'status',receipt.status),
+          pg_catalog.jsonb_build_object('resource_type','goods_receipt','id',receipt.id,'row_version',receipt.row_version,
+            'status',receipt.status,'received_at',receipt.received_at,'business_date',receipt_business_date),
           pg_catalog.jsonb_build_object('resource_type','goods_receipt_line','id',receipt_line.id,'goods_receipt_line_id',receipt_line.id,'base_accepted_quantity',receipt_line.base_accepted_quantity::text,'base_free_quantity',receipt_line.base_free_quantity::text,'unit_cost',receipt_line.unit_cost::text),
+          pg_catalog.jsonb_build_object('resource_type','stock_balance','location_id',receipt_line.location_id,'product_id',receipt_line.product_id,
+            'batch_id',receipt_line.batch_id,'row_version',balance.row_version,'on_hand_quantity',balance.on_hand_quantity::text,
+            'inventory_value',balance.inventory_value::text,'average_unit_cost',balance.average_unit_cost::text),
           pg_catalog.jsonb_build_object('resource_type','receipt_invoice_ceiling','goods_receipt_line_id',receipt_line.id,'allocated_base_billed_quantity',prior_billed::text,'allocated_base_free_quantity',prior_free::text));
       END LOOP;
       IF base_billed IS DISTINCT FROM pg_catalog.round((requested_line->>'billed_quantity')::numeric*line_factor,6)
@@ -1955,6 +2007,7 @@ BEGIN
         'purchase_order_line_id',line_purchase_order_line_id,'product_id',product.id,'hsn_code',product.hsn_code,'uom_code',line_uom,'multiplier',line_factor::text,
         'tax_code_version_id',tax_version.id,'taxability','taxable','gst_rate',tax_version.igst_rate::text,'cess_rate',tax_version.cess_rate::text,
         'ruleset_version',tax_version.ruleset_version,'net_value_account_id',inventory_account.id,'inventory_cost_treatment','capitalize',
+        'landed_cost_allocation_method',requested_line->>'landed_cost_allocation_method',
         'itc_eligibility','eligible','receipt_cost',receipt_cost::text,'receipt_allocations',resolved_allocations,'input',requested_line));
       source_versions:=source_versions||pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
         'resource_type','supplier_invoice_product_tax','product_id',product.id,'product_row_version',product.row_version,
@@ -1971,16 +2024,24 @@ BEGIN
       SELECT * INTO STRICT tax_release FROM core.reference_data_releases WHERE id=tax_version.release_id
        AND dataset_kind='hsn_sac_tax' AND status='active' AND effective_from<=invoice_date
        AND (effective_to IS NULL OR effective_to>=invoice_date) FOR SHARE;
-      SELECT * INTO STRICT expense_account FROM finance.accounts WHERE org_id=organization_id
-       AND id=NULLIF(requested_line->>'net_value_account_id','')::uuid AND account_type='expense'
-       AND currency_code='INR' AND status='active' AND NOT allows_party_posting FOR SHARE;
+      IF requested_line->>'charge_inventory_cost_treatment'='capitalize' THEN
+        IF NULLIF(requested_line->>'net_value_account_id','')::uuid IS DISTINCT FROM inventory_account.id THEN
+          RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='capitalized supplier charge account differs from the canonical inventory role'; END IF;
+        expense_account:=inventory_account;
+      ELSE
+        SELECT * INTO STRICT expense_account FROM finance.accounts WHERE org_id=organization_id
+         AND id=NULLIF(requested_line->>'net_value_account_id','')::uuid AND account_type='expense'
+         AND currency_code='INR' AND status='active' AND NOT allows_party_posting FOR SHARE;
+      END IF;
       IF ruleset_version IS NULL THEN ruleset_version:=tax_version.ruleset_version;
       ELSIF ruleset_version<>tax_version.ruleset_version THEN RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='supplier invoice tax rulesets differ'; END IF;
       resolved_lines:=resolved_lines||pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
         'line_number',pg_catalog.jsonb_array_length(resolved_lines)+1,'line_kind','charge','line_id',requested_line->>'line_id',
         'charge_code',profile.charge_code,'sac_code',tax_version.code,'tax_code_version_id',tax_version.id,
         'taxability','taxable','gst_rate',tax_version.igst_rate::text,'cess_rate',tax_version.cess_rate::text,
-        'ruleset_version',tax_version.ruleset_version,'net_value_account_id',expense_account.id,'inventory_cost_treatment','expense',
+        'ruleset_version',tax_version.ruleset_version,'net_value_account_id',expense_account.id,
+        'inventory_cost_treatment',requested_line->>'charge_inventory_cost_treatment',
+        'landed_cost_allocation_method',requested_line->>'landed_cost_allocation_method',
         'itc_eligibility','eligible','input',requested_line||pg_catalog.jsonb_build_object(
           'charge_code',profile.charge_code,'price_basis',requested_line->>'expense_price_basis',
           'document_discount_eligible',requested_line->'expense_document_discount_eligible')));
@@ -2014,7 +2075,8 @@ BEGIN
       'portal_cess_amount',portal_line.cess_amount::text,'ruleset_version',ruleset_version,'lines',resolved_lines,
       'legal_scope',pg_catalog.jsonb_build_object('country','IN','currency','INR','normal_charge',true,
         'posted_grn_match_required',true,'gstr2b_required',true,'itc_business_use_attestation_required',true,
-        'landed_cost_supported',false,'import_supported',false,'sez_supported',false,'reverse_charge_supported',false),
+        'landed_cost_supported',true,'landed_cost_methods',pg_catalog.jsonb_build_array('direct','quantity_weighted','value_weighted'),
+        'consumed_variance_role','purchase_price_variance','import_supported',false,'sez_supported',false,'reverse_charge_supported',false),
       'source_versions',source_versions);
 END
 ''',
@@ -2055,13 +2117,6 @@ BEGIN
        OR (totals->>'igst_total')::numeric IS DISTINCT FROM (resolved_document->>'portal_igst_amount')::numeric
        OR (totals->>'cess_total')::numeric IS DISTINCT FROM (resolved_document->>'portal_cess_amount')::numeric THEN
       RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='calculated supplier invoice GST components differ from the unique GSTR-2B evidence'; END IF;
-    FOR resolved_line IN SELECT value FROM pg_catalog.jsonb_array_elements(resolved_document->'lines') LOOP
-      SELECT value INTO STRICT calculated_line FROM pg_catalog.jsonb_array_elements(output_document->'lines')
-       WHERE value->>'line_id'=resolved_line->>'line_id';
-      IF resolved_line->>'line_kind'='product' AND (calculated_line->>'net_value_amount')::numeric
-           IS DISTINCT FROM (resolved_line->>'receipt_cost')::numeric THEN
-        RAISE EXCEPTION USING ERRCODE='0A000', MESSAGE='product invoice price variance requires reviewed unsold-stock landed-cost allocation'; END IF;
-    END LOOP;
     SELECT * INTO existing FROM automation.command_requests WHERE org_id=organization_id AND agent_grant_id=grant_id
       AND capability_code='procurement.supplier_invoice.prepare' AND idempotency_key_hash=key_hash FOR SHARE;
     IF FOUND THEN
@@ -2102,7 +2157,7 @@ BEGIN
         free_supply_tax_treatment,quoted_unit_rate,price_basis,tax_charge_mechanism,gross_amount,line_discount_kind,line_discount_basis,
         line_discount_value,document_discount_eligible,line_discount_amount,line_taxable_discount_amount,document_discount_amount,
         document_taxable_discount_amount,net_value_amount,gst_taxable_value,tax_classification_code_snapshot,tax_code_version_id,
-        taxability_snapshot,inventory_cost_treatment,net_value_account_id,withholding_nature_code,itc_eligibility,cgst_rate,sgst_rate,igst_rate,cess_rate,
+        taxability_snapshot,inventory_cost_treatment,landed_cost_allocation_method,net_value_account_id,withholding_nature_code,itc_eligibility,cgst_rate,sgst_rate,igst_rate,cess_rate,
         cgst_amount,sgst_amount,igst_amount,cess_amount,line_total)
       VALUES(organization_id,(resolved_line->>'line_id')::uuid,supplier_invoice_id,(resolved_line->>'line_number')::integer,
         resolved_line->>'line_kind',NULLIF(resolved_line->>'purchase_order_line_id','')::uuid,
@@ -2121,6 +2176,7 @@ BEGIN
         (calculated_line->>'document_taxable_discount_amount')::numeric,(calculated_line->>'net_value_amount')::numeric,
         (calculated_line->>'gst_taxable_value')::numeric,CASE WHEN resolved_line->>'line_kind'='product' THEN resolved_line->>'hsn_code' ELSE resolved_line->>'sac_code' END,
         (resolved_line->>'tax_code_version_id')::uuid,'taxable',resolved_line->>'inventory_cost_treatment',
+        NULLIF(resolved_line->>'landed_cost_allocation_method',''),
         (resolved_line->>'net_value_account_id')::uuid,
         CASE WHEN resolved_line->>'line_kind'='product' THEN 'purchase_of_goods' END,
         'eligible',(calculated_line->>'cgst_rate')::numeric,
@@ -3856,6 +3912,7 @@ END
         *_purchase_return_prepare_definition(),
         *_adjustment_note_prepare_definition(),
         *_customer_receipt_prepare_definition(),
+        *_customer_cheque_lifecycle_prepare_definition(),
         *_supplier_payment_prepare_definition(),
         *_supplier_advance_prepare_definition(),
         *_inventory_transfer_prepare_definition(),
@@ -4188,14 +4245,14 @@ DECLARE branch_id uuid:=NULLIF(request_document->>'branch_id','')::uuid;
         product catalog.products%ROWTYPE; conversion catalog.uom_conversions%ROWTYPE;
         batch inventory.batches%ROWTYPE; balance inventory.stock_balances%ROWTYPE;
         last_ledger inventory.stock_ledger_entries%ROWTYPE;
-        inventory_account finance.accounts%ROWTYPE; gain_account finance.accounts%ROWTYPE;
+        inventory_account finance.accounts%ROWTYPE; variance_account finance.accounts%ROWTYPE;
         requested_line jsonb; requested_count jsonb; resolved_lines jsonb:='[]'::jsonb;
         source_versions jsonb:='[]'::jsonb; counted_base numeric(20,6);
         variance_base numeric(20,6); extended_cost numeric(20,2);
         total_base numeric(20,6):=0; total_value numeric(20,2):=0;
         pending_count integer; recall_count integer; line_no integer:=0;
         medicine_count integer:=0; license_type_count integer; license_sources jsonb;
-        conversion_version_hash text;
+        conversion_version_hash text; variance_effect text; line_effect text;
 BEGIN
   IF organization_id IS NULL OR membership_id IS NULL OR auth_user_id IS NULL OR application_user_id IS NULL
      OR grant_id IS NULL OR inventory_document_id IS NULL OR branch_id IS NULL OR adjustment_date IS NULL
@@ -4203,7 +4260,7 @@ BEGIN
      OR request_document->>'reason_code'<>'cycle_count'
      OR pg_catalog.jsonb_typeof(request_document->'lines')<>'array'
      OR pg_catalog.jsonb_array_length(request_document->'lines') NOT BETWEEN 1 AND 500 THEN
-    RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='cycle-count gain input is incomplete'; END IF;
+    RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='cycle-count input is incomplete'; END IF;
   SELECT * INTO STRICT organization FROM core.organizations WHERE id=organization_id AND status='active'
     AND country_code='IN' AND base_currency='INR' FOR SHARE;
   IF adjustment_date IS DISTINCT FROM (counted_at AT TIME ZONE organization.timezone)::date
@@ -4266,9 +4323,6 @@ BEGIN
   SELECT * INTO STRICT inventory_account FROM finance.accounts WHERE org_id=organization_id
     AND id=erp_commercial_commands.resolve_role_account(organization_id,branch.id,'inventory_asset','asset','INR',false)
     AND status='active' AND account_type='asset' AND currency_code='INR' AND NOT allows_party_posting FOR SHARE;
-  SELECT * INTO STRICT gain_account FROM finance.accounts WHERE org_id=organization_id
-    AND id=erp_commercial_commands.resolve_role_account(organization_id,branch.id,'inventory_count_gain','income','INR',false)
-    AND status='active' AND account_type='income' AND currency_code='INR' AND NOT allows_party_posting FOR SHARE;
   source_versions:=pg_catalog.jsonb_build_array(
     pg_catalog.jsonb_build_object('resource_type','organization','id',organization.id,'row_version',organization.row_version),
     pg_catalog.jsonb_build_object('resource_type','branch','id',branch.id,'row_version',branch.row_version),
@@ -4277,8 +4331,7 @@ BEGIN
       'evidence_kind',evidence.evidence_kind,'document_date',evidence.document_date,'verified_at',evidence.verified_at,
       'retention_until',evidence.retention_until,'sha256',pg_catalog.encode(evidence.sha256,'hex')),
     pg_catalog.jsonb_build_object('resource_type','membership','role','physical_counter','id',counted_by),
-    pg_catalog.jsonb_build_object('resource_type','finance_account','role','inventory_asset','id',inventory_account.id,'row_version',inventory_account.row_version),
-    pg_catalog.jsonb_build_object('resource_type','finance_account','role','inventory_count_gain','id',gain_account.id,'row_version',gain_account.row_version));
+    pg_catalog.jsonb_build_object('resource_type','finance_account','role','inventory_asset','id',inventory_account.id,'row_version',inventory_account.row_version));
   PERFORM balance.batch_id FROM inventory.stock_balances balance
     JOIN (SELECT DISTINCT (count_row.value->>'batch_id')::uuid batch_id
       FROM pg_catalog.jsonb_array_elements(request_document->'lines') line(value)
@@ -4303,8 +4356,9 @@ BEGIN
       line_no:=line_no+1;
       IF NULLIF(requested_count->>'inventory_document_line_id','')::uuid IS NULL
          OR NULLIF(requested_count->>'batch_id','')::uuid IS NULL
-         OR NULLIF(requested_count->>'counted_quantity','')::numeric<=0 THEN
-        RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='cycle-count lot identity and positive counted quantity are required'; END IF;
+         OR NULLIF(requested_count->>'stock_balance_row_version','')::bigint IS NULL
+         OR NULLIF(requested_count->>'counted_quantity','')::numeric<0 THEN
+        RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='cycle-count lot, expected stock version, and nonnegative count are required'; END IF;
       SELECT * INTO STRICT batch FROM inventory.batches WHERE org_id=organization_id
         AND id=(requested_count->>'batch_id')::uuid AND product_id=product.id AND lot_kind='manufacturer_batch'
         AND status='released' AND released_at IS NOT NULL AND released_at<=counted_at
@@ -4318,7 +4372,8 @@ BEGIN
        WHERE stock_balance.org_id=organization_id AND stock_balance.branch_id=branch.id
         AND stock_balance.location_id=location.id AND stock_balance.product_id=product.id
         AND stock_balance.batch_id=batch.id AND stock_balance.on_hand_quantity>0
-        AND stock_balance.inventory_value>0 AND stock_balance.average_unit_cost>0 FOR UPDATE;
+        AND stock_balance.inventory_value>0 AND stock_balance.average_unit_cost>0
+        AND stock_balance.row_version=(requested_count->>'stock_balance_row_version')::bigint FOR UPDATE;
       SELECT * INTO STRICT last_ledger FROM inventory.stock_ledger_entries AS ledger_entry
        WHERE ledger_entry.org_id=organization_id AND ledger_entry.id=balance.last_ledger_entry_id
         AND ledger_entry.branch_id=branch.id AND ledger_entry.location_id=location.id
@@ -4332,9 +4387,15 @@ BEGIN
       IF pending_count<>0 THEN RAISE EXCEPTION USING ERRCODE='55000', MESSAGE='cycle-count lot has a pending inventory source or movement document'; END IF;
       counted_base:=pg_catalog.round((requested_count->>'counted_quantity')::numeric*conversion.multiplier,6);
       variance_base:=counted_base-balance.on_hand_quantity;
-      extended_cost:=pg_catalog.round(variance_base*balance.average_unit_cost,2);
-      IF variance_base<=0 OR extended_cost<=0 THEN
-        RAISE EXCEPTION USING ERRCODE='0A000', MESSAGE='pilot supports only a positive cycle-count gain with nonzero MWA value'; END IF;
+      extended_cost:=CASE WHEN pg_catalog.abs(variance_base)=balance.on_hand_quantity
+        THEN balance.inventory_value
+        ELSE pg_catalog.round(pg_catalog.abs(variance_base)*balance.average_unit_cost,2) END;
+      IF variance_base=0 OR extended_cost<=0 OR counted_base<0 THEN
+        RAISE EXCEPTION USING ERRCODE='0A000', MESSAGE='cycle count requires one nonzero valued variance'; END IF;
+      line_effect:=CASE WHEN variance_base>0 THEN 'gain' ELSE 'loss' END;
+      IF variance_effect IS NULL THEN variance_effect:=line_effect;
+      ELSIF variance_effect<>line_effect THEN
+        RAISE EXCEPTION USING ERRCODE='0A000', MESSAGE='one cycle-count command cannot mix gain and loss variances'; END IF;
       resolved_lines:=resolved_lines||pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
         'line_number',line_no,'inventory_document_line_id',requested_count->>'inventory_document_line_id',
         'product_id',product.id,'batch_id',batch.id,'uom_conversion_id',conversion.id,'uom_code',product.base_uom_code,
@@ -4342,7 +4403,7 @@ BEGIN
         'counted_quantity',(requested_count->>'counted_quantity'),'system_base_quantity',balance.on_hand_quantity::text,
         'counted_base_quantity',counted_base::text,'variance_base_quantity',variance_base::text,
         'unit_cost',balance.average_unit_cost::text,'extended_cost',extended_cost::text));
-      total_base:=total_base+variance_base; total_value:=total_value+extended_cost;
+      total_base:=total_base+pg_catalog.abs(variance_base); total_value:=total_value+extended_cost;
       source_versions:=source_versions||pg_catalog.jsonb_build_array(
         pg_catalog.jsonb_build_object('resource_type','product','id',product.id,'row_version',product.row_version,
           'drug_schedule',product.drug_schedule,'ndps_regulated',product.ndps_regulated,'cold_chain_required',product.cold_chain_required),
@@ -4351,7 +4412,7 @@ BEGIN
           'valid_from',conversion.valid_from,'valid_until',conversion.valid_until),
         pg_catalog.jsonb_build_object('resource_type','inventory_batch','id',batch.id,'row_version',batch.row_version,
           'status',batch.status,'expires_on',batch.expires_on,'mrp',batch.mrp::text,'mrp_uom_conversion_id',batch.mrp_uom_conversion_id),
-        pg_catalog.jsonb_build_object('resource_type','stock_balance','id',last_ledger.id,'branch_id',branch.id,
+        pg_catalog.jsonb_build_object('resource_type','stock_balance','branch_id',branch.id,
           'location_id',location.id,'product_id',product.id,'batch_id',batch.id,'row_version',balance.row_version,
           'on_hand_quantity',balance.on_hand_quantity::text,'inventory_value',balance.inventory_value::text,
           'average_unit_cost',balance.average_unit_cost::text,'last_ledger_entry_id',balance.last_ledger_entry_id,
@@ -4360,6 +4421,15 @@ BEGIN
         pg_catalog.jsonb_build_object('resource_type','pending_inventory_document_state','batch_id',batch.id,'active_count',pending_count));
     END LOOP;
   END LOOP;
+  SELECT * INTO STRICT variance_account FROM finance.accounts WHERE org_id=organization_id
+    AND id=erp_commercial_commands.resolve_role_account(organization_id,branch.id,
+      CASE variance_effect WHEN 'gain' THEN 'inventory_count_gain' ELSE 'inventory_count_loss' END,
+      CASE variance_effect WHEN 'gain' THEN 'income' ELSE 'expense' END,'INR',false)
+    AND status='active' AND account_type=CASE variance_effect WHEN 'gain' THEN 'income' ELSE 'expense' END
+    AND currency_code='INR' AND NOT allows_party_posting FOR SHARE;
+  source_versions:=source_versions||pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
+    'resource_type','finance_account','role',CASE variance_effect WHEN 'gain' THEN 'inventory_count_gain' ELSE 'inventory_count_loss' END,
+    'id',variance_account.id,'row_version',variance_account.row_version));
   IF medicine_count>0 THEN
     SELECT count(DISTINCT license.license_type_code),
            pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
@@ -4384,12 +4454,12 @@ BEGIN
   RETURN pg_catalog.jsonb_build_object('branch_id',branch.id,'adjustment_date',adjustment_date,
     'counted_at',counted_at,'counted_by_membership_id',counted_by,'location_id',location.id,
     'evidence_attachment_id',evidence.id,'inventory_asset_account_id',inventory_account.id,
-    'inventory_count_gain_account_id',gain_account.id,'lines',resolved_lines,
+    'inventory_variance_account_id',variance_account.id,'variance_effect',variance_effect,'lines',resolved_lines,
     'total_base_quantity',total_base::text,'total_value',total_value::text,'source_versions',source_versions,
     'legal_scope',pg_catalog.jsonb_build_object('country','IN','currency','INR','reason','cycle_count',
-      'supported_effect','positive_gain_only','valuation','current_moving_weighted_average',
+      'supported_effect','homogeneous_gain_or_loss','variance_effect',variance_effect,'valuation','current_moving_weighted_average',
       'tax_effect','no_supply_no_gst_no_itc_claim_or_reversal','physical_movement_required',false,
-      'unsupported_fail_closed',pg_catalog.jsonb_build_array('zero_loss_or_mixed_variance','backdated_count',
+      'unsupported_fail_closed',pg_catalog.jsonb_build_array('zero_or_mixed_variance','backdated_count',
         'cold_chain_or_controlled_product','active_recall','pending_inventory_source','reversal')));
 END
 ''',
@@ -4418,8 +4488,8 @@ BEGIN
                AND (expected.value->>'line_number')::integer=line.line_number AND line.movement_kind='count_adjustment'
                AND (expected.value->>'product_id')::uuid=line.product_id AND (expected.value->>'batch_id')::uuid=line.batch_id
                AND expected.value->>'uom_code'=line.uom_code
-               AND (expected.value->>'variance_base_quantity')::numeric=line.entered_quantity
-               AND (expected.value->>'variance_base_quantity')::numeric=line.base_quantity
+               AND pg_catalog.abs((expected.value->>'variance_base_quantity')::numeric)=line.entered_quantity
+               AND pg_catalog.abs((expected.value->>'variance_base_quantity')::numeric)=line.base_quantity
                AND (resolved_document->>'location_id')::uuid=line.from_location_id AND line.to_location_id IS NULL
                AND (expected.value->>'system_base_quantity')::numeric=line.system_quantity
                AND (expected.value->>'counted_base_quantity')::numeric=line.counted_quantity
@@ -4434,12 +4504,16 @@ BEGIN
        (resolved_document->>'total_value')::numeric,(resolved_document->>'total_value')::numeric)
      OR (SELECT count(*) FROM finance.journal_lines line WHERE line.org_id=organization_id AND line.journal_entry_id=journal_id)<>2
      OR NOT EXISTS(SELECT 1 FROM finance.journal_lines line WHERE line.org_id=organization_id AND line.journal_entry_id=journal_id
-       AND line.line_number=1 AND line.account_id=(resolved_document->>'inventory_asset_account_id')::uuid
+       AND line.line_number=1 AND line.account_id=CASE resolved_document->>'variance_effect'
+         WHEN 'gain' THEN (resolved_document->>'inventory_asset_account_id')::uuid
+         ELSE (resolved_document->>'inventory_variance_account_id')::uuid END
        AND line.branch_id=(resolved_document->>'branch_id')::uuid AND line.party_id IS NULL
        AND line.transaction_debit=(resolved_document->>'total_value')::numeric AND line.transaction_credit=0
        AND line.functional_debit=(resolved_document->>'total_value')::numeric AND line.functional_credit=0)
      OR NOT EXISTS(SELECT 1 FROM finance.journal_lines line WHERE line.org_id=organization_id AND line.journal_entry_id=journal_id
-       AND line.line_number=2 AND line.account_id=(resolved_document->>'inventory_count_gain_account_id')::uuid
+       AND line.line_number=2 AND line.account_id=CASE resolved_document->>'variance_effect'
+         WHEN 'gain' THEN (resolved_document->>'inventory_variance_account_id')::uuid
+         ELSE (resolved_document->>'inventory_asset_account_id')::uuid END
        AND line.branch_id=(resolved_document->>'branch_id')::uuid AND line.party_id IS NULL
        AND line.transaction_debit=0 AND line.transaction_credit=(resolved_document->>'total_value')::numeric
        AND line.functional_debit=0 AND line.functional_credit=(resolved_document->>'total_value')::numeric) THEN
@@ -4512,8 +4586,8 @@ BEGIN
       variance_quantity,unit_cost,extended_cost)
     VALUES(organization_id,(resolved_line->>'inventory_document_line_id')::uuid,inventory_document_id,
       (resolved_line->>'line_number')::integer,'count_adjustment',(resolved_line->>'product_id')::uuid,
-      (resolved_line->>'batch_id')::uuid,resolved_line->>'uom_code',(resolved_line->>'variance_base_quantity')::numeric,
-      (resolved_line->>'variance_base_quantity')::numeric,(resolved_document->>'location_id')::uuid,
+      (resolved_line->>'batch_id')::uuid,resolved_line->>'uom_code',pg_catalog.abs((resolved_line->>'variance_base_quantity')::numeric),
+      pg_catalog.abs((resolved_line->>'variance_base_quantity')::numeric),(resolved_document->>'location_id')::uuid,
       (resolved_line->>'system_base_quantity')::numeric,(resolved_line->>'counted_base_quantity')::numeric,
       (resolved_line->>'variance_base_quantity')::numeric,(resolved_line->>'unit_cost')::numeric,
       (resolved_line->>'extended_cost')::numeric);
@@ -4521,17 +4595,21 @@ BEGIN
   INSERT INTO finance.journal_entries(org_id,id,journal_number,posting_date,description,transaction_currency,functional_currency,
     fx_rate,transaction_debit_total,transaction_credit_total,functional_debit_total,functional_credit_total,status)
   VALUES(organization_id,journal_id,journal_number,(resolved_document->>'adjustment_date')::date,
-    'Physical cycle-count gain '||document_number,'INR','INR',1,(resolved_document->>'total_value')::numeric,
+    'Physical cycle-count '||(resolved_document->>'variance_effect')||' '||document_number,'INR','INR',1,(resolved_document->>'total_value')::numeric,
     (resolved_document->>'total_value')::numeric,(resolved_document->>'total_value')::numeric,
     (resolved_document->>'total_value')::numeric,'draft');
   INSERT INTO finance.journal_lines(org_id,id,journal_entry_id,line_number,account_id,branch_id,description,
     transaction_debit,transaction_credit,functional_debit,functional_credit)
   VALUES
-    (organization_id,pg_catalog.gen_random_uuid(),journal_id,1,(resolved_document->>'inventory_asset_account_id')::uuid,
-      (resolved_document->>'branch_id')::uuid,'Inventory gain from verified physical count',
+    (organization_id,pg_catalog.gen_random_uuid(),journal_id,1,CASE resolved_document->>'variance_effect'
+        WHEN 'gain' THEN (resolved_document->>'inventory_asset_account_id')::uuid
+        ELSE (resolved_document->>'inventory_variance_account_id')::uuid END,
+      (resolved_document->>'branch_id')::uuid,'Cycle-count '||(resolved_document->>'variance_effect')||' debit',
       (resolved_document->>'total_value')::numeric,0,(resolved_document->>'total_value')::numeric,0),
-    (organization_id,pg_catalog.gen_random_uuid(),journal_id,2,(resolved_document->>'inventory_count_gain_account_id')::uuid,
-      (resolved_document->>'branch_id')::uuid,'Cycle-count gain income',0,(resolved_document->>'total_value')::numeric,
+    (organization_id,pg_catalog.gen_random_uuid(),journal_id,2,CASE resolved_document->>'variance_effect'
+        WHEN 'gain' THEN (resolved_document->>'inventory_variance_account_id')::uuid
+        ELSE (resolved_document->>'inventory_asset_account_id')::uuid END,
+      (resolved_document->>'branch_id')::uuid,'Cycle-count '||(resolved_document->>'variance_effect')||' credit',0,(resolved_document->>'total_value')::numeric,
       0,(resolved_document->>'total_value')::numeric);
   PERFORM "{SCHEMA}"."assert_inventory_adjustment_draft"(organization_id,inventory_document_id,journal_id,resolved_document);
   RETURN pg_catalog.jsonb_build_object('command_request_id',command_id,'expires_at',expires_at,
@@ -5783,8 +5861,8 @@ DECLARE branch_id uuid:=NULLIF(request_document->>'branch_id','')::uuid;
         payment_date date:=NULLIF(request_document->>'payment_date','')::date;
         supplier_id uuid:=NULLIF(request_document->>'supplier_account_id','')::uuid;
         bank_id uuid:=NULLIF(request_document->>'bank_account_id','')::uuid;
-        settlement_id uuid:=NULLIF(request_document->>'settlement_account_id','')::uuid;
-        gross numeric(20,2):=NULLIF(request_document->>'gross_amount','')::numeric;
+        settlement_id uuid;
+        gross numeric(20,2):=NULLIF(request_document->>'expected_gross_amount','')::numeric;
         method text:=request_document->>'payment_method';
         reference text:=upper(NULLIF(pg_catalog.btrim(request_document->>'external_reference'),''));
         branch core.branches%ROWTYPE; supplier parties.supplier_accounts%ROWTYPE; party parties.parties%ROWTYPE;
@@ -5799,7 +5877,7 @@ DECLARE branch_id uuid:=NULLIF(request_document->>'branch_id','')::uuid;
 BEGIN
   IF organization_id IS NULL OR membership_id IS NULL OR auth_user_id IS NULL OR application_user_id IS NULL
      OR grant_id IS NULL OR payment_id IS NULL OR branch_id IS NULL OR payment_date IS NULL OR supplier_id IS NULL
-     OR bank_id IS NULL OR settlement_id IS NULL OR gross<=0 OR method NOT IN ('bank_transfer','upi')
+     OR bank_id IS NULL OR gross<=0 OR method NOT IN ('bank_transfer','upi')
      OR reference IS NULL OR pg_catalog.length(reference)>256
      OR pg_catalog.jsonb_typeof(request_document->'allocations')<>'array'
      OR pg_catalog.jsonb_array_length(request_document->'allocations') NOT BETWEEN 1 AND 500 THEN
@@ -5851,8 +5929,9 @@ BEGIN
     RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='supplier default payable does not match canonical branch account role'; END IF;
   SELECT * INTO STRICT bank FROM finance.bank_accounts WHERE org_id=organization_id AND id=bank_id
     AND status='active' AND currency_code='INR' FOR SHARE;
+  settlement_id:=bank.account_id;
   SELECT * INTO STRICT settlement FROM finance.accounts WHERE org_id=organization_id AND id=settlement_id
-    AND id=bank.account_id AND status='active' AND account_type='asset' AND currency_code='INR'
+    AND status='active' AND account_type='asset' AND currency_code='INR'
     AND allows_bank_reconciliation FOR SHARE;
   PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
     organization_id::text||':supplier-payment-reference:'||bank.id::text||':'||reference,672011));
@@ -5867,8 +5946,8 @@ BEGIN
    WHERE candidate.org_id=organization_id ORDER BY candidate.id FOR UPDATE OF candidate;
   FOR requested IN SELECT value FROM pg_catalog.jsonb_array_elements(request_document->'allocations') LOOP
     IF NULLIF(requested->>'allocation_id','')::uuid IS NULL OR NULLIF(requested->>'open_item_id','')::uuid IS NULL
-       OR NULLIF(requested->>'amount','')::numeric<=0 THEN
-      RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='supplier payment allocation identity and positive amount are required'; END IF;
+       OR coalesce(NULLIF(requested->>'cash_amount','')::numeric,0)<0 THEN
+      RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='supplier payment allocation identity and nonnegative cash amount are required'; END IF;
     SELECT * INTO STRICT item FROM finance.open_items WHERE org_id=organization_id
       AND id=(requested->>'open_item_id')::uuid AND item_side='payable' AND party_id=party.id
       AND currency_code='INR' AND status='open' AND document_date<=payment_date FOR UPDATE;
@@ -5954,14 +6033,15 @@ BEGIN
         ORDER BY prior.id),'[]'::jsonb)::text,'UTF8'),'sha256'),'hex') INTO allocation_state_hash
       FROM finance.allocations prior WHERE prior.org_id=organization_id AND prior.open_item_id=item.id
         AND prior.payment_id IS DISTINCT FROM payment_id;
-    IF prior_allocated+(requested->>'amount')::numeric>item.principal_amount THEN
+    IF prior_allocated+coalesce((requested->>'cash_amount')::numeric,0)>item.principal_amount THEN
       RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='supplier payment allocation exceeds live payable balance'; END IF;
-    requested_total:=requested_total+(requested->>'amount')::numeric;
+    requested_total:=requested_total+coalesce((requested->>'cash_amount')::numeric,0);
     resolved_allocations:=resolved_allocations||pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
       'allocation_id',requested->>'allocation_id','open_item_id',item.id,'supplier_invoice_id',invoice.id,
       'document_number',item.document_number,'principal_amount',item.principal_amount::text,
-      'prior_cash_allocated_amount',prior_allocated::text,'amount',(requested->>'amount')::numeric::text,
-      'residual_after',(item.principal_amount-prior_allocated-(requested->>'amount')::numeric)::text));
+      'prior_allocated_amount',prior_allocated::text,'cash_allocation_id',requested->>'allocation_id',
+      'cash_amount',coalesce((requested->>'cash_amount')::numeric,0)::text,
+      'residual_after',(item.principal_amount-prior_allocated-coalesce((requested->>'cash_amount')::numeric,0))::text));
     source_versions:=source_versions||pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
       'resource_type','payable_allocation_state','id',item.id,'supplier_invoice_id',invoice.id,'invoice_row_version',invoice.row_version,
       'principal_amount',item.principal_amount::text,'status',item.status,'allocation_count',allocation_count,
@@ -5976,7 +6056,7 @@ BEGIN
         'evidence_sha256',pg_catalog.encode(credit_fiscal_evidence.sha256,'hex')));
   END LOOP;
   IF requested_total<>gross THEN
-    RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='supplier payment allocations must exactly equal gross liability and bank cash'; END IF;
+    RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='supplier payment components must exactly equal expected gross liability'; END IF;
   source_versions:=pg_catalog.jsonb_build_array(
     pg_catalog.jsonb_build_object('resource_type','branch','id',branch.id,'row_version',branch.row_version),
     pg_catalog.jsonb_build_object('resource_type','supplier_account','id',supplier.id,'row_version',supplier.row_version),
@@ -5998,12 +6078,12 @@ BEGIN
     'supplier_account_id',supplier.id,'supplier_party_id',party.id,'bank_account_id',bank.id,
     'settlement_account_id',settlement.id,'accounts_payable_account_id',payable.id,'payment_method',method,
     'external_reference',reference,'gross_amount',gross::text,'cash_amount',gross::text,'withheld_amount','0.00',
-    'currency_code','INR','allocations',resolved_allocations,
+    'currency_code','INR','allocations',resolved_allocations,'settlement_components',resolved_allocations,
     'legal_scope',pg_catalog.jsonb_build_object('country_code','IN','currency_code','INR','settlement','posted_supplier_invoice_payables_only',
       'supported_payment_methods',pg_catalog.jsonb_build_array('bank_transfer','upi'),
       'income_tax_withholding','not_applicable_verified_prior_fy_turnover_at_or_below_inr_10_crore',
       'gst_tds','not_applicable_verified_notified_deductor_false',
-      'gross_liability_equals_bank_cash',true,'advance_withholding_adjustment_or_supplier_credit_netting','unavailable',
+      'gross_liability_equals_bank_cash',true,'advance_withholding_adjustment_or_supplier_credit_netting','not_selected',
       'payment_reversal','unavailable_operator_action'),
     'source_versions',source_versions);
 END
@@ -6034,8 +6114,8 @@ BEGIN
   IF line_count<>2 OR NOT EXISTS (SELECT 1 FROM finance.journal_lines WHERE org_id=organization_id
        AND journal_entry_id=journal_id AND line_number=1 AND account_id=(resolution->>'accounts_payable_account_id')::uuid
        AND branch_id=(resolution->>'branch_id')::uuid AND party_id=(resolution->>'supplier_party_id')::uuid
-       AND transaction_debit=(resolution->>'gross_amount')::numeric AND transaction_credit=0
-       AND functional_debit=(resolution->>'gross_amount')::numeric AND functional_credit=0)
+       AND transaction_debit=(resolution->>'cash_amount')::numeric AND transaction_credit=0
+       AND functional_debit=(resolution->>'cash_amount')::numeric AND functional_credit=0)
      OR NOT EXISTS (SELECT 1 FROM finance.journal_lines WHERE org_id=organization_id
        AND journal_entry_id=journal_id AND line_number=2 AND account_id=(resolution->>'settlement_account_id')::uuid
        AND branch_id=(resolution->>'branch_id')::uuid AND party_id IS NULL
@@ -6112,7 +6192,7 @@ BEGIN
   VALUES
    (organization_id,pg_catalog.gen_random_uuid(),journal_id,1,(resolved_document->>'accounts_payable_account_id')::uuid,
     (resolved_document->>'branch_id')::uuid,(resolved_document->>'supplier_party_id')::uuid,'Supplier payable settlement',
-    (resolved_document->>'gross_amount')::numeric,0,(resolved_document->>'gross_amount')::numeric,0),
+    (resolved_document->>'cash_amount')::numeric,0,(resolved_document->>'cash_amount')::numeric,0),
    (organization_id,pg_catalog.gen_random_uuid(),journal_id,2,(resolved_document->>'settlement_account_id')::uuid,
     (resolved_document->>'branch_id')::uuid,NULL,'Supplier payment bank settlement',0,
     (resolved_document->>'cash_amount')::numeric,0,(resolved_document->>'cash_amount')::numeric);
@@ -6135,7 +6215,7 @@ DECLARE branch_id uuid:=NULLIF(request_document->>'branch_id','')::uuid;
         supplier_id uuid:=NULLIF(request_document->>'supplier_account_id','')::uuid;
         purchase_order_id uuid:=NULLIF(request_document->>'purchase_order_id','')::uuid;
         bank_id uuid:=NULLIF(request_document->>'bank_account_id','')::uuid;
-        settlement_id uuid:=NULLIF(request_document->>'settlement_account_id','')::uuid;
+        settlement_id uuid;
         gross numeric(20,2):=NULLIF(request_document->>'gross_amount','')::numeric;
         method text:=request_document->>'payment_method';
         reference text:=upper(NULLIF(pg_catalog.btrim(request_document->>'external_reference'),''));
@@ -6149,7 +6229,7 @@ DECLARE branch_id uuid:=NULLIF(request_document->>'branch_id','')::uuid;
 BEGIN
   IF organization_id IS NULL OR membership_id IS NULL OR auth_user_id IS NULL OR application_user_id IS NULL
      OR grant_id IS NULL OR payment_id IS NULL OR branch_id IS NULL OR payment_date IS NULL OR supplier_id IS NULL
-     OR purchase_order_id IS NULL OR bank_id IS NULL OR settlement_id IS NULL OR gross<=0
+     OR purchase_order_id IS NULL OR bank_id IS NULL OR gross<=0
      OR method NOT IN ('bank_transfer','upi') OR reference IS NULL OR pg_catalog.length(reference)>256
      OR pg_catalog.jsonb_typeof(request_document->'allocations')<>'array'
      OR pg_catalog.jsonb_array_length(request_document->'allocations')<>1 THEN
@@ -6212,8 +6292,8 @@ BEGIN
     AND status='active' AND account_type='asset' AND currency_code='INR' AND allows_party_posting FOR SHARE;
   SELECT * INTO STRICT bank FROM finance.bank_accounts WHERE org_id=organization_id AND id=bank_id
     AND status='active' AND currency_code='INR' FOR SHARE;
-  SELECT * INTO STRICT settlement FROM finance.accounts WHERE org_id=organization_id AND id=settlement_id
-    AND id=bank.account_id AND status='active' AND account_type='asset' AND currency_code='INR'
+  SELECT * INTO STRICT settlement FROM finance.accounts WHERE org_id=organization_id AND id=bank.account_id
+    AND status='active' AND account_type='asset' AND currency_code='INR'
     AND allows_bank_reconciliation FOR SHARE;
   PERFORM 1 FROM procurement.purchase_order_advance_allocations prior WHERE prior.org_id=organization_id
     AND prior.purchase_order_line_id=line.id AND prior.payment_id<>payment_id ORDER BY prior.id FOR UPDATE OF prior;
@@ -6404,11 +6484,16 @@ DECLARE branch_id uuid:=NULLIF(request_document->>'branch_id','')::uuid;
         payment_date date:=NULLIF(request_document->>'payment_date','')::date;
         customer_id uuid:=NULLIF(request_document->>'customer_account_id','')::uuid;
         bank_id uuid:=NULLIF(request_document->>'bank_account_id','')::uuid;
-        settlement_id uuid:=NULLIF(request_document->>'settlement_account_id','')::uuid;
+        settlement_id uuid; evidence_id uuid:=NULLIF(request_document->>'evidence_attachment_id','')::uuid;
+        sales_order_id uuid:=NULLIF(request_document->>'sales_order_id','')::uuid;
         payment_amount numeric(20,2):=NULLIF(request_document->>'amount','')::numeric;
-        method text:=request_document->>'payment_method'; reference text:=upper(NULLIF(pg_catalog.btrim(request_document->>'external_reference'),''));
+        method text:=request_document->>'payment_method'; purpose text:=request_document->>'receipt_purpose';
+        reference text:=upper(NULLIF(pg_catalog.btrim(request_document->>'external_reference'),''));
         branch core.branches%ROWTYPE; customer parties.customer_accounts%ROWTYPE; party parties.parties%ROWTYPE;
         bank finance.bank_accounts%ROWTYPE; settlement finance.accounts%ROWTYPE; receivable finance.accounts%ROWTYPE;
+        evidence core.attachments%ROWTYPE; sales_order sales.orders%ROWTYPE; cash_limit_setting core.settings%ROWTYPE;
+        cash_rolling_setting core.settings%ROWTYPE; cash_days_setting core.settings%ROWTYPE;
+        cash_prior numeric(20,2); customer_advance_prior numeric(20,2); customer_advance_account finance.accounts%ROWTYPE;
         requested jsonb; item finance.open_items%ROWTYPE; event finance.accounting_events%ROWTYPE; invoice sales.invoices%ROWTYPE;
         resolved_allocations jsonb:='[]'::jsonb; source_versions jsonb:='[]'::jsonb;
         prior_allocated numeric(20,2); requested_total numeric(20,2):=0; allocation_count integer; duplicate_count integer;
@@ -6416,11 +6501,17 @@ DECLARE branch_id uuid:=NULLIF(request_document->>'branch_id','')::uuid;
 BEGIN
   IF organization_id IS NULL OR membership_id IS NULL OR auth_user_id IS NULL OR application_user_id IS NULL
      OR grant_id IS NULL OR payment_id IS NULL OR branch_id IS NULL OR payment_date IS NULL OR customer_id IS NULL
-     OR bank_id IS NULL OR settlement_id IS NULL OR payment_amount<=0 OR method NOT IN ('bank_transfer','card','upi')
+     OR payment_amount<=0 OR method NOT IN ('cash','cheque','bank_transfer','card','upi')
+     OR purpose NOT IN ('invoice_settlement','customer_advance')
      OR reference IS NULL OR pg_catalog.length(reference)>256
      OR pg_catalog.jsonb_typeof(request_document->'allocations')<>'array'
-     OR pg_catalog.jsonb_array_length(request_document->'allocations') NOT BETWEEN 1 AND 500 THEN
-    RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='customer-receipt noncash INR pilot input is incomplete'; END IF;
+     OR pg_catalog.jsonb_array_length(request_document->'allocations') NOT BETWEEN 0 AND 500
+     OR (purpose='invoice_settlement' AND pg_catalog.jsonb_array_length(request_document->'allocations')=0)
+     OR (purpose='customer_advance' AND (pg_catalog.jsonb_array_length(request_document->'allocations')<>0 OR sales_order_id IS NULL))
+     OR (purpose='invoice_settlement' AND sales_order_id IS NOT NULL)
+     OR (method IN ('cash','cheque') AND bank_id IS NOT NULL)
+     OR (method NOT IN ('cash','cheque') AND bank_id IS NULL) THEN
+    RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='customer receipt method, purpose, and allocation identity are incomplete'; END IF;
   PERFORM 1 FROM core.memberships membership JOIN core.users user_row ON user_row.id=membership.user_id
     JOIN core.organizations organization_row ON organization_row.id=membership.org_id
     JOIN automation.agent_grants grant_row ON grant_row.org_id=membership.org_id AND grant_row.subject_membership_id=membership.id
@@ -6447,20 +6538,68 @@ BEGIN
   SELECT * INTO STRICT branch FROM core.branches WHERE org_id=organization_id AND id=branch_id AND status='active' FOR SHARE;
   SELECT * INTO STRICT customer FROM parties.customer_accounts WHERE org_id=organization_id AND id=customer_id AND status='active' FOR SHARE;
   SELECT * INTO STRICT party FROM parties.parties WHERE org_id=organization_id AND id=customer.party_id AND status='active' FOR SHARE;
+  SELECT * INTO STRICT evidence FROM core.attachments WHERE org_id=organization_id AND id=evidence_id
+    AND status IN ('verified','retained') AND verified_at IS NOT NULL
+    AND verified_at<=pg_catalog.transaction_timestamp() FOR SHARE;
   SELECT * INTO STRICT receivable FROM finance.accounts WHERE org_id=organization_id
     AND id=erp_commercial_commands.resolve_role_account(organization_id,branch_id,'accounts_receivable','asset','INR',true)
     AND status='active' AND account_type='asset' AND currency_code='INR' AND allows_party_posting FOR SHARE;
   IF customer.default_receivable_account_id IS DISTINCT FROM receivable.id THEN
     RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='customer default receivable does not match canonical branch account role'; END IF;
-  SELECT * INTO STRICT bank FROM finance.bank_accounts WHERE org_id=organization_id AND id=bank_id
-    AND status='active' AND currency_code='INR' FOR SHARE;
-  SELECT * INTO STRICT settlement FROM finance.accounts WHERE org_id=organization_id AND id=settlement_id
-    AND id=bank.account_id AND status='active' AND account_type='asset' AND currency_code='INR'
-    AND allows_bank_reconciliation FOR SHARE;
+  IF method IN ('bank_transfer','card','upi') THEN
+    SELECT * INTO STRICT bank FROM finance.bank_accounts WHERE org_id=organization_id AND id=bank_id
+      AND status='active' AND currency_code='INR' FOR SHARE;
+    settlement_id:=bank.account_id;
+    SELECT * INTO STRICT settlement FROM finance.accounts WHERE org_id=organization_id AND id=settlement_id
+      AND status='active' AND account_type='asset' AND currency_code='INR' AND allows_bank_reconciliation FOR SHARE;
+  ELSIF method='cash' THEN
+    settlement_id:=erp_commercial_commands.resolve_role_account(organization_id,branch_id,'cash_on_hand','asset','INR',false);
+    SELECT * INTO STRICT settlement FROM finance.accounts WHERE org_id=organization_id AND id=settlement_id FOR SHARE;
+    SELECT * INTO STRICT cash_limit_setting FROM core.settings WHERE org_id=organization_id AND branch_id=branch_id
+      AND namespace='finance.cash_receipt_rules' AND key='max_single_amount' AND value_type='numeric'
+      AND status='active' AND value_numeric>0 FOR SHARE;
+    SELECT * INTO STRICT cash_rolling_setting FROM core.settings WHERE org_id=organization_id AND branch_id=branch_id
+      AND namespace='finance.cash_receipt_rules' AND key='max_customer_rolling_amount' AND value_type='numeric'
+      AND status='active' AND value_numeric>0 FOR SHARE;
+    SELECT * INTO STRICT cash_days_setting FROM core.settings WHERE org_id=organization_id AND branch_id=branch_id
+      AND namespace='finance.cash_receipt_rules' AND key='rolling_window_days' AND value_type='numeric'
+      AND status='active' AND value_numeric=pg_catalog.trunc(value_numeric) AND value_numeric>0 FOR SHARE;
+    SELECT coalesce(sum(existing.amount),0) INTO cash_prior FROM finance.payments existing
+      WHERE existing.org_id=organization_id AND existing.party_id=party.id AND existing.branch_id=branch_id
+        AND existing.payment_method='cash' AND existing.direction='receipt' AND existing.status='posted'
+        AND existing.payment_date BETWEEN payment_date-cash_days_setting.value_numeric::integer+1 AND payment_date;
+    IF payment_amount>cash_limit_setting.value_numeric OR cash_prior+payment_amount>cash_rolling_setting.value_numeric THEN
+      RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='cash receipt exceeds effective canonical branch or customer aggregation rule'; END IF;
+  ELSE
+    IF request_document->>'instrument_number' IS NULL OR NULLIF(request_document->>'instrument_date','')::date IS NULL
+       OR NULLIF(pg_catalog.btrim(request_document->>'drawee_bank_name'),'') IS NULL
+       OR coalesce((request_document->>'account_payee_confirmed')::boolean,false) IS DISTINCT FROM true THEN
+      RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='cheque receipt requires exact account-payee instrument evidence'; END IF;
+    settlement_id:=erp_commercial_commands.resolve_role_account(organization_id,branch_id,'cheques_in_hand','asset','INR',false);
+    SELECT * INTO STRICT settlement FROM finance.accounts WHERE org_id=organization_id AND id=settlement_id FOR SHARE;
+  END IF;
+  IF purpose='customer_advance' THEN
+    SELECT * INTO STRICT sales_order FROM sales.orders WHERE org_id=organization_id AND id=sales_order_id
+      AND branch_id=branch_id AND customer_account_id=customer.id AND status IN ('approved','partially_fulfilled')
+      AND currency_code='INR' AND tax_charge_mechanism='normal' AND supply_type IN ('intra_state','inter_state') FOR SHARE;
+    IF EXISTS (SELECT 1 FROM sales.order_lines line WHERE line.org_id=organization_id AND line.order_id=sales_order.id
+       AND line.line_kind<>'product') OR NOT EXISTS (SELECT 1 FROM sales.order_lines line
+       WHERE line.org_id=organization_id AND line.order_id=sales_order.id AND line.line_kind='product') THEN
+      RAISE EXCEPTION USING ERRCODE='0A000', MESSAGE='customer advance is restricted to an approved goods-only sales order'; END IF;
+    SELECT coalesce(sum(existing.amount),0) INTO customer_advance_prior FROM finance.payments existing
+      WHERE existing.org_id=organization_id AND existing.sales_order_id=sales_order.id
+        AND existing.payment_purpose='customer_advance' AND existing.status='posted'
+        AND NOT EXISTS (SELECT 1 FROM finance.payments reversal WHERE reversal.org_id=existing.org_id
+          AND reversal.reversal_of_payment_id=existing.id AND reversal.status='posted');
+    IF customer_advance_prior+payment_amount>sales_order.grand_total THEN
+      RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='customer advance exceeds locked goods-order residual'; END IF;
+    SELECT * INTO STRICT customer_advance_account FROM finance.accounts WHERE org_id=organization_id
+      AND id=erp_commercial_commands.resolve_role_account(organization_id,branch_id,'customer_advance','liability','INR',true) FOR SHARE;
+  END IF;
   PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
-    organization_id::text||':customer-receipt:'||bank.id::text||':'||reference||':'||payment_date::text||':'||payment_amount::text,672009));
+    organization_id::text||':customer-receipt:'||coalesce(bank.id::text,settlement.id::text)||':'||reference||':'||payment_date::text||':'||payment_amount::text,672009));
   SELECT count(*) INTO duplicate_count FROM finance.payments existing
-   WHERE existing.org_id=organization_id AND existing.bank_account_id=bank.id
+   WHERE existing.org_id=organization_id AND existing.settlement_account_id=settlement.id
      AND upper(pg_catalog.btrim(existing.external_reference))=reference AND existing.payment_date=payment_date
      AND existing.amount=payment_amount AND existing.status<>'reversed' AND existing.id<>payment_id;
   IF duplicate_count<>0 THEN
@@ -6505,8 +6644,9 @@ BEGIN
       'principal_amount',item.principal_amount::text,'status',item.status,'allocation_count',allocation_count,
       'active_allocated_amount',prior_allocated::text,'allocation_state_hash',allocation_state_hash));
   END LOOP;
-  IF requested_total<>payment_amount THEN
-    RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='customer receipt allocations must exactly equal payment amount'; END IF;
+  IF (purpose='invoice_settlement' AND requested_total<>payment_amount)
+     OR (purpose='customer_advance' AND requested_total<>0) THEN
+    RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='receipt allocations do not match the selected settlement purpose'; END IF;
   source_versions:=pg_catalog.jsonb_build_array(
     pg_catalog.jsonb_build_object('resource_type','branch','id',branch.id,'row_version',branch.row_version),
     pg_catalog.jsonb_build_object('resource_type','customer_account','id',customer.id,'row_version',customer.row_version),
@@ -6514,17 +6654,23 @@ BEGIN
     pg_catalog.jsonb_build_object('resource_type','accounts_receivable_role','id',receivable.id,'row_version',receivable.row_version),
     pg_catalog.jsonb_build_object('resource_type','bank_account','id',bank.id,'row_version',bank.row_version),
     pg_catalog.jsonb_build_object('resource_type','settlement_account','id',settlement.id,'row_version',settlement.row_version),
+    pg_catalog.jsonb_build_object('resource_type','receipt_evidence','id',evidence.id,
+      'sha256',pg_catalog.encode(evidence.sha256,'hex')),
     pg_catalog.jsonb_build_object('resource_type','bank_receipt_collision','bank_account_id',bank.id,'external_reference',reference,
       'payment_date',payment_date,'amount',payment_amount::text,'candidate_count',duplicate_count))||source_versions;
   RETURN pg_catalog.jsonb_build_object('branch_id',branch.id,'payment_id',payment_id,'payment_date',payment_date,
     'customer_account_id',customer.id,'customer_party_id',party.id,'bank_account_id',bank.id,
-    'settlement_account_id',settlement.id,'accounts_receivable_account_id',receivable.id,'payment_method',method,
+    'settlement_account_id',settlement.id,'accounts_receivable_account_id',receivable.id,
+    'customer_advance_account_id',customer_advance_account.id,'payment_method',method,'receipt_purpose',purpose,
+    'sales_order_id',sales_order.id,'evidence_attachment_id',evidence.id,
+    'instrument_number',request_document->>'instrument_number','instrument_date',request_document->>'instrument_date',
+    'drawee_bank_name',request_document->>'drawee_bank_name','account_payee_confirmed',request_document->>'account_payee_confirmed',
     'external_reference',reference,'amount',payment_amount::text,'currency_code','INR','allocations',resolved_allocations,
-    'legal_scope',pg_catalog.jsonb_build_object('country_code','IN','currency_code','INR','settlement','fully_allocated_non_cash',
-      'supported_payment_methods',pg_catalog.jsonb_build_array('bank_transfer','card','upi'),
-      'cash','unavailable_section_269st_and_cash_account_authority','cheque','unavailable_account_payee_evidence',
+    'legal_scope',pg_catalog.jsonb_build_object('country_code','IN','currency_code','INR','settlement',purpose,
+      'supported_payment_methods',pg_catalog.jsonb_build_array('cash','cheque','bank_transfer','card','upi'),
+      'cash','canonical_branch_rule_and_verified_evidence','cheque','account_payee_cheques_in_hand_until_named_terminal_action',
       'customer_deducted_tds','unavailable_seller_tds_receivable_form16a_26as_authority',
-      'fx','unavailable','advance_or_unapplied_receipt','unavailable'),
+      'fx','unavailable','customer_advance','goods_order_liability_without_gst_document_or_invoice_allocation'),
     'source_versions',source_versions);
 END
 ''',
@@ -6543,7 +6689,8 @@ BEGIN
          payment.amount,payment.functional_amount,payment.fx_rate,payment.external_reference,payment.status)
      IS DISTINCT FROM ROW((resolution->>'payment_date')::date,'receipt',(resolution->>'customer_party_id')::uuid,
          (resolution->>'branch_id')::uuid,(resolution->>'bank_account_id')::uuid,(resolution->>'settlement_account_id')::uuid,
-         resolution->>'payment_method','commercial_settlement','INR'::bpchar,(resolution->>'amount')::numeric,
+         resolution->>'payment_method',CASE resolution->>'receipt_purpose' WHEN 'customer_advance' THEN 'customer_advance' ELSE 'commercial_settlement' END,
+         'INR'::bpchar,(resolution->>'amount')::numeric,
          (resolution->>'amount')::numeric,1.000000::numeric,resolution->>'external_reference','approved')
      OR ROW(journal.posting_date,journal.transaction_currency,journal.functional_currency,journal.fx_rate,
          journal.transaction_debit_total,journal.transaction_credit_total,journal.functional_debit_total,
@@ -6559,7 +6706,8 @@ BEGIN
        AND transaction_debit=(resolution->>'amount')::numeric AND transaction_credit=0
        AND functional_debit=(resolution->>'amount')::numeric AND functional_credit=0)
      OR NOT EXISTS (SELECT 1 FROM finance.journal_lines WHERE org_id=organization_id
-       AND journal_entry_id=journal_id AND line_number=2 AND account_id=(resolution->>'accounts_receivable_account_id')::uuid
+       AND journal_entry_id=journal_id AND line_number=2 AND account_id=(CASE WHEN resolution->>'receipt_purpose'='customer_advance'
+         THEN resolution->>'customer_advance_account_id' ELSE resolution->>'accounts_receivable_account_id' END)::uuid
        AND branch_id=(resolution->>'branch_id')::uuid AND party_id=(resolution->>'customer_party_id')::uuid
        AND transaction_debit=0 AND transaction_credit=(resolution->>'amount')::numeric
        AND functional_debit=0 AND functional_credit=(resolution->>'amount')::numeric) THEN
@@ -6620,13 +6768,18 @@ BEGIN
   journal_number:=erp_core_commands.allocate_document_number(organization_id,journal_sequence_id,journal_sequence_key_hash,expires_at);
   INSERT INTO finance.payments(org_id,id,payment_number,payment_date,direction,party_id,branch_id,bank_account_id,
     settlement_account_id,payment_method,payment_purpose,currency_code,amount,functional_amount,fx_rate,external_reference,
+    sales_order_id,evidence_attachment_id,instrument_number,instrument_date,drawee_bank_name,account_payee_confirmed,
     status,approved_at,approved_by_membership_id)
   VALUES(organization_id,payment_id,payment_number,(resolved_document->>'payment_date')::date,'receipt',
     (resolved_document->>'customer_party_id')::uuid,(resolved_document->>'branch_id')::uuid,
     (resolved_document->>'bank_account_id')::uuid,(resolved_document->>'settlement_account_id')::uuid,
-    resolved_document->>'payment_method','commercial_settlement','INR',(resolved_document->>'amount')::numeric,
-    (resolved_document->>'amount')::numeric,1,resolved_document->>'external_reference','approved',
-    pg_catalog.transaction_timestamp(),membership_id);
+    resolved_document->>'payment_method',CASE resolved_document->>'receipt_purpose' WHEN 'customer_advance' THEN 'customer_advance' ELSE 'commercial_settlement' END,
+    'INR',(resolved_document->>'amount')::numeric,
+    (resolved_document->>'amount')::numeric,1,resolved_document->>'external_reference',
+    (resolved_document->>'sales_order_id')::uuid,(resolved_document->>'evidence_attachment_id')::uuid,
+    resolved_document->>'instrument_number',(resolved_document->>'instrument_date')::date,
+    resolved_document->>'drawee_bank_name',(resolved_document->>'account_payee_confirmed')::boolean,
+    'approved',pg_catalog.transaction_timestamp(),membership_id);
   INSERT INTO finance.journal_entries(org_id,id,journal_number,posting_date,description,transaction_currency,functional_currency,
     fx_rate,transaction_debit_total,transaction_credit_total,functional_debit_total,functional_credit_total,status)
   VALUES(organization_id,journal_id,journal_number,(resolved_document->>'payment_date')::date,
@@ -6638,8 +6791,10 @@ BEGIN
    (organization_id,pg_catalog.gen_random_uuid(),journal_id,1,(resolved_document->>'settlement_account_id')::uuid,
     (resolved_document->>'branch_id')::uuid,NULL,'Customer receipt bank settlement',(resolved_document->>'amount')::numeric,0,
     (resolved_document->>'amount')::numeric,0),
-   (organization_id,pg_catalog.gen_random_uuid(),journal_id,2,(resolved_document->>'accounts_receivable_account_id')::uuid,
-    (resolved_document->>'branch_id')::uuid,(resolved_document->>'customer_party_id')::uuid,'Customer receivable allocation',0,
+   (organization_id,pg_catalog.gen_random_uuid(),journal_id,2,(CASE WHEN resolved_document->>'receipt_purpose'='customer_advance'
+      THEN resolved_document->>'customer_advance_account_id' ELSE resolved_document->>'accounts_receivable_account_id' END)::uuid,
+    (resolved_document->>'branch_id')::uuid,(resolved_document->>'customer_party_id')::uuid,
+    CASE WHEN resolved_document->>'receipt_purpose'='customer_advance' THEN 'Customer goods advance liability' ELSE 'Customer receivable allocation' END,0,
     (resolved_document->>'amount')::numeric,0,(resolved_document->>'amount')::numeric);
   PERFORM "{SCHEMA}"."assert_customer_receipt_draft"(organization_id,payment_id,journal_id,resolved_document);
   RETURN pg_catalog.jsonb_build_object('command_request_id',command_id,'expires_at',expires_at,
@@ -6649,6 +6804,210 @@ END
             runtime=True,
         ),
     ]
+
+
+def _customer_cheque_lifecycle_prepare_definition() -> list[str]:
+    statements = [
+        *_function(
+            '"resolve_customer_cheque_action_prepare"(organization_id uuid, membership_id uuid, auth_user_id uuid, application_user_id uuid, grant_id uuid, caller_client_id varchar, action_payment_id uuid, action_kind text, request_document jsonb)',
+            "jsonb",
+            '''
+DECLARE branch_id uuid:=NULLIF(request_document->>'branch_id','')::uuid;
+        original_id uuid:=NULLIF(request_document->>'original_payment_id','')::uuid;
+        action_date date:=CASE action_kind WHEN 'clearance' THEN NULLIF(request_document->>'clearance_date','')::date
+          ELSE NULLIF(request_document->>'bounce_date','')::date END;
+        evidence_id uuid:=NULLIF(request_document->>'evidence_attachment_id','')::uuid;
+        requested_version bigint:=NULLIF(request_document->>'original_payment_row_version','')::bigint;
+        bank_id uuid:=NULLIF(request_document->>'bank_account_id','')::uuid;
+        original finance.payments%ROWTYPE; bank finance.bank_accounts%ROWTYPE; settlement finance.accounts%ROWTYPE;
+        evidence core.attachments%ROWTYPE; cheque_account finance.accounts%ROWTYPE; offset_account finance.accounts%ROWTYPE;
+        capability_code text:='finance.customer_cheque_'||action_kind||'.prepare';
+        operation_name text:='finance.customer_cheque_'||action_kind||'.post';
+        terminal_count integer; compensating jsonb:='[]'::jsonb; source_versions jsonb;
+BEGIN
+  IF action_kind NOT IN ('clearance','bounce') OR action_payment_id IS NULL OR branch_id IS NULL OR original_id IS NULL
+     OR action_date IS NULL OR evidence_id IS NULL OR requested_version IS NULL
+     OR (action_kind='clearance' AND (bank_id IS NULL OR NULLIF(pg_catalog.btrim(request_document->>'clearance_reference'),'') IS NULL))
+     OR (action_kind='bounce' AND (bank_id IS NOT NULL OR request_document->>'reason_code' NOT IN
+       ('funds_insufficient','signature_mismatch','account_closed','payment_stopped','instrument_invalid','other'))) THEN
+    RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='cheque terminal-action input is incomplete'; END IF;
+  PERFORM 1 FROM core.memberships membership JOIN core.users user_row ON user_row.id=membership.user_id
+    JOIN automation.agent_grants grant_row ON grant_row.org_id=membership.org_id AND grant_row.subject_membership_id=membership.id
+    JOIN automation.agent_grant_capabilities capability ON capability.org_id=grant_row.org_id AND capability.agent_grant_id=grant_row.id
+   WHERE membership.org_id=organization_id AND membership.id=membership_id AND membership.user_id=application_user_id
+     AND membership.status='active' AND user_row.auth_user_id=auth_user_id AND user_row.status='active'
+     AND grant_row.id=grant_id AND grant_row.client_id=caller_client_id AND grant_row.status='active'
+     AND grant_row.expires_at>pg_catalog.transaction_timestamp() AND (grant_row.branch_id IS NULL OR grant_row.branch_id=branch_id)
+     AND capability.capability_code=capability_code AND capability.operation_mode='write' AND capability.status='active';
+  IF NOT FOUND THEN RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='cheque terminal-action delegated authority is inactive'; END IF;
+  PERFORM erp_security.activate_context(auth_user_id,organization_id);
+  IF action_date>"erp_core_commands"."current_organization_business_date"() THEN
+    RAISE EXCEPTION USING ERRCODE='22007', MESSAGE='cheque terminal-action date cannot be in the future'; END IF;
+  IF erp_security.current_membership_id() IS DISTINCT FROM membership_id
+     OR erp_security.can_access_branch(branch_id) IS DISTINCT FROM true
+     OR erp_security.has_permission('finance.payment.manage',branch_id) IS DISTINCT FROM true
+     OR erp_security.has_permission('finance.journal.post',branch_id) IS DISTINCT FROM true
+     OR erp_security.has_permission('automation.command.execute',branch_id) IS DISTINCT FROM true THEN
+    RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='cheque terminal-action permission is inactive'; END IF;
+  SELECT * INTO STRICT original FROM finance.payments WHERE org_id=organization_id AND id=original_id
+    AND branch_id=branch_id AND status='posted' AND direction='receipt' AND payment_method='cheque'
+    AND payment_purpose IN ('commercial_settlement','customer_advance')
+    AND account_payee_confirmed AND row_version=requested_version FOR UPDATE;
+  IF action_date<original.payment_date OR (action_kind='bounce' AND original.payment_purpose='customer_advance'
+     AND NOT EXISTS (SELECT 1 FROM finance.open_items item JOIN finance.accounting_events event
+       ON event.org_id=item.org_id AND event.id=item.accounting_event_id
+       WHERE event.org_id=organization_id AND event.payment_id=original.id AND item.item_side='payable' AND item.status='open')) THEN
+    RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='cheque terminal action is stale or inconsistent with its open balance'; END IF;
+  SELECT * INTO STRICT evidence FROM core.attachments WHERE org_id=organization_id AND id=evidence_id
+    AND status IN ('verified','retained') AND verified_at IS NOT NULL
+    AND verified_at<=pg_catalog.transaction_timestamp() FOR SHARE;
+  SELECT count(*) INTO terminal_count FROM finance.payments terminal WHERE terminal.org_id=organization_id
+    AND terminal.related_payment_id=original.id AND terminal.payment_purpose IN ('cheque_clearance','cheque_bounce')
+    AND terminal.status='posted';
+  IF terminal_count<>0 THEN RAISE EXCEPTION USING ERRCODE='23505', MESSAGE='cheque already has a posted terminal action'; END IF;
+  SELECT * INTO STRICT cheque_account FROM finance.accounts WHERE org_id=organization_id
+    AND id=erp_commercial_commands.resolve_role_account(organization_id,branch_id,'cheques_in_hand','asset','INR',false)
+    AND id=original.settlement_account_id FOR SHARE;
+  IF action_kind='clearance' THEN
+    SELECT * INTO STRICT bank FROM finance.bank_accounts WHERE org_id=organization_id AND id=bank_id
+      AND status='active' AND currency_code='INR' FOR SHARE;
+    SELECT * INTO STRICT settlement FROM finance.accounts WHERE org_id=organization_id AND id=bank.account_id
+      AND status='active' AND account_type='asset' AND currency_code='INR' AND allows_bank_reconciliation FOR SHARE;
+  ELSE
+    settlement:=cheque_account;
+    SELECT * INTO STRICT offset_account FROM finance.accounts WHERE org_id=organization_id
+      AND id=erp_commercial_commands.resolve_role_account(organization_id,branch_id,
+        CASE original.payment_purpose WHEN 'customer_advance' THEN 'customer_advance' ELSE 'accounts_receivable' END,
+        CASE original.payment_purpose WHEN 'customer_advance' THEN 'liability' ELSE 'asset' END,'INR',true) FOR SHARE;
+    IF original.payment_purpose='commercial_settlement' THEN
+      SELECT coalesce(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+        'original_allocation_id',ordered.id,'open_item_id',ordered.open_item_id,
+        'reversal_allocation_id',ids.value) ORDER BY ordered.id),'[]'::jsonb)
+        INTO compensating FROM (
+          SELECT allocation.id,allocation.open_item_id,row_number() OVER (ORDER BY allocation.id) AS ordinal
+            FROM finance.allocations allocation
+           WHERE allocation.org_id=organization_id AND allocation.payment_id=original.id AND allocation.status='posted'
+             AND allocation.reversal_of_allocation_id IS NULL AND NOT EXISTS(SELECT 1 FROM finance.allocations reversal
+               WHERE reversal.org_id=allocation.org_id AND reversal.reversal_of_allocation_id=allocation.id)
+        ) ordered JOIN pg_catalog.jsonb_array_elements_text(request_document->'compensating_allocation_ids')
+          WITH ORDINALITY ids(value,ordinal) USING (ordinal);
+    ELSE
+      SELECT pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object('open_item_id',item.id,
+        'allocation_id',request_document#>>'{compensating_allocation_ids,0}')) INTO compensating
+       FROM finance.accounting_events event JOIN finance.open_items item
+         ON item.org_id=event.org_id AND item.accounting_event_id=event.id
+       WHERE event.org_id=organization_id AND event.payment_id=original.id AND item.item_side='payable' FOR UPDATE OF item;
+    END IF;
+  END IF;
+  source_versions:=pg_catalog.jsonb_build_array(
+    pg_catalog.jsonb_build_object('resource_type','customer_cheque_receipt','id',original.id,'row_version',original.row_version,
+      'status',original.status,'payment_purpose',original.payment_purpose,'amount',original.amount::text,
+      'instrument_number',original.instrument_number,'instrument_date',original.instrument_date,
+      'evidence_attachment_id',original.evidence_attachment_id),
+    pg_catalog.jsonb_build_object('resource_type','terminal_action_collision','id',original.id,'candidate_count',terminal_count),
+    pg_catalog.jsonb_build_object('resource_type','terminal_evidence','id',evidence.id,'sha256',pg_catalog.encode(evidence.sha256,'hex')),
+    pg_catalog.jsonb_build_object('resource_type','settlement_account','id',settlement.id,'row_version',settlement.row_version));
+  RETURN pg_catalog.jsonb_build_object('branch_id',branch_id,'payment_id',action_payment_id,'original_payment_id',original.id,
+    'action_kind',action_kind,'operation',operation_name,'action_date',action_date,'customer_party_id',original.party_id,
+    'bank_account_id',bank.id,'settlement_account_id',settlement.id,'cheques_in_hand_account_id',cheque_account.id,
+    'offset_account_id',offset_account.id,'amount',original.amount::text,'currency_code','INR',
+    'external_reference',CASE action_kind WHEN 'clearance' THEN upper(pg_catalog.btrim(request_document->>'clearance_reference'))
+      ELSE original.external_reference||':BOUNCE:'||upper(request_document->>'reason_code') END,
+    'evidence_attachment_id',evidence.id,'reason_code',request_document->>'reason_code',
+    'compensating_allocations',compensating,
+    'legal_scope',pg_catalog.jsonb_build_object('instrument','account_payee_cheque','terminal_action',action_kind,
+      'allocation_effect',CASE action_kind WHEN 'bounce' THEN 'exact_compensating_reopen' ELSE 'none' END),
+    'source_versions',source_versions);
+END
+''',
+        ),
+    ]
+    for action in ("clearance", "bounce"):
+        operation = f"finance.customer_cheque_{action}.prepare"
+        statements.extend(_function(
+            f'"resolve_customer_cheque_{action}_prepare"(organization_id uuid, membership_id uuid, auth_user_id uuid, application_user_id uuid, grant_id uuid, caller_client_id varchar, payment_id uuid, request_document jsonb)',
+            "jsonb",
+            f'''BEGIN
+  RETURN "{SCHEMA}"."resolve_customer_cheque_action_prepare"(organization_id,membership_id,auth_user_id,
+    application_user_id,grant_id,caller_client_id,payment_id,'{action}',request_document);
+END''',
+            runtime=True,
+        ))
+        statements.extend(_function(
+            f'"persist_customer_cheque_{action}_prepare"(organization_id uuid, membership_id uuid, auth_user_id uuid, application_user_id uuid, grant_id uuid, caller_client_id varchar, payment_id uuid, command_id uuid, journal_id uuid, event_id uuid, key_hash bytea, payment_sequence_key_hash bytea, journal_sequence_key_hash bytea, request_bytes bytea, resolved_bytes bytea, preview_bytes bytea, expires_at timestamptz)',
+            "jsonb",
+            f'''
+DECLARE request_document jsonb:=pg_catalog.convert_from(request_bytes,'UTF8')::jsonb;
+        resolved_document jsonb:=pg_catalog.convert_from(resolved_bytes,'UTF8')::jsonb;
+        preview_document jsonb:=pg_catalog.convert_from(preview_bytes,'UTF8')::jsonb;
+        current_resolution jsonb; existing automation.command_requests%ROWTYPE;
+        payment_sequence_id uuid; journal_sequence_id uuid; original_journal_id uuid;
+        payment_number text; journal_number text; fiscal_year integer;
+BEGIN
+  current_resolution:="{SCHEMA}"."resolve_customer_cheque_{action}_prepare"(organization_id,membership_id,
+    auth_user_id,application_user_id,grant_id,caller_client_id,payment_id,request_document);
+  IF current_resolution IS DISTINCT FROM resolved_document OR preview_document->'source_versions' IS DISTINCT FROM resolved_document->'source_versions'
+     OR preview_document->'legal_scope' IS DISTINCT FROM resolved_document->'legal_scope' THEN
+    RAISE EXCEPTION USING ERRCODE='40001', MESSAGE='cheque {action} resolution changed'; END IF;
+  SELECT * INTO existing FROM automation.command_requests WHERE org_id=organization_id AND agent_grant_id=grant_id
+    AND capability_code='{operation}' AND idempotency_key_hash=key_hash FOR SHARE;
+  IF FOUND THEN
+    IF existing.target_resource_id IS DISTINCT FROM payment_id OR existing.request_hash IS DISTINCT FROM extensions.digest(request_bytes,'sha256') THEN
+      RAISE EXCEPTION USING ERRCODE='23505', MESSAGE='cheque {action} idempotency input changed'; END IF;
+    RETURN pg_catalog.jsonb_build_object('command_request_id',existing.id,'expires_at',existing.expires_at,
+      'preview_hash',pg_catalog.encode(existing.preview_hash,'hex'),'replayed',true);
+  END IF;
+  PERFORM pg_catalog.set_config('app.request_id',command_id::text,true);
+  PERFORM "{SCHEMA}"."prepare_operator_command"(organization_id,command_id,grant_id,'{operation}',
+    (resolved_document->>'branch_id')::uuid,NULL,payment_id,(resolved_document->>'amount')::numeric,'INR',key_hash,
+    request_bytes,preview_bytes,NULL,extensions.digest(pg_catalog.convert_to((resolved_document->'source_versions')::text,'UTF8'),'sha256'),expires_at);
+  fiscal_year:=CASE WHEN extract(month FROM (resolved_document->>'action_date')::date)>=4
+    THEN extract(year FROM (resolved_document->>'action_date')::date)::integer
+    ELSE extract(year FROM (resolved_document->>'action_date')::date)::integer-1 END;
+  SELECT id INTO STRICT payment_sequence_id FROM core.document_sequences WHERE org_id=organization_id
+    AND branch_id=(resolved_document->>'branch_id')::uuid AND document_type='customer_receipt'
+    AND fiscal_year_start=pg_catalog.make_date(fiscal_year,4,1) AND status='active' FOR SHARE;
+  SELECT id INTO STRICT journal_sequence_id FROM core.document_sequences WHERE org_id=organization_id
+    AND branch_id=(resolved_document->>'branch_id')::uuid AND document_type='journal_entry'
+    AND fiscal_year_start=pg_catalog.make_date(fiscal_year,4,1) AND status='active' FOR SHARE;
+  payment_number:=erp_core_commands.allocate_document_number(organization_id,payment_sequence_id,payment_sequence_key_hash,expires_at);
+  journal_number:=erp_core_commands.allocate_document_number(organization_id,journal_sequence_id,journal_sequence_key_hash,expires_at);
+  IF '{action}'='bounce' THEN SELECT journal_entry_id INTO STRICT original_journal_id FROM finance.accounting_events
+    WHERE org_id=organization_id AND payment_id=(resolved_document->>'original_payment_id')::uuid FOR SHARE; END IF;
+  INSERT INTO finance.payments(org_id,id,payment_number,payment_date,direction,party_id,branch_id,bank_account_id,
+    settlement_account_id,payment_method,payment_purpose,currency_code,amount,functional_amount,fx_rate,external_reference,
+    related_payment_id,evidence_attachment_id,memo,status,approved_at,approved_by_membership_id)
+  VALUES(organization_id,payment_id,payment_number,(resolved_document->>'action_date')::date,
+    CASE '{action}' WHEN 'bounce' THEN 'disbursement' ELSE 'receipt' END,(resolved_document->>'customer_party_id')::uuid,
+    (resolved_document->>'branch_id')::uuid,(resolved_document->>'bank_account_id')::uuid,
+    (resolved_document->>'settlement_account_id')::uuid,CASE '{action}' WHEN 'bounce' THEN 'cheque' ELSE 'bank_transfer' END,
+    'cheque_{action}','INR',(resolved_document->>'amount')::numeric,(resolved_document->>'amount')::numeric,1,
+    resolved_document->>'external_reference',(resolved_document->>'original_payment_id')::uuid,
+    (resolved_document->>'evidence_attachment_id')::uuid,resolved_document->>'reason_code','approved',
+    pg_catalog.transaction_timestamp(),membership_id);
+  INSERT INTO finance.journal_entries(org_id,id,journal_number,posting_date,description,transaction_currency,functional_currency,
+    fx_rate,transaction_debit_total,transaction_credit_total,functional_debit_total,functional_credit_total,
+    reversal_of_journal_entry_id,reversal_reason,status)
+  VALUES(organization_id,journal_id,journal_number,(resolved_document->>'action_date')::date,'Customer cheque {action}',
+    'INR','INR',1,(resolved_document->>'amount')::numeric,(resolved_document->>'amount')::numeric,
+    (resolved_document->>'amount')::numeric,(resolved_document->>'amount')::numeric,original_journal_id,
+    CASE '{action}' WHEN 'bounce' THEN resolved_document->>'reason_code' ELSE NULL END,'draft');
+  INSERT INTO finance.journal_lines(org_id,id,journal_entry_id,line_number,account_id,branch_id,party_id,description,
+    transaction_debit,transaction_credit,functional_debit,functional_credit)
+  VALUES
+   (organization_id,pg_catalog.gen_random_uuid(),journal_id,1,(CASE '{action}' WHEN 'bounce' THEN resolved_document->>'offset_account_id'
+      ELSE resolved_document->>'settlement_account_id' END)::uuid,(resolved_document->>'branch_id')::uuid,
+      CASE '{action}' WHEN 'bounce' THEN (resolved_document->>'customer_party_id')::uuid ELSE NULL END,'Cheque {action} debit',
+      (resolved_document->>'amount')::numeric,0,(resolved_document->>'amount')::numeric,0),
+   (organization_id,pg_catalog.gen_random_uuid(),journal_id,2,(resolved_document->>'cheques_in_hand_account_id')::uuid,
+      (resolved_document->>'branch_id')::uuid,NULL,'Cheque {action} credit',0,(resolved_document->>'amount')::numeric,
+      0,(resolved_document->>'amount')::numeric);
+  RETURN pg_catalog.jsonb_build_object('command_request_id',command_id,'expires_at',expires_at,
+    'preview_hash',pg_catalog.encode(extensions.digest(preview_bytes,'sha256'),'hex'),'replayed',false);
+END''',
+            runtime=True,
+        ))
+    return statements
 
 
 def _execution_definition() -> list[str]:
@@ -6851,8 +7210,8 @@ DECLARE
     posted_allocation_total numeric(20,2);
     approving_membership_id uuid;
     approval_decided_at timestamptz;
-    count_gain_ledger_count integer;
-    count_gain_ledger_value numeric(20,2);
+    count_variance_ledger_count integer;
+    count_variance_ledger_value numeric(20,2);
     transfer_out_count integer;
     transfer_in_count integer;
     transfer_quantity_net numeric(20,6);
@@ -7032,16 +7391,6 @@ BEGIN
            OR calculation_artifact.aggregate_version IS DISTINCT FROM supplier_invoice.row_version
            OR calculation_artifact.actor_membership_id IS DISTINCT FROM actor_id
            OR calculation_artifact.request_sha256 IS DISTINCT FROM request_row.request_hash
-           OR EXISTS (
-                SELECT 1 FROM pg_catalog.jsonb_array_elements(current_resolution->'lines') resolved(value)
-                JOIN LATERAL (
-                  SELECT output.value FROM pg_catalog.jsonb_array_elements(
-                    pg_catalog.convert_from(calculation_artifact.output_bytes,'UTF8')::jsonb->'lines') output(value)
-                   WHERE output.value->>'line_id'=resolved.value->>'line_id'
-                ) calculated ON true
-               WHERE resolved.value->>'line_kind'='product'
-                 AND (calculated.value->>'net_value_amount')::numeric
-                     IS DISTINCT FROM (resolved.value->>'receipt_cost')::numeric)
            OR EXISTS (SELECT 1 FROM inventory.inventory_documents document
                 WHERE document.org_id=organization_id AND document.supplier_invoice_id=request_row.target_resource_id) THEN
           RAISE EXCEPTION USING ERRCODE='40001', MESSAGE='supplier invoice GRN, ceiling, GST, portal, ITC, account, or calculation source changed'; END IF;
@@ -7219,6 +7568,29 @@ BEGIN
            OR calculation_artifact.request_sha256 IS DISTINCT FROM request_row.request_hash THEN
           RAISE EXCEPTION USING ERRCODE='40001', MESSAGE='adjustment note original invoice, open item, GST rule, evidence, line ceiling, account, or calculation source changed';
         END IF;
+    ELSIF request_row.operation IN ('finance.customer_cheque_clearance.post','finance.customer_cheque_bounce.post') THEN
+        SELECT * INTO STRICT application_membership FROM core.memberships
+         WHERE org_id=organization_id AND id=actor_id AND status='active' FOR SHARE;
+        SELECT * INTO STRICT application_user FROM core.users
+         WHERE id=application_membership.user_id AND status='active' FOR SHARE;
+        SELECT * INTO STRICT payment FROM finance.payments
+         WHERE org_id=organization_id AND id=request_row.target_resource_id FOR UPDATE;
+        IF request_row.operation='finance.customer_cheque_clearance.post' THEN
+          current_resolution:="{SCHEMA}"."resolve_customer_cheque_clearance_prepare"(
+            organization_id,actor_id,application_user.auth_user_id,application_membership.user_id,
+            grant_row.id,grant_row.client_id,request_row.target_resource_id,request_document);
+        ELSE
+          current_resolution:="{SCHEMA}"."resolve_customer_cheque_bounce_prepare"(
+            organization_id,actor_id,application_user.auth_user_id,application_membership.user_id,
+            grant_row.id,grant_row.client_id,request_row.target_resource_id,request_document);
+        END IF;
+        IF request_row.target_resource_type<>'payment' OR request_row.target_row_version IS DISTINCT FROM payment.row_version
+           OR payment.status<>'approved' OR payment.related_payment_id IS DISTINCT FROM (request_document->>'original_payment_id')::uuid
+           OR current_resolution->'source_versions' IS DISTINCT FROM preview_document->'source_versions'
+           OR current_resolution->'legal_scope' IS DISTINCT FROM preview_document->'legal_scope'
+           OR request_row.aggregate_version_hash IS DISTINCT FROM extensions.digest(
+                pg_catalog.convert_to((preview_document->'source_versions')::text,'UTF8'),'sha256') THEN
+          RAISE EXCEPTION USING ERRCODE='40001', MESSAGE='customer cheque instrument, evidence, terminal state, or journal source changed'; END IF;
     ELSIF request_row.operation='finance.payment.post' AND request_row.capability_code='finance.customer_receipt.prepare' THEN
         SELECT * INTO STRICT application_membership FROM core.memberships
          WHERE org_id=organization_id AND id=actor_id AND status='active' FOR SHARE;
@@ -7448,7 +7820,10 @@ BEGIN
           calculation_artifact.request_id,request_row.id,
           (request_document->>'tax_document_id')::uuid,(request_document->>'journal_id')::uuid,
           invoice_journal_number,(request_document->>'event_id')::uuid,(request_document->>'open_item_id')::uuid,
-          NULL::uuid,NULL::bytea,NULL::bytea,request_row.idempotency_key_hash,request_row.request_hash,
+          (request_document->>'inventory_document_id')::uuid,
+          extensions.digest(request_row.idempotency_key_hash||pg_catalog.convert_to(':landed-cost','UTF8'),'sha256'),
+          extensions.digest(request_row.request_hash||pg_catalog.convert_to(':landed-cost','UTF8'),'sha256'),
+          request_row.idempotency_key_hash,request_row.request_hash,
           least(request_row.expires_at,calculation_artifact.expires_at));
       WHEN 'sales.dispatch.post' THEN
         PERFORM erp_trade_commands.post_dispatch(
@@ -7568,32 +7943,27 @@ BEGIN
           (request_document->>'allocation_id')::uuid,(request_document->>'residual_open_item_id')::uuid,
           request_row.idempotency_key_hash,request_row.request_hash,
           least(request_row.expires_at,calculation_artifact.expires_at));
+      WHEN 'finance.customer_cheque_clearance.post' THEN
+        PERFORM erp_finance_commands.post_customer_cheque_clearance(organization_id,
+          (request_document->>'original_payment_id')::uuid,request_row.target_resource_id,
+          (request_document->>'journal_id')::uuid,(request_document->>'event_id')::uuid);
+      WHEN 'finance.customer_cheque_bounce.post' THEN
+        PERFORM erp_finance_commands.post_customer_cheque_bounce(organization_id,
+          (request_document->>'original_payment_id')::uuid,request_row.target_resource_id,
+          (request_document->>'journal_id')::uuid,(request_document->>'event_id')::uuid,
+          current_resolution->'compensating_allocations');
       WHEN 'finance.payment.post' THEN
         IF request_row.capability_code NOT IN ('finance.customer_receipt.prepare','finance.supplier_payment.prepare') THEN
           RAISE EXCEPTION USING ERRCODE='0A000', MESSAGE='finance payment operation has no reviewed capability-specific dispatcher'; END IF;
-        PERFORM erp_finance_commands.post_payment(organization_id,request_row.target_resource_id,
-          (request_document->>'journal_id')::uuid,(request_document->>'event_id')::uuid);
-        FOR resolved_allocation IN SELECT value FROM pg_catalog.jsonb_array_elements(current_resolution->'allocations') LOOP
-          INSERT INTO finance.allocations(org_id,id,payment_id,open_item_id,allocation_date,currency_code,
-            amount,functional_amount,fx_rate,status,created_by_membership_id)
-          VALUES(organization_id,(resolved_allocation->>'allocation_id')::uuid,request_row.target_resource_id,
-            (resolved_allocation->>'open_item_id')::uuid,payment.payment_date,'INR',
-            (resolved_allocation->>'amount')::numeric,(resolved_allocation->>'amount')::numeric,1,'posted',actor_id);
-        END LOOP;
-        SELECT count(*),coalesce(sum(allocation.amount),0) INTO posted_allocation_count,posted_allocation_total
-          FROM finance.allocations allocation WHERE allocation.org_id=organization_id
-           AND allocation.payment_id=request_row.target_resource_id AND allocation.status='posted';
-        IF posted_allocation_count<>pg_catalog.jsonb_array_length(current_resolution->'allocations')
-           OR posted_allocation_total<>payment.amount OR EXISTS (
-             SELECT 1 FROM finance.allocations allocation
-              WHERE allocation.org_id=organization_id AND allocation.payment_id=request_row.target_resource_id
-                AND NOT EXISTS (SELECT 1 FROM pg_catalog.jsonb_array_elements(current_resolution->'allocations') expected(value)
-                  WHERE (expected.value->>'allocation_id')::uuid=allocation.id
-                    AND (expected.value->>'open_item_id')::uuid=allocation.open_item_id
-                    AND (expected.value->>'amount')::numeric=allocation.amount)) THEN
-          RAISE EXCEPTION USING ERRCODE='40001', MESSAGE=CASE request_row.capability_code
-            WHEN 'finance.supplier_payment.prepare' THEN 'supplier payment posted allocation set differs from approved preview'
-            ELSE 'customer receipt posted allocation set differs from approved preview' END; END IF;
+        IF request_row.capability_code='finance.customer_receipt.prepare' THEN
+          PERFORM erp_finance_commands.post_customer_receipt(organization_id,request_row.target_resource_id,
+            (request_document->>'journal_id')::uuid,(request_document->>'event_id')::uuid,
+            current_resolution->'allocations',NULLIF(request_document->>'customer_advance_open_item_id','')::uuid);
+        ELSE
+          PERFORM erp_finance_commands.post_supplier_payment(organization_id,request_row.target_resource_id,
+            (request_document->>'journal_id')::uuid,(request_document->>'event_id')::uuid,
+            current_resolution->'settlement_components');
+        END IF;
       WHEN 'finance.supplier_advance.post' THEN
         PERFORM erp_finance_commands.post_supplier_advance_payment(
           organization_id,request_row.target_resource_id,(request_document->>'journal_id')::uuid,
@@ -7664,18 +8034,21 @@ BEGIN
                      AND destination_entry.value_delta=(expected.value->>'extended_cost')::numeric)) THEN
             RAISE EXCEPTION USING ERRCODE='40001', MESSAGE='posted transfer ledger is not the exact balanced approved quantity and valuation'; END IF;
         ELSE
-          SELECT count(*),coalesce(sum(entry.value_delta),0) INTO count_gain_ledger_count,count_gain_ledger_value
+          SELECT count(*),coalesce(sum(pg_catalog.abs(entry.value_delta)),0)
+            INTO count_variance_ledger_count,count_variance_ledger_value
             FROM inventory.stock_ledger_entries entry WHERE entry.org_id=organization_id
-             AND entry.inventory_document_id=request_row.target_resource_id AND entry.entry_kind='count_gain';
-          IF count_gain_ledger_count<>pg_catalog.jsonb_array_length(current_resolution->'lines')
-             OR count_gain_ledger_value<>(current_resolution->>'total_value')::numeric THEN
-            RAISE EXCEPTION USING ERRCODE='40001', MESSAGE='posted count-gain ledger differs from the approved MWA preview'; END IF;
+             AND entry.inventory_document_id=request_row.target_resource_id
+             AND entry.entry_kind=CASE current_resolution->>'variance_effect'
+               WHEN 'gain' THEN 'count_gain' ELSE 'count_loss' END;
+          IF count_variance_ledger_count<>pg_catalog.jsonb_array_length(current_resolution->'lines')
+             OR count_variance_ledger_value<>(current_resolution->>'total_value')::numeric THEN
+            RAISE EXCEPTION USING ERRCODE='40001', MESSAGE='posted count-variance ledger differs from the approved MWA preview'; END IF;
           UPDATE finance.journal_entries SET status='posted',posted_at=pg_catalog.transaction_timestamp(),
             posted_by_membership_id=actor_id,updated_at=pg_catalog.transaction_timestamp(),
             updated_by_membership_id=actor_id,row_version=row_version+1
            WHERE org_id=organization_id AND id=(request_document->>'journal_id')::uuid AND status='draft'
-             AND transaction_debit_total=count_gain_ledger_value AND transaction_credit_total=count_gain_ledger_value
-             AND functional_debit_total=count_gain_ledger_value AND functional_credit_total=count_gain_ledger_value;
+             AND transaction_debit_total=count_variance_ledger_value AND transaction_credit_total=count_variance_ledger_value
+             AND functional_debit_total=count_variance_ledger_value AND functional_credit_total=count_variance_ledger_value;
           IF NOT FOUND THEN RAISE EXCEPTION USING ERRCODE='40001', MESSAGE='cycle-count valuation journal changed before atomic posting'; END IF;
           INSERT INTO finance.accounting_events(org_id,id,event_type,inventory_document_id,journal_entry_id,
             occurred_at,source_posted_at,created_by_membership_id)
@@ -7809,42 +8182,52 @@ def generated_artifacts() -> tuple[str, str]:
             "executable_prepare_capabilities": [
                 "finance.adjustment_note.prepare",
                 "finance.bank_reconciliation.prepare",
+                "finance.customer_cheque_bounce.prepare",
+                "finance.customer_cheque_clearance.prepare",
                 "finance.customer_receipt.prepare",
                 "finance.expense_claim.prepare",
                 "finance.supplier_advance.prepare",
                 "finance.supplier_payment.prepare",
+                "finance.adjustment_note.reversal.prepare",
                 "inventory.adjustment.prepare",
                 "inventory.destruction.prepare",
                 "inventory.transfer.prepare",
                 "procurement.goods_receipt.prepare",
                 "procurement.purchase_order.prepare",
                 "procurement.purchase_return.prepare",
+                "procurement.purchase_return.reversal.prepare",
                 "procurement.supplier_invoice.prepare",
                 "sales.dispatch.prepare",
                 "sales.invoice.prepare",
                 "sales.order.prepare",
                 "sales.return.prepare",
+                "sales.return.reversal.prepare",
             ],
             "blocked_prepare_capabilities": sorted(
                 set(OPERATOR_COMMANDS)
                 - {
                     "finance.adjustment_note.prepare",
                     "finance.bank_reconciliation.prepare",
+                    "finance.customer_cheque_bounce.prepare",
+                    "finance.customer_cheque_clearance.prepare",
                     "finance.customer_receipt.prepare",
                     "finance.expense_claim.prepare",
                     "finance.supplier_advance.prepare",
                     "finance.supplier_payment.prepare",
+                    "finance.adjustment_note.reversal.prepare",
                     "inventory.adjustment.prepare",
                     "inventory.destruction.prepare",
                     "inventory.transfer.prepare",
                     "procurement.goods_receipt.prepare",
                     "procurement.purchase_order.prepare",
                     "procurement.purchase_return.prepare",
+                    "procurement.purchase_return.reversal.prepare",
                     "procurement.supplier_invoice.prepare",
                     "sales.dispatch.prepare",
                     "sales.invoice.prepare",
                     "sales.order.prepare",
                     "sales.return.prepare",
+                    "sales.return.reversal.prepare",
                 }
             ),
             "capability_operation_map": {
@@ -7856,6 +8239,9 @@ def generated_artifacts() -> tuple[str, str]:
                 "compliance.destruction.post",
                 "finance.adjustment_note.post",
                 "finance.bank_reconciliation.match",
+                "finance.customer_cheque_bounce.post",
+                "finance.customer_cheque_clearance.post",
+                "finance.adjustment_note.reversal.post",
                 "finance.expense_claim.post",
                 "finance.payment.post",
                 "finance.supplier_advance.post",
@@ -7863,11 +8249,13 @@ def generated_artifacts() -> tuple[str, str]:
                 "procurement.purchase_order.approve",
                 "procurement.receipt.post",
                 "procurement.purchase_return.post",
+                "procurement.purchase_return.reversal.post",
                 "procurement.supplier_invoice.post",
                 "sales.dispatch.post",
                 "sales.invoice.post",
                 "sales.order.approve",
                 "sales.return.post",
+                "sales.return.reversal.post",
             ],
             "adjustment_note_pilot_scope": {
                 "supported_pairs": ["sales_credit", "purchase_debit"],
@@ -8004,7 +8392,7 @@ def generated_artifacts() -> tuple[str, str]:
                 ],
             },
             "inventory_adjustment_pilot_scope": {
-                "supported_effect": "same_day_positive_cycle_count_gain_only",
+                "supported_effect": "same_day_homogeneous_cycle_count_gain_or_loss",
                 "supported_currency": "INR",
                 "valuation": "locked_current_moving_weighted_average",
                 "required_matching": [
@@ -8016,11 +8404,13 @@ def generated_artifacts() -> tuple[str, str]:
                     "effective_product_uom_conversion_and_exact_base_count",
                     "branch_forms_20b_and_21b_for_medicine_custody",
                     "no_pending_inventory_document_for_the_lot",
-                    "atomic_count_gain_ledger_and_two_line_inventory_valuation_journal",
+                    "expected_stock_balance_row_version",
+                    "canonical_inventory_count_gain_or_loss_account",
+                    "atomic_signed_count_ledger_and_two_line_inventory_valuation_journal",
                 ],
                 "tax_effect": "no_supply_no_gst_no_itc_claim_or_reversal",
                 "unsupported_fail_closed": [
-                    "zero_loss_or_mixed_variance",
+                    "zero_or_mixed_sign_variance",
                     "backdated_or_stale_count",
                     "cold_chain_h_h1_x_ndps_or_recalled_product",
                     "unowned_zero_balance_or_pending_source_stock",
@@ -8129,15 +8519,17 @@ def generated_artifacts() -> tuple[str, str]:
                     "one_unique_parsed_gstr2b_row",
                 ],
                 "itc_basis": "explicit_human_attestation_taxable_resale_not_blocked_under_section_17",
-                "landed_cost_effect": "zero_exact_receipt_cost_match",
-                "supported_charge_treatment": "reviewed_charge_codes_expensed_only",
+                "landed_cost_effect": "reviewed_zero_quantity_value_adjustment_for_exclusive_remaining_receipt_stock",
+                "supported_allocation_methods": ["direct", "quantity_weighted", "value_weighted"],
+                "consumed_variance_role": "purchase_price_variance",
+                "supported_charge_treatment": "reviewed_expense_or_capitalize_with_explicit_basis",
                 "unsupported_fail_closed": [
                     "import",
                     "sez",
                     "reverse_charge",
                     "composition_or_unregistered_supplier",
                     "direct_unreceived_product_lines",
-                    "price_variance_or_capitalized_charge",
+                    "partial_or_co_mingled_receipt_stock",
                     "ineligible_blocked_or_deferred_itc",
                     "withholding",
                 ],

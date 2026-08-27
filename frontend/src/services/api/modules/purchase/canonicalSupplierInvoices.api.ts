@@ -41,6 +41,8 @@ export interface CanonicalSupplierInvoiceContextLine {
   suggested_line_discount_value: string;
 }
 
+export type LandedCostAllocationMethod = 'direct' | 'quantity_weighted' | 'value_weighted';
+
 export interface CanonicalSupplierInvoiceContext {
   ready: boolean;
   blocking_reasons: string[];
@@ -81,11 +83,12 @@ export interface CanonicalSupplierInvoiceContext {
     quoted_amount: string;
     expense_price_basis: 'tax_exclusive' | 'tax_inclusive';
     expense_document_discount_eligible: boolean;
-    net_value_account_id: string | null;
-    account_code: string | null;
-    account_name: string | null;
+    inventory_cost_treatment: 'capitalize';
+    net_value_account_id: string;
+    account_code: string;
+    account_name: string;
   }>;
-  inventory_effect: 'already_capitalized_by_goods_receipt';
+  inventory_effect: 'grn_quantity_owner_invoice_value_adjustment';
   supplier_invoice_inventory_value_delta: string;
 }
 
@@ -108,6 +111,22 @@ export interface CanonicalPostedSupplierInvoice {
   journal_credit_total: string;
   supplier_invoice_inventory_document_count: number;
   supplier_invoice_inventory_value_delta: string;
+  consumed_variance_amount: string;
+  landed_cost_adjustments: Array<{
+    inventory_document_id: string;
+    inventory_document_line_id: string;
+    stock_ledger_entry_id: string;
+    supplier_invoice_line_id: string;
+    location_id: string;
+    product_id: string;
+    batch_id: string;
+    allocation_method: LandedCostAllocationMethod;
+    allocation_weight: string;
+    basis_quantity: string | null;
+    basis_value: string | null;
+    quantity_delta: string;
+    value_delta: string;
+  }>;
   lines: Array<{
     supplier_invoice_line_id: string;
     product_name: string | null;
@@ -115,6 +134,7 @@ export interface CanonicalPostedSupplierInvoice {
     free_quantity: string | null;
     net_value_amount: string;
     line_total: string;
+    landed_cost_allocation_method: LandedCostAllocationMethod | null;
     allocations: Array<{
       allocation_id: string;
       goods_receipt_line_id: string;

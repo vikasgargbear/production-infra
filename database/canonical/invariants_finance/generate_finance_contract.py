@@ -189,7 +189,6 @@ BEGIN
                   <> (SELECT count(*) FROM finance.journal_lines WHERE org_id=NEW.org_id AND journal_entry_id=original.id) THEN
                 RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='journal reversal is not an exact sign inversion';
             END IF;
-            UPDATE finance.journal_entries SET status='reversed' WHERE org_id=original.org_id AND id=original.id;
         END IF;
     END IF;
     IF TG_OP='UPDATE' AND NEW.status='reversed' AND OLD.status<>'reversed'
@@ -240,7 +239,8 @@ BEGIN
         RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='open item financial facts are immutable';
     END IF;
     SELECT coalesce(sum(a.amount),0) INTO allocated FROM finance.allocations AS a
-     WHERE a.org_id=NEW.org_id AND a.open_item_id=NEW.id AND a.status='posted'
+     WHERE a.org_id=NEW.org_id
+       AND (a.open_item_id=NEW.id OR a.source_open_item_id=NEW.id) AND a.status='posted'
        AND NOT EXISTS (SELECT 1 FROM finance.allocations AS r WHERE r.org_id=a.org_id AND r.reversal_of_allocation_id=a.id);
     IF allocated>NEW.principal_amount OR (NEW.status='settled') IS DISTINCT FROM (allocated=NEW.principal_amount) THEN
         RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='open item status does not match active allocation total';
@@ -266,7 +266,8 @@ END
             """
 DECLARE item finance.open_items%ROWTYPE; payment finance.payments%ROWTYPE; withholding tax.withholdings%ROWTYPE;
         adjustment finance.adjustment_notes%ROWTYPE; advance procurement.purchase_order_advance_allocations%ROWTYPE;
-        original finance.allocations%ROWTYPE; allocated numeric(20,2); source_allocated numeric(20,2);
+        source_item finance.open_items%ROWTYPE; original finance.allocations%ROWTYPE;
+        allocated numeric(20,2); source_allocated numeric(20,2);
 BEGIN
     IF TG_OP<>'INSERT' THEN RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='allocations are append-only'; END IF;
     PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(NEW.org_id::text||NEW.open_item_id::text,671002));
@@ -276,13 +277,19 @@ BEGIN
     END IF;
     IF NEW.reversal_of_allocation_id IS NOT NULL THEN
         SELECT * INTO original FROM finance.allocations WHERE org_id=NEW.org_id AND id=NEW.reversal_of_allocation_id FOR UPDATE;
-        IF NOT FOUND OR original.status<>'posted' OR ROW(NEW.payment_id,NEW.withholding_id,NEW.adjustment_note_id,NEW.purchase_order_advance_allocation_id,NEW.open_item_id,
+        IF NOT FOUND OR original.status<>'posted' OR ROW(NEW.payment_id,NEW.withholding_id,NEW.adjustment_note_id,NEW.purchase_order_advance_allocation_id,NEW.source_open_item_id,NEW.open_item_id,
            NEW.currency_code,NEW.amount,NEW.functional_amount,NEW.fx_rate) IS DISTINCT FROM ROW(original.payment_id,
-           original.withholding_id,original.adjustment_note_id,original.purchase_order_advance_allocation_id,original.open_item_id,original.currency_code,original.amount,original.functional_amount,original.fx_rate) THEN
+           original.withholding_id,original.adjustment_note_id,original.purchase_order_advance_allocation_id,original.source_open_item_id,original.open_item_id,original.currency_code,original.amount,original.functional_amount,original.fx_rate) THEN
             RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='allocation reversal must copy the original settlement facts';
         END IF;
         IF original.adjustment_note_id IS NOT NULL THEN
-            RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='adjustment allocation reversal requires the reviewed compensating-note command';
+            PERFORM 1 FROM finance.adjustment_notes reversal_note
+             WHERE reversal_note.org_id=NEW.org_id
+               AND reversal_note.reversal_of_adjustment_note_id=original.adjustment_note_id
+               AND reversal_note.status='posted' FOR SHARE;
+            IF NOT FOUND THEN
+              RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='adjustment allocation reversal requires posted compensating-note evidence';
+            END IF;
         END IF;
     ELSIF NEW.payment_id IS NOT NULL THEN
         SELECT * INTO payment FROM finance.payments WHERE org_id=NEW.org_id AND id=NEW.payment_id FOR UPDATE;
@@ -318,6 +325,40 @@ BEGIN
          WHERE a.org_id=NEW.org_id AND a.purchase_order_advance_allocation_id=advance.id AND a.status='posted'
            AND NOT EXISTS(SELECT 1 FROM finance.allocations r WHERE r.org_id=a.org_id AND r.reversal_of_allocation_id=a.id);
         IF source_allocated>advance.gross_advance_amount THEN RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='supplier advance over-application'; END IF;
+    ELSIF NEW.source_open_item_id IS NOT NULL THEN
+        SELECT * INTO source_item FROM finance.open_items
+         WHERE org_id=NEW.org_id AND id=NEW.source_open_item_id FOR UPDATE;
+        SELECT note.* INTO adjustment FROM finance.accounting_events event
+          JOIN finance.adjustment_notes note
+            ON note.org_id=event.org_id AND note.id=event.adjustment_note_id
+         WHERE event.org_id=NEW.org_id AND event.id=source_item.accounting_event_id
+           AND event.event_type='adjustment_note' FOR SHARE OF note;
+        IF NOT FOUND THEN
+          SELECT po_advance.* INTO advance FROM procurement.purchase_order_advance_allocations po_advance
+            JOIN finance.accounting_events event ON event.org_id=po_advance.org_id
+             AND event.payment_id=po_advance.payment_id AND event.event_type='payment'
+           WHERE po_advance.org_id=NEW.org_id AND po_advance.prepayment_open_item_id=source_item.id
+             AND event.id=source_item.accounting_event_id AND po_advance.status='posted'
+             AND po_advance.reversal_of_allocation_id IS NULL FOR SHARE OF po_advance;
+        END IF;
+        IF (adjustment.id IS NULL AND advance.id IS NULL) OR source_item.status<>'open' OR source_item.id=item.id
+           OR source_item.party_id<>item.party_id OR source_item.currency_code<>item.currency_code
+           OR source_item.item_side=item.item_side
+           OR (adjustment.id IS NOT NULL AND (adjustment.status<>'posted'
+             OR adjustment.party_id<>source_item.party_id
+             OR adjustment.counterparty_payable_amount<source_item.principal_amount))
+           OR (advance.id IS NOT NULL AND (advance.gross_advance_amount<>source_item.principal_amount
+             OR NOT EXISTS (SELECT 1 FROM parties.supplier_accounts supplier WHERE supplier.org_id=NEW.org_id
+               AND supplier.id=advance.supplier_account_id AND supplier.party_id=item.party_id))) THEN
+          RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='residual credit open item is incompatible with target open item';
+        END IF;
+        SELECT coalesce(sum(a.amount),0) INTO source_allocated FROM finance.allocations a
+         WHERE a.org_id=NEW.org_id AND a.source_open_item_id=source_item.id AND a.status='posted'
+           AND NOT EXISTS (SELECT 1 FROM finance.allocations r
+             WHERE r.org_id=a.org_id AND r.reversal_of_allocation_id=a.id);
+        IF source_allocated>source_item.principal_amount THEN
+          RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='residual adjustment open item over-allocation';
+        END IF;
     ELSE
         SELECT * INTO withholding FROM tax.withholdings WHERE org_id=NEW.org_id AND id=NEW.withholding_id FOR UPDATE;
         IF NOT FOUND OR withholding.status<>'deducted' OR withholding.open_item_id<>item.id
@@ -332,20 +373,13 @@ BEGIN
     IF NEW.reversal_of_allocation_id IS NULL AND allocated>item.principal_amount THEN
         RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='open item over-allocation';
     END IF;
-    UPDATE finance.open_items SET status=CASE WHEN (SELECT coalesce(sum(a.amount),0) FROM finance.allocations a
-       WHERE a.org_id=NEW.org_id AND a.open_item_id=NEW.open_item_id AND a.status='posted'
-       AND NOT EXISTS (SELECT 1 FROM finance.allocations r WHERE r.org_id=a.org_id AND r.reversal_of_allocation_id=a.id))=principal_amount
-       THEN 'settled' ELSE 'open' END,
-       settled_at=CASE WHEN (SELECT coalesce(sum(a.amount),0) FROM finance.allocations a
-       WHERE a.org_id=NEW.org_id AND a.open_item_id=NEW.open_item_id AND a.status='posted'
-       AND NOT EXISTS (SELECT 1 FROM finance.allocations r WHERE r.org_id=a.org_id AND r.reversal_of_allocation_id=a.id))=principal_amount
-       THEN pg_catalog.transaction_timestamp() ELSE NULL END
-     WHERE org_id=NEW.org_id AND id=NEW.open_item_id;
     RETURN NEW;
 END
 """,
         ),
-        _trigger("allocations_guard_ct", "INSERT OR UPDATE OR DELETE", "finance.allocations", "guard_allocation"),
+        'CREATE CONSTRAINT TRIGGER "allocations_guard_ct" AFTER INSERT OR UPDATE OR DELETE ON '
+        '"finance"."allocations" DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION '
+        '"erp_finance_invariants"."guard_allocation"()',
     ]
 
     definitions["finance.bank_statements:bank_statements_cross_row_guard"] = [

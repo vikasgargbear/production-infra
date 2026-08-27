@@ -1,7 +1,7 @@
 import { apiHelpers } from '../../../../services/api/apiClient';
 import {
   approveCycleCountReview,
-  buildCycleCountGainPayload,
+  buildCycleCountPayload,
   executeApprovedCycleCount,
   loadAndVerifyCycleCountReadback,
   loadCycleCountEligibility,
@@ -40,6 +40,7 @@ const validInput = {
     uomMultiplier: '10.000000',
     countedQuantity: '1.234568',
     systemBaseQuantity: '12.345670',
+    stockBalanceRowVersion: 7,
   }],
 };
 
@@ -53,32 +54,34 @@ const validReadback = {
   journal_status: 'posted',
   journal_debit_total: '1.00',
   journal_credit_total: '1.00',
-  total_gain_base_quantity: '0.000010',
-  total_gain_value: '1.00',
+  variance_effect: 'gain',
+  total_variance_base_quantity: '0.000010',
+  total_variance_value: '1.00',
   accounting_event_id: ids.command,
   lines: [{
     inventory_document_line_id: ids.evidence,
     product_id: ids.product,
     batch_id: ids.batch,
+    location_id: ids.location,
     ledger_entry_id: ids.uom,
     system_base_quantity: '12.345670',
     counted_base_quantity: '12.345680',
-    gain_base_quantity: '0.000010',
+    variance_base_quantity: '0.000010',
     unit_cost: '100000.0000',
-    gain_value: '1.00',
+    variance_value: '1.00',
     ledger_quantity_delta: '0.000010',
     ledger_value_delta: '1.00',
     current_on_hand_quantity: '12.345680',
   }],
 } as const;
 
-describe('canonical cycle-count gain command', () => {
+describe('canonical signed cycle-count command', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
   it('accepts the server-owned business date independently of the browser UTC date', () => {
-    expect(() => buildCycleCountGainPayload(validInput)).not.toThrow();
+    expect(() => buildCycleCountPayload(validInput)).not.toThrow();
   });
 
   it.each([
@@ -87,11 +90,11 @@ describe('canonical cycle-count gain command', () => {
     { adjustmentDate: validInput.adjustmentDate, countedAt: 'not-an-instant' },
     { adjustmentDate: validInput.adjustmentDate, countedAt: '2026-08-25T00:00:00+05:30' },
   ])('fails closed for malformed business date or UTC timestamp: %p', override => {
-    expect(() => buildCycleCountGainPayload({ ...validInput, ...override })).toThrow();
+    expect(() => buildCycleCountPayload({ ...validInput, ...override })).toThrow();
   });
 
   it('preserves exact six-decimal counts and canonical identities', () => {
-    expect(buildCycleCountGainPayload(validInput)).toEqual({
+    expect(buildCycleCountPayload(validInput)).toEqual({
       idempotency_key: validInput.idempotencyKey,
       branch_id: ids.branch,
       adjustment_date: '2026-08-25',
@@ -103,24 +106,24 @@ describe('canonical cycle-count gain command', () => {
       lines: [{
         product_id: ids.product,
         uom_conversion_id: ids.uom,
-        batch_counts: [{ batch_id: ids.batch, counted_quantity: '1.234568' }],
+        batch_counts: [{ batch_id: ids.batch, counted_quantity: '1.234568', stock_balance_row_version: 7 }],
       }],
     });
   });
 
-  it.each(['1.2345678', '-1', 'NaN', '', '0', ' 1', '01', '1e3'])('fails closed for invalid or non-gain count %s', countedQuantity => {
-    expect(() => buildCycleCountGainPayload({
+  it.each(['1.2345678', '-1', 'NaN', '', ' 1', '01', '1e3'])('fails closed for invalid count %s', countedQuantity => {
+    expect(() => buildCycleCountPayload({
       ...validInput,
       items: [{ ...validInput.items[0], countedQuantity }],
     })).toThrow();
   });
 
   it('rejects quantities above numeric(20,6) without JavaScript number coercion', () => {
-    expect(() => buildCycleCountGainPayload({
+    expect(() => buildCycleCountPayload({
       ...validInput,
       items: [{ ...validInput.items[0], countedQuantity: '9007199254740993' }],
     })).toThrow('canonical decimal precision');
-    expect(() => buildCycleCountGainPayload({
+    expect(() => buildCycleCountPayload({
       ...validInput,
       items: [{
         ...validInput.items[0],
@@ -131,7 +134,7 @@ describe('canonical cycle-count gain command', () => {
   });
 
   it('accepts six fractional places and rejects over-scale values before prepare', () => {
-    expect(buildCycleCountGainPayload({
+    expect(buildCycleCountPayload({
       ...validInput,
       items: [{
         ...validInput.items[0],
@@ -141,26 +144,43 @@ describe('canonical cycle-count gain command', () => {
     })).toMatchObject({
       lines: [{ batch_counts: [{ counted_quantity: '12.345671' }] }],
     });
-    expect(() => buildCycleCountGainPayload({
+    expect(() => buildCycleCountPayload({
       ...validInput,
       items: [{ ...validInput.items[0], countedQuantity: '12.3456711' }],
     })).toThrow('canonical decimal precision');
   });
 
-  it('rejects a decrease and an exact no-op after UOM conversion', () => {
-    for (const countedQuantity of ['1.234566', '1.234567']) {
-      expect(() => buildCycleCountGainPayload({
-        ...validInput,
-        items: [{ ...validInput.items[0], countedQuantity }],
-      })).toThrow('positive cycle-count gain');
-    }
+  it('accepts an ordinary loss and rejects an exact no-op after UOM conversion', () => {
+    expect(() => buildCycleCountPayload({
+      ...validInput,
+      items: [{ ...validInput.items[0], countedQuantity: '1.234566' }],
+    })).not.toThrow();
+    expect(() => buildCycleCountPayload({
+      ...validInput,
+      items: [{ ...validInput.items[0], countedQuantity: '1.234567' }],
+    })).toThrow('nonzero variance');
+  });
+
+  it('rejects mixed gain and loss lines before prepare', () => {
+    expect(() => buildCycleCountPayload({
+      ...validInput,
+      items: [
+        validInput.items[0],
+        {
+          ...validInput.items[0],
+          batchId: ids.command,
+          countedQuantity: '1.000000',
+          systemBaseQuantity: '12.000000',
+        },
+      ],
+    })).toThrow('cannot mix gain and loss');
   });
 
   it('rejects mixed locations and duplicate batches', () => {
     const duplicate = { ...validInput.items[0] };
-    expect(() => buildCycleCountGainPayload({ ...validInput, items: [validInput.items[0], duplicate] }))
+    expect(() => buildCycleCountPayload({ ...validInput, items: [validInput.items[0], duplicate] }))
       .toThrow('Each batch may appear only once');
-    expect(() => buildCycleCountGainPayload({
+    expect(() => buildCycleCountPayload({
       ...validInput,
       items: [validInput.items[0], { ...duplicate, batchId: ids.command, locationId: ids.command }],
     })).toThrow('one branch and saleable location');
@@ -174,6 +194,7 @@ describe('canonical cycle-count gain command', () => {
       product_id: ids.product,
       batch_id: ids.batch,
       system_base_quantity: '12.000000',
+      stock_balance_row_version: 7,
       uom_conversions: [{
         uom_conversion_id: ids.uom,
         from_uom_code: 'PK',
@@ -203,6 +224,7 @@ describe('canonical cycle-count gain command', () => {
       counted_by_membership_id: ids.membership,
       product_id: ids.product,
       batch_id: ids.batch,
+      stock_balance_row_version: 7,
       uom_conversions: [{
         uom_conversion_id: ids.uom,
         from_uom_code: 'PK',
@@ -246,6 +268,26 @@ describe('canonical cycle-count gain command', () => {
       { command_request_id: ids.command, preview_hash: `sha256:${'a'.repeat(64)}` },
       { status: 'succeeded', resource_id: ids.document },
     )).resolves.toMatchObject({ inventory_document_id: ids.document });
+  });
+
+  it('accepts exact ordinary-loss readback without treating mutable current stock as authority', async () => {
+    const lossReadback = {
+      ...validReadback,
+      variance_effect: 'loss',
+      lines: [{
+        ...validReadback.lines[0],
+        counted_base_quantity: '12.345660',
+        variance_base_quantity: '-0.000010',
+        ledger_quantity_delta: '-0.000010',
+        ledger_value_delta: '-1.00',
+        current_on_hand_quantity: '99.000000',
+      }],
+    } as const;
+    (apiHelpers.get as jest.Mock).mockResolvedValueOnce({ data: lossReadback });
+    await expect(loadAndVerifyCycleCountReadback(
+      { command_request_id: ids.command, preview_hash: `sha256:${'a'.repeat(64)}` },
+      { status: 'succeeded', resource_id: ids.document },
+    )).resolves.toMatchObject({ variance_effect: 'loss' });
   });
 
   it('fails closed when exact line, document, or journal totals drift', async () => {

@@ -199,8 +199,35 @@ const PaymentFlowOptimized: React.FC = () => {
             </div>
           </div>
 
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="text-sm font-medium text-gray-700">Receipt purpose
+              <select value={payment.receipt_purpose} onChange={(event) => {
+                handleFieldChange('receipt_purpose', event.target.value);
+                setPaymentField('allocation_method', event.target.value === 'customer_advance' ? 'advance' : 'manual');
+              }} className="mt-1 min-h-11 w-full rounded-lg border border-gray-300 bg-white px-3">
+                <option value="invoice_settlement">Invoice settlement</option>
+                <option value="customer_advance">Goods-order customer advance</option>
+              </select>
+            </label>
+            <label className="text-sm font-medium text-gray-700">Verified evidence ID
+              <input value={payment.evidence_attachment_id} onChange={(event) => handleFieldChange('evidence_attachment_id', event.target.value)}
+                className="mt-1 min-h-11 w-full rounded-lg border border-gray-300 px-3" placeholder="Canonical attachment UUID" />
+            </label>
+          </div>
+
+          {payment.receipt_purpose === 'customer_advance' && <div className="grid gap-3 sm:grid-cols-2">
+            <label className="text-sm font-medium text-gray-700">Approved goods order ID
+              <input value={payment.sales_order_id} onChange={(event) => handleFieldChange('sales_order_id', event.target.value)}
+                className="mt-1 min-h-11 w-full rounded-lg border border-gray-300 px-3" placeholder="Canonical sales-order UUID" />
+            </label>
+            <label className="text-sm font-medium text-gray-700">Order branch ID
+              <input value={payment.branch_id} onChange={(event) => handleFieldChange('branch_id', event.target.value)}
+                className="mt-1 min-h-11 w-full rounded-lg border border-gray-300 px-3" placeholder="Canonical branch UUID" />
+            </label>
+          </div>}
+
           {/* Canonical settlement identity */}
-          <div className="space-y-2">
+          {!['cash', 'cheque'].includes(payment.payment_mode) && <div className="space-y-2">
             <label htmlFor="receipt-bank-account" className="block text-sm font-medium text-gray-700">
               Settlement bank account <span className="text-red-600" aria-hidden="true">*</span>
             </label>
@@ -222,7 +249,22 @@ const PaymentFlowOptimized: React.FC = () => {
               ))}
             </select>
             {bankAccountsError && <p role="alert" className="text-sm text-red-700">{bankAccountsError}</p>}
-          </div>
+          </div>}
+
+          {payment.payment_mode === 'cheque' && <div className="grid gap-3 rounded-lg border border-blue-200 bg-blue-50 p-3 sm:grid-cols-2">
+            <label className="text-sm font-medium text-gray-700">Instrument number
+              <input value={payment.instrument_number} onChange={(event) => handleFieldChange('instrument_number', event.target.value)} className="mt-1 min-h-11 w-full rounded-lg border border-gray-300 px-3" />
+            </label>
+            <label className="text-sm font-medium text-gray-700">Instrument date
+              <input type="date" value={payment.instrument_date} onChange={(event) => handleFieldChange('instrument_date', event.target.value)} className="mt-1 min-h-11 w-full rounded-lg border border-gray-300 px-3" />
+            </label>
+            <label className="text-sm font-medium text-gray-700">Drawee bank
+              <input value={payment.drawee_bank_name} onChange={(event) => handleFieldChange('drawee_bank_name', event.target.value)} className="mt-1 min-h-11 w-full rounded-lg border border-gray-300 px-3" />
+            </label>
+            <label className="flex min-h-11 items-center gap-2 text-sm font-medium text-gray-700">
+              <input type="checkbox" checked={payment.account_payee_confirmed} onChange={(event) => setPaymentField('account_payee_confirmed', event.target.checked)} />Account-payee confirmed
+            </label>
+          </div>}
 
           {/* Reference Number */}
           {needsReference && (

@@ -47,6 +47,14 @@ def _schema_type(schema: Mapping[str, Any], model_name: str):
     if schema_type == "boolean":
         return StrictBool
 
+    if schema_type == "integer":
+        constraints: dict[str, Any] = {"strict": True}
+        if "minimum" in schema:
+            constraints["ge"] = int(schema["minimum"])
+        if "maximum" in schema:
+            constraints["le"] = int(schema["maximum"])
+        return Annotated[int, Field(**constraints)]
+
     if schema_type == "string":
         enum_values = schema.get("enum")
         if enum_values:
@@ -221,29 +229,49 @@ def validate_prepare_payload_semantics(
         method = values["payment_method"]
         bank_account_id = values.get("bank_account_id")
         external_reference = values.get("external_reference")
-        if method == "cash":
+        if method in {"cash", "cheque"}:
             if bank_account_id is not None:
-                raise ValueError("cash payment must not include bank_account_id")
+                raise ValueError("cash or uncleared cheque must not include bank_account_id")
         elif bank_account_id is None:
             raise ValueError("non-cash payment requires bank_account_id")
         if method != "cash" and not external_reference:
             raise ValueError("non-cash payment requires external_reference")
 
     if operation_key == "finance.customer_receipt.prepare":
-        if values["payment_method"] not in {"bank_transfer", "card", "upi"}:
-            raise ValueError(
-                "customer receipt supports only bank_transfer, card, or upi"
-            )
+        method = values["payment_method"]
+        purpose = values["receipt_purpose"]
         allocations = values["allocations"]
         open_item_ids = [item["open_item_id"] for item in allocations]
         if len(set(open_item_ids)) != len(open_item_ids):
             raise ValueError("customer receipt allocations require unique open_item_id")
         if any(Decimal(str(item["amount"])) <= 0 for item in allocations):
             raise ValueError("customer receipt allocations must be positive")
-        if sum(Decimal(str(item["amount"])) for item in allocations) != Decimal(
-            str(values["amount"])
+        allocated = sum(Decimal(str(item["amount"])) for item in allocations)
+        if purpose == "invoice_settlement" and allocated != Decimal(str(values["amount"])):
+            raise ValueError("invoice-settlement allocations must exactly equal amount")
+        if purpose == "customer_advance" and allocations:
+            raise ValueError("customer advance must have zero invoice allocations")
+        if purpose == "customer_advance" and values.get("sales_order_id") is None:
+            raise ValueError("customer advance requires a goods-only sales_order_id")
+        if purpose == "invoice_settlement" and values.get("sales_order_id") is not None:
+            raise ValueError("invoice settlement cannot include customer-advance order lineage")
+        if method == "cheque":
+            required = (
+                values.get("instrument_number"),
+                values.get("instrument_date"),
+                values.get("drawee_bank_name"),
+                values.get("account_payee_confirmed"),
+                values.get("evidence_attachment_id"),
+            )
+            if not all(required):
+                raise ValueError("cheque receipt requires exact account-payee instrument evidence")
+        elif any(
+            values.get(field) is not None
+            for field in ("instrument_number", "instrument_date", "drawee_bank_name", "account_payee_confirmed")
         ):
-            raise ValueError("customer receipt allocations must exactly equal amount")
+            raise ValueError("non-cheque receipt cannot include cheque instrument fields")
+        if method == "cash" and values.get("evidence_attachment_id") is None:
+            raise ValueError("cash receipt requires immutable tender evidence")
 
     if operation_key == "finance.supplier_advance.prepare":
         if values["payment_method"] not in {"bank_transfer", "upi"}:
@@ -268,14 +296,23 @@ def validate_prepare_payload_semantics(
         open_item_ids = [item["open_item_id"] for item in allocations]
         if len(set(open_item_ids)) != len(open_item_ids):
             raise ValueError("supplier payment allocations require unique open_item_id")
-        if any(Decimal(str(item["amount"])) <= 0 for item in allocations):
-            raise ValueError("supplier payment allocations must be positive")
-        if sum(Decimal(str(item["amount"])) for item in allocations) != Decimal(
-            str(values["gross_amount"])
+        if any(Decimal(str(item["cash_amount"])) < 0 for item in allocations):
+            raise ValueError("supplier payment cash components cannot be negative")
+        source_ids = [
+            item[field]
+            for item in allocations
+            for field in ("supplier_advance_open_item_id", "adjustment_note_open_item_id")
+            if item.get(field) is not None
+        ]
+        if len(source_ids) != len(set(source_ids)):
+            raise ValueError("each supplier credit source may be selected only once")
+        if all(
+            Decimal(str(item["cash_amount"])) == 0
+            and item.get("supplier_advance_open_item_id") is None
+            and item.get("adjustment_note_open_item_id") is None
+            for item in allocations
         ):
-            raise ValueError(
-                "supplier payment allocations must exactly equal gross_amount"
-            )
+            raise ValueError("supplier payment must select at least one settlement component")
 
     if operation_key == "finance.adjustment_note.prepare":
         side = values["side"]
@@ -539,8 +576,8 @@ def validate_prepare_payload_semantics(
         for line_index, line in enumerate(values["lines"]):
             for batch_index, batch in enumerate(line["batch_counts"]):
                 prefix = f"lines[{line_index}].batch_counts[{batch_index}]"
-                if Decimal(batch["counted_quantity"]) <= 0:
-                    raise ValueError(f"{prefix} counted_quantity must be positive")
+                if Decimal(batch["counted_quantity"]) < 0:
+                    raise ValueError(f"{prefix} counted_quantity must be nonnegative")
                 if batch["batch_id"] in seen_batch_ids:
                     raise ValueError(
                         f"{prefix} repeats batch_id; each batch may be counted only once"
@@ -575,4 +612,23 @@ def validate_prepare_payload_semantics(
             ):
                 raise ValueError(
                     f"lines[{line_index}] requires a positive billed or free base quantity"
+                )
+            if line["landed_cost_allocation_method"] not in {
+                "direct", "quantity_weighted", "value_weighted"
+            }:
+                raise ValueError(
+                    f"lines[{line_index}] requires an explicit reviewed landed-cost allocation method"
+                )
+        for line_index, line in enumerate(values.get("expense_charge_lines") or ()):
+            treatment = line["charge_inventory_cost_treatment"]
+            method = line.get("landed_cost_allocation_method")
+            if treatment == "capitalize" and method not in {
+                "direct", "quantity_weighted", "value_weighted"
+            }:
+                raise ValueError(
+                    f"expense_charge_lines[{line_index}] capitalized charge requires an explicit reviewed allocation method"
+                )
+            if treatment == "expense" and method is not None:
+                raise ValueError(
+                    f"expense_charge_lines[{line_index}] expensed charge must not carry a landed-cost allocation method"
                 )

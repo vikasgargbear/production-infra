@@ -1,7 +1,7 @@
 {
   "blocked_count": 0,
   "blocked_invariants": {},
-  "catalog_sha256": "e4ce378b2410a2b9b6d239b6a43f610435fc7935613167cbaae73f77ff3d848f",
+  "catalog_sha256": "6c88d9a0f93158f126abc8d87057b8fcebb287ba332ef36fd37b802cadc29c31",
   "dispatcher": {
     "adjustment_note_pilot_scope": {
       "required_matching": [
@@ -50,7 +50,10 @@
     "blocked_prepare_capabilities": [],
     "capability_operation_map": {
       "finance.adjustment_note.prepare": "finance.adjustment_note.post",
+      "finance.adjustment_note.reversal.prepare": "finance.adjustment_note.reversal.post",
       "finance.bank_reconciliation.prepare": "finance.bank_reconciliation.match",
+      "finance.customer_cheque_bounce.prepare": "finance.customer_cheque_bounce.post",
+      "finance.customer_cheque_clearance.prepare": "finance.customer_cheque_clearance.post",
       "finance.customer_receipt.prepare": "finance.payment.post",
       "finance.expense_claim.prepare": "finance.expense_claim.post",
       "finance.supplier_advance.prepare": "finance.supplier_advance.post",
@@ -61,11 +64,13 @@
       "procurement.goods_receipt.prepare": "procurement.receipt.post",
       "procurement.purchase_order.prepare": "procurement.purchase_order.approve",
       "procurement.purchase_return.prepare": "procurement.purchase_return.post",
+      "procurement.purchase_return.reversal.prepare": "procurement.purchase_return.reversal.post",
       "procurement.supplier_invoice.prepare": "procurement.supplier_invoice.post",
       "sales.dispatch.prepare": "sales.dispatch.post",
       "sales.invoice.prepare": "sales.invoice.post",
       "sales.order.prepare": "sales.order.approve",
-      "sales.return.prepare": "sales.return.post"
+      "sales.return.prepare": "sales.return.post",
+      "sales.return.reversal.prepare": "sales.return.reversal.post"
     },
     "customer_receipt_pilot_scope": {
       "required_matching": [
@@ -95,27 +100,35 @@
     "executable_prepare_capabilities": [
       "finance.adjustment_note.prepare",
       "finance.bank_reconciliation.prepare",
+      "finance.customer_cheque_bounce.prepare",
+      "finance.customer_cheque_clearance.prepare",
       "finance.customer_receipt.prepare",
       "finance.expense_claim.prepare",
       "finance.supplier_advance.prepare",
       "finance.supplier_payment.prepare",
+      "finance.adjustment_note.reversal.prepare",
       "inventory.adjustment.prepare",
       "inventory.destruction.prepare",
       "inventory.transfer.prepare",
       "procurement.goods_receipt.prepare",
       "procurement.purchase_order.prepare",
       "procurement.purchase_return.prepare",
+      "procurement.purchase_return.reversal.prepare",
       "procurement.supplier_invoice.prepare",
       "sales.dispatch.prepare",
       "sales.invoice.prepare",
       "sales.order.prepare",
-      "sales.return.prepare"
+      "sales.return.prepare",
+      "sales.return.reversal.prepare"
     ],
     "execution_operations": [
       "automation.agent_grant.revoke",
       "compliance.destruction.post",
       "finance.adjustment_note.post",
       "finance.bank_reconciliation.match",
+      "finance.customer_cheque_bounce.post",
+      "finance.customer_cheque_clearance.post",
+      "finance.adjustment_note.reversal.post",
       "finance.expense_claim.post",
       "finance.payment.post",
       "finance.supplier_advance.post",
@@ -123,11 +136,13 @@
       "procurement.purchase_order.approve",
       "procurement.receipt.post",
       "procurement.purchase_return.post",
+      "procurement.purchase_return.reversal.post",
       "procurement.supplier_invoice.post",
       "sales.dispatch.post",
       "sales.invoice.post",
       "sales.order.approve",
-      "sales.return.post"
+      "sales.return.post",
+      "sales.return.reversal.post"
     ],
     "expense_claim_pilot_scope": {
       "approval_policy": "separate_approver",
@@ -188,13 +203,15 @@
         "effective_product_uom_conversion_and_exact_base_count",
         "branch_forms_20b_and_21b_for_medicine_custody",
         "no_pending_inventory_document_for_the_lot",
-        "atomic_count_gain_ledger_and_two_line_inventory_valuation_journal"
+        "expected_stock_balance_row_version",
+        "canonical_inventory_count_gain_or_loss_account",
+        "atomic_signed_count_ledger_and_two_line_inventory_valuation_journal"
       ],
       "supported_currency": "INR",
-      "supported_effect": "same_day_positive_cycle_count_gain_only",
+      "supported_effect": "same_day_homogeneous_cycle_count_gain_or_loss",
       "tax_effect": "no_supply_no_gst_no_itc_claim_or_reversal",
       "unsupported_fail_closed": [
-        "zero_loss_or_mixed_variance",
+        "zero_or_mixed_sign_variance",
         "backdated_or_stale_count",
         "cold_chain_h_h1_x_ndps_or_recalled_product",
         "unowned_zero_balance_or_pending_source_stock",
@@ -316,7 +333,10 @@
     },
     "registered_prepare_capabilities": [
       "finance.adjustment_note.prepare",
+      "finance.adjustment_note.reversal.prepare",
       "finance.bank_reconciliation.prepare",
+      "finance.customer_cheque_bounce.prepare",
+      "finance.customer_cheque_clearance.prepare",
       "finance.customer_receipt.prepare",
       "finance.expense_claim.prepare",
       "finance.supplier_advance.prepare",
@@ -327,11 +347,13 @@
       "procurement.goods_receipt.prepare",
       "procurement.purchase_order.prepare",
       "procurement.purchase_return.prepare",
+      "procurement.purchase_return.reversal.prepare",
       "procurement.supplier_invoice.prepare",
       "sales.dispatch.prepare",
       "sales.invoice.prepare",
       "sales.order.prepare",
-      "sales.return.prepare"
+      "sales.return.prepare",
+      "sales.return.reversal.prepare"
     ],
     "sales_invoice_pilot_scope": {
       "supported_supply_types": [
@@ -405,15 +427,21 @@
       ]
     },
     "supplier_invoice_pilot_scope": {
+      "consumed_variance_role": "purchase_price_variance",
       "itc_basis": "explicit_human_attestation_taxable_resale_not_blocked_under_section_17",
-      "landed_cost_effect": "zero_exact_receipt_cost_match",
+      "landed_cost_effect": "reviewed_zero_quantity_value_adjustment_for_exclusive_remaining_receipt_stock",
       "required_matching": [
         "one_purchase_order",
         "exact_posted_grn_set",
         "separate_billed_and_free_receipt_ceilings",
         "one_unique_parsed_gstr2b_row"
       ],
-      "supported_charge_treatment": "reviewed_charge_codes_expensed_only",
+      "supported_allocation_methods": [
+        "direct",
+        "quantity_weighted",
+        "value_weighted"
+      ],
+      "supported_charge_treatment": "reviewed_expense_or_capitalize_with_explicit_basis",
       "supported_product_kinds": [
         "medicine",
         "medical_device",
@@ -432,7 +460,7 @@
         "reverse_charge",
         "composition_or_unregistered_supplier",
         "direct_unreceived_product_lines",
-        "price_variance_or_capitalized_charge",
+        "partial_or_co_mingled_receipt_stock",
         "ineligible_blocked_or_deferred_itc",
         "withholding"
       ]
@@ -467,7 +495,7 @@
   },
   "manifest_version": "1.0.0",
   "mapping_file": "baseline-automation-command-enforcements.json",
-  "mapping_sha256": "890ac8128360e51c8fcd98696642e5dfc86027942fa794e995d2c4c63d56318c",
+  "mapping_sha256": "34b9ff6e0ad49fe8b3e332c2be25cb499ad0611856518fa23953c9766d2a86d3",
   "postgresql": "15+",
   "resolved_count": 3,
   "resolved_invariants": [

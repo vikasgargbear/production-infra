@@ -104,6 +104,84 @@ BEGIN
 END
 """,
         ),
+        *_function(
+            '"synchronize_open_item_status"(organization_id uuid, open_item_id uuid)',
+            "void",
+            """
+DECLARE item finance.open_items%ROWTYPE; active_total numeric(20,2);
+BEGIN
+    SELECT * INTO STRICT item FROM finance.open_items
+     WHERE org_id=organization_id AND id=open_item_id FOR UPDATE;
+    IF item.status='reversed' THEN
+      RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='reversed open item cannot be settled or reopened';
+    END IF;
+    SELECT coalesce(sum(allocation.amount),0) INTO active_total
+      FROM finance.allocations allocation
+     WHERE allocation.org_id=organization_id
+       AND (allocation.open_item_id=open_item_id OR allocation.source_open_item_id=open_item_id)
+       AND allocation.status='posted'
+       AND NOT EXISTS (SELECT 1 FROM finance.allocations reversal
+         WHERE reversal.org_id=allocation.org_id
+           AND reversal.reversal_of_allocation_id=allocation.id);
+    IF active_total>item.principal_amount THEN
+      RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='open item is overallocated';
+    END IF;
+    UPDATE finance.open_items
+       SET status=CASE WHEN active_total=item.principal_amount THEN 'settled' ELSE 'open' END,
+           settled_at=CASE WHEN active_total=item.principal_amount
+             THEN coalesce(item.settled_at,pg_catalog.transaction_timestamp()) ELSE NULL END
+     WHERE org_id=organization_id AND id=open_item_id;
+END
+""",
+        ),
+        *_function(
+            '"mark_journal_reversed"(organization_id uuid, original_journal_id uuid, reversal_journal_id uuid)',
+            "void",
+            """
+DECLARE original finance.journal_entries%ROWTYPE; reversal finance.journal_entries%ROWTYPE;
+        actor uuid:=erp_security.current_membership_id();
+BEGIN
+    IF organization_id IS DISTINCT FROM erp_security.current_org_id() OR actor IS NULL THEN
+      RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='journal reversal organization or actor context is invalid';
+    END IF;
+    SELECT * INTO STRICT original FROM finance.journal_entries
+     WHERE org_id=organization_id AND id=original_journal_id FOR UPDATE;
+    SELECT * INTO STRICT reversal FROM finance.journal_entries
+     WHERE org_id=organization_id AND id=reversal_journal_id FOR SHARE;
+    IF original.status='reversed' THEN
+      IF reversal.status='posted' AND reversal.reversal_of_journal_entry_id=original.id THEN RETURN; END IF;
+      RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='journal reversal replay differs from posted evidence';
+    END IF;
+    IF original.status<>'posted' OR reversal.status<>'posted'
+       OR reversal.reversal_of_journal_entry_id IS DISTINCT FROM original.id
+       OR ROW(reversal.transaction_currency,reversal.functional_currency,reversal.fx_rate,
+              reversal.transaction_debit_total,reversal.transaction_credit_total,
+              reversal.functional_debit_total,reversal.functional_credit_total)
+          IS DISTINCT FROM ROW(original.transaction_currency,original.functional_currency,original.fx_rate,
+              original.transaction_credit_total,original.transaction_debit_total,
+              original.functional_credit_total,original.functional_debit_total)
+       OR EXISTS (SELECT 1 FROM finance.journal_lines old_line
+          FULL JOIN finance.journal_lines new_line
+            ON new_line.org_id=organization_id AND new_line.journal_entry_id=reversal.id
+           AND new_line.line_number=old_line.line_number
+         WHERE old_line.org_id=organization_id AND old_line.journal_entry_id=original.id
+           AND (new_line.id IS NULL OR ROW(new_line.account_id,new_line.branch_id,new_line.party_id,
+                  new_line.transaction_debit,new_line.transaction_credit,new_line.functional_debit,new_line.functional_credit)
+             IS DISTINCT FROM ROW(old_line.account_id,old_line.branch_id,old_line.party_id,
+                  old_line.transaction_credit,old_line.transaction_debit,old_line.functional_credit,old_line.functional_debit)))
+       OR (SELECT count(*) FROM finance.journal_lines
+            WHERE org_id=organization_id AND journal_entry_id=reversal.id)
+          <> (SELECT count(*) FROM finance.journal_lines
+            WHERE org_id=organization_id AND journal_entry_id=original.id) THEN
+      RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='journal reversal command requires an exact posted sign inversion';
+    END IF;
+    UPDATE finance.journal_entries SET status='reversed',updated_at=pg_catalog.transaction_timestamp(),
+      updated_by_membership_id=actor,row_version=row_version+1
+     WHERE org_id=organization_id AND id=original.id AND status='posted';
+    IF NOT FOUND THEN RAISE EXCEPTION USING ERRCODE='40001', MESSAGE='original journal changed before reversal transition'; END IF;
+END
+""",
+        ),
     ]
 
 
@@ -214,14 +292,18 @@ BEGIN
     IF TG_OP='UPDATE' AND OLD.status IN ('posted','reversed') AND ROW(
        NEW.payment_number,NEW.payment_date,NEW.direction,NEW.party_id,NEW.branch_id,
        NEW.bank_account_id,NEW.settlement_account_id,
-       NEW.payment_method,NEW.currency_code,NEW.amount,NEW.functional_amount,NEW.fx_rate,
-       NEW.external_reference,NEW.reversal_of_payment_id,NEW.reversal_reason,
+       NEW.payment_method,NEW.payment_purpose,NEW.currency_code,NEW.amount,NEW.functional_amount,NEW.fx_rate,
+       NEW.external_reference,NEW.related_payment_id,NEW.sales_order_id,NEW.evidence_attachment_id,NEW.instrument_number,
+       NEW.instrument_date,NEW.drawee_bank_name,NEW.account_payee_confirmed,
+       NEW.reversal_of_payment_id,NEW.reversal_reason,
        NEW.approved_at,NEW.approved_by_membership_id,NEW.posted_at,NEW.posted_by_membership_id
     ) IS DISTINCT FROM ROW(
        OLD.payment_number,OLD.payment_date,OLD.direction,OLD.party_id,OLD.branch_id,
        OLD.bank_account_id,OLD.settlement_account_id,
-       OLD.payment_method,OLD.currency_code,OLD.amount,OLD.functional_amount,OLD.fx_rate,
-       OLD.external_reference,OLD.reversal_of_payment_id,OLD.reversal_reason,
+       OLD.payment_method,OLD.payment_purpose,OLD.currency_code,OLD.amount,OLD.functional_amount,OLD.fx_rate,
+       OLD.external_reference,OLD.related_payment_id,OLD.sales_order_id,OLD.evidence_attachment_id,OLD.instrument_number,
+       OLD.instrument_date,OLD.drawee_bank_name,OLD.account_payee_confirmed,
+       OLD.reversal_of_payment_id,OLD.reversal_reason,
        OLD.approved_at,OLD.approved_by_membership_id,OLD.posted_at,OLD.posted_by_membership_id
     ) THEN RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='posted payment facts are immutable'; END IF;
     IF TG_OP='UPDATE' AND NEW.status IN ('posted','reversed') AND NEW.status IS DISTINCT FROM OLD.status
@@ -264,9 +346,9 @@ BEGIN
        OR settlement.currency_code<>payment.currency_code THEN
         RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='payment settlement account must be an active matching-currency asset';
     END IF;
-    IF payment.payment_method='cash' THEN
+    IF payment.payment_method IN ('cash','cheque') THEN
       IF payment.bank_account_id IS NOT NULL THEN
-        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='cash payment cannot reference a bank account';
+        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='cash or uncleared-cheque payment cannot reference a bank account';
       END IF;
     ELSE
       SELECT * INTO bank FROM finance.bank_accounts
@@ -281,7 +363,9 @@ BEGIN
         RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='supplier advance must use the typed gross-advance posting command';
     END IF;
     SELECT * INTO journal FROM finance.journal_entries WHERE org_id=organization_id AND id=journal_id FOR UPDATE;
-    IF NOT FOUND OR journal.status<>'draft' OR journal.reversal_of_journal_entry_id IS NOT NULL
+    IF NOT FOUND OR journal.status<>'draft'
+       OR (payment.payment_purpose<>'cheque_bounce' AND journal.reversal_of_journal_entry_id IS NOT NULL)
+       OR (payment.payment_purpose='cheque_bounce' AND journal.reversal_of_journal_entry_id IS NULL)
        OR journal.transaction_currency<>payment.currency_code
        OR journal.transaction_debit_total<>payment.amount
        OR journal.functional_debit_total<>payment.functional_amount THEN
@@ -317,6 +401,361 @@ BEGIN
       VALUES(organization_id,event_id,'payment',payment_id,journal_id,posted_time,posted_time,actor);
     DELETE FROM "{FUNCTION_SCHEMA}"."command_scopes" WHERE backend_pid=pg_catalog.pg_backend_pid()
       AND transaction_id=pg_catalog.txid_current() AND scope='payment' AND org_id=organization_id AND entity_id=payment_id;
+    RETURN payment_id;
+END
+""",
+            runtime_callable=True,
+        ),
+        *_function(
+            '"post_customer_receipt"(organization_id uuid, payment_id uuid, journal_id uuid, event_id uuid, receipt_allocations jsonb, customer_advance_open_item_id uuid)',
+            "uuid",
+            f"""
+DECLARE payment finance.payments%ROWTYPE; item jsonb; target finance.open_items%ROWTYPE;
+        actor uuid:=erp_security.current_membership_id(); allocated numeric(20,2):=0;
+        active_total numeric(20,2); advance_account uuid;
+BEGIN
+    SELECT * INTO payment FROM finance.payments WHERE org_id=organization_id AND id=payment_id FOR UPDATE;
+    IF payment.id IS NULL OR payment.status<>'approved' OR payment.direction<>'receipt'
+       OR payment.payment_purpose NOT IN ('commercial_settlement','customer_advance')
+       OR pg_catalog.jsonb_typeof(receipt_allocations)<>'array' THEN
+      RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='customer receipt requires one approved typed receipt draft';
+    END IF;
+    IF payment.payment_purpose='customer_advance' THEN
+      IF pg_catalog.jsonb_array_length(receipt_allocations)<>0 OR customer_advance_open_item_id IS NULL THEN
+        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='customer advance has zero invoice allocations and one exact liability open item';
+      END IF;
+      advance_account:=erp_commercial_commands.resolve_role_account(
+        organization_id,payment.branch_id,'customer_advance','liability','INR',true);
+      IF (SELECT count(*) FROM finance.journal_lines line WHERE line.org_id=organization_id
+           AND line.journal_entry_id=journal_id AND line.account_id=advance_account
+           AND line.branch_id=payment.branch_id AND line.party_id=payment.party_id
+           AND line.transaction_credit=payment.amount AND line.transaction_debit=0)<>1 THEN
+        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='customer advance journal must credit canonical customer-advance liability';
+      END IF;
+    ELSE
+      IF customer_advance_open_item_id IS NOT NULL OR pg_catalog.jsonb_array_length(receipt_allocations)=0 THEN
+        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='invoice receipt requires explicit receivable allocations only';
+      END IF;
+    END IF;
+    PERFORM "{FUNCTION_SCHEMA}"."post_payment"(organization_id,payment_id,journal_id,event_id);
+    IF payment.payment_purpose='customer_advance' THEN
+      INSERT INTO finance.open_items(org_id,id,accounting_event_id,party_id,item_side,document_number,
+        document_date,due_date,currency_code,principal_amount,functional_principal_amount,created_by_membership_id)
+      VALUES(organization_id,customer_advance_open_item_id,event_id,payment.party_id,'payable',payment.payment_number,
+        payment.payment_date,payment.payment_date,'INR',payment.amount,payment.functional_amount,actor);
+      RETURN payment_id;
+    END IF;
+    FOR item IN SELECT value FROM pg_catalog.jsonb_array_elements(receipt_allocations) ORDER BY value->>'open_item_id' LOOP
+      SELECT * INTO STRICT target FROM finance.open_items WHERE org_id=organization_id
+        AND id=(item->>'open_item_id')::uuid AND item_side='receivable' AND party_id=payment.party_id
+        AND currency_code='INR' AND status IN ('open','settled') FOR UPDATE;
+      SELECT coalesce(sum(a.amount),0) INTO active_total FROM finance.allocations a
+       WHERE a.org_id=organization_id AND a.open_item_id=target.id AND a.status='posted'
+         AND a.reversal_of_allocation_id IS NULL AND NOT EXISTS (
+           SELECT 1 FROM finance.allocations r WHERE r.org_id=a.org_id
+            AND r.reversal_of_allocation_id=a.id AND r.status='reversed');
+      IF NULLIF(item->>'allocation_id','')::uuid IS NULL OR (item->>'amount')::numeric<=0
+         OR active_total+(item->>'amount')::numeric>target.principal_amount THEN
+        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='customer receipt allocation exceeds locked receivable residual';
+      END IF;
+      INSERT INTO finance.allocations(org_id,id,payment_id,open_item_id,allocation_date,currency_code,
+        amount,functional_amount,fx_rate,status,created_by_membership_id)
+      VALUES(organization_id,(item->>'allocation_id')::uuid,payment_id,target.id,payment.payment_date,'INR',
+        (item->>'amount')::numeric,(item->>'amount')::numeric,1,'posted',actor);
+      PERFORM "{FUNCTION_SCHEMA}"."synchronize_open_item_status"(organization_id,target.id);
+      allocated:=allocated+(item->>'amount')::numeric;
+    END LOOP;
+    IF allocated<>payment.amount THEN
+      RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='customer receipt allocations must exactly equal posted receipt';
+    END IF;
+    RETURN payment_id;
+END
+""",
+            runtime_callable=True,
+        ),
+        *_function(
+            '"post_customer_cheque_clearance"(organization_id uuid, original_payment_id uuid, clearance_payment_id uuid, journal_id uuid, event_id uuid)',
+            "uuid",
+            f"""
+DECLARE original finance.payments%ROWTYPE; clearance finance.payments%ROWTYPE; cheque_account uuid;
+BEGIN
+    SELECT * INTO STRICT original FROM finance.payments WHERE org_id=organization_id
+      AND id=original_payment_id FOR UPDATE;
+    SELECT * INTO STRICT clearance FROM finance.payments WHERE org_id=organization_id
+      AND id=clearance_payment_id FOR UPDATE;
+    IF clearance.status='posted' AND clearance.related_payment_id=original.id
+       AND EXISTS (SELECT 1 FROM finance.accounting_events event WHERE event.org_id=organization_id
+         AND event.payment_id=clearance.id AND event.id=event_id AND event.journal_entry_id=journal_id) THEN
+      RETURN clearance.id;
+    END IF;
+    IF original.status<>'posted' OR original.direction<>'receipt' OR original.payment_method<>'cheque'
+       OR original.payment_purpose NOT IN ('commercial_settlement','customer_advance')
+       OR original.account_payee_confirmed IS DISTINCT FROM true
+       OR clearance.status<>'approved' OR clearance.payment_purpose<>'cheque_clearance'
+       OR clearance.related_payment_id IS DISTINCT FROM original.id OR clearance.direction<>'receipt'
+       OR clearance.party_id IS DISTINCT FROM original.party_id OR clearance.branch_id IS DISTINCT FROM original.branch_id
+       OR clearance.amount IS DISTINCT FROM original.amount OR clearance.currency_code IS DISTINCT FROM original.currency_code
+       OR clearance.payment_method NOT IN ('bank_transfer','upi')
+       OR EXISTS (SELECT 1 FROM finance.payments terminal WHERE terminal.org_id=organization_id
+          AND terminal.related_payment_id=original.id AND terminal.id<>clearance.id
+          AND terminal.payment_purpose IN ('cheque_clearance','cheque_bounce') AND terminal.status='posted') THEN
+      RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='cheque clearance requires one unchanged posted account-payee instrument with no terminal action';
+    END IF;
+    cheque_account:=erp_commercial_commands.resolve_role_account(
+      organization_id,original.branch_id,'cheques_in_hand','asset','INR',false);
+    IF original.settlement_account_id IS DISTINCT FROM cheque_account
+       OR NOT EXISTS (SELECT 1 FROM finance.journal_lines line WHERE line.org_id=organization_id
+         AND line.journal_entry_id=journal_id AND line.account_id=cheque_account
+         AND line.branch_id=original.branch_id AND line.transaction_credit=original.amount
+         AND line.transaction_debit=0) THEN
+      RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='cheque clearance must credit the canonical cheques-in-hand account';
+    END IF;
+    RETURN "{FUNCTION_SCHEMA}"."post_payment"(organization_id,clearance.id,journal_id,event_id);
+END
+""",
+            runtime_callable=True,
+        ),
+        *_function(
+            '"post_customer_cheque_bounce"(organization_id uuid, original_payment_id uuid, bounce_payment_id uuid, journal_id uuid, event_id uuid, compensating_allocations jsonb)',
+            "uuid",
+            f"""
+DECLARE original finance.payments%ROWTYPE; bounce finance.payments%ROWTYPE; item jsonb;
+        cheque_account uuid; offset_account uuid; original_allocation finance.allocations%ROWTYPE;
+        advance_item finance.open_items%ROWTYPE; original_journal_id uuid;
+        actor uuid:=erp_security.current_membership_id();
+BEGIN
+    SELECT * INTO STRICT original FROM finance.payments WHERE org_id=organization_id
+      AND id=original_payment_id FOR UPDATE;
+    SELECT * INTO STRICT bounce FROM finance.payments WHERE org_id=organization_id
+      AND id=bounce_payment_id FOR UPDATE;
+    IF bounce.status='posted' AND bounce.related_payment_id=original.id
+       AND EXISTS (SELECT 1 FROM finance.accounting_events event WHERE event.org_id=organization_id
+         AND event.payment_id=bounce.id AND event.id=event_id AND event.journal_entry_id=journal_id) THEN
+      IF EXISTS (SELECT 1 FROM pg_catalog.jsonb_array_elements(compensating_allocations) expected(value)
+          WHERE NOT EXISTS (SELECT 1 FROM finance.allocations actual WHERE actual.org_id=organization_id
+            AND actual.id=coalesce((expected.value->>'reversal_allocation_id')::uuid,(expected.value->>'allocation_id')::uuid))) THEN
+        RAISE EXCEPTION USING ERRCODE='23505', MESSAGE='cheque bounce replay allocation evidence differs'; END IF;
+      RETURN bounce.id;
+    END IF;
+    IF original.status<>'posted' OR original.direction<>'receipt' OR original.payment_method<>'cheque'
+       OR original.payment_purpose NOT IN ('commercial_settlement','customer_advance') OR original.account_payee_confirmed IS DISTINCT FROM true
+       OR bounce.status<>'approved' OR bounce.payment_purpose<>'cheque_bounce'
+       OR bounce.related_payment_id IS DISTINCT FROM original.id OR bounce.direction<>'disbursement'
+       OR bounce.party_id IS DISTINCT FROM original.party_id OR bounce.branch_id IS DISTINCT FROM original.branch_id
+       OR bounce.amount IS DISTINCT FROM original.amount OR bounce.currency_code IS DISTINCT FROM original.currency_code
+       OR bounce.payment_method<>'cheque'
+       OR EXISTS (SELECT 1 FROM finance.payments terminal WHERE terminal.org_id=organization_id
+          AND terminal.related_payment_id=original.id AND terminal.id<>bounce.id
+          AND terminal.payment_purpose IN ('cheque_clearance','cheque_bounce') AND terminal.status='posted') THEN
+      RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='cheque bounce requires one unchanged allocated cheque with no terminal action';
+    END IF;
+    cheque_account:=erp_commercial_commands.resolve_role_account(
+      organization_id,original.branch_id,'cheques_in_hand','asset','INR',false);
+    offset_account:=erp_commercial_commands.resolve_role_account(organization_id,original.branch_id,
+      CASE WHEN original.payment_purpose='commercial_settlement' THEN 'accounts_receivable' ELSE 'customer_advance' END,
+      CASE WHEN original.payment_purpose='commercial_settlement' THEN 'asset' ELSE 'liability' END,'INR',true);
+    IF original.settlement_account_id IS DISTINCT FROM cheque_account
+       OR bounce.settlement_account_id IS DISTINCT FROM cheque_account
+       OR NOT EXISTS (SELECT 1 FROM finance.journal_lines line WHERE line.org_id=organization_id
+          AND line.journal_entry_id=journal_id AND line.account_id=offset_account
+          AND line.party_id=original.party_id AND line.branch_id=original.branch_id
+          AND line.transaction_debit=original.amount AND line.transaction_credit=0) THEN
+      RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='cheque bounce must restore the canonical customer balance and credit cheques in hand';
+    END IF;
+    SELECT event.journal_entry_id INTO STRICT original_journal_id FROM finance.accounting_events event
+      WHERE event.org_id=organization_id AND event.payment_id=original.id FOR SHARE;
+    IF (SELECT reversal_of_journal_entry_id FROM finance.journal_entries
+         WHERE org_id=organization_id AND id=journal_id FOR SHARE) IS DISTINCT FROM original_journal_id THEN
+      RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='cheque bounce journal must identify the exact original receipt journal';
+    END IF;
+    PERFORM "{FUNCTION_SCHEMA}"."post_payment"(organization_id,bounce.id,journal_id,event_id);
+    PERFORM "{FUNCTION_SCHEMA}"."mark_journal_reversed"(organization_id,original_journal_id,journal_id);
+    IF original.payment_purpose='commercial_settlement' THEN
+      IF pg_catalog.jsonb_typeof(compensating_allocations)<>'array' OR
+         pg_catalog.jsonb_array_length(compensating_allocations)<>(SELECT count(*) FROM finance.allocations a
+           WHERE a.org_id=organization_id AND a.payment_id=original.id AND a.status='posted'
+             AND a.reversal_of_allocation_id IS NULL AND NOT EXISTS(SELECT 1 FROM finance.allocations r
+               WHERE r.org_id=a.org_id AND r.reversal_of_allocation_id=a.id)) THEN
+        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='cheque bounce requires one exact reversal identity per live receipt allocation';
+      END IF;
+      FOR item IN SELECT value FROM pg_catalog.jsonb_array_elements(compensating_allocations) LOOP
+        SELECT * INTO STRICT original_allocation FROM finance.allocations WHERE org_id=organization_id
+          AND id=(item->>'original_allocation_id')::uuid AND payment_id=original.id AND status='posted'
+          AND reversal_of_allocation_id IS NULL FOR UPDATE;
+        INSERT INTO finance.allocations(org_id,id,payment_id,open_item_id,allocation_date,currency_code,
+          amount,functional_amount,fx_rate,reversal_of_allocation_id,reversal_reason,status,reversed_at,
+          reversed_by_membership_id,created_by_membership_id)
+        VALUES(organization_id,(item->>'reversal_allocation_id')::uuid,original.id,original_allocation.open_item_id,
+          bounce.payment_date,original_allocation.currency_code,original_allocation.amount,
+          original_allocation.functional_amount,original_allocation.fx_rate,original_allocation.id,
+          bounce.memo,'reversed',pg_catalog.transaction_timestamp(),actor,actor);
+        PERFORM "{FUNCTION_SCHEMA}"."synchronize_open_item_status"(organization_id,original_allocation.open_item_id);
+      END LOOP;
+    ELSE
+      SELECT open_item.* INTO STRICT advance_item FROM finance.accounting_events event
+       JOIN finance.open_items open_item ON open_item.org_id=event.org_id AND open_item.accounting_event_id=event.id
+       WHERE event.org_id=organization_id AND event.payment_id=original.id AND open_item.item_side='payable' FOR UPDATE OF open_item;
+      IF pg_catalog.jsonb_typeof(compensating_allocations)<>'array' OR pg_catalog.jsonb_array_length(compensating_allocations)<>1
+         OR (compensating_allocations->0->>'open_item_id')::uuid IS DISTINCT FROM advance_item.id THEN
+        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='advance cheque bounce requires the exact customer-advance open item';
+      END IF;
+      INSERT INTO finance.allocations(org_id,id,payment_id,open_item_id,allocation_date,currency_code,
+        amount,functional_amount,fx_rate,status,created_by_membership_id)
+      VALUES(organization_id,(compensating_allocations->0->>'allocation_id')::uuid,bounce.id,advance_item.id,
+        bounce.payment_date,'INR',bounce.amount,bounce.functional_amount,1,'posted',actor);
+      PERFORM "{FUNCTION_SCHEMA}"."synchronize_open_item_status"(organization_id,advance_item.id);
+    END IF;
+    RETURN bounce.id;
+END
+""",
+            runtime_callable=True,
+        ),
+        *_function(
+            '"apply_supplier_adjustment_credit"(organization_id uuid, adjustment_note_id uuid, source_open_item_id uuid, target_open_item_id uuid, allocation_id uuid, application_date date)',
+            "numeric",
+            f"""
+DECLARE note finance.adjustment_notes%ROWTYPE; source_item finance.open_items%ROWTYPE;
+        target_item finance.open_items%ROWTYPE; actor uuid:=erp_security.current_membership_id();
+        source_used numeric(20,2); target_used numeric(20,2); residual numeric(20,2);
+BEGIN
+    SELECT * INTO STRICT note FROM finance.adjustment_notes WHERE org_id=organization_id
+      AND id=adjustment_note_id AND side='purchase' AND direction='debit' AND status='posted' FOR SHARE;
+    SELECT * INTO STRICT source_item FROM finance.open_items WHERE org_id=organization_id
+      AND id=source_open_item_id AND accounting_event_id IN (
+        SELECT id FROM finance.accounting_events WHERE org_id=organization_id AND adjustment_note_id=note.id)
+      AND item_side='receivable' AND status IN ('open','settled') FOR UPDATE;
+    SELECT * INTO STRICT target_item FROM finance.open_items WHERE org_id=organization_id
+      AND id=target_open_item_id AND item_side='payable' AND party_id=source_item.party_id
+      AND currency_code=source_item.currency_code AND status IN ('open','settled') FOR UPDATE;
+    IF note.branch_id IS DISTINCT FROM (
+         SELECT invoice.branch_id FROM finance.accounting_events event
+         JOIN procurement.supplier_invoices invoice ON invoice.org_id=event.org_id AND invoice.id=event.supplier_invoice_id
+         WHERE event.org_id=organization_id AND event.id=target_item.accounting_event_id)
+       OR source_item.currency_code<>'INR' THEN
+      RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='supplier adjustment source and payable must share supplier, branch, and INR currency';
+    END IF;
+    IF application_date IS NULL OR application_date<note.note_date OR application_date>CURRENT_DATE THEN
+      RAISE EXCEPTION USING ERRCODE='22007', MESSAGE='supplier adjustment application date is invalid'; END IF;
+    SELECT coalesce(sum(a.amount),0) INTO source_used FROM finance.allocations a WHERE a.org_id=organization_id
+      AND a.source_open_item_id=source_item.id AND a.status='posted' AND a.reversal_of_allocation_id IS NULL
+      AND NOT EXISTS(SELECT 1 FROM finance.allocations r WHERE r.org_id=a.org_id AND r.reversal_of_allocation_id=a.id);
+    SELECT coalesce(sum(a.amount),0) INTO target_used FROM finance.allocations a WHERE a.org_id=organization_id
+      AND a.open_item_id=target_item.id AND a.status='posted' AND a.reversal_of_allocation_id IS NULL
+      AND NOT EXISTS(SELECT 1 FROM finance.allocations r WHERE r.org_id=a.org_id AND r.reversal_of_allocation_id=a.id);
+    residual:=source_item.principal_amount-source_used;
+    IF residual<=0 OR residual>target_item.principal_amount-target_used THEN
+      RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='supplier adjustment residual must be positive and fit the locked payable residual exactly';
+    END IF;
+    INSERT INTO finance.allocations(org_id,id,source_open_item_id,open_item_id,allocation_date,currency_code,
+      amount,functional_amount,fx_rate,status,created_by_membership_id)
+    VALUES(organization_id,allocation_id,source_item.id,target_item.id,application_date,'INR',residual,residual,1,'posted',actor);
+    PERFORM "{FUNCTION_SCHEMA}"."synchronize_open_item_status"(organization_id,source_item.id);
+    PERFORM "{FUNCTION_SCHEMA}"."synchronize_open_item_status"(organization_id,target_item.id);
+    RETURN residual;
+END
+""",
+            runtime_callable=True,
+        ),
+        *_function(
+            '"post_supplier_payment"(organization_id uuid, payment_id uuid, journal_id uuid, event_id uuid, settlement_components jsonb)',
+            "uuid",
+            f"""
+DECLARE payment finance.payments%ROWTYPE; component jsonb; target finance.open_items%ROWTYPE;
+        actor uuid:=erp_security.current_membership_id(); cash_total numeric(20,2):=0;
+        target_used numeric(20,2); credit_amount numeric(20,2); existing_event uuid;
+BEGIN
+    IF pg_catalog.jsonb_typeof(settlement_components)<>'array' OR pg_catalog.jsonb_array_length(settlement_components)=0 THEN
+      RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='supplier payment requires exact settlement component identities';
+    END IF;
+    SELECT * INTO STRICT payment FROM finance.payments WHERE org_id=organization_id AND id=payment_id FOR UPDATE;
+    SELECT id INTO existing_event FROM finance.accounting_events WHERE org_id=organization_id AND payment_id=payment_id;
+    IF payment.status='posted' THEN
+      IF existing_event IS DISTINCT FROM event_id OR EXISTS (
+        SELECT 1 FROM pg_catalog.jsonb_array_elements(settlement_components) expected(value)
+         WHERE (coalesce((expected.value->>'cash_amount')::numeric,0)>0 AND NOT EXISTS (
+             SELECT 1 FROM finance.allocations actual WHERE actual.org_id=organization_id
+              AND actual.id=(expected.value->>'cash_allocation_id')::uuid AND actual.payment_id=payment_id
+              AND actual.open_item_id=(expected.value->>'open_item_id')::uuid
+              AND actual.amount=(expected.value->>'cash_amount')::numeric AND actual.status='posted'))
+            OR (expected.value ? 'withholding' AND NOT EXISTS (
+             SELECT 1 FROM tax.withholdings actual WHERE actual.org_id=organization_id
+              AND actual.id=(expected.value#>>'{{withholding,withholding_id}}')::uuid
+              AND actual.open_item_id=(expected.value->>'open_item_id')::uuid
+              AND actual.status='deducted'
+              AND actual.withheld_amount=(expected.value#>>'{{withholding,amount}}')::numeric
+              AND actual.deduction_trigger='credit'))
+            OR (expected.value ? 'advance_application' AND NOT EXISTS (
+             SELECT 1 FROM finance.accounting_events actual WHERE actual.org_id=organization_id
+              AND actual.purchase_order_advance_allocation_id=(expected.value#>>'{{advance_application,advance_allocation_id}}')::uuid
+              AND actual.id=(expected.value#>>'{{advance_application,event_id}}')::uuid))
+            OR (expected.value ? 'adjustment_application' AND NOT EXISTS (
+             SELECT 1 FROM finance.allocations actual WHERE actual.org_id=organization_id
+              AND actual.id=(expected.value#>>'{{adjustment_application,allocation_id}}')::uuid
+              AND actual.source_open_item_id=(expected.value#>>'{{adjustment_application,source_open_item_id}}')::uuid
+              AND actual.open_item_id=(expected.value->>'open_item_id')::uuid))
+      ) THEN
+        RAISE EXCEPTION USING ERRCODE='23505', MESSAGE='supplier payment replay evidence differs from the approved component set';
+      END IF;
+      RETURN payment_id;
+    END IF;
+    IF payment.status<>'approved' OR payment.direction<>'disbursement'
+       OR payment.payment_purpose<>'commercial_settlement' OR payment.currency_code<>'INR' THEN
+      RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='supplier payment requires approved INR commercial disbursement';
+    END IF;
+    PERFORM "{FUNCTION_SCHEMA}"."post_payment"(organization_id,payment_id,journal_id,event_id);
+    FOR component IN SELECT value FROM pg_catalog.jsonb_array_elements(settlement_components) ORDER BY value->>'open_item_id' LOOP
+      SELECT * INTO STRICT target FROM finance.open_items WHERE org_id=organization_id
+       AND id=(component->>'open_item_id')::uuid AND item_side='payable' AND party_id=payment.party_id
+       AND currency_code='INR' AND status IN ('open','settled') FOR UPDATE;
+      SELECT coalesce(sum(a.amount),0) INTO target_used FROM finance.allocations a WHERE a.org_id=organization_id
+       AND a.open_item_id=target.id AND a.status='posted' AND a.reversal_of_allocation_id IS NULL
+       AND NOT EXISTS(SELECT 1 FROM finance.allocations r WHERE r.org_id=a.org_id AND r.reversal_of_allocation_id=a.id);
+      IF coalesce((component->>'cash_amount')::numeric,0)>0 THEN
+        IF target_used+(component->>'cash_amount')::numeric>target.principal_amount THEN
+          RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='supplier cash component exceeds locked payable residual'; END IF;
+        INSERT INTO finance.allocations(org_id,id,payment_id,open_item_id,allocation_date,currency_code,
+          amount,functional_amount,fx_rate,status,created_by_membership_id)
+        VALUES(organization_id,(component->>'cash_allocation_id')::uuid,payment_id,target.id,payment.payment_date,'INR',
+          (component->>'cash_amount')::numeric,(component->>'cash_amount')::numeric,1,'posted',actor);
+        PERFORM "{FUNCTION_SCHEMA}"."synchronize_open_item_status"(organization_id,target.id);
+        cash_total:=cash_total+(component->>'cash_amount')::numeric;
+      END IF;
+      IF component ? 'withholding' THEN
+        PERFORM 1 FROM tax.withholdings withholding
+         JOIN finance.allocations allocation ON allocation.org_id=withholding.org_id
+          AND allocation.withholding_id=withholding.id AND allocation.open_item_id=target.id
+          AND allocation.status='posted' AND allocation.reversal_of_allocation_id IS NULL
+         WHERE withholding.org_id=organization_id
+          AND withholding.id=(component#>>'{{withholding,withholding_id}}')::uuid
+          AND withholding.open_item_id=target.id AND withholding.status='deducted'
+          AND withholding.deduction_trigger='credit'
+          AND withholding.withheld_amount=(component#>>'{{withholding,amount}}')::numeric
+          AND NOT EXISTS(SELECT 1 FROM tax.withholdings reversal
+            WHERE reversal.org_id=withholding.org_id
+             AND reversal.reversal_of_withholding_id=withholding.id);
+        IF NOT FOUND THEN
+          RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='supplier invoice withholding must be exact pre-existing credit-time authority';
+        END IF;
+      END IF;
+      IF component ? 'advance_application' THEN
+        PERFORM "{FUNCTION_SCHEMA}"."apply_supplier_advance"(organization_id,
+          (component#>>'{{advance_application,advance_allocation_id}}')::uuid,
+          (component#>>'{{advance_application,supplier_invoice_line_id}}')::uuid,target.id,
+          (component#>>'{{advance_application,allocation_id}}')::uuid,
+          (component#>>'{{advance_application,journal_id}}')::uuid,
+          component#>>'{{advance_application,journal_number}}',
+          (component#>>'{{advance_application,event_id}}')::uuid);
+      END IF;
+      IF component ? 'adjustment_application' THEN
+        credit_amount:="{FUNCTION_SCHEMA}"."apply_supplier_adjustment_credit"(organization_id,
+          (component#>>'{{adjustment_application,adjustment_note_id}}')::uuid,
+          (component#>>'{{adjustment_application,source_open_item_id}}')::uuid,target.id,
+          (component#>>'{{adjustment_application,allocation_id}}')::uuid,payment.payment_date);
+      END IF;
+    END LOOP;
+    IF cash_total<>payment.amount THEN
+      RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='supplier payment cash components must exactly equal bank disbursement';
+    END IF;
     RETURN payment_id;
 END
 """,
@@ -413,7 +852,7 @@ END
             "uuid",
             f"""
 DECLARE original finance.payments%ROWTYPE; original_journal finance.journal_entries%ROWTYPE;
-        actor uuid; reversed_time timestamptz; existing uuid; advance record;
+        actor uuid; reversed_time timestamptz; existing uuid; advance record; allocation_item record;
         reversal_withholding_id uuid; reversal_open_item_id uuid;
 BEGIN
     IF organization_id IS DISTINCT FROM erp_security.current_org_id()
@@ -475,6 +914,8 @@ BEGIN
     UPDATE finance.journal_entries SET status='posted',posted_at=reversed_time,posted_by_membership_id=actor,
       updated_at=reversed_time,updated_by_membership_id=actor,row_version=row_version+1
       WHERE org_id=organization_id AND id=reversal_journal_id;
+    PERFORM "{FUNCTION_SCHEMA}"."mark_journal_reversed"(
+      organization_id,original_journal.id,reversal_journal_id);
     UPDATE finance.payments SET status='posted',posted_at=reversed_time,posted_by_membership_id=actor,
       updated_at=reversed_time,updated_by_membership_id=actor,row_version=row_version+1
       WHERE org_id=organization_id AND id=reversal_payment_id;
@@ -493,6 +934,12 @@ BEGIN
        AND allocation.status='posted'
        AND NOT EXISTS (SELECT 1 FROM finance.allocations reversal
                         WHERE reversal.org_id=allocation.org_id AND reversal.reversal_of_allocation_id=allocation.id);
+    FOR allocation_item IN SELECT DISTINCT allocation.open_item_id
+      FROM finance.allocations allocation
+     WHERE allocation.org_id=organization_id AND allocation.payment_id=original_payment_id LOOP
+      PERFORM erp_finance_commands.synchronize_open_item_status(
+        organization_id,allocation_item.open_item_id);
+    END LOOP;
     FOR advance IN SELECT * FROM procurement.purchase_order_advance_allocations a
       WHERE a.org_id=organization_id AND a.payment_id=original_payment_id AND a.status='posted' FOR UPDATE LOOP
       PERFORM erp_compliance_commands.assert_advance_withholding_reversible(organization_id,advance.id);
@@ -603,12 +1050,12 @@ BEGIN
     INSERT INTO finance.accounting_events(org_id,id,event_type,purchase_order_advance_allocation_id,journal_entry_id,
       occurred_at,source_posted_at,created_by_membership_id)
     VALUES(organization_id,event_id,'supplier_advance_application',advance.id,journal_id,posted_time,invoice.posted_at,actor);
-    INSERT INTO finance.allocations(org_id,id,purchase_order_advance_allocation_id,open_item_id,allocation_date,
+    INSERT INTO finance.allocations(org_id,id,source_open_item_id,open_item_id,allocation_date,
       currency_code,amount,functional_amount,fx_rate,status,created_by_membership_id)
-    VALUES(organization_id,allocation_id,advance.id,invoice_item.id,invoice.invoice_date,'INR',advance.gross_advance_amount,
+    VALUES(organization_id,allocation_id,advance_item.id,invoice_item.id,invoice.invoice_date,'INR',advance.gross_advance_amount,
       advance.functional_gross_advance_amount,1,'posted',actor);
-    UPDATE finance.open_items SET status='settled',settled_at=posted_time
-     WHERE org_id=organization_id AND id=advance_item.id AND status='open';
+    PERFORM erp_finance_commands.synchronize_open_item_status(organization_id,invoice_item.id);
+    PERFORM erp_finance_commands.synchronize_open_item_status(organization_id,advance_item.id);
     RETURN advance_allocation_id;
 END
 """,
@@ -1170,8 +1617,13 @@ def generated_artifacts() -> tuple[str, str]:
             "runtime_callable_functions": [
                 "import_bank_statement_lines(uuid,uuid,jsonb)",
                 "apply_supplier_advance(uuid,uuid,uuid,uuid,uuid,uuid,varchar,uuid)",
+                "apply_supplier_adjustment_credit(uuid,uuid,uuid,uuid,uuid,date)",
                 "parse_portal_document(uuid,uuid,jsonb)",
                 "post_payment(uuid,uuid,uuid,uuid)",
+                "post_customer_receipt(uuid,uuid,uuid,uuid,jsonb,uuid)",
+                "post_customer_cheque_clearance(uuid,uuid,uuid,uuid,uuid)",
+                "post_customer_cheque_bounce(uuid,uuid,uuid,uuid,uuid,jsonb)",
+                "post_supplier_payment(uuid,uuid,uuid,uuid,jsonb)",
                 "post_supplier_advance_payment(uuid,uuid,uuid,uuid,jsonb)",
                 "resolve_reconciliation_item(uuid,uuid,text,text)",
                 "reverse_payment(uuid,uuid,uuid,varchar,uuid,varchar,uuid,text)",

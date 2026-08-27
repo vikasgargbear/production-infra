@@ -4,7 +4,10 @@
     "required_roles": {
       "accounts_payable": "active liability account with allows_party_posting",
       "accounts_receivable": "active asset account with allows_party_posting",
+      "cash_on_hand": "active asset account without party posting",
+      "cheques_in_hand": "active asset account without party posting",
       "cost_of_goods_sold": "active expense account",
+      "customer_advance": "active liability account with allows_party_posting",
       "goods_received_not_invoiced": "active liability account",
       "gst_tds_payable": "active liability account",
       "income_tax_tds_payable": "active liability account",
@@ -14,10 +17,12 @@
       "input_sgst": "active asset account",
       "inventory_asset": "active asset account",
       "inventory_count_gain": "active income account without party posting",
+      "inventory_count_loss": "active expense account without party posting",
       "output_cess": "active liability account",
       "output_cgst": "active liability account",
       "output_igst": "active liability account",
       "output_sgst": "active liability account",
+      "purchase_price_variance": "active expense account without party posting",
       "purchase_return_inventory_variance": "active expense account",
       "rcm_cess_payable": "active liability account",
       "rcm_cgst_payable": "active liability account",
@@ -44,7 +49,7 @@
   ],
   "blocked_count": 0,
   "blocked_invariants": {},
-  "catalog_sha256": "e4ce378b2410a2b9b6d239b6a43f610435fc7935613167cbaae73f77ff3d848f",
+  "catalog_sha256": "6c88d9a0f93158f126abc8d87057b8fcebb287ba332ef36fd37b802cadc29c31",
   "generic_adjustment_tax_boundary": {
     "blocked_count": 0,
     "blocked_invariants": {},
@@ -281,7 +286,7 @@
   },
   "manifest_version": "1.0.0",
   "mapping_file": "baseline-commercial-command-enforcements.json",
-  "mapping_sha256": "4561f03e47e455910480cc87c06d131cc534837e0865e1dfc2e23b0ecf09f679",
+  "mapping_sha256": "85d582a6dc0c1f36e174d431e4550d3ae0c0b22a37ffbcb7075639a095664cd8",
   "postgresql": "15+",
   "prohibitions": [
     "No dynamic SQL.",
@@ -550,6 +555,6 @@
     "tax.documents:documents_cross_row_guard"
   ],
   "source_manifest": "commands_trade_v2/trade-posting-manifest.json",
-  "source_manifest_sha256": "08d65bea4e36aa1fbe768e6dfe86dda1ad9f1cf6d2b3ce40cef8b69377d0002c",
+  "source_manifest_sha256": "11c8913f8b663541427761c589a0553983e6c52a0cca8acb119239cadcc523cb",
   "target_resolved_count_after_catalog_correction": 11
 }

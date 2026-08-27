@@ -9,6 +9,7 @@
 export { default as ReturnsHub } from './ReturnsHub';
 export { default as SalesReturnFlow } from './SalesReturnFlow';
 export { default as PurchaseReturnFlow } from './PurchaseReturnFlow';
+export { default as CommercialReversalFlow } from './CommercialReversalFlow';
 export { default as ReturnsListHistory } from './ReturnsListHistory';
 
 // ==================== UI COMPONENTS ====================

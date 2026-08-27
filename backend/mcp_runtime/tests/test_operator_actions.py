@@ -29,6 +29,8 @@ EXPECTED_PREPARES = {
     "erp_supplier_invoice_prepare",
     "erp_purchase_return_prepare",
     "erp_customer_receipt_prepare",
+    "erp_customer_cheque_clearance_prepare",
+    "erp_customer_cheque_bounce_prepare",
     "erp_supplier_payment_prepare",
     "erp_supplier_advance_prepare",
     "erp_adjustment_note_prepare",
@@ -37,6 +39,9 @@ EXPECTED_PREPARES = {
     "erp_inventory_adjustment_prepare",
     "erp_inventory_destruction_prepare",
     "erp_expense_claim_prepare",
+    "erp_sales_return_reversal_prepare",
+    "erp_purchase_return_reversal_prepare",
+    "erp_adjustment_note_reversal_prepare",
 }
 
 
@@ -67,11 +72,16 @@ def test_only_reviewed_operator_action_subset_is_live_registered() -> None:
         "erp_sales_return_readback",
         "erp_purchase_return_readback",
         "erp_customer_receipt_readback",
+        "erp_customer_cheque_clearance_readback",
+        "erp_customer_cheque_bounce_readback",
         "erp_supplier_payment_readback",
         "erp_supplier_advance_readback",
         "erp_inventory_transfer_readback",
         "erp_inventory_adjustment_readback",
         "erp_expense_claim_readback",
+        "erp_sales_return_reversal_readback",
+        "erp_purchase_return_reversal_readback",
+        "erp_adjustment_note_reversal_readback",
     }
     assert OPERATOR_ACTIONS_EXPORTED is True
     published = set(PUBLISHED_PREPARE_TOOL_NAMES) | set(SHARED_ACTION_SCHEMAS)
@@ -232,7 +242,9 @@ def test_inventory_adjustment_is_a_hidden_typed_cycle_count_gain() -> None:
     assert "direction" not in properties
     assert "evidence_reference" not in properties
     batch = properties["lines"]["items"]["properties"]["batch_counts"]["items"]
-    assert set(batch["required"]) == {"batch_id", "counted_quantity"}
+    assert set(batch["required"]) == {
+        "batch_id", "counted_quantity", "stock_balance_row_version",
+    }
     assert OPERATOR_ACTIONS_EXPORTED is True
 
 
@@ -257,8 +269,8 @@ def test_supplier_payment_transport_is_exact_non_cheque_invoice_allocation() -> 
     assert properties["payment_method"]["enum"] == ["bank_transfer", "upi"]
     assert set(properties["allocations"]["items"]["required"]) == {
         "open_item_id",
-        "amount",
+        "cash_amount",
     }
-    assert "gross_amount" in schema["required"]
+    assert "expected_gross_amount" in schema["required"]
     assert "permanently consumed" in properties["external_reference"]["description"]
     assert OPERATOR_ACTIONS_EXPORTED is True

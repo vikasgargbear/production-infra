@@ -161,10 +161,15 @@ IDS = {
     "grni_account": "d3210000-0000-7000-8000-00000000000f",
     "purchase_return_variance_account": "d3210000-0000-7000-8000-000000000010",
     "inventory_count_gain_account": "d3210000-0000-7000-8000-000000000011",
+    "inventory_count_loss_account": "d3210000-0000-7000-8000-000000000016",
     "rounding_gain_account": "d3210000-0000-7000-8000-000000000012",
     "rounding_loss_account": "d3210000-0000-7000-8000-000000000013",
     "expense_claim_expense_account": "d3210000-0000-7000-8000-000000000014",
     "expense_claim_reimbursement_account": "d3210000-0000-7000-8000-000000000015",
+    "purchase_price_variance_account": "d3210000-0000-7000-8000-000000000017",
+    "cash_on_hand_account": "d3210000-0000-7000-8000-000000000018",
+    "cheques_in_hand_account": "d3210000-0000-7000-8000-000000000019",
+    "customer_advance_account": "d3210000-0000-7000-8000-000000000020",
 }
 DEMO_EXPENSE_RECEIPT_RETENTION_MONTHS = Decimal("84")
 DEMO_RUN_ID = os.getenv("GITHUB_RUN_ID", "local")
@@ -189,7 +194,7 @@ IDS["cycle_count_evidence"] = str(
         ),
     )
 )
-for resource_key in ("expense_receipt_evidence",):
+for resource_key in ("expense_receipt_evidence", "customer_receipt_evidence"):
     IDS[resource_key] = str(
         uuid5(
             NAMESPACE_URL,
@@ -268,9 +273,9 @@ REQUIRED_PERMISSIONS = (
 def _reviewed_prepare_capabilities() -> tuple[tuple[str, str], ...]:
     contract = json.loads(OPERATOR_CONTRACT_PATH.read_text(encoding="utf-8"))
     actions = contract.get("prepare_actions")
-    if not isinstance(actions, list) or len(actions) != 17:
+    if not isinstance(actions, list) or len(actions) < 17:
         raise RuntimeError(
-            "generated operator contract must contain exactly 17 prepare actions"
+            "generated operator contract must contain the 17 core prepare actions"
         )
     capabilities = tuple(sorted(
         (
@@ -281,8 +286,8 @@ def _reviewed_prepare_capabilities() -> tuple[tuple[str, str], ...]:
         if isinstance(action, dict)
     ))
     if (
-        len(capabilities) != 17
-        or len({operation for operation, _ in capabilities}) != 17
+        len(capabilities) != len(actions)
+        or len({operation for operation, _ in capabilities}) != len(actions)
         or any(
             not operation.endswith(".prepare")
             or approval_policy not in {
@@ -2313,6 +2318,13 @@ def seed_end_to_end_master(
                 business_date,
                 "recipient_itc_reversal",
             ),
+            (
+                IDS["customer_receipt_evidence"],
+                "customer_receipt_evidence",
+                f"customer-receipt-evidence-{DEMO_RUN_ID}.json",
+                SOURCE_RETRIEVED_ON,
+                f"customer_receipt_evidence:{DEMO_RUN_ID}:{DEMO_RUN_ATTEMPT}",
+            ),
         )
         cursor.executemany(
             """
@@ -2455,8 +2467,10 @@ def seed_end_to_end_master(
             (IDS["grni_account"], "2300-DEMO-GRNI", "Demo goods received not invoiced", "liability", False, False),
             (IDS["purchase_return_variance_account"], "5200-DEMO-PRV", "Demo purchase return inventory variance", "expense", False, False),
             (IDS["inventory_count_gain_account"], "4200-DEMO-ICG", "Demo inventory count gain", "income", False, False),
+            (IDS["inventory_count_loss_account"], "5201-DEMO-ICL", "Demo inventory count loss", "expense", False, False),
             (IDS["rounding_gain_account"], "4900-DEMO-RG", "Demo rounding gain", "income", False, False),
             (IDS["rounding_loss_account"], "5900-DEMO-RL", "Demo rounding loss", "expense", False, False),
+            (IDS["purchase_price_variance_account"], "5300-DEMO-PPV", "Demo purchase price variance", "expense", False, False),
             (
                 IDS["destruction_loss_account"],
                 f"LIVE18-DSTR-{DEMO_RUN_ID}-{DEMO_RUN_ATTEMPT}",
@@ -2479,6 +2493,30 @@ def seed_end_to_end_master(
                 "Live18 member reimbursement payable",
                 "liability",
                 False,
+                False,
+            ),
+            (
+                IDS["cash_on_hand_account"],
+                "1010-DEMO-CASH",
+                "Demo branch cash on hand",
+                "asset",
+                False,
+                False,
+            ),
+            (
+                IDS["cheques_in_hand_account"],
+                "1020-DEMO-CHEQUES",
+                "Demo uncleared cheques in hand",
+                "asset",
+                False,
+                False,
+            ),
+            (
+                IDS["customer_advance_account"],
+                "2400-DEMO-CUSTADV",
+                "Demo customer advances",
+                "liability",
+                True,
                 False,
             ),
         )
@@ -2545,14 +2583,19 @@ def seed_end_to_end_master(
             "purchase_return_inventory_variance": IDS["purchase_return_variance_account"],
             "inventory_asset": IDS["inventory_account"],
             "inventory_count_gain": IDS["inventory_count_gain_account"],
+            "inventory_count_loss": IDS["inventory_count_loss_account"],
             "cost_of_goods_sold": IDS["cogs_account"],
             "rounding_gain": IDS["rounding_gain_account"],
             "rounding_loss": IDS["rounding_loss_account"],
+            "purchase_price_variance": IDS["purchase_price_variance_account"],
             "inventory_destruction_loss": IDS["destruction_loss_account"],
             "inventory_itc_reversal_expense": IDS["destruction_loss_account"],
             "member_reimbursement_liability": IDS[
                 "expense_claim_reimbursement_account"
             ],
+            "cash_on_hand": IDS["cash_on_hand_account"],
+            "cheques_in_hand": IDS["cheques_in_hand_account"],
+            "customer_advance": IDS["customer_advance_account"],
         }
         cursor.executemany(
             """
@@ -2570,6 +2613,38 @@ def seed_end_to_end_master(
                     role, account_id, IDS["reviewer_membership"], IDS["reviewer_membership"],
                 )
                 for role, account_id in sorted(role_accounts.items())
+            ],
+        )
+        cash_rule_values = {
+            "max_single_amount": Decimal("100000.00"),
+            "max_customer_rolling_amount": Decimal("200000.00"),
+            "rolling_window_days": Decimal("30"),
+        }
+        cursor.executemany(
+            """
+            INSERT INTO core.settings (
+                org_id,id,scope_kind,branch_id,namespace,key,value_type,value_numeric,
+                status,created_by_membership_id,updated_by_membership_id
+            ) VALUES (%s,%s,'branch',%s,'finance.cash_receipt_rules',%s,'numeric',%s,
+                'active',%s,%s)
+            ON CONFLICT DO NOTHING
+            """,
+            [
+                (
+                    IDS["org"],
+                    str(
+                        uuid5(
+                            NAMESPACE_URL,
+                            f"aasopharma-demo-cash-receipt-rule:{rule_key}",
+                        )
+                    ),
+                    IDS["branch"],
+                    rule_key,
+                    rule_value,
+                    IDS["reviewer_membership"],
+                    IDS["reviewer_membership"],
+                )
+                for rule_key, rule_value in sorted(cash_rule_values.items())
             ],
         )
         cursor.execute(
@@ -3429,7 +3504,6 @@ def supplier_advance_payload(
         "payment_date": business_date.isoformat(),
         "supplier_account_id": IDS["supplier_account"],
         "purchase_order_id": purchase_order_id,
-        "settlement_account_id": IDS["bank_ledger"],
         "bank_account_id": IDS["bank_account"],
         "payment_method": "upi",
         "gross_amount": "500.00",
@@ -3991,6 +4065,7 @@ def supplier_invoice_payload(
                 "allocated_base_billed_quantity": "50",
                 "allocated_base_free_quantity": "2.5",
                 "product_inventory_cost_treatment": "capitalize",
+                "landed_cost_allocation_method": "direct",
                 "itc_eligibility": "eligible",
                 "itc_eligibility_basis": "taxable_resale_not_blocked_under_section_17",
             }
@@ -4419,11 +4494,10 @@ def supplier_payment_payload(
         "branch_id": IDS["branch"],
         "payment_date": business_date.isoformat(),
         "supplier_account_id": IDS["supplier_account"],
-        "settlement_account_id": IDS["bank_ledger"],
         "bank_account_id": IDS["bank_account"],
         "payment_method": "bank_transfer",
-        "gross_amount": "2000.00",
-        "allocations": [{"open_item_id": open_item_id, "amount": "2000.00"}],
+        "expected_gross_amount": "2000.00",
+        "allocations": [{"open_item_id": open_item_id, "cash_amount": "2000.00"}],
         "external_reference": f"DEMO-NEFT-PAY-{os.getenv('GITHUB_RUN_ID', 'local')}",
     }
 
@@ -5286,12 +5360,13 @@ def customer_receipt_payload(
         "branch_id": IDS["branch"],
         "payment_date": business_date.isoformat(),
         "customer_account_id": IDS["customer_account"],
-        "settlement_account_id": IDS["bank_ledger"],
         "bank_account_id": IDS["bank_account"],
         "payment_method": "upi",
+        "receipt_purpose": "invoice_settlement",
         "amount": "500.00",
         "allocations": [{"open_item_id": open_item_id, "amount": "500.00"}],
         "external_reference": f"DEMO-UPI-RECEIPT-{os.getenv('GITHUB_RUN_ID', 'local')}",
+        "evidence_attachment_id": IDS["customer_receipt_evidence"],
     }
 
 
@@ -5513,7 +5588,11 @@ def reconcile_purchase_return(
 
 
 def inventory_adjustment_payload(
-    batch_id: str, counted_base_quantity: str, *, business_date: date
+    batch_id: str,
+    counted_base_quantity: str,
+    stock_balance_row_version: int,
+    *,
+    business_date: date,
 ) -> dict[str, Any]:
     business_date = require_business_date(business_date)
     counted_instant = datetime.now(timezone.utc)
@@ -5535,7 +5614,11 @@ def inventory_adjustment_payload(
                 "product_id": IDS["product"],
                 "uom_conversion_id": IDS["count_uom_conversion"],
                 "batch_counts": [
-                    {"batch_id": batch_id, "counted_quantity": counted_packs}
+                    {
+                        "batch_id": batch_id,
+                        "counted_quantity": counted_packs,
+                        "stock_balance_row_version": stock_balance_row_version,
+                    }
                 ],
             }
         ],
@@ -5584,7 +5667,7 @@ def reconcile_inventory_adjustment(connection, resource_id: str) -> dict[str, An
         }
 
 
-def current_saleable_quantity(connection, batch_id: str) -> str:
+def current_saleable_balance(connection, batch_id: str) -> tuple[str, int]:
     with connection.cursor() as cursor:
         cursor.execute(
             "SELECT erp_security.activate_context(%s, %s)",
@@ -5592,7 +5675,7 @@ def current_saleable_quantity(connection, batch_id: str) -> str:
         )
         cursor.execute(
             """
-            SELECT on_hand_quantity
+            SELECT on_hand_quantity,row_version
               FROM inventory.stock_balances
              WHERE org_id=%s AND branch_id=%s AND location_id=%s
                AND product_id=%s AND batch_id=%s
@@ -5605,7 +5688,7 @@ def current_saleable_quantity(connection, batch_id: str) -> str:
         row = cursor.fetchone()
         if row is None or row[0] <= 0:
             raise RuntimeError("demo saleable batch balance is unavailable")
-        return str(row[0])
+        return str(row[0]), int(row[1])
 
 
 def seed_live18_cycle_count_evidence(
@@ -6188,7 +6271,7 @@ def main() -> int:
             runtime,
             supplier_payment_journey["executed"]["resource_id"],
             "disbursement",
-            supplier_payment_request["gross_amount"],
+            supplier_payment_request["expected_gross_amount"],
         )
 
     with database_connection("ERP_RUNTIME_DATABASE_URL") as runtime:
@@ -6330,13 +6413,14 @@ def main() -> int:
             purchase_return_journey["executed"]["resource_id"],
             purchase_return_journey["prepared"]["command_request_id"],
         )
-        saleable_quantity = current_saleable_quantity(
+        saleable_quantity, stock_balance_row_version = current_saleable_balance(
             runtime, receipt_reconciliation["batch_id"]
         )
 
     adjustment_request = inventory_adjustment_payload(
         receipt_reconciliation["batch_id"],
         saleable_quantity,
+        stock_balance_row_version,
         business_date=demo_business_date,
     )
     preflight_action("inventory.adjustment.prepare", adjustment_request)
@@ -6453,8 +6537,17 @@ _SAFE_FAILURE_ERROR_CODES = frozenset({
     "APPROVAL_REQUIRED", "IDEMPOTENCY_CONFLICT", "PERIOD_CLOSED",
     "INSUFFICIENT_STOCK", "BATCH_BLOCKED", "POLICY_BLOCKED",
 })
+_SEPARATELY_FIXTURED_PREPARE_OPERATIONS = frozenset({
+    "finance.customer_cheque_bounce.prepare",
+    "finance.customer_cheque_clearance.prepare",
+    "finance.adjustment_note.reversal.prepare",
+    "procurement.purchase_return.reversal.prepare",
+    "sales.return.reversal.prepare",
+})
 _SAFE_FAILURE_OPERATIONS = frozenset(
-    operation for operation, _approval_policy in PREPARE_CAPABILITIES
+    operation
+    for operation, _approval_policy in PREPARE_CAPABILITIES
+    if operation not in _SEPARATELY_FIXTURED_PREPARE_OPERATIONS
 ) | frozenset({
     "automation.command.approve",
     "automation.command.execute",

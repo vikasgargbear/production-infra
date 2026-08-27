@@ -25,6 +25,7 @@ import {
 import { clientUuid } from '../../../utils/clientUuid';
 import type { CanonicalCommandPreview } from '../../../services/api/canonicalOperatorActions';
 import CustomerReceiptReviewDialog from './CustomerReceiptReviewDialog';
+import CustomerChequeLifecyclePanel from './CustomerChequeLifecyclePanel';
 
 
 // Import global components
@@ -85,6 +86,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
     invoiceByOpenItem: Map<string, { invoice_id: string; due: string | number }>;
   } | null>(null);
   const [postedPaymentId, setPostedPaymentId] = React.useState('');
+  const [postedReceiptRowVersion, setPostedReceiptRowVersion] = React.useState(0);
   const [receiptConfirmation, setReceiptConfirmation] = React.useState<{
     preview: CanonicalCommandPreview;
     payload: CanonicalCustomerReceiptPreparePayload;
@@ -169,6 +171,14 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
         reference_number: payment.reference_number,
         bank_account_id: payment.bank_account_id,
         settlement_account_id: payment.settlement_account_id,
+        branch_id: payment.branch_id,
+        evidence_attachment_id: payment.evidence_attachment_id,
+        sales_order_id: payment.sales_order_id,
+        receipt_purpose: payment.receipt_purpose,
+        instrument_number: payment.instrument_number,
+        instrument_date: payment.instrument_date,
+        drawee_bank_name: payment.drawee_bank_name,
+        account_payee_confirmed: payment.account_payee_confirmed,
         allocation_method: payment.allocation_method,
         allocations: payment.allocations,
       }, outstandingInvoices, 'erp-web-customer-receipt-prepare:validation-only');
@@ -193,6 +203,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
       if (postedReceiptRef.current) {
         const posted = postedReceiptRef.current;
         const readback = await reconcileCustomerReceipt(posted.paymentId, posted.payload, posted.invoiceByOpenItem);
+        setPostedReceiptRowVersion(readback.row_version);
         setPaymentField('receipt_no', readback.payment_number || readback.payment_id);
         setMessage('Receipt posted and reconciled against the authoritative invoice balance.', 'success');
         setCurrentStep(3);
@@ -207,6 +218,14 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
         reference_number: payment.reference_number,
         bank_account_id: payment.bank_account_id,
         settlement_account_id: payment.settlement_account_id,
+        branch_id: payment.branch_id,
+        evidence_attachment_id: payment.evidence_attachment_id,
+        sales_order_id: payment.sales_order_id,
+        receipt_purpose: payment.receipt_purpose,
+        instrument_number: payment.instrument_number,
+        instrument_date: payment.instrument_date,
+        drawee_bank_name: payment.drawee_bank_name,
+        account_payee_confirmed: payment.account_payee_confirmed,
         allocation_method: payment.allocation_method,
         allocations: payment.allocations,
       };
@@ -266,6 +285,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
       setPostedPaymentId(executed.payment_id);
       setReceiptConfirmation(null);
       const readback = await reconcileCustomerReceipt(executed.payment_id, payload, invoiceByOpenItem);
+      setPostedReceiptRowVersion(readback.row_version);
       setPaymentField('receipt_no', readback.payment_number || readback.payment_id);
       setMessage('Receipt posted and reconciled against the authoritative invoice balance.', 'success');
       setCurrentStep(3);
@@ -286,6 +306,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
     receiptAttemptRef.current = null;
     postedReceiptRef.current = null;
     setPostedPaymentId('');
+    setPostedReceiptRowVersion(0);
     setReceiptConfirmation(null);
     resetPayment();
     setCurrentStep(1);
@@ -440,6 +461,17 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
               <p className="text-2xl font-bold text-gray-900 mb-8">
                 Amount: ₹{centsToMoney(moneyToCents(payment.amount))}
               </p>
+
+              {payment.payment_mode === 'cheque'
+                && postedPaymentId
+                && postedReceiptRowVersion > 0
+                && (
+                  <CustomerChequeLifecyclePanel
+                    branchId={postedReceiptRef.current?.payload.branch_id || payment.branch_id}
+                    paymentId={postedPaymentId}
+                    rowVersion={postedReceiptRowVersion}
+                  />
+                )}
 
               <div className="flex justify-center space-x-3">
                 <button
@@ -629,7 +661,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                           <div className="text-2xl mb-2">💳</div>
                           <h4 className="font-semibold text-green-800 mb-1">Customer Advance Payment</h4>
                           <p className="text-sm text-green-700">
-                            Keep as Advance is available for selection, but posting remains disabled until the reviewed customer-advance command is connected.
+                            This posts a goods-order payment liability with zero invoice allocations. Service or mixed-supply advances fail closed.
                           </p>
                         </div>
                       )}
@@ -640,7 +672,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                           <FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" />
                           <p className="text-gray-600 font-medium">No Outstanding Invoices</p>
                           <p className="text-sm text-gray-500 mt-2">
-                            This customer has no pending invoices. Select Keep as Advance to see its current posting availability.
+                            This customer has no pending invoices. A reviewed goods-order advance remains available when its exact order identity is supplied.
                           </p>
                         </div>
                       )}

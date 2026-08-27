@@ -29,7 +29,7 @@ router = APIRouter(
     tags=["Canonical Customer Receipt Reads"],
 )
 FINANCE_USER = Depends(PermissionChecker("finance", "view"))
-CustomerReceiptMethod = Literal["bank_transfer", "card", "upi"]
+CustomerReceiptMethod = Literal["cash", "cheque", "bank_transfer", "card", "upi"]
 
 
 def _activate(db: Session, user: dict[str, Any]) -> UUID:

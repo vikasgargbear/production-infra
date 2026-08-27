@@ -95,8 +95,8 @@ def test_payment_settlement_identity_distinguishes_cash_from_bank() -> None:
     assert columns["bank_account_id"][:4] == [
         "bank_account_id", "uuid", True, None
     ]
-    assert "payment_method = 'cash' AND bank_account_id IS NULL" in expressions
-    assert "payment_method <> 'cash' AND bank_account_id IS NOT NULL" in expressions
+    assert "payment_method IN ('cash','cheque')" in expressions
+    assert "payment_method NOT IN ('cash','cheque') AND bank_account_id IS NOT NULL" in expressions
     assert "bank_account whose account_id exactly equals settlement_account_id" in rules
     assert "reauthorizes payment.branch_id" in rules
 
@@ -309,7 +309,7 @@ def test_open_items_allocations_and_bank_reconciliation_are_reversible_links() -
     } <= _columns(allocation).keys()
     assert (
         "num_nonnulls(payment_id,withholding_id,adjustment_note_id,"
-        "purchase_order_advance_allocation_id) = 1"
+        "purchase_order_advance_allocation_id,source_open_item_id) = 1"
     ) in _expressions(allocation)
     assert any(
         fk["columns"] == ["org_id", "purchase_order_advance_allocation_id"]
@@ -322,7 +322,7 @@ def test_open_items_allocations_and_bank_reconciliation_are_reversible_links() -
     assert _index(allocation, "allocations_reversal_uq")["unique"] is True
     allocation_triggers = _cross_row_rules(allocation)
     assert "Lock the exact settlement source" in allocation_triggers
-    assert "not above either source amount or open-item principal" in allocation_triggers
+    assert "not above either source amount or target principal" in allocation_triggers
     assert {"bank_statement_line_id", "journal_entry_id", "reversal_of_match_id"} <= _columns(match).keys()
     assert _index(match, "reconciliation_matches_reversal_uq")["unique"] is True
     assert "exceeding" in _cross_row_rules(match)

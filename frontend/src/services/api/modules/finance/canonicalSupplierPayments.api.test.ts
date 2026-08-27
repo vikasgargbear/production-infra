@@ -13,9 +13,9 @@ const ids = {
 };
 const payload: any = {
   supplier_account_id: ids.supplier, branch_id: ids.branch,
-  bank_account_id: ids.bank, settlement_account_id: ids.settlement,
-  external_reference: 'upi-ref', gross_amount: '40.01',
-  allocations: [{ open_item_id: ids.item, amount: '40.01' }],
+  bank_account_id: ids.bank,
+  external_reference: 'upi-ref', expected_gross_amount: '40.01',
+  allocations: [{ open_item_id: ids.item, cash_amount: '40.01' }],
 };
 const posted = (): any => ({
   payment_id: ids.payment, status: 'posted', supplier_account_id: ids.supplier,

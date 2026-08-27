@@ -35,15 +35,20 @@ OPERATOR_TOOL_DESCRIPTIONS: Mapping[str, str] = {
     "erp_goods_receipt_prepare": "Prepare a GRN against an approved PO with supplier challan, manufacturer batch, expiry, MRP, location, and QC facts.",
     "erp_supplier_invoice_prepare": "Prepare a supplier GST invoice matched to posted GRN quantities and GSTR-2B evidence.",
     "erp_purchase_return_prepare": "Prepare a supplier return, return challan, and debit-note or supplier-credit-note treatment against exact receipt lineage.",
-    "erp_customer_receipt_prepare": "Prepare an INR customer receipt with an exact bank reference and receivable allocations.",
-    "erp_supplier_payment_prepare": "Prepare an INR supplier payment with an exact bank reference and payable allocations.",
+    "erp_customer_receipt_prepare": "Prepare an allocated INR receipt or a goods-only unapplied customer advance using canonical cash, cheque, or bank authority.",
+    "erp_customer_cheque_clearance_prepare": "Prepare clearance of one posted account-payee customer cheque into a canonical bank account.",
+    "erp_customer_cheque_bounce_prepare": "Prepare the compensating bounce of one posted uncleared customer cheque.",
+    "erp_supplier_payment_prepare": "Prepare an INR supplier payment with canonical withholding and exact payable, advance, and adjustment-note identities.",
     "erp_supplier_advance_prepare": "Prepare an INR supplier advance allocated to one approved purchase-order line.",
     "erp_adjustment_note_prepare": "Prepare a standalone canonical customer credit note or supplier debit note against exact posted invoice lines and the authoritative open item.",
     "erp_inventory_transfer_prepare": "Prepare an exact canonical inter-branch stock transfer with explicit source batches and destination location.",
-    "erp_inventory_adjustment_prepare": "Prepare an evidenced positive cycle-count inventory adjustment for exact product batches.",
+    "erp_inventory_adjustment_prepare": "Prepare an evidenced homogeneous gain or ordinary-loss cycle-count inventory adjustment for exact product batches.",
     "erp_inventory_destruction_prepare": "Prepare certified same-day destruction of exact non-regulated stock with a reviewed Section 17(5)(h) GST input-credit reversal.",
     "erp_bank_reconciliation_prepare": "Prepare an exact full match between one imported bank-statement line and one posted bank-ledger journal entry without changing either owner.",
     "erp_expense_claim_prepare": "Submit an INR member expense claim with verified receipts, exact expense accounts, and a separately reviewed reimbursement journal.",
+    "erp_sales_return_reversal_prepare": "Prepare an exact compensating reversal of one erroneous posted sales return.",
+    "erp_purchase_return_reversal_prepare": "Prepare an exact compensating reversal of one erroneous posted purchase return.",
+    "erp_adjustment_note_reversal_prepare": "Prepare an exact compensating reversal of one posted customer-credit or supplier-debit note.",
     "erp_operation_approve": "Approve exactly one unchanged prepared command by its command ID and preview hash.",
     "erp_operation_review_get": "Inspect exact immutable preview bytes, hashes, source versions, impacts, and approval requirements using an independent approval grant.",
     "erp_operation_execute": "Execute exactly one approved, unchanged command with an idempotency key.",
@@ -53,11 +58,16 @@ OPERATOR_TOOL_DESCRIPTIONS: Mapping[str, str] = {
     "erp_sales_return_readback": "Read one posted sales return with its exact invoice, dispatch allocation, quarantine receipt, adjustment-note, allocation, and tax evidence.",
     "erp_purchase_return_readback": "Read one posted purchase return with its exact supplier-invoice, goods-receipt, inventory issue, adjustment-note, allocation, and tax evidence.",
     "erp_customer_receipt_readback": "Read one posted customer receipt with its exact receivable allocations and balanced settlement journal.",
+    "erp_customer_cheque_clearance_readback": "Read one cleared customer cheque with original instrument evidence and the exact bank reclassification journal.",
+    "erp_customer_cheque_bounce_readback": "Read one bounced customer cheque with original instrument evidence, compensating allocations, reopened residuals, and inverse journal.",
     "erp_supplier_payment_readback": "Read one posted supplier payment with its exact payable allocations, residual open items, withholding identity, and balanced settlement journal.",
     "erp_supplier_advance_readback": "Read one posted supplier advance with its exact purchase-order-line allocation, prepayment open item, withholding identity, and balanced journal.",
     "erp_inventory_transfer_readback": "Read one posted inventory transfer with its exact paired source and destination stock-ledger evidence and unchanged value.",
-    "erp_inventory_adjustment_readback": "Read one posted cycle-count gain with its exact count, stock ledger, valuation journal, and accounting-event evidence.",
+    "erp_inventory_adjustment_readback": "Read one posted signed cycle-count variance with its exact count, stock ledger, valuation journal, and accounting-event evidence.",
     "erp_expense_claim_readback": "Read a posted expense claim with approved lines, verified receipt hashes, balanced journal totals, and accounting-event identity.",
+    "erp_sales_return_reversal_readback": "Read exact sales-return counter-note, stock, allocation, tax, and journal reversal evidence.",
+    "erp_purchase_return_reversal_readback": "Read exact purchase-return counter-note, stock, allocation, tax, and journal reversal evidence.",
+    "erp_adjustment_note_reversal_readback": "Read exact adjustment-note counter-document, allocation, tax, and journal reversal evidence.",
 }
 PUBLISHED_PREPARE_TOOL_NAMES = frozenset(
     {
@@ -70,6 +80,8 @@ PUBLISHED_PREPARE_TOOL_NAMES = frozenset(
         "erp_supplier_invoice_prepare",
         "erp_purchase_return_prepare",
         "erp_customer_receipt_prepare",
+        "erp_customer_cheque_clearance_prepare",
+        "erp_customer_cheque_bounce_prepare",
         "erp_supplier_payment_prepare",
         "erp_supplier_advance_prepare",
         "erp_adjustment_note_prepare",
@@ -78,6 +90,9 @@ PUBLISHED_PREPARE_TOOL_NAMES = frozenset(
         "erp_inventory_destruction_prepare",
         "erp_bank_reconciliation_prepare",
         "erp_expense_claim_prepare",
+        "erp_sales_return_reversal_prepare",
+        "erp_purchase_return_reversal_prepare",
+        "erp_adjustment_note_reversal_prepare",
     }
 )
 
@@ -411,6 +426,24 @@ ALLOCATION = _object(
     "Explicit payment allocation; the backend verifies ownership, currency, branch and outstanding balance.",
 )
 
+SUPPLIER_PAYMENT_ALLOCATION = _object(
+    {
+        "open_item_id": _uuid("Exact posted supplier-invoice payable being reduced."),
+        "cash_amount": _decimal(
+            "Requested INR bank component for this payable; statutory withholding and selected credit residuals are database-derived.",
+            money=True,
+        ),
+        "supplier_advance_open_item_id": _uuid(
+            "Optional exact supplier-prepayment receivable; its locked residual is applied in full."
+        ),
+        "adjustment_note_open_item_id": _uuid(
+            "Optional exact posted supplier debit-note receivable; its locked residual is applied in full."
+        ),
+    },
+    ("open_item_id", "cash_amount"),
+    "One unambiguous payable settlement identity. Every selected source credit must share supplier, branch, and currency.",
+)
+
 
 @dataclass(frozen=True)
 class OperatorAction:
@@ -643,6 +676,10 @@ def _prepare_actions() -> dict[str, OperatorAction]:
                 "Explicit accounting treatment. The pilot accepts capitalize for received product lines.",
                 enum=["capitalize"],
             ),
+            "landed_cost_allocation_method": _string(
+                "Reviewed allocation authority for invoice price variance. No implicit weighting or fallback is allowed.",
+                enum=["direct", "quantity_weighted", "value_weighted"],
+            ),
             "itc_eligibility": _string(
                 "Explicit ITC treatment backed by the exact GSTR-2B portal line.",
                 enum=["eligible"],
@@ -659,6 +696,7 @@ def _prepare_actions() -> dict[str, OperatorAction]:
             "allocated_base_billed_quantity",
             "allocated_base_free_quantity",
             "product_inventory_cost_treatment",
+            "landed_cost_allocation_method",
             "itc_eligibility",
             "itc_eligibility_basis",
         ]
@@ -669,8 +707,12 @@ def _prepare_actions() -> dict[str, OperatorAction]:
         "properties": {
             **supplier_invoice_charge["properties"],
             "charge_inventory_cost_treatment": _string(
-                "Reviewed expense treatment; capitalized and uncertain charges remain unavailable.",
-                enum=["expense"],
+                "Explicit reviewed expense or capitalized landed-cost treatment.",
+                enum=["expense", "capitalize"],
+            ),
+            "landed_cost_allocation_method": _string(
+                "Reviewed allocation authority for invoice price variance. No implicit weighting or fallback is allowed.",
+                enum=["direct", "quantity_weighted", "value_weighted"],
             ),
             "net_value_account_id": _uuid(
                 "Active canonical expense account for the reviewed charge."
@@ -799,48 +841,73 @@ def _prepare_actions() -> dict[str, OperatorAction]:
     customer_receipt.update(
         {
             "customer_account_id": _uuid("Canonical active customer account; the backend derives its party."),
-            "settlement_account_id": _uuid(
-                "Active INR reconcilable bank asset ledger owned by bank_account_id."
-            ),
             "bank_account_id": _uuid(
-                "Active organization bank account that owns settlement_account_id."
+                "Active organization bank account for bank, card, or UPI receipt. The ledger is derived from this identity."
             ),
             "payment_method": _string(
-                "Reviewed non-cash INR receipt method; cash and cheque are unavailable in the pilot.",
-                enum=["bank_transfer", "card", "upi"],
+                "Reviewed INR receipt method. Cash and cheque use canonical branch account roles.",
+                enum=["cash", "cheque", "bank_transfer", "card", "upi"],
+            ),
+            "receipt_purpose": _string(
+                "Invoice settlement or a goods-only unapplied customer advance liability.",
+                enum=["invoice_settlement", "customer_advance"],
+            ),
+            "sales_order_id": _uuid(
+                "Required only for a goods-only customer advance; the backend locks the approved product-only order."
             ),
             "amount": _decimal("Exact total INR receipt amount.", money=True),
-            "allocations": _array(
-                ALLOCATION,
-                "Unique live sales-invoice receivable allocations whose exact sum equals amount.",
-            ),
+            "allocations": {
+                **_array(ALLOCATION, "Unique live receivable allocations."),
+                "minItems": 0,
+            },
             "external_reference": _string(
-                "Exact bank, UPI, or gateway reference used for duplicate-payment detection."
+                "Exact bank, UPI, gateway, cash-voucher, or cheque reference used for duplicate detection."
             ),
+            "evidence_attachment_id": _uuid(
+                "Verified immutable tender or instrument evidence required by the effective branch receipt rule."
+            ),
+            "instrument_number": _string("Cheque instrument number."),
+            "instrument_date": _date("Cheque instrument date."),
+            "drawee_bank_name": _string("Cheque drawee bank name copied from immutable evidence."),
+            "account_payee_confirmed": {"type": "boolean", "description": "Explicit confirmation that the cheque is account-payee only."},
         }
     )
+
+    customer_cheque_clearance = _header("clearance_date", "Cheque bank-clearance date.")
+    customer_cheque_clearance.update({
+        "original_payment_id": _uuid("Posted uncleared customer-cheque receipt."),
+        "original_payment_row_version": _string("Exact selected receipt row version.", pattern=r"^[1-9][0-9]*$"),
+        "bank_account_id": _uuid("Canonical INR bank account receiving cleared funds."),
+        "clearance_reference": _string("Exact bank clearance reference."),
+        "evidence_attachment_id": _uuid("Verified immutable bank-clearance evidence."),
+    })
+
+    customer_cheque_bounce = _header("bounce_date", "Cheque dishonour date.")
+    customer_cheque_bounce.update({
+        "original_payment_id": _uuid("Posted uncleared customer-cheque receipt."),
+        "original_payment_row_version": _string("Exact selected receipt row version.", pattern=r"^[1-9][0-9]*$"),
+        "reason_code": _string("Reviewed dishonour reason.", enum=["funds_insufficient", "signature_mismatch", "account_closed", "payment_stopped", "instrument_invalid", "other"]),
+        "evidence_attachment_id": _uuid("Verified immutable bank dishonour evidence."),
+    })
 
     supplier_payment = _header("payment_date", "Supplier payment value date.")
     supplier_payment.update(
         {
             "supplier_account_id": _uuid("Canonical active supplier account; the backend derives its party."),
-            "settlement_account_id": _uuid(
-                "Active asset ledger account funding the supplier settlement."
-            ),
             "bank_account_id": _uuid(
-                "Active organization bank account whose ledger account is settlement_account_id."
+                "Active organization bank account; its canonical ledger is database-derived."
             ),
             "payment_method": _string(
                 "Reviewed non-cheque INR supplier-payment method.",
                 enum=["bank_transfer", "upi"],
             ),
-            "gross_amount": _decimal(
-                "Exact INR posted-invoice liability settlement. The pilot requires withholding and advance application to be absent, so gross equals bank cash.",
+            "expected_gross_amount": _decimal(
+                "Concurrency assertion for the total liability reduction derived from locked payables, imported withholding rules, and selected credit residuals.",
                 money=True,
             ),
             "allocations": _array(
-                ALLOCATION,
-                "Unique live supplier-invoice payable allocations whose exact sum equals gross_amount.",
+                SUPPLIER_PAYMENT_ALLOCATION,
+                "Unique payable identities with optional exact source-credit identities.",
             ),
             "external_reference": _string(
                 "Exact bank or UPI reference permanently consumed for this bank account, including after accounting reversal."
@@ -863,11 +930,8 @@ def _prepare_actions() -> dict[str, OperatorAction]:
         {
             "supplier_account_id": _uuid("Canonical active supplier account; the backend derives its party."),
             "purchase_order_id": _uuid("Approved product purchase order."),
-            "settlement_account_id": _uuid(
-                "Active asset ledger account funding the supplier advance."
-            ),
             "bank_account_id": _uuid(
-                "Active organization bank account whose ledger account is settlement_account_id."
+                "Active organization bank account; its canonical asset ledger is database-derived."
             ),
             "payment_method": _string(
                 "Reviewed non-cheque INR supplier-advance method.",
@@ -945,8 +1009,13 @@ def _prepare_actions() -> dict[str, OperatorAction]:
         {
             "batch_id": _uuid("Canonical manufacturer batch selected for this movement."),
             "counted_quantity": _decimal("Exact physical count in the selected effective UOM."),
+            "stock_balance_row_version": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "Exact positive authoritative stock-balance row version selected before prepare.",
+            },
         },
-        ("batch_id", "counted_quantity"),
+        ("batch_id", "counted_quantity", "stock_balance_row_version"),
         "One unique existing lot count. The backend derives system quantity, base quantity, variance, and MWA value.",
     )
     inventory_adjustment = _header("adjustment_date", "India-local posting date of the same-day physical cycle count.")
@@ -955,7 +1024,7 @@ def _prepare_actions() -> dict[str, OperatorAction]:
             "counted_at": _datetime("Recent nonfuture physical count timestamp with timezone offset."),
             "counted_by_membership_id": _uuid("Active membership that performed the physical count."),
             "location_id": _uuid("Active same-branch saleable, non-cold inventory location."),
-            "reason_code": _string("Fixed reviewed cycle-count gain reason.", enum=["cycle_count"]),
+            "reason_code": _string("Fixed reviewed cycle-count reason.", enum=["cycle_count"]),
             "evidence_attachment_id": _uuid(
                 "Verified retained inventory_cycle_count_sheet certifying organization ownership and no pending source document."
             ),
@@ -967,9 +1036,9 @@ def _prepare_actions() -> dict[str, OperatorAction]:
                         "batch_counts": _array(STOCK_COUNT_BATCH, "Exact existing lots physically counted."),
                     },
                     ("product_id", "uom_conversion_id", "batch_counts"),
-                    "Cycle-count gain product and its unique existing lots.",
+                    "Signed cycle-count product and its unique existing lots.",
                 ),
-                "Gain-only cycle-count lines. Shortage, mixed, zero, cold-chain, controlled, recalled, and reversal flows are unavailable.",
+                "All lines must be gains or ordinary losses. Mixed, zero, damage, expiry, cold-chain, controlled, recalled, and reversal flows are unavailable.",
             ),
         }
     )
@@ -1071,6 +1140,20 @@ def _prepare_actions() -> dict[str, OperatorAction]:
         }
     )
 
+    commercial_reversal = {
+        "original_resource_id": _uuid("Exact posted return or adjustment-note identity to correct."),
+        "expected_row_version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Exact positive posted source row version.",
+        },
+        "reversal_date": _date("Counter-document date, not before the original note date."),
+        "reason": _string("Required auditable reason explaining why the posted source was erroneous."),
+        "amendment_evidence_attachment_id": _uuid(
+            "Verified statutory amendment or counter-note evidence; required only after return reporting."
+        ),
+    }
+
     definitions = (
         ("erp_sales_order_prepare", "sales.order.prepare", "sales.order.create", "commercial_lines", "actor_confirmation", sales_order),
         ("erp_sales_dispatch_prepare", "sales.dispatch.prepare", "sales.dispatch.create", "batched_commercial_lines", "actor_confirmation", sales_dispatch),
@@ -1081,6 +1164,8 @@ def _prepare_actions() -> dict[str, OperatorAction]:
         ("erp_supplier_invoice_prepare", "procurement.supplier_invoice.prepare", "procurement.supplier_invoice.create", "commercial_lines", "actor_confirmation", supplier_invoice),
         ("erp_purchase_return_prepare", "procurement.purchase_return.prepare", "procurement.purchase_return.create", "original_document_return", "separate_approver", purchase_return),
         ("erp_customer_receipt_prepare", "finance.customer_receipt.prepare", "finance.customer_receipt.create", "payment_allocations", "actor_confirmation", customer_receipt),
+        ("erp_customer_cheque_clearance_prepare", "finance.customer_cheque_clearance.prepare", "finance.customer_receipt.create", "cheque_instrument_clearance", "separate_approver", customer_cheque_clearance),
+        ("erp_customer_cheque_bounce_prepare", "finance.customer_cheque_bounce.prepare", "finance.customer_receipt.create", "cheque_instrument_bounce", "separate_approver", customer_cheque_bounce),
         ("erp_supplier_payment_prepare", "finance.supplier_payment.prepare", "finance.supplier_payment.create", "payment_allocations", "actor_confirmation", supplier_payment),
         ("erp_supplier_advance_prepare", "finance.supplier_advance.prepare", "finance.supplier_advance.create", "supplier_advance", "separate_approver", supplier_advance),
         ("erp_adjustment_note_prepare", "finance.adjustment_note.prepare", "finance.adjustment_note.manage", "original_document_adjustment", "separate_approver", adjustment_note),
@@ -1089,6 +1174,9 @@ def _prepare_actions() -> dict[str, OperatorAction]:
         ("erp_bank_reconciliation_prepare", "finance.bank_reconciliation.prepare", "finance.bank_reconcile", "exact_bank_journal_match", "separate_approver", bank_reconciliation),
         ("erp_inventory_destruction_prepare", "inventory.destruction.prepare", "inventory.destruction.create", "controlled_batched_movement", "separate_approver", inventory_destruction),
         ("erp_expense_claim_prepare", "finance.expense_claim.prepare", "finance.expense.manage", "verified_expense_receipts", "separate_approver", expense_claim),
+        ("erp_sales_return_reversal_prepare", "sales.return.reversal.prepare", "finance.adjustment_note.manage", "posted_commercial_reversal", "separate_approver", commercial_reversal),
+        ("erp_purchase_return_reversal_prepare", "procurement.purchase_return.reversal.prepare", "finance.adjustment_note.manage", "posted_commercial_reversal", "separate_approver", commercial_reversal),
+        ("erp_adjustment_note_reversal_prepare", "finance.adjustment_note.reversal.prepare", "finance.adjustment_note.manage", "posted_commercial_reversal", "separate_approver", commercial_reversal),
     )
 
     def prepare_schema(
@@ -1105,9 +1193,15 @@ def _prepare_actions() -> dict[str, OperatorAction]:
             "charge_lines",
             "expense_charge_lines",
             "authority_reference",
+            "amendment_evidence_attachment_id",
             "witness_credential",
             "bank_account_id",
             "external_reference",
+            "instrument_number",
+            "instrument_date",
+            "drawee_bank_name",
+            "account_payee_confirmed",
+            "sales_order_id",
             "qc_notes",
             "supplier_challan_number",
             "supplier_challan_date",
@@ -1191,11 +1285,16 @@ SHARED_ACTION_SCHEMAS: Mapping[str, Mapping[str, Any]] = {
     "erp_sales_return_readback": STATUS_INPUT_SCHEMA,
     "erp_purchase_return_readback": STATUS_INPUT_SCHEMA,
     "erp_customer_receipt_readback": STATUS_INPUT_SCHEMA,
+    "erp_customer_cheque_clearance_readback": STATUS_INPUT_SCHEMA,
+    "erp_customer_cheque_bounce_readback": STATUS_INPUT_SCHEMA,
     "erp_supplier_payment_readback": STATUS_INPUT_SCHEMA,
     "erp_supplier_advance_readback": STATUS_INPUT_SCHEMA,
     "erp_inventory_transfer_readback": STATUS_INPUT_SCHEMA,
     "erp_inventory_adjustment_readback": STATUS_INPUT_SCHEMA,
     "erp_expense_claim_readback": STATUS_INPUT_SCHEMA,
+    "erp_sales_return_reversal_readback": STATUS_INPUT_SCHEMA,
+    "erp_purchase_return_reversal_readback": STATUS_INPUT_SCHEMA,
+    "erp_adjustment_note_reversal_readback": STATUS_INPUT_SCHEMA,
 }
 
 

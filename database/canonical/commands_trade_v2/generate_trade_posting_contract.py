@@ -107,10 +107,11 @@ $function$""",
 
 
 def _landed_pool_function() -> list[str]:
-    return _function(
-        "eligible_landed_cost_pool(p_org_id uuid, p_supplier_invoice_line_id uuid)",
-        "numeric",
-        """
+    return [
+        *_function(
+            "total_landed_cost_pool(p_org_id uuid, p_supplier_invoice_line_id uuid)",
+            "numeric",
+            """
 DECLARE source procurement.supplier_invoice_lines%ROWTYPE;
         invoice_status text;
         allocated_billed numeric(20,6);
@@ -126,8 +127,8 @@ BEGIN
     SELECT invoice.status INTO invoice_status
       FROM procurement.supplier_invoices AS invoice
      WHERE invoice.org_id=p_org_id AND invoice.id=source.supplier_invoice_id;
-    IF source.id IS NULL OR invoice_status<>'posted' THEN
-        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='landed cost requires a posted supplier invoice line';
+    IF source.id IS NULL OR invoice_status NOT IN ('approved','posted') THEN
+        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='landed cost requires an approved or posted supplier invoice line';
     END IF;
     IF source.inventory_cost_treatment<>'capitalize' THEN
         RETURN 0;
@@ -155,7 +156,97 @@ BEGIN
     RETURN source.net_value_amount-receipt_cost;
 END
 """,
+        ),
+        *_function(
+            "eligible_landed_cost_pool(p_org_id uuid, p_supplier_invoice_line_id uuid)",
+            "numeric",
+            """
+DECLARE source procurement.supplier_invoice_lines%ROWTYPE;
+        total_pool numeric(20,2); source_basis numeric; remaining_basis numeric;
+        target_count bigint; exact_source_provenance boolean;
+BEGIN
+    SELECT * INTO STRICT source FROM procurement.supplier_invoice_lines
+     WHERE org_id=p_org_id AND id=p_supplier_invoice_line_id FOR SHARE;
+    total_pool:=erp_trade_commands_v2.total_landed_cost_pool(p_org_id,p_supplier_invoice_line_id);
+    IF total_pool=0 OR source.inventory_cost_treatment<>'capitalize' THEN RETURN 0; END IF;
+    IF source.landed_cost_allocation_method NOT IN ('direct','quantity_weighted','value_weighted') THEN
+        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='capitalized supplier line lacks a reviewed landed-cost allocation method';
+    END IF;
+
+    WITH raw_targets AS (
+      SELECT receipt.location_id,receipt.product_id,receipt.batch_id,
+             receipt.id AS goods_receipt_line_id,
+             allocation.allocated_base_billed_quantity+allocation.allocated_base_free_quantity AS allocated_quantity,
+             receipt.base_accepted_quantity+receipt.base_free_quantity AS receipt_quantity,
+             pg_catalog.round((allocation.allocated_base_billed_quantity+allocation.allocated_base_free_quantity)*receipt.unit_cost,2) AS allocated_value
+        FROM procurement.supplier_invoice_receipt_allocations allocation
+        JOIN procurement.supplier_invoice_lines product_line
+          ON product_line.org_id=allocation.org_id AND product_line.id=allocation.supplier_invoice_line_id
+        JOIN procurement.goods_receipt_lines receipt
+          ON receipt.org_id=allocation.org_id AND receipt.id=allocation.goods_receipt_line_id
+       WHERE allocation.org_id=p_org_id
+         AND product_line.supplier_invoice_id=source.supplier_invoice_id
+         AND (source.line_kind='charge' OR product_line.id=source.id)
+    ), targets AS (
+      SELECT location_id,product_id,batch_id,sum(allocated_quantity) AS allocated_quantity,
+             sum(allocated_value) AS allocated_value,
+             bool_and(allocated_quantity=receipt_quantity) AS fully_allocated_receipt,
+             array_agg(goods_receipt_line_id) AS goods_receipt_line_ids
+        FROM raw_targets GROUP BY location_id,product_id,batch_id
     )
+    SELECT count(*),bool_and(target.fully_allocated_receipt AND NOT EXISTS (
+             SELECT 1
+               FROM inventory.stock_ledger_entries AS entry
+               JOIN inventory.inventory_document_lines AS document_line
+                 ON document_line.org_id=entry.org_id
+                AND document_line.id=entry.inventory_document_line_id
+              WHERE entry.org_id=p_org_id
+                AND entry.location_id=target.location_id
+                AND entry.product_id=target.product_id
+                AND entry.batch_id=target.batch_id
+                AND entry.quantity_delta>0
+                AND NOT (document_line.goods_receipt_line_id=ANY(target.goods_receipt_line_ids))
+           )),
+           CASE source.landed_cost_allocation_method
+             WHEN 'value_weighted' THEN sum(target.allocated_value)
+             ELSE sum(target.allocated_quantity)
+           END,
+           CASE source.landed_cost_allocation_method
+             WHEN 'value_weighted' THEN sum(pg_catalog.round(
+               LEAST(target.allocated_quantity,COALESCE(balance.on_hand_quantity,0))
+               * target.allocated_value/target.allocated_quantity,2))
+             ELSE sum(LEAST(target.allocated_quantity,COALESCE(balance.on_hand_quantity,0)))
+           END
+      INTO target_count,exact_source_provenance,source_basis,remaining_basis
+      FROM targets target
+      LEFT JOIN inventory.stock_balances balance
+        ON balance.org_id=p_org_id AND balance.location_id=target.location_id
+       AND balance.product_id=target.product_id AND balance.batch_id=target.batch_id;
+    IF target_count=0 OR source_basis<=0 THEN
+        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='capitalized supplier line has no exact receipt allocation basis';
+    END IF;
+    IF exact_source_provenance IS DISTINCT FROM true THEN
+        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='landed-cost remaining stock is ambiguous because receipt stock is partial or co-mingled';
+    END IF;
+    IF source.landed_cost_allocation_method='direct' AND target_count<>1 THEN
+        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='direct landed-cost allocation requires exactly one receipt stock identity';
+    END IF;
+    IF remaining_basis<=0 THEN RETURN 0; END IF;
+    RETURN pg_catalog.round(total_pool*remaining_basis/source_basis,2);
+END
+""",
+        ),
+        *_function(
+            "consumed_landed_cost_pool(p_org_id uuid, p_supplier_invoice_line_id uuid)",
+            "numeric",
+            """
+BEGIN
+    RETURN erp_trade_commands_v2.total_landed_cost_pool(p_org_id,p_supplier_invoice_line_id)
+         - erp_trade_commands_v2.eligible_landed_cost_pool(p_org_id,p_supplier_invoice_line_id);
+END
+""",
+        ),
+    ]
 
 
 def _landed_line_definitions() -> list[str]:
@@ -177,10 +268,10 @@ DECLARE doc inventory.inventory_documents%ROWTYPE;
 BEGIN
     SELECT * INTO STRICT doc FROM inventory.inventory_documents
      WHERE org_id=p_org_id AND id=p_document_id FOR UPDATE;
-    IF doc.status<>'approved' OR doc.document_type<>'cost_adjustment'
+    IF doc.status NOT IN ('approved','posted') OR doc.document_type<>'cost_adjustment'
        OR doc.supplier_invoice_id IS NULL
        OR doc.costing_method_snapshot<>'moving_weighted_average' THEN
-        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='landed-cost command requires an approved typed MWA cost adjustment';
+        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='landed-cost command requires an approved or posted typed MWA cost adjustment';
     END IF;
     SELECT id INTO locked_supplier_invoice_id FROM procurement.supplier_invoices
      WHERE org_id=p_org_id AND id=doc.supplier_invoice_id AND status='posted'
@@ -239,7 +330,13 @@ BEGIN
          OR (line.cost_allocation_method='quantity_weighted'
              AND line.cost_allocation_basis_quantity IS DISTINCT FROM balance.on_hand_quantity)
          OR (line.cost_allocation_method='value_weighted'
-             AND line.cost_allocation_basis_value IS DISTINCT FROM balance.inventory_value)
+             AND line.cost_allocation_basis_value IS DISTINCT FROM
+               balance.inventory_value-COALESCE((
+                 SELECT sum(entry.value_delta) FROM inventory.stock_ledger_entries entry
+                  WHERE entry.org_id=line.org_id AND entry.inventory_document_id=line.inventory_document_id
+                    AND entry.location_id=line.from_location_id AND entry.product_id=line.product_id
+                    AND entry.batch_id=line.batch_id AND entry.entry_kind='value_adjustment'
+               ),0))
          OR NOT EXISTS (
              SELECT 1
                FROM procurement.supplier_invoice_receipt_allocations AS allocation
@@ -529,6 +626,156 @@ END
 
 def _landed_document_definitions() -> list[str]:
     return [
+        *_function(
+            "prepare_supplier_invoice_landed_cost_adjustment(p_org_id uuid, p_supplier_invoice_id uuid, p_document_id uuid, p_actor_id uuid)",
+            "uuid",
+            """
+DECLARE invoice procurement.supplier_invoices%ROWTYPE;
+        source_line procurement.supplier_invoice_lines%ROWTYPE; target record;
+        pool numeric(20,2); basis numeric; basis_total numeric;
+        weight numeric(20,12); allocated_weight numeric(20,12):=0;
+        allocated_value numeric(20,2):=0; line_value numeric(20,2);
+        line_number integer:=0; target_count bigint; target_position bigint;
+        document_value numeric(20,2);
+BEGIN
+    PERFORM erp_trade_commands.assert_context(p_org_id,p_actor_id);
+    SELECT * INTO STRICT invoice FROM procurement.supplier_invoices
+     WHERE org_id=p_org_id AND id=p_supplier_invoice_id AND status IN ('approved','posted') FOR UPDATE;
+    PERFORM erp_trade_commands.assert_permission('procurement.invoice.post',invoice.branch_id);
+    IF p_document_id IS NULL OR EXISTS (
+      SELECT 1 FROM inventory.inventory_documents
+       WHERE org_id=p_org_id AND supplier_invoice_id=p_supplier_invoice_id
+    ) THEN
+      RAISE EXCEPTION USING ERRCODE='23505', MESSAGE='supplier invoice landed-cost document identity already exists';
+    END IF;
+    PERFORM balance.location_id
+      FROM inventory.stock_balances AS balance
+      JOIN (
+        SELECT DISTINCT receipt.location_id,receipt.product_id,receipt.batch_id
+          FROM procurement.supplier_invoice_receipt_allocations AS allocation
+          JOIN procurement.supplier_invoice_lines AS supplier_line
+            ON supplier_line.org_id=allocation.org_id
+           AND supplier_line.id=allocation.supplier_invoice_line_id
+          JOIN procurement.goods_receipt_lines AS receipt
+            ON receipt.org_id=allocation.org_id
+           AND receipt.id=allocation.goods_receipt_line_id
+         WHERE supplier_line.org_id=p_org_id
+           AND supplier_line.supplier_invoice_id=p_supplier_invoice_id
+      ) AS source_target
+        ON source_target.location_id=balance.location_id
+       AND source_target.product_id=balance.product_id
+       AND source_target.batch_id=balance.batch_id
+     WHERE balance.org_id=p_org_id
+     ORDER BY balance.location_id,balance.product_id,balance.batch_id
+     FOR UPDATE OF balance;
+    SELECT COALESCE(sum(pg_catalog.abs(erp_trade_commands_v2.eligible_landed_cost_pool(p_org_id,line.id))),0)
+      INTO document_value FROM procurement.supplier_invoice_lines line
+     WHERE line.org_id=p_org_id AND line.supplier_invoice_id=p_supplier_invoice_id
+       AND line.inventory_cost_treatment='capitalize';
+    IF document_value=0 THEN RETURN NULL; END IF;
+
+    INSERT INTO inventory.inventory_documents(
+      org_id,id,branch_id,physical_movement_required,document_type,document_number,
+      fiscal_year,document_date,status,reason_code,currency_code,costing_method_snapshot,
+      total_abs_base_quantity,total_value,supplier_invoice_id,approved_at,approved_by_membership_id
+    ) VALUES (
+      p_org_id,p_document_id,invoice.branch_id,false,'cost_adjustment',invoice.supplier_invoice_number,
+      invoice.fiscal_year,invoice.supplier_invoice_date,'approved','supplier_invoice_landed_cost',
+      invoice.currency_code,'moving_weighted_average',0,document_value,p_supplier_invoice_id,
+      pg_catalog.transaction_timestamp(),p_actor_id
+    );
+
+    FOR source_line IN SELECT * FROM procurement.supplier_invoice_lines
+      WHERE org_id=p_org_id AND supplier_invoice_id=p_supplier_invoice_id
+        AND inventory_cost_treatment='capitalize' ORDER BY line_number,id
+    LOOP
+      pool:=erp_trade_commands_v2.eligible_landed_cost_pool(p_org_id,source_line.id);
+      IF pool=0 THEN CONTINUE; END IF;
+      allocated_weight:=0; allocated_value:=0;
+      WITH raw_targets AS (
+        SELECT receipt.location_id,receipt.product_id,receipt.batch_id,receipt.uom_code,
+               allocation.allocated_base_billed_quantity+allocation.allocated_base_free_quantity AS allocated_quantity
+          FROM procurement.supplier_invoice_receipt_allocations allocation
+          JOIN procurement.supplier_invoice_lines product_line
+            ON product_line.org_id=allocation.org_id AND product_line.id=allocation.supplier_invoice_line_id
+          JOIN procurement.goods_receipt_lines receipt
+            ON receipt.org_id=allocation.org_id AND receipt.id=allocation.goods_receipt_line_id
+         WHERE allocation.org_id=p_org_id AND product_line.supplier_invoice_id=p_supplier_invoice_id
+           AND (source_line.line_kind='charge' OR product_line.id=source_line.id)
+      ), targets AS (
+        SELECT location_id,product_id,batch_id,min(uom_code) AS uom_code,sum(allocated_quantity) AS allocated_quantity
+          FROM raw_targets GROUP BY location_id,product_id,batch_id
+      )
+      SELECT count(*),sum(CASE source_line.landed_cost_allocation_method
+               WHEN 'value_weighted' THEN balance.inventory_value ELSE balance.on_hand_quantity END)
+        INTO target_count,basis_total FROM targets stock_target
+        JOIN inventory.stock_balances balance ON balance.org_id=p_org_id
+         AND balance.location_id=stock_target.location_id
+         AND balance.product_id=stock_target.product_id
+         AND balance.batch_id=stock_target.batch_id
+       WHERE balance.on_hand_quantity>0;
+      IF target_count=0 OR basis_total<=0 OR
+         (source_line.landed_cost_allocation_method='direct' AND target_count<>1) THEN
+        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='landed-cost source has no exact positive reviewed allocation basis';
+      END IF;
+
+      target_position:=0;
+      FOR target IN
+        WITH raw_targets AS (
+          SELECT receipt.location_id,receipt.product_id,receipt.batch_id,receipt.uom_code,
+                 allocation.allocated_base_billed_quantity+allocation.allocated_base_free_quantity AS allocated_quantity
+            FROM procurement.supplier_invoice_receipt_allocations allocation
+            JOIN procurement.supplier_invoice_lines product_line
+              ON product_line.org_id=allocation.org_id AND product_line.id=allocation.supplier_invoice_line_id
+            JOIN procurement.goods_receipt_lines receipt
+              ON receipt.org_id=allocation.org_id AND receipt.id=allocation.goods_receipt_line_id
+           WHERE allocation.org_id=p_org_id AND product_line.supplier_invoice_id=p_supplier_invoice_id
+             AND (source_line.line_kind='charge' OR product_line.id=source_line.id)
+        ), targets AS (
+          SELECT location_id,product_id,batch_id,min(uom_code) AS uom_code,sum(allocated_quantity) AS allocated_quantity
+            FROM raw_targets GROUP BY location_id,product_id,batch_id
+        )
+        SELECT stock_target.*,balance.on_hand_quantity,balance.inventory_value,balance.average_unit_cost
+          FROM targets stock_target JOIN inventory.stock_balances balance ON balance.org_id=p_org_id
+           AND balance.location_id=stock_target.location_id
+           AND balance.product_id=stock_target.product_id
+           AND balance.batch_id=stock_target.batch_id
+         WHERE balance.on_hand_quantity>0
+         ORDER BY stock_target.location_id,stock_target.product_id,stock_target.batch_id
+         FOR UPDATE OF balance
+      LOOP
+        target_position:=target_position+1;
+        basis:=CASE source_line.landed_cost_allocation_method
+          WHEN 'value_weighted' THEN target.inventory_value ELSE target.on_hand_quantity END;
+        weight:=CASE WHEN source_line.landed_cost_allocation_method='direct' THEN 1
+          WHEN target_position<target_count THEN pg_catalog.round(basis/basis_total,12)
+          ELSE 1-allocated_weight END;
+        line_value:=CASE WHEN target_position<target_count THEN pg_catalog.round(pool*weight,2)
+          ELSE pool-allocated_value END;
+        line_number:=line_number+1;
+        INSERT INTO inventory.inventory_document_lines(
+          org_id,id,inventory_document_id,line_number,movement_kind,product_id,batch_id,uom_code,
+          entered_quantity,base_quantity,from_location_id,unit_cost,extended_cost,
+          cost_allocation_method,cost_allocation_basis_quantity,cost_allocation_basis_value,
+          cost_allocation_weight,supplier_invoice_line_id
+        ) VALUES (
+          p_org_id,pg_catalog.gen_random_uuid(),p_document_id,line_number,'value_adjustment',
+          target.product_id,target.batch_id,target.uom_code,0,0,target.location_id,
+          target.average_unit_cost,line_value,source_line.landed_cost_allocation_method,
+          CASE WHEN source_line.landed_cost_allocation_method='quantity_weighted' THEN target.on_hand_quantity END,
+          CASE WHEN source_line.landed_cost_allocation_method='value_weighted' THEN target.inventory_value END,
+          weight,source_line.id
+        );
+        allocated_weight:=allocated_weight+weight; allocated_value:=allocated_value+line_value;
+      END LOOP;
+      IF allocated_weight<>1 OR allocated_value<>pool THEN
+        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='landed-cost allocation residual did not reconcile exactly';
+      END IF;
+    END LOOP;
+    RETURN p_document_id;
+END
+""",
+        ),
         *_function(
             "post_landed_cost_adjustment(p_org_id uuid, p_document_id uuid, p_actor_id uuid, p_idempotency_key_hash bytea, p_request_hash bytea, p_expires_at timestamptz)",
             "uuid",

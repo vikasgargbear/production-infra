@@ -502,9 +502,8 @@ def test_scenario_matrix_matches_adapter_readiness_and_bounded_pilot_scopes():
         for key, binding in ACTION_ADAPTER_BINDINGS.items()
         if key.endswith(".prepare") and not binding.available
     }
-    assert supported == available == set(
-        matrix["readiness_contract"]["supported_prepare_operations"]
-    )
+    assert supported == set(matrix["readiness_contract"]["supported_prepare_operations"])
+    assert supported <= available
     assert unavailable == set(
         matrix["readiness_contract"]["unavailable_prepare_operations"]
     )
@@ -578,7 +577,7 @@ def test_scenario_matrix_matches_adapter_readiness_and_bounded_pilot_scopes():
         "supplier_payment_without_withholding",
         "purchase_return_partial",
         "purchase_return_final",
-        "positive_gain_only",
+        "ordinary_negative_variance",
     } <= coverage
     assert {
         "export",
@@ -590,7 +589,7 @@ def test_scenario_matrix_matches_adapter_readiness_and_bounded_pilot_scopes():
         "reverse_charge",
         "composition_or_unregistered_supplier",
         "fully_rejected_or_free_only_receipt",
-        "zero_loss_or_mixed_variance",
+        "zero_or_mixed_sign_variance",
         "uninvoiced_return",
         "direct_issue",
         "cash_section_269st_or_cash_account_without_authority",

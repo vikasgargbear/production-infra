@@ -25,6 +25,14 @@ export interface Payment {
     reference_number: string;
     bank_account_id: string;
     settlement_account_id: string;
+    branch_id: string;
+    evidence_attachment_id: string;
+    sales_order_id: string;
+    receipt_purpose: 'invoice_settlement' | 'customer_advance';
+    instrument_number: string;
+    instrument_date: string;
+    drawee_bank_name: string;
+    account_payee_confirmed: boolean;
     remarks: string;
     allocation_method: string;
     allocations: PaymentAllocation[];
@@ -90,6 +98,14 @@ const initialState: PaymentState = {
         reference_number: '',
         bank_account_id: '',
         settlement_account_id: '',
+        branch_id: '',
+        evidence_attachment_id: '',
+        sales_order_id: '',
+        receipt_purpose: 'invoice_settlement',
+        instrument_number: '',
+        instrument_date: '',
+        drawee_bank_name: '',
+        account_payee_confirmed: false,
         remarks: '',
         allocation_method: 'fifo',
         allocations: []

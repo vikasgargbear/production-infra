@@ -245,6 +245,13 @@ OPERATOR_READBACK_TOOLS: Mapping[str, tuple[str, str]] = {
     "erp_customer_receipt_readback": (
         "customer_receipt_readback", "customer-receipt-readback"
     ),
+    "erp_customer_cheque_clearance_readback": (
+        "customer_cheque_clearance_readback",
+        "customer-cheque-clearance-readback",
+    ),
+    "erp_customer_cheque_bounce_readback": (
+        "customer_cheque_bounce_readback", "customer-cheque-bounce-readback"
+    ),
     "erp_supplier_payment_readback": (
         "supplier_payment_readback", "supplier-payment-readback"
     ),
@@ -259,6 +266,15 @@ OPERATOR_READBACK_TOOLS: Mapping[str, tuple[str, str]] = {
     ),
     "erp_expense_claim_readback": (
         "expense_claim_readback", "expense-claim-readback"
+    ),
+    "erp_sales_return_reversal_readback": (
+        "sales_return_reversal_readback", "sales-return-reversal-readback"
+    ),
+    "erp_purchase_return_reversal_readback": (
+        "purchase_return_reversal_readback", "purchase-return-reversal-readback"
+    ),
+    "erp_adjustment_note_reversal_readback": (
+        "adjustment_note_reversal_readback", "adjustment-note-reversal-readback"
     ),
 }
 OPERATOR_OPERATIONS.update(

@@ -149,13 +149,19 @@ def test_approved_catalog_corrections_are_present_without_implicit_residual_defa
 
 def test_account_roles_and_cogs_are_explicit_and_fail_closed() -> None:
     manifest = json.loads((ROOT / "commercial-command-manifest.json").read_text())
-    mapping = (ROOT / "baseline-commercial-command-enforcements.json").read_text()
+    document = json.loads((ROOT / "baseline-commercial-command-enforcements.json").read_text())
+    mapping = "\n".join(
+        statement
+        for enforcement in document["enforcements"]
+        for statement in enforcement["statements"]
+    )
     roles = manifest["account_role_settings"]
     assert roles["namespace"] == "finance.account_roles"
     assert "branch setting first" in roles["resolution"]
     assert {
         "inventory_asset", "inventory_count_gain", "cost_of_goods_sold", "rcm_igst_payable",
         "sales_revenue", "supplier_prepayment", "income_tax_tds_payable", "gst_tds_payable",
+        "purchase_price_variance",
     } <= set(
         roles["required_roles"]
     )
@@ -165,6 +171,10 @@ def test_account_roles_and_cogs_are_explicit_and_fail_closed() -> None:
     assert "No invented account IDs or fallback suspense account." in manifest["prohibitions"]
     assert "line.revenue_account_id,'income',header.currency_code" in mapping
     assert "line.revenue_account_id,income,header.currency_code" not in mapping
+    assert "active branch finance account-role mapping is ambiguous" in mapping
+    assert "active organization finance account-role mapping is ambiguous" in mapping
+    assert "active finance account-role UUID setting is missing" in mapping
+    assert "account.allows_party_posting IS DISTINCT FROM require_party" in mapping
 
 
 def test_generic_adjustment_catalog_persists_fixed_calculation_and_lineage_facts() -> None:
@@ -341,3 +351,51 @@ def test_generic_adjustment_tax_boundary_is_typed_and_service_advances_stay_defe
     assert "guard_posted_purchase_return_lines" in fixture
     assert "'search_path=\"\"'=ANY" in fixture
     assert "reviewed security modes and empty fixed search_path" in fixture
+
+
+def test_commercial_reversals_are_named_compensating_authorities_with_exact_lineage() -> None:
+    document = json.loads((ROOT / "baseline-commercial-command-enforcements.json").read_text())
+    mapping = "\n".join(
+        statement
+        for enforcement in document["enforcements"]
+        for statement in enforcement["statements"]
+    )
+    for function_name in (
+        "prepare_sales_return_reversal",
+        "prepare_purchase_return_reversal",
+        "prepare_adjustment_note_reversal",
+        "post_sales_return_reversal",
+        "post_purchase_return_reversal",
+        "post_adjustment_note_reversal",
+        "persist_commercial_reversal_prepare",
+        "execute_approved_commercial_reversal",
+    ):
+        assert f'CREATE FUNCTION "erp_commercial_commands"."{function_name}"' in mapping
+    for invariant in (
+        "reported return or note requires explicit verified amendment or counter-note evidence",
+        "unreported return or note must use direct counter-document reversal without amendment evidence",
+        "commercial reversal is blocked because residual credit or debit was consumed",
+        "document_type='sales_return_receipt'",
+        "document_type='purchase_return_issue'",
+        "reverses_document_id",
+        "erp_trade_commands.post_locked_document",
+        "erp_finance_commands.mark_journal_reversed",
+        "reversal_of_adjustment_note_id",
+        "reversal_of_allocation_id",
+    ):
+        assert invariant in mapping
+    assert "UPDATE inventory.stock_balances" not in mapping[
+        mapping.index('CREATE FUNCTION "erp_commercial_commands"."post_commercial_reversal"'):
+        mapping.index('CREATE FUNCTION "erp_commercial_commands"."post_sales_return_reversal"')
+    ]
+    assert "supplier_invoice_id" not in mapping[
+        mapping.index('CREATE FUNCTION "erp_commercial_commands"."post_commercial_reversal"'):
+        mapping.index('CREATE FUNCTION "erp_commercial_commands"."post_sales_return_reversal"')
+    ]
+    post_body = mapping[
+        mapping.index('CREATE FUNCTION "erp_commercial_commands"."post_commercial_reversal"'):
+        mapping.index('CREATE FUNCTION "erp_commercial_commands"."post_sales_return_reversal"')
+    ]
+    assert post_body.index("erp_trade_commands.claim") < post_body.index(
+        "resolve_commercial_reversal_prepare"
+    )
