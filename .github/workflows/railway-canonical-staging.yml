@@ -605,12 +605,28 @@ jobs:
             local service=$1
             local key=$2
             local value=$3
+            local attempt
+            local variable_rc
             test -n "$value"
-            printf '%s' "$value" | railway variable set \
-              --service "$service" \
-              --environment "$RAILWAY_ENVIRONMENT_ID" \
-              --skip-deploys \
-              --stdin "$key" >/dev/null
+            for attempt in $(seq 1 4); do
+              variable_rc=0
+              printf '%s' "$value" | timeout --signal=TERM 45s railway variable set \
+                --service "$service" \
+                --environment "$RAILWAY_ENVIRONMENT_ID" \
+                --skip-deploys \
+                --stdin "$key" >/dev/null 2>&1 || variable_rc=$?
+              if test "$variable_rc" -eq 0; then
+                return 0
+              fi
+              echo "Railway variable transport is not ready for $service/$key " \
+                "(attempt $attempt/4, status $variable_rc)" >&2
+              if test "$attempt" -lt 4; then
+                sleep $((attempt * 2))
+              fi
+            done
+            echo "::error title=Railway variable update failed::$service/$key " \
+              "failed after four bounded attempts; provider output was suppressed" >&2
+            return 1
           }
 
           encode() { jq -nr --arg value "$1" '$value|@uri'; }
@@ -674,7 +690,7 @@ jobs:
           printf '%s\n' "$REVIEWED_SHA:$DEPLOYMENT_NONCE" > deploy/railway/frontend.force-deploy
 
           upload_diagnostic() {
-            python "$GITHUB_WORKSPACE/backend/scripts/railway_upload_diagnostic.py" \
+            python3 "$GITHUB_WORKSPACE/backend/scripts/railway_upload_diagnostic.py" \
               --stdout-file "$1" \
               --stderr-file "$2" \
               --format tsv

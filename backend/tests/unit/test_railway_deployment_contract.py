@@ -191,6 +191,11 @@ def test_workflow_sets_the_reviewed_sha_without_variable_deploys() -> None:
 
     assert variable_step.count("railway variable set \\") == 1
     assert "--skip-deploys" in variable_step
+    assert "for attempt in $(seq 1 4)" in variable_step
+    assert "timeout --signal=TERM 45s railway variable set" in variable_step
+    assert "provider output was suppressed" in variable_step
+    assert 'Railway variable transport is not ready for $service/$key' in variable_step
+    assert 'echo "$value"' not in variable_step
     assert variable_step.count(
         'RAILWAY_GIT_COMMIT_SHA "$REVIEWED_SHA"'
     ) == 3
@@ -333,6 +338,8 @@ def test_railway_never_receives_render_evidence_storage_credentials() -> None:
 
 def test_workflow_uploads_fresh_source_and_polls_exact_deployment_ids() -> None:
     workflow = _workflow()
+    assert 'python3 "$GITHUB_WORKSPACE/backend/scripts/railway_upload_diagnostic.py"' in workflow
+    assert 'python "$GITHUB_WORKSPACE/backend/scripts/railway_upload_diagnostic.py"' not in workflow
 
     assert "group: railway-canonical-staging-pilot" in workflow
     assert "cancel-in-progress: false" in workflow
