@@ -549,6 +549,48 @@ def test_stock_adjustment_runs_before_mutating_sales_and_uses_authoritative_stoc
         )
 
 
+def test_delivery_challan_proves_ordered_selected_batch_stock_prerequisite() -> None:
+    facts = {
+        "display": {
+            "direct_issue_available_base_quantity": "100.000000",
+            "cycle_count_system_base_quantity": "100.000000",
+            "sales_uom_multiplier": "10.000000",
+            "cycle_count_uom_multiplier": "10.000000",
+        },
+    }
+    scalars = {
+        "stock_adjustment_gain_quantity": "1.000000",
+        "sales_invoice_quantity": "9.000000",
+        "sales_invoice_free_quantity": "1.000000",
+        "sales_order_quantity": "1.000000",
+    }
+
+    assert _operation_facts(
+        "delivery_challan", facts, scalars, set()
+    ) is facts
+
+    with pytest.raises(FixtureCompileError, match="stock remaining"):
+        _operation_facts(
+            "delivery_challan",
+            facts,
+            {**scalars, "sales_order_quantity": "1.000001"},
+            set(),
+        )
+
+    with pytest.raises(FixtureCompileError, match="exact cycle-count"):
+        _operation_facts(
+            "delivery_challan",
+            {
+                "display": {
+                    **facts["display"],
+                    "cycle_count_system_base_quantity": "99.000000",
+                },
+            },
+            scalars,
+            set(),
+        )
+
+
 def test_bank_reconciliation_template_targets_exact_run_scoped_pair() -> None:
     root = Path(__file__).resolve().parents[3]
     template = json.loads(

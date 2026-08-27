@@ -1259,6 +1259,49 @@ def _operation_facts(
             None,
         ),
     }
+    if operation_id == "delivery_challan":
+        initial_base = Decimal(_leaf(
+            facts, "display.direct_issue_available_base_quantity", "canonical fact"
+        ))
+        cycle_count_base = Decimal(_leaf(
+            facts, "display.cycle_count_system_base_quantity", "canonical fact"
+        ))
+        sales_multiplier = Decimal(_leaf(
+            facts, "display.sales_uom_multiplier", "canonical fact"
+        ))
+        count_multiplier = Decimal(_leaf(
+            facts, "display.cycle_count_uom_multiplier", "canonical fact"
+        ))
+        if initial_base != cycle_count_base:
+            raise FixtureCompileError(
+                "delivery_challan prerequisite stock does not share the exact "
+                "cycle-count and direct-issue batch balance"
+            )
+        if min(initial_base, sales_multiplier, count_multiplier) <= 0:
+            raise FixtureCompileError(
+                "delivery_challan prerequisite stock and UOM multipliers must be positive"
+            )
+        adjusted_base = (
+            initial_base
+            + Decimal(_leaf(
+                scalars, "stock_adjustment_gain_quantity", "reviewed scalar"
+            )) * count_multiplier
+        )
+        invoice_base = (
+            Decimal(_leaf(scalars, "sales_invoice_quantity", "reviewed scalar"))
+            + Decimal(_leaf(
+                scalars, "sales_invoice_free_quantity", "reviewed scalar"
+            ))
+        ) * sales_multiplier
+        dispatch_base = Decimal(_leaf(
+            scalars, "sales_order_quantity", "reviewed scalar"
+        )) * sales_multiplier
+        if adjusted_base - invoice_base < dispatch_base:
+            raise FixtureCompileError(
+                "delivery_challan reviewed sales order exceeds the exact selected "
+                "batch stock remaining after its prior adjustment and sales invoice"
+            )
+        return facts
     if operation_id == "supplier_invoice":
         chain = supplier_invoice_chain_choices(scalars)
         portal_components = {

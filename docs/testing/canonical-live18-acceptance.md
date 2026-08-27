@@ -166,10 +166,12 @@ the exact canonical count UOM. The compiler resolves the requester membership,
 the exact run-and-attempt-bound unused retained cycle-count evidence, eligible
 released batch, UOM multiplier,
 evidence verification instant, and pre-run base stock from canonical staging.
-It then subtracts the earlier certified direct invoice and dispatch issues and
-derives one exactly representable physical count above the resulting system
-stock. The UI independently reloads eligibility, visibly reconciles that exact
-system balance, and requires a distinct reviewer before requester execution.
+It derives one exactly representable physical count above that system stock.
+Before compiling the later dispatch, the compiler proves that this exact batch's
+ordered adjustment and direct-invoice effects leave enough stock for the exact
+sales-order quantity. The UI independently reloads eligibility, visibly
+reconciles that exact system balance, and requires a distinct reviewer before
+requester execution.
 The two metadata URLs, three HTTPS origins, exact deployed SHA,
 two user credentials, and canonical organization/branch UUIDs are mandatory.
 The browser runner rejects any fixture step targeting WhatsApp, email, SMS,
