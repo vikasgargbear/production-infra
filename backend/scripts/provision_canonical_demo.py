@@ -2463,7 +2463,11 @@ def activate_demo_product(connection) -> None:
     with connection.cursor() as cursor:
         cursor.execute("SELECT erp_security.activate_context(%s, %s)", (IDS["reviewer_auth_user"], IDS["org"]))
         cursor.execute("SELECT set_config('app.request_id', %s, true)", (IDS["request"],))
-        cursor.execute("SELECT status, row_version FROM catalog.products WHERE org_id=%s AND id=%s FOR UPDATE", (IDS["org"], IDS["product"]))
+        cursor.execute(
+            "SELECT status, row_version FROM catalog.products "
+            "WHERE org_id=%s AND id=%s",
+            (IDS["org"], IDS["product"]),
+        )
         status, row_version = cursor.fetchone()
         if status == "active":
             return

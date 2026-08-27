@@ -70,7 +70,13 @@ def test_openapi_exposes_only_canonical_product_draft_mutations():
         "generic_name",
         "product_kind",
     }
-    assert update_properties == {"product_name", "generic_name", "product_kind"}
+    assert update_properties == {
+        "row_version",
+        "product_name",
+        "generic_name",
+        "product_kind",
+    }
+    assert schemas["CanonicalProductDraftUpdate"]["required"] == ["row_version"]
     assert not FORBIDDEN_REGULATORY_FIELDS & (create_properties | update_properties)
 
 

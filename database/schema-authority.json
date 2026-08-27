@@ -87,6 +87,8 @@
     "backend/alembic/sql/20260826_0029_evidence_storage_auth_hook.sql",
     "backend/alembic/versions/20260827_0030_runtime_command_resume_projection.py",
     "backend/alembic/sql/20260827_0030_runtime_command_resume_projection.sql",
+    "backend/alembic/versions/20260827_0031_canonical_write_function_boundary.py",
+    "backend/alembic/sql/20260827_0031_canonical_write_function_boundary.sql",
     "database/canonical/security/evidence-storage-service-identity.json",
     "database/canonical/master_codes/master-code-authority.json",
     "database/canonical/master_codes/generate_master_code_contract.py",

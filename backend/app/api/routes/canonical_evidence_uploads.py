@@ -11,10 +11,12 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Security, Upl
 from fastapi.security import HTTPBearer
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
 from ...core.database import get_db
 from ...core.security.permissions import PermissionChecker
+from ...infrastructure import canonical_write_commands
 from ...infrastructure.evidence_storage import (
     EVIDENCE_BUCKET,
     MAX_EVIDENCE_BYTES,
@@ -33,6 +35,23 @@ router = APIRouter(
     dependencies=[Security(HTTPBearer(auto_error=False))],
 )
 EXPENSE_RECEIPT_KIND = "expense_receipt"
+_EVIDENCE_SQLSTATE_RESPONSES = {
+    "22023": (422, "Expense receipt metadata is invalid"),
+    "23505": (409, "Evidence identity conflicts with existing metadata"),
+    "40001": (409, "Evidence lifecycle changed; reload before retrying"),
+    "42501": (403, "Evidence write is not authorized"),
+    "P0002": (409, "Canonical evidence metadata is missing"),
+}
+
+
+def _raise_evidence_database_error(exc: DBAPIError) -> None:
+    original = exc.orig
+    sqlstate = getattr(original, "sqlstate", None) or getattr(original, "pgcode", None)
+    mapped = _EVIDENCE_SQLSTATE_RESPONSES.get(sqlstate)
+    if mapped is None:
+        raise exc
+    status_code, detail = mapped
+    raise HTTPException(status_code=status_code, detail=detail) from exc
 
 
 def evidence_storage_dependency() -> SupabaseEvidenceStorage:
@@ -203,51 +222,35 @@ def _transition(
     status: Literal["verified", "rejected"],
 ) -> dict:
     _activate(db, user)
-    row = db.execute(
-        text(
-            """
-            UPDATE core.attachments
-               SET status=:status,
-                   verified_at=CASE WHEN :status='verified'
-                                    THEN pg_catalog.transaction_timestamp()
-                                    ELSE NULL END
-             WHERE org_id=:org_id
-               AND branch_id=:branch_id
-               AND id=:attachment_id
-               AND status='pending_upload'
-            RETURNING org_id AS organization_id,branch_id,id AS attachment_id,
-                      evidence_kind,original_filename,media_type,byte_size,
-                      pg_catalog.encode(sha256,'hex') AS sha256,document_date,
-                      retention_until,legal_hold,status,verified_at,
-                      storage_object_path
-            """
-        ),
-        {
-            "status": status,
-            "org_id": org_id,
-            "branch_id": branch_id,
-            "attachment_id": attachment_id,
-        },
-    ).mappings().one_or_none()
-    if row is None:
-        existing = _attachment_row(db, org_id, branch_id, attachment_id)
-        if existing is None or existing["status"] != status:
+    try:
+        canonical_write_commands.transition_expense_receipt_attachment(
+            db,
+            org_id=org_id,
+            branch_id=branch_id,
+            attachment_id=attachment_id,
+            target_status=status,
+        )
+        value = _attachment_row(db, org_id, branch_id, attachment_id)
+        if value is None:
             db.rollback()
             raise HTTPException(
                 status_code=409,
-                detail="Evidence lifecycle changed before integrity finalization",
+                detail="Canonical evidence metadata disappeared",
             )
+        db.commit()
+        return value
+    except DBAPIError as exc:
         db.rollback()
-        return existing
-    value = dict(row)
-    db.commit()
-    return value
+        _raise_evidence_database_error(exc)
 
 
 def _verify_stored_bytes(storage: SupabaseEvidenceStorage, row: dict) -> None:
     stored = storage.read(row["storage_object_path"])
     validate_pdf(row["original_filename"], row["media_type"], stored)
-    if len(stored) != row["byte_size"] or hashlib.sha256(stored).hexdigest() != row["sha256"]:
+    if (
+        len(stored) != row["byte_size"]
+        or hashlib.sha256(stored).hexdigest() != row["sha256"]
+    ):
         raise EvidenceIntegrityError(
             "Stored evidence bytes differ from canonical attachment metadata"
         )
@@ -277,76 +280,34 @@ def upload_expense_receipt(
         str(org_id), str(branch_id), EXPENSE_RECEIPT_KIND, digest
     )
     attachment_id = uuid4()
-    inserted = db.execute(
-        text(
-            """
-            INSERT INTO core.attachments (
-                org_id,branch_id,id,storage_bucket,storage_object_path,
-                original_filename,media_type,byte_size,sha256,evidence_kind,
-                document_date,retention_until,legal_hold,status
-            ) VALUES (
-                :org_id,:branch_id,:attachment_id,:storage_bucket,:object_key,
-                :original_filename,'application/pdf',:byte_size,
-                pg_catalog.decode(:sha256,'hex'),'expense_receipt',
-                :document_date,:retention_until,false,'pending_upload'
-            )
-            ON CONFLICT (org_id,storage_bucket,storage_object_path) DO NOTHING
-            RETURNING id
-            """
-        ),
-        {
-            "org_id": org_id,
-            "branch_id": branch_id,
-            "attachment_id": attachment_id,
-            "storage_bucket": EVIDENCE_BUCKET,
-            "object_key": object_key,
-            "original_filename": pdf.filename,
-            "byte_size": len(pdf.content),
-            "sha256": digest,
-            "document_date": document_date,
-            "retention_until": context["retention_until"],
-        },
-    ).scalar_one_or_none()
-    if inserted is None:
-        row = db.execute(
-            text(
-                """
-                SELECT id FROM core.attachments
-                 WHERE org_id=:org_id AND branch_id=:branch_id
-                   AND storage_bucket=:storage_bucket
-                   AND storage_object_path=:object_key
-                   AND evidence_kind='expense_receipt'
-                   AND sha256=pg_catalog.decode(:sha256,'hex')
-                   AND byte_size=:byte_size
-                   AND original_filename=:original_filename
-                   AND document_date=:document_date
-                """
-            ),
-            {
-                "org_id": org_id,
-                "branch_id": branch_id,
-                "storage_bucket": EVIDENCE_BUCKET,
-                "object_key": object_key,
-                "sha256": digest,
-                "byte_size": len(pdf.content),
-                "original_filename": pdf.filename,
-                "document_date": document_date,
-            },
-        ).scalar_one_or_none()
-        if row is None:
-            db.rollback()
-            raise HTTPException(
-                status_code=409,
-                detail="Evidence object identity conflicts with existing canonical metadata",
-            )
-        attachment_id = row
-    db.commit()
+    try:
+        initiated = canonical_write_commands.initiate_expense_receipt_attachment(
+            db,
+            org_id=org_id,
+            branch_id=branch_id,
+            attachment_id=attachment_id,
+            storage_bucket=EVIDENCE_BUCKET,
+            storage_object_path=object_key,
+            original_filename=pdf.filename,
+            byte_size=len(pdf.content),
+            sha256=bytes.fromhex(digest),
+            document_date=document_date,
+            retention_until=context["retention_until"],
+        )
+        attachment_id = initiated["attachment_id"]
+        db.commit()
+    except DBAPIError as exc:
+        db.rollback()
+        _raise_evidence_database_error(exc)
 
     _activate(db, user)
     current = _attachment_row(db, org_id, branch_id, attachment_id)
     db.rollback()
     if current is None:
-        raise HTTPException(status_code=409, detail="Canonical evidence metadata disappeared")
+        raise HTTPException(
+            status_code=409,
+            detail="Canonical evidence metadata disappeared",
+        )
     if current["status"] in ("verified", "retained"):
         try:
             _verify_stored_bytes(storage, current)
@@ -387,7 +348,7 @@ def upload_expense_receipt(
         attachment_id=attachment_id,
         status="verified",
     )
-    return _response(verified, replayed=inserted is None)
+    return _response(verified, replayed=initiated["idempotency_replayed"])
 
 
 @router.get("/{attachment_id}", response_model=EvidenceAttachmentResponse)

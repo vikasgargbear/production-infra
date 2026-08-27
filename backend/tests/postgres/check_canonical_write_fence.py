@@ -94,6 +94,11 @@ finally:
 
 assert scalar(
     "SELECT pg_catalog.has_table_privilege('erp_runtime','catalog.products','UPDATE')"
+) is False
+assert scalar(
+    "SELECT pg_catalog.has_function_privilege("
+    "'erp_runtime','erp_master_commands.update_product_draft(uuid,uuid,bigint,"
+    "boolean,text,boolean,text,boolean,text)','EXECUTE')"
 ) is True
 assert scalar(
     "SELECT pg_catalog.has_schema_privilege('erp_runtime','erp_automation_commands','USAGE')"

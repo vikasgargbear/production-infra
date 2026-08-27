@@ -72,8 +72,11 @@ def test_runtime_role_check_covers_lifecycle_branch_and_tenant_denial():
     assert "BRANCH_A_HIDDEN" in source
     assert "ORG_B" in source
     assert "status='verified'" in source
-    assert "status='rejected'" in source
+    assert '"rejected"' in source
     assert "legal_hold=true" in source
+    assert "initiate_expense_receipt_attachment" in source
+    assert "transition_expense_receipt_attachment" in source
+    assert "restricted runtime operation unexpectedly succeeded" in source
 
 
 def test_runtime_role_check_is_part_of_the_postgresql_15_gate():

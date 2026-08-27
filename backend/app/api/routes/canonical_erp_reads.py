@@ -32,6 +32,7 @@ from sqlalchemy.orm import Session
 from ...core.database import get_db
 from ...core.money import money_json
 from ...core.security.permissions import PermissionChecker
+from ...infrastructure import canonical_write_commands
 from ..schemas.money import MoneyJSON
 from ..schemas.master.customer import CanonicalCustomerCreate
 from ..schemas.master.supplier import CanonicalSupplierCreate
@@ -44,6 +45,7 @@ _MASTER_CREATE_SQLSTATE_RESPONSES = {
     "22023": (status.HTTP_422_UNPROCESSABLE_ENTITY, "Master data is invalid"),
     "22003": (status.HTTP_409_CONFLICT, "Master code sequence is exhausted"),
     "23505": (status.HTTP_409_CONFLICT, "Master data already exists"),
+    "23503": (status.HTTP_409_CONFLICT, "Master data is already referenced"),
     "23514": (status.HTTP_409_CONFLICT, "Master data configuration is incomplete"),
     "P0002": (status.HTTP_409_CONFLICT, "Required canonical master data is missing"),
     "40001": (status.HTTP_503_SERVICE_UNAVAILABLE, "Master data changed; retry safely"),
@@ -393,11 +395,13 @@ class CanonicalCustomerAddressWrite(BaseModel):
     pincode: str = Field(pattern=r"^[0-9]{6}$")
     address_type: Literal["billing", "shipping", "other"]
     is_default: bool
+    row_version: Optional[int] = Field(default=None, ge=1)
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
 
 class CanonicalProductDraftUpdate(BaseModel):
+    row_version: int = Field(ge=1)
     product_name: Optional[str] = Field(default=None, min_length=1, max_length=255)
     generic_name: Optional[str] = Field(default=None, max_length=255)
     product_kind: Optional[str] = Field(
@@ -408,7 +412,7 @@ class CanonicalProductDraftUpdate(BaseModel):
 
     @model_validator(mode="after")
     def require_change(self):
-        if not self.model_fields_set:
+        if not (self.model_fields_set - {"row_version"}):
             raise ValueError("At least one product field is required")
         return self
 
@@ -432,7 +436,8 @@ def products(limit: int = Query(100, ge=1, le=500), skip: int = Query(0, ge=0),
                CASE WHEN p.status='draft' AND p.hsn_code='0000' THEN NULL ELSE p.hsn_code END AS hsn_code,
                p.dosage_form, p.strength_display, p.drug_schedule,
                p.requires_prescription, p.cold_chain_required,
-               p.status='active' AS is_active, p.status, p.created_at, p.updated_at,
+               p.status='active' AS is_active, p.status, p.row_version,
+               p.created_at, p.updated_at,
                COALESCE(stock.current_stock, 0) AS current_stock
           FROM catalog.products p
           JOIN core.organizations organization
@@ -537,37 +542,26 @@ def update_product_draft(
     """Update only mutable identity fields while the product remains a draft."""
 
     org_id = _activate(db, user)
-    fields = product.model_fields_set
-    updated = db.execute(
-        text("""
-            UPDATE catalog.products
-               SET name = CASE WHEN :set_name THEN :name ELSE name END,
-                   generic_name = CASE WHEN :set_generic THEN :generic_name ELSE generic_name END,
-                   product_kind = CASE WHEN :set_kind THEN :product_kind ELSE product_kind END,
-                   updated_at = transaction_timestamp(),
-                   row_version = row_version + 1
-             WHERE org_id=:org_id AND id=:product_id AND status='draft'
-             RETURNING id, sku, name
-        """),
-        {
-            "org_id": org_id,
-            "product_id": product_id,
-            "set_name": "product_name" in fields,
-            "name": product.product_name,
-            "set_generic": "generic_name" in fields,
-            "generic_name": product.generic_name,
-            "set_kind": "product_kind" in fields,
-            "product_kind": product.product_kind,
-        },
-    ).first()
-    if updated is None:
+    try:
+        updated = canonical_write_commands.update_product_draft(
+            db,
+            org_id=org_id,
+            product_id=product_id,
+            expected_row_version=product.row_version,
+            fields=product.model_fields_set,
+            product_name=product.product_name,
+            generic_name=product.generic_name,
+            product_kind=product.product_kind,
+        )
+        db.commit()
+    except DBAPIError as exc:
         db.rollback()
-        raise HTTPException(status_code=409, detail="Only existing product drafts can be edited")
-    db.commit()
+        _raise_master_create_database_error(exc)
     return {
-        "product_id": updated.id,
-        "product_code": updated.sku,
-        "product_name": updated.name,
+        "product_id": updated["product_id"],
+        "product_code": updated["product_code"],
+        "product_name": updated["updated_product_name"],
+        "row_version": updated["new_row_version"],
         "lifecycle_status": "draft",
         "message": "Product draft updated",
     }
@@ -576,18 +570,31 @@ def update_product_draft(
 @router.delete("/products/{product_id}")
 def delete_product_draft(
     product_id: UUID,
+    row_version: int = Query(..., ge=1),
     user: dict = Depends(PermissionChecker("master", "delete")),
     db: Session = Depends(get_db),
 ):
-    """Fail closed until product deletion has a canonical command owner."""
+    """Delete an unused draft through its canonical database command."""
 
-    raise HTTPException(
-        status_code=503,
-        detail=(
-            "Product draft deletion is unavailable until its canonical "
-            "command is installed"
-        ),
-    )
+    org_id = _activate(db, user)
+    try:
+        deleted = canonical_write_commands.delete_product_draft(
+            db,
+            org_id=org_id,
+            product_id=product_id,
+            expected_row_version=row_version,
+        )
+        db.commit()
+    except DBAPIError as exc:
+        db.rollback()
+        _raise_master_create_database_error(exc)
+    return {
+        "success": True,
+        "product_id": deleted["product_id"],
+        "product_code": deleted["product_code"],
+        "product_name": deleted["product_name"],
+        "message": "Product draft deleted",
+    }
 
 
 @router.get("/products/all-with-batches")
@@ -1060,40 +1067,31 @@ def create_customer_address(
     party_id = _customer_party_id(db, org_id, customer_id)
     state_code = _validated_state_code(address.state_code, None)
     try:
-        if address.is_default:
-            db.execute(text("""
-                UPDATE "parties"."addresses"
-                   SET is_primary=false
-                 WHERE org_id=:org_id AND party_id=:party_id
-                   AND address_kind=:kind AND status='active'
-            """), {"org_id": org_id, "party_id": party_id, "kind": address.address_type})
-        address_id = db.execute(text("""
-            INSERT INTO parties.addresses (
-                org_id, party_id, address_kind, line1, line2, landmark,
-                city, state_code, postal_code, country_code, is_primary, status
-            ) VALUES (
-                :org_id, :party_id, :kind, :line1, :line2, :landmark,
-                :city, :state_code, :postal_code, 'IN',
-                CASE WHEN :is_default THEN true ELSE NOT EXISTS (
-                    SELECT 1 FROM parties.addresses
-                     WHERE org_id=:org_id AND party_id=:party_id
-                       AND address_kind=:kind AND status='active'
-                ) END,
-                'active'
-            ) RETURNING id
-        """), {
-            "org_id": org_id, "party_id": party_id,
-            "kind": address.address_type, "line1": address.address_line1,
-            "line2": address.address_line2, "landmark": address.landmark,
-            "city": address.city, "state_code": state_code,
-            "postal_code": address.pincode, "is_default": address.is_default,
-        }).scalar_one()
+        created = canonical_write_commands.create_party_address(
+            db,
+            org_id=org_id,
+            party_id=party_id,
+            address_kind=address.address_type,
+            line1=address.address_line1,
+            line2=address.address_line2,
+            landmark=address.landmark,
+            city=address.city,
+            state_code=state_code,
+            postal_code=address.pincode,
+            make_primary=address.is_default,
+        )
         db.commit()
-    except IntegrityError as exc:
+    except DBAPIError as exc:
         db.rollback()
-        raise HTTPException(status_code=409, detail="Address conflicts with existing customer data") from exc
-    return {"success": True, "address_id": address_id, "customer_id": customer_id,
-            "message": "Address created"}
+        _raise_master_create_database_error(exc)
+    return {
+        "success": True,
+        "address_id": created["address_id"],
+        "row_version": created["row_version"],
+        "idempotency_replayed": created["idempotency_replayed"],
+        "customer_id": customer_id,
+        "message": "Address created",
+    }
 
 
 @router.put(
@@ -1110,47 +1108,32 @@ def update_customer_address(
     org_id = _activate(db, user)
     party_id = _customer_party_id(db, org_id, customer_id)
     state_code = _validated_state_code(address.state_code, None)
+    if address.row_version is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Canonical address row_version is required for an update",
+        )
     try:
-        if address.is_default:
-            db.execute(text("""
-                UPDATE "parties"."addresses"
-                   SET is_primary=false
-                 WHERE org_id=:org_id AND party_id=:party_id
-                   AND address_kind=:kind AND id<>:address_id AND status='active'
-            """), {"org_id": org_id, "party_id": party_id,
-                     "address_id": address_id, "kind": address.address_type})
-        updated = db.execute(text("""
-            UPDATE "parties"."addresses"
-               SET address_kind=:kind, line1=:line1, line2=:line2,
-                   landmark=:landmark, city=:city, state_code=:state_code,
-                   postal_code=:postal_code,
-                   is_primary=CASE WHEN :is_default THEN true ELSE NOT EXISTS (
-                       SELECT 1 FROM parties.addresses other
-                        WHERE other.org_id=:org_id AND other.party_id=:party_id
-                          AND other.address_kind=:kind AND other.id<>:address_id
-                          AND other.status='active' AND other.is_primary
-                   ) END,
-                   updated_at=transaction_timestamp(), row_version=row_version+1
-             WHERE org_id=:org_id AND party_id=:party_id AND id=:address_id
-               AND status='active'
-         RETURNING id, row_version
-        """), {
-            "org_id": org_id, "party_id": party_id, "address_id": address_id,
-            "kind": address.address_type, "line1": address.address_line1,
-            "line2": address.address_line2, "landmark": address.landmark,
-            "city": address.city, "state_code": state_code,
-            "postal_code": address.pincode, "is_default": address.is_default,
-        }).mappings().first()
-        if updated is None:
-            raise HTTPException(status_code=404, detail="Customer address not found")
+        updated = canonical_write_commands.update_party_address(
+            db,
+            org_id=org_id,
+            party_id=party_id,
+            address_id=address_id,
+            expected_row_version=address.row_version,
+            address_kind=address.address_type,
+            line1=address.address_line1,
+            line2=address.address_line2,
+            landmark=address.landmark,
+            city=address.city,
+            state_code=state_code,
+            postal_code=address.pincode,
+            make_primary=address.is_default,
+        )
         db.commit()
-    except HTTPException:
+    except DBAPIError as exc:
         db.rollback()
-        raise
-    except IntegrityError as exc:
-        db.rollback()
-        raise HTTPException(status_code=409, detail="Address conflicts with existing customer data") from exc
-    return {"success": True, "address_id": updated["id"],
+        _raise_master_create_database_error(exc)
+    return {"success": True, "address_id": updated["address_id"],
             "row_version": updated["row_version"], "message": "Address updated"}
 
 
