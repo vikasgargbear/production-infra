@@ -3,7 +3,7 @@ import { calculateInvoicePreview } from '../../../../services/calculations/invoi
 import { employeesApi } from '../../../../services/api';
 import type { Customer } from '../../../../types/models/customer';
 import { buildCanonicalInvoicePreparePayload } from '../utils/canonicalInvoiceCommand';
-import { useInvoiceLogic } from './useInvoiceLogic';
+import { createInitialInvoice, useInvoiceLogic } from './useInvoiceLogic';
 import type { CanonicalDocumentPolicy } from '../../../../services/api/modules/org/canonicalBusinessContext.api';
 
 const mockDocumentPolicy: CanonicalDocumentPolicy = {
@@ -119,6 +119,10 @@ describe('useInvoiceLogic selected quantity boundary', () => {
 
         expect(result.current.invoice.invoice_date).toBe('2026-08-25');
         expect(result.current.invoice.due_date).toBe('');
+    });
+
+    it('starts the pre-logistics calculation with an explicit neutral freight amount', () => {
+        expect(createInitialInvoice().freight_charges).toBe('0.00');
     });
 
     it.each([

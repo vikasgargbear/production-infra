@@ -410,6 +410,12 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
                 location_id: product.location_id,
                 uom_conversion_id: product.uom_conversion_id,
                 quantity,
+                // Batch selection establishes a complete canonical draft
+                // line. A zero free quantity is explicit operator state, not
+                // a posting-time fallback, and its only valid treatment is to
+                // exclude it from taxable value.
+                free_quantity: '0.000000',
+                free_supply_tax_treatment: 'excluded_from_taxable_value',
                 unit: product.unit || product.uom,
                 pack_size: product.pack_size || product.pack_type,
                 mrp: product.mrp,

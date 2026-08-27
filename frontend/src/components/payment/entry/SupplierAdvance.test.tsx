@@ -52,6 +52,13 @@ beforeEach(() => {
 test('exposes the complete mandatory PO-line flow and keeps prepare disabled until valid', async () => {
   render(<SupplierAdvance />);
   await waitFor(() => expect((screen.getByLabelText('Supplier') as HTMLSelectElement).options.length).toBe(2));
+  expect(screen.getByLabelText('Supplier').getAttribute('aria-label')).toBe('Supplier');
+  expect(screen.getByLabelText('Approved purchase order').getAttribute('aria-label')).toBe('Approved purchase order');
+  expect(screen.getByLabelText('Approved PO product line').getAttribute('aria-label')).toBe('Approved PO product line');
+  expect(screen.getByLabelText('Bank and settlement ledger').getAttribute('aria-label')).toBe('Bank and settlement ledger');
+  expect(screen.getByLabelText('Method').getAttribute('aria-label')).toBe('Method');
+  expect(screen.getByLabelText('Bank / UPI reference').getAttribute('aria-label')).toBe('Bank / UPI reference');
+  expect(screen.getByLabelText('Gross advance amount').getAttribute('aria-label')).toBe('Gross advance amount');
   const prepare = screen.getByRole('button', { name: 'Prepare immutable preview' });
   expect((prepare as HTMLButtonElement).disabled).toBe(true);
   fireEvent.change(screen.getByLabelText('Supplier'), { target: { value: ids.supplier } });

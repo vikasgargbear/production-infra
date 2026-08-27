@@ -196,7 +196,10 @@ export const createInitialInvoice = (businessDate = ''): Invoice => ({
     vehicle_number: '',
     driver_phone: '',
     lr_number: '',
-    freight_charges: '',
+    // The item-step preview runs before the logistics step is shown. Start
+    // from an explicit neutral freight amount so the canonical calculation
+    // request is complete; the operator can still change it on step two.
+    freight_charges: '0.00',
     discount_amount: 0,
     discount_percent: 0,
     discount_type: 'percentage',
