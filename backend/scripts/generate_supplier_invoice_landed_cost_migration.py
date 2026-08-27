@@ -46,7 +46,10 @@ def generated_sql() -> str:
         create = [statement for statement in statements if statement.startswith(create_prefix)]
         if len(create) != 1:
             raise RuntimeError(f"expected one reviewed definition for {schema}.{name}, found {len(create)}")
-        selected.append(create[0].replace("CREATE FUNCTION", "CREATE OR REPLACE FUNCTION", 1))
+        definition = create[0].replace(
+            "CREATE FUNCTION", "CREATE OR REPLACE FUNCTION", 1
+        )
+        selected.append("\n".join(line.rstrip() for line in definition.splitlines()))
         signature_prefix = f'ALTER FUNCTION "{schema}"."{name}"('
         ownership = [statement for statement in statements if statement.startswith(signature_prefix)]
         if len(ownership) != 1:

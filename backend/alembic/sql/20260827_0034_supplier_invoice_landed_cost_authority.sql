@@ -691,7 +691,7 @@ BEGIN
         PERFORM "erp_commercial_commands".add_journal_line(organization_id,journal_id,line_no,role_account,header.branch_id,NULL,'Eligible input tax',component_amount,0,actor_id); line_no:=line_no+1;
       END IF;
     END LOOP;
-    
+
     IF header.tax_charge_mechanism='reverse_charge' THEN
       FOR role_key,component_amount IN SELECT * FROM (VALUES
         ('rcm_cgst_payable'::varchar,header.cgst_total),('rcm_sgst_payable'::varchar,header.sgst_total),
@@ -702,7 +702,7 @@ BEGIN
         END IF;
       END LOOP;
     END IF;
-    
+
     IF header.rounding_adjustment<>0 THEN
       role_key:=CASE WHEN header.rounding_adjustment>0 THEN 'rounding_loss' ELSE 'rounding_gain' END;
       role_account:=erp_commercial_commands.resolve_role_account(organization_id,header.branch_id,role_key,CASE WHEN role_key='rounding_gain' THEN 'income' ELSE 'expense' END,header.currency_code,false);
