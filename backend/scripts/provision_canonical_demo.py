@@ -22,6 +22,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, NamedTuple
 from uuid import NAMESPACE_URL, UUID, uuid5
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import jwt
 import pdfplumber
@@ -3451,6 +3452,44 @@ def organization_business_date(connection) -> date:
     return rows[0][0]
 
 
+def organization_business_clock(connection) -> tuple[date, datetime]:
+    """Resolve one database instant in the canonical organization timezone."""
+
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT erp_security.activate_context(%s, %s)",
+            (IDS["reviewer_auth_user"], IDS["org"]),
+        )
+        cursor.execute(
+            """
+            SELECT erp_core_commands.current_organization_business_date(),
+                   transaction_timestamp(), organization.timezone
+              FROM core.organizations organization
+             WHERE organization.id=%s AND organization.status='active'
+            """,
+            (IDS["org"],),
+        )
+        rows = cursor.fetchall()
+    if len(rows) != 1:
+        raise RuntimeError("canonical organization business clock is unavailable")
+    business_date, current_instant, timezone_name = rows[0]
+    if (
+        not isinstance(business_date, date)
+        or not isinstance(current_instant, datetime)
+        or current_instant.utcoffset() is None
+        or not isinstance(timezone_name, str)
+        or not timezone_name
+    ):
+        raise RuntimeError("canonical organization business clock is invalid")
+    try:
+        local_instant = current_instant.astimezone(ZoneInfo(timezone_name))
+    except ZoneInfoNotFoundError as error:
+        raise RuntimeError("canonical organization timezone is invalid") from error
+    if local_instant.date() != business_date:
+        raise RuntimeError("canonical organization business clock is inconsistent")
+    return business_date, local_instant.replace(microsecond=0)
+
+
 def reconcile_purchase_order(
     connection, resource_id: str, command_request_id: str, *, expected_line_count: int = 2
 ) -> dict[str, Any]:
@@ -3518,9 +3557,13 @@ def goods_receipt_payload(
     purchase_order_line_id: str,
     *,
     business_date: date,
+    received_at: datetime,
 ) -> dict[str, Any]:
     business_date = require_business_date(business_date)
-    received_at = datetime.now(timezone.utc).replace(microsecond=0)
+    if received_at.utcoffset() is None or received_at.date() != business_date:
+        raise ValueError(
+            "goods receipt time must be timezone-aware and match the business date"
+        )
     return {
         "idempotency_key": f"demo-goods-receipt-{os.getenv('GITHUB_RUN_ID', 'local')}",
         "branch_id": IDS["branch"],
@@ -6092,7 +6135,9 @@ def main() -> int:
     with database_connection("PSYCOPG_DATABASE_URL") as bootstrap:
         bootstrap_identity(bootstrap)
     with database_connection("ERP_RUNTIME_DATABASE_URL") as runtime:
-        demo_business_date = organization_business_date(runtime)
+        demo_business_date, demo_business_instant = organization_business_clock(
+            runtime
+        )
 
     with database_connection("PSYCOPG_DATABASE_URL") as bootstrap:
         release_exists = demo_tax_release_exists(bootstrap)
@@ -6184,6 +6229,7 @@ def main() -> int:
         purchase_order_id,
         purchase_reconciliation["line_ids"][1],
         business_date=demo_business_date,
+        received_at=demo_business_instant,
     )
     preflight_action("procurement.goods_receipt.prepare", receipt_payload)
     receipt_journey = exercise_action(

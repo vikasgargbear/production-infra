@@ -10,7 +10,7 @@ test database.
 from __future__ import annotations
 
 from contextlib import contextmanager
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 import hashlib
 import os
@@ -194,10 +194,17 @@ def _purchase_order_payload(*, business_date: date) -> dict[str, Any]:
 
 
 def _goods_receipt_payload(
-    purchase_order_id: UUID, purchase_order_line_id: UUID, *, business_date: date
+    purchase_order_id: UUID,
+    purchase_order_line_id: UUID,
+    *,
+    business_date: date,
+    received_at: datetime,
 ) -> dict[str, Any]:
     payload = fixture.goods_receipt_payload(
-        str(purchase_order_id), str(purchase_order_line_id), business_date=business_date
+        str(purchase_order_id),
+        str(purchase_order_line_id),
+        business_date=business_date,
+        received_at=received_at,
     )
     batch = payload["lines"][0]["batches"][0]
     batch.update({
@@ -602,7 +609,9 @@ def _run_transferred_stock_lifecycle(
     with psycopg2.connect(admin_dsn) as connection:
         fixture.bootstrap_identity(connection, organization_pan=organization_pan)
     with psycopg2.connect(runtime_dsn) as connection:
-        business_date = fixture.organization_business_date(connection)
+        business_date, business_instant = fixture.organization_business_clock(
+            connection
+        )
     with psycopg2.connect(admin_dsn) as connection:
         fixture.seed_business_master(connection, business_date=business_date)
         fixture.seed_end_to_end_master(connection, business_date=business_date)
@@ -630,6 +639,7 @@ def _run_transferred_stock_lifecycle(
             _goods_receipt_payload(
                 purchase.resource_id, purchase_order_line_id,
                 business_date=business_date,
+                received_at=business_instant,
             ),
         ))
         assert receipt.resource_id is not None
@@ -817,7 +827,9 @@ def run_lifecycle() -> None:
     with psycopg2.connect(admin_dsn) as connection:
         _seed_reference_authority(connection)
     with psycopg2.connect(runtime_dsn) as connection:
-        business_date = fixture.organization_business_date(connection)
+        business_date, business_instant = fixture.organization_business_clock(
+            connection
+        )
     with psycopg2.connect(admin_dsn) as connection:
         fixture.seed_business_master(connection, business_date=business_date)
         fixture.seed_end_to_end_master(connection, business_date=business_date)
@@ -845,7 +857,10 @@ def run_lifecycle() -> None:
             service,
             "procurement.goods_receipt.prepare",
             _goods_receipt_payload(
-                purchase_order_id, purchase_order_line_id, business_date=business_date
+                purchase_order_id,
+                purchase_order_line_id,
+                business_date=business_date,
+                received_at=business_instant,
             ),
         ))
         goods_receipt_id = receipt.resource_id

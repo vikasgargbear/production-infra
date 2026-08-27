@@ -308,7 +308,9 @@ def main() -> None:
         fixture.IDS["tax_version"] = str(tax_rows[0][0])
         fixture.IDS["tax_release"] = str(tax_rows[0][1])
     with psycopg2.connect(runtime_dsn) as connection:
-        business_date = fixture.organization_business_date(connection)
+        business_date, business_instant = fixture.organization_business_clock(
+            connection
+        )
     previous_date = business_date - timedelta(days=1)
     next_date = business_date + timedelta(days=1)
     # This chronology fixture deliberately proves that a supplier document may
@@ -349,7 +351,10 @@ def main() -> None:
         )
 
         receipt_payload = fixture.goods_receipt_payload(
-            str(purchase_id), str(purchase_line_id), business_date=business_date
+            str(purchase_id),
+            str(purchase_line_id),
+            business_date=business_date,
+            received_at=business_instant,
         )
         receipt_batch = receipt_payload["lines"][0]["batches"][0]
         receipt_batch.update(

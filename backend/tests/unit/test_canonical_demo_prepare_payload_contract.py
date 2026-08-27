@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -21,6 +21,7 @@ UUID_A = "d3000000-0000-7000-8000-0000000000aa"
 UUID_B = "d3000000-0000-7000-8000-0000000000ab"
 UUID_C = "d3000000-0000-7000-8000-0000000000ac"
 BUSINESS_DATE = date(2026, 8, 26)
+BUSINESS_INSTANT = datetime(2026, 8, 26, 12, tzinfo=timezone.utc)
 
 
 def _reviewed_po_grn_scalars() -> dict[str, str]:
@@ -149,7 +150,10 @@ def _cases() -> list[tuple[str, str, dict[str, Any], dict[str, Any]]]:
             "goods_receipt",
             "procurement.goods_receipt.prepare",
             module.goods_receipt_payload(
-                UUID_A, UUID_B, business_date=BUSINESS_DATE
+                UUID_A,
+                UUID_B,
+                business_date=BUSINESS_DATE,
+                received_at=BUSINESS_INSTANT,
             ),
             {
                 "purchase_order_id": UUID_A,
@@ -354,7 +358,10 @@ def test_demo_chain_keeps_exact_lineage_between_each_prepare_payload() -> None:
         UUID_A, UUID_B, business_date=BUSINESS_DATE
     )
     receipt = module.goods_receipt_payload(
-        UUID_A, UUID_B, business_date=BUSINESS_DATE
+        UUID_A,
+        UUID_B,
+        business_date=BUSINESS_DATE,
+        received_at=BUSINESS_INSTANT,
     )
     supplier_invoice = module.supplier_invoice_payload(
         UUID_A, UUID_B, portal, business_date=BUSINESS_DATE

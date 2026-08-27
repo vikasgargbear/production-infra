@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import importlib.util
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = ROOT / "backend/scripts/provision_canonical_demo.py"
 BUSINESS_DATE = date(2026, 8, 26)
+BUSINESS_INSTANT = datetime(2026, 8, 26, 12, tzinfo=timezone.utc)
 UUID_A = "d3000000-0000-7000-8000-0000000000aa"
 UUID_B = "d3000000-0000-7000-8000-0000000000ab"
 UUID_C = "d3000000-0000-7000-8000-0000000000ac"
@@ -61,6 +62,37 @@ def test_demo_business_date_is_resolved_from_the_canonical_postgres_clock() -> N
     ]
 
 
+def test_demo_business_clock_preserves_the_organization_local_offset() -> None:
+    module = _module()
+    utc_instant = datetime(2026, 8, 25, 18, 30, tzinfo=timezone.utc)
+    connection = _Connection([(BUSINESS_DATE, utc_instant, "Asia/Kolkata")])
+
+    business_date, local_instant = module.organization_business_clock(connection)
+
+    assert business_date == BUSINESS_DATE
+    assert local_instant.isoformat() == "2026-08-26T00:00:00+05:30"
+    _statement, parameters = connection.cursor_value.executions[-1]
+    assert "transaction_timestamp()" in _statement
+    assert "organization.timezone" in _statement
+    assert parameters == (module.IDS["org"],)
+
+
+def test_goods_receipt_rejects_a_timestamp_outside_the_business_date() -> None:
+    module = _module()
+
+    try:
+        module.goods_receipt_payload(
+            UUID_A,
+            UUID_B,
+            business_date=BUSINESS_DATE,
+            received_at=datetime(2026, 8, 25, 23, 59, tzinfo=timezone.utc),
+        )
+    except ValueError as error:
+        assert "match the business date" in str(error)
+    else:
+        raise AssertionError("mismatched receipt timestamp was accepted")
+
+
 def test_customer_address_eligibility_uses_the_same_business_date() -> None:
     module = _module()
     connection = _Connection([(7,)])
@@ -96,7 +128,10 @@ def test_demo_transaction_chains_are_monotonic_on_one_business_clock() -> None:
         UUID_A, UUID_B, business_date=BUSINESS_DATE
     )
     goods_receipt = module.goods_receipt_payload(
-        UUID_A, UUID_B, business_date=BUSINESS_DATE
+        UUID_A,
+        UUID_B,
+        business_date=BUSINESS_DATE,
+        received_at=BUSINESS_INSTANT,
     )
     supplier_invoice = module.supplier_invoice_payload(
         UUID_A, UUID_B, portal, business_date=BUSINESS_DATE
