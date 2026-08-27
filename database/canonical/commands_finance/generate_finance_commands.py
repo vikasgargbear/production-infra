@@ -139,7 +139,11 @@ END
             "void",
             """
 DECLARE original finance.journal_entries%ROWTYPE; reversal finance.journal_entries%ROWTYPE;
+        actor uuid:=erp_security.current_membership_id();
 BEGIN
+    IF organization_id IS DISTINCT FROM erp_security.current_org_id() OR actor IS NULL THEN
+      RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='journal reversal organization or actor context is invalid';
+    END IF;
     SELECT * INTO STRICT original FROM finance.journal_entries
      WHERE org_id=organization_id AND id=original_journal_id FOR UPDATE;
     SELECT * INTO STRICT reversal FROM finance.journal_entries
@@ -172,7 +176,8 @@ BEGIN
       RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='journal reversal command requires an exact posted sign inversion';
     END IF;
     UPDATE finance.journal_entries SET status='reversed',updated_at=pg_catalog.transaction_timestamp(),
-      row_version=row_version+1 WHERE org_id=organization_id AND id=original.id AND status='posted';
+      updated_by_membership_id=actor,row_version=row_version+1
+     WHERE org_id=organization_id AND id=original.id AND status='posted';
     IF NOT FOUND THEN RAISE EXCEPTION USING ERRCODE='40001', MESSAGE='original journal changed before reversal transition'; END IF;
 END
 """,

@@ -129,8 +129,10 @@ def test_journal_reversal_transition_is_explicitly_owned_by_named_commands() -> 
 
     assert '"mark_journal_reversed"' in sql
     assert "journal reversal command requires an exact posted sign inversion" in sql
+    assert "journal reversal organization or actor context is invalid" in sql
     assert "reversal.reversal_of_journal_entry_id IS DISTINCT FROM original.id" in sql
     assert "UPDATE finance.journal_entries SET status='reversed'" in sql
+    assert "updated_by_membership_id=actor" in sql
     assert 'GRANT EXECUTE ON FUNCTION "erp_finance_commands"."mark_journal_reversed"' not in sql
     posting = sql.index("WHERE org_id=organization_id AND id=reversal_journal_id;")
     transition = sql.index('"mark_journal_reversed"(', posting)
