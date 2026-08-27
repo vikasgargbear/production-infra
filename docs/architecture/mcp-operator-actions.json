@@ -9,6 +9,7 @@
     "fail_closed": true,
     "published_prepare_operations": [
       "finance.adjustment_note.prepare",
+      "finance.adjustment_note.reversal.prepare",
       "finance.customer_receipt.prepare",
       "finance.bank_reconciliation.prepare",
       "finance.expense_claim.prepare",
@@ -20,11 +21,13 @@
       "procurement.goods_receipt.prepare",
       "procurement.purchase_order.prepare",
       "procurement.purchase_return.prepare",
+      "procurement.purchase_return.reversal.prepare",
       "procurement.supplier_invoice.prepare",
       "sales.dispatch.prepare",
       "sales.invoice.prepare",
       "sales.order.prepare",
-      "sales.return.prepare"
+      "sales.return.prepare",
+      "sales.return.reversal.prepare"
     ],
     "unavailable_prepare_operations": [],
     "release_gates": {
@@ -347,6 +350,36 @@
       "approval_policy": "separate_approver",
       "schema_profile": "verified_expense_receipts",
       "description": "Submit a current-date INR member expense claim backed by unique verified receipts, then require a distinct full-claim approver before posting the exact balanced reimbursement journal."
+    },
+    {
+      "tool": "erp_sales_return_reversal_prepare",
+      "operation_key": "sales.return.reversal.prepare",
+      "resource": "adjustment_note_reversal",
+      "permission": "finance.adjustment_note.manage",
+      "risk": "consequential_write",
+      "approval_policy": "separate_approver",
+      "schema_profile": "posted_commercial_reversal",
+      "description": "Prepare an exact compensating counter-note and stock-ledger reversal for one erroneous posted sales return, with explicit amendment evidence after statutory reporting."
+    },
+    {
+      "tool": "erp_purchase_return_reversal_prepare",
+      "operation_key": "procurement.purchase_return.reversal.prepare",
+      "resource": "adjustment_note_reversal",
+      "permission": "finance.adjustment_note.manage",
+      "risk": "consequential_write",
+      "approval_policy": "separate_approver",
+      "schema_profile": "posted_commercial_reversal",
+      "description": "Prepare an exact compensating counter-note and stock-ledger reversal for one erroneous posted purchase return, without mutating landed-cost history."
+    },
+    {
+      "tool": "erp_adjustment_note_reversal_prepare",
+      "operation_key": "finance.adjustment_note.reversal.prepare",
+      "resource": "adjustment_note_reversal",
+      "permission": "finance.adjustment_note.manage",
+      "risk": "consequential_write",
+      "approval_policy": "separate_approver",
+      "schema_profile": "posted_commercial_reversal",
+      "description": "Prepare an exact compensating reversal for one erroneous standalone posted customer-credit or supplier-debit note whose residual has not been consumed."
     }
   ],
   "shared_actions": [
@@ -471,6 +504,33 @@
       "tool": "erp_expense_claim_readback",
       "operation_key": "automation.command.status.get",
       "resource": "expense_claim",
+      "mode": "read",
+      "risk": "read_only",
+      "permission": "automation.command.view",
+      "allowed_fields": ["command_request_id"]
+    },
+    {
+      "tool": "erp_sales_return_reversal_readback",
+      "operation_key": "automation.command.status.get",
+      "resource": "adjustment_note_reversal",
+      "mode": "read",
+      "risk": "read_only",
+      "permission": "automation.command.view",
+      "allowed_fields": ["command_request_id"]
+    },
+    {
+      "tool": "erp_purchase_return_reversal_readback",
+      "operation_key": "automation.command.status.get",
+      "resource": "adjustment_note_reversal",
+      "mode": "read",
+      "risk": "read_only",
+      "permission": "automation.command.view",
+      "allowed_fields": ["command_request_id"]
+    },
+    {
+      "tool": "erp_adjustment_note_reversal_readback",
+      "operation_key": "automation.command.status.get",
+      "resource": "adjustment_note_reversal",
       "mode": "read",
       "risk": "read_only",
       "permission": "automation.command.view",

@@ -46,6 +46,9 @@ OPERATOR_COMMANDS = {
     "inventory.transfer.prepare": ("inventory.document.post", "inventory_document"),
     "inventory.adjustment.prepare": ("inventory.document.post", "inventory_document"),
     "inventory.destruction.prepare": ("compliance.destruction.post", "destruction"),
+    "sales.return.reversal.prepare": ("sales.return.reversal.post", "adjustment_note_reversal"),
+    "procurement.purchase_return.reversal.prepare": ("procurement.purchase_return.reversal.post", "adjustment_note_reversal"),
+    "finance.adjustment_note.reversal.prepare": ("finance.adjustment_note.reversal.post", "adjustment_note_reversal"),
 }
 BASELINE_OPERATOR_COMMANDS = {
     capability: binding

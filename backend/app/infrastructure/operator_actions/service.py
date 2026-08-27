@@ -76,6 +76,11 @@ from .customer_receipt import (
     PERSIST_CUSTOMER_RECEIPT_SQL,
     RESOLVE_CUSTOMER_RECEIPT_SQL,
 )
+from .commercial_reversal import (
+    EXECUTE_COMMERCIAL_REVERSAL_SQL,
+    PERSIST_COMMERCIAL_REVERSAL_SQL,
+    RESOLVE_COMMERCIAL_REVERSAL_SQL,
+)
 from .supplier_advance import (
     PERSIST_SUPPLIER_ADVANCE_SQL,
     RESOLVE_SUPPLIER_ADVANCE_SQL,
@@ -712,6 +717,17 @@ class SqlAlchemyOperatorActionService:
             )
         if policy.operation_key == "inventory.adjustment.prepare":
             return self._prepare_inventory_adjustment(
+                policy=policy,
+                payload=payload,
+                idempotency_key=idempotency_key,
+                context=context,
+            )
+        if policy.operation_key in {
+            "sales.return.reversal.prepare",
+            "procurement.purchase_return.reversal.prepare",
+            "finance.adjustment_note.reversal.prepare",
+        }:
+            return self._prepare_commercial_reversal(
                 policy=policy,
                 payload=payload,
                 idempotency_key=idempotency_key,
@@ -3416,6 +3432,169 @@ class SqlAlchemyOperatorActionService:
                     required_approvals=({"policy": policy.approval_policy, "count": 1},),
                 )
 
+    def _prepare_commercial_reversal(
+        self,
+        *,
+        policy: ActionPolicy,
+        payload: Mapping[str, Any],
+        idempotency_key: str,
+        context: ActionContext,
+    ) -> PreparedCommand:
+        if not self.adapter_readiness()[policy.operation_key]:
+            self._unavailable(policy.operation_key)
+        reversal_kind = {
+            "sales.return.reversal.prepare": "sales_return",
+            "procurement.purchase_return.reversal.prepare": "purchase_return",
+            "finance.adjustment_note.reversal.prepare": "adjustment_note",
+        }[policy.operation_key]
+        identity = (
+            f"aasopharma:{context.organization_id}:{context.membership_id}:"
+            f"{policy.operation_key}:{idempotency_key}"
+        )
+        identifiers = {
+            name: uuid5(NAMESPACE_URL, identity + f":{name}")
+            for name in (
+                "command_request_id",
+                "reversal_adjustment_note_id",
+                "reversal_inventory_document_id",
+                "reversal_journal_id",
+                "reversal_event_id",
+                "reversal_tax_document_id",
+            )
+        }
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+        params = {
+            "org_id": context.organization_id,
+            "original_resource_id": payload["original_resource_id"],
+            "expected_row_version": payload["expected_row_version"],
+            "reversal_date": payload["reversal_date"],
+            "reason": payload["reason"],
+            "amendment_evidence_attachment_id": payload.get(
+                "amendment_evidence_attachment_id"
+            ),
+            "reversal_kind": reversal_kind,
+            "agent_grant_id": context.agent_grant_id,
+            "command_request_id": identifiers["command_request_id"],
+            "reversal_adjustment_note_id": identifiers[
+                "reversal_adjustment_note_id"
+            ],
+            "expires_at": expires_at,
+            "idempotency_key_hash": hashlib.sha256(
+                idempotency_key.encode("utf-8")
+            ).digest(),
+        }
+        with self._session_factory() as session:
+            with session.begin():
+                assert_runtime_principal(session)
+                self._authorize(session, context, policy)
+                _lock_prepare_idempotency(session, params, policy.operation_key)
+                rows = _mapping_rows(
+                    session.execute(RESOLVE_COMMERCIAL_REVERSAL_SQL[reversal_kind], params)
+                )
+                if len(rows) != 1:
+                    raise OperatorActionError(
+                        ActionErrorCode.POLICY_BLOCKED,
+                        "Canonical commercial reversal resolution is unavailable",
+                    )
+                resolution = _json_document(rows[0]["resolution"])
+                request_document = {
+                    **payload,
+                    "reversal_adjustment_note_id": str(
+                        identifiers["reversal_adjustment_note_id"]
+                    ),
+                    "reversal_inventory_document_id": (
+                        None
+                        if reversal_kind == "adjustment_note"
+                        else str(identifiers["reversal_inventory_document_id"])
+                    ),
+                    "reversal_journal_id": str(identifiers["reversal_journal_id"]),
+                    "reversal_event_id": str(identifiers["reversal_event_id"]),
+                    "reversal_tax_document_id": (
+                        str(identifiers["reversal_tax_document_id"])
+                        if resolution.get("original_tax_document_id")
+                        else None
+                    ),
+                }
+                request_bytes = canonical_json_bytes(request_document)
+                source_versions = tuple(resolution["source_versions"])
+                resolved_references = tuple(
+                    {
+                        key: value
+                        for key, value in source.items()
+                        if key in {"resource_type", "id", "role"}
+                    }
+                    for source in source_versions
+                )
+                financial_impact = ({
+                    "effect": "exact_sign_inversion",
+                    "amount": resolution["counterparty_payable_amount"],
+                    "currency_code": "INR",
+                    "original_adjustment_note_id": resolution[
+                        "original_adjustment_note_id"
+                    ],
+                },)
+                inventory_impact = (() if reversal_kind == "adjustment_note" else ({
+                    "effect": "exact_ledger_inversion",
+                    "original_inventory_document_id": resolution[
+                        "inventory_document_id"
+                    ],
+                },))
+                tax_impact = ({
+                    "effect": (
+                        "counter_tax_document"
+                        if resolution.get("original_tax_document_id")
+                        else "commercial_only"
+                    ),
+                    "reported": resolution["reported_return_membership_count"] > 0,
+                },)
+                preview = {
+                    "branch_id": resolution["branch_id"],
+                    "calculation_ruleset": [],
+                    "capability_code": policy.operation_key,
+                    "command_request_id": str(identifiers["command_request_id"]),
+                    "destination_branch_id": None,
+                    "financial_impact": list(financial_impact),
+                    "inventory_impact": list(inventory_impact),
+                    "legal_scope": resolution["legal_scope"],
+                    "operation": policy.operation_key.replace(".prepare", ".post"),
+                    "organization_id": str(context.organization_id),
+                    "request_hash": hashlib.sha256(request_bytes).hexdigest(),
+                    "resolved_references": list(resolved_references),
+                    "source_versions": list(source_versions),
+                    "target_resource_id": str(
+                        identifiers["reversal_adjustment_note_id"]
+                    ),
+                    "target_resource_type": "adjustment_note_reversal",
+                    "tax_impact": list(tax_impact),
+                }
+                params.update({
+                    "request_bytes": request_bytes,
+                    "resolved_bytes": canonical_json_bytes(resolution),
+                    "preview_bytes": canonical_json_bytes(preview),
+                })
+                persisted = _mapping_rows(
+                    session.execute(PERSIST_COMMERCIAL_REVERSAL_SQL, params)
+                )
+                if len(persisted) != 1:
+                    raise OperatorActionError(
+                        ActionErrorCode.POLICY_BLOCKED,
+                        "Canonical commercial reversal prepare did not persist exactly once",
+                    )
+                result = _json_document(persisted[0]["command_request_id"])
+                return PreparedCommand(
+                    command_request_id=UUID(str(result["command_request_id"])),
+                    command_type=preview["operation"],
+                    preview_hash="sha256:" + str(result["preview_hash"]),
+                    expires_at=_persisted_expiry(result["expires_at"]),
+                    resolved_references=resolved_references,
+                    source_versions=source_versions,
+                    calculation_ruleset=(),
+                    inventory_impact=inventory_impact,
+                    financial_impact=financial_impact,
+                    tax_impact=tax_impact,
+                    required_approvals=({"policy": "separate_approver", "count": 1},),
+                )
+
     def _prepare_inventory_adjustment(
         self,
         *,
@@ -4120,6 +4299,12 @@ class SqlAlchemyOperatorActionService:
                     session.execute(EXECUTE_INVENTORY_DESTRUCTION_SQL, params)
                 elif before["operation"] == "finance.bank_reconciliation.match":
                     session.execute(EXECUTE_BANK_RECONCILIATION_SQL, params)
+                elif before["operation"] in {
+                    "sales.return.reversal.post",
+                    "procurement.purchase_return.reversal.post",
+                    "finance.adjustment_note.reversal.post",
+                }:
+                    session.execute(EXECUTE_COMMERCIAL_REVERSAL_SQL, params)
                 else:
                     session.execute(_EXECUTE_COMMAND_SQL, params)
                 after_rows = _mapping_rows(

@@ -42,6 +42,9 @@ EXPECTED_PREPARE_TOOLS = {
     "erp_inventory_destruction_prepare",
     "erp_bank_reconciliation_prepare",
     "erp_expense_claim_prepare",
+    "erp_sales_return_reversal_prepare",
+    "erp_purchase_return_reversal_prepare",
+    "erp_adjustment_note_reversal_prepare",
 }
 EXPECTED_SHARED_TOOLS = {
     "erp_operation_approve",
@@ -58,6 +61,9 @@ EXPECTED_SHARED_TOOLS = {
     "erp_inventory_transfer_readback",
     "erp_inventory_adjustment_readback",
     "erp_expense_claim_readback",
+    "erp_sales_return_reversal_readback",
+    "erp_purchase_return_reversal_readback",
+    "erp_adjustment_note_reversal_readback",
 }
 EXPECTED_BASE_READ_TOOLS = {
     "erp_product_search",
@@ -223,6 +229,9 @@ EXPLICIT_CONTEXT_QUALIFIED_REUSE = {
         "erp_inventory_transfer_readback.command_request_id",
         "erp_inventory_adjustment_readback.command_request_id",
         "erp_expense_claim_readback.command_request_id",
+        "erp_sales_return_reversal_readback.command_request_id",
+        "erp_purchase_return_reversal_readback.command_request_id",
+        "erp_adjustment_note_reversal_readback.command_request_id",
     },
     "document_discount_eligible": {
         "erp_adjustment_note_prepare.lines[].document_discount_eligible",
@@ -255,6 +264,9 @@ EXPLICIT_CONTEXT_QUALIFIED_REUSE = {
     "reason": {
         "erp_adjustment_note_prepare.reason",
         "erp_inventory_destruction_prepare.reason",
+        "erp_sales_return_reversal_prepare.reason",
+        "erp_purchase_return_reversal_prepare.reason",
+        "erp_adjustment_note_reversal_prepare.reason",
     },
     "free_quantity": {
         "erp_adjustment_note_prepare.lines[].free_quantity",
@@ -382,6 +394,9 @@ EXPECTED_APPROVAL_POLICIES = {
     "erp_inventory_destruction_prepare": "separate_approver",
     "erp_bank_reconciliation_prepare": "separate_approver",
     "erp_expense_claim_prepare": "separate_approver",
+    "erp_sales_return_reversal_prepare": "separate_approver",
+    "erp_purchase_return_reversal_prepare": "separate_approver",
+    "erp_adjustment_note_reversal_prepare": "separate_approver",
 }
 
 
@@ -895,12 +910,24 @@ def validate(
         app_operation = app_by_tool.get(tool, {})
         expected_approval = (
             "separate_approver"
-            if tool in {"erp_adjustment_note_prepare", "erp_bank_reconciliation_prepare"}
+            if tool in {
+                "erp_adjustment_note_prepare",
+                "erp_bank_reconciliation_prepare",
+                "erp_sales_return_reversal_prepare",
+                "erp_purchase_return_reversal_prepare",
+                "erp_adjustment_note_reversal_prepare",
+            }
             else "actor_confirmation"
         )
         expected_risk = (
             "consequential_write"
-            if tool in {"erp_adjustment_note_prepare", "erp_bank_reconciliation_prepare"}
+            if tool in {
+                "erp_adjustment_note_prepare",
+                "erp_bank_reconciliation_prepare",
+                "erp_sales_return_reversal_prepare",
+                "erp_purchase_return_reversal_prepare",
+                "erp_adjustment_note_reversal_prepare",
+            }
             else "reversible_write"
         )
         if (

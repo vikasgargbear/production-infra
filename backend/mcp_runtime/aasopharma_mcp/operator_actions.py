@@ -44,6 +44,9 @@ OPERATOR_TOOL_DESCRIPTIONS: Mapping[str, str] = {
     "erp_inventory_destruction_prepare": "Prepare certified same-day destruction of exact non-regulated stock with a reviewed Section 17(5)(h) GST input-credit reversal.",
     "erp_bank_reconciliation_prepare": "Prepare an exact full match between one imported bank-statement line and one posted bank-ledger journal entry without changing either owner.",
     "erp_expense_claim_prepare": "Submit an INR member expense claim with verified receipts, exact expense accounts, and a separately reviewed reimbursement journal.",
+    "erp_sales_return_reversal_prepare": "Prepare an exact compensating reversal of one erroneous posted sales return.",
+    "erp_purchase_return_reversal_prepare": "Prepare an exact compensating reversal of one erroneous posted purchase return.",
+    "erp_adjustment_note_reversal_prepare": "Prepare an exact compensating reversal of one posted customer-credit or supplier-debit note.",
     "erp_operation_approve": "Approve exactly one unchanged prepared command by its command ID and preview hash.",
     "erp_operation_review_get": "Inspect exact immutable preview bytes, hashes, source versions, impacts, and approval requirements using an independent approval grant.",
     "erp_operation_execute": "Execute exactly one approved, unchanged command with an idempotency key.",
@@ -58,6 +61,9 @@ OPERATOR_TOOL_DESCRIPTIONS: Mapping[str, str] = {
     "erp_inventory_transfer_readback": "Read one posted inventory transfer with its exact paired source and destination stock-ledger evidence and unchanged value.",
     "erp_inventory_adjustment_readback": "Read one posted signed cycle-count variance with its exact count, stock ledger, valuation journal, and accounting-event evidence.",
     "erp_expense_claim_readback": "Read a posted expense claim with approved lines, verified receipt hashes, balanced journal totals, and accounting-event identity.",
+    "erp_sales_return_reversal_readback": "Read exact sales-return counter-note, stock, allocation, tax, and journal reversal evidence.",
+    "erp_purchase_return_reversal_readback": "Read exact purchase-return counter-note, stock, allocation, tax, and journal reversal evidence.",
+    "erp_adjustment_note_reversal_readback": "Read exact adjustment-note counter-document, allocation, tax, and journal reversal evidence.",
 }
 PUBLISHED_PREPARE_TOOL_NAMES = frozenset(
     {
@@ -78,6 +84,9 @@ PUBLISHED_PREPARE_TOOL_NAMES = frozenset(
         "erp_inventory_destruction_prepare",
         "erp_bank_reconciliation_prepare",
         "erp_expense_claim_prepare",
+        "erp_sales_return_reversal_prepare",
+        "erp_purchase_return_reversal_prepare",
+        "erp_adjustment_note_reversal_prepare",
     }
 )
 
@@ -951,11 +960,10 @@ def _prepare_actions() -> dict[str, OperatorAction]:
         {
             "batch_id": _uuid("Canonical manufacturer batch selected for this movement."),
             "counted_quantity": _decimal("Exact physical count in the selected effective UOM."),
-            "stock_balance_row_version": {
-                "type": "integer",
-                "minimum": 1,
-                "description": "Exact authoritative stock-balance row version selected before prepare.",
-            },
+            "stock_balance_row_version": _string(
+                "Exact positive authoritative stock-balance row version selected before prepare.",
+                pattern=r"^[1-9][0-9]*$",
+            ),
         },
         ("batch_id", "counted_quantity", "stock_balance_row_version"),
         "One unique existing lot count. The backend derives system quantity, base quantity, variance, and MWA value.",
@@ -1082,6 +1090,18 @@ def _prepare_actions() -> dict[str, OperatorAction]:
         }
     )
 
+    commercial_reversal = {
+        "original_resource_id": _uuid("Exact posted return or adjustment-note identity to correct."),
+        "expected_row_version": _string(
+            "Exact positive posted source row version.", pattern=r"^[1-9][0-9]*$"
+        ),
+        "reversal_date": _date("Counter-document date, not before the original note date."),
+        "reason": _string("Required auditable reason explaining why the posted source was erroneous."),
+        "amendment_evidence_attachment_id": _uuid(
+            "Verified statutory amendment or counter-note evidence; required only after return reporting."
+        ),
+    }
+
     definitions = (
         ("erp_sales_order_prepare", "sales.order.prepare", "sales.order.create", "commercial_lines", "actor_confirmation", sales_order),
         ("erp_sales_dispatch_prepare", "sales.dispatch.prepare", "sales.dispatch.create", "batched_commercial_lines", "actor_confirmation", sales_dispatch),
@@ -1100,6 +1120,9 @@ def _prepare_actions() -> dict[str, OperatorAction]:
         ("erp_bank_reconciliation_prepare", "finance.bank_reconciliation.prepare", "finance.bank_reconcile", "exact_bank_journal_match", "separate_approver", bank_reconciliation),
         ("erp_inventory_destruction_prepare", "inventory.destruction.prepare", "inventory.destruction.create", "controlled_batched_movement", "separate_approver", inventory_destruction),
         ("erp_expense_claim_prepare", "finance.expense_claim.prepare", "finance.expense.manage", "verified_expense_receipts", "separate_approver", expense_claim),
+        ("erp_sales_return_reversal_prepare", "sales.return.reversal.prepare", "finance.adjustment_note.manage", "posted_commercial_reversal", "separate_approver", commercial_reversal),
+        ("erp_purchase_return_reversal_prepare", "procurement.purchase_return.reversal.prepare", "finance.adjustment_note.manage", "posted_commercial_reversal", "separate_approver", commercial_reversal),
+        ("erp_adjustment_note_reversal_prepare", "finance.adjustment_note.reversal.prepare", "finance.adjustment_note.manage", "posted_commercial_reversal", "separate_approver", commercial_reversal),
     )
 
     def prepare_schema(
@@ -1116,6 +1139,7 @@ def _prepare_actions() -> dict[str, OperatorAction]:
             "charge_lines",
             "expense_charge_lines",
             "authority_reference",
+            "amendment_evidence_attachment_id",
             "witness_credential",
             "bank_account_id",
             "external_reference",
@@ -1207,6 +1231,9 @@ SHARED_ACTION_SCHEMAS: Mapping[str, Mapping[str, Any]] = {
     "erp_inventory_transfer_readback": STATUS_INPUT_SCHEMA,
     "erp_inventory_adjustment_readback": STATUS_INPUT_SCHEMA,
     "erp_expense_claim_readback": STATUS_INPUT_SCHEMA,
+    "erp_sales_return_reversal_readback": STATUS_INPUT_SCHEMA,
+    "erp_purchase_return_reversal_readback": STATUS_INPUT_SCHEMA,
+    "erp_adjustment_note_reversal_readback": STATUS_INPUT_SCHEMA,
 }
 
 

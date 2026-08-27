@@ -2,7 +2,7 @@
   "application_readiness_blockers": [
     "No reviewed PAN/fiscal-year AATO profile and effective e-invoice applicability/reporting-window release exists in the canonical catalog; generation and regeneration fail closed."
   ],
-  "catalog_sha256": "4fa6410081b69aa91c1afbfd51ab4194a80a6254b5f47225b95aedd70dcfba13",
+  "catalog_sha256": "73702c7d207ee61c83a83f6d89ebf781c97c0f31f3d6bd9fafb347e58f4b5e10",
   "catalog_table_count": 110,
   "database_boundary": {
     "adapters": {

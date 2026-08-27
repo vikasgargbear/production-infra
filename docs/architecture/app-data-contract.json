@@ -204,7 +204,13 @@
     {"tool":"erp_supplier_advance_readback","resource":"payments","mode":"read","risk":"read_only","idempotency":"not_applicable","approval":"none"},
     {"tool":"erp_inventory_transfer_readback","resource":"inventory","mode":"read","risk":"read_only","idempotency":"not_applicable","approval":"none"},
     {"tool":"erp_inventory_adjustment_readback","resource":"inventory","mode":"read","risk":"read_only","idempotency":"not_applicable","approval":"none"},
-    {"tool":"erp_expense_claim_readback","resource":"expense_claim","mode":"read","risk":"read_only","idempotency":"not_applicable","approval":"none"}
+    {"tool":"erp_expense_claim_readback","resource":"expense_claim","mode":"read","risk":"read_only","idempotency":"not_applicable","approval":"none"},
+    {"tool":"erp_sales_return_reversal_prepare","resource":"adjustment_note_reversal","mode":"write","risk":"consequential_write","idempotency":"required","approval":"separate_approver"},
+    {"tool":"erp_purchase_return_reversal_prepare","resource":"adjustment_note_reversal","mode":"write","risk":"consequential_write","idempotency":"required","approval":"separate_approver"},
+    {"tool":"erp_adjustment_note_reversal_prepare","resource":"adjustment_note_reversal","mode":"write","risk":"consequential_write","idempotency":"required","approval":"separate_approver"},
+    {"tool":"erp_sales_return_reversal_readback","resource":"adjustment_note_reversal","mode":"read","risk":"read_only","idempotency":"not_applicable","approval":"none"},
+    {"tool":"erp_purchase_return_reversal_readback","resource":"adjustment_note_reversal","mode":"read","risk":"read_only","idempotency":"not_applicable","approval":"none"},
+    {"tool":"erp_adjustment_note_reversal_readback","resource":"adjustment_note_reversal","mode":"read","risk":"read_only","idempotency":"not_applicable","approval":"none"}
   ],
   "legacy_routines": ["financial.auto_allocate_payment"],
   "legacy_relation_map": {

@@ -283,7 +283,13 @@ BEGIN
             RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='allocation reversal must copy the original settlement facts';
         END IF;
         IF original.adjustment_note_id IS NOT NULL THEN
-            RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='adjustment allocation reversal requires the reviewed compensating-note command';
+            PERFORM 1 FROM finance.adjustment_notes reversal_note
+             WHERE reversal_note.org_id=NEW.org_id
+               AND reversal_note.reversal_of_adjustment_note_id=original.adjustment_note_id
+               AND reversal_note.status='posted' FOR SHARE;
+            IF NOT FOUND THEN
+              RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='adjustment allocation reversal requires posted compensating-note evidence';
+            END IF;
         END IF;
     ELSIF NEW.payment_id IS NOT NULL THEN
         SELECT * INTO payment FROM finance.payments WHERE org_id=NEW.org_id AND id=NEW.payment_id FOR UPDATE;

@@ -158,6 +158,21 @@ _PREPARE_BINDINGS = {
         execute_function="erp_automation_commands.execute_inventory_destruction_command",
         unavailable_reason=None,
     ),
+    "sales.return.reversal.prepare": ActionAdapterBinding(
+        operation_key="sales.return.reversal.prepare", available=True,
+        prepare_function="erp_commercial_commands.persist_commercial_reversal_prepare:sales_return",
+        execute_function="erp_commercial_commands.execute_approved_commercial_reversal", unavailable_reason=None,
+    ),
+    "procurement.purchase_return.reversal.prepare": ActionAdapterBinding(
+        operation_key="procurement.purchase_return.reversal.prepare", available=True,
+        prepare_function="erp_commercial_commands.persist_commercial_reversal_prepare:purchase_return",
+        execute_function="erp_commercial_commands.execute_approved_commercial_reversal", unavailable_reason=None,
+    ),
+    "finance.adjustment_note.reversal.prepare": ActionAdapterBinding(
+        operation_key="finance.adjustment_note.reversal.prepare", available=True,
+        prepare_function="erp_commercial_commands.persist_commercial_reversal_prepare:adjustment_note",
+        execute_function="erp_commercial_commands.execute_approved_commercial_reversal", unavailable_reason=None,
+    ),
     "finance.bank_reconciliation.prepare": ActionAdapterBinding(
         operation_key="finance.bank_reconciliation.prepare",
         available=True,

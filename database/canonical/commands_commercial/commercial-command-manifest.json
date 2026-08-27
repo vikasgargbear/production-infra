@@ -46,7 +46,7 @@
   ],
   "blocked_count": 0,
   "blocked_invariants": {},
-  "catalog_sha256": "c108fd1f487f88a306a9eb08ca2d3c6c0efc215b08252703bc4f56beb02fe8fc",
+  "catalog_sha256": "c5ea3af416d63a91556cde706e9499e7fd5399a0b6896494247cce532f012825",
   "generic_adjustment_tax_boundary": {
     "blocked_count": 0,
     "blocked_invariants": {},
@@ -283,7 +283,7 @@
   },
   "manifest_version": "1.0.0",
   "mapping_file": "baseline-commercial-command-enforcements.json",
-  "mapping_sha256": "a9a30614e1d43ecb52f7f2a716a543906259b633f1bb900e07651657bdcb3114",
+  "mapping_sha256": "32efdda88ec3a6d88349fabfa7857665064e7e17186ee01b5e6167f36c374e2b",
   "postgresql": "15+",
   "prohibitions": [
     "No dynamic SQL.",
@@ -552,6 +552,6 @@
     "tax.documents:documents_cross_row_guard"
   ],
   "source_manifest": "commands_trade_v2/trade-posting-manifest.json",
-  "source_manifest_sha256": "4f8426087016e3dd5c8f30c15d263e186949af92d28c2daebaca740662777df2",
+  "source_manifest_sha256": "61b1961777cdc43193d07f6c57b253722a5692bbf95eb1da1ed8cb01efd8da52",
   "target_resolved_count_after_catalog_correction": 11
 }

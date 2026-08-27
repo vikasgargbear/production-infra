@@ -149,7 +149,12 @@ def test_approved_catalog_corrections_are_present_without_implicit_residual_defa
 
 def test_account_roles_and_cogs_are_explicit_and_fail_closed() -> None:
     manifest = json.loads((ROOT / "commercial-command-manifest.json").read_text())
-    mapping = (ROOT / "baseline-commercial-command-enforcements.json").read_text()
+    document = json.loads((ROOT / "baseline-commercial-command-enforcements.json").read_text())
+    mapping = "\n".join(
+        statement
+        for enforcement in document["enforcements"]
+        for statement in enforcement["statements"]
+    )
     roles = manifest["account_role_settings"]
     assert roles["namespace"] == "finance.account_roles"
     assert "branch setting first" in roles["resolution"]
@@ -346,3 +351,44 @@ def test_generic_adjustment_tax_boundary_is_typed_and_service_advances_stay_defe
     assert "guard_posted_purchase_return_lines" in fixture
     assert "'search_path=\"\"'=ANY" in fixture
     assert "reviewed security modes and empty fixed search_path" in fixture
+
+
+def test_commercial_reversals_are_named_compensating_authorities_with_exact_lineage() -> None:
+    document = json.loads((ROOT / "baseline-commercial-command-enforcements.json").read_text())
+    mapping = "\n".join(
+        statement
+        for enforcement in document["enforcements"]
+        for statement in enforcement["statements"]
+    )
+    for function_name in (
+        "prepare_sales_return_reversal",
+        "prepare_purchase_return_reversal",
+        "prepare_adjustment_note_reversal",
+        "post_sales_return_reversal",
+        "post_purchase_return_reversal",
+        "post_adjustment_note_reversal",
+        "persist_commercial_reversal_prepare",
+        "execute_approved_commercial_reversal",
+    ):
+        assert f'CREATE FUNCTION "erp_commercial_commands"."{function_name}"' in mapping
+    for invariant in (
+        "reported return or note requires explicit verified amendment or counter-note evidence",
+        "unreported return or note must use direct counter-document reversal without amendment evidence",
+        "commercial reversal is blocked because residual credit or debit was consumed",
+        "document_type='sales_return_receipt'",
+        "document_type='purchase_return_issue'",
+        "reverses_document_id",
+        "erp_trade_commands.post_locked_document",
+        "erp_finance_commands.mark_journal_reversed",
+        "reversal_of_adjustment_note_id",
+        "reversal_of_allocation_id",
+    ):
+        assert invariant in mapping
+    assert "UPDATE inventory.stock_balances" not in mapping[
+        mapping.index('CREATE FUNCTION "erp_commercial_commands"."post_commercial_reversal"'):
+        mapping.index('CREATE FUNCTION "erp_commercial_commands"."post_sales_return_reversal"')
+    ]
+    assert "supplier_invoice_id" not in mapping[
+        mapping.index('CREATE FUNCTION "erp_commercial_commands"."post_commercial_reversal"'):
+        mapping.index('CREATE FUNCTION "erp_commercial_commands"."post_sales_return_reversal"')
+    ]

@@ -2735,8 +2735,8 @@
             "adjustment_note_id"
           ],
           "unique": true,
-          "where": "adjustment_note_id IS NOT NULL",
-          "purpose": "one original-open-item application per posted adjustment note"
+          "where": "adjustment_note_id IS NOT NULL AND reversal_of_allocation_id IS NULL",
+          "purpose": "one original-open-item application per posted adjustment note; reversal lineage owns the compensating row"
         }
       ],
       "cross_row_invariants": [

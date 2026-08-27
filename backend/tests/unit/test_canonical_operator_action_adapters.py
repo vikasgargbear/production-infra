@@ -1926,7 +1926,7 @@ def _command_row(command_request_id):
 
 def test_registry_covers_every_contract_action_and_stays_fail_closed():
     prepare_keys = {action.operation_key for action in PREPARE_ACTIONS.values()}
-    assert len(prepare_keys) == 17
+    assert len(prepare_keys) == 20
     assert set(ACTION_ADAPTER_BINDINGS) == set(ACTION_POLICIES)
     assert ACTION_ADAPTER_BINDINGS["sales.order.prepare"].available is True
     assert ACTION_ADAPTER_BINDINGS["sales.dispatch.prepare"].available is True
@@ -1945,6 +1945,9 @@ def test_registry_covers_every_contract_action_and_stays_fail_closed():
     assert ACTION_ADAPTER_BINDINGS["inventory.transfer.prepare"].available is True
     assert ACTION_ADAPTER_BINDINGS["inventory.destruction.prepare"].available is True
     assert ACTION_ADAPTER_BINDINGS["finance.bank_reconciliation.prepare"].available is True
+    assert ACTION_ADAPTER_BINDINGS["sales.return.reversal.prepare"].available is True
+    assert ACTION_ADAPTER_BINDINGS["procurement.purchase_return.reversal.prepare"].available is True
+    assert ACTION_ADAPTER_BINDINGS["finance.adjustment_note.reversal.prepare"].available is True
     assert all(
         not ACTION_ADAPTER_BINDINGS[key].available
         for key in prepare_keys
@@ -1966,6 +1969,9 @@ def test_registry_covers_every_contract_action_and_stays_fail_closed():
             "inventory.transfer.prepare",
             "inventory.destruction.prepare",
             "finance.bank_reconciliation.prepare",
+            "sales.return.reversal.prepare",
+            "procurement.purchase_return.reversal.prepare",
+            "finance.adjustment_note.reversal.prepare",
         }
     )
     assert all(
@@ -1990,6 +1996,9 @@ def test_registry_covers_every_contract_action_and_stays_fail_closed():
             "inventory.transfer.prepare",
             "inventory.destruction.prepare",
             "finance.bank_reconciliation.prepare",
+            "sales.return.reversal.prepare",
+            "procurement.purchase_return.reversal.prepare",
+            "finance.adjustment_note.reversal.prepare",
         }
     )
     assert ACTION_ADAPTER_BINDINGS["sales.order.prepare"].prepare_function == (
@@ -4044,7 +4053,7 @@ def test_infrastructure_adapter_has_no_legacy_service_or_table_dependency():
     assert "execute(text(" not in source
     assert "erp_automation_commands.execute_approved_command" in source
     assert "pg_advisory_xact_lock" in source
-    assert source.count("_lock_prepare_idempotency(") == 18
+    assert source.count("_lock_prepare_idempotency(") == 19
 
 
 def test_calculator_database_requires_the_isolated_principal(monkeypatch):
