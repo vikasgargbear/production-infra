@@ -60,6 +60,15 @@ beforeEach(() => {
   } });
 });
 
+it('keeps the immutable prepare boundary visible and disabled before context selection', async () => {
+  render(<ExpenseClaimsFlow onClose={jest.fn()} />);
+
+  const prepare = screen.getByRole('button', { name: 'Prepare immutable preview' });
+  expect((prepare as HTMLButtonElement).disabled).toBe(true);
+  await waitFor(() => expect((screen.getByLabelText('Branch') as HTMLSelectElement).options.length).toBe(2));
+  expect((screen.getByRole('button', { name: 'Prepare immutable preview' }) as HTMLButtonElement).disabled).toBe(true);
+});
+
 it('uses canonical claimant, account and receipt context to reach immutable prepare', async () => {
   render(<ExpenseClaimsFlow onClose={jest.fn()} />);
 

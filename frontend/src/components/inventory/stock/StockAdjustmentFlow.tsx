@@ -607,9 +607,12 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
                 {adjustmentData.adjustment_date || 'Loading…'}
               </div>
             </div>
-            <label className="block text-sm font-medium text-gray-700">
-              Physical count completed at (UTC)
+            <div>
+              <label htmlFor="cycle-count-completed-at" className="block text-sm font-medium text-gray-700">
+                Physical count completed at (UTC)
+              </label>
               <input
+                id="cycle-count-completed-at"
                 type="text"
                 value={adjustmentData.counted_at}
                 onChange={(event) => setAdjustmentData(prev => ({
@@ -625,7 +628,7 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
               <span id="cycle-count-time-help" className="mt-1 block text-xs font-normal text-gray-500">
                 Enter the exact timestamp from the retained count evidence. The browser does not supply or convert this time.
               </span>
-            </label>
+            </div>
             <div>
               <Select
                 label="Verified physical count sheet"

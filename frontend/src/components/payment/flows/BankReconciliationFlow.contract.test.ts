@@ -13,6 +13,10 @@ it('selects authoritative exact candidates and uses the reviewed lifecycle', () 
   expect(source).toContain('compareExactDecimals');
   expect(source).toContain('data-testid="bank-reconciliation-review-command"');
   expect(source).toContain('{review.command_request_id}');
+  expect(source).toContain('htmlFor="bank-reconciliation-candidate"');
+  expect(source).toContain('id="bank-reconciliation-candidate"');
+  expect(source).toContain('htmlFor="bank-reconciliation-match-method"');
+  expect(source).toContain('id="bank-reconciliation-match-method"');
 });
 
 it('keeps statement import fail closed without compatibility writes', () => {

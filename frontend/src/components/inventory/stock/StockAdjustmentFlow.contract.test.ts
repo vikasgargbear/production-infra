@@ -15,6 +15,8 @@ describe('StockAdjustmentFlow canonical lifecycle contract', () => {
     expect(source).not.toContain('parseInt(');
     expect(source).not.toContain('adjustment_type: adjustmentData.adjustment_type');
     expect(source).toContain('Physical count completed at (UTC)');
+    expect(source).toContain('htmlFor="cycle-count-completed-at"');
+    expect(source).toContain('id="cycle-count-completed-at"');
     expect(source).toContain('adjustmentData.counted_at');
     expect(source).toContain('requireCanonicalUtcEventTimestamp');
     expect(source).not.toContain('const countedAt = new Date().toISOString()');

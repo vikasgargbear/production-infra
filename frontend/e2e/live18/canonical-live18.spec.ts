@@ -17,7 +17,7 @@ import {
   Live18BrowserHealth, rejectedPrepareOccurrences,
 } from '../support/live18/browserHealth';
 import {
-  interpolateUiSteps, RuntimeUiValues,
+  interpolateUiSteps, missingOperationResourceDependencies, RuntimeUiValues,
 } from '../support/live18/runtimeUiValues';
 import {
   assertSessionIsolation, loginAndCaptureSession, sessionIdentityFromToken,
@@ -535,6 +535,14 @@ test.describe('canonical ERP live18 desktop certification', () => {
       expect(contract.availability, contract.blocker || '').toBe('published');
       const operationFixture = fixture?.operations[contract.id];
       expect(operationFixture, `${contract.id} lacks reviewed UI driver input`).toBeTruthy();
+      const missingResources = missingOperationResourceDependencies(
+        operationFixture!, loadCompletedResources(),
+      );
+      test.skip(
+        missingResources.length > 0,
+        `${contract.id} requires canonical predecessor readback(s) that did not complete: `
+          + missingResources.join(', '),
+      );
       await runOperation(browser, contract, operationFixture!);
     });
   }

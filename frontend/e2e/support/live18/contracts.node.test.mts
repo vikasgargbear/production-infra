@@ -5,7 +5,8 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import {
-  assertExactCommandTargets, interpolateUiSteps,
+  assertExactCommandTargets, interpolateUiSteps, missingOperationResourceDependencies,
+  operationResourceDependencies,
 } from './runtimeUiValues.ts';
 import {
   Live18BrowserHealth, rejectedPrepareOccurrences,
@@ -308,6 +309,41 @@ test('runtime interpolation accepts only explicitly supplied prior-operation res
     ),
     /unavailable runtime token \{\{resource_purchase_order\}\}/,
   );
+});
+
+test('operation resource dependencies are exact, deduplicated, and fail closed until propagated', () => {
+  const steps = (overrides: Record<string, unknown> = {}) => ([{
+    actor: 'requester',
+    action: 'expectText',
+    locator: { kind: 'text', name: 'Visible validation', exact: true },
+    ...overrides,
+  }]);
+  const operation = {
+    lifecycle_mode: 'split',
+    missing_required_steps: steps({
+      locator: {
+        kind: 'role', role: 'button', exact: true,
+        name: 'Receive {{resource_purchase_order}}',
+      },
+    }),
+    prepare_steps: steps({ value: '{{resource_purchase_order}}' }),
+    approval_steps: steps({ value: '{{command_request_id}}' }),
+    execute_steps: steps({ value: '{{resource_goods_receipt}}' }),
+  };
+
+  assert.deepEqual(operationResourceDependencies(operation), [
+    'resource_goods_receipt', 'resource_purchase_order',
+  ]);
+  assert.deepEqual(missingOperationResourceDependencies(operation, {}), [
+    'resource_goods_receipt', 'resource_purchase_order',
+  ]);
+  assert.deepEqual(missingOperationResourceDependencies(operation, {
+    resource_purchase_order: 'd3000000-0000-7000-8000-000000000041',
+  }), ['resource_goods_receipt']);
+  assert.deepEqual(missingOperationResourceDependencies(operation, {
+    resource_purchase_order: 'd3000000-0000-7000-8000-000000000041',
+    resource_goods_receipt: 'd3000000-0000-7000-8000-000000000042',
+  }), []);
 });
 
 test('all 18 reviewed routes must target their captured command during approval and execute', () => {

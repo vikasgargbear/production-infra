@@ -10,6 +10,15 @@ interface RuntimeTemplatedStep {
   locator?: { name: string };
 }
 
+interface RuntimeTemplatedOperation {
+  missing_required_steps: RuntimeTemplatedStep[];
+  prepare_steps: RuntimeTemplatedStep[];
+  approval_steps: RuntimeTemplatedStep[];
+  execute_steps: RuntimeTemplatedStep[];
+}
+
+export type ResourceRuntimeToken = `resource_${string}`;
+
 const RUNTIME_TOKEN = /\{\{([a-z_][a-z0-9_]*)\}\}/gi;
 const ALLOWED_RUNTIME_TOKENS = new Set<keyof RuntimeUiValues>([
   'command_request_id', 'preview_hash', 'run_token',
@@ -34,6 +43,37 @@ export function runtimeTokens(value: string | undefined, label: string): string[
     }
   }
   return found;
+}
+
+export function operationResourceDependencies(
+  operation: RuntimeTemplatedOperation,
+): ResourceRuntimeToken[] {
+  const dependencies = new Set<ResourceRuntimeToken>();
+  for (const phase of [
+    'missing_required_steps', 'prepare_steps', 'approval_steps', 'execute_steps',
+  ] as const) {
+    const steps = operation[phase];
+    for (const [stepIndex, step] of steps.entries()) {
+      const label = `${phase}[${stepIndex}]`;
+      for (const token of [
+        ...runtimeTokens(step.value, `${label}.value`),
+        ...runtimeTokens(step.locator?.name, `${label}.locator.name`),
+      ]) {
+        if (RESOURCE_RUNTIME_TOKEN.test(token)) {
+          dependencies.add(token as ResourceRuntimeToken);
+        }
+      }
+    }
+  }
+  return [...dependencies].sort();
+}
+
+export function missingOperationResourceDependencies(
+  operation: RuntimeTemplatedOperation,
+  completedResources: Partial<Record<ResourceRuntimeToken, string>>,
+): ResourceRuntimeToken[] {
+  return operationResourceDependencies(operation)
+    .filter(token => !completedResources[token]);
 }
 
 function interpolate(value: string | undefined, runtime: RuntimeUiValues, label: string): string | undefined {

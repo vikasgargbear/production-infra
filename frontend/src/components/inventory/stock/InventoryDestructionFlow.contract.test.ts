@@ -18,6 +18,10 @@ it('uses canonical eligibility, evidence, command lifecycle and exact readback',
   expect(source).toContain('Physical destruction completed at (UTC)');
   expect(source).toContain('requireCanonicalUtcEventTimestamp');
   expect(source).toContain('physicalConfirmedAt');
+  expect(source).toContain('aria-label="Eligible full stock balance"');
+  expect(source).toContain('aria-label="Verified destruction certificate"');
+  expect(source).toContain('aria-label="Verified Section 17(5)(h) reversal evidence"');
+  expect(source).toContain('aria-label="Physical destruction completed at (UTC)"');
   expect(source).not.toContain('new Date().toISOString()');
 });
 
