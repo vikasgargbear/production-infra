@@ -27,7 +27,7 @@ LIVE18_BASE_SCENARIOS = {
     "supplier_payment_balance_no_withholding",
     "sales_return_partial",
     "purchase_return_partial",
-    "inventory_adjustment_cycle_count_gain",
+    "inventory_adjustment_cycle_count_loss",
     "inventory_transfer_inter_branch_fefo",
     "inventory_destruction_certified_full_balance",
     "standalone_sales_credit_note",

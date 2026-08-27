@@ -51,3 +51,11 @@ def test_receipt_settlement_migration_owns_instruments_and_named_commands():
     assert 'TO "erp_runtime"' in migration
     assert "forbids caller settlement accounts" in migration
     assert "request_document || pg_catalog.jsonb_build_object('settlement_account_id',settlement_id)" in migration
+    assert "REVOKE INSERT, UPDATE, DELETE ON TABLE" in migration
+    for table in (
+        "finance.payments", "finance.allocations", "finance.open_items",
+        "finance.journal_entries", "finance.journal_lines",
+        "finance.accounting_events",
+    ):
+        assert table in migration
+    assert 'FROM "erp_app", "erp_runtime"' in migration

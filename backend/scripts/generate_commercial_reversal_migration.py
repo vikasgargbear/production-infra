@@ -9,7 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 TARGET = ROOT / "backend/alembic/sql/20260827_0036_commercial_reversal_authority.sql"
-EXPECTED_SQL_SHA256 = "d29b395b0b8b6c6567c331b9727d6911e563a8493e2ea72258eb3d9898d8bd0a"
+EXPECTED_SQL_SHA256 = "bb10df56d8b8573d5c02b3da104dfdf063b8d4739938abb3e7aaadbf70829c62"
 FUNCTIONS = (
     ("erp_automation_commands", "guard_command_request_match"),
     ("erp_automation_commands", "prepare_operator_command"),

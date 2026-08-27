@@ -46,5 +46,12 @@ def test_commercial_reversal_migration_owns_compensation_and_closed_fences():
         assert name in migration
     assert "commercial reversal residual was consumed" in migration
     assert "mark_journal_reversed" in migration
+    post_body = migration.split(
+        'CREATE OR REPLACE FUNCTION "erp_commercial_commands"."post_commercial_reversal"',
+        1,
+    )[1].split("ALTER FUNCTION", 1)[0]
+    assert post_body.index("erp_trade_commands.claim") < post_body.index(
+        "resolve_commercial_reversal_prepare"
+    )
     assert 'FROM PUBLIC, "erp_app", "erp_runtime"' in migration
     assert 'TO "erp_app", "erp_runtime"' in migration

@@ -18,6 +18,18 @@ from .scope import out_of_scope_paths
 
 ROOT = Path(__file__).resolve().parents[3]
 
+# These commands extend the supported business surface but are deliberately
+# outside the frozen Live18 17-core readiness catalog.  Keep the exact set here
+# so MCP publication cannot silently grow while the release-readiness artifact
+# remains unchanged.
+SUPPORTED_BUSINESS_EXTENSIONS = {
+    "finance.adjustment_note.reversal.prepare",
+    "finance.customer_cheque_bounce.prepare",
+    "finance.customer_cheque_clearance.prepare",
+    "procurement.purchase_return.reversal.prepare",
+    "sales.return.reversal.prepare",
+}
+
 
 def _json(path: Path):
     return json.loads(path.read_text())
@@ -63,7 +75,9 @@ def test_published_matrix_matches_the_reviewed_mcp_registry() -> None:
         for row in mcp_contract[section]
     }
 
-    assert {item.command_operation for item in published} == published_commands
+    core_commands = {item.command_operation for item in published}
+    assert core_commands.isdisjoint(SUPPORTED_BUSINESS_EXTENSIONS)
+    assert core_commands | SUPPORTED_BUSINESS_EXTENSIONS == published_commands
     assert all(item.prepare_tool in prepare_tools for item in published)
     assert all(item.mcp_readback_tool in read_tools for item in published)
 

@@ -2986,4 +2986,16 @@ GRANT EXECUTE ON FUNCTION "erp_finance_commands"."post_customer_cheque_bounce"(o
 GRANT EXECUTE ON FUNCTION "erp_finance_commands"."post_supplier_payment"(organization_id uuid, payment_id uuid, journal_id uuid, event_id uuid, settlement_components jsonb) TO "erp_app";
 GRANT EXECUTE ON FUNCTION "erp_finance_commands"."post_payment"(organization_id uuid, payment_id uuid, journal_id uuid, event_id uuid) TO "erp_app";
 
+-- Canonical finance posting is available only through the named authorities
+-- above.  ``erp_runtime`` inherits ``erp_app``, so revoke the baseline table
+-- mutations from both roles rather than leaving an indirect DML escape hatch.
+REVOKE INSERT, UPDATE, DELETE ON TABLE
+  finance.payments,
+  finance.allocations,
+  finance.open_items,
+  finance.journal_entries,
+  finance.journal_lines,
+  finance.accounting_events
+FROM "erp_app", "erp_runtime";
+
 RESET ROLE;

@@ -29,7 +29,7 @@
       "rest_readback": "/api/web/actions/inventory-adjustment/commands/{command_request_id}/readback",
       "mcp_readback_tool": "erp_inventory_adjustment_readback",
       "database_relations": ["inventory.inventory_documents", "inventory.inventory_document_lines", "inventory.stock_ledger_entries", "inventory.stock_balances", "finance.journal_entries", "finance.journal_lines"],
-      "scenario_steps": ["inventory_adjustment_cycle_count_gain"],
+      "scenario_steps": ["inventory_adjustment_cycle_count_loss"],
       "availability": "published"
     },
     {

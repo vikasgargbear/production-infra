@@ -19,7 +19,7 @@ down_revision = "20260827_0035"
 branch_labels = None
 depends_on = None
 SQL_PATH = Path(__file__).resolve().parents[1] / "sql" / "20260827_0036_commercial_reversal_authority.sql"
-EXPECTED_SQL_SHA256 = "d29b395b0b8b6c6567c331b9727d6911e563a8493e2ea72258eb3d9898d8bd0a"
+EXPECTED_SQL_SHA256 = "bb10df56d8b8573d5c02b3da104dfdf063b8d4739938abb3e7aaadbf70829c62"
 
 
 def _reviewed_sql() -> str:

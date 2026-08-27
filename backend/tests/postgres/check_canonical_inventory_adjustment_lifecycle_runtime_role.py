@@ -1,7 +1,8 @@
 """Execute signed cycle-count gain/loss lifecycles on disposable PostgreSQL 15.
 
 This gate deliberately uses real canonical rows and ``erp_runtime`` for every
-prepare/approve/execute/readback. Fixture-only owner writes are rolled back.
+prepare/approve/execute/readback. It requires a fresh disposable database so
+each service phase commits with PostgreSQL's declared constraint timing.
 """
 
 from __future__ import annotations
@@ -10,7 +11,7 @@ import importlib.util
 import os
 from decimal import Decimal
 from pathlib import Path
-from uuid import UUID
+from uuid import NAMESPACE_URL, UUID, uuid5
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import DBAPIError
@@ -34,7 +35,7 @@ ORG = TRANSFER.ORG
 BRANCH = TRANSFER.SOURCE_BRANCH
 LOCATION = TRANSFER.SOURCE_LOCATION
 PRODUCT = TRANSFER.PRODUCT
-CONVERSION = TRANSFER.CONVERSION
+CONVERSION = UUID("e3000000-0000-7000-8000-000000000059")
 BATCH = TRANSFER.BATCH
 REQUESTER = TRANSFER.MEMBERSHIP
 REQUESTER_USER = TRANSFER.USER
@@ -54,6 +55,10 @@ STALE_EVIDENCE = UUID("e3000000-0000-7000-8000-000000000069")
 
 
 def _extend_fixture(session, business_date) -> None:
+    # ``auth.users`` is owned by Supabase in production.  The disposable PG15
+    # bootstrap leaves it under the bootstrap principal, so create the second
+    # synthetic identity before adopting the migration-owner role.
+    session.execute(text("INSERT INTO auth.users(id) VALUES (:id)"), {"id": APPROVER_AUTH})
     session.execute(text('SET LOCAL ROLE "erp_migration_owner"'))
     session.execute(text("SELECT set_config('app.org_id',:org,true),set_config('app.membership_id',:member,true)"),
                     {"org": str(ORG), "member": str(REQUESTER)})
@@ -62,10 +67,10 @@ def _extend_fixture(session, business_date) -> None:
         "core.role_permissions", "core.access_grants", "core.document_sequences",
         "core.settings", "core.attachments", "automation.agent_grants",
         "automation.agent_grant_capabilities", "finance.accounts",
+        "catalog.uom_conversions",
     )
     for table_name in tables:
         session.execute(text(f"ALTER TABLE {table_name} DISABLE TRIGGER USER"))
-    session.execute(text("INSERT INTO auth.users(id) VALUES (:id)"), {"id": APPROVER_AUTH})
     session.execute(text("""
       INSERT INTO core.users(id,auth_user_id,display_name,status)
       VALUES (:approver_user,:approver_auth,'Cycle Count Approver','active');
@@ -106,13 +111,18 @@ def _extend_fixture(session, business_date) -> None:
       VALUES (:org,:asset,'1300','Inventory Asset','asset','INR',false,'active',:requester,:requester),
              (:org,:gain,'4800','Inventory Count Gain','income','INR',false,'active',:requester,:requester),
              (:org,:loss,'6800','Inventory Count Loss','expense','INR',false,'active',:requester,:requester);
+      INSERT INTO catalog.units_of_measure(code,name,symbol,dimension,decimal_places,status)
+      VALUES ('COUNT','Count unit','count','count',6,'active') ON CONFLICT (code) DO NOTHING;
+      INSERT INTO catalog.uom_conversions(
+        org_id,id,product_id,from_uom_code,to_uom_code,multiplier,valid_from,status,created_by_membership_id)
+      VALUES (:org,:conversion,:product,'COUNT','EA',1.000000,:business_date,'active',:requester);
       INSERT INTO core.settings(org_id,id,scope_kind,branch_id,namespace,key,value_type,value_text,status,created_by_membership_id,updated_by_membership_id)
-      VALUES (:org,gen_random_uuid(),'organization',NULL,'finance.account_roles','inventory_asset','text',:asset::text,'active',:requester,:requester),
-             (:org,gen_random_uuid(),'organization',NULL,'finance.account_roles','inventory_count_gain','text',:gain::text,'active',:requester,:requester),
-             (:org,gen_random_uuid(),'organization',NULL,'finance.account_roles','inventory_count_loss','text',:loss::text,'active',:requester,:requester);
+      VALUES (:org,gen_random_uuid(),'organization',NULL,'finance.account_roles','inventory_asset','text',CAST(:asset AS text),'active',:requester,:requester),
+             (:org,gen_random_uuid(),'organization',NULL,'finance.account_roles','inventory_count_gain','text',CAST(:gain AS text),'active',:requester,:requester),
+             (:org,gen_random_uuid(),'organization',NULL,'finance.account_roles','inventory_count_loss','text',CAST(:loss AS text),'active',:requester,:requester);
       INSERT INTO core.document_sequences(org_id,id,branch_id,document_type,fiscal_year_start,prefix,padding,next_value,status,created_by_membership_id,updated_by_membership_id)
-      VALUES (:org,gen_random_uuid(),:branch,'stock_count',make_date(CASE WHEN extract(month from :business_date::date)>=4 THEN extract(year from :business_date::date)::int ELSE extract(year from :business_date::date)::int-1 END,4,1),'CNT-',5,1,'active',:requester,:requester),
-             (:org,gen_random_uuid(),:branch,'journal_entry',make_date(CASE WHEN extract(month from :business_date::date)>=4 THEN extract(year from :business_date::date)::int ELSE extract(year from :business_date::date)::int-1 END,4,1),'JRN-',5,1,'active',:requester,:requester);
+      VALUES (:org,gen_random_uuid(),:branch,'stock_count',make_date(CASE WHEN extract(month from CAST(:business_date AS date))>=4 THEN extract(year from CAST(:business_date AS date))::int ELSE extract(year from CAST(:business_date AS date))::int-1 END,4,1),'CNT-',5,1,'active',:requester,:requester),
+             (:org,gen_random_uuid(),:branch,'journal_entry',make_date(CASE WHEN extract(month from CAST(:business_date AS date))>=4 THEN extract(year from CAST(:business_date AS date))::int ELSE extract(year from CAST(:business_date AS date))::int-1 END,4,1),'JRN-',5,1,'active',:requester,:requester);
       INSERT INTO core.attachments(org_id,branch_id,id,storage_bucket,storage_object_path,original_filename,media_type,byte_size,sha256,evidence_kind,document_date,retention_until,status,verified_at,created_by_membership_id)
       VALUES (:org,:branch,:loss_evidence,'fixture','count/loss.pdf','loss.pdf','application/pdf',100,decode(repeat('71',32),'hex'),'inventory_cycle_count_sheet',:business_date,:business_date+3650,'verified',transaction_timestamp(),:requester),
              (:org,:branch,:gain_evidence,'fixture','count/gain.pdf','gain.pdf','application/pdf',100,decode(repeat('72',32),'hex'),'inventory_cycle_count_sheet',:business_date,:business_date+3650,'verified',transaction_timestamp(),:requester),
@@ -124,9 +134,12 @@ def _extend_fixture(session, business_date) -> None:
         "approver_access": UUID("e3000000-0000-7000-8000-000000000071"),
         "requester_grant": REQUESTER_GRANT, "approver_grant": APPROVER_GRANT,
         "asset": ASSET_ACCOUNT, "gain": GAIN_ACCOUNT, "loss": LOSS_ACCOUNT,
+        "conversion": CONVERSION, "product": PRODUCT,
         "branch": BRANCH, "business_date": business_date,
         "loss_evidence": LOSS_EVIDENCE, "gain_evidence": GAIN_EVIDENCE, "stale_evidence": STALE_EVIDENCE,
     })
+    # Drain deferred foreign-key events before changing trigger state again.
+    session.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
     for table_name in tables:
         session.execute(text(f"ALTER TABLE {table_name} ENABLE TRIGGER USER"))
     session.execute(text("RESET ROLE"))
@@ -148,6 +161,10 @@ def _context(*, approver: bool = False, org: UUID = ORG) -> ActionContext:
 
 
 def _payload(session, *, counted: str, evidence: UUID) -> dict:
+    session.execute(
+        text("SELECT erp_security.activate_context(:auth,:org)"),
+        {"auth": REQUESTER_AUTH, "org": ORG},
+    )
     row_version = session.scalar(text("""
       SELECT row_version FROM inventory.stock_balances
        WHERE org_id=:org AND branch_id=:branch AND location_id=:location AND product_id=:product AND batch_id=:batch
@@ -186,8 +203,10 @@ def main() -> None:
                     TRANSFER._seed(session)
                     business_date = session.scalar(text("SELECT current_date"))
                     _extend_fixture(session, business_date)
+                outer.commit()
                 connection.exec_driver_sql('SET SESSION AUTHORIZATION "erp_runtime"')
                 assert int(connection.scalar(text("SHOW server_version_num"))) // 10000 == 15
+                connection.commit()
                 service = SqlAlchemyOperatorActionService(sessions, runtime_principal_configured=True)
 
                 loss_preview, loss = _post(service, sessions, "4.000000", LOSS_EVIDENCE, "loss")
@@ -205,6 +224,7 @@ def main() -> None:
                 insufficient_line = UUID("e3000000-0000-7000-8000-000000000081")
                 connection.exec_driver_sql('RESET SESSION AUTHORIZATION')
                 connection.execute(text('SET LOCAL ROLE "erp_migration_owner"'))
+                connection.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
                 connection.execute(text("ALTER TABLE inventory.inventory_documents DISABLE TRIGGER USER"))
                 connection.execute(text("ALTER TABLE inventory.inventory_document_lines DISABLE TRIGGER USER"))
                 connection.execute(text("""
@@ -224,16 +244,18 @@ def main() -> None:
                 """), {"org": ORG, "document": insufficient_document, "line": insufficient_line,
                        "branch": BRANCH, "requester": REQUESTER, "product": PRODUCT,
                        "batch": BATCH, "location": LOCATION})
+                connection.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
                 connection.execute(text("ALTER TABLE inventory.inventory_document_lines ENABLE TRIGGER USER"))
                 connection.execute(text("ALTER TABLE inventory.inventory_documents ENABLE TRIGGER USER"))
                 connection.execute(text("RESET ROLE"))
                 connection.exec_driver_sql('SET SESSION AUTHORIZATION "erp_runtime"')
+                connection.commit()
                 with sessions() as session, session.begin():
                     session.execute(text("SELECT erp_security.activate_context(:auth,:org)"),
                                     {"auth": REQUESTER_AUTH, "org": ORG})
                     try:
                         with session.begin_nested():
-                            session.execute(text("SELECT erp_trade_commands.post_locked_document(:org,:document,:actor,transaction_timestamp())"),
+                            session.execute(text("SELECT erp_trade_commands.post_locked_document(:org,:document,:actor)"),
                                             {"org": ORG, "document": insufficient_document, "actor": REQUESTER})
                     except DBAPIError as error:
                         assert "insufficient" in str(error).lower() or "negative" in str(error).lower()
@@ -244,7 +266,29 @@ def main() -> None:
                     assert session.scalar(text("SELECT on_hand_quantity FROM inventory.stock_balances WHERE org_id=:org AND batch_id=:batch"),
                                           {"org": ORG, "batch": BATCH}) == Decimal("6.000000")
 
+                connection.exec_driver_sql('RESET SESSION AUTHORIZATION')
+                connection.execute(text('SET LOCAL ROLE "erp_migration_owner"'))
+                connection.execute(text("ALTER TABLE inventory.inventory_documents DISABLE TRIGGER USER"))
+                connection.execute(text("ALTER TABLE inventory.inventory_document_lines DISABLE TRIGGER USER"))
+                connection.execute(
+                    text("DELETE FROM inventory.inventory_document_lines WHERE org_id=:org AND inventory_document_id=:document"),
+                    {"org": ORG, "document": insufficient_document},
+                )
+                connection.execute(
+                    text("DELETE FROM inventory.inventory_documents WHERE org_id=:org AND id=:document"),
+                    {"org": ORG, "document": insufficient_document},
+                )
+                connection.execute(text("ALTER TABLE inventory.inventory_document_lines ENABLE TRIGGER USER"))
+                connection.execute(text("ALTER TABLE inventory.inventory_documents ENABLE TRIGGER USER"))
+                connection.execute(text("RESET ROLE"))
+                connection.exec_driver_sql('SET SESSION AUTHORIZATION "erp_runtime"')
+                connection.commit()
+
                 with sessions.begin() as session:
+                    session.execute(
+                        text("SELECT erp_security.activate_context(:auth,:org)"),
+                        {"auth": REQUESTER_AUTH, "org": ORG},
+                    )
                     evidence = session.execute(text("""
                       SELECT document.status,document.total_abs_base_quantity,document.total_value,
                              ledger.entry_kind,ledger.quantity_delta,ledger.value_delta,
@@ -272,6 +316,7 @@ def main() -> None:
                                    {"org": ORG, "batch": BATCH})
                 connection.execute(text("RESET ROLE"))
                 connection.exec_driver_sql('SET SESSION AUTHORIZATION "erp_runtime"')
+                connection.commit()
                 try:
                     service.execute(command_request_id=stale.command_request_id, preview_hash=stale.preview_hash,
                         idempotency_key="pg15-count-stale-execute", context=_context())
@@ -279,12 +324,15 @@ def main() -> None:
                     pass
                 else:
                     raise AssertionError("stale stock row version executed")
+                stale_document_id = uuid5(
+                    NAMESPACE_URL,
+                    f"aasopharma:{ORG}:{REQUESTER}:inventory.adjustment.prepare:"
+                    "pg15-count-stale-prepare:inventory_document_id",
+                )
                 assert connection.scalar(text("""
-                  SELECT count(*) FROM inventory.stock_ledger_entries ledger
-                  JOIN automation.command_requests command ON command.org_id=ledger.org_id
-                   AND command.target_resource_id=ledger.inventory_document_id
-                  WHERE command.org_id=:org AND command.id=:command
-                """), {"org": ORG, "command": stale.command_request_id}) == 0
+                  SELECT count(*) FROM inventory.stock_ledger_entries
+                   WHERE org_id=:org AND inventory_document_id=:document
+                """), {"org": ORG, "document": stale_document_id}) == 0
                 try:
                     service.prepare(policy=ACTION_POLICIES["inventory.adjustment.prepare"], payload=stale_payload,
                         idempotency_key="pg15-count-cross-tenant", context=_context(org=OTHER_ORG))
@@ -292,10 +340,18 @@ def main() -> None:
                     pass
                 else:
                     raise AssertionError("cross-tenant cycle count prepared")
+                print(
+                    "inventory-adjustment PostgreSQL 15 lifecycle passed: "
+                    f"loss={loss.resource_id} gain={gain.resource_id} "
+                    "balance_quantity=6.000000 balance_value=60.00"
+                )
             finally:
                 if outer.is_active:
                     outer.rollback()
+                if connection.in_transaction():
+                    connection.rollback()
                 connection.exec_driver_sql("RESET SESSION AUTHORIZATION")
+                connection.commit()
     finally:
         engine.dispose()
 
