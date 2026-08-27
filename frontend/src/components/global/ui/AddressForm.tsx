@@ -187,7 +187,11 @@ const AddressForm: React.FC<AddressFormProps> = ({
                 ) || filteredAddresses.find(addr => addr.is_default) || filteredAddresses[0];
 
             if (defaultAddr) {
-                selectAddress(defaultAddr);
+                // Hydrating the authoritative default is not an explicit menu
+                // selection. Keep a dropdown that the user opened while this
+                // request was in flight visible so they can still review and
+                // choose the exact saved address.
+                selectAddress(defaultAddr, false);
             }
             return availableAddresses;
         } catch (error) {
@@ -200,7 +204,7 @@ const AddressForm: React.FC<AddressFormProps> = ({
         }
     };
 
-    const selectAddress = (address: SavedAddress): void => {
+    const selectAddress = (address: SavedAddress, closeDropdown = true): void => {
         setSelectedAddressId(address.address_id || null);
         const mobileNumber = address.mobile || customer?.primary_phone || '';
 
@@ -227,7 +231,9 @@ const AddressForm: React.FC<AddressFormProps> = ({
             });
         }
 
-        setShowDropdown(false);
+        if (closeDropdown) {
+            setShowDropdown(false);
+        }
         setIsEditing(false);
         setIsAddingNew(false);
     };
