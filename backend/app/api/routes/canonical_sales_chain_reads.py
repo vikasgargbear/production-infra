@@ -1,5 +1,6 @@
 """Strict posted sales-invoice accounting, tax, and inventory reconciliation."""
 
+from datetime import date
 from decimal import Decimal
 from typing import Annotated, Literal, Optional
 from uuid import UUID
@@ -42,6 +43,7 @@ class CanonicalSalesOrderReadback(BaseModel):
     order_number: str
     status: str
     customer_name: str
+    requested_delivery_date: date
     total_amount: Money
     rounding_adjustment: Money
     lines: list[CanonicalSalesOrderLineReadback] = Field(min_length=1)
@@ -125,6 +127,7 @@ def sales_order_acceptance_readback(order_id: UUID, user: dict = SALES_USER, db:
     org_id = _activate(db, user)
     rows = _rows(db, """
         SELECT document.id AS sales_order_id, document.order_number, document.status,
+               document.requested_delivery_date,
                party.legal_name AS customer_name,
                to_char(document.grand_total, 'FM999999999999999990.00') AS total_amount,
                to_char(document.rounding_adjustment, 'FM999999999999999990.00') AS rounding_adjustment,

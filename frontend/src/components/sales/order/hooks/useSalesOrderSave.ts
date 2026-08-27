@@ -82,6 +82,9 @@ export function useSalesOrderSave(props: UseSalesOrderSaveProps): UseSalesOrderS
                 || typeof detail.customer_name !== 'string' || !detail.customer_name.trim()) {
                 throw new Error('Order posted, but authoritative identity readback is incomplete.');
             }
+            if (detail.requested_delivery_date !== order.expected_delivery_date) {
+                throw new Error('Order posted, but the requested delivery date differs from authoritative readback.');
+            }
             setCreatedOrderData({
                 orderId: String(detail.sales_order_id),
                 orderNumber: detail.order_number.trim(),
@@ -106,7 +109,7 @@ export function useSalesOrderSave(props: UseSalesOrderSaveProps): UseSalesOrderS
         } finally {
             setSaving(false);
         }
-    }, [preparedPreview, saving, setCreatedOrderData, setMessage, setMessageType, setShowSuccessModal]);
+    }, [order.expected_delivery_date, preparedPreview, saving, setCreatedOrderData, setMessage, setMessageType, setShowSuccessModal]);
 
     return {
         saving,

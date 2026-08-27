@@ -252,6 +252,7 @@ def _documents():
         "matched_count": 1,
         "document": {
             "sales_order_id": resource_id,
+            "requested_delivery_date": "2026-08-28",
             "grand_total": "1650.00",
             "lines": [{
                 "base_billed_quantity": "12.000000",
@@ -261,7 +262,7 @@ def _documents():
             }],
         },
     }
-    return prepared, executed, status, readback
+    return prepared, executed, status, readback, "2026-08-28"
 
 
 def test_sales_order_readback_preserves_resource_quantities_and_preview_total() -> None:
@@ -269,6 +270,7 @@ def test_sales_order_readback_preserves_resource_quantities_and_preview_total() 
 
     assert exact == {
         "sales_order_id": "0198ea37-2b21-7c8d-9123-123456789abc",
+        "requested_delivery_date": "2026-08-28",
         "grand_total": "1650.00",
         "base_billed_quantity": "12.000000",
         "base_free_quantity": "2.000000",
@@ -290,6 +292,7 @@ def test_sales_order_readback_compares_decimal_value_not_display_scale() -> None
     "mutation, message",
     [
         (lambda parts: parts[3]["document"].update(grand_total="1649.99"), "total drifted"),
+        (lambda parts: parts[3]["document"].update(requested_delivery_date="2026-08-29"), "requested delivery date differs"),
         (lambda parts: parts[3]["document"]["lines"][0].update(base_free_quantity="3.000000"), "differs from the command input"),
         (lambda parts: parts[2].update(resource_id="0198ea37-2b21-7c8d-9123-000000000000"), "stable sales-order resource UUID"),
     ],

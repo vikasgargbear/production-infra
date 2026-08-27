@@ -372,6 +372,7 @@ def _verify_sales_order_readback(
     executed: dict[str, Any],
     status: dict[str, Any],
     readback: dict[str, Any],
+    requested_delivery_date: str,
 ) -> dict[str, Any]:
     resource_id = executed.get("resource_id")
     if not isinstance(resource_id, str) or status.get("resource_id") != resource_id:
@@ -381,6 +382,10 @@ def _verify_sales_order_readback(
     document = readback.get("document")
     if not isinstance(document, dict) or document.get("sales_order_id") != resource_id:
         raise ExerciseError("Live sales-order readback identity differs from execute")
+    if document.get("requested_delivery_date") != requested_delivery_date:
+        raise ExerciseError(
+            "Live sales-order requested delivery date differs from the command input"
+        )
     financial = prepared.get("financial_impact")
     if not isinstance(financial, list) or len(financial) != 1:
         raise ExerciseError("Live sales-order preview omitted one financial impact")
@@ -409,6 +414,7 @@ def _verify_sales_order_readback(
             )
     return {
         "sales_order_id": resource_id,
+        "requested_delivery_date": requested_delivery_date,
         "grand_total": readback_total,
         "base_billed_quantity": line["base_billed_quantity"],
         "base_free_quantity": line["base_free_quantity"],
@@ -519,6 +525,7 @@ def _exercise_mcp(
             "idempotency_key": f"mcp-live-sales-order-{run_id}",
             "branch_id": DEMO_BRANCH_ID,
             "order_date": business_date,
+            "requested_delivery_date": business_date,
             "document_discount": {
                 "document_discount_kind": "amount",
                 "document_discount_basis": "taxable_value",
@@ -580,7 +587,7 @@ def _exercise_mcp(
         {"branch_id": DEMO_BRANCH_ID, "sales_order_id": resource_id},
     )
     exact_values = _verify_sales_order_readback(
-        prepared, executed, status, readback
+        prepared, executed, status, readback, business_date
     )
     return names, {
         "command_request_id": command_id,

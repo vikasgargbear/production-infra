@@ -167,6 +167,7 @@ def _sales_order_payload():
         "idempotency_key": "sales-order:test:0001",
         "branch_id": str(BRANCH_ID),
         "order_date": "2026-08-20",
+        "requested_delivery_date": "2026-08-22",
         "customer_account_id": str(uuid4()),
         "delivery_address_id": str(uuid4()),
         "delivery_address_row_version": "3",
@@ -199,6 +200,7 @@ def _sales_order_payload():
 
 def _sales_invoice_payload():
     payload = _sales_order_payload()
+    payload.pop("requested_delivery_date")
     payload.update(
         {
             "idempotency_key": "sales-invoice:test:0001",
@@ -262,6 +264,7 @@ def _sales_return_payload(*, treatment: str = "statutory"):
 
 def _purchase_order_payload():
     payload = _sales_order_payload()
+    payload.pop("requested_delivery_date")
     payload.update(
         {
             "idempotency_key": "purchase-order:test:0001",
@@ -482,6 +485,7 @@ def test_registry_and_strict_models_are_derived_from_exact_machine_contract():
     payload = _sales_order_payload()
     parsed = PREPARE_PAYLOAD_MODELS["sales.order.prepare"].model_validate(payload)
     assert parsed.branch_id == BRANCH_ID
+    assert parsed.requested_delivery_date.isoformat() == "2026-08-22"
     assert parsed.lines[0].billed_quantity == "10.000000"
     assert parsed.lines[0].free_quantity == "0.000000"
 
@@ -506,6 +510,13 @@ def test_registry_and_strict_models_are_derived_from_exact_machine_contract():
             rate_overflow_payload
         )
 
+    missing_delivery = _sales_order_payload()
+    missing_delivery.pop("requested_delivery_date")
+    with pytest.raises(ValidationError):
+        PREPARE_PAYLOAD_MODELS["sales.order.prepare"].model_validate(
+            missing_delivery
+        )
+
 
 def test_prepare_validates_branch_and_calls_only_injected_canonical_service(enabled_boundary):
     fake = FakeOperatorActionService()
@@ -526,9 +537,31 @@ def test_prepare_validates_branch_and_calls_only_injected_canonical_service(enab
     call = fake.calls[0]
     assert call[0] == "prepare"
     assert call[2]["branch_id"] == BRANCH_ID
+    assert call[2]["requested_delivery_date"].isoformat() == "2026-08-22"
     assert call[2]["lines"][0]["quoted_unit_rate"] == "100.0000"
     assert "idempotency_key" not in call[2]
     assert fake.last_idempotency_key == "sales-order:test:0001"
+
+
+def test_sales_order_prepare_rejects_delivery_before_order_date(enabled_boundary):
+    fake = FakeOperatorActionService()
+    policy = ACTION_POLICIES["sales.order.prepare"]
+    holder = {"value": _context(policy.operation_key, policy.permission)}
+    client = TestClient(_app(fake, holder))
+    payload = _sales_order_payload()
+    payload["requested_delivery_date"] = "2026-08-19"
+
+    response = client.post(
+        "/api/internal/mcp/actions/sales.order.prepare/prepare",
+        json=payload,
+    )
+
+    assert response.status_code == 422
+    assert (
+        "sales order requested_delivery_date must not precede order_date"
+        in response.text
+    )
+    assert fake.calls == []
 
 
 def test_dispatch_prepare_accepts_only_order_line_quantities_batches_and_logistics(

@@ -6048,8 +6048,11 @@ AS $function$
 DECLARE
     branch_id uuid := NULLIF(request_document->>'branch_id','')::uuid;
     customer_account_id uuid := NULLIF(request_document->>'customer_account_id','')::uuid;
+    delivery_address_id uuid := NULLIF(request_document->>'delivery_address_id','')::uuid;
+    delivery_address_row_version bigint := NULLIF(request_document->>'delivery_address_row_version','')::bigint;
     customer_party_id uuid;
     order_date date := NULLIF(request_document->>'order_date','')::date;
+    requested_delivery_date date := NULLIF(request_document->>'requested_delivery_date','')::date;
     zero_rated_payment_mode text := request_document->>'zero_rated_payment_mode';
     supply_type text;
     customer_account parties.customer_accounts%ROWTYPE;
@@ -6067,11 +6070,18 @@ BEGIN
     IF SESSION_USER<>'erp_calculator' OR organization_id IS NULL OR membership_id IS NULL
        OR auth_user_id IS NULL OR application_user_id IS NULL OR grant_id IS NULL
        OR branch_id IS NULL OR customer_account_id IS NULL OR order_date IS NULL
+       OR requested_delivery_date IS NULL
+       OR delivery_address_id IS NULL OR delivery_address_row_version IS NULL
+       OR delivery_address_row_version<1 OR request_document?'place_of_supply_state_code'
+       OR request_document?'shipping_address_id'
        OR zero_rated_payment_mode NOT IN ('not_applicable','without_payment','with_igst')
        OR pg_catalog.jsonb_typeof(request_document)<>'object'
        OR pg_catalog.jsonb_typeof(request_document->'lines')<>'array'
        OR pg_catalog.jsonb_array_length(request_document->'lines') NOT BETWEEN 1 AND 500 THEN
         RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='sales-order resolve input is incomplete';
+    END IF;
+    IF requested_delivery_date<order_date THEN
+        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='sales-order requested delivery date precedes order date';
     END IF;
     PERFORM 1
       FROM core.memberships AS membership
@@ -6125,19 +6135,16 @@ BEGIN
            AND address_kind='registered' AND is_primary AND status='active'
            AND valid_from<=order_date AND (valid_until IS NULL OR valid_until>=order_date) FOR SHARE;
     END IF;
-    SELECT count(*) INTO address_count FROM parties.addresses
-     WHERE org_id=organization_id AND party_id=customer_party_id
-       AND address_kind='shipping' AND is_primary AND status='active'
-       AND valid_from<=order_date AND (valid_until IS NULL OR valid_until>=order_date);
-    IF address_count>1 THEN
-        RAISE EXCEPTION USING ERRCODE='21000', MESSAGE='customer has ambiguous effective primary shipping addresses';
-    ELSIF address_count=1 THEN
-        SELECT * INTO STRICT shipping_address FROM parties.addresses
-         WHERE org_id=organization_id AND party_id=customer_party_id
-           AND address_kind='shipping' AND is_primary AND status='active'
-           AND valid_from<=order_date AND (valid_until IS NULL OR valid_until>=order_date) FOR SHARE;
-    ELSE
-        shipping_address:=billing_address;
+    SELECT * INTO STRICT shipping_address FROM parties.addresses
+     WHERE org_id=organization_id AND id=delivery_address_id
+       AND party_id=customer_party_id
+       AND address_kind IN ('registered','billing','shipping') AND status='active'
+       AND row_version=delivery_address_row_version
+       AND valid_from<=order_date AND (valid_until IS NULL OR valid_until>=order_date)
+     FOR SHARE;
+    IF shipping_address.country_code<>'IN' OR shipping_address.state_code!~'^[0-9]{2}$'
+       OR shipping_address.postal_code!~'^[0-9]{6}$' THEN
+        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='selected delivery address lacks exact supported India address facts';
     END IF;
 
     SELECT count(*) INTO registration_count FROM parties.tax_registrations
@@ -6276,7 +6283,8 @@ BEGIN
         'billing_address_id',billing_address.id,'billing_address_row_version',billing_address.row_version,
         'shipping_address_id',shipping_address.id,'shipping_address_row_version',shipping_address.row_version,
         'shipping_state_code',shipping_address.state_code,
-        'order_date',order_date,'lines',resolved_lines,
+        'order_date',order_date,'requested_delivery_date',requested_delivery_date,
+        'lines',resolved_lines,
         'ruleset_version',resolved_lines->0->>'ruleset_version'
     );
 END
@@ -6526,7 +6534,8 @@ BEGIN
     totals:=output_document->'totals';
     requested_total:=(totals->>'grand_total')::numeric;
     INSERT INTO sales.orders(
-        org_id,id,branch_id,customer_account_id,order_number,fiscal_year,order_date,status,
+        org_id,id,branch_id,customer_account_id,order_number,fiscal_year,order_date,
+        requested_delivery_date,status,
         supply_type,zero_rated_payment_mode,tax_charge_mechanism,billing_address_id,
         shipping_address_id,currency_code,calculation_ruleset_version,
         document_discount_kind,document_discount_basis,document_discount_value,
@@ -6535,7 +6544,8 @@ BEGIN
         rounding_policy,rounding_adjustment,grand_total)
     VALUES(
         organization_id,order_id,branch_id,
-        (resolved_document->>'customer_account_id')::uuid,order_number,fiscal_year,order_date,'submitted',
+        (resolved_document->>'customer_account_id')::uuid,order_number,fiscal_year,order_date,
+        (resolved_document->>'requested_delivery_date')::date,'submitted',
         resolved_document->>'supply_type',resolved_document->>'zero_rated_payment_mode',
         'normal',(resolved_document->>'billing_address_id')::uuid,
         (resolved_document->>'shipping_address_id')::uuid,'INR',output_document->>'ruleset_version',

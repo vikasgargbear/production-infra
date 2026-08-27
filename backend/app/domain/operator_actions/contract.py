@@ -168,6 +168,11 @@ def validate_prepare_payload_semantics(
     """Enforce conditional action rules that JSON Schema field shapes cannot express."""
 
     values = payload.model_dump(mode="python")
+    if operation_key == "sales.order.prepare":
+        if values["requested_delivery_date"] < values["order_date"]:
+            raise ValueError(
+                "sales order requested_delivery_date must not precede order_date"
+            )
     if operation_key == "finance.bank_reconciliation.prepare":
         amount = Decimal(values["matched_amount"])
         if amount <= 0 or amount != amount.quantize(Decimal("0.01")):

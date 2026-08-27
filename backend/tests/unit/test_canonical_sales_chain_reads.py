@@ -1,3 +1,4 @@
+from datetime import date
 from uuid import uuid4
 
 import pytest
@@ -69,7 +70,8 @@ def test_order_and_dispatch_schemas_require_exact_strings_and_canonical_uuids():
     ids = [uuid4() for _ in range(12)]
     order = {
         "sales_order_id": ids[0], "order_number": "SO-1", "status": "approved",
-        "customer_name": "Customer", "total_amount": "168.00", "rounding_adjustment": "0.00", "lines": [{
+        "customer_name": "Customer", "requested_delivery_date": "2026-08-30",
+        "total_amount": "168.00", "rounding_adjustment": "0.00", "lines": [{
             "sales_order_line_id": ids[1], "product_id": ids[2],
             "billed_quantity": "1.125000", "free_quantity": "0.250000",
             "base_billed_quantity": "11.250000", "base_free_quantity": "2.500000",
@@ -93,7 +95,9 @@ def test_order_and_dispatch_schemas_require_exact_strings_and_canonical_uuids():
         **dispatch, "inventory_value": "84.13",
         "lines": [{**dispatch["lines"][0], "ledger_value": "84.13"}],
     }
-    assert reads.CanonicalSalesOrderReadback.model_validate(order).lines[0].quoted_unit_rate == "84.1250"
+    parsed_order = reads.CanonicalSalesOrderReadback.model_validate(order)
+    assert parsed_order.lines[0].quoted_unit_rate == "84.1250"
+    assert parsed_order.requested_delivery_date == date(2026, 8, 30)
     assert reads.CanonicalSalesDispatchReadback.model_validate(dispatch).lines[0].ledger_base_quantity == "13.750000"
     assert reads.CanonicalSalesDispatchValuationReadback.model_validate(
         valuation
@@ -116,7 +120,8 @@ def test_order_and_dispatch_schemas_require_exact_strings_and_canonical_uuids():
 def test_order_and_dispatch_readbacks_fail_closed_for_arithmetic_drift(target, field, value, message):
     ids = [uuid4() for _ in range(11)]
     order = {"sales_order_id": ids[0], "order_number": "SO-1", "status": "approved",
-             "customer_name": "Customer", "total_amount": "112.00", "rounding_adjustment": "0.00", "lines": [{
+             "customer_name": "Customer", "requested_delivery_date": "2026-08-30",
+             "total_amount": "112.00", "rounding_adjustment": "0.00", "lines": [{
                  "sales_order_line_id": ids[1], "product_id": ids[2], "billed_quantity": "1.000000",
                  "free_quantity": "0.250000", "base_billed_quantity": "10.000000",
                  "base_free_quantity": "2.500000", "quoted_unit_rate": "100.0000",

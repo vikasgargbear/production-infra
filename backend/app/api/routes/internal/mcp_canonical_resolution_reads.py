@@ -501,6 +501,7 @@ class SalesOrderDocument(StrictDTO):
     order_number: str
     fiscal_year: int
     order_date: date
+    requested_delivery_date: date
     status: str
     currency_code: str
     grand_total: Decimal
@@ -756,7 +757,8 @@ def canonical_sales_order_get(
                    document.customer_account_id,
                    document.shipping_address_id AS delivery_address_id,
                    command.delivery_address_row_version,
-                   order_number, fiscal_year, order_date, status, currency_code,
+                   order_number, fiscal_year, order_date, requested_delivery_date,
+                   status, currency_code,
                    grand_total, calculation_ruleset_version, row_version
               FROM sales.orders document
               JOIN LATERAL erp_automation_reads.sales_order_address_provenance(

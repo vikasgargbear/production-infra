@@ -82,6 +82,11 @@ function PrepareHarness({ order }: { order: Order }) {
     });
     return <>
         <button type="button" onClick={() => void save.handleSaveOrder()}>Generate Order</button>
+        {save.reviewOpen && (
+            <button type="button" onClick={() => void save.confirmPreparedOrder()}>
+                Confirm Order
+            </button>
+        )}
         {message && <div role="alert" data-message-type={messageType}>{message}</div>}
     </>;
 }
@@ -93,6 +98,18 @@ describe('sales-order visible prepare action', () => {
             data: {
                 command_request_id: '10000000-0000-7000-8000-000000000006',
                 preview_hash: `sha256:${'a'.repeat(64)}`,
+            },
+        });
+        (ordersApi.executePreparedCanonical as jest.Mock).mockResolvedValue({
+            data: { resource_id: '10000000-0000-7000-8000-000000000007' },
+        });
+        (ordersApi.getCanonical as jest.Mock).mockResolvedValue({
+            data: {
+                sales_order_id: '10000000-0000-7000-8000-000000000007',
+                order_number: 'SO-000001',
+                customer_name: 'Canonical Customer',
+                requested_delivery_date: '2026-08-29',
+                total_amount: '168.25',
             },
         });
     });
@@ -167,5 +184,39 @@ describe('sales-order visible prepare action', () => {
             'Order document discount is not supported by canonical sales-order posting',
         );
         expect(ordersApi.prepareCanonical).not.toHaveBeenCalled();
+    });
+
+    it('verifies the exact requested delivery date in authoritative readback', async () => {
+        render(<PrepareHarness order={validOrder()} />);
+
+        await userEvent.click(screen.getByRole('button', { name: 'Generate Order' }));
+        await userEvent.click(await screen.findByRole('button', { name: 'Confirm Order' }));
+
+        await waitFor(() => expect(ordersApi.getCanonical).toHaveBeenCalledWith(
+            '10000000-0000-7000-8000-000000000007',
+        ));
+        expect((await screen.findByRole('alert')).textContent).toBe(
+            'Sales order posted and verified from the canonical API.',
+        );
+    });
+
+    it('fails closed when authoritative readback changes the requested delivery date', async () => {
+        (ordersApi.getCanonical as jest.Mock).mockResolvedValue({
+            data: {
+                sales_order_id: '10000000-0000-7000-8000-000000000007',
+                order_number: 'SO-000001',
+                customer_name: 'Canonical Customer',
+                requested_delivery_date: '2026-08-30',
+                total_amount: '168.25',
+            },
+        });
+        render(<PrepareHarness order={validOrder()} />);
+
+        await userEvent.click(screen.getByRole('button', { name: 'Generate Order' }));
+        await userEvent.click(await screen.findByRole('button', { name: 'Confirm Order' }));
+
+        expect((await screen.findByRole('alert')).textContent).toBe(
+            'Order posted, but the requested delivery date differs from authoritative readback.',
+        );
     });
 });

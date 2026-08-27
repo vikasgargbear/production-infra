@@ -456,6 +456,9 @@ def _prepare_actions() -> dict[str, OperatorAction]:
     sales_order = _commercial_header("order_date", "Commercial order date in the branch timezone.")
     sales_order.update(
         {
+            "requested_delivery_date": _date(
+                "Customer-requested delivery date; it must not precede order_date."
+            ),
             "customer_account_id": _uuid("Canonical active customer account; the backend derives its party."),
             "delivery_address_id": _uuid(
                 "Explicit effective customer delivery address; the backend derives place of supply from it."
