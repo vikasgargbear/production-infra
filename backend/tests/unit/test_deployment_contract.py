@@ -1435,6 +1435,12 @@ def test_live18_is_opt_in_exact_sha_external_fixture_and_always_cleaned():
     assert "vars.RAILWAY_FRONTEND_URL" in live18
     assert "vars.RAILWAY_API_URL" in live18
     assert "vars.RAILWAY_MCP_URL" in live18
+    assert "needs.railway-canonical-staging.outputs.api_deployment_id" in live18
+    assert "needs.railway-canonical-staging.outputs.mcp_deployment_id" in live18
+    assert "needs.railway-canonical-staging.outputs.frontend_deployment_id" in live18
+    assert '--api-deployment-id "$RAILWAY_API_DEPLOYMENT_ID"' in live18
+    assert '--mcp-deployment-id "$RAILWAY_MCP_DEPLOYMENT_ID"' in live18
+    assert '--frontend-deployment-id "$RAILWAY_FRONTEND_DEPLOYMENT_ID"' in live18
     assert (
         'echo "LIVE18_FIXTURE_PATH=$RUNNER_TEMP/live18-reviewed-fixture.json"'
         in live18

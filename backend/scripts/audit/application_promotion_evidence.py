@@ -577,6 +577,10 @@ def reconcile_railway_deferred_deployment(
     run = live18_manifest.get("run")
     deployment = live18_manifest.get("deployment")
     demo = live18_manifest.get("demo")
+    deployment_ids = {
+        name: row["deployment_id"]
+        for name, row in services.items()
+    }
     if (
         live18_manifest.get("schema") != "aasopharma.live18.upload-manifest.v1"
         or run != {
@@ -589,6 +593,7 @@ def reconcile_railway_deferred_deployment(
         or deployment.get("commit_sha") != expected_sha
         or deployment.get("status") != "ready"
         or deployment.get("origins") != origins
+        or deployment.get("deployment_ids") != deployment_ids
         or SHA256.fullmatch(str(deployment.get("raw_evidence_sha256", ""))) is None
         or not isinstance(demo, dict)
         or demo.get("action") != "provision-demo"
@@ -1632,6 +1637,7 @@ def capture_live18_acceptance(
     if (
         deployment.get("provider") != binding.get("deployment_provider")
         or deployment.get("commit_sha") != binding.get("git_commit")
+        or deployment.get("status") != "ready"
     ):
         raise EvidenceError("Live18 deployment differs from the promotion binding")
     if SHA256.fullmatch(str(deployment.get("raw_evidence_sha256", ""))) is None:
@@ -1646,6 +1652,19 @@ def capture_live18_acceptance(
     }
     if origins != expected_origins:
         raise EvidenceError("Live18 service origins differ from the exact deployment")
+    expected_deployment_ids = (
+        {
+            name: row.get("deployment_id")
+            for name, row in services.items()
+            if isinstance(row, dict)
+        }
+        if deployment.get("provider") == "railway"
+        else None
+    )
+    if deployment.get("deployment_ids") != expected_deployment_ids:
+        raise EvidenceError(
+            "Live18 service deployment identities differ from the exact deployment"
+        )
 
     matrix = _load_json(LIVE18_MATRIX_PATH)
     operations = matrix.get("operations")

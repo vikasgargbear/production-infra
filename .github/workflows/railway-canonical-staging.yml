@@ -37,6 +37,12 @@ on:
       api_deployment_id:
         description: Exact Railway API deployment created for the reviewed SHA
         value: ${{ jobs.deploy.outputs.api_deployment_id }}
+      mcp_deployment_id:
+        description: Exact Railway MCP deployment created for the reviewed SHA
+        value: ${{ jobs.deploy.outputs.mcp_deployment_id }}
+      frontend_deployment_id:
+        description: Exact Railway frontend deployment created for the reviewed SHA
+        value: ${{ jobs.deploy.outputs.frontend_deployment_id }}
     secrets:
       RAILWAY_API_TOKEN:
         required: true
@@ -72,6 +78,8 @@ jobs:
   deploy:
     outputs:
       api_deployment_id: ${{ steps.exact_upload.outputs.api_deployment_id }}
+      mcp_deployment_id: ${{ steps.exact_upload.outputs.mcp_deployment_id }}
+      frontend_deployment_id: ${{ steps.exact_upload.outputs.frontend_deployment_id }}
     runs-on: ubuntu-latest
     environment: canonical-staging
     timeout-minutes: 45
@@ -895,6 +903,8 @@ jobs:
           deployment_id_from_payload mcp-deploy.json > mcp-deployment-id
           deployment_id_from_payload frontend-deploy.json > frontend-deployment-id
           echo "api_deployment_id=$(<api-deployment-id)" >> "$GITHUB_OUTPUT"
+          echo "mcp_deployment_id=$(<mcp-deployment-id)" >> "$GITHUB_OUTPUT"
+          echo "frontend_deployment_id=$(<frontend-deployment-id)" >> "$GITHUB_OUTPUT"
 
       - name: Require each exact upload to become the active deployment
         run: |

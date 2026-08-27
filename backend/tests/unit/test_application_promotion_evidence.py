@@ -289,6 +289,14 @@ def _live18_manifest(git_commit: str, binding: dict) -> dict:
             "origins": {
                 name: row["url"] for name, row in binding["deployment_services"].items()
             },
+            "deployment_ids": (
+                {
+                    name: row["deployment_id"]
+                    for name, row in binding["deployment_services"].items()
+                }
+                if binding["deployment_provider"] == "railway"
+                else None
+            ),
             # This hashes the Live18 public-deployment attestation. The binding
             # separately hashes the provider's immutable deployment artifact.
             "raw_evidence_sha256": "e" * 64,
@@ -504,9 +512,10 @@ def test_railway_maintenance_reconciles_only_same_run_live18_readiness():
         "deployment_provider": "railway",
         "git_commit": git_commit,
         "deployment_services": {
-            name: {
-                "url": row["url"],
-            }
+                name: {
+                    "url": row["url"],
+                    "deployment_id": row["deployment_id"],
+                }
             for name, row in maintenance["services"].items()
         },
     }
@@ -566,6 +575,15 @@ def test_railway_maintenance_reconciles_only_same_run_live18_readiness():
     with pytest.raises(evidence.EvidenceError, match="does not match"):
         evidence.reconcile_railway_deferred_deployment(
             **{**common, "live18_manifest": wrong_origin}
+        )
+
+    wrong_deployment = json.loads(json.dumps(manifest))
+    wrong_deployment["deployment"]["deployment_ids"]["mcp"] = (
+        "20000000-0000-4000-8000-000000000009"
+    )
+    with pytest.raises(evidence.EvidenceError, match="does not match"):
+        evidence.reconcile_railway_deferred_deployment(
+            **{**common, "live18_manifest": wrong_deployment}
         )
 
     with pytest.raises(evidence.EvidenceError, match="artifact identity"):

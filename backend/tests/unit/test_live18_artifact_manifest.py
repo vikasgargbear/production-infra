@@ -9,6 +9,7 @@ import pytest
 
 from scripts.build_live18_artifact_manifest import (
     ArtifactManifestError,
+    _deployment_summary,
     _http_summary,
     build_manifest,
 )
@@ -23,6 +24,11 @@ REQUESTER = "d3000000-0000-7000-8000-000000000021"
 REVIEWER = "d3000000-0000-7000-8000-000000000003"
 COMMAND = "018f0000-0000-7000-8000-000000000001"
 RESOURCE = "018f0000-0000-7000-8000-000000000002"
+DEPLOYMENT_IDS = {
+    "api": "10000000-0000-4000-8000-000000000001",
+    "frontend": "10000000-0000-4000-8000-000000000002",
+    "mcp": "10000000-0000-4000-8000-000000000003",
+}
 PNG_1X1 = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl9sAAAAASUVORK5CYII="
 )
@@ -33,6 +39,38 @@ def _write(path: Path, value: object) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value), encoding="utf-8")
     return path
+
+
+def _ready_deployment(provider: str) -> dict[str, object]:
+    services: dict[str, dict[str, object]] = {
+        "api": {
+            "origin": "https://api.example",
+            "health": {"status": "healthy", "git_commit": SHA},
+            "readiness": {"status": "ready"},
+        },
+        "frontend": {
+            "origin": "https://frontend.example",
+            "health": "ok",
+            "build_metadata": {
+                "service": "aasopharma-erp",
+                "git_commit": SHA,
+            },
+        },
+        "mcp": {
+            "origin": "https://mcp.example",
+            "health": {"status": "ok", "git_commit": SHA},
+            "readiness": {"status": "ready"},
+        },
+    }
+    if provider == "railway":
+        for name, deployment_id in DEPLOYMENT_IDS.items():
+            services[name]["deployment_id"] = deployment_id
+    return {
+        "schema": "aasopharma.live18.deployment-evidence.v1",
+        "provider": provider,
+        "commit_sha": SHA,
+        "services": services,
+    }
 
 
 def _screenshots(root: Path, operation_id: str) -> tuple[list[dict[str, object]], Path]:
@@ -165,16 +203,32 @@ def _railway_demo_receipt(*, run_id: str, run_attempt: str) -> dict[str, object]
     return value
 
 
+def test_deployment_summary_requires_exact_ready_sha_and_railway_ids(
+    tmp_path: Path,
+) -> None:
+    provenance_only = _ready_deployment("railway")
+    provenance_only["schema"] = "aasopharma.deployment-provenance.v1"
+    with pytest.raises(ArtifactManifestError, match="wrong deployment evidence schema"):
+        _deployment_summary(_write(tmp_path / "provenance.json", provenance_only))
+
+    not_ready = _ready_deployment("railway")
+    not_ready["services"]["mcp"]["readiness"] = {"status": "not_ready"}
+    with pytest.raises(ArtifactManifestError, match="public readiness"):
+        _deployment_summary(_write(tmp_path / "not-ready.json", not_ready))
+
+    wrong_sha = _ready_deployment("railway")
+    wrong_sha["services"]["api"]["health"]["git_commit"] = "b" * 40
+    with pytest.raises(ArtifactManifestError, match="public readiness"):
+        _deployment_summary(_write(tmp_path / "wrong-sha.json", wrong_sha))
+
+    missing_id = _ready_deployment("railway")
+    del missing_id["services"]["frontend"]["deployment_id"]
+    with pytest.raises(ArtifactManifestError, match="deployment_id"):
+        _deployment_summary(_write(tmp_path / "missing-id.json", missing_id))
+
+
 def test_manifest_omits_credentials_and_raw_request_response_bodies(tmp_path: Path) -> None:
-    deployed = _write(tmp_path / "deployed.json", {
-        "schema": "aasopharma.live18.deployment-evidence.v1",
-        "provider": "railway",
-        "commit_sha": SHA,
-        "services": {
-            name: {"origin": f"https://{name}.example"}
-            for name in ("api", "frontend", "mcp")
-        },
-    })
+    deployed = _write(tmp_path / "deployed.json", _ready_deployment("railway"))
     evidence_dir = tmp_path / "evidence"
     screenshots, screenshot_dir = _screenshots(tmp_path, "sales_invoice")
     _write(evidence_dir / "sales_invoice.json", {
@@ -258,15 +312,7 @@ def test_manifest_omits_credentials_and_raw_request_response_bodies(tmp_path: Pa
 def test_success_requires_all_17_ready_operations_and_34_reviewed_pngs(
     tmp_path: Path,
 ) -> None:
-    deployed = _write(tmp_path / "deployed.json", {
-        "schema": "aasopharma.live18.deployment-evidence.v1",
-        "provider": "render",
-        "commit_sha": SHA,
-        "services": {
-            name: {"origin": f"https://{name}.example"}
-            for name in ("api", "frontend", "mcp")
-        },
-    })
+    deployed = _write(tmp_path / "deployed.json", _ready_deployment("render"))
     evidence_dir = tmp_path / "evidence"
     screenshot_dir = tmp_path / "screenshots"
     for operation in _matrix_operations():
@@ -374,15 +420,7 @@ def test_render_demo_receipt_rejects_deployment_drift(tmp_path: Path) -> None:
 
 
 def test_success_rejects_reconciliation_from_another_run(tmp_path: Path) -> None:
-    deployed = _write(tmp_path / "deployed.json", {
-        "schema": "aasopharma.live18.deployment-evidence.v1",
-        "provider": "render",
-        "commit_sha": SHA,
-        "services": {
-            name: {"origin": f"https://{name}.example"}
-            for name in ("api", "frontend", "mcp")
-        },
-    })
+    deployed = _write(tmp_path / "deployed.json", _ready_deployment("render"))
     evidence_dir = tmp_path / "evidence"
     screenshot_dir = tmp_path / "screenshots"
     for operation in _matrix_operations():
@@ -499,15 +537,7 @@ def test_attestation_rejects_operation_matrix_drift(tmp_path: Path) -> None:
 
 
 def test_manifest_treats_empty_optional_demo_evidence_as_absent(tmp_path: Path) -> None:
-    deployed = _write(tmp_path / "deployed.json", {
-        "schema": "aasopharma.live18.deployment-evidence.v1",
-        "provider": "railway",
-        "commit_sha": SHA,
-        "services": {
-            name: {"origin": f"https://{name}.example"}
-            for name in ("api", "frontend", "mcp")
-        },
-    })
+    deployed = _write(tmp_path / "deployed.json", _ready_deployment("railway"))
     demo = tmp_path / "demo.json"
     demo.touch()
 
@@ -525,15 +555,7 @@ def test_manifest_treats_empty_optional_demo_evidence_as_absent(tmp_path: Path) 
 
 
 def test_manifest_treats_empty_optional_database_evidence_as_absent(tmp_path: Path) -> None:
-    deployed = _write(tmp_path / "deployed.json", {
-        "schema": "aasopharma.live18.deployment-evidence.v1",
-        "provider": "railway",
-        "commit_sha": SHA,
-        "services": {
-            name: {"origin": f"https://{name}.example"}
-            for name in ("api", "frontend", "mcp")
-        },
-    })
+    deployed = _write(tmp_path / "deployed.json", _ready_deployment("railway"))
     database = tmp_path / "database.json"
     database.touch()
 
@@ -551,15 +573,7 @@ def test_manifest_treats_empty_optional_database_evidence_as_absent(tmp_path: Pa
 
 
 def test_manifest_scrubs_operation_specific_browser_failure_evidence(tmp_path: Path) -> None:
-    deployed = _write(tmp_path / "deployed.json", {
-        "schema": "aasopharma.live18.deployment-evidence.v1",
-        "provider": "railway",
-        "commit_sha": SHA,
-        "services": {
-            name: {"origin": f"https://{name}.example"}
-            for name in ("api", "frontend", "mcp")
-        },
-    })
+    deployed = _write(tmp_path / "deployed.json", _ready_deployment("railway"))
     evidence_dir = tmp_path / "evidence"
     _write(evidence_dir / "sales_invoice.failure.json", {
         "evidence_schema": "aasopharma.live18.browser-failure.v1",
@@ -603,15 +617,7 @@ def test_manifest_scrubs_operation_specific_browser_failure_evidence(tmp_path: P
 def test_manifest_rejects_failure_evidence_with_successful_browser_outcome(
     tmp_path: Path,
 ) -> None:
-    deployed = _write(tmp_path / "deployed.json", {
-        "schema": "aasopharma.live18.deployment-evidence.v1",
-        "provider": "railway",
-        "commit_sha": SHA,
-        "services": {
-            name: {"origin": f"https://{name}.example"}
-            for name in ("api", "frontend", "mcp")
-        },
-    })
+    deployed = _write(tmp_path / "deployed.json", _ready_deployment("railway"))
     evidence_dir = tmp_path / "evidence"
     _write(evidence_dir / "sales_invoice.failure.json", {
         "evidence_schema": "aasopharma.live18.browser-failure.v1",
@@ -638,15 +644,7 @@ def test_manifest_rejects_failure_evidence_with_successful_browser_outcome(
 
 
 def test_manifest_rejects_nonempty_malformed_optional_evidence(tmp_path: Path) -> None:
-    deployed = _write(tmp_path / "deployed.json", {
-        "schema": "aasopharma.live18.deployment-evidence.v1",
-        "provider": "railway",
-        "commit_sha": SHA,
-        "services": {
-            name: {"origin": f"https://{name}.example"}
-            for name in ("api", "frontend", "mcp")
-        },
-    })
+    deployed = _write(tmp_path / "deployed.json", _ready_deployment("railway"))
     malformed = tmp_path / "demo.json"
     malformed.write_text("{", encoding="utf-8")
 

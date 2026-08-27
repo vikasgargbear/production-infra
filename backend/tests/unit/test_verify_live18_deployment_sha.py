@@ -17,6 +17,11 @@ ORIGINS = {
     "api_origin": "https://api.example",
     "mcp_origin": "https://mcp.example",
 }
+DEPLOYMENT_IDS = {
+    "api": "10000000-0000-4000-8000-000000000001",
+    "frontend": "10000000-0000-4000-8000-000000000002",
+    "mcp": "10000000-0000-4000-8000-000000000003",
+}
 
 
 def _responses(sha: str = SHA) -> dict[str, bytes]:
@@ -168,6 +173,33 @@ def test_three_service_roles_require_distinct_origins():
             api_origin=ORIGINS["api_origin"],
             mcp_origin=ORIGINS["mcp_origin"],
             fetch=_fetch(_responses()),
+        )
+
+
+def test_railway_public_evidence_carries_exact_deployment_identities():
+    evidence = verify(
+        provider="railway",
+        commit_sha=SHA,
+        deployment_ids=DEPLOYMENT_IDS,
+        fetch=_fetch(_responses()),
+        **ORIGINS,
+    )
+
+    assert {
+        name: row["deployment_id"]
+        for name, row in evidence["services"].items()
+    } == DEPLOYMENT_IDS
+
+    with pytest.raises(
+        Live18DeploymentVerificationError,
+        match="three exact UUIDs",
+    ):
+        verify(
+            provider="railway",
+            commit_sha=SHA,
+            deployment_ids={**DEPLOYMENT_IDS, "mcp": "wrong"},
+            fetch=_fetch(_responses()),
+            **ORIGINS,
         )
 
 

@@ -15,6 +15,9 @@ from urllib.request import Request, urlopen
 
 
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+DEPLOYMENT_ID_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+)
 PROVIDERS = ("render", "railway")
 MAX_RESPONSE_BYTES = 64 * 1024
 PUBLIC_FETCH_TIMEOUT_SECONDS = 45
@@ -124,6 +127,7 @@ def verify_provenance(
     frontend_origin: str,
     api_origin: str,
     mcp_origin: str,
+    deployment_ids: dict[str, str] | None = None,
     fetch: Fetch = _public_fetch,
 ) -> dict[str, Any]:
     """Prove the public services are live on one SHA without requiring DB access."""
@@ -144,6 +148,21 @@ def verify_provenance(
         raise Live18DeploymentVerificationError(
             "frontend, API, and MCP must use three distinct HTTPS origins"
         )
+    normalized_deployment_ids: dict[str, str] | None = None
+    if deployment_ids is not None:
+        if (
+            provider != "railway"
+            or set(deployment_ids) != {"api", "frontend", "mcp"}
+            or any(
+                not isinstance(value, str)
+                or DEPLOYMENT_ID_RE.fullmatch(value) is None
+                for value in deployment_ids.values()
+            )
+        ):
+            raise Live18DeploymentVerificationError(
+                "Railway deployment identities must contain three exact UUIDs"
+            )
+        normalized_deployment_ids = dict(deployment_ids)
 
     # Render's static-site rewrite intentionally serves the SPA document for
     # unknown paths, including /health. The versioned metadata resource is the
@@ -174,28 +193,32 @@ def verify_provenance(
         expected_status="ok",
         expected_sha=commit_sha,
     )
+    services = {
+        "api": {
+            "origin": api,
+            "health": {"status": "healthy", "git_commit": commit_sha},
+        },
+        "frontend": {
+            "origin": frontend,
+            "health": "ok",
+            "build_metadata": {
+                "service": "aasopharma-erp",
+                "git_commit": commit_sha,
+            },
+        },
+        "mcp": {
+            "origin": mcp,
+            "health": {"status": "ok", "git_commit": commit_sha},
+        },
+    }
+    if normalized_deployment_ids is not None:
+        for name, deployment_id in normalized_deployment_ids.items():
+            services[name]["deployment_id"] = deployment_id
     return {
         "schema": "aasopharma.deployment-provenance.v1",
         "provider": provider,
         "commit_sha": commit_sha,
-        "services": {
-            "api": {
-                "origin": api,
-                "health": {"status": "healthy", "git_commit": commit_sha},
-            },
-            "frontend": {
-                "origin": frontend,
-                "health": "ok",
-                "build_metadata": {
-                    "service": "aasopharma-erp",
-                    "git_commit": commit_sha,
-                },
-            },
-            "mcp": {
-                "origin": mcp,
-                "health": {"status": "ok", "git_commit": commit_sha},
-            },
-        },
+        "services": services,
     }
 
 
@@ -206,6 +229,7 @@ def verify(
     frontend_origin: str,
     api_origin: str,
     mcp_origin: str,
+    deployment_ids: dict[str, str] | None = None,
     fetch: Fetch = _public_fetch,
 ) -> dict[str, Any]:
     """Return deterministic public evidence or fail on any service mismatch."""
@@ -216,6 +240,7 @@ def verify(
         frontend_origin=frontend_origin,
         api_origin=api_origin,
         mcp_origin=mcp_origin,
+        deployment_ids=deployment_ids,
         fetch=fetch,
     )
     api = provenance["services"]["api"]["origin"]
@@ -256,12 +281,28 @@ def main() -> None:
     parser.add_argument("--frontend-origin", required=True)
     parser.add_argument("--api-origin", required=True)
     parser.add_argument("--mcp-origin", required=True)
+    parser.add_argument("--api-deployment-id")
+    parser.add_argument("--frontend-deployment-id")
+    parser.add_argument("--mcp-deployment-id")
     parser.add_argument(
         "--provenance-only",
         action="store_true",
         help="Verify exact public service builds without claiming readiness",
     )
     args = parser.parse_args()
+    raw_deployment_ids = {
+        "api": args.api_deployment_id,
+        "frontend": args.frontend_deployment_id,
+        "mcp": args.mcp_deployment_id,
+    }
+    supplied_deployment_ids = {
+        name: value
+        for name, value in raw_deployment_ids.items()
+        if value is not None
+    }
+    deployment_ids = supplied_deployment_ids or None
+    if deployment_ids is not None and len(deployment_ids) != 3:
+        parser.error("all three Railway deployment IDs must be supplied together")
     verifier = verify_provenance if args.provenance_only else verify
     evidence = verifier(
         provider=args.provider,
@@ -269,6 +310,7 @@ def main() -> None:
         frontend_origin=args.frontend_origin,
         api_origin=args.api_origin,
         mcp_origin=args.mcp_origin,
+        deployment_ids=deployment_ids,
     )
     print(serialize_evidence(evidence), end="")
 

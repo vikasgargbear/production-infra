@@ -500,6 +500,9 @@ def test_workflow_orders_reset_fence_and_exact_deployment() -> None:
     assert "--provenance-only" in live18[: live18.index(demo_step)]
     assert "--provenance-only" not in demo_step
     assert demo_step.count("verify_live18_deployment_sha.py") == 1
+    assert '--api-deployment-id "$RAILWAY_API_DEPLOYMENT_ID"' in demo_step
+    assert '--mcp-deployment-id "$RAILWAY_MCP_DEPLOYMENT_ID"' in demo_step
+    assert '--frontend-deployment-id "$RAILWAY_FRONTEND_DEPLOYMENT_ID"' in demo_step
     assert "for attempt in $(seq 1 30); do" in demo_step
     assert "Railway did not become ready after canonical session authority opened" in demo_step
 

@@ -355,6 +355,11 @@ def test_workflow_uploads_fresh_source_and_polls_exact_deployment_ids() -> None:
     assert 'upload_service api "$RAILWAY_API_SERVICE"' in workflow
     assert 'upload_service mcp "$RAILWAY_MCP_SERVICE"' in workflow
     assert 'upload_service frontend "$RAILWAY_FRONTEND_SERVICE"' in workflow
+    assert 'echo "api_deployment_id=$(<api-deployment-id)"' in workflow
+    assert 'echo "mcp_deployment_id=$(<mcp-deployment-id)"' in workflow
+    assert 'echo "frontend_deployment_id=$(<frontend-deployment-id)"' in workflow
+    assert "value: ${{ jobs.deploy.outputs.mcp_deployment_id }}" in workflow
+    assert "value: ${{ jobs.deploy.outputs.frontend_deployment_id }}" in workflow
     assert workflow.index('upload_service api "$RAILWAY_API_SERVICE"') < workflow.index(
         'upload_service mcp "$RAILWAY_MCP_SERVICE"'
     ) < workflow.index('upload_service frontend "$RAILWAY_FRONTEND_SERVICE"')

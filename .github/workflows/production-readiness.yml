@@ -1151,6 +1151,8 @@ jobs:
       RAILWAY_ENVIRONMENT_ID: ${{ vars.RAILWAY_ENVIRONMENT_ID }}
       RAILWAY_API_SERVICE: ${{ vars.RAILWAY_API_SERVICE }}
       RAILWAY_API_DEPLOYMENT_ID: ${{ needs.railway-canonical-staging.outputs.api_deployment_id }}
+      RAILWAY_MCP_DEPLOYMENT_ID: ${{ needs.railway-canonical-staging.outputs.mcp_deployment_id }}
+      RAILWAY_FRONTEND_DEPLOYMENT_ID: ${{ needs.railway-canonical-staging.outputs.frontend_deployment_id }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -1217,6 +1219,8 @@ jobs:
               api_origin=$RAILWAY_API_ORIGIN
               mcp_origin=$RAILWAY_MCP_ORIGIN
               test -n "$RAILWAY_API_DEPLOYMENT_ID"
+              test -n "$RAILWAY_MCP_DEPLOYMENT_ID"
+              test -n "$RAILWAY_FRONTEND_DEPLOYMENT_ID"
               ;;
             *) exit 2 ;;
           esac
@@ -1244,6 +1248,11 @@ jobs:
           readiness_mode=()
           if test "$LIVE18_PROVIDER" = railway; then
             readiness_mode=(--provenance-only)
+            readiness_mode+=(
+              --api-deployment-id "$RAILWAY_API_DEPLOYMENT_ID"
+              --mcp-deployment-id "$RAILWAY_MCP_DEPLOYMENT_ID"
+              --frontend-deployment-id "$RAILWAY_FRONTEND_DEPLOYMENT_ID"
+            )
           fi
           PYTHONPATH=backend python3 backend/scripts/verify_live18_deployment_sha.py \
             --provider "$LIVE18_PROVIDER" \
@@ -1671,6 +1680,9 @@ jobs:
               --frontend-origin "$LIVE18_APP_ORIGIN" \
               --api-origin "$LIVE18_API_ORIGIN" \
               --mcp-origin "$LIVE18_MCP_ORIGIN" \
+              --api-deployment-id "$RAILWAY_API_DEPLOYMENT_ID" \
+              --mcp-deployment-id "$RAILWAY_MCP_DEPLOYMENT_ID" \
+              --frontend-deployment-id "$RAILWAY_FRONTEND_DEPLOYMENT_ID" \
               > "$ready_evidence"; then
               mv "$ready_evidence" "$RUNNER_TEMP/live18-deployed-sha.json"
               break

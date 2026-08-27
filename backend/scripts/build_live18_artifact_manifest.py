@@ -325,20 +325,47 @@ def _deployment_summary(path: Path) -> dict[str, Any]:
         raise ArtifactManifestError("wrong deployment evidence schema")
     provider = value.get("provider")
     services = value.get("services")
-    if provider not in {"render", "railway"} or not isinstance(services, dict):
+    if (
+        provider not in {"render", "railway"}
+        or not isinstance(services, dict)
+        or set(services) != {"api", "frontend", "mcp"}
+    ):
         raise ArtifactManifestError("invalid deployment evidence")
+    commit_sha = _required_text(value, "commit_sha", SHA)
     origins: dict[str, str] = {}
+    deployment_ids: dict[str, str] = {}
     for name in ("api", "frontend", "mcp"):
         service = services.get(name)
         origin = service.get("origin") if isinstance(service, dict) else None
         if not isinstance(origin, str) or not origin.startswith("https://") or "@" in origin:
             raise ArtifactManifestError(f"invalid {name} deployment origin")
         origins[name] = origin
+        if provider == "railway":
+            deployment_ids[name] = _required_text(
+                service, "deployment_id", UUID
+            )
+    if len(set(origins.values())) != 3:
+        raise ArtifactManifestError("deployment service origins must be distinct")
+    if (
+        services["api"].get("health")
+        != {"status": "healthy", "git_commit": commit_sha}
+        or services["api"].get("readiness") != {"status": "ready"}
+        or services["frontend"].get("health") != "ok"
+        or services["frontend"].get("build_metadata")
+        != {"service": "aasopharma-erp", "git_commit": commit_sha}
+        or services["mcp"].get("health")
+        != {"status": "ok", "git_commit": commit_sha}
+        or services["mcp"].get("readiness") != {"status": "ready"}
+    ):
+        raise ArtifactManifestError(
+            "deployment evidence does not prove exact-SHA public readiness"
+        )
     return {
         "provider": provider,
-        "commit_sha": _required_text(value, "commit_sha", SHA),
+        "commit_sha": commit_sha,
         "status": "ready",
         "origins": origins,
+        "deployment_ids": deployment_ids if provider == "railway" else None,
         "raw_evidence_sha256": _digest(path),
     }
 
