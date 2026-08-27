@@ -98,6 +98,17 @@ test.each([
   ['negative quantity', () => buildCanonicalSalesOrderCommand({ customer_id: ids.customer, order_date: '2026-08-25', items: [{ branch_id: ids.branch, product_id: ids.product, uom_conversion_id: ids.uom, quantity: -1, unit_price: 1 }] } as any, 'test', policy)],
 ])('%s fails closed before prepare', (_label, action) => expect(action).toThrow());
 
+test('sales order rejects zero billed quantity with the exact actionable builder error', () => {
+  expect(() => buildCanonicalSalesOrderCommand({
+    order_date: '2026-08-25', customer_id: ids.customer,
+    shipping_address_data: { address_id: ids.address, row_version: 4 },
+    discount_amount: 0, other_charges: 0,
+    items: [{ branch_id: ids.branch, product_id: ids.product, uom_conversion_id: ids.uom,
+      quantity: '0', free_quantity: '0', unit_price: '10', discount_percent: '0',
+      free_supply_tax_treatment: 'excluded_from_taxable_value' }],
+  } as any, 'test', policy)).toThrow('Item 1 billed quantity must be greater than zero');
+});
+
 test('dispatch rejects missing policy, exact distance, and order-line identity', () => {
   const eligible = [{
     batch_id: ids.batch, batch_number: 'B-1', expiry_date: '2027-01-01', location_id: ids.location,

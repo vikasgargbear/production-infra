@@ -60,10 +60,20 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
         2,
     );
     const previewUnavailableReason = canonicalOrderPreviewUnavailableReason(order);
+    const messageNotice = message && (
+        <div role="alert" className={`mb-4 p-3 rounded-lg flex items-center ${messageType === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+            }`}>
+            {messageType === 'success' ? <CheckCircle className="w-4 h-4 mr-2" /> : <AlertCircle className="w-4 h-4 mr-2" />}
+            {message}
+        </div>
+    );
     if (previewUnavailableReason) {
-        return <div className="m-6 rounded-lg border border-amber-200 bg-amber-50 p-6 text-amber-900" role="alert">
-            <h2 className="font-semibold">Authoritative sales-order preview unavailable</h2>
-            <p className="mt-1 text-sm">{previewUnavailableReason} Return to the item step and refresh the live calculation.</p>
+        return <div className="m-6">
+            {messageNotice}
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-6 text-amber-900" role="status">
+                <h2 className="font-semibold">Authoritative sales-order preview unavailable</h2>
+                <p className="mt-1 text-sm">{previewUnavailableReason} Return to the item step and refresh the live calculation.</p>
+            </div>
         </div>;
     }
     return (
@@ -72,13 +82,7 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
                 Server policy: {documentPolicy.default_price_basis.replace('_', ' ')} pricing · {documentPolicy.default_rounding_policy} rounding · {documentPolicy.default_zero_rated_payment_mode.replace(/_/g, ' ')} zero-rated mode
             </p>}
             {/* Message Display */}
-            {message && (
-                <div className={`mb-4 p-3 rounded-lg flex items-center ${messageType === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                    }`}>
-                    {messageType === 'success' ? <CheckCircle className="w-4 h-4 mr-2" /> : <AlertCircle className="w-4 h-4 mr-2" />}
-                    {message}
-                </div>
-            )}
+            {messageNotice}
 
             {/* Order Preview */}
             <PrintUtility
