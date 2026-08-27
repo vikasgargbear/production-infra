@@ -68,6 +68,7 @@ const InvoiceFlow: React.FC<InvoiceFlowProps> = ({ open = true, onClose, prefill
         error,
         setError,
         documentPolicy,
+        businessDate,
         saving,
         showSuccessModal,
         setShowSuccessModal,
@@ -299,6 +300,7 @@ ${companyInfo.name}`;
                 <InvoiceItemsStep
                     invoice={invoice as any}
                     setInvoice={setInvoice as any}
+                    maximumInvoiceDate={businessDate}
                     selectedCustomer={selectedCustomer as any}
                     setSelectedCustomer={setSelectedCustomer as any}
                     employees={employees as any}

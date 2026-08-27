@@ -1,5 +1,6 @@
 import type { CanonicalCommandPreview } from '../../../services/api/canonicalOperatorActions';
 import { isCanonicalUuid } from '../../../utils/canonicalUuid';
+import { requireCanonicalPostingDate } from '../../../utils/canonicalPostingDate';
 
 export type SupplierPaymentMethod = 'bank_transfer' | 'upi';
 
@@ -66,7 +67,6 @@ export interface SupplierPaymentPreparePayload extends Record<string, unknown> {
 }
 
 const MONEY = /^(?:0|[1-9]\d*)(?:\.(\d{1,2}))?$/;
-const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Exact INR paise parser. BigInt prevents IEEE-754 drift at every boundary. */
 export function supplierMoneyToMinor(value: string): bigint {
@@ -120,12 +120,7 @@ export function buildSupplierPaymentPreparePayload(
   if (!isCanonicalUuid(draft.bank_account_id) || !isCanonicalUuid(draft.settlement_account_id)) {
     throw new Error('Select a canonical INR bank settlement account.');
   }
-  if (!DATE.test(context.payment_date)) {
-    throw new Error('The authoritative supplier-payment context has an invalid organization date.');
-  }
-  if (!DATE.test(draft.payment_date) || draft.payment_date > context.payment_date) {
-    throw new Error('Payment date must be valid and cannot be later than the authoritative organization date.');
-  }
+  requireCanonicalPostingDate(draft.payment_date, context.payment_date, 'Payment date');
   if (!['bank_transfer', 'upi'].includes(draft.payment_method)) {
     throw new Error('Supplier payment supports only bank transfer or UPI.');
   }
@@ -155,9 +150,12 @@ export function buildSupplierPaymentPreparePayload(
     if (source.branch_id !== draft.branch_id) {
       throw new Error(`${source.document_number} belongs to a different branch.`);
     }
-    if (source.document_date > draft.payment_date) {
-      throw new Error(`${source.document_number} cannot be paid before its document date.`);
-    }
+    requireCanonicalPostingDate(
+      draft.payment_date,
+      context.payment_date,
+      `Payment date for ${source.document_number}`,
+      source.document_date,
+    );
     if (seen.has(source.open_item_id)) throw new Error('Each payable open item can be allocated only once.');
     seen.add(source.open_item_id);
     const amount = supplierMoneyToMinor(allocation.amount);

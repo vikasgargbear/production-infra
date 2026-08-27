@@ -21,6 +21,7 @@ import {
   validateCanonicalSupplierInvoicePreview,
 } from './utils/canonicalSupplierInvoiceCommand';
 import { reconcileCanonicalSupplierInvoice } from './utils/canonicalSupplierInvoiceLifecycle';
+import { requireCanonicalPostingDate } from '../../../utils/canonicalPostingDate';
 
 const errorMessage = (error: any): string => (
   error?.response?.data?.detail?.message
@@ -35,6 +36,7 @@ const CanonicalSupplierInvoiceFlow: React.FC<{ onClose?: () => void }> = ({ onCl
   const [invoiceNumber, setInvoiceNumber] = useState('');
   const [invoiceDate, setInvoiceDate] = useState('');
   const [receivedDate, setReceivedDate] = useState('');
+  const [businessDate, setBusinessDate] = useState('');
   const [businessDateLoading, setBusinessDateLoading] = useState(true);
   const [businessDateError, setBusinessDateError] = useState('');
   const [context, setContext] = useState<CanonicalSupplierInvoiceContext | null>(null);
@@ -76,6 +78,7 @@ const CanonicalSupplierInvoiceFlow: React.FC<{ onClose?: () => void }> = ({ onCl
       if (!active) return;
       setInvoiceDate((current) => current || businessContext.business_date);
       setReceivedDate((current) => current || businessContext.business_date);
+      setBusinessDate(businessContext.business_date);
       setBusinessDateError('');
     }).catch((error) => {
       if (!active) return;
@@ -109,6 +112,18 @@ const CanonicalSupplierInvoiceFlow: React.FC<{ onClose?: () => void }> = ({ onCl
       toast.error('Select a posted GRN and enter the exact supplier invoice and received dates.');
       return;
     }
+    try {
+      requireCanonicalPostingDate(invoiceDate, businessDate, 'Supplier invoice date');
+      requireCanonicalPostingDate(
+        receivedDate,
+        businessDate,
+        'Supplier invoice received date',
+        invoiceDate,
+      );
+    } catch (error) {
+      toast.error(errorMessage(error));
+      return;
+    }
     const requestSequence = ++contextRequestSequence.current;
     setLoading(true);
     resetReview();
@@ -137,6 +152,13 @@ const CanonicalSupplierInvoiceFlow: React.FC<{ onClose?: () => void }> = ({ onCl
 
   const draftPayload = () => {
     if (!context) throw new Error('Load canonical GRN and GSTR-2B context first.');
+    requireCanonicalPostingDate(invoiceDate, businessDate, 'Supplier invoice date');
+    requireCanonicalPostingDate(
+      receivedDate,
+      businessDate,
+      'Supplier invoice received date',
+      invoiceDate,
+    );
     return buildCanonicalSupplierInvoicePreparePayload(context, {
       idempotencyKey: `erp-web-supplier-invoice:${prepareId.current}`,
       supplierInvoiceNumber: invoiceNumber,
@@ -239,16 +261,16 @@ const CanonicalSupplierInvoiceFlow: React.FC<{ onClose?: () => void }> = ({ onCl
                   <input value={invoiceNumber} onChange={(event) => { setInvoiceNumber(event.target.value); invalidateContext(); }} className="mt-1 min-h-11 w-full rounded-md border border-slate-300 px-3" maxLength={64} />
                 </label>
                 <label className="text-sm">Invoice date
-                  <input aria-label="Supplier invoice date" type="date" value={invoiceDate} onChange={(event) => { setInvoiceDate(event.target.value); invalidateContext(); }} className="mt-1 min-h-11 w-full rounded-md border border-slate-300 px-3" />
+                  <input aria-label="Supplier invoice date" type="date" value={invoiceDate} max={businessDate || undefined} onChange={(event) => { setInvoiceDate(event.target.value); invalidateContext(); }} className="mt-1 min-h-11 w-full rounded-md border border-slate-300 px-3" />
                 </label>
                 <label className="text-sm">Received date
-                  <input aria-label="Supplier invoice received date" type="date" value={receivedDate} min={invoiceDate} onChange={(event) => { setReceivedDate(event.target.value); resetReview(); }} className="mt-1 min-h-11 w-full rounded-md border border-slate-300 px-3" />
+                  <input aria-label="Supplier invoice received date" type="date" value={receivedDate} min={invoiceDate} max={businessDate || undefined} onChange={(event) => { setReceivedDate(event.target.value); resetReview(); }} className="mt-1 min-h-11 w-full rounded-md border border-slate-300 px-3" />
                 </label>
               </div>
               {businessDateLoading && <p className="mt-3 text-sm text-slate-600">Loading organization business date…</p>}
               {businessDateError && <p role="alert" className="mt-3 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">{businessDateError} Enter both dates explicitly before continuing.</p>}
               {selectedReceipt && <p className="mt-3 text-xs text-slate-500">PO {selectedReceipt.purchase_order_number}; {selectedReceipt.remaining_line_count} unallocated line(s). The backend requires one exact parsed GSTR-2B match.</p>}
-              <button type="button" onClick={loadContext} disabled={loading || businessDateLoading || !selectedReceiptId || !invoiceNumber.trim() || !invoiceDate || !receivedDate} className="mt-4 inline-flex min-h-11 items-center rounded-md bg-blue-600 px-4 font-medium text-white disabled:bg-slate-300">{loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Load canonical evidence</button>
+              <button type="button" onClick={loadContext} disabled={loading || businessDateLoading || !businessDate || !selectedReceiptId || !invoiceNumber.trim() || !invoiceDate || !receivedDate} className="mt-4 inline-flex min-h-11 items-center rounded-md bg-blue-600 px-4 font-medium text-white disabled:bg-slate-300">{loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Load canonical evidence</button>
               {!context && <button type="button" disabled className="ml-3 mt-4 inline-flex min-h-11 items-center rounded-md bg-slate-300 px-4 font-medium text-white">Review server calculation</button>}
             </section>
 

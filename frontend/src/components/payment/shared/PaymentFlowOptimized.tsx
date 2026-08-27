@@ -55,6 +55,7 @@ const PaymentFlowOptimized: React.FC = () => {
         setBankAccounts(accounts);
         setPaymentMethods(response.data.payment_methods);
         setPaymentField('payment_date', response.data.business_date);
+        setPaymentField('business_date', response.data.business_date);
         setBankAccountsError(accounts.length ? '' : 'No canonical bank settlement account is available.');
       })
       .catch(() => {
@@ -62,6 +63,7 @@ const PaymentFlowOptimized: React.FC = () => {
         setBankAccounts([]);
         setPaymentMethods([]);
         setPaymentField('payment_date', '');
+        setPaymentField('business_date', '');
         setBankAccountsError('Unable to load the canonical receipt context. Receipt posting is unavailable.');
       });
     return () => { active = false; };
@@ -140,6 +142,7 @@ const PaymentFlowOptimized: React.FC = () => {
                 <input
                   type="date"
                   value={payment.payment_date}
+                  max={payment.business_date || undefined}
                   onChange={(e) => handleFieldChange('payment_date', e.target.value)}
                   className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />

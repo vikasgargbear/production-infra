@@ -23,6 +23,7 @@ import { resolvedSalesOrderDeliveryAddress } from '../../utils/canonicalSalesCha
 interface OrderItemsStepProps {
     order: Order;
     setOrder: React.Dispatch<React.SetStateAction<Order>>;
+    maximumOrderDate: string;
     selectedCustomer: Customer | null;
     message: string;
     messageType: string;
@@ -39,6 +40,7 @@ interface OrderItemsStepProps {
 const OrderItemsStep: React.FC<OrderItemsStepProps> = ({
     order,
     setOrder,
+    maximumOrderDate,
     selectedCustomer,
     message,
     messageType,
@@ -71,6 +73,7 @@ const OrderItemsStep: React.FC<OrderItemsStepProps> = ({
                     label="Order Date"
                     value={order.order_date}
                     onChange={(value: string) => setOrder(prev => ({ ...prev, order_date: value }))}
+                    max={maximumOrderDate || undefined}
                     required
                     size="sm"
                 />

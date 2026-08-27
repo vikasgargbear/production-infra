@@ -33,6 +33,7 @@ import { getSalesReturnSubmissionBoundary } from './utils/returnSubmissionBounda
 import { updateSalesReturnItem } from './utils/salesReturnProjection';
 import { prepareCanonicalSalesReturn, type AwaitingIndependentApproval } from './utils/canonicalReturnLifecycle';
 import { clientUuid } from '../../utils/clientUuid';
+import { requireCanonicalPostingDate } from '../../utils/canonicalPostingDate';
 import { formatCalendarDate } from '../../utils/calendarDate';
 import { returnFlowOwnsEscape } from './utils/returnKeyboardBoundary';
 import { formatCanonicalReasonCode } from './utils/canonicalReturnCommand';
@@ -58,6 +59,7 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
   const [showDetailsExpanded, setShowDetailsExpanded] = useState(true);
   const [preparing, setPreparing] = useState(false);
   const [preparedApproval, setPreparedApproval] = useState<AwaitingIndependentApproval | null>(null);
+  const [authoritativeBusinessDate, setAuthoritativeBusinessDate] = useState('');
   const prepareKeyRef = useRef(`erp-web-sales-return-prepare:${clientUuid()}`);
 
   // Determine if all required header fields are filled (for compact mode)
@@ -84,19 +86,20 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
 
   useEffect(() => {
     let active = true;
-    if (returnData.return_date) return undefined;
     void canonicalBusinessContextApi.get().then(context => {
-      if (active) dispatch({
-        type: 'SET_RETURN_DATA',
-        data: { return_date: context.business_date },
-      });
+      if (!active) return;
+      setAuthoritativeBusinessDate(context.business_date);
+      if (!returnDataRef.current.return_date) dispatch({
+          type: 'SET_RETURN_DATA',
+          data: { return_date: context.business_date },
+        });
     }).catch(error => {
       if (active) toast.error(
         error instanceof Error ? error.message : 'Unable to load the organization business date.',
       );
     });
     return () => { active = false; };
-  }, [dispatch, returnData.return_date]);
+  }, [dispatch]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -142,6 +145,17 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
     const requestSequence = ++invoiceContextRequestSequence.current;
     if (!invoice) {
       dispatch({ type: 'SET_SELECTED_INVOICE', invoice: null });
+      return;
+    }
+    try {
+      requireCanonicalPostingDate(
+        returnDataRef.current.return_date,
+        authoritativeBusinessDate,
+        'Sales return date',
+        invoice.invoice_date,
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Sales return date is invalid.');
       return;
     }
 
@@ -276,7 +290,7 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
         },
       });
     }
-  }, [dispatch]);
+  }, [authoritativeBusinessDate, dispatch]);
 
   // Handle customer selection
   const handleCustomerSelect = useCallback(async (
@@ -435,6 +449,12 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
     if (!canPrepare || preparedApproval) return;
     setPreparing(true);
     try {
+      requireCanonicalPostingDate(
+        returnData.return_date,
+        authoritativeBusinessDate,
+        'Sales return date',
+        returnData.invoice_date,
+      );
       const result = await prepareCanonicalSalesReturn(returnData as any, prepareKeyRef.current);
       setPreparedApproval(result);
       toast.success('Immutable sales-return preview prepared for independent approval.');
@@ -529,6 +549,7 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
                     <StandardDatePicker
                       label="Return Date"
                       value={returnData.return_date || ''}
+                      max={authoritativeBusinessDate || undefined}
                       onChange={(dateStr) => {
                         dispatch({ type: 'SET_SELECTED_INVOICE', invoice: null });
                         dispatch({ type: 'SET_RETURN_REASONS', reasons: [] });
@@ -623,7 +644,7 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
                 </>
               )}
 
-              <ReturnInvoiceSelector
+              {authoritativeBusinessDate && returnData.return_date ? <ReturnInvoiceSelector
                 selectedCustomer={selectedCustomer}
                 selectedInvoice={selectedInvoice}
                 onInvoiceSelect={handleInvoiceSelect}
@@ -645,7 +666,11 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
                 }}
                 showInvoiceSection={ui.showInvoiceSection}
                 invoiceSearchRef={invoiceSearchRef}
-              />
+              /> : (
+                <p role="status" className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+                  Loading the authoritative organization date before invoice selection…
+                </p>
+              )}
 
               {selectedInvoice && (
                 <div className="mb-4 grid gap-4 rounded-lg border border-gray-300 bg-white p-4 shadow-sm md:grid-cols-2">

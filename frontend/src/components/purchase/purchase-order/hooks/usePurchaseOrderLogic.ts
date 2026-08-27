@@ -93,6 +93,7 @@ export interface UsePurchaseOrderLogicReturn {
     purchaseOrder: PurchaseOrderData;
     setPurchaseOrder: React.Dispatch<React.SetStateAction<PurchaseOrderData>>;
     documentPolicy: CanonicalDocumentPolicy | null;
+    businessDate: string;
     branches: PurchaseOrderBranchChoice[];
     branchId: string;
     setBranchId: React.Dispatch<React.SetStateAction<string>>;
@@ -185,6 +186,7 @@ export function usePurchaseOrderLogic({
     const [currentStep, setCurrentStep] = useState(1);
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [documentPolicy, setDocumentPolicy] = useState<CanonicalDocumentPolicy | null>(null);
+    const [businessDate, setBusinessDate] = useState('');
 
     // Modal States
     const [showSupplierModal, setShowSupplierModal] = useState(false);
@@ -202,6 +204,7 @@ export function usePurchaseOrderLogic({
                 ...previous,
                 po_date: previous.po_date || context.business_date,
             }));
+            setBusinessDate(context.business_date);
             setDocumentPolicy(context.document_policy);
         }).catch(error => {
             if (active) toast.error(
@@ -325,6 +328,7 @@ export function usePurchaseOrderLogic({
         branchId,
         isOnline,
         documentPolicy,
+        businessDate,
         setPurchaseOrder,
         setCreatedPOData,
         setShowSuccessModal,
@@ -344,6 +348,7 @@ export function usePurchaseOrderLogic({
         purchaseOrder,
         setPurchaseOrder,
         documentPolicy,
+        businessDate,
         branches,
         branchId,
         setBranchId,

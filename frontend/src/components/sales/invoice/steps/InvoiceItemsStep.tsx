@@ -24,6 +24,7 @@ import InvoiceItemsFooter from './InvoiceItemsFooter';
 interface InvoiceItemsStepProps {
     invoice: Invoice;
     setInvoice: React.Dispatch<React.SetStateAction<Invoice>>;
+    maximumInvoiceDate: string;
     selectedCustomer: Customer | null;
     setSelectedCustomer: React.Dispatch<React.SetStateAction<Customer | null>>;
     employees: Employee[];
@@ -57,6 +58,7 @@ interface InvoiceItemsStepProps {
 const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
     invoice,
     setInvoice,
+    maximumInvoiceDate,
     selectedCustomer,
     setSelectedCustomer,
     employees,
@@ -169,6 +171,7 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                                 label="Invoice Date"
                                 value={invoice.invoice_date}
                                 onChange={(value: string) => setInvoice(prev => ({ ...prev, invoice_date: value }))}
+                                max={maximumInvoiceDate || undefined}
                                 required
                                 tabIndex={1}
                                 autoFocus

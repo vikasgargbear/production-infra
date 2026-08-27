@@ -20,6 +20,7 @@ import {
 interface ChallanDetailsStepProps {
     challan: Challan;
     setChallan: React.Dispatch<React.SetStateAction<Challan>>;
+    maximumDispatchDate: string;
     selectedCustomer: CustomerDetails | null;
     employees: Employee[];
     selectedMR: Employee | null;
@@ -53,6 +54,7 @@ interface ChallanDetailsStepProps {
 const ChallanDetailsStep: React.FC<ChallanDetailsStepProps> = ({
     challan,
     setChallan,
+    maximumDispatchDate,
     showImportModal,
     setShowImportModal,
     approvedOrderImportUnavailableReason,
@@ -104,6 +106,7 @@ const ChallanDetailsStep: React.FC<ChallanDetailsStepProps> = ({
                                     reference_doc: '',
                                     items: [],
                                 }))}
+                                max={maximumDispatchDate || undefined}
                                 size="sm"
                                 required
                             />

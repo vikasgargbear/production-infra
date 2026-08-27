@@ -163,6 +163,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
       buildCustomerReceiptPreparePayload({
         customer_account_id: selectedCustomer.customer_id,
         payment_date: payment.payment_date,
+        business_date: payment.business_date,
         payment_mode: payment.payment_mode,
         amount: payment.amount,
         reference_number: payment.reference_number,
@@ -200,6 +201,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
       const draft = {
         customer_account_id: selectedCustomer.customer_id,
         payment_date: payment.payment_date,
+        business_date: payment.business_date,
         payment_mode: payment.payment_mode,
         amount: payment.amount,
         reference_number: payment.reference_number,

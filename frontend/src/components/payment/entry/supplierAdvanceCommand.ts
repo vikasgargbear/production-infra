@@ -1,5 +1,6 @@
 import type { CanonicalCommandPreview } from '../../../services/api/canonicalOperatorActions';
 import { isCanonicalUuid } from '../../../utils/canonicalUuid';
+import { requireCanonicalPostingDate } from '../../../utils/canonicalPostingDate';
 
 export type SupplierAdvanceMethod = 'bank_transfer' | 'upi';
 
@@ -63,7 +64,6 @@ export interface SupplierAdvancePreparePayload extends Record<string, unknown> {
 }
 
 const MONEY = /^(?:0|[1-9]\d{0,19})(?:\.(\d{1,2}))?$/;
-const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const KEY = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/;
 
 export function advanceMoneyToMinor(value: string): bigint {
@@ -93,9 +93,7 @@ export function buildSupplierAdvancePreparePayload(
 ): SupplierAdvancePreparePayload {
   if (!context.ready) throw new Error(context.blocking_reasons[0] || 'Canonical supplier advance is unavailable.');
   if (!KEY.test(idempotencyKey)) throw new Error('Supplier advance requires a durable attempt identity.');
-  if (!DATE.test(context.payment_date) || !DATE.test(draft.paymentDate) || draft.paymentDate > context.payment_date) {
-    throw new Error('Advance date must be valid and cannot exceed the authoritative organization date.');
-  }
+  requireCanonicalPostingDate(draft.paymentDate, context.payment_date, 'Advance date');
   if (!['bank_transfer', 'upi'].includes(draft.paymentMethod)) {
     throw new Error('Supplier advance supports only bank transfer or UPI.');
   }
@@ -111,8 +109,14 @@ export function buildSupplierAdvancePreparePayload(
   if (!context.branches.some(row => row.branch_id === line.branch_id)) {
     throw new Error('The selected purchase-order branch is outside the authoritative context.');
   }
-  if (line.order_date > draft.paymentDate || line.withholding_nature_code !== 'purchase_of_goods') {
-    throw new Error('Advance date or purchase-of-goods lineage does not match the selected PO line.');
+  requireCanonicalPostingDate(
+    draft.paymentDate,
+    context.payment_date,
+    'Advance date',
+    line.order_date,
+  );
+  if (line.withholding_nature_code !== 'purchase_of_goods') {
+    throw new Error('Purchase-of-goods lineage does not match the selected PO line.');
   }
   const bank = context.bank_accounts.find(row => row.bank_account_id === draft.bankAccountId);
   if (!bank || !isCanonicalUuid(bank.bank_account_id) || !isCanonicalUuid(bank.settlement_account_id)

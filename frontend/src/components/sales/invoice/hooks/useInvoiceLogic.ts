@@ -138,6 +138,7 @@ export interface UseInvoiceLogicReturn {
     error: string | null;
     setError: Dispatch<SetStateAction<string | null>>;
     documentPolicy: CanonicalDocumentPolicy | null;
+    businessDate: string;
 
     saving: boolean;
     showSuccessModal: boolean;
@@ -295,6 +296,7 @@ export const useInvoiceLogic = (
         selectedCustomer,
         companyInfo,
         documentPolicy,
+        businessDate,
         isOnline,
         setInvoice,
         setCreatedInvoiceData,
@@ -593,6 +595,7 @@ export const useInvoiceLogic = (
         error,
         setError,
         documentPolicy,
+        businessDate,
 
         saving,
         showSuccessModal,

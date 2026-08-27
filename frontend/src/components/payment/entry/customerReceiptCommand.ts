@@ -1,5 +1,6 @@
 import { isCanonicalUuid } from '../../../utils/canonicalUuid';
 import { exactDecimalString, exactDecimalUnits } from '../../../utils/exactDecimal';
+import { requireCanonicalPostingDate } from '../../../utils/canonicalPostingDate';
 
 export type CanonicalReceiptMethod = 'bank_transfer' | 'card' | 'upi';
 
@@ -21,6 +22,7 @@ export interface ReceiptAllocation {
 export interface CustomerReceiptDraft {
   customer_account_id: string;
   payment_date: string;
+  business_date: string;
   payment_mode: string;
   amount: string;
   reference_number: string;
@@ -123,7 +125,7 @@ export function buildCustomerReceiptPreparePayload(
   }
   const reference = draft.reference_number.trim();
   if (!reference) throw new Error('A bank, UPI, or gateway reference is required.');
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(draft.payment_date)) throw new Error('Select a valid payment date.');
+  requireCanonicalPostingDate(draft.payment_date, draft.business_date, 'Payment date');
 
   const byInvoice = new Map(outstandingInvoices.map(invoice => [invoice.invoice_id, invoice]));
   const seenOpenItems = new Set<string>();
@@ -134,6 +136,12 @@ export function buildCustomerReceiptPreparePayload(
     if (!invoice || !isCanonicalUuid(invoice.open_item_id) || !isCanonicalUuid(invoice.branch_id)) {
       throw new Error(`Invoice ${allocation.invoice_number || allocation.invoice_id} lacks canonical allocation evidence.`);
     }
+    requireCanonicalPostingDate(
+      draft.payment_date,
+      draft.business_date,
+      `Payment date for ${invoice.invoice_number}`,
+      invoice.invoice_date,
+    );
     if (seenOpenItems.has(invoice.open_item_id!)) throw new Error('Each open item can be allocated only once.');
     seenOpenItems.add(invoice.open_item_id!);
     branches.add(invoice.branch_id!);

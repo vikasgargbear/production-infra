@@ -42,7 +42,8 @@ describe('reviewed canonical sales-document lifecycles', () => {
 
     it('keeps order Back read-only and reopens the unchanged immutable preview', async () => {
         const props = {
-            order: {}, selectedCustomer: { customer_id: 'customer' }, isOnline: true,
+            order: { order_date: '2026-08-27' }, selectedCustomer: { customer_id: 'customer' }, isOnline: true,
+            businessDate: '2026-08-27',
             setCreatedOrderData: jest.fn(), setShowSuccessModal: jest.fn(),
             setMessage: jest.fn(), setMessageType: jest.fn(), setOrder: jest.fn(),
         } as any;
@@ -65,8 +66,9 @@ describe('reviewed canonical sales-document lifecycles', () => {
             .mockRejectedValueOnce(new Error('response lost after POST'))
             .mockResolvedValueOnce({ data: { resource_id: '10000000-0000-4000-8000-000000000003' } });
         const props = {
-            challan: { items: [], total_amount: '168.00' },
+            challan: { challan_date: '2026-08-27', items: [], total_amount: '168.00' },
             selectedCustomer: { customer_id: 'customer', customer_name: 'Customer' },
+            businessDate: '2026-08-27',
             isOnline: true, setCreatedChallanData: jest.fn(), setShowSuccessModal: jest.fn(),
             setChallan: jest.fn(), companyInfo: {}, generateChallanNumber: jest.fn(),
         } as any;

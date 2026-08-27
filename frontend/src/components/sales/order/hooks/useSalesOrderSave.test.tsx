@@ -74,6 +74,7 @@ function PrepareHarness({ order }: { order: Order }) {
         order,
         selectedCustomer: { customer_id: ids.customer },
         documentPolicy: policy,
+        businessDate: '2026-08-27',
         setOrder: jest.fn(),
         setCreatedOrderData: jest.fn(),
         setShowSuccessModal: jest.fn(),

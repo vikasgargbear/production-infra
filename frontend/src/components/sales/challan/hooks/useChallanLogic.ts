@@ -156,6 +156,7 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
         selectedCustomer: selectedCustomer as CustomerDetails,
         companyInfo,
         documentPolicy,
+        businessDate,
         isOnline,
         setChallan,
         setCreatedChallanData,
@@ -314,6 +315,7 @@ export function useChallanLogic({ onClose, sameAsBillingInitial = true }: UseCha
         message,
         messageType,
         documentPolicy,
+        businessDate,
         approvedOrderImportUnavailableReason,
 
         // Refs

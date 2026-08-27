@@ -126,6 +126,7 @@ const ChallanFlow: React.FC<ChallanFlowProps> = ({ open = true, onClose }) => {
                 // State
                 challan={logic.challan}
                 setChallan={logic.setChallan}
+                maximumDispatchDate={logic.businessDate}
                 selectedCustomer={logic.selectedCustomer}
                 employees={logic.employees}
                 selectedMR={logic.selectedMR}

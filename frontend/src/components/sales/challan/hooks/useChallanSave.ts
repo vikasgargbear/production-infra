@@ -6,12 +6,14 @@ import { buildCanonicalSalesDispatchCommand } from '../../utils/canonicalSalesCh
 import { clientUuid } from '../../../../utils/clientUuid';
 import type { CanonicalCommandPreview } from '../../../../services/api/canonicalOperatorActions';
 import type { CanonicalDocumentPolicy } from '../../../../services/api/modules/org/canonicalBusinessContext.api';
+import { requireCanonicalPostingDate } from '../../../../utils/canonicalPostingDate';
 
 export interface UseChallanSaveProps {
     challan: Challan;
     selectedCustomer: CustomerDetails | null;
     companyInfo: unknown;
     documentPolicy: CanonicalDocumentPolicy | null;
+    businessDate: string;
     isOnline: boolean;
     setChallan: React.Dispatch<React.SetStateAction<Challan>>;
     setCreatedChallanData: React.Dispatch<React.SetStateAction<CreatedChallanData | null>>;
@@ -30,7 +32,7 @@ export interface UseChallanSaveReturn {
 }
 
 export function useChallanSave(props: UseChallanSaveProps): UseChallanSaveReturn {
-    const { challan, selectedCustomer, documentPolicy, isOnline, setCreatedChallanData, setShowSuccessModal } = props;
+    const { challan, selectedCustomer, documentPolicy, businessDate, isOnline, setCreatedChallanData, setShowSuccessModal } = props;
     const [saving, setSaving] = useState(false);
     const [preparedPreview, setPreparedPreview] = useState<CanonicalCommandPreview | null>(null);
     const [reviewOpen, setReviewOpen] = useState(false);
@@ -43,6 +45,7 @@ export function useChallanSave(props: UseChallanSaveProps): UseChallanSaveReturn
         try {
             if (!isOnline) throw new Error('Cloud API is unavailable. Nothing was saved or queued.');
             if (!selectedCustomer) throw new Error('Select a customer before preparing the dispatch');
+            requireCanonicalPostingDate(challan.challan_date, businessDate, 'Dispatch date');
             setSaving(true);
             let payload = buildCanonicalSalesDispatchCommand(challan, idempotencyKey.current, documentPolicy);
             let fingerprint = JSON.stringify(payload);
@@ -61,7 +64,7 @@ export function useChallanSave(props: UseChallanSaveProps): UseChallanSaveReturn
         } catch (error) {
             toast.error(error instanceof Error ? error.message : 'Unable to prepare the delivery challan');
         } finally { setSaving(false); }
-    }, [challan, documentPolicy, isOnline, preparedPreview, saving, selectedCustomer]);
+    }, [businessDate, challan, documentPolicy, isOnline, preparedPreview, saving, selectedCustomer]);
 
     const confirmPreparedChallan = useCallback(async () => {
         if (!preparedPreview || saving) return;

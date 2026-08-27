@@ -19,6 +19,7 @@ export interface Payment {
     customer_details: CustomerDetails | null;
     receipt_no: string;
     payment_date: string;
+    business_date: string;
     amount: string;
     payment_mode: string;
     reference_number: string;
@@ -83,6 +84,7 @@ const initialState: PaymentState = {
         customer_details: null,
         receipt_no: '',
         payment_date: '',
+        business_date: '',
         amount: '',
         payment_mode: '',
         reference_number: '',
@@ -212,6 +214,7 @@ const paymentReducer = (state: PaymentState, action: PaymentAction): PaymentStat
                 payment: {
                     ...initialState.payment,
                     payment_date: '',
+                    business_date: '',
                     allocation_method: 'fifo'
                 }
             };

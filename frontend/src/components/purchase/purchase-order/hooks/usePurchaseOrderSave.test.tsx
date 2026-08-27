@@ -87,6 +87,7 @@ describe('usePurchaseOrderSave terminal retry boundary', () => {
             branchId: BRANCH_ID,
             isOnline: true,
             documentPolicy,
+            businessDate: '2026-08-25',
             ...setters,
         }));
 
@@ -121,6 +122,7 @@ describe('usePurchaseOrderSave terminal retry boundary', () => {
             branchId: BRANCH_ID,
             isOnline: true,
             documentPolicy,
+            businessDate: '2026-08-25',
             ...setters,
         }));
 

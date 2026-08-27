@@ -27,6 +27,7 @@ import { addExactDecimals, compareExactDecimals, exactDecimalUnits } from '../..
 import { canonicalBusinessContextApi } from '../../services/api/modules/org/canonicalBusinessContext.api';
 import { isCanonicalUuid } from '../../utils/canonicalUuid';
 import { formatCalendarDate } from '../../utils/calendarDate';
+import { requireCanonicalPostingDate } from '../../utils/canonicalPostingDate';
 import {
   authoritativeReturnQuantity,
   authoritativeReturnRate,
@@ -97,6 +98,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
   const [loading, setLoading] = useState(false);
   const [preparing, setPreparing] = useState(false);
   const [preparedApproval, setPreparedApproval] = useState<AwaitingIndependentApproval | null>(null);
+  const [authoritativeBusinessDate, setAuthoritativeBusinessDate] = useState('');
   const prepareKeyRef = useRef(`erp-web-purchase-return-prepare:${clientUuid()}`);
   const toast = useToast();
 
@@ -162,19 +164,20 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
 
   useEffect(() => {
     let active = true;
-    if (returnData.return_date) return undefined;
     void canonicalBusinessContextApi.get().then(context => {
-      if (active) setReturnData(previous => ({
-        ...previous,
-        return_date: context.business_date,
-      }));
+      if (!active) return;
+      setAuthoritativeBusinessDate(context.business_date);
+      setReturnData(previous => previous.return_date ? previous : ({
+          ...previous,
+          return_date: context.business_date,
+        }));
     }).catch(error => {
       if (active) toast.error(
         error instanceof Error ? error.message : 'Unable to load the organization business date.',
       );
     });
     return () => { active = false; };
-  }, [returnData.return_date, toast]);
+  }, [toast]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -223,6 +226,18 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
     const requestSequence = ++invoiceContextRequestSequence.current;
     if (!invoice) {
       setLoading(false);
+      return;
+    }
+    try {
+      requireCanonicalPostingDate(
+        returnDataRef.current.return_date,
+        authoritativeBusinessDate,
+        'Purchase return date',
+        invoice.invoice_date,
+      );
+    } catch (error) {
+      setLoading(false);
+      toast.error(error instanceof Error ? error.message : 'Purchase return date is invalid.');
       return;
     }
 
@@ -508,6 +523,12 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
     if (!canPrepare || preparedApproval) return;
     setPreparing(true);
     try {
+      requireCanonicalPostingDate(
+        returnData.return_date,
+        authoritativeBusinessDate,
+        'Purchase return date',
+        returnData.invoice_date,
+      );
       const result = await prepareCanonicalPurchaseReturn(returnData as any, prepareKeyRef.current);
       setPreparedApproval(result);
       toast.success('Immutable purchase-return preview prepared for independent approval.');
@@ -546,6 +567,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
                 <StandardDatePicker
                   label="Return Date"
                   value={returnData.return_date}
+                  max={authoritativeBusinessDate || undefined}
                   onChange={(dateStr) => {
                     setSelectedInvoice(null);
                     setReturnReasons([]);
@@ -668,12 +690,17 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
                   )}
 
                   {/* Invoice Selector */}
-                  {!selectedInvoice && (
+                  {!selectedInvoice && authoritativeBusinessDate && returnData.return_date && (
                     <PurchaseReturnSelector
                       invoices={returnableInvoices}
                       onInvoiceSelect={handleInvoiceSelect}
                       loading={loading}
                     />
+                  )}
+                  {!selectedInvoice && (!authoritativeBusinessDate || !returnData.return_date) && (
+                    <p role="status" className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+                      Loading the authoritative organization date before invoice selection…
+                    </p>
                   )}
                 </div>
               )}

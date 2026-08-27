@@ -108,6 +108,16 @@ describe('canonical desktop return authority boundary', () => {
     expect(purchaseFlow).toContain('isCanonicalUuid(invoiceId)');
   });
 
+  it('blocks source selection and posting outside the authoritative business-date boundary', () => {
+    for (const flow of [salesFlow, purchaseFlow]) {
+      expect(flow).toContain('requireCanonicalPostingDate');
+      expect(flow).toContain('max={authoritativeBusinessDate || undefined}');
+      expect(flow).toContain('Loading the authoritative organization date before invoice selection');
+    }
+    expect(salesFlow.match(/requireCanonicalPostingDate/g)).toHaveLength(3);
+    expect(purchaseFlow.match(/requireCanonicalPostingDate/g)).toHaveLength(3);
+  });
+
   it('ignores stale canonical source responses when the selected invoice or supplier changes', () => {
     expect(salesFlow).toContain('invoiceContextRequestSequence');
     expect(salesFlow).toMatch(/requestSequence !== invoiceContextRequestSequence\.current/);

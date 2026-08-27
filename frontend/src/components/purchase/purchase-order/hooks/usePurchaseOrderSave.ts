@@ -21,6 +21,7 @@ import {
 } from '../utils/canonicalPurchaseOrderCommand';
 import type { CanonicalDocumentPolicy } from '../../../../services/api/modules/org/canonicalBusinessContext.api';
 import { canonicalActionErrorMessage } from '../../../../services/api/canonicalActionError';
+import { requireCanonicalPostingDate } from '../../../../utils/canonicalPostingDate';
 
 export const PURCHASE_ORDER_CANONICAL_OPERATION = 'procurement.purchase_order.prepare' as const;
 
@@ -36,6 +37,7 @@ export interface UsePurchaseOrderSaveProps {
     branchId: unknown;
     isOnline: boolean;
     documentPolicy: CanonicalDocumentPolicy | null;
+    businessDate: string;
     setPurchaseOrder: React.Dispatch<React.SetStateAction<PurchaseOrderData>>;
     setCreatedPOData: React.Dispatch<React.SetStateAction<CreatedPOData | null>>;
     setShowSuccessModal: React.Dispatch<React.SetStateAction<boolean>>;
@@ -65,6 +67,7 @@ export function usePurchaseOrderSave(
         branchId,
         isOnline,
         documentPolicy,
+        businessDate,
         setPurchaseOrder,
         setCreatedPOData,
         setShowSuccessModal,
@@ -109,6 +112,14 @@ export function usePurchaseOrderSave(
         if (validationError) {
             setErrors({ submission: validationError });
             toast.error(validationError);
+            return false;
+        }
+        try {
+            requireCanonicalPostingDate(purchaseOrder.po_date, businessDate, 'Purchase-order date');
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Purchase-order date is invalid.';
+            setErrors({ submission: message });
+            toast.error(message);
             return false;
         }
         if (!isOnline) {
@@ -158,6 +169,7 @@ export function usePurchaseOrderSave(
         }
     }, [
         branchId,
+        businessDate,
         currentFingerprint,
         documentPolicy,
         isOnline,

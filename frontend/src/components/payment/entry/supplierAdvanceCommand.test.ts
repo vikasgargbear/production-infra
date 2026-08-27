@@ -58,7 +58,7 @@ test('builds one exact PO-line gross allocation without floating point or invent
 test.each([
   [{ ...draft, grossAmount: '168.011' }, /at most two/i],
   [{ ...draft, grossAmount: '168.02' }, /cannot exceed/i],
-  [{ ...draft, paymentDate: '2026-08-26' }, /cannot exceed/i],
+  [{ ...draft, paymentDate: '2026-08-26' }, /authoritative organization date/i],
   [{ ...draft, externalReference: ' ' }, /reference/i],
   [{ ...draft, purchaseOrderLineId: ids.payment }, /approved purchase-order/i],
 ] as const)('rejects invalid or non-authoritative draft %#', (invalid, message) => {

@@ -45,6 +45,7 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
     purchaseOrder,
     setPurchaseOrder,
     documentPolicy,
+    businessDate,
     branches,
     branchId,
     setBranchId,
@@ -115,6 +116,7 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
                 label="PO Date"
                 value={purchaseOrder.po_date}
                 onChange={(value) => setPurchaseOrder(prev => ({ ...prev, po_date: value }))}
+                max={businessDate || undefined}
                 required
               />
             </div>

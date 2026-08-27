@@ -61,6 +61,7 @@ export interface UseSalesOrderLogicReturn {
     order: Order;
     setOrder: React.Dispatch<React.SetStateAction<Order>>;
     documentPolicy: CanonicalDocumentPolicy | null;
+    businessDate: string;
     selectedCustomer: Customer | null;
     setSelectedCustomer: React.Dispatch<React.SetStateAction<Customer | null>>;
     sameAsBilling: boolean;
@@ -171,6 +172,7 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
         order,
         selectedCustomer,
         documentPolicy,
+        businessDate,
         setOrder,
         setCreatedOrderData,
         setShowSuccessModal,
@@ -600,6 +602,7 @@ Expected Delivery: ${order.expected_delivery_date}
         order,
         setOrder,
         documentPolicy,
+        businessDate,
         selectedCustomer,
         setSelectedCustomer,
         sameAsBilling,

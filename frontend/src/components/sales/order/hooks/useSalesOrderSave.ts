@@ -7,11 +7,13 @@ import { clientUuid } from '../../../../utils/clientUuid';
 import type { CanonicalCommandPreview } from '../../../../services/api/canonicalOperatorActions';
 import { normalizeAuthoritativeDecimal } from '../../../../utils/exactDecimal';
 import type { CanonicalDocumentPolicy } from '../../../../services/api/modules/org/canonicalBusinessContext.api';
+import { requireCanonicalPostingDate } from '../../../../utils/canonicalPostingDate';
 
 export interface UseSalesOrderSaveProps {
     order: Order;
     selectedCustomer: unknown;
     documentPolicy: CanonicalDocumentPolicy | null;
+    businessDate: string;
     setOrder: React.Dispatch<React.SetStateAction<Order>>;
     setCreatedOrderData: React.Dispatch<React.SetStateAction<CreatedOrderData | null>>;
     setShowSuccessModal: React.Dispatch<React.SetStateAction<boolean>>;
@@ -30,7 +32,7 @@ export interface UseSalesOrderSaveReturn {
 }
 
 export function useSalesOrderSave(props: UseSalesOrderSaveProps): UseSalesOrderSaveReturn {
-    const { order, selectedCustomer, documentPolicy, setCreatedOrderData, setShowSuccessModal, setMessage, setMessageType } = props;
+    const { order, selectedCustomer, documentPolicy, businessDate, setCreatedOrderData, setShowSuccessModal, setMessage, setMessageType } = props;
     const [saving, setSaving] = useState(false);
     const [preparedPreview, setPreparedPreview] = useState<CanonicalCommandPreview | null>(null);
     const [reviewOpen, setReviewOpen] = useState(false);
@@ -42,6 +44,7 @@ export function useSalesOrderSave(props: UseSalesOrderSaveProps): UseSalesOrderS
         if (saving) return;
         try {
             if (!selectedCustomer) throw new Error('Select a customer before preparing the order');
+            requireCanonicalPostingDate(order.order_date, businessDate, 'Sales order date');
             setSaving(true);
             let payload = buildCanonicalSalesOrderCommand(order, idempotencyKey.current, documentPolicy);
             let fingerprint = JSON.stringify(payload);
@@ -63,7 +66,7 @@ export function useSalesOrderSave(props: UseSalesOrderSaveProps): UseSalesOrderS
             const message = error instanceof Error ? error.message : 'Unable to prepare the sales order';
             setMessage(message); setMessageType('error'); toast.error(message);
         } finally { setSaving(false); }
-    }, [documentPolicy, order, preparedPreview, saving, selectedCustomer, setMessage, setMessageType]);
+    }, [businessDate, documentPolicy, order, preparedPreview, saving, selectedCustomer, setMessage, setMessageType]);
 
     const confirmPreparedOrder = useCallback(async () => {
         if (!preparedPreview || saving) return;

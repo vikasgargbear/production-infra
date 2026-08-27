@@ -60,7 +60,7 @@ test.each([
 test('fails closed when the backend organization date contract is malformed', () => {
   expect(() => buildSupplierPaymentPreparePayload(
     draft(), { ...context, payment_date: '25/08/2026' }, 'stable',
-  )).toThrow('authoritative supplier-payment context');
+  )).toThrow('Authoritative organization business date');
 });
 
 test('accepts only an exact immutable supplier-payment preview', () => {

@@ -44,6 +44,7 @@ const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose })
         order,
         setOrder,
         documentPolicy,
+        businessDate,
         selectedCustomer,
         sameAsBilling,
         setSameAsBilling,
@@ -168,6 +169,7 @@ const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose })
                             <OrderItemsStep
                                 order={order}
                                 setOrder={setOrder}
+                                maximumOrderDate={businessDate}
                                 selectedCustomer={selectedCustomer}
                                 message={message}
                                 messageType={messageType}

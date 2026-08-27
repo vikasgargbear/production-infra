@@ -25,6 +25,7 @@ describe('canonical customer receipt command', () => {
     expect(buildCustomerReceiptPreparePayload({
       customer_account_id: customerId,
       payment_date: '2026-08-25',
+      business_date: '2026-08-25',
       payment_mode: 'upi',
       amount: '168.00',
       reference_number: ' UPI-E2E-168 ',
@@ -62,7 +63,7 @@ describe('canonical customer receipt command', () => {
 
   it.each(['CASH', 'CHEQUE', 'SPLIT'])('fails closed for unsupported %s receipts', payment_mode => {
     expect(() => buildCustomerReceiptPreparePayload({
-      customer_account_id: customerId, payment_date: '2026-08-25', payment_mode,
+      customer_account_id: customerId, payment_date: '2026-08-25', business_date: '2026-08-25', payment_mode,
       amount: '168.00', reference_number: 'REF', bank_account_id: bankId,
       settlement_account_id: settlementId, allocation_method: 'fifo',
       allocations: [{ invoice_id: invoiceA.invoice_id, invoice_number: invoiceA.invoice_number, amount: '168.00' }],
@@ -71,7 +72,7 @@ describe('canonical customer receipt command', () => {
 
   it('rejects advance, unallocated residue, missing lineage, and overprecision', () => {
     const base = {
-      customer_account_id: customerId, payment_date: '2026-08-25', payment_mode: 'upi',
+      customer_account_id: customerId, payment_date: '2026-08-25', business_date: '2026-08-25', payment_mode: 'upi',
       amount: '168.00', reference_number: 'REF', bank_account_id: bankId,
       settlement_account_id: settlementId, allocation_method: 'fifo',
       allocations: [{ invoice_id: invoiceA.invoice_id, invoice_number: invoiceA.invoice_number, amount: '168.00' }],

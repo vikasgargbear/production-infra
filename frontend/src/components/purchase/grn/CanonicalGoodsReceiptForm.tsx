@@ -22,6 +22,11 @@ import {
   postCanonicalGoodsReceipt,
   prepareCanonicalGoodsReceipt,
 } from './canonicalReceiptLifecycle';
+import { useCanonicalBusinessDate } from '../../../hooks/useCanonicalBusinessDate';
+import {
+  canonicalBusinessTimestampInputMax,
+  requireCanonicalPostingTimestamp,
+} from '../../../utils/canonicalPostingDate';
 
 
 interface Props {
@@ -45,6 +50,11 @@ export const CanonicalGoodsReceiptForm: React.FC<Props> = ({
   onCancel,
   onPosted,
 }) => {
+  const {
+    businessDate,
+    loading: businessDateLoading,
+    error: businessDateError,
+  } = useCanonicalBusinessDate();
   const [draft, setDraft] = useState<CanonicalReceiptDraft>(() => initialReceiptDraft(
     context,
     `erp-web-goods-receipt-prepare:${clientUuid()}`,
@@ -129,6 +139,7 @@ export const CanonicalGoodsReceiptForm: React.FC<Props> = ({
     setError(null);
     setPreparing(true);
     try {
+      requireCanonicalPostingTimestamp(draft.receivedAt, businessDate, 'Physical receipt time');
       const response = await prepareCanonicalGoodsReceipt(context, draft);
       setPreview(response.data);
     } catch (requestError) {
@@ -184,6 +195,7 @@ export const CanonicalGoodsReceiptForm: React.FC<Props> = ({
             <input
               type="datetime-local"
               value={draft.receivedAt}
+              max={canonicalBusinessTimestampInputMax(businessDate)}
               onChange={event => {
                 setPreview(null);
                 setDraft(current => ({
@@ -357,13 +369,19 @@ export const CanonicalGoodsReceiptForm: React.FC<Props> = ({
             {error}
           </div>
         )}
+        {businessDateError && (
+          <div role="alert" className="flex gap-3 rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-800">
+            <AlertCircle className="h-5 w-5 shrink-0" />
+            {businessDateError}
+          </div>
+        )}
 
         <div className="flex flex-wrap justify-end gap-3 rounded-xl border border-gray-200 bg-white p-4">
           <button type="button" onClick={onCancel} className="min-h-11 rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">Cancel</button>
           <button
             type="button"
             onClick={prepare}
-            disabled={preparing || posting || unavailable}
+            disabled={preparing || posting || unavailable || businessDateLoading || !businessDate || Boolean(businessDateError)}
             className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {preparing ? <Loader2 className="h-4 w-4 animate-spin" /> : <PackageCheck className="h-4 w-4" />}

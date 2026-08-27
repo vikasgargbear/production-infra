@@ -22,12 +22,14 @@ import {
     buildCanonicalInvoicePreparePayload,
     invoicePreviewValidationError,
 } from '../utils/canonicalInvoiceCommand';
+import { requireCanonicalPostingDate } from '../../../../utils/canonicalPostingDate';
 
 export interface UseInvoiceSaveProps {
     invoice: Invoice;
     selectedCustomer: Customer | null;
     companyInfo: CompanyInfo | null;
     documentPolicy: CanonicalDocumentPolicy | null;
+    businessDate: string;
     isOnline: boolean;
     setInvoice: Dispatch<SetStateAction<Invoice>>;
     setCreatedInvoiceData: Dispatch<SetStateAction<CreatedInvoiceData | null>>;
@@ -69,6 +71,7 @@ export function useInvoiceSave(props: UseInvoiceSaveProps): UseInvoiceSaveReturn
         selectedCustomer,
         companyInfo,
         documentPolicy,
+        businessDate,
         isOnline,
         setInvoice,
         setCreatedInvoiceData,
@@ -89,6 +92,14 @@ export function useInvoiceSave(props: UseInvoiceSaveProps): UseInvoiceSaveReturn
         if (validationError) {
             setError(validationError);
             toast.error(validationError);
+            return;
+        }
+        try {
+            requireCanonicalPostingDate(invoice.invoice_date, businessDate, 'Invoice date');
+        } catch (dateError) {
+            const message = dateError instanceof Error ? dateError.message : 'Invoice date is invalid.';
+            setError(message);
+            toast.error(message);
             return;
         }
 
@@ -137,6 +148,7 @@ export function useInvoiceSave(props: UseInvoiceSaveProps): UseInvoiceSaveReturn
         }
     }, [
         companyInfo,
+        businessDate,
         documentPolicy,
         invoice,
         isOnline,

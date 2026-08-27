@@ -25,6 +25,7 @@ jest.mock('../shared/PaymentFlowOptimized', () => () => {
   return <button onClick={() => {
     setPaymentField('amount', '168.00');
     setPaymentField('payment_date', '2026-08-25');
+    setPaymentField('business_date', '2026-08-25');
     setPaymentField('payment_mode', 'upi');
     setPaymentField('reference_number', 'UPI-RETRY-1');
     setPaymentField('bank_account_id', '0198ea37-2b20-7c8d-9123-123456789abc');

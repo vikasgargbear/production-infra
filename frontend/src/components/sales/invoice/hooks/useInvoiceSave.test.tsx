@@ -41,6 +41,7 @@ const posted = {
 const createProps = (isOnline: boolean) => ({
     invoice: {
         invoice_number: '',
+        invoice_date: '2026-08-27',
         final_amount: '150.00',
         items: [{ product_id: 'product-1' }],
     } as any,
@@ -52,6 +53,7 @@ const createProps = (isOnline: boolean) => ({
     } as any,
     companyInfo: { name: 'Synthetic Company' } as any,
     documentPolicy: {} as any,
+    businessDate: '2026-08-27',
     isOnline,
     setInvoice: jest.fn(),
     setCreatedInvoiceData: jest.fn(),
