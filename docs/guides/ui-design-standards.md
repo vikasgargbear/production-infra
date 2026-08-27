@@ -536,11 +536,6 @@ ALL interactive elements MUST have accessible labels:
 
 ## Related Documents
 
-This document consolidates and supersedes:
-- `docs/frontend/ui-design-patterns.md` (merged)
-- `docs/frontend/ui_ux_design_principles.md` (merged)
-
-Audit reports:
-- `frontend/docs/UI_AUDIT_INVOICE_MODULE.md` (2026-02-06)
-
-All UI design decisions should reference THIS document.
+Current interaction and accessibility behavior must be verified against
+`frontend/src`, its component tests, and the live Playwright suites. Historical
+line-number audit snapshots are not design authority.
