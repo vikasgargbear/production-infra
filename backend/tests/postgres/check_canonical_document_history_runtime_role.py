@@ -64,10 +64,12 @@ def main() -> None:
                     "limit": 25,
                     "offset": 0,
                 }
-                assert session.execute(text(
+                result = session.execute(text(
                     source + " SELECT * FROM authoritative_documents " + filters
                     + " ORDER BY document_date DESC, document_number DESC, document_id DESC LIMIT :limit OFFSET :offset"
-                ), params).fetchall() == []
+                ), params)
+                assert tuple(result.keys()) == reads._HISTORY_COLUMNS
+                assert result.fetchall() == []
 
             returns_params = {
                 **params,

@@ -1,13 +1,17 @@
 from pathlib import Path
 from datetime import date, datetime, timezone
 import re
+from types import SimpleNamespace
 from uuid import UUID
 
 import pytest
 from pydantic import ValidationError
 
+from app.api.routes import canonical_document_history_reads as history_reads
 from app.api.routes.canonical_document_history_reads import (
     CanonicalDocumentHistoryItem,
+    CanonicalDocumentHistoryResponse,
+    _HISTORY_COLUMNS,
     _filter_sql,
     _history_sources,
 )
@@ -44,6 +48,73 @@ def test_exact_wire_contract_rejects_json_numbers_and_overprecision():
             source_document_type="sales_dispatch",
             source_document_id=UUID("d3000000-0000-7000-8000-000000000004"),
         ))
+
+
+def test_history_cte_declares_the_exact_response_wire_shape_and_provenance():
+    source = _history_sources()
+    expected_columns = tuple(CanonicalDocumentHistoryItem.model_fields)
+    assert _HISTORY_COLUMNS == expected_columns
+    assert f"WITH authoritative_documents ({', '.join(expected_columns)}) AS (" in source
+    # Keep the first UNION arm readable on its own as well as binding the
+    # complete CTE wire shape. This prevents a future extraction of that arm
+    # from silently restoring PostgreSQL's native ``case`` result key.
+    assert "AS source_document_type" in source
+
+    supplier_invoice = _item(
+        document_kind="supplier_invoice",
+        source_document_type="goods_receipt",
+        source_document_id=UUID("d3000000-0000-7000-8000-000000000004"),
+        source_document_number="GRN-EXACT-1",
+    )
+    response = CanonicalDocumentHistoryResponse.model_validate({
+        "items": [supplier_invoice],
+        "business_date": date(2026, 8, 25),
+        "page": 1,
+        "page_size": 25,
+        "total": 1,
+    })
+    assert response.items[0].source_document_type == "goods_receipt"
+    assert response.items[0].source_document_id == UUID("d3000000-0000-7000-8000-000000000004")
+    assert response.items[0].source_document_number == "GRN-EXACT-1"
+
+
+def test_populated_supplier_invoice_endpoint_preserves_complete_provenance(monkeypatch):
+    supplier_invoice = _item(
+        document_kind="supplier_invoice",
+        source_document_type="goods_receipt",
+        source_document_id=UUID("d3000000-0000-7000-8000-000000000004"),
+        source_document_number="GRN-EXACT-1",
+    )
+
+    class FakeSession:
+        def execute(self, statement, _params):
+            if "SELECT COUNT(*)" in str(statement):
+                return SimpleNamespace(scalar_one=lambda: 1)
+            return SimpleNamespace(fetchall=lambda: [SimpleNamespace(_mapping=supplier_invoice)])
+
+    monkeypatch.setattr(history_reads, "_activate", lambda _db, _user: UUID(
+        "d3000000-0000-7000-8000-000000000005"
+    ))
+    monkeypatch.setattr(history_reads, "_organization_business_date", lambda _db, _org_id: date(2026, 8, 25))
+    monkeypatch.setattr(history_reads, "_scope", lambda _user: (True, []))
+    monkeypatch.setattr(history_reads, "check_module_access", lambda _user, _module: True)
+
+    result = history_reads.canonical_document_history(
+        document_kind="supplier_invoice",
+        document_group=None,
+        search=None,
+        status_filter="posted",
+        date_from=None,
+        date_to=None,
+        page=1,
+        page_size=25,
+        user={},
+        db=FakeSession(),
+    )
+    response = CanonicalDocumentHistoryResponse.model_validate(result)
+    assert response.items[0].source_document_type == "goods_receipt"
+    assert response.items[0].source_document_id == UUID("d3000000-0000-7000-8000-000000000004")
+    assert response.items[0].source_document_number == "GRN-EXACT-1"
 
 
 def test_non_settlement_histories_never_claim_paid_or_outstanding_amounts():

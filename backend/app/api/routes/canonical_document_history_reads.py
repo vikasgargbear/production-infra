@@ -156,19 +156,47 @@ class CanonicalDocumentHistoryResponse(BaseModel):
 _MONEY = "'FM999999999999999990.00'"
 _QUANTITY = "'FM999999999999990.000000'"
 _RATE = "'FM9999999999999990.0000'"
+_HISTORY_COLUMNS = (
+    "document_kind",
+    "document_id",
+    "branch_id",
+    "document_number",
+    "document_date",
+    "due_date",
+    "status",
+    "party_account_id",
+    "party_name",
+    "source_document_type",
+    "source_document_id",
+    "source_document_number",
+    "line_count",
+    "total_quantity",
+    "minimum_unit_rate",
+    "maximum_unit_rate",
+    "taxable_amount",
+    "total_tax",
+    "total_amount",
+    "paid_amount",
+    "outstanding_amount",
+    "payment_status",
+    "created_at",
+    "updated_at",
+)
 
 
 def _history_sources() -> str:
     # Each arm returns the identical wire shape. Status predicates exclude
     # mutable drafts; reversed rows remain explicit and cannot masquerade as posted.
+    columns = ", ".join(_HISTORY_COLUMNS)
     return f"""
-    WITH authoritative_documents AS (
+    WITH authoritative_documents ({columns}) AS (
       SELECT 'sales_invoice'::text AS document_kind, invoice.id AS document_id,
              invoice.branch_id, invoice.invoice_number AS document_number,
              invoice.invoice_date AS document_date, payable.due_date,
              invoice.status, invoice.customer_account_id AS party_account_id,
              party.legal_name AS party_name,
-             CASE WHEN provenance.source_document_id IS NULL THEN NULL ELSE 'sales_dispatch' END,
+             CASE WHEN provenance.source_document_id IS NULL THEN NULL ELSE 'sales_dispatch' END
+               AS source_document_type,
              provenance.source_document_id, provenance.source_document_number,
              COALESCE(lines.line_count,0)::integer AS line_count,
              to_char(COALESCE(lines.total_quantity,0), {_QUANTITY}) AS total_quantity,
