@@ -165,10 +165,14 @@ def _seed(session: Session) -> None:
               source_storage_bucket,source_storage_object_path,source_media_type,source_document_sha256,
               dataset_storage_bucket,dataset_storage_object_path,dataset_media_type,dataset_sha256,
               record_count,publication_date,effective_from,reviewed_by_user_id,reviewed_at,status)
-            VALUES (:release_id,'hsn_sac_tax','transfer-lifecycle-v1','gstn','https://example.invalid/hsn',
+            SELECT :release_id,'hsn_sac_tax','transfer-lifecycle-v1','gstn','https://example.invalid/hsn',
               'fixture','source.json','application/json',decode(repeat('41',32),'hex'),
               'fixture','dataset.json','application/json',decode(repeat('42',32),'hex'),
-              1,current_date-1,current_date-1,:user_id,transaction_timestamp(),'active');
+              1,current_date-1,current_date-1,:user_id,transaction_timestamp(),'active'
+            WHERE NOT EXISTS (
+              SELECT 1 FROM core.reference_data_releases
+               WHERE dataset_kind='hsn_sac_tax' AND status='active'
+            );
             INSERT INTO parties.parties(
               org_id,id,party_kind,legal_name,status,created_by_membership_id,updated_by_membership_id)
             VALUES (:org,:manufacturer,'organization','Lifecycle Manufacturer','active',:membership,:membership);
@@ -176,8 +180,10 @@ def _seed(session: Session) -> None:
               org_id,id,sku,product_kind,name,manufacturer_party_id,base_uom_code,hsn_code,
               drug_schedule,requires_prescription,ndps_regulated,regulatory_ruleset_version,
               cold_chain_required,status,hsn_release_id,created_by_membership_id,updated_by_membership_id)
-            VALUES (:org,:product,'LIFECYCLE-SKU','consumable','Lifecycle Product',:manufacturer,
-              'EA','3004','NONE',false,false,'transfer-lifecycle-v1',false,'active',:release_id,:membership,:membership);
+            SELECT :org,:product,'LIFECYCLE-SKU','consumable','Lifecycle Product',:manufacturer,
+              'EA','3004','NONE',false,false,release.ruleset_version,false,'active',release.id,:membership,:membership
+              FROM core.reference_data_releases AS release
+             WHERE release.dataset_kind='hsn_sac_tax' AND release.status='active';
             INSERT INTO catalog.uom_conversions(
               org_id,id,product_id,from_uom_code,to_uom_code,multiplier,valid_from,status,created_by_membership_id)
             VALUES (:org,:conversion,:product,'EA','EA',1.000000,current_date-1,'active',:membership);
