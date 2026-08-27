@@ -1,5 +1,6 @@
 {
-  "template_schema": "aasopharma.live18.ui-template.v1",
+  "template_schema": "aasopharma.live23.ui-variant-template.v1",
+  "scenario_id": "purchase_return_reversal",
   "operation_id": "purchase_return_reversal",
   "lifecycle_mode": "split",
   "steps": {

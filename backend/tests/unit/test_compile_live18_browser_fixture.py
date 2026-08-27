@@ -951,7 +951,6 @@ def test_live18_templates_use_only_canonical_hash_routes() -> None:
         "/#/returns/purchase-return",
         "/#/returns/approval-inbox",
             "/#/returns/resume-post",
-            "/#/returns/commercial-reversal",
         "/#/stock-management/stock-adjustment",
         "/#/stock-management/stock-transfer",
         "/#/stock-management/inventory-destruction",
@@ -1187,6 +1186,7 @@ def test_customer_receipt_template_targets_prior_certified_invoice() -> None:
         "identity": {
             "bank_account_id": "d3000000-0000-7000-8000-000000000040",
             "customer_account_id": "d3000000-0000-7000-8000-000000000041",
+            "customer_receipt_evidence_attachment_id": "d3000000-0000-7000-8000-000000000042",
         },
         "display": {
             "customer_code": "DEMO-CUSTOMER",
@@ -1202,10 +1202,10 @@ def test_customer_receipt_template_targets_prior_certified_invoice() -> None:
     )
     _validate_compiled_steps("customer_receipt", operation, "actor_confirmation")
     assert used == set(scalars)
-    assert operation["prepare_steps"][8]["locator"]["name"] == (
+    assert operation["prepare_steps"][9]["locator"]["name"] == (
         "Select canonical invoice {{resource_sales_invoice}}"
     )
-    assert operation["prepare_steps"][6]["value"] == "LIVE18-RCPT-{{run_token}}"
+    assert operation["prepare_steps"][7]["value"] == "LIVE18-RCPT-{{run_token}}"
 
 
 def test_supplier_payment_template_targets_prior_certified_supplier_invoice() -> None:
@@ -1492,9 +1492,9 @@ def test_commercial_reversal_templates_use_exact_prior_resources_and_split_lifec
 ) -> None:
     root = Path(__file__).resolve().parents[3]
     template = json.loads(
-        (root / f"frontend/e2e/live18/templates/{operation_id}.json").read_text()
+        (root / f"frontend/e2e/live23/templates/{operation_id}.json").read_text()
     )
-    assert template["template_schema"] == TEMPLATE_SCHEMA
+    assert template["template_schema"] == "aasopharma.live23.ui-variant-template.v1"
     assert template["operation_id"] == operation_id
     rendered = json.dumps(template, sort_keys=True)
     assert f"{{{{resource_{source_operation}}}}}" in rendered

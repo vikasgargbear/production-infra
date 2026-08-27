@@ -2321,7 +2321,7 @@ def seed_end_to_end_master(
             (
                 IDS["customer_receipt_evidence"],
                 "customer_receipt_evidence",
-                f"customer-receipt-evidence-{DEMO_RUN_ID}.json",
+                f"customer-receipt-evidence-{DEMO_UI_FIXTURE_ID}.json",
                 business_date,
                 f"customer_receipt_evidence:{DEMO_RUN_ID}:{DEMO_RUN_ATTEMPT}",
             ),

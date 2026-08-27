@@ -58,6 +58,16 @@ FIELDS_BY_OPERATION: dict[str, tuple[ProjectionField, ...]] = {
         ProjectionField("amount", "amount", "header.amount"),
         ProjectionField("status", "status", "header.status"),
     ),
+    "finance.customer_cheque_clearance": (
+        ProjectionField("action_payment_id", "action_payment_id", "header.id"),
+        ProjectionField("action", "action", "header.payment_purpose"),
+        ProjectionField("status", "status", "header.status"),
+    ),
+    "finance.customer_cheque_bounce": (
+        ProjectionField("action_payment_id", "action_payment_id", "header.id"),
+        ProjectionField("action", "action", "header.payment_purpose"),
+        ProjectionField("status", "status", "header.status"),
+    ),
     "finance.supplier_payment": (
         ProjectionField("payment_id", "payment_id", "header.id"),
         ProjectionField("amount", "amount", "header.amount"),
@@ -112,6 +122,42 @@ FIELDS_BY_OPERATION: dict[str, tuple[ProjectionField, ...]] = {
             "header.counterparty_payable_amount",
         ),
         ProjectionField("status", "status", "header.status"),
+    ),
+    "sales.return.reversal": (
+        ProjectionField(
+            "reversal_adjustment_note_id", "reversal_adjustment_note_id", "header.id"
+        ),
+        ProjectionField(
+            "original_adjustment_note_id", "original_adjustment_note_id",
+            "header.reversal_of_adjustment_note_id",
+        ),
+        ProjectionField(
+            "reversal_note_status", "reversal_note_status", "header.status"
+        ),
+    ),
+    "procurement.purchase_return.reversal": (
+        ProjectionField(
+            "reversal_adjustment_note_id", "reversal_adjustment_note_id", "header.id"
+        ),
+        ProjectionField(
+            "original_adjustment_note_id", "original_adjustment_note_id",
+            "header.reversal_of_adjustment_note_id",
+        ),
+        ProjectionField(
+            "reversal_note_status", "reversal_note_status", "header.status"
+        ),
+    ),
+    "finance.adjustment_note.reversal": (
+        ProjectionField(
+            "reversal_adjustment_note_id", "reversal_adjustment_note_id", "header.id"
+        ),
+        ProjectionField(
+            "original_adjustment_note_id", "original_adjustment_note_id",
+            "header.reversal_of_adjustment_note_id",
+        ),
+        ProjectionField(
+            "reversal_note_status", "reversal_note_status", "header.status"
+        ),
     ),
     "finance.bank_reconciliation": (
         ProjectionField(

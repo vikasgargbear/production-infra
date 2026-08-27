@@ -1125,6 +1125,7 @@ jobs:
       PHARMA_CANONICAL_PRODUCTION_PROJECT_REFS: ${{ vars.CANONICAL_PRODUCTION_PROJECT_REFS }}
       PHARMA_CANONICAL_LIVE_TIMEOUT_SECONDS: "30"
       LIVE18_REQUIRED: "true"
+      LIVE23_BUSINESS_VARIANTS_REQUIRED: "true"
       LIVE18_WRITE_ACK: canonical-disposable-only
       LIVE18_EXPECTED_DEPLOYED_SHA: ${{ inputs.canonical_staging_deploy_sha }}
       LIVE18_RUN_TOKEN: ${{ github.run_id }}-${{ github.run_attempt }}
@@ -1163,6 +1164,7 @@ jobs:
             echo "LIVE18_EVIDENCE_DIR=$RUNNER_TEMP/live18-evidence"
             echo "LIVE18_PLAYWRIGHT_ARTIFACT_DIR=$RUNNER_TEMP/live18-playwright"
             echo "LIVE18_DATABASE_EVIDENCE_PATH=$RUNNER_TEMP/live18-database-evidence.json"
+            echo "LIVE23_BUSINESS_DATABASE_EVIDENCE_PATH=$RUNNER_TEMP/live23-business-database-evidence.json"
             echo "LIVE18_RECONCILIATION_EVIDENCE_PATH=$RUNNER_TEMP/live18-reconciliation-attestation.json"
             echo "LIVE18_DEMO_EVIDENCE_PATH=$RUNNER_TEMP/live18-demo-evidence.json"
             echo "LIVE18_EVIDENCE_IDENTITY_PREPARE_PATH=$RUNNER_TEMP/live18-evidence-identity-prepare.json"
@@ -1836,13 +1838,18 @@ jobs:
           set -euo pipefail
           npx playwright test --config e2e/live18/playwright.config.ts --list \
             | tee "$RUNNER_TEMP/live18-playwright-list.txt"
-          discovered=$(grep -c 'canonical-live18\.spec\.ts.*UI to REST readback' "$RUNNER_TEMP/live18-playwright-list.txt")
+          discovered=$(grep -c 'canonical-live18\.spec\.ts.*: UI to REST readback' "$RUNNER_TEMP/live18-playwright-list.txt")
           expected=$(jq -r '.ready_count' ../docs/testing/live18-ui-template-readiness.json)
           test "$discovered" -eq "$expected"
+          variant_discovered=$(grep -c 'canonical-live18\.spec\.ts.*visible variant UI to REST readback' "$RUNNER_TEMP/live18-playwright-list.txt")
+          variant_expected=$(jq -r '.ready_count' ../backend/tests/live_acceptance/live23_supported_business_readiness.json)
+          test "$variant_discovered" -eq "$variant_expected"
       - name: Run the exact-SHA live18 desktop browser certification
         id: live18_browser
         working-directory: frontend
-        run: npx playwright test --config e2e/live18/playwright.config.ts
+        run: >-
+          npx playwright test --config e2e/live18/playwright.config.ts
+          --grep ': UI to REST readback emits canonical UUID evidence'
       - name: Capture PostgreSQL evidence from exact Railway deployment over direct IPv6
         if: always() && env.LIVE18_PROVIDER == 'railway' && steps.live18_browser.outcome != 'skipped'
         env:
@@ -1913,7 +1920,8 @@ jobs:
         run: |
           set -euo pipefail
           PYTHONPATH=backend pytest -q \
-            backend/tests/live_acceptance/test_browser_evidence_reconciliation.py
+            backend/tests/live_acceptance/test_browser_evidence_reconciliation.py \
+            -k test_browser_resource_reconciles_through_mcp_and_postgresql
           python3 backend/scripts/build_live18_reconciliation_attestation.py \
             --deployed-sha "$RUNNER_TEMP/live18-deployed-sha.json" \
             --evidence-dir "$LIVE18_EVIDENCE_DIR" \
@@ -1921,6 +1929,86 @@ jobs:
             --database-evidence "$LIVE18_DATABASE_EVIDENCE_PATH" \
             --provider "$LIVE18_PROVIDER" \
             --output "$LIVE18_RECONCILIATION_EVIDENCE_PATH"
+      - name: Run exact-SHA supported-business browser variants
+        id: business_variant_browser
+        if: always() && steps.live18_reconciliation.outcome == 'success'
+        working-directory: frontend
+        run: >-
+          npx playwright test --config e2e/live18/playwright.config.ts
+          --grep 'visible variant UI to REST readback emits canonical UUID evidence'
+      - name: Capture supported-business variant PostgreSQL evidence separately
+        if: always() && env.LIVE18_PROVIDER == 'railway' && steps.business_variant_browser.outcome == 'success'
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          request="$RUNNER_TEMP/live23-business-railway-evidence-request.json"
+          umask 077
+          python3 - "$request" <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          import sys
+
+          evidence_dir = Path(os.environ["LIVE18_EVIDENCE_DIR"]) / "business-variants"
+          evidence = {
+              path.stem: json.loads(path.read_text(encoding="utf-8"))
+              for path in evidence_dir.glob("*.json")
+          }
+          value = {
+              "schema": "aasopharma.live18.railway-database-phase.v1",
+              "evidence_scope": "supported_business_variants",
+              "expected_sha": os.environ["REVIEWED_DEPLOY_SHA"],
+              "project_ref": os.environ["CANONICAL_STAGING_PROJECT_REF"],
+              "run_id": os.environ["GITHUB_RUN_ID"],
+              "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+              "request_nonce": os.environ["LIVE18_RAILWAY_REQUEST_NONCE"],
+              "deployment_id": os.environ["RAILWAY_API_DEPLOYMENT_ID"],
+              "deployment_instance_id": os.environ["RAILWAY_API_DEPLOYMENT_INSTANCE_ID"],
+              "organization_id": os.environ["PHARMA_CANONICAL_LIVE_TEST_ORG_ID"],
+              "auth_user_id": os.environ["PHARMA_CANONICAL_LIVE_TEST_AUTH_USER_ID"],
+              "denial_auth_user_id": os.environ["LIVE18_DENIAL_AUTH_USER_ID"],
+              "denial_organization_id": os.environ["PHARMA_CANONICAL_LIVE_DENIAL_ORG_ID"],
+              "evidence": evidence,
+          }
+          Path(sys.argv[1]).write_text(json.dumps(value), encoding="utf-8")
+          PY
+          trap 'rm -f "$request"' EXIT
+          railway ssh \
+            --project "$RAILWAY_PROJECT_ID" \
+            --environment "$RAILWAY_ENVIRONMENT_ID" \
+            --service "$RAILWAY_API_SERVICE" \
+            --deployment-instance "$RAILWAY_API_DEPLOYMENT_INSTANCE_ID" \
+            --identity-file "$LIVE18_RAILWAY_SSH_PRIVATE_KEY" \
+            -- python scripts/live18_railway_database_phase.py capture-evidence \
+              --input - --output - \
+            < "$request" > "$LIVE23_BUSINESS_DATABASE_EVIDENCE_PATH"
+          PYTHONPATH=backend python3 - "$LIVE23_BUSINESS_DATABASE_EVIDENCE_PATH" "$request" <<'PY'
+          import json
+          from pathlib import Path
+          import sys
+          from scripts.live18_railway_database_phase import _verify_response
+
+          response = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          request = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+          request["response"] = response
+          _verify_response(request)
+          if response.get("action") != "capture-evidence":
+              raise SystemExit("Railway variant database evidence has the wrong action")
+          if response.get("evidence_scope") != "supported_business_variants":
+              raise SystemExit("Railway variant database evidence has the wrong scope")
+          PY
+          echo "PHARMA_CANONICAL_BUSINESS_VARIANT_DATABASE_EVIDENCE_PATH=$LIVE23_BUSINESS_DATABASE_EVIDENCE_PATH" >> "$GITHUB_ENV"
+      - name: Reconcile supported-business variants through MCP and PostgreSQL
+        id: business_variant_reconciliation
+        if: always() && steps.business_variant_browser.outcome == 'success'
+        env:
+          PHARMA_CANONICAL_LIVE_SERVICE_TOKEN: ${{ secrets.MCP_INTERNAL_SERVICE_TOKEN }}
+        run: |
+          set -euo pipefail
+          PYTHONPATH=backend pytest -q \
+            backend/tests/live_acceptance/test_browser_evidence_reconciliation.py \
+            -k test_supported_business_variant_reconciles_through_mcp_and_postgresql
       - name: Retire the legacy evidence credential after exact-SHA backend proof
         id: evidence_credential_retirement
         if: >-
@@ -2080,7 +2168,7 @@ jobs:
         run: PYTHONPATH=backend python3 backend/scripts/close_live18_railway_authority.py
       - name: Always remove external reviewed choices and compiled fixture
         if: always()
-        run: rm -f "$LIVE18_FIXTURE_PATH" "$LIVE18_REVIEWED_SCALARS_INPUT_PATH" "$LIVE18_REVIEWED_SCALARS_PATH" "$LIVE18_EXPENSE_RECEIPT_PATH" "$LIVE18_RAILWAY_IDENTITY_RESPONSE_PATH" "$LIVE18_RAILWAY_IDENTITY_ATTEMPTED_PATH" "$LIVE18_RAILWAY_PRE_DEMO_RECOVERY_ATTEMPTED_PATH" "$RUNNER_TEMP/live18-railway-demo-request.json" "$RUNNER_TEMP/live18-railway-identity-request.json" "$RUNNER_TEMP/live18-railway-evidence-request.json" "$RUNNER_TEMP/live18-railway-cleanup-request.json" "$RUNNER_TEMP/live18-railway-cleanup-response.json"
+        run: rm -f "$LIVE18_FIXTURE_PATH" "$LIVE18_REVIEWED_SCALARS_INPUT_PATH" "$LIVE18_REVIEWED_SCALARS_PATH" "$LIVE18_EXPENSE_RECEIPT_PATH" "$LIVE18_RAILWAY_IDENTITY_RESPONSE_PATH" "$LIVE18_RAILWAY_IDENTITY_ATTEMPTED_PATH" "$LIVE18_RAILWAY_PRE_DEMO_RECOVERY_ATTEMPTED_PATH" "$RUNNER_TEMP/live18-railway-demo-request.json" "$RUNNER_TEMP/live18-railway-identity-request.json" "$RUNNER_TEMP/live18-railway-evidence-request.json" "$RUNNER_TEMP/live23-business-railway-evidence-request.json" "$RUNNER_TEMP/live18-railway-cleanup-request.json" "$RUNNER_TEMP/live18-railway-cleanup-response.json"
       - name: Build scrubbed allowlisted live18 evidence manifest
         if: always() && env.LIVE18_DEPLOYMENT_BOUND == 'true'
         env:

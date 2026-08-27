@@ -36,6 +36,12 @@ RESOURCE_TABLES = {
         "purchase_return_id",
     ),
     "finance.customer_receipt": ("finance.payments", "finance.allocations", "payment_id"),
+    "finance.customer_cheque_clearance": (
+        "finance.payments", "finance.accounting_events", "payment_id",
+    ),
+    "finance.customer_cheque_bounce": (
+        "finance.payments", "finance.accounting_events", "payment_id",
+    ),
     "finance.supplier_payment": ("finance.payments", "finance.allocations", "payment_id"),
     "finance.supplier_advance": (
         "finance.payments",
@@ -46,6 +52,15 @@ RESOURCE_TABLES = {
         "finance.adjustment_notes",
         "finance.adjustment_note_lines",
         "adjustment_note_id",
+    ),
+    "sales.return.reversal": (
+        "finance.adjustment_notes", "finance.adjustment_note_lines", "adjustment_note_id",
+    ),
+    "procurement.purchase_return.reversal": (
+        "finance.adjustment_notes", "finance.adjustment_note_lines", "adjustment_note_id",
+    ),
+    "finance.adjustment_note.reversal": (
+        "finance.adjustment_notes", "finance.adjustment_note_lines", "adjustment_note_id",
     ),
     "finance.bank_reconciliation": (
         "finance.reconciliation_matches",
@@ -138,9 +153,14 @@ JOURNAL_EFFECT_OPERATIONS = {
     "procurement.supplier_invoice",
     "procurement.purchase_return",
     "finance.customer_receipt",
+    "finance.customer_cheque_clearance",
+    "finance.customer_cheque_bounce",
     "finance.supplier_payment",
     "finance.supplier_advance",
     "finance.adjustment_note",
+    "sales.return.reversal",
+    "procurement.purchase_return.reversal",
+    "finance.adjustment_note.reversal",
     "finance.expense_claim",
     "inventory.adjustment",
     "inventory.destruction",
@@ -274,6 +294,24 @@ class CanonicalReconciler:
 
         header, lines = self._load_resource_rows(operation, resource_id)
         assert len(header) == 1
+        customer_advance_receipt = (
+            operation == "finance.customer_receipt"
+            and header[0].get("payment_purpose") == "customer_advance"
+        )
+        if customer_advance_receipt and not lines:
+            lines = self.query(
+                """
+                SELECT item.*
+                  FROM finance.accounting_events event
+                  JOIN finance.open_items item
+                    ON item.org_id=event.org_id
+                   AND item.accounting_event_id=event.id
+                 WHERE event.org_id=%s::uuid AND event.payment_id=%s::uuid
+                   AND item.item_side='payable'
+                 ORDER BY item.id
+                """,
+                (self.org_id, resource_id),
+            )
         assert lines, f"{operation} posted without typed lines/allocations"
 
         line_to_header = {
@@ -1097,12 +1135,20 @@ class CanonicalReconciler:
                 """,
                 (self.org_id, resource_id),
             )
-            if operation != "finance.supplier_advance":
+            if operation != "finance.supplier_advance" and not customer_advance_receipt:
                 assert allocations, "settlement payment posted without typed allocations"
                 assert sum(
                     (Decimal(str(row["amount"])) for row in allocations), Decimal("0")
                 ) == Decimal(str(header[0]["amount"])), (
                     f"{operation} allocations do not reconcile to its payment amount"
+                )
+            if customer_advance_receipt:
+                assert allocations == []
+                assert len(lines) == 1
+                assert lines[0]["item_side"] == "payable"
+                assert lines[0]["status"] in {"open", "settled"}
+                assert Decimal(str(lines[0]["principal_amount"])) == Decimal(
+                    str(header[0]["amount"])
                 )
 
         withholdings = self.query(

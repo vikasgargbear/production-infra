@@ -35,3 +35,32 @@ The two final-return variants must be inserted directly after their matching
 partial return in a fresh expanded run. Appending them after all Live18 writes
 could conflict with later adjustment-note ceilings, so an extra tail job is not
 an acceptable certification design.
+
+## Supported-business lifecycle variants
+
+Seven supported lifecycle paths sit outside the frozen operation identity and
+the five tax/quantity scenarios above. Their exact ordered authority is
+`backend/tests/live_acceptance/live23_supported_business_readiness.json`:
+
+1. a cheque customer advance sourced from the certified goods order, then
+   distinct-user cheque clearance;
+2. a second cheque customer advance sourced from that same goods order, then
+   distinct-user cheque bounce;
+3. corrective reversals of the exact certified sales return, purchase return,
+   and customer credit note.
+
+These paths are required only when
+`LIVE23_BUSINESS_VARIANTS_REQUIRED=true`. They reuse the normal desktop
+Playwright driver, but write browser evidence below
+`LIVE18_EVIDENCE_DIR/business-variants` and capture a separately scoped
+Railway database response. This keeps the frozen 17-operation evidence set and
+its promotion attestation byte-for-byte bounded to its existing identity.
+
+Every lifecycle path is visible UI work: no fixture creates resources through
+an API, chooses a first/latest row, or intercepts responses. Receipt variants
+bind `resource_sales_order`; each cheque terminal action binds its exact
+preceding receipt; each reversal binds its exact posted predecessor. Cheque
+actions and reversals require a distinct reviewer to load and approve the exact
+command UUID before the original requester reloads and executes it. The same
+resource UUID must then reconcile through the declared REST readback,
+operation-specific MCP tool, and PostgreSQL runtime/RLS evidence.

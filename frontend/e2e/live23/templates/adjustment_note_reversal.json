@@ -1,6 +1,7 @@
 {
-  "template_schema": "aasopharma.live18.ui-template.v1",
-  "operation_id": "sales_return_reversal",
+  "template_schema": "aasopharma.live23.ui-variant-template.v1",
+  "scenario_id": "adjustment_note_reversal",
+  "operation_id": "adjustment_note_reversal",
   "lifecycle_mode": "split",
   "steps": {
     "missing_required_steps": [
@@ -10,18 +11,18 @@
     ],
     "prepare_steps": [
       {"actor":"requester","action":"goto","value":"/#/returns/commercial-reversal"},
-      {"actor":"requester","action":"select","locator":{"kind":"label","name":"Posted source type","exact":true},"value":"sales_return"},
-      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Exact source UUID","exact":true},"value":"{{resource_sales_return}}"},
+      {"actor":"requester","action":"select","locator":{"kind":"label","name":"Posted source type","exact":true},"value":"adjustment_note"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Exact source UUID","exact":true},"value":"{{resource_customer_credit_note}}"},
       {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Resolve exact posted source","exact":true}},
       {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Exact unreported source resolved. The command will create a direct counter-document.","exact":true},"value":"Exact unreported source resolved"},
-      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Why was the posted source erroneous?","exact":true},"value":"Erroneous duplicate sales-return posting"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Why was the posted source erroneous?","exact":true},"value":"Erroneous duplicate customer-credit note"},
       {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Prepare immutable review","exact":true}}
     ],
     "approval_steps": [
       {"actor":"reviewer","action":"goto","value":"/#/returns/commercial-reversal"},
       {"actor":"reviewer","action":"fill","locator":{"kind":"label","name":"Command UUID","exact":true},"value":"{{command_request_id}}"},
       {"actor":"reviewer","action":"click","locator":{"kind":"role","role":"button","name":"Load exact review","exact":true}},
-      {"actor":"reviewer","action":"expectText","locator":{"kind":"testId","name":"canonical-immutable-preview"},"value":"sales.return.reversal.post"},
+      {"actor":"reviewer","action":"expectText","locator":{"kind":"testId","name":"canonical-immutable-preview"},"value":"finance.adjustment_note.reversal.post"},
       {"actor":"reviewer","action":"click","locator":{"kind":"role","role":"button","name":"Approve as distinct reviewer","exact":true}}
     ],
     "execute_steps": [

@@ -67,6 +67,29 @@ export interface OperationFixture {
 export interface Live18Fixture {
   fixture_schema: 'aasopharma.live18.fixture.v1';
   operations: Record<string, OperationFixture>;
+  business_variants?: Record<string, OperationFixture>;
+}
+
+interface SupportedBusinessVariantRegistry {
+  schema: 'aasopharma.live23.supported-business-readiness.v1';
+  required_variant_count: number;
+  ready_count: number;
+  variants: Array<{
+    id: string;
+    operation_id: string;
+    status: 'ready';
+    exact_sha_required: true;
+    template: string;
+    depends_on_resources: string[];
+    schedule_after_operation: string;
+    command_operation: string;
+    prepare_tool: string;
+    approval_policy: ApprovalPolicy;
+    rest_readback: string;
+    mcp_readback_tool: string;
+    database_relations: string[];
+    posted_heading: string;
+  }>;
 }
 
 const repositoryRoot = path.resolve(__dirname, '../../../..');
@@ -152,6 +175,59 @@ export function loadReadyOperationMatrix(): OperationContract[] {
   return matrix.filter(item => readyIds.has(item.id));
 }
 
+export function loadSupportedBusinessVariantMatrix(): Array<OperationContract & {
+  posted_heading: string; schedule_after_operation: string;
+}> {
+  const registry = JSON.parse(fs.readFileSync(path.join(
+    repositoryRoot, 'backend/tests/live_acceptance/live23_supported_business_readiness.json',
+  ), 'utf8')) as SupportedBusinessVariantRegistry;
+  if (registry.schema !== 'aasopharma.live23.supported-business-readiness.v1'
+    || registry.required_variant_count !== 7 || registry.ready_count !== 7
+    || !Array.isArray(registry.variants) || registry.variants.length !== 7
+    || new Set(registry.variants.map(row => row.id)).size !== 7) {
+    throw new Error('The supported-business variant registry must contain exactly seven ready variants.');
+  }
+  const available = new Set([
+    'sales_invoice', 'sales_order', 'sales_return', 'purchase_return', 'customer_credit_note',
+  ]);
+  const schedule: Record<string, string> = {
+    customer_receipt_cheque_clearance: 'sales_order',
+    customer_cheque_clearance: 'sales_order',
+    customer_receipt_cheque_bounce: 'sales_order',
+    customer_cheque_bounce: 'sales_order',
+    sales_return_reversal: 'sales_return',
+    purchase_return_reversal: 'purchase_return',
+    adjustment_note_reversal: 'customer_credit_note',
+  };
+  return registry.variants.map(row => {
+    if (row.status !== 'ready' || row.exact_sha_required !== true
+      || !row.id || !row.operation_id || !row.command_operation || !row.prepare_tool
+      || !row.rest_readback || !row.mcp_readback_tool || !row.posted_heading
+      || row.schedule_after_operation !== schedule[row.id]
+      || !['actor_confirmation', 'separate_approver'].includes(row.approval_policy)
+      || !Array.isArray(row.database_relations) || row.database_relations.length === 0
+      || !Array.isArray(row.depends_on_resources) || row.depends_on_resources.length === 0
+      || row.depends_on_resources.some(resource => !available.has(resource))) {
+      throw new Error(`${row.id || 'unknown'} supported-business contract is incomplete or unordered.`);
+    }
+    available.add(row.id);
+    return {
+      id: row.id,
+      command_operation: row.command_operation,
+      prepare_tool: row.prepare_tool,
+      approval_policy: row.approval_policy,
+      rest_readback: row.rest_readback,
+      mcp_readback_tool: row.mcp_readback_tool,
+      database_relations: row.database_relations,
+      scenario_steps: [row.id],
+      availability: 'published' as const,
+      certification_status: 'ready' as const,
+      posted_heading: row.posted_heading,
+      schedule_after_operation: row.schedule_after_operation,
+    };
+  });
+}
+
 export function loadFixture(required: boolean): Live18Fixture | null {
   const fixturePath = process.env.LIVE18_FIXTURE_PATH?.trim();
   if (!fixturePath) {
@@ -178,6 +254,15 @@ export function loadFixture(required: boolean): Live18Fixture | null {
   const actual = Object.keys(fixture.operations).sort();
   if (JSON.stringify(actual) !== JSON.stringify(expected)) {
     throw new Error('The reviewed live18 fixture must name exactly the release-ready operations.');
+  }
+  const businessVariantsRequired = process.env.LIVE23_BUSINESS_VARIANTS_REQUIRED === 'true';
+  const businessMatrix = loadSupportedBusinessVariantMatrix();
+  if (businessVariantsRequired) {
+    const expectedVariants = businessMatrix.map(item => item.id).sort();
+    const actualVariants = Object.keys(fixture.business_variants || {}).sort();
+    if (JSON.stringify(actualVariants) !== JSON.stringify(expectedVariants)) {
+      throw new Error('The reviewed fixture must name exactly seven supported-business variants.');
+    }
   }
   const supportedActions: UiAction[] = [
     'goto', 'click', 'fill', 'select', 'setInputFiles', 'press', 'expectText', 'expectDisabled',
@@ -260,5 +345,24 @@ export function loadFixture(required: boolean): Live18Fixture | null {
     }
   }
   assertExactCommandTargets(fixture.operations);
+  if (fixture.business_variants) {
+    for (const [variantId, operation] of Object.entries(fixture.business_variants)) {
+      const contract = businessMatrix.find(item => item.id === variantId);
+      if (!contract) throw new Error(`${variantId} is not a reviewed supported-business variant.`);
+      if (!['split', 'combined_actor_confirmation'].includes(operation.lifecycle_mode)
+        || (operation.lifecycle_mode === 'combined_actor_confirmation'
+          && contract.approval_policy !== 'actor_confirmation')) {
+        throw new Error(`${variantId} has an invalid lifecycle policy.`);
+      }
+      for (const phase of [
+        'missing_required_steps', 'prepare_steps', 'approval_steps', 'execute_steps',
+      ] as const) {
+        if (!Array.isArray(operation[phase]) || operation[phase].length === 0) {
+          throw new Error(`${variantId}.${phase} must contain visible UI steps.`);
+        }
+      }
+    }
+    assertExactCommandTargets(fixture.business_variants);
+  }
   return fixture;
 }

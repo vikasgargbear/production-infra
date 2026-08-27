@@ -65,7 +65,10 @@ def test_stock_and_journal_effect_sets_cover_posting_operations() -> None:
     assert {
         "sales.dispatch", "sales.invoice", "sales.return",
         "procurement.supplier_invoice", "procurement.purchase_return",
-        "finance.customer_receipt", "finance.supplier_payment",
+        "finance.customer_receipt", "finance.customer_cheque_clearance",
+        "finance.customer_cheque_bounce", "finance.supplier_payment",
         "finance.supplier_advance", "finance.adjustment_note",
+        "sales.return.reversal", "procurement.purchase_return.reversal",
+        "finance.adjustment_note.reversal",
         "finance.expense_claim", "inventory.adjustment", "inventory.destruction",
     } == JOURNAL_EFFECT_OPERATIONS

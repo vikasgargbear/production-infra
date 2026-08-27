@@ -21,6 +21,7 @@ from scripts.live18_evidence_contract import MANDATORY_LINEAGE_PATHS
 from .contract import load_ready_operation_matrix
 from .mcp_readback import mcp_readback_arguments
 from .readback_consistency import assert_canonical_projection_consistency
+from scripts.live_acceptance.live23_variants import load_supported_business_registry
 
 
 pytestmark = pytest.mark.integration
@@ -145,6 +146,34 @@ def _captured_database_evidence() -> dict[str, Any] | None:
         "network_family": 6,
         "transport": "supabase_direct_ipv6_from_railway",
     }
+    return artifact
+
+
+@lru_cache(maxsize=1)
+def _captured_business_variant_database_evidence() -> dict[str, Any] | None:
+    value = os.environ.get(
+        "PHARMA_CANONICAL_BUSINESS_VARIANT_DATABASE_EVIDENCE_PATH", ""
+    ).strip()
+    if not value:
+        return None
+    path = Path(value)
+    assert path.is_absolute(), "variant database evidence path must be absolute"
+    artifact = json.loads(path.read_text(encoding="utf-8"))
+    assert artifact.get("schema") == "aasopharma.live18.railway-database-response.v1"
+    assert artifact.get("action") == "capture-evidence"
+    assert artifact.get("evidence_scope") == "supported_business_variants"
+    expected_hash = artifact.get("content_sha256")
+    unsigned = {key: item for key, item in artifact.items() if key != "content_sha256"}
+    actual_hash = hashlib.sha256(
+        json.dumps(unsigned, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    assert expected_hash == actual_hash, "variant database evidence hash differs"
+    assert artifact.get("expected_sha") == os.environ.get(
+        "LIVE18_EXPECTED_DEPLOYED_SHA", ""
+    ).strip().lower()
+    assert artifact.get("project_ref") == os.environ.get(
+        "PHARMA_CANONICAL_LIVE_PROJECT_REF", ""
+    ).strip()
     return artifact
 
 
@@ -303,3 +332,92 @@ def test_browser_resource_reconciles_through_mcp_and_postgresql(
             resource_id=resource_id,
             database=database,
         )
+
+
+@pytest.mark.skipif(
+    os.environ.get("LIVE23_BUSINESS_VARIANTS_REQUIRED") != "true",
+    reason="exact-SHA supported-business variant reconciliation was not requested",
+)
+@pytest.mark.parametrize(
+    "contract",
+    load_supported_business_registry(),
+    ids=lambda contract: contract["id"],
+)
+def test_supported_business_variant_reconciles_through_mcp_and_postgresql(
+    contract,
+    canonical_live_config,
+    mcp_client,
+    request,
+) -> None:
+    evidence_value = os.environ.get("LIVE18_EVIDENCE_DIR", "").strip()
+    assert evidence_value, "LIVE18_EVIDENCE_DIR is required"
+    evidence_dir = Path(evidence_value) / "business-variants"
+    operation_id = contract["id"]
+    expected_sha = os.environ.get("LIVE18_EXPECTED_DEPLOYED_SHA", "").strip().lower()
+    evidence_path = evidence_dir / f"{operation_id}.json"
+    assert evidence_path.is_file(), f"missing variant evidence: {evidence_path}"
+    evidence = json.loads(evidence_path.read_text())
+    assert evidence["operation_id"] == operation_id
+    assert evidence["tested_sha"] == expected_sha
+    assert evidence["organization_id"] == str(canonical_live_config.test_org_id)
+    assert evidence["branch_id"] == str(canonical_live_config.test_branch_id)
+    assert evidence["requester_user_id"] != evidence["reviewer_user_id"]
+    command_id = str(uuid.UUID(evidence["command_request_id"]))
+    resource_id = str(uuid.UUID(evidence["resource_id"]))
+
+    mcp_status = mcp_client.call(
+        "erp_operation_status_get", {"command_request_id": command_id}
+    )
+    _assert_mcp_identity(
+        mcp_status,
+        command_id=command_id,
+        resource_id=resource_id,
+        require_command_id=True,
+    )
+    assert _find(mcp_status, "status") == "succeeded"
+    declared_tool = contract["mcp_readback_tool"]
+    declared_readback = mcp_client.call(
+        declared_tool,
+        mcp_readback_arguments(
+            declared_tool,
+            branch_id=evidence["branch_id"],
+            command_id=command_id,
+            resource_id=resource_id,
+        ),
+    )
+    _assert_mcp_identity(
+        declared_readback,
+        command_id=command_id,
+        resource_id=resource_id,
+    )
+    operation = contract["command_operation"].removesuffix(".prepare")
+    captured = _captured_business_variant_database_evidence()
+    if captured is None:
+        reconciler = request.getfixturevalue("reconciler")
+        denial_db_query = request.getfixturevalue("denial_db_query")
+        database = reconciler.reconcile(
+            command_id,
+            operation,
+            resource_id,
+            _preview(evidence),
+            _validated_prepare_request(evidence),
+        )
+        reconciler.assert_cross_tenant_denied(
+            operation, resource_id, denial_db_query,
+        )
+    else:
+        assert captured["expected_sha"] == expected_sha
+        assert captured["project_ref"] == canonical_live_config.project_ref
+        row = captured["resources"][operation_id]
+        assert row["command_operation"] == contract["command_operation"]
+        assert row["command_request_id"] == command_id
+        assert row["resource_id"] == resource_id
+        assert row["cross_tenant_denied"] is True
+        database = row["database"]
+    assert database, f"{operation_id} produced no database reconciliation evidence"
+    assert_canonical_projection_consistency(
+        operation,
+        rest=evidence["rest_readback"],
+        mcp=declared_readback,
+        database=database,
+    )

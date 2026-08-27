@@ -77,6 +77,12 @@ MAX_REQUEST_BYTES = 8 * 1024 * 1024
 OPERATION_MATRIX_PATH = (
     BACKEND_DIRECTORY / "tests" / "live_acceptance" / "operation_matrix.json"
 )
+SUPPORTED_BUSINESS_MATRIX_PATH = (
+    BACKEND_DIRECTORY
+    / "tests"
+    / "live_acceptance"
+    / "live23_supported_business_readiness.json"
+)
 DEPLOYMENT_PROVENANCE_PATH = Path("/app/.railway-deployment-provenance")
 REMOTE_STATE_ROOT = Path("/tmp")
 EXPECTED_RAILWAY_API_ORIGIN = (
@@ -241,6 +247,30 @@ def _ready_operations() -> list[dict[str, Any]]:
     ):
         raise RailwayDatabasePhaseError("Packaged Live18 operation matrix is incomplete")
     return ready
+
+
+def _supported_business_operations() -> list[dict[str, Any]]:
+    value = json.loads(SUPPORTED_BUSINESS_MATRIX_PATH.read_text(encoding="utf-8"))
+    rows = value.get("variants") if isinstance(value, dict) else None
+    if (
+        value.get("schema") != "aasopharma.live23.supported-business-readiness.v1"
+        or value.get("required_variant_count") != 7
+        or value.get("ready_count") != 7
+        or not isinstance(rows, list)
+        or len(rows) != 7
+        or any(
+            not isinstance(row, dict)
+            or row.get("status") != "ready"
+            or not row.get("id")
+            or not row.get("command_operation")
+            for row in rows
+        )
+        or len({row["id"] for row in rows}) != len(rows)
+    ):
+        raise RailwayDatabasePhaseError(
+            "Packaged supported-business variant matrix is incomplete"
+        )
+    return rows
 
 
 def _write_response(value: dict[str, Any], path: str) -> None:
@@ -1306,7 +1336,13 @@ def _evidence_capture(request: dict[str, Any]) -> dict[str, Any]:
     evidence_pack = request.get("evidence")
     if not isinstance(evidence_pack, dict):
         raise RailwayDatabasePhaseError("Browser evidence pack is missing")
-    contracts = _ready_operations()
+    evidence_scope = request.get("evidence_scope", "live18")
+    if evidence_scope == "live18":
+        contracts = _ready_operations()
+    elif evidence_scope == "supported_business_variants":
+        contracts = _supported_business_operations()
+    else:
+        raise RailwayDatabasePhaseError("Browser evidence scope is invalid")
     if set(evidence_pack) != {str(contract["id"]) for contract in contracts}:
         raise RailwayDatabasePhaseError("Browser evidence does not cover all ready operations")
 
@@ -1397,6 +1433,7 @@ def _evidence_capture(request: dict[str, Any]) -> dict[str, Any]:
     response = {
         "schema": RESPONSE_SCHEMA,
         "action": "capture-evidence",
+        "evidence_scope": evidence_scope,
         **_response_boundary(request),
         "organization_id": organization_id,
         "denial_organization_id": denial_organization_id,

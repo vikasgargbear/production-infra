@@ -8,7 +8,8 @@ import {
 
 import { loadBrowserConfig, verifyDeployedSha } from '../support/live18/config';
 import {
-  loadFixture, loadReadyOperationMatrix, OperationContract, OperationFixture, UiStep,
+  loadFixture, loadReadyOperationMatrix, loadSupportedBusinessVariantMatrix,
+  OperationContract, OperationFixture, UiStep,
 } from '../support/live18/contracts';
 import {
   buildOperationFailureEvidence, OperationFailureProgress, writeOperationFailureEvidence,
@@ -28,7 +29,9 @@ import { captureLive18Screenshot } from './screenshotEvidence';
 import type { Live18ScreenshotEvidence } from './screenshotEvidence';
 
 const requiredLiveRun = process.env.LIVE18_REQUIRED === 'true';
+const requiredBusinessVariantRun = process.env.LIVE23_BUSINESS_VARIANTS_REQUIRED === 'true';
 const matrix = loadReadyOperationMatrix();
+const businessVariantMatrix = loadSupportedBusinessVariantMatrix();
 const fixture = loadFixture(requiredLiveRun);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PREVIEW_HASH = /^sha256:[0-9a-f]{64}$/i;
@@ -52,6 +55,13 @@ const POSTED_UI_HEADING: Record<string, string> = {
   supplier_debit_note: 'Posted and reconciled',
   supplier_invoice: 'Supplier Invoice Posted',
   supplier_payment: 'Supplier payment reconciled',
+  customer_receipt_cheque_clearance: 'Customer advance posted and reconciled against the authoritative goods order.',
+  customer_cheque_clearance: 'Cheque terminal action posted and reconciled',
+  customer_receipt_cheque_bounce: 'Customer advance posted and reconciled against the authoritative goods order.',
+  customer_cheque_bounce: 'Cheque terminal action posted and reconciled',
+  sales_return_reversal: 'Authoritative compensating readback',
+  purchase_return_reversal: 'Authoritative compensating readback',
+  adjustment_note_reversal: 'Authoritative compensating readback',
 };
 
 type CompletedResources = Record<`resource_${string}`, string>;
@@ -60,6 +70,14 @@ function evidenceRoot(): string {
   const value = process.env.LIVE18_EVIDENCE_DIR?.trim();
   if (!value) throw new Error('LIVE18_EVIDENCE_DIR is required for UUID reconciliation.');
   return value;
+}
+
+const businessVariantIds = new Set(businessVariantMatrix.map(({ id }) => id));
+
+function operationEvidenceRoot(operationId: string): string {
+  return businessVariantIds.has(operationId)
+    ? path.join(evidenceRoot(), 'business-variants')
+    : evidenceRoot();
 }
 
 function resourceStatePath(): string {
@@ -310,6 +328,7 @@ async function runOperation(
         && item.path === preparePath && (item.status === 400 || item.status === 422));
       screenshotEvidence.push(await captureLive18Screenshot(
         requesterPage, config, contract.id, 'missing-required',
+        businessVariantIds.has(contract.id) ? 'business-variants' : 'live18',
       ));
       browserHealth.clear();
       captured.length = 0;
@@ -452,6 +471,7 @@ async function runOperation(
       await postedResourceEvidence.scrollIntoViewIfNeeded();
       screenshotEvidence.push(await captureLive18Screenshot(
         requesterPage, config, contract.id, 'posted',
+        businessVariantIds.has(contract.id) ? 'business-variants' : 'live18',
       ));
 
       beginStage(progress, 'rest_readback');
@@ -497,7 +517,7 @@ async function runOperation(
         screenshots: screenshotEvidence,
         cleanup_id: findDeep(executions[0].responseBody, 'reversal_command_id') || null,
       };
-      const root = evidenceRoot();
+      const root = operationEvidenceRoot(contract.id);
       fs.mkdirSync(root, { recursive: true });
       const evidencePath = path.join(root, `${contract.id}.json`);
       fs.writeFileSync(evidencePath, JSON.stringify(evidence, null, 2));
@@ -509,7 +529,7 @@ async function runOperation(
   } catch (error) {
     try {
       writeOperationFailureEvidence(
-        evidenceRoot(),
+        operationEvidenceRoot(contract.id),
         buildOperationFailureEvidence(config.expectedSha, contract.id, progress, error),
       );
     } catch (evidenceError) {
@@ -545,5 +565,25 @@ test.describe('canonical ERP live18 desktop certification', () => {
       );
       await runOperation(browser, contract, operationFixture!);
     });
+    for (const variant of businessVariantMatrix.filter(
+      candidate => candidate.schedule_after_operation === contract.id,
+    )) {
+      test(`${variant.id}: visible variant UI to REST readback emits canonical UUID evidence`, async ({ browser }) => {
+        test.skip(
+          !requiredBusinessVariantRun,
+          'Set LIVE23_BUSINESS_VARIANTS_REQUIRED=true for the exact-SHA supported-business run.',
+        );
+        const operationFixture = fixture?.business_variants?.[variant.id];
+        expect(operationFixture, `${variant.id} lacks reviewed supported-business UI input`).toBeTruthy();
+        const missingResources = missingOperationResourceDependencies(
+          operationFixture!, loadCompletedResources(),
+        );
+        test.skip(
+          missingResources.length > 0,
+          `${variant.id} requires exact predecessor readback(s): ${missingResources.join(', ')}`,
+        );
+        await runOperation(browser, variant, operationFixture!);
+      });
+    }
   }
 });

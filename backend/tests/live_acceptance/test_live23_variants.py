@@ -9,8 +9,12 @@ from scripts.live_acceptance.live23_variants import (
     EXPECTED_VARIANTS,
     Live23VariantError,
     compile_ready_variant,
+    compile_supported_business_variants,
+    derive_customer_cheque_receipt_choices,
     derive_final_return_choices,
     load_variant_registry,
+    load_supported_business_registry,
+    SUPPORTED_BUSINESS_VARIANTS,
 )
 
 
@@ -58,12 +62,14 @@ def _scalars() -> dict[str, str]:
         "purchase_return_gst_treatment_label": "Tax reversal",
         "purchase_return_transport_mode_label": "Road",
         "purchase_return_distance_km": "12.50",
+        "customer_receipt_amount": "168.00",
     }
 
 
 def _facts() -> dict[str, object]:
     return {
         "identity": {
+            "branch_id": "d3000000-0000-7000-8000-000000000010",
             "customer_account_id": "d3000000-0000-7000-8000-000000000011",
             "supplier_account_id": "d3000000-0000-7000-8000-000000000012",
             "supplier_destination_address_id": "d3000000-0000-7000-8000-00000000001a",
@@ -76,7 +82,10 @@ def _facts() -> dict[str, object]:
             "sez_delivery_address_row_version": "1",
             "product_id": "d3000000-0000-7000-8000-000000000018",
             "direct_issue_batch_id": "d3000000-0000-7000-8000-000000000019",
+            "customer_receipt_evidence_attachment_id": "d3000000-0000-7000-8000-000000000020",
+            "bank_account_id": "d3000000-0000-7000-8000-000000000021",
         },
+        "clock": {"business_date": "2026-08-28"},
         "display": {
             "customer_code": "LIVE23-CUSTOMER",
             "supplier_code": "LIVE23-SUPPLIER",
@@ -225,3 +234,70 @@ def test_invoice_variants_compile_only_canonical_customer_and_policy_choices(
     assert f'"value": "{mode}"' in serialized
     assert serialized.count("Generate Invoice") == 1
     assert "{{command_request_id}}" in serialized
+
+
+def test_supported_business_registry_is_exact_ordered_and_dependency_bound() -> None:
+    rows = load_supported_business_registry()
+    assert tuple(row["id"] for row in rows) == SUPPORTED_BUSINESS_VARIANTS
+    assert rows[0]["depends_on_resources"] == ["sales_order"]
+    assert rows[1]["depends_on_resources"] == [
+        "customer_receipt_cheque_clearance"
+    ]
+    assert rows[3]["depends_on_resources"] == [
+        "customer_receipt_cheque_bounce"
+    ]
+    assert rows[2]["depends_on_resources"] == ["sales_order"]
+    assert [row["schedule_after_operation"] for row in rows] == [
+        "sales_order", "sales_order", "sales_order", "sales_order",
+        "sales_return", "purchase_return", "customer_credit_note",
+    ]
+    assert rows[4]["depends_on_resources"] == ["sales_return"]
+    assert rows[5]["depends_on_resources"] == ["purchase_return"]
+    assert rows[6]["depends_on_resources"] == ["customer_credit_note"]
+
+
+def test_supported_business_variants_compile_to_visible_exact_resource_chains() -> None:
+    operations = compile_supported_business_variants(_facts(), _scalars())
+    assert tuple(operations) == SUPPORTED_BUSINESS_VARIANTS
+    assert "{{resource_sales_order}}" in json.dumps(
+        operations["customer_receipt_cheque_clearance"]
+    )
+    assert "{{resource_sales_order}}" in json.dumps(
+        operations["customer_receipt_cheque_bounce"]
+    )
+    assert '"value": "84.00"' in json.dumps(
+        operations["customer_receipt_cheque_clearance"]
+    )
+    assert '"value": "84.00"' in json.dumps(
+        operations["customer_receipt_cheque_bounce"]
+    )
+    clearance = json.dumps(operations["customer_cheque_clearance"])
+    bounce = json.dumps(operations["customer_cheque_bounce"])
+    assert "{{resource_customer_receipt_cheque_clearance}}" in clearance
+    assert "{{resource_customer_receipt_cheque_bounce}}" in bounce
+    assert "finance.customer_cheque_clearance.post" in clearance
+    assert "finance.customer_cheque_bounce.post" in bounce
+    for scenario_id, resource in (
+        ("sales_return_reversal", "{{resource_sales_return}}"),
+        ("purchase_return_reversal", "{{resource_purchase_return}}"),
+        ("adjustment_note_reversal", "{{resource_customer_credit_note}}"),
+    ):
+        serialized = json.dumps(operations[scenario_id])
+        assert resource in serialized
+        assert "Approve as distinct reviewer" in serialized
+        assert "Execute as requester" in serialized
+
+
+def test_customer_cheque_receipts_split_the_reviewed_ceiling_exactly() -> None:
+    assert derive_customer_cheque_receipt_choices(
+        {"customer_receipt_amount": "168.01"}
+    ) == {
+        "customer_receipt_cheque_clearance_amount": "84.00",
+        "customer_receipt_cheque_bounce_amount": "84.01",
+    }
+    with pytest.raises(
+        Live23VariantError, match="must fund two positive cheque receipts"
+    ):
+        derive_customer_cheque_receipt_choices(
+            {"customer_receipt_amount": "0.01"}
+        )

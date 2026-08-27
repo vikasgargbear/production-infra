@@ -1323,6 +1323,7 @@ def test_live18_is_opt_in_exact_sha_external_fixture_and_always_cleaned():
         "Verify exact migration head and provision same-run demo over Railway direct IPv6",
         "Provision disposable identities and MCP authority over Railway direct IPv6",
         "Capture PostgreSQL evidence from exact Railway deployment over direct IPv6",
+        "Capture supported-business variant PostgreSQL evidence separately",
         "Always clean Railway-direct temporary identities and authorities",
         "Re-close canonical authority immediately after any Live18 failure",
         "Re-close canonical authority after any identity cleanup failure",

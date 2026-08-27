@@ -63,8 +63,12 @@ export async function captureLive18Screenshot(
   config: Live18BrowserConfig,
   operationId: string,
   stage: Live18ScreenshotStage,
+  collection: 'live18' | 'business-variants' = 'live18',
 ): Promise<Live18ScreenshotEvidence> {
-  const directory = screenshotEvidenceDirectory(config);
+  const root = screenshotEvidenceDirectory(config);
+  const directory = collection === 'business-variants'
+    ? path.join(root, 'business-variants')
+    : root;
   const filename = screenshotEvidenceFilename(operationId, stage);
   const destination = path.join(directory, filename);
   if (!destination.startsWith(`${directory}${path.sep}`)) {

@@ -391,6 +391,16 @@ def resolve_authoritative_facts(
          AND destination_branch.status='active' AND destination.status='active'
          AND bank.status='active' AND ledger.status='active'
     """
+    customer_receipt_evidence_sql = """
+      SELECT attachment.id::text
+        FROM core.attachments attachment
+       WHERE attachment.org_id=%s
+         AND attachment.storage_bucket='canonical-demo-evidence'
+         AND attachment.storage_object_path=%s
+         AND attachment.evidence_kind='customer_receipt_evidence'
+         AND attachment.status IN ('verified','retained')
+         AND attachment.verified_at IS NOT NULL
+    """
     params = (
         identities["customer_account_id"], identities["supplier_account_id"],
         identities["product_id"], identities["uom_conversion_id"],
@@ -997,6 +1007,14 @@ def resolve_authoritative_facts(
                 ),
             )
             destruction_rows = cursor.fetchall()
+            cursor.execute(
+                customer_receipt_evidence_sql,
+                (
+                    org_id,
+                    f"demo/customer-receipt-evidence-{run_token}.json",
+                ),
+            )
+            customer_receipt_evidence_rows = cursor.fetchall()
         connection.rollback()
     if len(rows) != 1:
         raise FixtureCompileError(f"authoritative selector facts resolved {len(rows)} rows, expected one")
@@ -1050,6 +1068,10 @@ def resolve_authoritative_facts(
         raise FixtureCompileError(
             "run-scoped GST destruction stock, ITC lineage, rule, return, and evidence "
             f"resolved {len(destruction_rows)} rows, expected one"
+        )
+    if len(customer_receipt_evidence_rows) != 1:
+        raise FixtureCompileError(
+            "run-scoped retained customer-receipt evidence must resolve exactly once"
         )
     (
         supplier_invoice_portal_line_id,
@@ -1156,6 +1178,9 @@ def resolve_authoritative_facts(
                 "sez_delivery_address_row_version": variant_customers["sez"][4],
             } if variant_customers else {}),
             "cycle_count_evidence_attachment_id": cycle_count_evidence_id,
+            "customer_receipt_evidence_attachment_id": (
+                customer_receipt_evidence_rows[0][0]
+            ),
             "cycle_count_counted_by_membership_id": cycle_count_membership_id,
             "bank_reconciliation_statement_id": bank_statement_id,
             "bank_reconciliation_statement_line_id": bank_statement_line_id,
@@ -1999,6 +2024,14 @@ def main() -> None:
         load_reviewed_scalars(args.reviewed_scalars),
         args.readiness,
     )
+    if os.getenv("LIVE23_BUSINESS_VARIANTS_REQUIRED") == "true":
+        from scripts.live_acceptance.live23_variants import (
+            compile_supported_business_variants,
+        )
+        fixture["business_variants"] = compile_supported_business_variants(
+            facts,
+            load_reviewed_scalars(args.reviewed_scalars),
+        )
     args.output.write_text(json.dumps(fixture, separators=(",", ":")) + "\n", encoding="utf-8")
     args.output.chmod(0o600)
 

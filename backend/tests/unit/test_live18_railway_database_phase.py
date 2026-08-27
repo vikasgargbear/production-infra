@@ -1395,3 +1395,32 @@ def test_packaged_remote_matrix_covers_all_17_ready_operations():
     assert len(operations) == 17
     assert len({row["command_operation"] for row in operations}) == 16
     assert "expense_claim" not in {row["id"] for row in operations}
+
+
+def test_packaged_remote_matrix_covers_supported_business_variants_separately():
+    operations = phase._supported_business_operations()
+    assert [row["id"] for row in operations] == [
+        "customer_receipt_cheque_clearance",
+        "customer_cheque_clearance",
+        "customer_receipt_cheque_bounce",
+        "customer_cheque_bounce",
+        "sales_return_reversal",
+        "purchase_return_reversal",
+        "adjustment_note_reversal",
+    ]
+    assert {row["status"] for row in operations} == {"ready"}
+
+
+def test_production_readiness_runs_supported_variants_without_inflating_live18_evidence():
+    workflow = (
+        phase.BACKEND_DIRECTORY.parent
+        / ".github/workflows/production-readiness.yml"
+    ).read_text(encoding="utf-8")
+    assert 'LIVE23_BUSINESS_VARIANTS_REQUIRED: "true"' in workflow
+    assert "variant_discovered" in workflow
+    assert "visible variant UI to REST readback" in workflow
+    assert '"evidence_scope": "supported_business_variants"' in workflow
+    assert "PHARMA_CANONICAL_BUSINESS_VARIANT_DATABASE_EVIDENCE_PATH" in workflow
+    assert 'Path(os.environ["LIVE18_EVIDENCE_DIR"]) / "business-variants"' in workflow
+    assert '--evidence-dir "$LIVE18_EVIDENCE_DIR"' in workflow
+    assert '--operation-matrix backend/tests/live_acceptance/operation_matrix.json' in workflow
