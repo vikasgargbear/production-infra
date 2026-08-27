@@ -10,18 +10,45 @@ Usage:
   GET /api/schema/{schema_name}/{table_name} - Get specific table columns
 """
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-from typing import Optional
-import json
-import logging
 
 from ...core.database import get_db
 from ...core.auth.org_context import get_org_context, OrgContext
 from ...core.security.permissions import PermissionChecker
 
 router = APIRouter(prefix="/schema", tags=["Schema Documentation"])
+
+# Data-bearing schemas installed by the canonical Alembic baseline.  Command,
+# invariant, and security function schemas are intentionally not exposed as
+# application data catalogs.
+CANONICAL_DATA_SCHEMAS = (
+    "automation",
+    "calculation",
+    "catalog",
+    "compliance",
+    "core",
+    "finance",
+    "hr",
+    "inventory",
+    "parties",
+    "procurement",
+    "sales",
+    "tax",
+)
+_CANONICAL_DATA_SCHEMA_SET = frozenset(CANONICAL_DATA_SCHEMAS)
+
+
+def _require_canonical_data_schema(schema_name: str) -> str:
+    if schema_name not in _CANONICAL_DATA_SCHEMA_SET:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Canonical data schema '{schema_name}' is not published",
+        )
+    return schema_name
 
 
 @router.get("/all")
@@ -35,19 +62,18 @@ async def get_all_schemas(
     Returns all schemas, tables, and columns from the live database.
     """
     try:
-        # Get all schemas we care about
+        # Publish only the data schemas owned by the canonical Alembic chain.
         schemas_query = """
             SELECT schema_name
             FROM information_schema.schemata
-            WHERE schema_name IN (
-                'master', 'inventory', 'parties', 'sales', 
-                'procurement', 'financial', 'gst', 'compliance',
-                'analytics', 'system_config'
-            )
+            WHERE schema_name = ANY(CAST(:schema_names AS text[]))
             ORDER BY schema_name
         """
         # P3-9: Safety LIMIT to prevent loading entire DB
-        schemas_result = db.execute(text(schemas_query + " LIMIT 100"))
+        schemas_result = db.execute(
+            text(schemas_query + " LIMIT 100"),
+            {"schema_names": list(CANONICAL_DATA_SCHEMAS)},
+        )
         schemas = [row[0] for row in schemas_result]
         
         result = {}
@@ -138,6 +164,7 @@ async def get_schema(
     """
     Get all tables and columns for a specific schema.
     """
+    schema_name = _require_canonical_data_schema(schema_name)
     try:
         # Get all tables in this schema
         tables_query = """
@@ -215,6 +242,7 @@ async def get_table(
     """
     Get column details for a specific table.
     """
+    schema_name = _require_canonical_data_schema(schema_name)
     try:
         # Get all columns for this table
         columns_query = """
@@ -262,49 +290,6 @@ async def get_table(
             "columns": columns,
             "column_names": [c["name"] for c in columns],
             "column_count": len(columns)
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logging.getLogger(__name__).error(f"Table query failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to retrieve table information")
-
-
-@router.get("/quick/{schema_name}/{table_name}")
-async def get_table_columns_quick(
-    schema_name: str,
-    table_name: str,
-    _: dict = Depends(PermissionChecker("master", "view")),
-    db: Session = Depends(get_db),
-    context: OrgContext = Depends(get_org_context),
-):
-    """
-    Get just the column names for a specific table (simplified for quick reference).
-    Perfect for checking what columns exist before writing a query.
-    """
-    try:
-        columns_query = """
-            SELECT column_name
-            FROM information_schema.columns
-            WHERE table_schema = :schema_name
-              AND table_name = :table_name
-            ORDER BY ordinal_position
-            LIMIT 500  -- P3-9: Safety limit
-        """
-        columns_result = db.execute(text(columns_query), {
-            "schema_name": schema_name,
-            "table_name": table_name
-        })
-        
-        columns = [row[0] for row in columns_result]
-        
-        if not columns:
-            raise HTTPException(status_code=404, detail=f"Table '{schema_name}.{table_name}' not found")
-        
-        return {
-            "table": f"{schema_name}.{table_name}",
-            "columns": columns
         }
         
     except HTTPException:

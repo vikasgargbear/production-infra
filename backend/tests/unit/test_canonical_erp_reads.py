@@ -1955,45 +1955,25 @@ def test_party_address_state_code_has_no_application_owned_name_mapping() -> Non
         )
 
 
-class ProductDraftDeleteDatabase:
-    def __init__(self) -> None:
-        self.product_id = uuid4()
-        self.statements = []
-        self.commits = 0
-        self.rollbacks = 0
+def test_delete_product_draft_fails_closed_without_a_canonical_command() -> None:
+    class UnexpectedDatabaseUse:
+        def __getattr__(self, name):
+            raise AssertionError(f"product deletion used database.{name}")
 
-    def execute(self, statement, params):
-        sql = str(statement)
-        self.statements.append(sql)
-        if "activate_context" in sql:
-            return SimpleNamespace()
-        if "DELETE FROM catalog.products" in sql:
-            row = SimpleNamespace(id=self.product_id, sku="DRAFT-E2E", name="E2E draft")
-            return SimpleNamespace(first=lambda: row)
-        raise AssertionError(sql)
+    with pytest.raises(HTTPException) as error:
+        canonical_erp_reads.delete_product_draft(
+            uuid4(),
+            user={"org_id": str(uuid4()), "auth_user_id": str(uuid4())},
+            db=UnexpectedDatabaseUse(),
+        )
 
-    def commit(self):
-        self.commits += 1
-
-    def rollback(self):
-        self.rollbacks += 1
-
-
-def test_delete_product_draft_is_bounded_to_draft_lifecycle() -> None:
-    database = ProductDraftDeleteDatabase()
-    result = canonical_erp_reads.delete_product_draft(
-        database.product_id,
-        user={"org_id": str(uuid4()), "auth_user_id": str(uuid4())},
-        db=database,
+    assert error.value.status_code == 503
+    assert error.value.detail == (
+        "Product draft deletion is unavailable until its canonical command is installed"
     )
-
-    assert result["success"] is True
-    assert result["product_id"] == database.product_id
-    assert database.commits == 1
-    assert database.rollbacks == 0
-    sql = "\n".join(database.statements)
-    assert "DELETE FROM catalog.products" in sql
-    assert "status='draft'" in sql
+    assert "DELETE FROM catalog.products" not in inspect.getsource(
+        canonical_erp_reads.delete_product_draft
+    )
 
 
 def test_tax_master_does_not_double_count_intra_and_interstate_rates() -> None:
