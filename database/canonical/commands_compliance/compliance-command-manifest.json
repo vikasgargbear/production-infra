@@ -49,7 +49,7 @@
   },
   "manifest_version": "1.0.0",
   "mapping_file": "baseline-compliance-command-enforcements.json",
-  "mapping_sha256": "b07f6e8ed9a14b93efee6a60b6381c5989da2b84c6696158049164b4f2bf25b1",
+  "mapping_sha256": "c7878f580c91d1a71b69d991390fe9908185695c4eea770379f821591b461f65",
   "postgresql": "15+",
   "resolved_count": 16,
   "resolved_invariants": [

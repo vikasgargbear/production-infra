@@ -66,6 +66,16 @@ FUNCTION_SOURCE_OVERRIDES = {
     ("erp_automation_commands", "resolve_purchase_return_prepare"): (
         "20260825_0010_return_reason_authority.sql"
     ),
+    # Revision 0039 evolves these functions from their immutable 0012
+    # definitions.  Revalidating the historical package must continue to read
+    # the exact definitions owned by 0012 rather than back-writing the newer
+    # tenant-timezone semantics into migration history.
+    ("erp_commercial_commands", "post_sales_return"): (
+        "20260825_0012_canonical_command_definitions.sql"
+    ),
+    ("erp_commercial_commands", "post_purchase_return"): (
+        "20260825_0012_canonical_command_definitions.sql"
+    ),
 }
 
 CONSTRAINT_TARGETS = (
@@ -97,7 +107,13 @@ def _function_definition(relative_path: str, schema: str, function: str) -> str:
         end = source.find("$function$;", start)
         if end < 0:
             raise RuntimeError(f"reviewed override is unterminated for {prefix} in {override}")
-        return source[start : end + len("$function$;")]
+        definition = source[start : end + len("$function$;")]
+        if override == OUTPUT_PATH.name:
+            # A post-0012 evolution may freeze its predecessor by reading the
+            # immutable 0012 package itself.  The outer packager owns the
+            # statement separator, so do not duplicate that existing byte.
+            definition = definition[:-1]
+        return definition
 
     artifact = _artifact(relative_path)
     enforcements = artifact.get("enforcements", artifact.get("platform_enforcements"))

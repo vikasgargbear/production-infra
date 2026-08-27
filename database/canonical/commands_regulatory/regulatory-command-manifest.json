@@ -5,10 +5,10 @@
     "current_catalog_resolved": 8,
     "pre_correction_global_net": -1
   },
-  "catalog_sha256": "fbb0f9e88cc227131c83669df326c507621154a40fe56a71ac1a116bb1c6e4d8",
+  "catalog_sha256": "e4ce378b2410a2b9b6d239b6a43f610435fc7935613167cbaae73f77ff3d848f",
   "manifest_version": "1.0.0",
   "mapping_file": "baseline-regulatory-command-enforcements.json",
-  "mapping_sha256": "d02a7b1863b12fc0817120e1ca6bdac123342287edf1f5ca1318f42d87e3ed80",
+  "mapping_sha256": "0d867c3e67c89c8e516adf397e0bcd8ccc9bdf8d35fdddf5ec4c8875c0fceb29",
   "postgresql": "15+",
   "regulated_seed_status": {
     "baseline_seed_blockers_removed": 7,

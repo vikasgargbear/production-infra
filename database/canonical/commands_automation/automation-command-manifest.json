@@ -1,7 +1,7 @@
 {
   "blocked_count": 0,
   "blocked_invariants": {},
-  "catalog_sha256": "fbb0f9e88cc227131c83669df326c507621154a40fe56a71ac1a116bb1c6e4d8",
+  "catalog_sha256": "e4ce378b2410a2b9b6d239b6a43f610435fc7935613167cbaae73f77ff3d848f",
   "dispatcher": {
     "adjustment_note_pilot_scope": {
       "required_matching": [
@@ -467,7 +467,7 @@
   },
   "manifest_version": "1.0.0",
   "mapping_file": "baseline-automation-command-enforcements.json",
-  "mapping_sha256": "f4b38c38ca7a0b77d7504a501e131e5556307452405f617fe103ef9fc570470f",
+  "mapping_sha256": "890ac8128360e51c8fcd98696642e5dfc86027942fa794e995d2c4c63d56318c",
   "postgresql": "15+",
   "resolved_count": 3,
   "resolved_invariants": [

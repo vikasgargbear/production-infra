@@ -194,7 +194,7 @@ def test_empty_regulated_ledgers_fail_closed_at_activation_and_posting() -> None
         "NEW.order_date",
         "NEW.invoice_date",
         "NEW.return_date",
-        "NEW.received_at::date",
+        "(NEW.received_at AT TIME ZONE organization.timezone)::date",
         "NEW.supplier_invoice_date",
     ):
         assert source_date in sql

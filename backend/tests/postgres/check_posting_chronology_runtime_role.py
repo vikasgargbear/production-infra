@@ -309,22 +309,18 @@ def main() -> None:
         fixture.IDS["tax_release"] = str(tax_rows[0][1])
     with psycopg2.connect(runtime_dsn) as connection:
         business_date = fixture.organization_business_date(connection)
-    # Batch identity validates conversion effectiveness against the UTC
-    # created_at date.  At a positive local offset near midnight, the reviewed
-    # master can therefore need to start one UTC day before the local business
-    # date while documents remain on the local date.
-    master_effective_date = min(business_date, datetime.now(timezone.utc).date())
+    previous_date = business_date - timedelta(days=1)
+    next_date = business_date + timedelta(days=1)
+    # This chronology fixture deliberately proves that a supplier document may
+    # predate its receipt by one day.  Its master and tax authority therefore
+    # begin on that exact earliest tested document date.  Runtime timestamps
+    # are still interpreted through the organization's locked timezone.
     with psycopg2.connect(admin_dsn) as connection:
-        fixture.seed_business_master(connection, business_date=master_effective_date)
-        fixture.seed_end_to_end_master(
-            connection, business_date=master_effective_date
-        )
+        fixture.seed_business_master(connection, business_date=previous_date)
+        fixture.seed_end_to_end_master(connection, business_date=previous_date)
         _seed_adjustment_authority(connection, business_date)
     with psycopg2.connect(runtime_dsn) as connection:
         fixture.activate_demo_product(connection)
-
-    previous_date = business_date - timedelta(days=1)
-    next_date = business_date + timedelta(days=1)
     with _service(runtime_url, calculator_url) as service:
         purchase_payload = fixture.purchase_order_payload(business_date=business_date)
         future_purchase = deepcopy(purchase_payload)

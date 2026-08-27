@@ -409,8 +409,11 @@ END
             "trigger",
             f'''
 DECLARE stale_product boolean:=false; effective_date date;
+        organization core.organizations%ROWTYPE;
 BEGIN
     IF NEW.status IS NOT DISTINCT FROM OLD.status THEN RETURN NEW; END IF;
+    SELECT * INTO STRICT organization FROM core.organizations
+     WHERE id=NEW.org_id AND status='active' FOR SHARE;
     CASE TG_TABLE_SCHEMA||'.'||TG_TABLE_NAME
       WHEN 'sales.orders' THEN
         IF NEW.status<>'approved' THEN RETURN NEW; END IF;
@@ -434,7 +437,7 @@ BEGIN
                  AND NOT "{SCHEMA}"."product_ready"(NEW.org_id,product_id,effective_date)) INTO stale_product;
       WHEN 'procurement.goods_receipts' THEN
         IF NEW.status<>'posted' THEN RETURN NEW; END IF;
-        effective_date:=NEW.received_at::date;
+        effective_date:=(NEW.received_at AT TIME ZONE organization.timezone)::date;
         SELECT EXISTS(SELECT 1 FROM procurement.goods_receipt_lines WHERE org_id=NEW.org_id AND goods_receipt_id=NEW.id AND product_id IS NOT NULL
                  AND NOT "{SCHEMA}"."product_ready"(NEW.org_id,product_id,effective_date)) INTO stale_product;
       WHEN 'procurement.supplier_invoices' THEN

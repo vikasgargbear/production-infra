@@ -1,6 +1,6 @@
 {
   "baseline_mapping_sha256": "7fcce7363749b305e79a7ebdd771fb112b6ecd05b6beff8ad049f0af28f99c1e",
-  "catalog_sha256": "3f30c1df4f77348d7763f63f3f1f7d82ec575b974610a9f0975d3ad3e461f84c",
+  "catalog_sha256": "16c69317dc3e543b2aabd1b081a66cb3d7e0be09756079a9adb72942913c8506",
   "manifest_version": "1.0.0",
   "resolved_platform_blocker_count": 15,
   "resolved_platform_blockers": {

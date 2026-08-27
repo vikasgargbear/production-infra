@@ -76,6 +76,7 @@ def _definitions() -> dict[str, list[str]]:
 DECLARE
     mrp_conversion_count integer;
     validate_mrp_conversion boolean;
+    organization_timezone text;
 BEGIN
     validate_mrp_conversion:=TG_OP='INSERT';
     IF TG_OP='UPDATE' THEN
@@ -86,6 +87,9 @@ BEGIN
         );
     END IF;
     IF validate_mrp_conversion THEN
+        SELECT timezone INTO STRICT organization_timezone
+          FROM core.organizations
+         WHERE id=NEW.org_id AND status='active' FOR SHARE;
         SELECT count(*) INTO mrp_conversion_count
           FROM catalog.uom_conversions AS conversion
           JOIN catalog.products AS product
@@ -96,8 +100,8 @@ BEGIN
            AND conversion.product_id=NEW.product_id
            AND conversion.to_uom_code=product.base_uom_code
            AND conversion.status='active'
-           AND conversion.valid_from<=NEW.created_at::date
-           AND (conversion.valid_until IS NULL OR conversion.valid_until>=NEW.created_at::date);
+           AND conversion.valid_from<=(NEW.created_at AT TIME ZONE organization_timezone)::date
+           AND (conversion.valid_until IS NULL OR conversion.valid_until>=(NEW.created_at AT TIME ZONE organization_timezone)::date);
         IF mrp_conversion_count<>1 THEN
             RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='batch MRP requires the effective marketed-pack to base-UOM conversion for its product';
         END IF;

@@ -50,7 +50,13 @@ def test_migration_versions_every_former_staging_hot_patch() -> None:
 def test_incremental_command_owners_are_not_reverted_to_baseline() -> None:
     sql = SQL_PATH.read_text(encoding="utf-8")
 
-    assert len(FUNCTION_SOURCE_OVERRIDES) == 3
+    assert len(FUNCTION_SOURCE_OVERRIDES) == 5
+    assert FUNCTION_SOURCE_OVERRIDES[
+        ("erp_commercial_commands", "post_sales_return")
+    ] == "20260825_0012_canonical_command_definitions.sql"
+    assert FUNCTION_SOURCE_OVERRIDES[
+        ("erp_commercial_commands", "post_purchase_return")
+    ] == "20260825_0012_canonical_command_definitions.sql"
     assert "guard_command_request_match" not in sql
     assert "WHEN 'finance.adjustment_note.post' THEN" in sql
     assert "adjustment note is neither approved nor a command-bound draft" in sql

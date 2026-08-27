@@ -375,7 +375,7 @@ def test_lot_identity_branch_consistency_and_system_lot_expiry_are_explicit() ->
     assert "released state" in batch_rules
     assert "tax-inclusive Maximum Retail Price in INR" in batch_rules
     assert "marketed from_uom_code to the product base_uom_code" in batch_rules
-    assert "effective on created_at::date" in batch_rules
+    assert "effective on the batch created_at timestamp interpreted in the locked organization timezone" in batch_rules
 
     conversion_checks = _checks("catalog.uom_conversions")
     assert "from_uom_code <> to_uom_code OR multiplier = 1" in conversion_checks

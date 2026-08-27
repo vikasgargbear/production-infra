@@ -71,6 +71,10 @@ FUNCTION_SOURCE_MIGRATIONS = {
     "resolve_goods_receipt_prepare": "20260825_0012_canonical_command_definitions.sql",
     "resolve_sales_invoice_prepare": "20260825_0016_sales_invoice_auto_fefo.sql",
     "resolve_sales_order_prepare": "20260828_0036_sales_order_delivery_date.sql",
+    # Revision 0039 evolves the canonical source after chronology was packaged.
+    # Rebuild 0038 from its immutable pre-chronology baseline rather than
+    # trying to remove the newer tenant-timezone clauses from current source.
+    "resolve_sales_return_prepare": "20260820_0001_canonical_v1.sql",
     "resolve_purchase_return_prepare": "20260825_0010_return_reason_authority.sql",
     "resolve_adjustment_note_prepare_unchecked_v0013": "20260825_0007_adjustment_note_command.sql",
 }

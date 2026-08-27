@@ -177,6 +177,8 @@ PYTHONPATH=backend \
 PYTHONPATH=backend \
   python backend/tests/postgres/check_calculation_schema_c_collation_migration.py
 PYTHONPATH=backend \
+  python backend/tests/postgres/check_tenant_timestamp_date_runtime_role.py
+PYTHONPATH=backend \
   python backend/tests/postgres/check_sales_invoice_direct_issue_acceptance.py
 PYTHONPATH=backend \
   python backend/tests/postgres/check_sales_dispatch_partial_input_credit_acceptance.py

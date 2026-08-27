@@ -247,16 +247,78 @@ def _seed_opening_stock(runtime_dsn: str) -> tuple[list[UUID], dict[UUID, tuple[
     return batch_ids, before
 
 
-def _payload(admin_dsn: str, batch_ids: list[UUID]) -> dict[str, Any]:
+def _assert_batch_guard_uses_organization_date(
+    admin_dsn: str, business_date: date
+) -> None:
+    """Prove a local-midnight batch does not use the session UTC date."""
+
+    batch_id = uuid4()
+    with psycopg2.connect(admin_dsn) as connection, connection.cursor() as cursor:
+        cursor.execute('SET LOCAL ROLE "erp_migration_owner"')
+        cursor.execute("SET LOCAL TIME ZONE 'UTC'")
+        for setting, value in (
+            ("app.org_id", fixture.IDS["org"]),
+            ("app.membership_id", fixture.IDS["operator_membership"]),
+            ("app.user_id", fixture.IDS["operator_user"]),
+            ("app.request_id", str(uuid4())),
+        ):
+            cursor.execute("SELECT set_config(%s,%s,true)", (setting, value))
+        cursor.execute("SAVEPOINT tenant_batch_clock")
+        cursor.execute(
+            """
+            INSERT INTO inventory.batches(
+              org_id,id,product_id,batch_number,lot_kind,manufactured_on,
+              expires_on,mrp,mrp_uom_conversion_id,status,created_at,
+              created_by_membership_id,updated_by_membership_id)
+            SELECT %s,%s,%s,%s,'manufacturer_batch',%s::date-30,%s::date+365,
+                   200,%s,'quarantined',
+                   (%s::date+TIME '00:15') AT TIME ZONE organization.timezone,
+                   %s,%s
+              FROM core.organizations AS organization
+             WHERE organization.id=%s AND organization.status='active'
+            """,
+            (
+                fixture.IDS["org"],
+                batch_id,
+                fixture.IDS["product"],
+                f"PG15-TENANT-CLOCK-{batch_id}",
+                business_date,
+                business_date,
+                fixture.IDS["uom_conversion"],
+                business_date,
+                fixture.IDS["operator_membership"],
+                fixture.IDS["operator_membership"],
+                fixture.IDS["org"],
+            ),
+        )
+        cursor.execute(
+            """
+            SELECT batch.created_at::date,
+                   (batch.created_at AT TIME ZONE organization.timezone)::date
+              FROM inventory.batches AS batch
+              JOIN core.organizations AS organization ON organization.id=batch.org_id
+             WHERE batch.org_id=%s AND batch.id=%s
+            """,
+            (fixture.IDS["org"], batch_id),
+        )
+        session_date, organization_date = cursor.fetchone()
+        assert organization_date == business_date
+        assert session_date < organization_date
+        cursor.execute("ROLLBACK TO SAVEPOINT tenant_batch_clock")
+
+
+def _payload(
+    admin_dsn: str, batch_ids: list[UUID], *, business_date: date
+) -> dict[str, Any]:
     with psycopg2.connect(admin_dsn) as connection, connection.cursor() as cursor:
         cursor.execute(
-            "SELECT CURRENT_DATE,row_version FROM parties.addresses WHERE org_id=%s AND id=%s",
+            "SELECT row_version FROM parties.addresses WHERE org_id=%s AND id=%s",
             (fixture.IDS["org"], fixture.IDS["customer_address"]),
         )
-        invoice_date, address_row_version = cursor.fetchone()
+        address_row_version = cursor.fetchone()[0]
     return {
         "branch_id": fixture.IDS["branch"],
-        "invoice_date": invoice_date.isoformat(),
+        "invoice_date": business_date.isoformat(),
         "customer_account_id": fixture.IDS["customer_account"],
         "delivery_address_id": fixture.IDS["customer_address"],
         "delivery_address_row_version": str(address_row_version),
@@ -652,8 +714,9 @@ def main() -> None:
     with psycopg2.connect(runtime_dsn) as connection:
         fixture.activate_demo_product(connection)
 
+    _assert_batch_guard_uses_organization_date(admin_dsn, business_date)
     batch_ids, before = _seed_opening_stock(runtime_dsn)
-    payload = _payload(admin_dsn, batch_ids)
+    payload = _payload(admin_dsn, batch_ids, business_date=business_date)
     prepare_key = f"pg15-sales-invoice-{uuid4()}"
     with _service(runtime_url, calculator_url) as service:
         try:

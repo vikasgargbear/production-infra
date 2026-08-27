@@ -203,12 +203,15 @@ END
             f'''
 DECLARE ledger inventory.stock_ledger_entries%ROWTYPE; batch inventory.batches%ROWTYPE;
         product catalog.products%ROWTYPE; claim_id uuid; replay_id uuid;
+        organization core.organizations%ROWTYPE;
         rule compliance.controlled_movement_rule_versions%ROWTYPE;
         entry_direction text; entry_quantity numeric(20,6); entry_day date;
         matching_license_count bigint;
 BEGIN
     PERFORM "{SCHEMA}"."assert_context"(
       organization_id,actor_id,'compliance.controlled_substance.post',NULL::uuid);
+    SELECT * INTO STRICT organization FROM core.organizations
+     WHERE id=organization_id AND status='active' FOR SHARE;
     SELECT p_claim_id,p_replay_resource_id INTO claim_id,replay_id FROM "{SCHEMA}"."claim"(
       organization_id,actor_id,'compliance.controlled_substance.record',key_hash,request_hash,expires_at);
     IF replay_id IS NOT NULL THEN RETURN replay_id; END IF;
@@ -242,7 +245,7 @@ BEGIN
     END IF;
     entry_direction:=CASE WHEN ledger.quantity_delta>0 THEN 'in' ELSE 'out' END;
     entry_quantity:=pg_catalog.abs(ledger.quantity_delta);
-    entry_day:=ledger.posted_at::date;
+    entry_day:=(ledger.posted_at AT TIME ZONE organization.timezone)::date;
     SELECT * INTO rule FROM compliance.controlled_movement_rule_versions candidate
      WHERE candidate.status='active' AND candidate.entry_type=entry_type
        AND candidate.drug_schedule IN ('ANY',product.drug_schedule)
@@ -666,11 +669,14 @@ END
             f'''
 DECLARE batch inventory.batches%ROWTYPE; product catalog.products%ROWTYPE;
         location inventory.locations%ROWTYPE; claim_id uuid; replay_id uuid;
+        organization core.organizations%ROWTYPE;
         product_rule compliance.storage_rule_versions%ROWTYPE;
         location_rule compliance.storage_rule_versions%ROWTYPE;
         allowed_min numeric(9,4); allowed_max numeric(9,4); actual_hash bytea; excursion boolean;
 BEGIN
     PERFORM "{SCHEMA}"."assert_context"(organization_id,actor_id,'internal.temperature.ingest',NULL::uuid);
+    SELECT * INTO STRICT organization FROM core.organizations
+     WHERE id=organization_id AND status='active' FOR SHARE;
     SELECT p_claim_id,p_replay_resource_id INTO claim_id,replay_id FROM "{SCHEMA}"."claim"(
       organization_id,actor_id,'compliance.temperature.ingest',key_hash,request_hash,expires_at);
     IF replay_id IS NOT NULL THEN RETURN replay_id; END IF;
@@ -689,10 +695,10 @@ BEGIN
     END IF;
     SELECT * INTO STRICT product_rule FROM compliance.storage_rule_versions
      WHERE org_id=organization_id AND product_id=product.id AND subject_kind='product' AND status='active'
-       AND measured_at::date BETWEEN effective_from AND COALESCE(effective_to,'infinity'::date) FOR SHARE;
+       AND (measured_at AT TIME ZONE organization.timezone)::date BETWEEN effective_from AND COALESCE(effective_to,'infinity'::date) FOR SHARE;
     SELECT * INTO STRICT location_rule FROM compliance.storage_rule_versions
      WHERE org_id=organization_id AND location_id=location.id AND subject_kind='location' AND status='active'
-       AND measured_at::date BETWEEN effective_from AND COALESCE(effective_to,'infinity'::date) FOR SHARE;
+       AND (measured_at AT TIME ZONE organization.timezone)::date BETWEEN effective_from AND COALESCE(effective_to,'infinity'::date) FOR SHARE;
     allowed_min:=GREATEST(product_rule.minimum_celsius,location_rule.minimum_celsius);
     allowed_max:=LEAST(product_rule.maximum_celsius,location_rule.maximum_celsius);
     IF allowed_min>=allowed_max OR NOT EXISTS (

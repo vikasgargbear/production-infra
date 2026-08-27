@@ -4553,6 +4553,7 @@ DECLARE requested_branch_id uuid:=NULLIF(request_document->>'branch_id','')::uui
         original_invoice_id uuid:=NULLIF(request_document->>'original_invoice_id','')::uuid;
         return_date date:=NULLIF(request_document->>'return_date','')::date;
         invoice sales.invoices%ROWTYPE; original_tax tax.documents%ROWTYPE;
+        organization core.organizations%ROWTYPE;
         customer parties.customer_accounts%ROWTYPE; buyer_registration parties.tax_registrations%ROWTYPE;
         rule tax.gst_adjustment_rule_versions%ROWTYPE; rule_release core.reference_data_releases%ROWTYPE;
         evidence core.attachments%ROWTYPE; original_artifact calculation.artifacts%ROWTYPE;
@@ -4596,6 +4597,8 @@ BEGIN
        OR erp_security.has_permission('finance.journal.post',NULL::uuid) IS DISTINCT FROM true
        OR erp_security.has_permission('automation.command.execute',requested_branch_id) IS DISTINCT FROM true THEN
       RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='sales-return verified context or cross-domain permission is inactive'; END IF;
+    SELECT * INTO STRICT organization FROM core.organizations
+     WHERE id=organization_id AND status='active' FOR SHARE;
     SELECT * INTO STRICT invoice FROM sales.invoices WHERE org_id=organization_id AND id=original_invoice_id
        AND branch_id=requested_branch_id AND status='posted' AND invoice_type='tax_invoice' AND currency_code='INR'
        AND tax_charge_mechanism='normal' FOR UPDATE;
@@ -4634,7 +4637,7 @@ BEGIN
       ELSIF rule.deadline_policy='november_30_following_fy' THEN
         adjustment_deadline:=pg_catalog.make_date(pg_catalog.date_part('year',invoice.invoice_date)::integer+
           CASE WHEN pg_catalog.date_part('month',invoice.invoice_date)>=4 THEN 1 ELSE 0 END,11,30);
-        SELECT least(adjustment_deadline,min(filing.filed_at::date)) INTO adjustment_deadline
+        SELECT least(adjustment_deadline,min((filing.filed_at AT TIME ZONE organization.timezone)::date)) INTO adjustment_deadline
           FROM tax.returns filing JOIN tax.return_periods period ON period.org_id=filing.org_id AND period.id=filing.return_period_id
          WHERE filing.org_id=organization_id AND period.registration_id=original_tax.registration_id
            AND filing.return_type='gstr9' AND filing.status='filed'

@@ -127,7 +127,8 @@ def test_stock_identity_capacity_and_availability_are_exact_numeric_guards() -> 
     assert "conversion.id=NEW.mrp_uom_conversion_id" in batch
     assert "conversion.product_id=NEW.product_id" in batch
     assert "conversion.to_uom_code=product.base_uom_code" in batch
-    assert "conversion.valid_from<=NEW.created_at::date" in batch
+    assert "conversion.valid_from<=(NEW.created_at AT TIME ZONE organization_timezone)::date" in batch
+    assert "SELECT timezone INTO STRICT organization_timezone" in batch
     assert "validate_mrp_conversion:=TG_OP='INSERT'" in batch
     assert "INSERT OR UPDATE" in batch
     assert "inventory_document_lines" in location

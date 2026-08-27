@@ -220,7 +220,8 @@ def test_controlled_register_derives_immutable_ledger_and_license_facts() -> Non
     assert "compliance.controlled_movement_rule_versions" in mapping
     assert "candidate.ndps_scope IN ('any'" in mapping
     assert "entry_quantity:=pg_catalog.abs(ledger.quantity_delta)" in mapping
-    assert "entry_day:=ledger.posted_at::date" in mapping
+    assert "entry_day:=(ledger.posted_at AT TIME ZONE organization.timezone)::date" in mapping
+    assert "SELECT * INTO STRICT organization FROM core.organizations" in mapping
     assert "counterparty and license number must be supplied together" in mapping
     assert "license.valid_from<=entry_day" in mapping
     assert "license.next_verification_due_on>=entry_day" in mapping

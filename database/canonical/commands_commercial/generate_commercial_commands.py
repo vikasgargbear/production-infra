@@ -1663,7 +1663,7 @@ def _return_command(*, sales: bool) -> list[str]:
     ELSIF invoiced AND adjustment_rule.deadline_policy='november_30_following_fy' THEN
       adjustment_deadline:=pg_catalog.make_date((pg_catalog.date_part('year',{original_date})::integer+
         CASE WHEN pg_catalog.date_part('month',{original_date})>=4 THEN 1 ELSE 0 END),11,30);
-      SELECT least(adjustment_deadline,min(filing.filed_at::date)) INTO adjustment_deadline
+      SELECT least(adjustment_deadline,min((filing.filed_at AT TIME ZONE organization.timezone)::date)) INTO adjustment_deadline
         FROM tax.returns filing JOIN tax.return_periods period ON period.org_id=filing.org_id AND period.id=filing.return_period_id
        WHERE filing.org_id=organization_id AND period.registration_id=original_tax.registration_id
          AND filing.return_type='gstr9' AND filing.status='filed'
@@ -1778,6 +1778,7 @@ def _return_command(*, sales: bool) -> list[str]:
         "uuid",
         f'''
 DECLARE header {header_table}%ROWTYPE; original {original_table}%ROWTYPE; artifact calculation.artifacts%ROWTYPE;
+        organization core.organizations%ROWTYPE;
         original_tax tax.documents%ROWTYPE; original_open finance.open_items%ROWTYPE; posting_line record;
         adjustment_rule tax.gst_adjustment_rule_versions%ROWTYPE; supplier_portal_line tax.portal_document_lines%ROWTYPE;
         claim_id uuid; replay_id uuid; input_doc jsonb; output_doc jsonb; consumed bytea; party_id uuid; party_account uuid;
@@ -1789,6 +1790,8 @@ DECLARE header {header_table}%ROWTYPE; original {original_table}%ROWTYPE; artifa
         registration_scope_count bigint;
 BEGIN
     PERFORM erp_trade_commands.assert_context(organization_id,actor_id);
+    SELECT * INTO STRICT organization FROM core.organizations
+     WHERE id=organization_id AND status='active' FOR SHARE;
     IF NULLIF(pg_catalog.current_setting('app.request_id',true),'')::uuid IS DISTINCT FROM request_id THEN RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='commercial request context mismatch'; END IF;
     SELECT * INTO STRICT header FROM {header_table} WHERE org_id=organization_id AND id=resource_id FOR UPDATE;
     IF header.status<>'{postable_status}' THEN RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='return is not in the required posting state'; END IF;
@@ -2129,6 +2132,7 @@ def _generic_adjustment_command() -> list[str]:
         "uuid",
         r'''
 DECLARE note finance.adjustment_notes%ROWTYPE; artifact calculation.artifacts%ROWTYPE; original_tax tax.documents%ROWTYPE;
+        organization core.organizations%ROWTYPE;
         adjustment_rule tax.gst_adjustment_rule_versions%ROWTYPE; portal_line tax.portal_document_lines%ROWTYPE;
         original_open finance.open_items%ROWTYPE; line record; input_doc jsonb; output_doc jsonb; consumed bytea;
         claim_id uuid; replay_id uuid; branch_id uuid; party_account uuid; posting_account uuid; role_account uuid; role_key varchar;
@@ -2139,6 +2143,8 @@ DECLARE note finance.adjustment_notes%ROWTYPE; artifact calculation.artifacts%RO
         original_document_date date; adjustment_deadline date; tax_number varchar(64); tax_date date;
 BEGIN
     PERFORM erp_trade_commands.assert_context(organization_id,actor_id);
+    SELECT * INTO STRICT organization FROM core.organizations
+     WHERE id=organization_id AND status='active' FOR SHARE;
     IF NULLIF(pg_catalog.current_setting('app.request_id',true),'')::uuid IS DISTINCT FROM request_id THEN
       RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='commercial request context mismatch'; END IF;
     SELECT * INTO STRICT note FROM finance.adjustment_notes WHERE org_id=organization_id AND id=resource_id FOR UPDATE;
@@ -2185,7 +2191,7 @@ BEGIN
     ELSIF adjustment_rule.deadline_policy='november_30_following_fy' THEN
       adjustment_deadline:=pg_catalog.make_date((pg_catalog.date_part('year',original_document_date)::integer+
         CASE WHEN pg_catalog.date_part('month',original_document_date)>=4 THEN 1 ELSE 0 END),11,30);
-      SELECT least(adjustment_deadline,min(filing.filed_at::date)) INTO adjustment_deadline
+      SELECT least(adjustment_deadline,min((filing.filed_at AT TIME ZONE organization.timezone)::date)) INTO adjustment_deadline
         FROM tax.returns filing JOIN tax.return_periods period ON period.org_id=filing.org_id AND period.id=filing.return_period_id
        WHERE filing.org_id=organization_id AND period.registration_id=original_tax.registration_id
          AND filing.return_type='gstr9' AND filing.status='filed'
