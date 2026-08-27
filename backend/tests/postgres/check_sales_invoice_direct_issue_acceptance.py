@@ -675,6 +675,20 @@ def main() -> None:
             raise AssertionError("cross-tenant sales-invoice prepare was not denied")
 
         prepared = _prepare(service, payload, prepare_key)
+        product_references = [
+            reference
+            for reference in prepared.resolved_references
+            if reference.get("resource_type") == "product"
+        ]
+        assert len(product_references) == 1
+        assert product_references[0] == {
+            "resource_type": "product",
+            "id": fixture.IDS["product"],
+            "row_version": product_references[0]["row_version"],
+            "product_code": "DEMO-CARTON-481910",
+            "product_name": "Synthetic Corrugated Pharmacy Packing Carton",
+        }
+        assert int(product_references[0]["row_version"]) >= 1
         _assert_calculation_input(admin_dsn, prepared.command_request_id)
         _assert_runtime_resume_projection(
             runtime_dsn, prepared.command_request_id, prepare_key

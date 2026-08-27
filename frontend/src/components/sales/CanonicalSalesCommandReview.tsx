@@ -65,6 +65,22 @@ export default function CanonicalSalesCommandReview({ title, preview, open, post
   const taxLines = Array.isArray(preview.tax_impact) ? preview.tax_impact : [];
   const inventoryLines = Array.isArray(preview.inventory_impact) ? preview.inventory_impact : [];
   const warnings = Array.isArray(preview.policy_warnings) ? preview.policy_warnings : [];
+  const products = Array.isArray(preview.resolved_references)
+    ? preview.resolved_references.flatMap(reference => {
+      if (!reference || typeof reference !== 'object') return [];
+      const fields = reference as Record<string, unknown>;
+      if (fields.resource_type !== 'product'
+        || typeof fields.product_name !== 'string'
+        || !fields.product_name.trim()
+        || typeof fields.product_code !== 'string'
+        || !fields.product_code.trim()) return [];
+      return [{
+        id: String(fields.id || ''),
+        code: fields.product_code.trim(),
+        name: fields.product_name.trim(),
+      }];
+    })
+    : [];
   return <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 p-4">
     <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="canonical-sales-review-title"
       data-testid="canonical-immutable-preview"
@@ -78,6 +94,12 @@ export default function CanonicalSalesCommandReview({ title, preview, open, post
         <div><dt className="font-medium text-gray-700">GST evidence</dt><dd className="text-gray-900">{taxLines.length} server-calculated line{taxLines.length === 1 ? '' : 's'}</dd></div>
         <div><dt className="font-medium text-gray-700">Stock movements</dt><dd className="text-gray-900">{inventoryLines.length}</dd></div>
         <div><dt className="font-medium text-gray-700">Policy warnings</dt><dd className={warnings.length ? 'font-medium text-amber-700' : 'text-gray-900'}>{warnings.length || 'None'}</dd></div>
+        {products.length > 0 && <div>
+          <dt className="font-medium text-gray-700">Products</dt>
+          <dd className="text-gray-900"><ul>
+            {products.map(product => <li key={`${product.id}:${product.code}`}>{product.name} ({product.code})</li>)}
+          </ul></dd>
+        </div>}
         <div><dt className="font-medium text-gray-700">Command</dt><dd className="break-all text-gray-900">{preview.command_request_id}</dd></div>
         <div><dt className="font-medium text-gray-700">Preview hash</dt><dd className="break-all text-gray-900">{preview.preview_hash}</dd></div>
       </dl>

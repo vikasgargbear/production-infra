@@ -30,6 +30,11 @@ from app.infrastructure.operator_actions.runtime_database import (
     runtime_database_configured,
 )
 from app.infrastructure.operator_actions.sales_order import commercial_calculation_documents
+from app.infrastructure.operator_actions.sales_invoice import (
+    RESOLVE_SALES_INVOICE_PRODUCT_IDENTITIES_SQL,
+    RESOLVE_SALES_INVOICE_SQL,
+    authoritative_product_references,
+)
 from mcp_runtime.aasopharma_mcp.operator_actions import PREPARE_ACTIONS
 
 
@@ -295,6 +300,7 @@ class FakeSalesInvoiceSession:
                     "line_id": source["line_id"],
                     "order_line_id": str(uuid4()),
                     "product_id": source["product_id"],
+                    "product_row_version": 4,
                     "uom_conversion_id": source["uom_conversion_id"],
                     "uom_code": "BOX",
                     "multiplier": "10.000000",
@@ -369,8 +375,30 @@ class FakeSalesInvoiceSession:
                 "source_versions": [
                     {"resource_type": "branch", "id": request["branch_id"], "row_version": 3},
                     {"resource_type": "account_role", "role": "sales_revenue", "id": str(uuid4()), "row_version": 2},
+                    *(
+                        {
+                            "resource_type": "product",
+                            "id": line["product_id"],
+                            "row_version": 4,
+                        }
+                        for line in resolved_lines
+                        if line["line_kind"] == "product"
+                    ),
                 ],
             }},))
+        if "resolve_sales_invoice_product_identities" in sql:
+            resolution = json.loads(params["resolution_json"])
+            return FakeResult(({"product_references": [
+                {
+                    "resource_type": "product",
+                    "id": line["product_id"],
+                    "row_version": line["product_row_version"],
+                    "product_code": f"PROD-{index:06d}",
+                    "product_name": f"Canonical Product {index}",
+                }
+                for index, line in enumerate(resolution["lines"], start=1)
+                if line["line_kind"] == "product"
+            ]},))
         if "persist_sales_invoice_prepare" in sql:
             if self.fail_persist:
                 raise RuntimeError("persistence failed")
@@ -2242,8 +2270,6 @@ def test_sales_order_prepare_uses_one_isolated_calculator_transaction(
     assert calculation_input["document"]["products"][0][
         "free_supply_tax_treatment"
     ] == "included_at_unit_rate"
-
-
 def test_purchase_order_prepare_uses_one_isolated_calculator_transaction():
     session = FakePurchaseOrderSession()
     payload = _purchase_order_service_payload()
@@ -2607,9 +2633,13 @@ def test_sales_invoice_prepare_is_atomic_for_both_fulfillment_modes(
     assert prepared.financial_impact[0]["receivable"] == "365.80"
     assert prepared.tax_impact[0]["igst_total"] == "55.80"
     assert session.transaction_entries == session.transaction_exits == 1
-    assert len(session.executions) == 2
+    assert len(session.executions) == 3
     resolution_request = json.loads(session.executions[0][1]["request_json"])
-    persist_params = session.executions[1][1]
+    identity_resolution = json.loads(session.executions[1][1]["resolution_json"])
+    persist_params = session.executions[2][1]
+    assert identity_resolution["lines"][0]["product_id"] == str(
+        payload["lines"][0]["product_id"]
+    )
     assert bool(persist_params["inventory_document_id"]) is expected_inventory_id
     assert resolution_request["tax_charge_mechanism"] == "normal"
     assert resolution_request["lines"][0]["fulfillment_source"] == fulfillment_source
@@ -2631,6 +2661,52 @@ def test_sales_invoice_prepare_is_atomic_for_both_fulfillment_modes(
     assert calculation_input["document"]["products"][0][
         "free_supply_tax_treatment"
     ] == "included_at_unit_rate"
+    persisted_preview = json.loads(persist_params["preview_bytes"])
+    product_reference = next(
+        reference
+        for reference in persisted_preview["resolved_references"]
+        if reference["resource_type"] == "product"
+    )
+    assert product_reference["product_name"] == "Canonical Product 1"
+    assert product_reference["product_code"] == "PROD-000001"
+    assert product_reference in prepared.resolved_references
+
+
+def test_sales_invoice_product_labels_are_bound_to_locked_catalog_versions():
+    product_id = uuid4()
+    resolution = [{
+            "resource_type": "product",
+            "id": str(product_id),
+            "row_version": 7,
+            "product_code": " PROD-000007 ",
+            "product_name": " Canonical Carton ",
+        }]
+
+    references = authoritative_product_references(resolution)
+
+    assert references == ({
+        "resource_type": "product",
+        "id": str(product_id),
+        "row_version": 7,
+        "product_code": "PROD-000007",
+        "product_name": "Canonical Carton",
+    },)
+    assert "resolve_sales_invoice_prepare" in str(RESOLVE_SALES_INVOICE_SQL)
+    assert "resolve_sales_invoice_product_identities" in str(
+        RESOLVE_SALES_INVOICE_PRODUCT_IDENTITIES_SQL
+    )
+
+
+def test_sales_invoice_product_labels_fail_closed_when_identity_is_missing():
+    product_id = uuid4()
+    resolution = [{
+        "resource_type": "product",
+        "id": str(product_id),
+        "row_version": 1,
+    }]
+
+    with pytest.raises(ValueError, match="resolved product label is missing"):
+        authoritative_product_references(resolution)
 
 
 def test_sales_invoice_prepare_defaults_missing_direct_batches_to_auto_fefo():
@@ -2657,10 +2733,10 @@ def test_sales_invoice_prepare_defaults_missing_direct_batches_to_auto_fefo():
         context=context,
     )
 
-    assert len(session.executions) == 3
+    assert len(session.executions) == 4
     initial = json.loads(session.executions[0][1]["request_json"])
     resolved = json.loads(session.executions[1][1]["request_json"])
-    persisted = json.loads(session.executions[2][1]["request_bytes"])
+    persisted = json.loads(session.executions[3][1]["request_bytes"])
     assert initial["lines"][0]["batch_allocation_mode"] == "auto_fefo"
     assert "batch_allocations" not in initial["lines"][0]
     assert resolved["lines"][0]["batch_allocation_mode"] == "auto_fefo"

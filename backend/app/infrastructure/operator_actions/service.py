@@ -44,7 +44,9 @@ from .sales_dispatch import (
 )
 from .sales_invoice import (
     PERSIST_SALES_INVOICE_SQL,
+    RESOLVE_SALES_INVOICE_PRODUCT_IDENTITIES_SQL,
     RESOLVE_SALES_INVOICE_SQL,
+    authoritative_product_references,
     calculation_documents as sales_invoice_calculation_documents,
 )
 from .purchase_order import (
@@ -1851,6 +1853,63 @@ class SqlAlchemyOperatorActionService:
                         metadata={"reason": str(exc)},
                     ) from exc
                 source_versions = tuple(resolution["source_versions"])
+                identity_rows = _mapping_rows(
+                    session.execute(
+                        RESOLVE_SALES_INVOICE_PRODUCT_IDENTITIES_SQL,
+                        {
+                            "org_id": context.organization_id,
+                            "resolution_json": canonical_json_bytes(
+                                resolution
+                            ).decode("utf-8"),
+                        },
+                    )
+                )
+                if len(identity_rows) != 1:
+                    raise OperatorActionError(
+                        ActionErrorCode.POLICY_BLOCKED,
+                        "Canonical sales-invoice product identity is unavailable",
+                        metadata={
+                            "operation_key": policy.operation_key,
+                            "reason": "AUTHORITATIVE_PRODUCT_IDENTITY_UNAVAILABLE",
+                        },
+                    )
+                identity_document = identity_rows[0]["product_references"]
+                if isinstance(identity_document, str):
+                    try:
+                        identity_document = json.loads(identity_document)
+                    except json.JSONDecodeError:
+                        identity_document = None
+                try:
+                    product_references = authoritative_product_references(
+                        identity_document
+                    )
+                except (KeyError, TypeError, ValueError) as exc:
+                    raise OperatorActionError(
+                        ActionErrorCode.POLICY_BLOCKED,
+                        "Canonical sales-invoice product identity is unavailable",
+                        metadata={
+                            "operation_key": policy.operation_key,
+                            "reason": "AUTHORITATIVE_PRODUCT_IDENTITY_UNAVAILABLE",
+                        },
+                    ) from exc
+                product_reference_versions = {
+                    (reference["id"], reference["row_version"])
+                    for reference in product_references
+                }
+                source_product_versions = {
+                    (str(source.get("id")), int(source.get("row_version", 0)))
+                    for source in source_versions
+                    if source.get("resource_type") == "product"
+                }
+                if source_product_versions != product_reference_versions:
+                    raise OperatorActionError(
+                        ActionErrorCode.POLICY_BLOCKED,
+                        "Canonical sales-invoice product version is unavailable",
+                        metadata={
+                            "operation_key": policy.operation_key,
+                            "reason": "AUTHORITATIVE_PRODUCT_VERSION_UNAVAILABLE",
+                        },
+                    )
                 resolved_references = tuple(
                     {
                         "resource_type": source["resource_type"],
@@ -1868,7 +1927,8 @@ class SqlAlchemyOperatorActionService:
                         },
                     }
                     for source in source_versions
-                )
+                    if source.get("resource_type") != "product"
+                ) + product_references
                 totals = calculation_output["totals"]
                 inventory_impacts = []
                 if has_direct:

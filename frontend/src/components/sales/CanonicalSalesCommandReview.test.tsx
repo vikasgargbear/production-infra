@@ -8,6 +8,12 @@ const preview = {
   financial_impact: [{ receivable: '168.00' }],
   tax_impact: [{ cgst_total: '9.00', sgst_total: '9.00' }],
   inventory_impact: [{ base_quantity: '2.000000' }],
+  resolved_references: [{
+    resource_type: 'product',
+    id: '20000000-0000-4000-8000-000000000001',
+    product_code: 'PROD-000001',
+    product_name: 'Canonical Carton',
+  }],
   policy_warnings: [],
 };
 
@@ -24,6 +30,7 @@ describe('CanonicalSalesCommandReview', () => {
     );
     expect(screen.getByText('₹168.00')).toBeTruthy();
     expect(screen.getByText('1 server-calculated line')).toBeTruthy();
+    expect(screen.getByText('Canonical Carton (PROD-000001)')).toBeTruthy();
     const post = screen.getByRole('button', { name: 'Approve & Post' }) as HTMLButtonElement;
     expect(post.disabled).toBe(true);
     fireEvent.click(screen.getByRole('checkbox', { name: /reviewed this exact server preview/i }));
