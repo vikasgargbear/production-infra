@@ -168,6 +168,9 @@ IDS = {
     "expense_claim_expense_account": "d3210000-0000-7000-8000-000000000014",
     "expense_claim_reimbursement_account": "d3210000-0000-7000-8000-000000000015",
     "purchase_price_variance_account": "d3210000-0000-7000-8000-000000000017",
+    "cash_on_hand_account": "d3210000-0000-7000-8000-000000000018",
+    "cheques_in_hand_account": "d3210000-0000-7000-8000-000000000019",
+    "customer_advance_account": "d3210000-0000-7000-8000-000000000020",
 }
 INDIA_BUSINESS_DATE = datetime.now(timezone.utc).astimezone(
     ZoneInfo("Asia/Kolkata")
@@ -2446,6 +2449,30 @@ def seed_end_to_end_master(
                 False,
                 False,
             ),
+            (
+                IDS["cash_on_hand_account"],
+                "1010-DEMO-CASH",
+                "Demo branch cash on hand",
+                "asset",
+                False,
+                False,
+            ),
+            (
+                IDS["cheques_in_hand_account"],
+                "1020-DEMO-CHEQUES",
+                "Demo uncleared cheques in hand",
+                "asset",
+                False,
+                False,
+            ),
+            (
+                IDS["customer_advance_account"],
+                "2400-DEMO-CUSTADV",
+                "Demo customer advances",
+                "liability",
+                True,
+                False,
+            ),
         )
         cursor.executemany(
             """
@@ -2520,6 +2547,9 @@ def seed_end_to_end_master(
             "member_reimbursement_liability": IDS[
                 "expense_claim_reimbursement_account"
             ],
+            "cash_on_hand": IDS["cash_on_hand_account"],
+            "cheques_in_hand": IDS["cheques_in_hand_account"],
+            "customer_advance": IDS["customer_advance_account"],
         }
         cursor.executemany(
             """
@@ -2537,6 +2567,38 @@ def seed_end_to_end_master(
                     role, account_id, IDS["reviewer_membership"], IDS["reviewer_membership"],
                 )
                 for role, account_id in sorted(role_accounts.items())
+            ],
+        )
+        cash_rule_values = {
+            "max_single_amount": Decimal("100000.00"),
+            "max_customer_rolling_amount": Decimal("200000.00"),
+            "rolling_window_days": Decimal("30"),
+        }
+        cursor.executemany(
+            """
+            INSERT INTO core.settings (
+                org_id,id,scope_kind,branch_id,namespace,key,value_type,value_numeric,
+                status,created_by_membership_id,updated_by_membership_id
+            ) VALUES (%s,%s,'branch',%s,'finance.cash_receipt_rules',%s,'numeric',%s,
+                'active',%s,%s)
+            ON CONFLICT DO NOTHING
+            """,
+            [
+                (
+                    IDS["org"],
+                    str(
+                        uuid5(
+                            NAMESPACE_URL,
+                            f"aasopharma-demo-cash-receipt-rule:{rule_key}",
+                        )
+                    ),
+                    IDS["branch"],
+                    rule_key,
+                    rule_value,
+                    IDS["reviewer_membership"],
+                    IDS["reviewer_membership"],
+                )
+                for rule_key, rule_value in sorted(cash_rule_values.items())
             ],
         )
         cursor.execute(

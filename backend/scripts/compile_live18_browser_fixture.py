@@ -288,6 +288,10 @@ def resolve_authoritative_facts(
              destination_branch.code,destination_branch.name,
              destination.code,destination.name,bank.bank_name,bank.account_holder_name,
              ledger.code,ledger.name,
+             cash_account.id::text,cash_account.code,cash_account.name,
+             cheque_account.id::text,cheque_account.code,cheque_account.name,
+             customer_advance_account.id::text,customer_advance_account.code,
+             customer_advance_account.name,
              delivery_address.id::text,delivery_address.row_version,
              direct_issue_batch.id::text,direct_issue_batch.batch_number,
              direct_issue_batch.available_base_quantity,uom.multiplier,
@@ -346,6 +350,41 @@ def resolve_authoritative_facts(
         JOIN inventory.locations destination ON destination.org_id=destination_branch.org_id AND destination.id=%s AND destination.branch_id=destination_branch.id
         JOIN finance.bank_accounts bank ON bank.org_id=branch.org_id AND bank.id=%s
         JOIN finance.accounts ledger ON ledger.org_id=branch.org_id AND ledger.id=%s
+        JOIN core.settings cash_role
+          ON cash_role.org_id=branch.org_id AND cash_role.status='active'
+         AND cash_role.namespace='finance.account_roles' AND cash_role.key='cash_on_hand'
+         AND cash_role.value_type='text'
+         AND (cash_role.branch_id IS NULL OR cash_role.branch_id=branch.id)
+        JOIN finance.accounts cash_account
+          ON cash_account.org_id=cash_role.org_id
+         AND cash_account.id=cash_role.value_text::uuid
+         AND cash_account.status='active' AND cash_account.account_type='asset'
+         AND cash_account.currency_code='INR' AND NOT cash_account.allows_party_posting
+        JOIN core.settings cheque_role
+          ON cheque_role.org_id=branch.org_id AND cheque_role.status='active'
+         AND cheque_role.namespace='finance.account_roles' AND cheque_role.key='cheques_in_hand'
+         AND cheque_role.value_type='text'
+         AND (cheque_role.branch_id IS NULL OR cheque_role.branch_id=branch.id)
+        JOIN finance.accounts cheque_account
+          ON cheque_account.org_id=cheque_role.org_id
+         AND cheque_account.id=cheque_role.value_text::uuid
+         AND cheque_account.status='active' AND cheque_account.account_type='asset'
+         AND cheque_account.currency_code='INR' AND NOT cheque_account.allows_party_posting
+        JOIN core.settings customer_advance_role
+          ON customer_advance_role.org_id=branch.org_id
+         AND customer_advance_role.status='active'
+         AND customer_advance_role.namespace='finance.account_roles'
+         AND customer_advance_role.key='customer_advance'
+         AND customer_advance_role.value_type='text'
+         AND (customer_advance_role.branch_id IS NULL
+              OR customer_advance_role.branch_id=branch.id)
+        JOIN finance.accounts customer_advance_account
+          ON customer_advance_account.org_id=customer_advance_role.org_id
+         AND customer_advance_account.id=customer_advance_role.value_text::uuid
+         AND customer_advance_account.status='active'
+         AND customer_advance_account.account_type='liability'
+         AND customer_advance_account.currency_code='INR'
+         AND customer_advance_account.allows_party_posting
        WHERE branch.org_id=%s AND branch.id=%s
          AND branch.status='active' AND customer.status='active' AND supplier.status='active'
          AND product.status='active' AND source.status='active' AND quarantine.status='active'
@@ -981,6 +1020,11 @@ def resolve_authoritative_facts(
         "destination_branch_code", "destination_branch_name",
         "destination_location_code", "destination_location_name",
         "bank_name", "bank_account_holder", "bank_ledger_code", "bank_ledger_name",
+        "cash_on_hand_account_id", "cash_on_hand_account_code",
+        "cash_on_hand_account_name", "cheques_in_hand_account_id",
+        "cheques_in_hand_account_code", "cheques_in_hand_account_name",
+        "customer_advance_account_id", "customer_advance_account_code",
+        "customer_advance_account_name",
         "delivery_address_id", "delivery_address_row_version",
         "direct_issue_batch_id", "direct_issue_batch_number",
         "direct_issue_available_base_quantity", "sales_uom_multiplier",
