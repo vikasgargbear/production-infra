@@ -1,19 +1,15 @@
 #!/usr/bin/env python3
-"""Generate immutable migration 0034 from reviewed canonical command artifacts."""
+"""Verify the frozen reviewed SQL for immutable migration 0034."""
 
 from __future__ import annotations
 
-import json
+import hashlib
 from pathlib import Path
 
 
 REPO = Path(__file__).resolve().parents[2]
 OUTPUT = REPO / "backend/alembic/sql/20260827_0034_supplier_invoice_landed_cost_authority.sql"
-SOURCES = (
-    REPO / "database/canonical/commands_trade_v2/baseline-trade-posting-enforcements.json",
-    REPO / "database/canonical/commands_commercial/baseline-commercial-command-enforcements.json",
-    REPO / "database/canonical/commands_automation/baseline-automation-command-enforcements.json",
-)
+EXPECTED_SQL_SHA256 = "51e4efd4e2f10edafbf921efe45f114e39c8d2f6f0c51e3996a959b56d1d58a4"
 FUNCTIONS = (
     ("erp_trade_commands_v2", "total_landed_cost_pool"),
     ("erp_trade_commands_v2", "eligible_landed_cost_pool"),
@@ -28,57 +24,25 @@ FUNCTIONS = (
 )
 
 
-def _statements() -> list[str]:
-    statements: list[str] = []
-    for source in SOURCES:
-        payload = json.loads(source.read_text(encoding="utf-8"))
-        for enforcement in payload["enforcements"]:
-            statements.extend(enforcement["statements"])
-        statements.extend(payload.get("platform_enforcements", ()))
-    return statements
-
-
 def generated_sql() -> str:
-    statements = _statements()
-    selected: list[str] = []
+    """Return the frozen SQL after verifying its immutable reviewed identity.
+
+    Later migrations replace shared dispatch functions. Regenerating this migration
+    from the mutable current baseline would silently rewrite migration history.
+    """
+    sql = OUTPUT.read_text(encoding="utf-8")
+    if hashlib.sha256(sql.encode("utf-8")).hexdigest() != EXPECTED_SQL_SHA256:
+        raise RuntimeError("supplier-invoice landed-cost migration hash mismatch")
     for schema, name in FUNCTIONS:
-        create_prefix = f'CREATE FUNCTION "{schema}"."{name}"('
-        create = [statement for statement in statements if statement.startswith(create_prefix)]
-        if len(create) != 1:
-            raise RuntimeError(f"expected one reviewed definition for {schema}.{name}, found {len(create)}")
-        definition = create[0].replace(
-            "CREATE FUNCTION", "CREATE OR REPLACE FUNCTION", 1
-        )
-        selected.append("\n".join(line.rstrip() for line in definition.splitlines()))
-        signature_prefix = f'ALTER FUNCTION "{schema}"."{name}"('
-        ownership = [statement for statement in statements if statement.startswith(signature_prefix)]
-        if len(ownership) != 1:
-            raise RuntimeError(f"expected one ownership statement for {schema}.{name}")
-        selected.append(ownership[0])
-        revoke_prefix = f'REVOKE ALL ON FUNCTION "{schema}"."{name}"('
-        revokes = [statement for statement in statements if statement.startswith(revoke_prefix)]
-        if len(revokes) != 1:
-            raise RuntimeError(f"expected one revoke statement for {schema}.{name}")
-        selected.append(revokes[0])
-
-    prelude = """SET LOCAL ROLE erp_migration_owner;
-
-ALTER TABLE procurement.supplier_invoice_lines
-  ADD COLUMN landed_cost_allocation_method text;
-
-ALTER TABLE procurement.supplier_invoice_lines
-  ADD CONSTRAINT supplier_invoice_lines_landed_cost_allocation_ck CHECK (
-    (inventory_cost_treatment='capitalize'
-      AND landed_cost_allocation_method IN ('direct','quantity_weighted','value_weighted'))
-    OR (inventory_cost_treatment='expense'
-      AND landed_cost_allocation_method IS NULL)
-  ) NOT VALID;
-"""
-    return prelude + "\n" + ";\n\n".join(selected) + ";\n\nRESET ROLE;\n"
+        marker = f'CREATE OR REPLACE FUNCTION "{schema}"."{name}"('
+        if marker not in sql:
+            raise RuntimeError(f"frozen migration lacks {schema}.{name}")
+    return sql
 
 
 def main() -> None:
-    OUTPUT.write_text(generated_sql(), encoding="utf-8")
+    generated_sql()
+    print("supplier-invoice landed-cost migration: current")
 
 
 if __name__ == "__main__":
