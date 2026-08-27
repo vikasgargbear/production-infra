@@ -40,6 +40,7 @@ from ....domain.operator_actions import (
 from .mcp_agent_grants import _internal_auth, bearer
 from ..canonical_erp_reads import (
     CanonicalCustomerReceiptReadback,
+    canonical_customer_cheque_action_readback,
     canonical_customer_receipt_readback,
 )
 from ..canonical_inventory_transfers import (
@@ -738,6 +739,16 @@ CORE_READBACK_CONTRACTS = {
     "customer_receipt": CanonicalReadbackContract(
         "finance.customer_receipt.prepare", "finance.payment.post", "payment"
     ),
+    "customer_cheque_clearance": CanonicalReadbackContract(
+        "finance.customer_cheque_clearance.prepare",
+        "finance.customer_cheque_clearance.post",
+        "payment",
+    ),
+    "customer_cheque_bounce": CanonicalReadbackContract(
+        "finance.customer_cheque_bounce.prepare",
+        "finance.customer_cheque_bounce.post",
+        "payment",
+    ),
     "supplier_payment": CanonicalReadbackContract(
         "finance.supplier_payment.prepare", "finance.payment.post", "payment"
     ),
@@ -899,6 +910,63 @@ def customer_receipt_readback(
     return canonical_customer_receipt_readback(
         payment_id=payment_id,
         user=_projection_user(context),
+        db=db,
+    )
+
+
+def _customer_cheque_readback(
+    *,
+    command_request_id: UUID,
+    contract_name: str,
+    context: ActionContext,
+    service: OperatorActionService,
+    db: Session,
+) -> CanonicalCustomerReceiptReadback:
+    payment_id = _succeeded_resource(
+        command_request_id=command_request_id,
+        context=context,
+        service=service,
+        contract=CORE_READBACK_CONTRACTS[contract_name],
+    )
+    return canonical_customer_cheque_action_readback(
+        payment_id=payment_id, user=_projection_user(context), db=db
+    )
+
+
+@router.get(
+    "/commands/{command_request_id}/customer-cheque-clearance-readback",
+    response_model=CanonicalCustomerReceiptReadback,
+)
+def customer_cheque_clearance_readback(
+    command_request_id: UUID,
+    context: ActionContext = Depends(get_action_context),
+    service: OperatorActionService = Depends(get_operator_action_service),
+    db: Session = Depends(get_db),
+) -> CanonicalCustomerReceiptReadback:
+    return _customer_cheque_readback(
+        command_request_id=command_request_id,
+        contract_name="customer_cheque_clearance",
+        context=context,
+        service=service,
+        db=db,
+    )
+
+
+@router.get(
+    "/commands/{command_request_id}/customer-cheque-bounce-readback",
+    response_model=CanonicalCustomerReceiptReadback,
+)
+def customer_cheque_bounce_readback(
+    command_request_id: UUID,
+    context: ActionContext = Depends(get_action_context),
+    service: OperatorActionService = Depends(get_operator_action_service),
+    db: Session = Depends(get_db),
+) -> CanonicalCustomerReceiptReadback:
+    return _customer_cheque_readback(
+        command_request_id=command_request_id,
+        contract_name="customer_cheque_bounce",
+        context=context,
+        service=service,
         db=db,
     )
 

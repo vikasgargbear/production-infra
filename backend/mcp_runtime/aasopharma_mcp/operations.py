@@ -245,6 +245,13 @@ OPERATOR_READBACK_TOOLS: Mapping[str, tuple[str, str]] = {
     "erp_customer_receipt_readback": (
         "customer_receipt_readback", "customer-receipt-readback"
     ),
+    "erp_customer_cheque_clearance_readback": (
+        "customer_cheque_clearance_readback",
+        "customer-cheque-clearance-readback",
+    ),
+    "erp_customer_cheque_bounce_readback": (
+        "customer_cheque_bounce_readback", "customer-cheque-bounce-readback"
+    ),
     "erp_supplier_payment_readback": (
         "supplier_payment_readback", "supplier-payment-readback"
     ),

@@ -4158,6 +4158,30 @@ class CanonicalReceiptJournalLineReadback(BaseModel):
     functional_credit: MoneyJSON
 
 
+class CanonicalReceiptAdvanceReadback(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    open_item_id: UUID
+    sales_order_id: UUID
+    principal_amount: MoneyJSON
+    allocated_amount: MoneyJSON
+    residual_amount: MoneyJSON
+    status: Literal["open", "settled"]
+
+
+class CanonicalReceiptTerminalActionReadback(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    action_payment_id: UUID
+    action: Literal["cheque_clearance", "cheque_bounce"]
+    action_date: date
+    evidence_attachment_id: UUID
+    journal_entry_id: UUID
+    journal_number: str
+    journal_debit_total: MoneyJSON
+    journal_credit_total: MoneyJSON
+
+
 class CanonicalCustomerReceiptReadback(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -4167,7 +4191,15 @@ class CanonicalCustomerReceiptReadback(BaseModel):
     branch_id: UUID
     party_id: UUID
     settlement_account_id: UUID
-    payment_method: Literal["bank_transfer", "card", "upi"]
+    bank_account_id: Optional[UUID]
+    payment_method: Literal["cash", "cheque", "bank_transfer", "card", "upi"]
+    payment_purpose: Literal["commercial_settlement", "customer_advance"]
+    sales_order_id: Optional[UUID]
+    evidence_attachment_id: UUID
+    instrument_number: Optional[str]
+    instrument_date: Optional[date]
+    drawee_bank_name: Optional[str]
+    account_payee_confirmed: Optional[bool]
     external_reference: str
     amount: MoneyJSON
     status: Literal["posted"]
@@ -4176,6 +4208,8 @@ class CanonicalCustomerReceiptReadback(BaseModel):
     journal_debit_total: MoneyJSON
     journal_credit_total: MoneyJSON
     allocations: list[CanonicalReceiptAllocationReadback]
+    advance: Optional[CanonicalReceiptAdvanceReadback]
+    terminal_actions: list[CanonicalReceiptTerminalActionReadback]
     journal_lines: list[CanonicalReceiptJournalLineReadback]
     allocation_reconciled: Literal[True]
     journal_balanced: Literal[True]
@@ -4183,13 +4217,30 @@ class CanonicalCustomerReceiptReadback(BaseModel):
     @model_validator(mode="after")
     def validate_accounting_evidence(self):
         amount = Decimal(self.amount)
-        if not self.allocations:
-            raise ValueError("posted receipt readback requires allocation evidence")
         open_items = [allocation.open_item_id for allocation in self.allocations]
         if len(open_items) != len(set(open_items)):
             raise ValueError("posted receipt readback repeats an open item")
-        if sum((Decimal(row.amount) for row in self.allocations), Decimal("0")) != amount:
-            raise ValueError("posted receipt allocations do not reconcile to payment")
+        allocation_total = sum(
+            (Decimal(row.amount) for row in self.allocations), Decimal("0")
+        )
+        if self.payment_purpose == "commercial_settlement":
+            if not self.allocations or self.advance is not None or allocation_total != amount:
+                raise ValueError("posted invoice receipt allocations do not reconcile")
+        elif self.allocations or self.advance is None:
+            raise ValueError("posted customer advance requires zero invoice allocations")
+        elif Decimal(self.advance.principal_amount) != amount:
+            raise ValueError("customer advance principal does not reconcile to receipt")
+        elif self.advance.sales_order_id != self.sales_order_id:
+            raise ValueError("customer advance sales-order lineage does not reconcile")
+        if self.payment_method == "cheque":
+            if not all((self.instrument_number, self.instrument_date,
+                        self.drawee_bank_name, self.account_payee_confirmed)):
+                raise ValueError("cheque receipt readback lacks instrument evidence")
+        elif any((self.instrument_number, self.instrument_date,
+                  self.drawee_bank_name, self.account_payee_confirmed)):
+            raise ValueError("non-cheque receipt carries cheque instrument evidence")
+        if len(self.terminal_actions) > 1:
+            raise ValueError("customer cheque has more than one terminal action")
         if len(self.journal_lines) != 2:
             raise ValueError("posted receipt requires exactly two journal lines")
         debit = sum((Decimal(row.transaction_debit) for row in self.journal_lines), Decimal("0"))
@@ -4531,7 +4582,11 @@ def canonical_customer_receipt_readback(
     headers = _rows(db, """
         SELECT payment.id AS payment_id, payment.payment_number,
                payment.payment_date, payment.branch_id, payment.party_id,
-               payment.settlement_account_id, payment.payment_method,
+               payment.settlement_account_id, payment.bank_account_id,
+               payment.payment_method, payment.payment_purpose,
+               payment.sales_order_id, payment.evidence_attachment_id,
+               payment.instrument_number, payment.instrument_date,
+               payment.drawee_bank_name, payment.account_payee_confirmed,
                payment.external_reference, payment.amount, payment.status,
                journal.id AS journal_entry_id, journal.journal_number,
                journal.transaction_debit_total AS journal_debit_total,
@@ -4541,10 +4596,10 @@ def canonical_customer_receipt_readback(
             ON event.org_id=payment.org_id AND event.payment_id=payment.id
           JOIN finance.journal_entries journal
             ON journal.org_id=event.org_id AND journal.id=event.journal_entry_id
-           AND journal.status='posted'
+           AND journal.status IN ('posted','reversed')
          WHERE payment.org_id=:org_id AND payment.id=:payment_id
            AND payment.direction='receipt'
-           AND payment.payment_purpose='commercial_settlement'
+           AND payment.payment_purpose IN ('commercial_settlement','customer_advance')
            AND payment.status='posted'
            AND (:organization_scope
                 OR payment.branch_id=ANY(CAST(:branch_ids AS uuid[])))
@@ -4586,6 +4641,57 @@ def canonical_customer_receipt_readback(
                 OR payment.branch_id=ANY(CAST(:branch_ids AS uuid[])))
          ORDER BY line.line_number, line.id
     """, params)
+    advance_rows = _rows(db, """
+        SELECT item.id AS open_item_id, payment.sales_order_id,
+               item.principal_amount,
+               COALESCE(SUM(allocation.amount) FILTER (
+                 WHERE allocation.status='posted'
+                   AND allocation.reversal_of_allocation_id IS NULL
+                   AND NOT EXISTS (
+                     SELECT 1 FROM finance.allocations reversal
+                      WHERE reversal.org_id=allocation.org_id
+                        AND reversal.reversal_of_allocation_id=allocation.id
+                   )),0) AS allocated_amount,
+               item.principal_amount-COALESCE(SUM(allocation.amount) FILTER (
+                 WHERE allocation.status='posted'
+                   AND allocation.reversal_of_allocation_id IS NULL
+                   AND NOT EXISTS (
+                     SELECT 1 FROM finance.allocations reversal
+                      WHERE reversal.org_id=allocation.org_id
+                        AND reversal.reversal_of_allocation_id=allocation.id
+                   )),0) AS residual_amount,
+               item.status
+          FROM finance.payments payment
+          JOIN finance.accounting_events event
+            ON event.org_id=payment.org_id AND event.payment_id=payment.id
+          JOIN finance.open_items item
+            ON item.org_id=event.org_id AND item.accounting_event_id=event.id
+           AND item.item_side='payable'
+          LEFT JOIN finance.allocations allocation
+            ON allocation.org_id=item.org_id AND allocation.open_item_id=item.id
+         WHERE payment.org_id=:org_id AND payment.id=:payment_id
+           AND payment.payment_purpose='customer_advance'
+         GROUP BY item.id,payment.sales_order_id,item.principal_amount,item.status
+    """, params)
+    terminal_actions = _rows(db, """
+        SELECT terminal.id AS action_payment_id,
+               terminal.payment_purpose AS action,
+               terminal.payment_date AS action_date,
+               terminal.evidence_attachment_id,
+               journal.id AS journal_entry_id,journal.journal_number,
+               journal.transaction_debit_total AS journal_debit_total,
+               journal.transaction_credit_total AS journal_credit_total
+          FROM finance.payments terminal
+          JOIN finance.accounting_events event
+            ON event.org_id=terminal.org_id AND event.payment_id=terminal.id
+          JOIN finance.journal_entries journal
+            ON journal.org_id=event.org_id AND journal.id=event.journal_entry_id
+           AND journal.status='posted'
+         WHERE terminal.org_id=:org_id AND terminal.related_payment_id=:payment_id
+           AND terminal.payment_purpose IN ('cheque_clearance','cheque_bounce')
+           AND terminal.status='posted'
+         ORDER BY terminal.payment_date,terminal.id
+    """, params)
     header = headers[0]
     allocation_total = sum(
         (Decimal(str(row["amount"])) for row in allocations), Decimal("0")
@@ -4599,12 +4705,27 @@ def canonical_customer_receipt_readback(
         Decimal("0"),
     )
     amount = Decimal(str(header["amount"]))
+    advance = advance_rows[0] if len(advance_rows) == 1 else None
+    if len(advance_rows) > 1:
+        raise HTTPException(status_code=409, detail="Customer advance open item is ambiguous")
+    is_invoice_receipt = header["payment_purpose"] == "commercial_settlement"
     return {
         **header,
         "amount": money_json(header["amount"]),
         "journal_debit_total": money_json(header["journal_debit_total"]),
         "journal_credit_total": money_json(header["journal_credit_total"]),
         "allocations": [{**row, "amount": money_json(row["amount"])} for row in allocations],
+        "advance": None if advance is None else {
+            **advance,
+            "principal_amount": money_json(advance["principal_amount"]),
+            "allocated_amount": money_json(advance["allocated_amount"]),
+            "residual_amount": money_json(advance["residual_amount"]),
+        },
+        "terminal_actions": [{
+            **row,
+            "journal_debit_total": money_json(row["journal_debit_total"]),
+            "journal_credit_total": money_json(row["journal_credit_total"]),
+        } for row in terminal_actions],
         "journal_lines": [{
             **row,
             "transaction_debit": money_json(row["transaction_debit"]),
@@ -4612,9 +4733,38 @@ def canonical_customer_receipt_readback(
             "functional_debit": money_json(row["functional_debit"]),
             "functional_credit": money_json(row["functional_credit"]),
         } for row in journal_lines],
-        "allocation_reconciled": allocation_total == amount,
+        "allocation_reconciled": (
+            allocation_total == amount if is_invoice_receipt
+            else allocation_total == 0 and advance is not None
+            and Decimal(str(advance["principal_amount"])) == amount
+        ),
         "journal_balanced": line_debit == line_credit == amount,
     }
+
+
+@router.get(
+    "/payment-allocation/payment/{payment_id:uuid}/cheque-action-readback",
+    response_model=CanonicalCustomerReceiptReadback,
+)
+def canonical_customer_cheque_action_readback(
+    payment_id: UUID,
+    user: dict = FINANCE_USER,
+    db: Session = Depends(get_db),
+):
+    """Return the original receipt plus the exact succeeded terminal cheque action."""
+    org_id = _activate(db, user)
+    rows = _rows(db, """
+        SELECT terminal.related_payment_id AS original_payment_id
+          FROM finance.payments terminal
+         WHERE terminal.org_id=:org_id AND terminal.id=:payment_id
+           AND terminal.payment_purpose IN ('cheque_clearance','cheque_bounce')
+           AND terminal.status='posted' AND terminal.related_payment_id IS NOT NULL
+    """, {"org_id": org_id, "payment_id": payment_id})
+    if len(rows) != 1:
+        raise HTTPException(status_code=404, detail="Canonical cheque action not found")
+    return canonical_customer_receipt_readback(
+        payment_id=rows[0]["original_payment_id"], user=user, db=db
+    )
 
 
 def _amount(rows: list[dict], key: str):

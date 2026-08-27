@@ -199,6 +199,16 @@ def test_core_readback_contracts_are_one_exact_reviewed_mapping():
             "finance.payment.post",
             "payment",
         ),
+        "customer_cheque_clearance": (
+            "finance.customer_cheque_clearance.prepare",
+            "finance.customer_cheque_clearance.post",
+            "payment",
+        ),
+        "customer_cheque_bounce": (
+            "finance.customer_cheque_bounce.prepare",
+            "finance.customer_cheque_bounce.post",
+            "payment",
+        ),
         "supplier_payment": (
             "finance.supplier_payment.prepare",
             "finance.payment.post",
@@ -259,6 +269,8 @@ def test_internal_routes_publish_the_existing_canonical_response_models():
         "sales-return": mcp_actions.PostedReturnReadback,
         "purchase-return": mcp_actions.PostedReturnReadback,
         "customer-receipt": mcp_actions.CanonicalCustomerReceiptReadback,
+        "customer-cheque-clearance": mcp_actions.CanonicalCustomerReceiptReadback,
+        "customer-cheque-bounce": mcp_actions.CanonicalCustomerReceiptReadback,
         "supplier-payment": mcp_actions.PostedSupplierPaymentResponse,
         "inventory-transfer": mcp_actions.TransferReadbackResponse,
         "inventory-adjustment": mcp_actions.InventoryAdjustmentReadback,
