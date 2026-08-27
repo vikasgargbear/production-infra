@@ -397,8 +397,8 @@ alembic upgrade head
 
 1. Review [Development Workflow](development.md)
 2. Read [Testing Guide](testing.md)
-3. Explore [API Documentation](../backend/api/)
-4. Understand [Architecture](../backend/architecture/)
+3. Explore [API contract guidance](../backend/api/)
+4. Understand [canonical architecture](../architecture/)
 
 ---
 

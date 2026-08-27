@@ -283,9 +283,9 @@ npm run lint               # ESLint
 
 | Category | Path | Description |
 |----------|------|-------------|
-| **API Reference** | `docs/backend/api/` | All API endpoints |
-| **Architecture** | `docs/backend/architecture/` | System design |
-| **Database Schema** | `docs/backend/database/` | Table structures |
+| **API contract** | `docs/backend/api/` | Mounted/OpenAPI and canonical verification guidance |
+| **Architecture** | `docs/architecture/` | Canonical application and data authority |
+| **Database authority** | `database/canonical/` | Reviewed canonical sources and generated artifacts |
 | **Frontend Docs** | `frontend/docs/` | Components, guides |
 | **Getting Started** | `docs/guides/getting-started.md` | Full setup guide |
 | **Deployment** | `docs/deployment/` | Production deployment |
