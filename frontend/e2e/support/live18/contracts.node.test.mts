@@ -13,6 +13,25 @@ import {
 } from './browserHealth.ts';
 import { buildOperationFailureEvidence } from './failureEvidence.ts';
 import { isExpectedSessionExchange } from './session.ts';
+import { runUiStep } from './uiDriver.ts';
+
+test('goto reloads an identical hash route so certification phases cannot share form state', async () => {
+  const calls: string[] = [];
+  const appOrigin = 'https://erp.example';
+  const route = '/#/sales/invoice';
+  const page = {
+    url: () => `${appOrigin}${route}`,
+    reload: async () => { calls.push('reload'); },
+    goto: async (target: string) => { calls.push(`goto:${target}`); },
+  };
+  await runUiStep(page as any, appOrigin, { actor: 'requester', action: 'goto', value: route });
+  assert.deepEqual(calls, ['reload']);
+
+  calls.length = 0;
+  page.url = () => `${appOrigin}/#/sales/sales-order`;
+  await runUiStep(page as any, appOrigin, { actor: 'requester', action: 'goto', value: route });
+  assert.deepEqual(calls, [`goto:${appOrigin}${route}`]);
+});
 
 test('reviewed screenshots stay manual, runner-local, and credential guarded', () => {
   const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..');

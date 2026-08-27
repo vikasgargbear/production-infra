@@ -1,6 +1,7 @@
 import path from 'path';
 
-import { expect, Locator, Page } from '@playwright/test';
+import { expect } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 
 import type { UiStep } from './contracts';
 
@@ -28,7 +29,11 @@ export async function runUiStep(page: Page, appOrigin: string, step: UiStep): Pr
   }
   if (step.action === 'goto') {
     if (!step.value?.startsWith('/')) throw new Error('goto requires an application-relative path.');
-    await page.goto(`${appOrigin}${step.value}`);
+    const target = `${appOrigin}${step.value}`;
+    // Hash routers do not remount when asked to navigate to the URL already
+    // displayed. Each Live18 phase must start from a fresh product state.
+    if (page.url() === target) await page.reload();
+    else await page.goto(target);
     return;
   }
   const locator = locatorFor(page, step);
