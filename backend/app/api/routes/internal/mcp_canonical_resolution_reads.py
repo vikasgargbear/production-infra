@@ -263,6 +263,10 @@ def canonical_customer_search(
                         OR lower(COALESCE(registration.registration_number,''))=lower(:search)
                         OR COALESCE(contact.phone,'')=:search) AS _exact_match
                   FROM parties.customer_accounts AS customer
+                  CROSS JOIN LATERAL (
+                      SELECT erp_core_commands.current_organization_business_date()
+                               AS business_date
+                  ) business_clock
                   JOIN parties.parties AS party
                     ON party.org_id=customer.org_id AND party.id=customer.party_id
                   LEFT JOIN LATERAL (
@@ -295,8 +299,9 @@ def canonical_customer_search(
                                AND status='active'
                                AND is_primary IS TRUE
                                AND address_kind IN ('registered','billing','shipping')
-                               AND valid_from<=CURRENT_DATE
-                               AND (valid_until IS NULL OR valid_until>=CURRENT_DATE)
+                               AND valid_from<=business_clock.business_date
+                               AND (valid_until IS NULL
+                                    OR valid_until>=business_clock.business_date)
                              ORDER BY id
                              LIMIT 2
                         ) AS address
@@ -405,6 +410,10 @@ def canonical_stock_batch_search(
                      ORDER BY batch.expires_on
                    )::integer AS fefo_expiry_tier
               FROM inventory.stock_balances AS balance
+              CROSS JOIN LATERAL (
+                  SELECT erp_core_commands.current_organization_business_date()
+                           AS business_date
+              ) business_clock
               JOIN inventory.batches AS batch
                 ON batch.org_id=balance.org_id AND batch.id=balance.batch_id
               JOIN inventory.locations AS location
@@ -447,7 +456,9 @@ def canonical_stock_batch_search(
                         FROM catalog.uom_conversions
                        WHERE org_id=product.org_id AND product_id=product.id
                          AND status='active'
-                         AND (valid_until IS NULL OR valid_until>=CURRENT_DATE)
+                         AND valid_from<=business_clock.business_date
+                         AND (valid_until IS NULL
+                              OR valid_until>=business_clock.business_date)
                        ORDER BY from_uom_code, to_uom_code, valid_from, id
                        LIMIT 50
                     ) AS conversion
@@ -460,7 +471,7 @@ def canonical_stock_batch_search(
                AND batch.lot_kind='manufacturer_batch'
                AND batch.status='released'
                AND batch.released_at IS NOT NULL
-               AND batch.expires_on>CURRENT_DATE
+               AND batch.expires_on>business_clock.business_date
              ORDER BY fefo_expiry_tier, batch.batch_number, batch.id LIMIT :limit
             """
         ),

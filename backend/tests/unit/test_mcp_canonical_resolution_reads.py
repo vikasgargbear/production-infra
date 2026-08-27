@@ -378,7 +378,8 @@ def test_resolution_sql_returns_exact_action_lineage_identifiers():
     assert "PARTITION BY balance.product_id, balance.location_id" in resolution_source
     assert "ORDER BY batch.expires_on" in resolution_source
     assert "row_number() OVER (" not in resolution_source
-    assert "batch.expires_on>CURRENT_DATE" in resolution_source
+    assert "batch.expires_on>business_clock.business_date" in resolution_source
+    assert "CURRENT_DATE" not in resolution_source
     assert "allocation.id AS invoice_dispatch_allocation_id" in resolution_source
     assert "allocation.id AS supplier_invoice_receipt_allocation_id" in resolution_source
     assert "return_line.invoice_dispatch_allocation_id=allocation.id" in resolution_source

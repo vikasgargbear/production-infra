@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from copy import deepcopy
+from datetime import date
 from decimal import Decimal
 from pathlib import Path
 from typing import get_type_hints
@@ -267,14 +268,20 @@ def test_receipt_wire_decimals_remain_exact_strings():
 def test_context_and_readback_publish_the_postgres_organization_local_clock(monkeypatch):
     context_payload = _context_payload()
     context_lines = context_payload.pop("lines")
+    context_payload["business_date"] = date(2026, 8, 28)
     captured_sql: list[str] = []
+    captured_line_params: list[dict] = []
 
     def context_one(_db, sql, _params):
         captured_sql.append(sql)
         return context_payload
 
     monkeypatch.setattr(canonical_goods_receipts, "_one", context_one)
-    monkeypatch.setattr(canonical_goods_receipts, "_rows", lambda *_args: context_lines)
+    def context_rows(_db, _sql, params):
+        captured_line_params.append(params)
+        return context_lines
+
+    monkeypatch.setattr(canonical_goods_receipts, "_rows", context_rows)
     response = canonical_goods_receipts._canonical_purchase_order_receipt_context(
         object(), ORG_ID, UUID(str(context_payload["purchase_order_id"]))
     )
@@ -282,3 +289,9 @@ def test_context_and_readback_publish_the_postgres_organization_local_clock(monk
     assert response.business_as_of.isoformat() == "2026-08-28T10:30:00.123456"
     assert "transaction_timestamp() AT TIME ZONE organization.timezone" in captured_sql[0]
     assert "CURRENT_TIMESTAMP" not in captured_sql[0]
+    assert captured_line_params == [{
+        "org_id": ORG_ID,
+        "purchase_order_id": UUID(str(context_payload["purchase_order_id"])),
+        "branch_id": context_payload["branch_id"],
+        "business_date": date(2026, 8, 28),
+    }]

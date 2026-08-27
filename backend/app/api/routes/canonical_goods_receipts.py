@@ -285,6 +285,8 @@ def _canonical_purchase_order_receipt_context(
                organization.timezone AS organization_timezone,
                transaction_timestamp() AT TIME ZONE organization.timezone
                  AS business_as_of,
+               (transaction_timestamp() AT TIME ZONE organization.timezone)::date
+                 AS business_date,
                purchase_order.status
           FROM procurement.purchase_orders purchase_order
           JOIN core.organizations organization
@@ -308,6 +310,12 @@ def _canonical_purchase_order_receipt_context(
         raise HTTPException(
             status_code=404,
             detail="Approved canonical purchase order is unavailable for receipt",
+        )
+    business_date = header.pop("business_date", None)
+    if not isinstance(business_date, date):
+        raise HTTPException(
+            status_code=503,
+            detail="Canonical purchase order receipt business date is unavailable",
         )
 
     lines = _rows(db, """
@@ -369,8 +377,9 @@ def _canonical_purchase_order_receipt_context(
                  AND conversion.product_id=line.product_id
                  AND conversion.to_uom_code=product.base_uom_code
                  AND conversion.status='active'
-                 AND conversion.valid_from<=CURRENT_DATE
-                 AND (conversion.valid_until IS NULL OR conversion.valid_until>=CURRENT_DATE)
+                 AND conversion.valid_from<=CAST(:business_date AS date)
+                 AND (conversion.valid_until IS NULL
+                      OR conversion.valid_until>=CAST(:business_date AS date))
           ) conversion_data ON true
          WHERE line.org_id=:org_id AND line.purchase_order_id=:purchase_order_id
            AND line.line_kind='product'
@@ -381,6 +390,7 @@ def _canonical_purchase_order_receipt_context(
         "org_id": org_id,
         "purchase_order_id": purchase_order_id,
         "branch_id": header["branch_id"],
+        "business_date": business_date,
     })
     return ReceiptContextResponse.model_validate({**header, "lines": lines})
 

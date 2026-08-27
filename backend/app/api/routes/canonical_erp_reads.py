@@ -1345,6 +1345,10 @@ def units(user: dict = MASTER_USER, db: Session = Depends(get_db)):
 def company_profile(user: dict = MASTER_USER, db: Session = Depends(get_db)):
     org_id = _activate(db, user)
     rows = _rows(db, """
+        WITH business_clock AS MATERIALIZED (
+            SELECT erp_core_commands.current_organization_business_date()
+                     AS business_date
+        )
         SELECT organization.id AS org_id, organization.legal_name AS org_name,
                organization.legal_name, organization.trade_name, organization.pan AS pan_number,
                organization.cin AS cin_number,
@@ -1361,6 +1365,7 @@ def company_profile(user: dict = MASTER_USER, db: Session = Depends(get_db)):
                COALESCE(bank.accounts, '[]'::jsonb) AS bank_accounts,
                organization.status, organization.updated_at
           FROM core.organizations organization
+          CROSS JOIN business_clock
           LEFT JOIN LATERAL (
               SELECT gstin FROM tax.registrations
                WHERE org_id=organization.id AND status='active'
@@ -1385,8 +1390,8 @@ def company_profile(user: dict = MASTER_USER, db: Session = Depends(get_db)):
                  AND license_type_code IN (
                      'drug_wholesale_form_20b', 'drug_wholesale_form_21b'
                  )
-                 AND status='active' AND valid_from<=CURRENT_DATE
-                 AND (valid_until IS NULL OR valid_until>=CURRENT_DATE)
+                 AND status='active' AND valid_from<=business_clock.business_date
+                 AND (valid_until IS NULL OR valid_until>=business_clock.business_date)
           ) license ON true
           LEFT JOIN LATERAL (
               SELECT jsonb_agg(jsonb_build_object(
@@ -1468,14 +1473,19 @@ def integration_settings(user: dict = MASTER_USER, db: Session = Depends(get_db)
 def tax_codes(user: dict = MASTER_USER, db: Session = Depends(get_db)):
     _activate(db, user)
     return _rows(db, """
+        WITH business_clock AS MATERIALIZED (
+            SELECT erp_core_commands.current_organization_business_date()
+                     AS business_date
+        )
         SELECT id AS tax_id, code AS tax_code, description AS tax_name,
                cgst_rate, sgst_rate, igst_rate, cess_rate,
                GREATEST(cgst_rate+sgst_rate, igst_rate)+cess_rate AS total_rate,
                taxability, effective_from, effective_to,
                status='active' AS is_active, status
           FROM tax.tax_code_versions
-         WHERE status='active' AND effective_from<=current_date
-           AND (effective_to IS NULL OR effective_to>=current_date)
+          CROSS JOIN business_clock
+         WHERE status='active' AND effective_from<=business_clock.business_date
+           AND (effective_to IS NULL OR effective_to>=business_clock.business_date)
          ORDER BY code, version_number DESC
     """, {})
 
@@ -1589,13 +1599,18 @@ def canonical_gst_settings(
     """Return the one effective organization GST registration, if published."""
     org_id = _activate(db, user)
     rows = _rows(db, """
+        WITH business_clock AS MATERIALIZED (
+            SELECT erp_core_commands.current_organization_business_date()
+                     AS business_date
+        )
         SELECT id, branch_id, gstin, legal_name, trade_name, state_code,
                registration_type, business_vertical_code, effective_from,
                effective_to, status, row_version
           FROM tax.registrations
+          CROSS JOIN business_clock
          WHERE org_id=:org_id AND status='active'
-           AND effective_from<=CURRENT_DATE
-           AND (effective_to IS NULL OR effective_to>=CURRENT_DATE)
+           AND effective_from<=business_clock.business_date
+           AND (effective_to IS NULL OR effective_to>=business_clock.business_date)
          ORDER BY effective_from DESC, id
          LIMIT 2
     """, {"org_id": org_id})
@@ -1615,17 +1630,21 @@ def gst_dashboard(
 ):
     org_id = _activate(db, user)
     rows = _rows(db, """
-        WITH period_bounds AS (
+        WITH business_clock AS MATERIALIZED (
+            SELECT erp_core_commands.current_organization_business_date()
+                     AS business_date
+        ), period_bounds AS (
             SELECT CASE :period
-                     WHEN 'previous' THEN (date_trunc('month', CURRENT_DATE)-interval '1 month')::date
-                     WHEN 'quarter' THEN date_trunc('quarter', CURRENT_DATE)::date
-                     WHEN 'year' THEN date_trunc('year', CURRENT_DATE)::date
-                     ELSE date_trunc('month', CURRENT_DATE)::date
+                     WHEN 'previous' THEN (date_trunc('month', business_date)-interval '1 month')::date
+                     WHEN 'quarter' THEN date_trunc('quarter', business_date)::date
+                     WHEN 'year' THEN date_trunc('year', business_date)::date
+                     ELSE date_trunc('month', business_date)::date
                    END AS date_from,
                    CASE :period
-                     WHEN 'previous' THEN (date_trunc('month', CURRENT_DATE)-interval '1 day')::date
-                     ELSE CURRENT_DATE
+                     WHEN 'previous' THEN (date_trunc('month', business_date)-interval '1 day')::date
+                     ELSE business_date
                    END AS date_to
+              FROM business_clock
         )
         SELECT period.date_from, period.date_to,
                COALESCE(sales.total,0) AS output_tax,
@@ -2071,7 +2090,8 @@ def _sales_rows(db: Session, org_id: UUID, table_name: str, number_column: str,
           WHEN COALESCE(payment.paid_amount, 0) >= COALESCE(document.grand_total, 0)
             THEN 'paid'
           WHEN COALESCE(payment.paid_amount, 0) > 0 THEN 'partial'
-          WHEN payment.due_date IS NOT NULL AND payment.due_date < CURRENT_DATE
+          WHEN payment.due_date IS NOT NULL
+               AND payment.due_date < business_clock.business_date
             THEN 'overdue'
           ELSE 'pending'
         END
@@ -2116,6 +2136,12 @@ def _sales_rows(db: Session, org_id: UUID, table_name: str, number_column: str,
                ORDER BY item.created_at DESC, item.id DESC LIMIT 1
           ) payment ON true
     """ if include_invoice_payments else ""
+    business_clock_join = """
+          CROSS JOIN LATERAL (
+              SELECT erp_core_commands.current_organization_business_date()
+                       AS business_date
+          ) business_clock
+    """ if include_invoice_payments else ""
     search_filter = f"""
            AND (:search='' OR document.{number_column} ILIKE :search_pattern
                 OR party.legal_name ILIKE :search_pattern)
@@ -2144,6 +2170,7 @@ def _sales_rows(db: Session, org_id: UUID, table_name: str, number_column: str,
                document.created_at, document.updated_at
                {payment_columns}
           FROM sales.{table_name} document
+          {business_clock_join}
           JOIN parties.customer_accounts account
             ON account.org_id=document.org_id AND account.id=document.customer_account_id
           JOIN parties.parties party ON party.org_id=account.org_id AND party.id=account.party_id
@@ -3774,6 +3801,10 @@ def supplier_invoices(limit: int = Query(100, ge=1, le=500), skip: int = Query(0
                       user: dict = PURCHASE_USER, db: Session = Depends(get_db)):
     org_id = _activate(db, user)
     rows = _rows(db, """
+        WITH business_clock AS MATERIALIZED (
+            SELECT erp_core_commands.current_organization_business_date()
+                     AS business_date
+        )
         SELECT invoice.id AS supplier_invoice_id,
                invoice.supplier_invoice_number AS invoice_number,
                invoice.supplier_invoice_date AS invoice_date, invoice.due_date,
@@ -3791,13 +3822,14 @@ def supplier_invoices(limit: int = Query(100, ge=1, le=500), skip: int = Query(0
                CASE
                  WHEN COALESCE(payable.outstanding_amount,invoice.grand_total)<=0 THEN 'paid'
                  WHEN COALESCE(payable.outstanding_amount,invoice.grand_total)<invoice.grand_total THEN 'partial'
-                 WHEN invoice.due_date<CURRENT_DATE THEN 'overdue'
+                 WHEN invoice.due_date<business_clock.business_date THEN 'overdue'
                  ELSE 'pending'
                END AS payment_status,
                COALESCE(lines.items_count,0) AS items_count,
                count(*) OVER() AS _total,
                invoice.created_at, invoice.updated_at
           FROM procurement.supplier_invoices invoice
+          CROSS JOIN business_clock
           LEFT JOIN LATERAL (
               SELECT GREATEST(item.principal_amount-COALESCE(applied.amount,0),0) AS outstanding_amount
                 FROM finance.accounting_events event
@@ -3832,7 +3864,7 @@ def supplier_invoices(limit: int = Query(100, ge=1, le=500), skip: int = Query(0
            AND (:payment_status IS NULL OR CASE
                  WHEN COALESCE(payable.outstanding_amount,invoice.grand_total)<=0 THEN 'paid'
                  WHEN COALESCE(payable.outstanding_amount,invoice.grand_total)<invoice.grand_total THEN 'partial'
-                 WHEN invoice.due_date<CURRENT_DATE THEN 'overdue'
+                 WHEN invoice.due_date<business_clock.business_date THEN 'overdue'
                  ELSE 'pending' END=:payment_status)
          ORDER BY invoice.supplier_invoice_date DESC, invoice.id DESC
          LIMIT :limit OFFSET :skip
@@ -4012,6 +4044,8 @@ def goods_receipts(limit: int = Query(100, ge=1, le=500), skip: int = Query(0, g
                count(*) OVER() AS _total,
                receipt.created_at, receipt.updated_at
           FROM procurement.goods_receipts receipt
+          JOIN core.organizations organization
+            ON organization.id=receipt.org_id AND organization.status='active'
           JOIN parties.supplier_accounts account ON account.org_id=receipt.org_id AND account.id=receipt.supplier_account_id
           JOIN parties.parties party ON party.org_id=account.org_id AND party.id=account.party_id
           LEFT JOIN LATERAL (
@@ -4020,8 +4054,12 @@ def goods_receipts(limit: int = Query(100, ge=1, le=500), skip: int = Query(0, g
                WHERE line.org_id=receipt.org_id AND line.goods_receipt_id=receipt.id
           ) lines ON true
          WHERE receipt.org_id=:org_id
-           AND (:from_date IS NULL OR receipt.received_at::date>=CAST(:from_date AS date))
-           AND (:to_date IS NULL OR receipt.received_at::date<=CAST(:to_date AS date))
+           AND (:from_date IS NULL OR
+                (receipt.received_at AT TIME ZONE organization.timezone)::date
+                  >=CAST(:from_date AS date))
+           AND (:to_date IS NULL OR
+                (receipt.received_at AT TIME ZONE organization.timezone)::date
+                  <=CAST(:to_date AS date))
            AND (:status IS NULL OR receipt.status=:status)
            AND (:search IS NULL OR receipt.goods_receipt_number ILIKE '%%' || :search || '%%'
                 OR party.legal_name ILIKE '%%' || :search || '%%'
@@ -4232,7 +4270,10 @@ def _canonical_receivable_rows(
         or str(user.get("branch_scope") or "").lower() in {"all", "organization"}
     )
     return _rows(db, """
-        WITH effective_allocations AS (
+        WITH business_clock AS MATERIALIZED (
+            SELECT erp_core_commands.current_organization_business_date()
+                     AS business_date
+        ), effective_allocations AS (
             SELECT allocation.org_id, allocation.open_item_id,
                    COALESCE(SUM(allocation.amount), 0) AS allocated_amount,
                    MAX(allocation.allocation_date) AS last_payment_date
@@ -4255,9 +4296,11 @@ def _canonical_receivable_rows(
                    item.principal_amount,
                    GREATEST(item.principal_amount-COALESCE(applied.allocated_amount,0),0)
                      AS outstanding_amount,
-                   GREATEST(CURRENT_DATE-item.due_date,0) AS days_overdue,
+                   GREATEST(business_clock.business_date-item.due_date,0)
+                     AS days_overdue,
                    applied.last_payment_date
               FROM finance.open_items item
+              CROSS JOIN business_clock
               JOIN finance.accounting_events event
                 ON event.org_id=item.org_id AND event.id=item.accounting_event_id
                AND event.sales_invoice_id IS NOT NULL
@@ -4676,14 +4719,23 @@ def canonical_collection_aging(
     org_id = _activate(db, user)
     rows = _canonical_receivable_rows(db, org_id, user)
     collection_rows = _rows(db, """
+        WITH business_clock AS MATERIALIZED (
+            SELECT erp_core_commands.current_organization_business_date()
+                     AS business_date
+        )
         SELECT COALESCE(SUM(amount) FILTER (
-                   WHERE payment_date=CURRENT_DATE),0) AS today_collections,
+                   WHERE payment_date=business_clock.business_date),0)
+                   AS today_collections,
                COALESCE(SUM(amount) FILTER (
-                   WHERE payment_date>=CURRENT_DATE-interval '6 days'),0) AS week_collections,
+                   WHERE payment_date>=business_clock.business_date-6),0)
+                   AS week_collections,
                COALESCE(SUM(amount) FILTER (
-                   WHERE payment_date>=date_trunc('month',CURRENT_DATE)::date),0)
+                   WHERE payment_date>=date_trunc(
+                       'month',business_clock.business_date
+                   )::date),0)
                    AS month_collections
           FROM finance.payments
+          CROSS JOIN business_clock
          WHERE org_id=:org_id AND direction='receipt' AND status='posted'
            AND reversal_of_payment_id IS NULL
            AND NOT EXISTS (
@@ -4905,6 +4957,13 @@ def payment_analytics_trends(date_from: Optional[str] = None, date_to: Optional[
 
 def _dashboard_stats_totals(db: Session, params: dict) -> dict:
     rows = _rows(db, f"""
+        WITH business_clock AS MATERIALIZED (
+            SELECT organization.timezone,
+                   erp_core_commands.current_organization_business_date()
+                     AS business_date
+              FROM core.organizations organization
+             WHERE organization.id=:org_id AND organization.status='active'
+        )
         SELECT COALESCE(SUM(invoice.grand_total),0) AS total_revenue,
                count(*) AS total_invoices,
                count(DISTINCT invoice.customer_account_id) AS purchasing_customers,
@@ -4913,13 +4972,19 @@ def _dashboard_stats_totals(db: Session, params: dict) -> dict:
                    AND sales_order.status NOT IN ('cancelled','reversed')
                    AND (:date_from IS NULL OR sales_order.order_date >= CAST(:date_from AS date))
                    AND (:date_to IS NULL OR sales_order.order_date <= CAST(:date_to AS date))) AS total_orders,
-               (SELECT count(*) FROM parties.customer_accounts
-                 WHERE org_id=:org_id) AS total_customers,
-               (SELECT count(*) FROM parties.customer_accounts
-                 WHERE org_id=:org_id
-                   AND (:date_from IS NULL OR created_at::date >= CAST(:date_from AS date))
-                   AND (:date_to IS NULL OR created_at::date <= CAST(:date_to AS date))) AS new_customers
-          FROM sales.invoices invoice WHERE {_INVOICE_RANGE}
+               (SELECT count(*) FROM parties.customer_accounts customer
+                 WHERE customer.org_id=:org_id) AS total_customers,
+               (SELECT count(*) FROM parties.customer_accounts customer
+                 WHERE customer.org_id=:org_id
+                   AND (:date_from IS NULL OR
+                        (customer.created_at AT TIME ZONE business_clock.timezone)::date
+                          >= CAST(:date_from AS date))
+                   AND (:date_to IS NULL OR
+                        (customer.created_at AT TIME ZONE business_clock.timezone)::date
+                          <= CAST(:date_to AS date))) AS new_customers
+          FROM sales.invoices invoice
+          CROSS JOIN business_clock
+         WHERE {_INVOICE_RANGE}
     """, params)
     return rows[0]
 

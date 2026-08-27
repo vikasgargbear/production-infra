@@ -60,14 +60,12 @@ def _scope(user: dict[str, Any]) -> tuple[bool, list[UUID]]:
     return organization_scope, [UUID(str(value)) for value in (user.get("branch_ids") or [])]
 
 
-def _organization_business_date(db: Session, org_id: UUID) -> date:
+def _organization_business_date(db: Session) -> date:
     """Resolve overdue state against the organization's authoritative clock."""
 
     value = db.execute(text("""
-        SELECT (transaction_timestamp() AT TIME ZONE organization.timezone)::date
-          FROM core.organizations organization
-         WHERE organization.id=:org_id AND organization.status='active'
-    """), {"org_id": org_id}).scalar_one_or_none()
+        SELECT erp_core_commands.current_organization_business_date()
+    """)).scalar_one_or_none()
     if value is None:
         raise HTTPException(
             status_code=503,
@@ -369,7 +367,8 @@ def _history_sources() -> str:
 
       UNION ALL
       SELECT 'goods_receipt', receipt.id, receipt.branch_id, receipt.goods_receipt_number,
-             receipt.received_at::date, NULL::date, receipt.status,
+             (receipt.received_at AT TIME ZONE organization.timezone)::date,
+             NULL::date, receipt.status,
              receipt.supplier_account_id, party.legal_name,
              CASE WHEN lines.source_document_id IS NULL THEN NULL ELSE 'purchase_order' END,
              lines.source_document_id, lines.source_document_number,
@@ -379,6 +378,8 @@ def _history_sources() -> str:
 	             NULL::text, NULL::text, to_char(COALESCE(lines.total_amount,0),{_MONEY}),
 	             NULL::text, NULL::text, NULL, receipt.created_at, receipt.updated_at
         FROM procurement.goods_receipts receipt
+        JOIN core.organizations organization
+          ON organization.id=receipt.org_id AND organization.status='active'
         JOIN parties.supplier_accounts account ON account.org_id=receipt.org_id AND account.id=receipt.supplier_account_id
         JOIN parties.parties party ON party.org_id=account.org_id AND party.id=account.party_id
         LEFT JOIN LATERAL (
@@ -482,7 +483,7 @@ def canonical_document_history(
     if date_from and date_to and date_from > date_to:
         raise HTTPException(status_code=422, detail="Document history date range is invalid")
     org_id = _activate(db, user)
-    business_date = _organization_business_date(db, org_id)
+    business_date = _organization_business_date(db)
     organization_scope, branch_ids = _scope(user)
     params = {
         "org_id": org_id,

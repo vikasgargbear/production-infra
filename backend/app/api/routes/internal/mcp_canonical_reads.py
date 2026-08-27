@@ -281,6 +281,10 @@ def canonical_product_search(
                    gtin, product.status, product.row_version,
                    conversions.uom_conversions
               FROM catalog.products AS product
+              CROSS JOIN LATERAL (
+                  SELECT erp_core_commands.current_organization_business_date()
+                           AS business_date
+              ) business_clock
               LEFT JOIN LATERAL (
                   SELECT COALESCE(
                            jsonb_agg(
@@ -302,7 +306,9 @@ def canonical_product_search(
                         FROM catalog.uom_conversions
                        WHERE org_id=product.org_id AND product_id=product.id
                          AND status='active'
-                         AND (valid_until IS NULL OR valid_until>=CURRENT_DATE)
+                         AND valid_from<=business_clock.business_date
+                         AND (valid_until IS NULL
+                              OR valid_until>=business_clock.business_date)
                        ORDER BY from_uom_code, to_uom_code, valid_from, id
                        LIMIT 50
                     ) AS conversion
@@ -409,9 +415,14 @@ def canonical_gst_settings(
                    registration_type, business_vertical_code, effective_from,
                    effective_to, status, row_version
               FROM tax.registrations
+              CROSS JOIN LATERAL (
+                  SELECT erp_core_commands.current_organization_business_date()
+                           AS business_date
+              ) business_clock
              WHERE org_id=:org_id AND status='active'
-               AND effective_from<=CURRENT_DATE
-               AND (effective_to IS NULL OR effective_to>=CURRENT_DATE)
+               AND effective_from<=business_clock.business_date
+               AND (effective_to IS NULL
+                    OR effective_to>=business_clock.business_date)
                AND ((CAST(:branch_id AS uuid) IS NULL AND branch_id IS NULL)
                     OR branch_id=CAST(:branch_id AS uuid))
              ORDER BY effective_from DESC, id
