@@ -1307,6 +1307,9 @@ def test_goods_receipt_template_derives_clock_and_expiry_and_targets_prior_po() 
     assert operation["missing_required_steps"][2]["value"] == (
         "{{resource_purchase_order}}"
     )
+    assert operation["missing_required_steps"][3]["locator"]["name"] == (
+        "Record canonical receipt for purchase order {{resource_purchase_order}}"
+    )
     assert operation["prepare_steps"][2]["value"] == "{{resource_purchase_order}}"
     assert operation["prepare_steps"][3]["locator"]["name"] == (
         "Record canonical receipt for purchase order {{resource_purchase_order}}"

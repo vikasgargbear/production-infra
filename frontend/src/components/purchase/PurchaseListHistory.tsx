@@ -137,11 +137,19 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
   };
 
   const buildSearchParams = useCallback((overrides: Partial<typeof filters> = {}) => {
-    if (!businessDateRef.current) {
-      dispatch({ type: 'SET_ERROR', error: 'Organization business date is unavailable.' });
+    try {
+      return buildPurchaseHistoryParams(
+        { ...filters, ...overrides },
+        documentType,
+        businessDateRef.current || undefined,
+      );
+    } catch (error) {
+      dispatch({
+        type: 'SET_ERROR',
+        error: error instanceof Error ? error.message : 'Organization business date is unavailable.',
+      });
       return null;
     }
-    return buildPurchaseHistoryParams({ ...filters, ...overrides }, documentType, businessDateRef.current);
   }, [dispatch, filters, documentType]);
 
   const handleRefresh = useCallback(async () => {

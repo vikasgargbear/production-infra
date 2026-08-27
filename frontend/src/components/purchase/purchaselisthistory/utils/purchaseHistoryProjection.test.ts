@@ -23,6 +23,27 @@ describe('purchase history query and export projection', () => {
     expect(resolvePurchaseHistoryDates('all', '', '', '2026-08-24')).toEqual({});
   });
 
+  it('does not block all-time or explicit exact searches on business-date bootstrap', () => {
+    const allTime = buildPurchaseHistoryParams({
+      ...filters,
+      searchQuery: '6ef82619-a636-5c6b-8125-7635848028e5',
+      dateFilter: 'all',
+      statusFilter: 'all',
+    }, 'purchase_order');
+    expect(allTime).toEqual(expect.objectContaining({
+      search: '6ef82619-a636-5c6b-8125-7635848028e5',
+      status: undefined,
+    }));
+    expect(resolvePurchaseHistoryDates('all')).toEqual({});
+    expect(resolvePurchaseHistoryDates('last7days', '2026-08-01', '2026-08-07')).toEqual({
+      from_date: '2026-08-01',
+      to_date: '2026-08-07',
+    });
+    expect(() => resolvePurchaseHistoryDates('last7days')).toThrow(
+      'Organization business date is unavailable.',
+    );
+  });
+
   it('escapes supplier names and document numbers in CSV', () => {
     const csv = purchaseHistoryCsv([{
       po_number: 'PI,"42"', supplier_name: 'A, B Pharma', po_date: '2026-08-24',

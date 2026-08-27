@@ -47,6 +47,11 @@ const response = (number: string) => ({
   }],
 });
 
+afterEach(() => {
+  jest.useRealTimers();
+  jest.clearAllMocks();
+});
+
 test('debounces deterministically and ignores an older purchase search response', async () => {
   jest.useFakeTimers();
   const oldRequest = deferred<any>();
@@ -102,4 +107,53 @@ test('offers receipt navigation for the exact approved canonical purchase order'
   });
   fireEvent.click(receipt);
   expect(onRecordReceipt).toHaveBeenCalledWith(purchaseOrderId);
+});
+
+test('searches the exact approved PO before business-date bootstrap finishes', async () => {
+  jest.useFakeTimers();
+  const purchaseOrderId = '6ef82619-a636-5c6b-8125-7635848028e5';
+  const supplierBootstrap = deferred<any>();
+  const purchaseBootstrap = deferred<any>();
+  const onRecordReceipt = jest.fn();
+  (canonicalDocumentHistoryApi.get as jest.Mock)
+    .mockReturnValueOnce(supplierBootstrap.promise)
+    .mockReturnValueOnce(purchaseBootstrap.promise)
+    .mockResolvedValueOnce({
+      total: 1, page: 1, page_size: 25, business_date: '2026-08-27',
+      items: [{
+        ...response('LIVE18-PO').items[0],
+        document_kind: 'purchase_order',
+        document_id: purchaseOrderId,
+        status: 'approved',
+        paid_amount: null,
+        outstanding_amount: null,
+        payment_status: null,
+      }],
+    });
+
+  render(<PurchaseListHistory onRecordReceipt={onRecordReceipt} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Purchase Orders' }));
+  fireEvent.change(screen.getByLabelText('purchase history search'), {
+    target: { value: purchaseOrderId },
+  });
+  await act(async () => { jest.advanceTimersByTime(500); });
+
+  expect(canonicalDocumentHistoryApi.get).toHaveBeenLastCalledWith(
+    expect.objectContaining({ search: purchaseOrderId }),
+  );
+  expect(screen.getByRole('button', {
+    name: `Record canonical receipt for purchase order ${purchaseOrderId}`,
+  })).toBeTruthy();
+
+  await act(async () => {
+    supplierBootstrap.resolve({
+      items: [], total: 0, page: 1, page_size: 25, business_date: '2026-08-27',
+    });
+    purchaseBootstrap.resolve({
+      items: [], total: 0, page: 1, page_size: 25, business_date: '2026-08-27',
+    });
+  });
+  expect(screen.getByRole('button', {
+    name: `Record canonical receipt for purchase order ${purchaseOrderId}`,
+  })).toBeTruthy();
 });

@@ -14,13 +14,17 @@ export function resolvePurchaseHistoryDates(
   preset: string,
   explicitFrom = '',
   explicitTo = '',
-  businessDate: string,
+  businessDate?: string,
 ): { from_date?: string; to_date?: string } {
   if (explicitFrom || explicitTo) {
     return {
       from_date: explicitFrom || undefined,
       to_date: explicitTo || undefined,
     };
+  }
+  if (preset === 'all') return {};
+  if (!businessDate) {
+    throw new Error('Organization business date is unavailable.');
   }
   const range = historyPresetRange(businessDate, preset);
   return range ? { from_date: range.from, to_date: range.to } : {};
@@ -29,7 +33,7 @@ export function resolvePurchaseHistoryDates(
 export function buildPurchaseHistoryParams(
   filters: PurchaseHistoryFilters,
   documentType: PurchaseDocumentType,
-  businessDate: string,
+  businessDate?: string,
 ): Record<string, string | undefined> {
   const status = filters.statusFilter === 'all' ? undefined : filters.statusFilter;
   return {
