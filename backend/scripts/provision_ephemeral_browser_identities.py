@@ -226,8 +226,12 @@ class Live18IdentityBoundary(NamedTuple):
     active_temporary_grant_count: int
 
 
-def _live18_authority() -> tuple[tuple[tuple[str, str, str, str], ...], tuple[str, ...]]:
-    """Derive the full live18 web grant from the reviewed generated authority contract."""
+def _live18_authority() -> tuple[
+    tuple[tuple[str, str, str, str], ...],
+    tuple[tuple[str, str, str, str], ...],
+    tuple[str, ...],
+]:
+    """Derive durable published and temporary ready-run MCP authorities."""
     contract = json.loads(OPERATOR_CONTRACT_PATH.read_text(encoding="utf-8"))
     matrix = json.loads(LIVE18_MATRIX_PATH.read_text(encoding="utf-8"))
     operations = matrix.get("operations", [])
@@ -236,16 +240,24 @@ def _live18_authority() -> tuple[tuple[tuple[str, str, str, str], ...], tuple[st
         item.get("id") for item in deferred_rows
         if isinstance(item, dict) and item.get("status") == "deferred"
     }
-    required = {
-        item.get("command_operation") for item in operations
-        if isinstance(item, dict) and item.get("id") not in deferred
-    }
+    published_operations = [
+        item for item in operations
+        if isinstance(item, dict) and item.get("availability") == "published"
+    ]
+    published = {item.get("command_operation") for item in published_operations}
+    ready_operations = [
+        item for item in published_operations if item.get("id") not in deferred
+    ]
+    ready = {item.get("command_operation") for item in ready_operations}
     if (
         matrix.get("operation_count") != 18
         or matrix.get("required_operation_count") != 17
         or len(operations) != matrix["operation_count"]
         or len(deferred) != len(deferred_rows)
-        or None in required
+        or len(published_operations) != matrix["operation_count"]
+        or len(ready_operations) != matrix["required_operation_count"]
+        or None in published
+        or None in ready
     ):
         raise EphemeralIdentityError(
             "Live18 operation matrix must contain 18 named operations and an exact ready scope"
@@ -256,35 +268,56 @@ def _live18_authority() -> tuple[tuple[tuple[str, str, str, str], ...], tuple[st
         for action in actions
         if isinstance(action, dict) and action.get("operation_key")
     }
-    if len(required) != 16 or not required <= set(by_operation):
+    if len(published) != 17 or set(by_operation) != published:
+        raise EphemeralIdentityError(
+            "Generated operator contract must expose all 17 published prepare commands"
+        )
+    if len(ready) != 16 or not ready < published:
         raise EphemeralIdentityError(
             "Generated operator contract must expose all 16 release-ready prepare commands"
         )
-    capabilities = tuple(
-        (
-            operation,
-            "write",
-            str(by_operation[operation]["risk"]),
-            str(by_operation[operation]["approval_policy"]),
+    def capabilities(
+        operations: set[object],
+    ) -> tuple[tuple[str, str, str, str], ...]:
+        return tuple(
+            (
+                str(operation),
+                "write",
+                str(by_operation[str(operation)]["risk"]),
+                str(by_operation[str(operation)]["approval_policy"]),
+            )
+            for operation in sorted(operations, key=str)
+        ) + (
+            (
+                "automation.command.approve",
+                "write",
+                "consequential_write",
+                "actor_confirmation",
+            ),
+            (
+                "automation.command.execute",
+                "write",
+                "consequential_write",
+                "actor_confirmation",
+            ),
+            ("automation.command.status.get", "read", "read_only", "none"),
         )
-        for operation in sorted(required)
-    ) + (
-        ("automation.command.approve", "write", "consequential_write", "actor_confirmation"),
-        ("automation.command.execute", "write", "consequential_write", "actor_confirmation"),
-        ("automation.command.status.get", "read", "read_only", "none"),
-    )
     permissions = tuple(sorted({
-        str(by_operation[operation]["permission"])
-        for operation in required
+        str(by_operation[str(operation)]["permission"])
+        for operation in ready
     } | {
         "automation.command.approve",
         "automation.command.execute",
         "automation.command.view",
     }))
-    return capabilities, permissions
+    return capabilities(published), capabilities(ready), permissions
 
 
-LIVE18_REQUESTER_CAPABILITIES, LIVE18_REQUESTER_PERMISSIONS = _live18_authority()
+(
+    LIVE18_PUBLISHED_REQUESTER_CAPABILITIES,
+    LIVE18_REQUESTER_CAPABILITIES,
+    LIVE18_REQUESTER_PERMISSIONS,
+) = _live18_authority()
 
 
 def _baseline_capability_bounds(
@@ -308,7 +341,7 @@ def _baseline_capability_bounds(
 
 
 LIVE18_BASELINE_OPERATOR_CAPABILITY_BOUNDS = _baseline_capability_bounds(
-    LIVE18_REQUESTER_CAPABILITIES
+    LIVE18_PUBLISHED_REQUESTER_CAPABILITIES
     + (("inventory.destructions.get", "read", "read_only", "none"),)
 )
 LIVE18_BASELINE_REVIEWER_CAPABILITY_BOUNDS = _baseline_capability_bounds(

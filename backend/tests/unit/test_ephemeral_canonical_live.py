@@ -66,9 +66,9 @@ def test_live18_capabilities_extend_only_the_live18_profile_from_generated_autho
 
     assert "finance.expense_claim.prepare" not in ordinary
     assert "inventory.destruction.prepare" not in ordinary
-    assert live18["finance.expense_claim.prepare"] == "separate_approver"
+    assert "finance.expense_claim.prepare" not in live18
     assert live18["inventory.destruction.prepare"] == "separate_approver"
-    assert len(MODULE.LIVE18_PREPARE_CAPABILITIES) == 17
+    assert len(MODULE.LIVE18_PREPARE_CAPABILITIES) == 16
 
 
 def test_live23_fixture_resolution_requires_a_bounded_run_token_and_lineage() -> None:
