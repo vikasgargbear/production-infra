@@ -102,7 +102,6 @@ export function canonicalPurchaseOrderValidationError(
         if (!order.items.length) return 'Add at least one purchase-order item.';
 
         order.items.forEach((item, index) => {
-            requiredUuid(item.id, `Item ${index + 1} line`);
             requiredUuid(item.product_id, `Item ${index + 1} product`);
             requiredUuid(item.uom_conversion_id, `Item ${index + 1} UOM`);
             const billed = canonicalDecimal(
@@ -195,7 +194,6 @@ export function buildCanonicalPurchaseOrderPreparePayload(
                 QUANTITY_PATTERN,
             );
             return {
-                line_id: requiredUuid(item.id, `Item ${index + 1} line`),
                 product_id: requiredUuid(item.product_id, `Item ${index + 1} product`),
                 uom_conversion_id: requiredUuid(
                     item.uom_conversion_id,

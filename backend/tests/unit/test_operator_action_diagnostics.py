@@ -108,7 +108,7 @@ def test_command_diagnostics_do_not_change_public_route_contracts():
         "/web/actions/commands/{command_request_id}": (
             {"GET"},
             web.get_command_status,
-            web.ExecutionResponse,
+            web.CommandStatusResponse,
         ),
     }
 

@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict
 from app.api.routes import web_operator_actions as web
 from app.domain.operator_actions import (
     ActionErrorCode,
+    CommandState,
     OperatorActionError,
     PreparedCommand,
 )
@@ -139,6 +140,54 @@ def test_web_prepare_calls_the_shared_operator_service(monkeypatch):
     assert captured["context"] is context
     assert captured["idempotency_key"] == "web-test-0001"
     assert captured["payload"] == {"branch_id": branch_id}
+
+
+def test_web_command_status_preserves_recovery_metadata(monkeypatch):
+    command_id = uuid4()
+    resource_id = uuid4()
+    audit_id = uuid4()
+    expires_at = datetime(2099, 1, 1, tzinfo=timezone.utc)
+    context = SimpleNamespace(organization_id=uuid4())
+
+    class Service:
+        def deployment_readiness(self):
+            return True
+
+        def adapter_readiness(self):
+            return {"automation.command.status.get": True}
+
+        def get_status(self, **kwargs):
+            assert kwargs == {
+                "command_request_id": command_id,
+                "context": context,
+            }
+            return CommandState(
+                command_request_id=command_id,
+                command_type="inventory.document.post",
+                status="succeeded",
+                preview_hash="sha256:" + "c" * 64,
+                expires_at=expires_at,
+                resource_type="inventory_document",
+                resource_id=resource_id,
+                failure=None,
+                audit_references=({"id": str(audit_id)},),
+            )
+
+    monkeypatch.setattr(web, "_command_context", lambda *_args, **_kwargs: context)
+    monkeypatch.setattr(web, "record_operator_action", lambda **_kwargs: None)
+
+    response = web.get_command_status(
+        command_id,
+        user=_user(),
+        db=object(),
+        service=Service(),
+    )
+
+    assert response.status == "succeeded"
+    assert response.expires_at == expires_at
+    assert response.resource_id == resource_id
+    assert response.failure is None
+    assert response.audit_references == ({"id": str(audit_id)},)
 
 
 def test_web_prepare_maps_fefo_policy_rejection_to_structured_conflict(monkeypatch):

@@ -59,7 +59,6 @@ describe('canonical purchase-order command', () => {
             tax_charge_mechanism: 'normal',
             rounding_policy: 'none',
             lines: [{
-                line_id: PRODUCT,
                 product_id: PRODUCT,
                 uom_conversion_id: UOM,
                 billed_quantity: '1.5',
@@ -70,6 +69,7 @@ describe('canonical purchase-order command', () => {
         });
         expect(payload.lines[0]).not.toHaveProperty('gst_percent');
         expect(payload.lines[0]).not.toHaveProperty('pack_size');
+        expect(payload.lines[0]).not.toHaveProperty('line_id');
     });
 
     it.each([

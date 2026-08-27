@@ -235,6 +235,12 @@ def test_bank_reconciliation_prepare_is_one_exact_backend_transaction():
     assert prepared.required_approvals == ({"policy": "separate_approver", "count": 1},)
     assert prepared.inventory_impact == () and prepared.tax_impact == ()
     assert prepared.financial_impact[0]["creates_journal"] is False
+    persisted_preview = next(
+        json.loads(params["preview_bytes"])
+        for statement, params in session.executions
+        if "persist_bank_reconciliation_prepare" in statement
+    )
+    assert persisted_preview["match_method"] == payload["match_method"]
     sql = "\n".join(item[0] for item in session.executions)
     assert "pg_advisory_xact_lock" in sql
     assert "resolve_bank_reconciliation_prepare" in sql

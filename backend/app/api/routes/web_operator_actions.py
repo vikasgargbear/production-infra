@@ -103,6 +103,20 @@ class ExecutionResponse(StrictDTO):
     idempotency_replayed: bool = False
 
 
+class CommandStatusResponse(StrictDTO):
+    command_request_id: UUID
+    command_type: str
+    status: str
+    preview_hash: str
+    expires_at: Optional[datetime] = None
+    resource_type: Optional[str] = None
+    resource_id: Optional[UUID] = None
+    approved_at: Optional[datetime] = None
+    executed_at: Optional[datetime] = None
+    failure: Optional[dict[str, Any]] = None
+    audit_references: tuple[dict[str, Any], ...] = ()
+
+
 class InventoryAdjustmentEvidence(StrictDTO):
     evidence_attachment_id: UUID
     status: Literal["verified", "retained"]
@@ -1628,13 +1642,13 @@ def execute_command(
     return response
 
 
-@router.get("/commands/{command_request_id}", response_model=ExecutionResponse)
+@router.get("/commands/{command_request_id}", response_model=CommandStatusResponse)
 def get_command_status(
     command_request_id: UUID,
     user: dict = Depends(_web_user),
     db: Session = Depends(get_db),
     service: OperatorActionService = Depends(get_operator_action_service),
-) -> ExecutionResponse:
+) -> CommandStatusResponse:
     """GET-only recovery after an ambiguous execute response; never retries a write."""
 
     operation = "automation.command.status.get"
@@ -1652,7 +1666,7 @@ def get_command_status(
             context=context,
             command_request_id=command_request_id,
         )
-    response = ExecutionResponse(**result.__dict__)
+    response = CommandStatusResponse(**result.__dict__)
     record_operator_action(
         operation=operation,
         outcome="accepted",

@@ -3355,6 +3355,7 @@ class SqlAlchemyOperatorActionService:
                     "financial_impact": list(financial_impact),
                     "inventory_impact": [],
                     "legal_scope": resolution["legal_scope"],
+                    "match_method": resolution["match_method"],
                     "operation": "finance.bank_reconciliation.match",
                     "organization_id": str(context.organization_id),
                     "request_hash": hashlib.sha256(request_bytes).hexdigest(),
