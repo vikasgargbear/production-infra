@@ -1734,10 +1734,13 @@ def import_gstr1_reporting_release(
 
 
 def reconcile_gstr1_reporting_release(
-    connection, source: bytes, dataset_bytes: bytes,
+    connection, source_sha256: str, dataset_bytes: bytes,
     *, initial_activation_replayed: bool,
 ) -> dict[str, Any]:
     """Read back the immutable release and both exact active rule intervals."""
+
+    if re.fullmatch(r"[0-9a-f]{64}", source_sha256) is None:
+        raise RuntimeError("GSTR-1 reporting source SHA-256 is invalid")
 
     with connection.cursor() as cursor:
         cursor.execute(
@@ -1779,7 +1782,7 @@ def reconcile_gstr1_reporting_release(
             or row[2] != "active"
             or row[3] != "gst_portal"
             or row[4] != GSTR1_REPORTING_SOURCE_URI
-            or row[5] != hashlib.sha256(source).hexdigest()
+            or row[5] != source_sha256
             or row[6] != hashlib.sha256(dataset_bytes).hexdigest()
             or row[7] != 2
             or str(row[8]) != IDS["reviewer_user"]
@@ -1800,7 +1803,7 @@ def reconcile_gstr1_reporting_release(
         "release_id": IDS["gstr1_reporting_release"],
         "ruleset_version": GSTR1_REPORTING_RULESET_VERSION,
         "record_count": 2,
-        "source_sha256": hashlib.sha256(source).hexdigest(),
+        "source_sha256": source_sha256,
         "dataset_sha256": hashlib.sha256(dataset_bytes).hexdigest(),
         "reviewed_by_user_id": IDS["reviewer_user"],
         "activated_by_user_id": IDS["operator_user"],
@@ -1810,6 +1813,40 @@ def reconcile_gstr1_reporting_release(
         "initial_activation_replayed": initial_activation_replayed,
         "existing_exact_release_reconciled": not initial_activation_replayed,
     }
+
+
+def reconcile_demo_gstr1_reporting_authority(
+    connection, dataset_bytes: bytes
+) -> dict[str, Any]:
+    """Reconcile an installed GSTR-1 authority without a live portal fetch.
+
+    GSTR-1 filing/reporting authority is intentionally outside the core
+    transaction certification boundary.  A disposable ERP fixture must not
+    become unavailable because the GST tutorial portal is temporarily down.
+    When the reviewed immutable release is already installed, verify its exact
+    source and dataset hashes from PostgreSQL.  When it is absent, report an
+    explicit deferred boundary; importing or refreshing the official artifact
+    belongs to the separately reviewed regulatory-data workflow.
+    """
+
+    if not demo_gstr1_reporting_release_exists(connection):
+        return {
+            "status": "deferred",
+            "reason": "official_gst_portal_onboarding_deferred",
+            "ruleset_version": GSTR1_REPORTING_RULESET_VERSION,
+            "source_uri": GSTR1_REPORTING_SOURCE_URI,
+            "source_sha256": GSTR1_REPORTING_SOURCE_SHA256,
+            "dataset_sha256": hashlib.sha256(dataset_bytes).hexdigest(),
+            "record_count": 0,
+            "initial_activation_replayed": False,
+            "existing_exact_release_reconciled": False,
+        }
+    return reconcile_gstr1_reporting_release(
+        connection,
+        GSTR1_REPORTING_SOURCE_SHA256,
+        dataset_bytes,
+        initial_activation_replayed=False,
+    )
 
 
 def seed_business_master(connection) -> None:
@@ -5845,7 +5882,6 @@ def main() -> int:
     evidence_dir.mkdir(parents=True, exist_ok=True)
     source = fetch_official_source(evidence_dir)
     adjustment_source = fetch_adjustment_source(evidence_dir)
-    gstr1_reporting_source = fetch_gstr1_reporting_source(evidence_dir)
     itc_reversal_source = fetch_itc_reversal_source(evidence_dir)
     expense_receipt_bytes = reviewed_expense_receipt()
     reviewed_live18_scalars = live18_reviewed_scalars()
@@ -5859,7 +5895,6 @@ def main() -> int:
     with database_connection("PSYCOPG_DATABASE_URL") as bootstrap:
         release_exists = demo_tax_release_exists(bootstrap)
         adjustment_release_exists = demo_adjustment_release_exists(bootstrap)
-        gstr1_reporting_release_exists = demo_gstr1_reporting_release_exists(bootstrap)
         existing_itc_reversal_authority = resolve_existing_itc_reversal_authority(
             bootstrap, itc_reversal_source
         )
@@ -5888,18 +5923,13 @@ def main() -> int:
             import_tax_release(importer, source, dataset_bytes)
         if not adjustment_release_exists:
             import_adjustment_release(importer, adjustment_source, adjustment_bytes)
-        if not gstr1_reporting_release_exists:
-            import_gstr1_reporting_release(
-                importer, gstr1_reporting_source, gstr1_reporting_bytes
-            )
         if existing_itc_reversal_authority is None:
             import_itc_reversal_release(
                 importer, itc_reversal_source, itc_reversal_bytes
             )
     with database_connection("PSYCOPG_DATABASE_URL") as bootstrap:
-        gstr1_reporting_reconciliation = reconcile_gstr1_reporting_release(
-            bootstrap, gstr1_reporting_source, gstr1_reporting_bytes,
-            initial_activation_replayed=not gstr1_reporting_release_exists,
+        gstr1_reporting_reconciliation = reconcile_demo_gstr1_reporting_authority(
+            bootstrap, gstr1_reporting_bytes
         )
         seed_business_master(bootstrap)
         seed_end_to_end_master(

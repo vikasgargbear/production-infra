@@ -290,13 +290,79 @@ def test_exact_release_readback_reconciles_hashes_rules_and_identities() -> None
         ),
     ]
     result = module.reconcile_gstr1_reporting_release(
-        _Connection(rows=[rows]), source, dataset,
+        _Connection(rows=[rows]), hashlib.sha256(source).hexdigest(), dataset,
         initial_activation_replayed=True,
     )
     assert result["initial_activation_replayed"] is True
     assert result["existing_exact_release_reconciled"] is False
     assert result["record_count"] == 2
     assert result["reviewed_by_user_id"] != result["activated_by_user_id"]
+
+
+def test_demo_reuses_exact_installed_gstr1_authority_without_portal_fetch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_script()
+    dataset = b"canonical"
+    attested_at = datetime(2026, 8, 25, 6, 0, tzinfo=timezone.utc)
+    common = (
+        module.IDS["gstr1_reporting_release"], module.GSTR1_REPORTING_RULESET_VERSION,
+        "active", "gst_portal", module.GSTR1_REPORTING_SOURCE_URI,
+        module.GSTR1_REPORTING_SOURCE_SHA256, hashlib.sha256(dataset).hexdigest(), 2,
+        module.IDS["reviewer_user"], attested_at,
+    )
+    rows = [
+        common + (
+            module.IDS["gstr1_reporting_legacy_rule"], "gstn-through-2024-07",
+            Decimal("250000.00"), date(2017, 7, 1), date(2024, 7, 31), "active",
+            module.IDS["operator_user"], attested_at,
+            module.IDS["gstr1_reporting_activation_request"],
+        ),
+        common + (
+            module.IDS["gstr1_reporting_current_rule"], "gstn-from-2024-08",
+            Decimal("100000.00"), date(2024, 8, 1), None, "active",
+            module.IDS["operator_user"], attested_at,
+            module.IDS["gstr1_reporting_activation_request"],
+        ),
+    ]
+    connection = _Connection(rows=[(True,), rows])
+    monkeypatch.setattr(
+        module,
+        "fetch_gstr1_reporting_source",
+        lambda _path: pytest.fail("demo reconciliation must not call the GST portal"),
+    )
+
+    result = module.reconcile_demo_gstr1_reporting_authority(connection, dataset)
+
+    assert result["existing_exact_release_reconciled"] is True
+    assert result["source_sha256"] == module.GSTR1_REPORTING_SOURCE_SHA256
+
+
+def test_demo_defers_missing_gstr1_authority_without_fabricating_rules(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_script()
+    dataset = b"canonical"
+    connection = _Connection(rows=[(False,)])
+    monkeypatch.setattr(
+        module,
+        "fetch_gstr1_reporting_source",
+        lambda _path: pytest.fail("core demo provisioning must not call the GST portal"),
+    )
+
+    result = module.reconcile_demo_gstr1_reporting_authority(connection, dataset)
+
+    assert result == {
+        "status": "deferred",
+        "reason": "official_gst_portal_onboarding_deferred",
+        "ruleset_version": module.GSTR1_REPORTING_RULESET_VERSION,
+        "source_uri": module.GSTR1_REPORTING_SOURCE_URI,
+        "source_sha256": module.GSTR1_REPORTING_SOURCE_SHA256,
+        "dataset_sha256": hashlib.sha256(dataset).hexdigest(),
+        "record_count": 0,
+        "initial_activation_replayed": False,
+        "existing_exact_release_reconciled": False,
+    }
 
 
 def test_activation_remains_inside_explicit_demo_opt_in() -> None:
