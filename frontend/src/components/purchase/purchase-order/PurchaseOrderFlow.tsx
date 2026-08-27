@@ -45,6 +45,10 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
     purchaseOrder,
     setPurchaseOrder,
     documentPolicy,
+    branches,
+    branchId,
+    setBranchId,
+    branchLoadError,
     selectedSupplier,
     currentStep,
     setCurrentStep,
@@ -89,7 +93,22 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
           <h3 className="text-sm font-semibold text-gray-700">ORDER INFORMATION</h3>
         </div>
         <ContentCard title={undefined} subtitle={undefined} actions={undefined}>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <label className="text-sm font-medium text-gray-700">
+              Branch
+              <select
+                value={branchId}
+                onChange={(event) => setBranchId(event.target.value)}
+                className="mt-1 min-h-11 w-full rounded-lg border border-gray-300 bg-white px-3"
+              >
+                <option value="">Select branch</option>
+                {branches.map(branch => (
+                  <option key={branch.branch_id} value={branch.branch_id}>
+                    {branch.branch_code} — {branch.branch_name}
+                  </option>
+                ))}
+              </select>
+            </label>
             <div>
               <StandardDatePicker
                 label="PO Date"
@@ -106,6 +125,9 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
               />
             </div>
           </div>
+          {branchLoadError && (
+            <p role="alert" className="mt-3 text-sm text-red-700">{branchLoadError}</p>
+          )}
         </ContentCard>
       </div>
 

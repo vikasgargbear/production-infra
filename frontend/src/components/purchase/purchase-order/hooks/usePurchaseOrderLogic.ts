@@ -9,8 +9,10 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useAuth } from '../../../../contexts/AuthContext';
 import { clientUuid } from '../../../../utils/clientUuid';
+import { branchesApi } from '../../../../services/api';
 import { canonicalBusinessContextApi } from '../../../../services/api/modules/org/canonicalBusinessContext.api';
 import type { CanonicalDocumentPolicy } from '../../../../services/api/modules/org/canonicalBusinessContext.api';
+import { isCanonicalUuid } from '../../../../utils/canonicalUuid';
 import { toast } from 'react-toastify';
 import { usePurchaseOrderSave } from './usePurchaseOrderSave';
 import {
@@ -75,6 +77,12 @@ export interface CreatedPOData {
     totalAmount: number | string;
 }
 
+export interface PurchaseOrderBranchChoice {
+    branch_id: string;
+    branch_code: string;
+    branch_name: string;
+}
+
 export interface UsePurchaseOrderLogicProps {
     prefilledData?: Partial<PurchaseOrderData> | null;
     onClose: () => void;
@@ -85,6 +93,10 @@ export interface UsePurchaseOrderLogicReturn {
     purchaseOrder: PurchaseOrderData;
     setPurchaseOrder: React.Dispatch<React.SetStateAction<PurchaseOrderData>>;
     documentPolicy: CanonicalDocumentPolicy | null;
+    branches: PurchaseOrderBranchChoice[];
+    branchId: string;
+    setBranchId: React.Dispatch<React.SetStateAction<string>>;
+    branchLoadError: string | null;
     selectedSupplier: any;
     setSelectedSupplier: React.Dispatch<React.SetStateAction<any>>;
     currentStep: number;
@@ -142,6 +154,19 @@ export const getInitialPurchaseOrder = (
     status: 'draft'
 });
 
+export const canonicalPurchaseOrderBranches = (value: unknown): PurchaseOrderBranchChoice[] => {
+    if (!Array.isArray(value)) return [];
+    return value.flatMap((row: any) => {
+        const branchId = String(row?.branch_id ?? '').trim();
+        const branchCode = String(row?.branch_code ?? '').trim();
+        const branchName = String(row?.branch_name ?? '').trim();
+        if (!isCanonicalUuid(branchId) || !branchCode || !branchName || row?.is_active === false) {
+            return [];
+        }
+        return [{ branch_id: branchId, branch_code: branchCode, branch_name: branchName }];
+    });
+};
+
 export function usePurchaseOrderLogic({
     prefilledData = null,
     onClose
@@ -150,6 +175,12 @@ export function usePurchaseOrderLogic({
 
     // Core State
     const [purchaseOrder, setPurchaseOrder] = useState<PurchaseOrderData>(() => getInitialPurchaseOrder(prefilledData));
+    const [branches, setBranches] = useState<PurchaseOrderBranchChoice[]>([]);
+    const [branchId, setBranchId] = useState(() => {
+        const authenticatedBranch = String(user?.branch_id ?? '').trim();
+        return isCanonicalUuid(authenticatedBranch) ? authenticatedBranch : '';
+    });
+    const [branchLoadError, setBranchLoadError] = useState<string | null>(null);
     const [selectedSupplier, setSelectedSupplier] = useState(prefilledData?.supplier_details || null);
     const [currentStep, setCurrentStep] = useState(1);
     const [errors, setErrors] = useState<Record<string, string>>({});
@@ -178,6 +209,28 @@ export function usePurchaseOrderLogic({
                     ? error.message
                     : 'Unable to load the organization business date.',
             );
+        });
+        return () => { active = false; };
+    }, []);
+
+    useEffect(() => {
+        let active = true;
+        void branchesApi.getAll().then(response => {
+            if (!active) return;
+            const choices = canonicalPurchaseOrderBranches(response.data?.branches);
+            if (!choices.length) {
+                throw new Error('No active canonical branch is available for purchase orders.');
+            }
+            setBranches(choices);
+            setBranchId(current => choices.some(branch => branch.branch_id === current) ? current : '');
+            setBranchLoadError(null);
+        }).catch(error => {
+            if (!active) return;
+            setBranches([]);
+            setBranchId('');
+            setBranchLoadError(error instanceof Error
+                ? error.message
+                : 'Unable to load canonical purchase-order branches.');
         });
         return () => { active = false; };
     }, []);
@@ -252,12 +305,12 @@ export function usePurchaseOrderLogic({
         const canonicalError = canonicalPurchaseOrderValidationError(
             purchaseOrder,
             selectedSupplier,
-            user?.branch_id,
+            branchId,
         );
         if (canonicalError) newErrors.submission = canonicalError;
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
-    }, [purchaseOrder, selectedSupplier, user?.branch_id]);
+    }, [branchId, purchaseOrder, selectedSupplier]);
 
     const {
         saving,
@@ -269,7 +322,7 @@ export function usePurchaseOrderLogic({
     } = usePurchaseOrderSave({
         purchaseOrder,
         selectedSupplier,
-        branchId: user?.branch_id,
+        branchId,
         isOnline,
         documentPolicy,
         setPurchaseOrder,
@@ -280,7 +333,7 @@ export function usePurchaseOrderLogic({
     const purchaseOrderValidationError = canonicalPurchaseOrderValidationError(
         purchaseOrder,
         selectedSupplier,
-        user?.branch_id,
+        branchId,
     );
 
     const handlePrint = useCallback(() => {
@@ -291,6 +344,10 @@ export function usePurchaseOrderLogic({
         purchaseOrder,
         setPurchaseOrder,
         documentPolicy,
+        branches,
+        branchId,
+        setBranchId,
+        branchLoadError,
         selectedSupplier,
         setSelectedSupplier,
         currentStep,

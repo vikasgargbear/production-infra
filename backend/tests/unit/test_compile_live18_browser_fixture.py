@@ -871,6 +871,7 @@ def test_purchase_order_template_compiles_reviewed_commercial_choices() -> None:
         {
             "clock": {"business_date": "2026-08-25"},
             "identity": {
+                "branch_id": "d3000000-0000-7000-8000-000000000040",
                 "supplier_account_id": "d3000000-0000-7000-8000-000000000041",
                 "product_id": "d3000000-0000-7000-8000-000000000042",
             },
@@ -892,9 +893,12 @@ def test_purchase_order_template_compiles_reviewed_commercial_choices() -> None:
     )
     _validate_compiled_steps("purchase_order", operation, "actor_confirmation")
     assert used == set(scalars)
-    assert operation["prepare_steps"][1]["value"] == "2026-08-28"
-    assert operation["prepare_steps"][6]["value"] == "2.000000"
-    assert operation["prepare_steps"][7]["value"] == "84.0000"
+    assert operation["prepare_steps"][1]["value"] == (
+        "d3000000-0000-7000-8000-000000000040"
+    )
+    assert operation["prepare_steps"][2]["value"] == "2026-08-28"
+    assert operation["prepare_steps"][7]["value"] == "2.000000"
+    assert operation["prepare_steps"][8]["value"] == "84.0000"
 
 
 def test_supplier_invoice_template_uses_run_scoped_authority_and_reviewed_attestation() -> None:
