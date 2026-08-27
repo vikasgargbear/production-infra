@@ -44,10 +44,10 @@ BEGIN
     expected_runtime_count:=CASE
       WHEN pg_catalog.to_regprocedure(
         'erp_automation_commands.execute_bank_reconciliation_command(uuid,uuid)'
-      ) IS NULL THEN 21
+      ) IS NULL THEN 25
       WHEN pg_catalog.to_regprocedure(
         'erp_automation_commands.execute_approved_expense_claim(uuid,uuid)'
-      ) IS NULL THEN 28
+      ) IS NULL THEN 32
       ELSE 36
     END;
     IF runtime_count<>expected_runtime_count THEN
