@@ -52,7 +52,9 @@ def test_context_uses_command_schema_business_date_and_settlement_uuid():
     ).model_dump(mode="json")
 
     assert response["business_date"] == "2026-08-25"
-    assert response["payment_methods"] == ["bank_transfer", "card", "upi"]
+    assert response["payment_methods"] == [
+        "cash", "cheque", "bank_transfer", "card", "upi"
+    ]
     assert response["settlement_accounts"][0]["bank_account_id"] == str(
         account["bank_account_id"]
     )

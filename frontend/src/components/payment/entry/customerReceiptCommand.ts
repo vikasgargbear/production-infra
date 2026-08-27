@@ -1,7 +1,7 @@
 import { isCanonicalUuid } from '../../../utils/canonicalUuid';
 import { exactDecimalString, exactDecimalUnits } from '../../../utils/exactDecimal';
 
-export type CanonicalReceiptMethod = 'bank_transfer' | 'card' | 'upi';
+export type CanonicalReceiptMethod = 'cash' | 'cheque' | 'bank_transfer' | 'card' | 'upi';
 
 export interface ReceiptOutstandingInvoice {
   invoice_id: string;
@@ -26,6 +26,14 @@ export interface CustomerReceiptDraft {
   reference_number: string;
   bank_account_id: string;
   settlement_account_id: string;
+  branch_id?: string;
+  evidence_attachment_id?: string;
+  sales_order_id?: string;
+  receipt_purpose?: 'invoice_settlement' | 'customer_advance';
+  instrument_number?: string;
+  instrument_date?: string;
+  drawee_bank_name?: string;
+  account_payee_confirmed?: boolean;
   allocation_method: string;
   allocations: ReceiptAllocation[];
 }
@@ -35,9 +43,15 @@ export interface CanonicalCustomerReceiptPreparePayload {
   branch_id: string;
   payment_date: string;
   customer_account_id: string;
-  settlement_account_id: string;
-  bank_account_id: string;
+  bank_account_id?: string;
   payment_method: CanonicalReceiptMethod;
+  receipt_purpose: 'invoice_settlement' | 'customer_advance';
+  sales_order_id?: string;
+  evidence_attachment_id: string;
+  instrument_number?: string;
+  instrument_date?: string;
+  drawee_bank_name?: string;
+  account_payee_confirmed?: boolean;
   amount: string;
   allocations: Array<{ open_item_id: string; amount: string }>;
   external_reference: string;
@@ -58,8 +72,8 @@ export function centsToMoney(cents: bigint): string {
 }
 
 export function canonicalReceiptMethod(paymentMode: string): CanonicalReceiptMethod | null {
-  if (paymentMode === 'bank_transfer' || paymentMode === 'card' || paymentMode === 'upi') {
-    return paymentMode;
+  if (['cash', 'cheque', 'bank_transfer', 'card', 'upi'].includes(paymentMode)) {
+    return paymentMode as CanonicalReceiptMethod;
   }
   return null;
 }
@@ -110,26 +124,39 @@ export function buildCustomerReceiptPreparePayload(
 ): CanonicalCustomerReceiptPreparePayload {
   const method = canonicalReceiptMethod(draft.payment_mode);
   if (!method) {
-    throw new Error('Canonical receipt posting supports UPI, Card, or Bank Transfer. Cash, Cheque, and Split are unavailable.');
-  }
-  if (draft.allocation_method === 'advance') {
-    throw new Error('Customer advance posting is unavailable until its reviewed canonical command is connected.');
+    throw new Error('Select a supported canonical receipt method.');
   }
   const amountCents = moneyToCents(draft.amount);
   if (amountCents <= 0n) throw new Error('Receipt amount must be greater than zero.');
   if (!isCanonicalUuid(draft.customer_account_id)) throw new Error('Select a canonical customer account.');
-  if (!isCanonicalUuid(draft.bank_account_id) || !isCanonicalUuid(draft.settlement_account_id)) {
+  const usesBank = !['cash', 'cheque'].includes(method);
+  if (usesBank && !isCanonicalUuid(draft.bank_account_id)) {
     throw new Error('Select a canonical bank settlement account.');
   }
+  if (!usesBank && draft.bank_account_id) throw new Error('Cash and uncleared cheque receipts cannot select a bank account.');
+  if (!isCanonicalUuid(draft.evidence_attachment_id)) throw new Error('Select verified immutable receipt evidence.');
   const reference = draft.reference_number.trim();
   if (!reference) throw new Error('A bank, UPI, or gateway reference is required.');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(draft.payment_date)) throw new Error('Select a valid payment date.');
 
+  const purpose = draft.receipt_purpose ?? 'invoice_settlement';
+  const isAdvance = purpose === 'customer_advance';
+  if (isAdvance) {
+    if (!isCanonicalUuid(draft.sales_order_id) || !isCanonicalUuid(draft.branch_id)) {
+      throw new Error('Select an approved canonical goods order for the customer advance.');
+    }
+    if (draft.allocations.length) throw new Error('Customer advances must have zero invoice allocations.');
+  }
+  if (method === 'cheque' && (!String(draft.instrument_number ?? '').trim()
+    || !/^\d{4}-\d{2}-\d{2}$/.test(String(draft.instrument_date ?? ''))
+    || !String(draft.drawee_bank_name ?? '').trim() || !draft.account_payee_confirmed)) {
+    throw new Error('Cheque requires account-payee instrument and verified evidence details.');
+  }
   const byInvoice = new Map(outstandingInvoices.map(invoice => [invoice.invoice_id, invoice]));
   const seenOpenItems = new Set<string>();
   const branches = new Set<string>();
   let allocatedCents = 0n;
-  const allocations = draft.allocations.map(allocation => {
+  const allocations = isAdvance ? [] : draft.allocations.map(allocation => {
     const invoice = byInvoice.get(allocation.invoice_id);
     if (!invoice || !isCanonicalUuid(invoice.open_item_id) || !isCanonicalUuid(invoice.branch_id)) {
       throw new Error(`Invoice ${allocation.invoice_number || allocation.invoice_id} lacks canonical allocation evidence.`);
@@ -144,19 +171,27 @@ export function buildCustomerReceiptPreparePayload(
     allocatedCents += cents;
     return { open_item_id: invoice.open_item_id!, amount: centsToMoney(cents) };
   });
-  if (allocations.length === 0 || allocatedCents !== amountCents) {
+  if (!isAdvance && (allocations.length === 0 || allocatedCents !== amountCents)) {
     throw new Error('Invoice allocations must exactly equal the receipt amount.');
   }
-  if (branches.size !== 1) throw new Error('A receipt can allocate invoices from exactly one branch.');
+  if (!isAdvance && branches.size !== 1) throw new Error('A receipt can allocate invoices from exactly one branch.');
 
   return {
     idempotency_key: idempotencyKey,
-    branch_id: [...branches][0],
+    branch_id: isAdvance ? draft.branch_id! : [...branches][0],
     payment_date: draft.payment_date,
     customer_account_id: draft.customer_account_id,
-    settlement_account_id: draft.settlement_account_id,
-    bank_account_id: draft.bank_account_id,
+    ...(usesBank ? { bank_account_id: draft.bank_account_id } : {}),
     payment_method: method,
+    receipt_purpose: purpose,
+    ...(isAdvance ? { sales_order_id: draft.sales_order_id } : {}),
+    evidence_attachment_id: draft.evidence_attachment_id!,
+    ...(method === 'cheque' ? {
+      instrument_number: String(draft.instrument_number).trim(),
+      instrument_date: draft.instrument_date,
+      drawee_bank_name: String(draft.drawee_bank_name).trim(),
+      account_payee_confirmed: true,
+    } : {}),
     amount: centsToMoney(amountCents),
     allocations,
     external_reference: reference,

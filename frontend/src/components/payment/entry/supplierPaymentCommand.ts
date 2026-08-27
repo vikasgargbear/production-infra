@@ -57,12 +57,16 @@ export interface SupplierPaymentPreparePayload extends Record<string, unknown> {
   supplier_account_id: string;
   branch_id: string;
   bank_account_id: string;
-  settlement_account_id: string;
   payment_date: string;
   payment_method: SupplierPaymentMethod;
   external_reference: string;
-  gross_amount: string;
-  allocations: Array<{ open_item_id: string; amount: string }>;
+  expected_gross_amount: string;
+  allocations: Array<{
+    open_item_id: string;
+    cash_amount: string;
+    supplier_advance_open_item_id?: string;
+    adjustment_note_open_item_id?: string;
+  }>;
 }
 
 const MONEY = /^(?:0|[1-9]\d*)(?:\.(\d{1,2}))?$/;
@@ -166,7 +170,7 @@ export function buildSupplierPaymentPreparePayload(
       throw new Error(`Allocation for ${source.document_number} exceeds its authoritative outstanding amount.`);
     }
     total += amount;
-    return { open_item_id: source.open_item_id, amount: supplierMinorToMoney(amount) };
+    return { open_item_id: source.open_item_id, cash_amount: supplierMinorToMoney(amount) };
   });
   if (!allocations.length || total <= 0n) {
     throw new Error('Allocate a positive amount to at least one supplier invoice.');
@@ -176,11 +180,10 @@ export function buildSupplierPaymentPreparePayload(
     supplier_account_id: supplier.supplier_account_id,
     branch_id: branch.branch_id,
     bank_account_id: bank.bank_account_id,
-    settlement_account_id: bank.settlement_account_id,
     payment_date: draft.payment_date,
     payment_method: draft.payment_method,
     external_reference: reference,
-    gross_amount: supplierMinorToMoney(total),
+    expected_gross_amount: supplierMinorToMoney(total),
     allocations,
   };
 }
@@ -204,17 +207,16 @@ export function validateSupplierPaymentPreview(
   const impacts = Array.isArray(document.financial_impact) ? document.financial_impact : [];
   if (impacts.length !== 1) throw new Error('Supplier-payment preview lacks one exact financial impact.');
   const impact = impacts[0] as Record<string, unknown>;
-  if (supplierMoneyToMinor(String(impact.gross_liability_settlement || '')) !== supplierMoneyToMinor(payload.gross_amount)
-    || supplierMoneyToMinor(String(impact.cash_disbursed_amount || '')) !== supplierMoneyToMinor(payload.gross_amount)
-    || supplierMoneyToMinor(String(impact.withheld_amount || '')) !== 0n
-    || impact.settlement_account_id !== payload.settlement_account_id) {
+  if (supplierMoneyToMinor(String(impact.gross_liability_settlement || '')) !== supplierMoneyToMinor(payload.expected_gross_amount)
+    || supplierMoneyToMinor(String(impact.cash_disbursed_amount || '')) !== supplierMoneyToMinor(payload.expected_gross_amount)
+    || supplierMoneyToMinor(String(impact.withheld_amount || '')) !== 0n) {
     throw new Error('Supplier-payment preview financial totals differ from the draft.');
   }
   const rows = Array.isArray(impact.allocations) ? impact.allocations as Array<Record<string, unknown>> : [];
-  const expected = new Map(payload.allocations.map(row => [row.open_item_id, supplierMoneyToMinor(row.amount)]));
+  const expected = new Map(payload.allocations.map(row => [row.open_item_id, supplierMoneyToMinor(row.cash_amount)]));
   if (rows.length !== expected.size || rows.some(row => (
     !expected.has(String(row.open_item_id || ''))
-    || expected.get(String(row.open_item_id || '')) !== supplierMoneyToMinor(String(row.allocated_amount || ''))
+    || expected.get(String(row.open_item_id || '')) !== supplierMoneyToMinor(String(row.cash_allocated_amount || ''))
   ))) {
     throw new Error('Supplier-payment preview allocations differ from the draft.');
   }

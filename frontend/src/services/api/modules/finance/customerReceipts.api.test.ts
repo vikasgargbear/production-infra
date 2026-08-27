@@ -33,8 +33,9 @@ describe('canonical receipt execution and reconciliation', () => {
 
   const preparePayload = () => ({
     idempotency_key: 'receipt:1', branch_id: invoiceId, payment_date: '2026-08-25',
-    customer_account_id: invoiceId, settlement_account_id: paymentId, bank_account_id: invoiceId,
-    payment_method: 'upi' as const, amount: '168.00',
+    customer_account_id: invoiceId, bank_account_id: invoiceId,
+    payment_method: 'upi' as const, receipt_purpose: 'invoice_settlement' as const,
+    evidence_attachment_id: invoiceId, amount: '168.00',
     allocations: [{ open_item_id: openItemId, amount: '168.00' }], external_reference: 'UPI-1',
   });
 
@@ -65,6 +66,7 @@ describe('canonical receipt execution and reconciliation', () => {
     } });
     (paymentAllocationApi.getCustomerReceiptReadback as jest.Mock).mockResolvedValue({ data: {
       payment_id: paymentId, payment_number: 'RCPT-4', status: 'posted', amount: '168.00',
+      payment_purpose: 'commercial_settlement',
       allocation_reconciled: true, journal_balanced: true,
       allocations: [{ open_item_id: openItemId, amount: '168.00' }],
     } });
@@ -72,8 +74,9 @@ describe('canonical receipt execution and reconciliation', () => {
     expect(approveAndExecuteCanonicalAction).toHaveBeenCalledWith('finance.customer_receipt.prepare', expect.any(Object), 'receipt-lifecycle');
     const result = await reconcileCustomerReceipt(paymentId, {
       idempotency_key: 'receipt:1', branch_id: invoiceId, payment_date: '2026-08-25',
-      customer_account_id: invoiceId, settlement_account_id: invoiceId, bank_account_id: invoiceId,
-      payment_method: 'upi', amount: '168.00', allocations: [{ open_item_id: openItemId, amount: '168.00' }], external_reference: 'UPI-1',
+      customer_account_id: invoiceId, bank_account_id: invoiceId,
+      payment_method: 'upi', receipt_purpose: 'invoice_settlement', evidence_attachment_id: invoiceId,
+      amount: '168.00', allocations: [{ open_item_id: openItemId, amount: '168.00' }], external_reference: 'UPI-1',
     }, new Map([[openItemId, { invoice_id: invoiceId, due: '168.00' }]]));
     expect(result).toEqual({ payment_id: paymentId, payment_number: 'RCPT-4' });
   });
@@ -85,13 +88,15 @@ describe('canonical receipt execution and reconciliation', () => {
     } });
     (paymentAllocationApi.getCustomerReceiptReadback as jest.Mock).mockResolvedValue({ data: {
       payment_id: paymentId, payment_number: 'RCPT-4', status: 'posted', amount: '168.00',
+      payment_purpose: 'commercial_settlement',
       allocation_reconciled: true, journal_balanced: true,
       allocations: [{ open_item_id: openItemId, amount: '168.00' }],
     } });
     await expect(reconcileCustomerReceipt(paymentId, {
       idempotency_key: 'receipt:1', branch_id: invoiceId, payment_date: '2026-08-25',
-      customer_account_id: invoiceId, settlement_account_id: invoiceId, bank_account_id: invoiceId,
-      payment_method: 'upi', amount: '168.00', allocations: [{ open_item_id: openItemId, amount: '168.00' }], external_reference: 'UPI-1',
+      customer_account_id: invoiceId, bank_account_id: invoiceId,
+      payment_method: 'upi', receipt_purpose: 'invoice_settlement', evidence_attachment_id: invoiceId,
+      amount: '168.00', allocations: [{ open_item_id: openItemId, amount: '168.00' }], external_reference: 'UPI-1',
     }, new Map([[openItemId, { invoice_id: invoiceId, due: '168.00' }]]))).rejects.toThrow('Do not retry blindly');
     expect(approveAndExecuteCanonicalAction).not.toHaveBeenCalled();
   });

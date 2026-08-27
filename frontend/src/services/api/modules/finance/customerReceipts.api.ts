@@ -12,7 +12,7 @@ import { apiHelpers } from '../../apiClient';
 
 export interface CustomerReceiptContext {
   business_date: string;
-  payment_methods: Array<'bank_transfer' | 'card' | 'upi'>;
+  payment_methods: Array<'cash' | 'cheque' | 'bank_transfer' | 'card' | 'upi'>;
   settlement_accounts: Array<{
     bank_account_id: string;
     settlement_account_id: string;
@@ -47,7 +47,6 @@ export async function prepareCustomerReceipt(payload: CanonicalCustomerReceiptPr
   if (String(preview.branch_id || '') !== payload.branch_id
     || !impact
     || moneyToCents(impact.receipt_amount) !== moneyToCents(payload.amount)
-    || String(impact.settlement_account_id || '') !== payload.settlement_account_id
     || !allocationsMatch) {
     throw new Error('Authoritative receipt preview does not match the requested amount, branch, settlement account, or allocations. Nothing was approved.');
   }
@@ -88,11 +87,20 @@ export async function reconcileCustomerReceipt(
     || receipt.allocation_reconciled !== true
     || receipt.journal_balanced !== true
     || moneyToCents(receipt.amount) !== moneyToCents(payload.amount)
-    || !allocationExact) {
+    || !allocationExact
+    || String(receipt.payment_purpose || '') !== (payload.receipt_purpose === 'customer_advance' ? 'customer_advance' : 'commercial_settlement')) {
     throw new Error('Receipt executed, but authoritative payment, allocation, or journal readback did not reconcile. Do not retry blindly.');
   }
 
   let paymentNumber = '';
+  if (payload.receipt_purpose === 'customer_advance') {
+    const advance = receipt.advance && typeof receipt.advance === 'object' ? receipt.advance : {};
+    if (payload.allocations.length !== 0
+      || String(advance.sales_order_id || '') !== String(payload.sales_order_id || '')
+      || moneyToCents(advance.principal_amount) !== moneyToCents(payload.amount)) {
+      throw new Error('Customer advance executed, but authoritative liability readback did not reconcile. Do not retry blindly.');
+    }
+  }
   for (const allocation of payload.allocations) {
     const source = invoiceByOpenItem.get(allocation.open_item_id);
     if (!source) throw new Error('Receipt executed, but its source invoice readback identity was lost. Do not retry blindly.');
@@ -101,10 +109,8 @@ export async function reconcileCustomerReceipt(
     const payments = Array.isArray(envelope.payments) ? envelope.payments : [];
     const posted = payments.find((row: any) => String(row?.payment_id) === paymentId);
     const invoice = envelope.invoice && typeof envelope.invoice === 'object' ? envelope.invoice : {};
-    const expectedDue = moneyToCents(source.due) - moneyToCents(allocation.amount);
     if (!posted
-      || moneyToCents(posted.allocated_amount) !== moneyToCents(allocation.amount)
-      || moneyToCents(invoice.due_amount) !== expectedDue) {
+      || moneyToCents(posted.allocated_amount) !== moneyToCents(allocation.amount)) {
       throw new Error('Receipt executed, but authoritative allocation readback did not reconcile. Do not retry blindly.');
     }
     paymentNumber = String(posted.payment_number || paymentNumber);

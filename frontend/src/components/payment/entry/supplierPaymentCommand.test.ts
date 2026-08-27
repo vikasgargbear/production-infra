@@ -41,8 +41,8 @@ test('uses BigInt paise and FIFO without floating point drift', () => {
 
 test('builds the strict exact-string supplier command', () => {
   expect(buildSupplierPaymentPreparePayload(draft(), context, 'stable-attempt')).toEqual(expect.objectContaining({
-    gross_amount: '100.01', external_reference: 'upi-ref', idempotency_key: 'stable-attempt',
-    allocations: [{ open_item_id: ids.item1, amount: '100.01' }],
+    expected_gross_amount: '100.01', external_reference: 'upi-ref', idempotency_key: 'stable-attempt',
+    allocations: [{ open_item_id: ids.item1, cash_amount: '100.01' }],
   }));
 });
 
@@ -72,7 +72,7 @@ test('accepts only an exact immutable supplier-payment preview', () => {
     inventory_impact: [], tax_impact: [], financial_impact: [{
       gross_liability_settlement: '100.01', cash_disbursed_amount: '100.01', withheld_amount: '0.00',
       settlement_account_id: ids.settlement,
-      allocations: [{ open_item_id: ids.item1, allocated_amount: '100.01', residual_after: '0.00' }],
+      allocations: [{ open_item_id: ids.item1, cash_allocated_amount: '100.01', residual_after: '0.00' }],
     }],
   };
   expect(validateSupplierPaymentPreview(preview, payload)).toBe(preview);
