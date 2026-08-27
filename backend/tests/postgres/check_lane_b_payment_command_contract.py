@@ -10,8 +10,8 @@ from sqlalchemy.orm import Session
 
 PUBLIC_FUNCTIONS = (
     "erp_finance_commands.post_customer_receipt(uuid,uuid,uuid,uuid,jsonb,uuid)",
-    "erp_finance_commands.post_customer_cheque_clearance(uuid,uuid,uuid,uuid)",
-    "erp_finance_commands.post_customer_cheque_bounce(uuid,uuid,uuid,uuid,jsonb)",
+    "erp_finance_commands.post_customer_cheque_clearance(uuid,uuid,uuid,uuid,uuid)",
+    "erp_finance_commands.post_customer_cheque_bounce(uuid,uuid,uuid,uuid,uuid,jsonb)",
     "erp_finance_commands.post_supplier_payment(uuid,uuid,uuid,uuid,jsonb)",
     "erp_finance_commands.apply_supplier_advance(uuid,uuid,uuid,uuid,uuid,uuid,character varying,uuid)",
     "erp_finance_commands.apply_supplier_adjustment_credit(uuid,uuid,uuid,uuid,uuid,date)",
@@ -63,7 +63,7 @@ def main() -> None:
 
             bounce = session.scalar(text("""
                 SELECT pg_get_functiondef(
-                  'erp_finance_commands.post_customer_cheque_bounce(uuid,uuid,uuid,uuid,jsonb)'::regprocedure
+                  'erp_finance_commands.post_customer_cheque_bounce(uuid,uuid,uuid,uuid,uuid,jsonb)'::regprocedure
                 )
             """))
             assert "mark_journal_reversed" in bounce

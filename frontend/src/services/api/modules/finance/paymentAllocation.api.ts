@@ -22,4 +22,8 @@ export const paymentAllocationApi = {
     getCustomerReceiptReadback: (paymentId: string): Promise<AxiosResponse> => {
         return apiHelpers.get(`${ENDPOINTS.BASE}/payment/${paymentId}/readback`);
     },
+
+    getCustomerChequeActionReadback: (paymentId: string): Promise<AxiosResponse> => {
+        return apiHelpers.get(`${ENDPOINTS.BASE}/payment/${paymentId}/cheque-action-readback`);
+    },
 };

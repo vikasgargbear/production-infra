@@ -4145,6 +4145,16 @@ class CanonicalReceiptAllocationReadback(BaseModel):
     allocation_date: date
 
 
+class CanonicalReceiptAllocationReversalReadback(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reversal_allocation_id: UUID
+    original_allocation_id: UUID
+    open_item_id: UUID
+    amount: MoneyJSON
+    reversal_date: date
+
+
 class CanonicalReceiptJournalLineReadback(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -4187,6 +4197,7 @@ class CanonicalCustomerReceiptReadback(BaseModel):
 
     payment_id: UUID
     payment_number: str
+    row_version: int = Field(ge=1)
     payment_date: date
     branch_id: UUID
     party_id: UUID
@@ -4208,6 +4219,7 @@ class CanonicalCustomerReceiptReadback(BaseModel):
     journal_debit_total: MoneyJSON
     journal_credit_total: MoneyJSON
     allocations: list[CanonicalReceiptAllocationReadback]
+    reversed_allocations: list[CanonicalReceiptAllocationReversalReadback]
     advance: Optional[CanonicalReceiptAdvanceReadback]
     terminal_actions: list[CanonicalReceiptTerminalActionReadback]
     journal_lines: list[CanonicalReceiptJournalLineReadback]
@@ -4223,10 +4235,17 @@ class CanonicalCustomerReceiptReadback(BaseModel):
         allocation_total = sum(
             (Decimal(row.amount) for row in self.allocations), Decimal("0")
         )
+        reversal_total = sum(
+            (Decimal(row.amount) for row in self.reversed_allocations), Decimal("0")
+        )
+        bounced = bool(self.terminal_actions and self.terminal_actions[0].action == "cheque_bounce")
         if self.payment_purpose == "commercial_settlement":
-            if not self.allocations or self.advance is not None or allocation_total != amount:
+            if self.advance is not None or (
+                (bounced and (self.allocations or not self.reversed_allocations or reversal_total != amount))
+                or (not bounced and (not self.allocations or self.reversed_allocations or allocation_total != amount))
+            ):
                 raise ValueError("posted invoice receipt allocations do not reconcile")
-        elif self.allocations or self.advance is None:
+        elif self.allocations or self.reversed_allocations or self.advance is None:
             raise ValueError("posted customer advance requires zero invoice allocations")
         elif Decimal(self.advance.principal_amount) != amount:
             raise ValueError("customer advance principal does not reconcile to receipt")
@@ -4580,7 +4599,7 @@ def canonical_customer_receipt_readback(
         "branch_ids": branch_ids,
     }
     headers = _rows(db, """
-        SELECT payment.id AS payment_id, payment.payment_number,
+        SELECT payment.id AS payment_id, payment.payment_number,payment.row_version,
                payment.payment_date, payment.branch_id, payment.party_id,
                payment.settlement_account_id, payment.bank_account_id,
                payment.payment_method, payment.payment_purpose,
@@ -4624,6 +4643,21 @@ def canonical_customer_receipt_readback(
            )
          ORDER BY allocation.allocation_date, allocation.id
     """, params)
+    reversed_allocations = _rows(db, """
+        SELECT reversal.id AS reversal_allocation_id,
+               original.id AS original_allocation_id,
+               original.open_item_id,reversal.amount,
+               reversal.allocation_date AS reversal_date
+          FROM finance.allocations original
+          JOIN finance.allocations reversal
+            ON reversal.org_id=original.org_id
+           AND reversal.reversal_of_allocation_id=original.id
+           AND reversal.status='reversed'
+         WHERE original.org_id=:org_id AND original.payment_id=:payment_id
+           AND original.status='posted'
+           AND original.reversal_of_allocation_id IS NULL
+         ORDER BY reversal.allocation_date,reversal.id
+    """, params)
     journal_lines = _rows(db, """
         SELECT line.id AS journal_line_id, line.line_number, line.account_id,
                line.party_id, line.transaction_debit, line.transaction_credit,
@@ -4633,7 +4667,7 @@ def canonical_customer_receipt_readback(
             ON payment.org_id=event.org_id AND payment.id=event.payment_id
           JOIN finance.journal_entries journal
             ON journal.org_id=event.org_id AND journal.id=event.journal_entry_id
-           AND journal.status='posted'
+           AND journal.status IN ('posted','reversed')
           JOIN finance.journal_lines line
             ON line.org_id=journal.org_id AND line.journal_entry_id=journal.id
          WHERE event.org_id=:org_id AND event.payment_id=:payment_id
@@ -4696,6 +4730,9 @@ def canonical_customer_receipt_readback(
     allocation_total = sum(
         (Decimal(str(row["amount"])) for row in allocations), Decimal("0")
     )
+    reversal_total = sum(
+        (Decimal(str(row["amount"])) for row in reversed_allocations), Decimal("0")
+    )
     line_debit = sum(
         (Decimal(str(row["transaction_debit"])) for row in journal_lines),
         Decimal("0"),
@@ -4709,12 +4746,16 @@ def canonical_customer_receipt_readback(
     if len(advance_rows) > 1:
         raise HTTPException(status_code=409, detail="Customer advance open item is ambiguous")
     is_invoice_receipt = header["payment_purpose"] == "commercial_settlement"
+    bounced = len(terminal_actions) == 1 and terminal_actions[0]["action"] == "cheque_bounce"
     return {
         **header,
         "amount": money_json(header["amount"]),
         "journal_debit_total": money_json(header["journal_debit_total"]),
         "journal_credit_total": money_json(header["journal_credit_total"]),
         "allocations": [{**row, "amount": money_json(row["amount"])} for row in allocations],
+        "reversed_allocations": [{
+            **row, "amount": money_json(row["amount"]),
+        } for row in reversed_allocations],
         "advance": None if advance is None else {
             **advance,
             "principal_amount": money_json(advance["principal_amount"]),
@@ -4734,9 +4775,13 @@ def canonical_customer_receipt_readback(
             "functional_credit": money_json(row["functional_credit"]),
         } for row in journal_lines],
         "allocation_reconciled": (
-            allocation_total == amount if is_invoice_receipt
-            else allocation_total == 0 and advance is not None
+            (allocation_total == 0 and reversal_total == amount)
+            if is_invoice_receipt and bounced
+            else allocation_total == amount and reversal_total == 0
+            if is_invoice_receipt
+            else allocation_total == reversal_total == 0 and advance is not None
             and Decimal(str(advance["principal_amount"])) == amount
+            and (not bounced or Decimal(str(advance["allocated_amount"])) == amount)
         ),
         "journal_balanced": line_debit == line_credit == amount,
     }

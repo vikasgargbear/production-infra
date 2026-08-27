@@ -65,7 +65,7 @@ describe('canonical receipt execution and reconciliation', () => {
       payments: [{ payment_id: paymentId, payment_number: 'RCPT-4', allocated_amount: '168.00' }],
     } });
     (paymentAllocationApi.getCustomerReceiptReadback as jest.Mock).mockResolvedValue({ data: {
-      payment_id: paymentId, payment_number: 'RCPT-4', status: 'posted', amount: '168.00',
+      payment_id: paymentId, payment_number: 'RCPT-4', row_version: 3, status: 'posted', amount: '168.00',
       payment_purpose: 'commercial_settlement',
       allocation_reconciled: true, journal_balanced: true,
       allocations: [{ open_item_id: openItemId, amount: '168.00' }],
@@ -78,7 +78,7 @@ describe('canonical receipt execution and reconciliation', () => {
       payment_method: 'upi', receipt_purpose: 'invoice_settlement', evidence_attachment_id: invoiceId,
       amount: '168.00', allocations: [{ open_item_id: openItemId, amount: '168.00' }], external_reference: 'UPI-1',
     }, new Map([[openItemId, { invoice_id: invoiceId, due: '168.00' }]]));
-    expect(result).toEqual({ payment_id: paymentId, payment_number: 'RCPT-4' });
+    expect(result).toEqual({ payment_id: paymentId, payment_number: 'RCPT-4', row_version: 3 });
   });
 
   it('fails closed after execution when readback does not reconcile', async () => {
@@ -87,7 +87,7 @@ describe('canonical receipt execution and reconciliation', () => {
       invoice: { due_amount: '168.00' }, payments: [],
     } });
     (paymentAllocationApi.getCustomerReceiptReadback as jest.Mock).mockResolvedValue({ data: {
-      payment_id: paymentId, payment_number: 'RCPT-4', status: 'posted', amount: '168.00',
+      payment_id: paymentId, payment_number: 'RCPT-4', row_version: 3, status: 'posted', amount: '168.00',
       payment_purpose: 'commercial_settlement',
       allocation_reconciled: true, journal_balanced: true,
       allocations: [{ open_item_id: openItemId, amount: '168.00' }],

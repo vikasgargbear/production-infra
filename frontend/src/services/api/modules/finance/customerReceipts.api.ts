@@ -69,7 +69,7 @@ export async function reconcileCustomerReceipt(
   paymentId: string,
   payload: CanonicalCustomerReceiptPreparePayload,
   invoiceByOpenItem: Map<string, { invoice_id: string; due: string | number }>,
-): Promise<{ payment_id: string; payment_number: string }> {
+): Promise<{ payment_id: string; payment_number: string; row_version: number }> {
   if (!isCanonicalUuid(paymentId)) throw new Error('Cannot reconcile an invalid payment identity.');
   const receiptResponse = await paymentAllocationApi.getCustomerReceiptReadback(paymentId);
   const receipt = receiptResponse.data && typeof receiptResponse.data === 'object'
@@ -115,5 +115,9 @@ export async function reconcileCustomerReceipt(
     }
     paymentNumber = String(posted.payment_number || paymentNumber);
   }
-  return { payment_id: paymentId, payment_number: String(receipt.payment_number || paymentNumber) };
+  const rowVersion = Number(receipt.row_version);
+  if (!Number.isSafeInteger(rowVersion) || rowVersion <= 0) {
+    throw new Error('Receipt readback omitted its exact row version. Do not retry blindly.');
+  }
+  return { payment_id: paymentId, payment_number: String(receipt.payment_number || paymentNumber), row_version: rowVersion };
 }

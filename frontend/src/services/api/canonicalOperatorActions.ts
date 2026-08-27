@@ -14,6 +14,8 @@ export type CanonicalOperationKey =
   | 'procurement.supplier_invoice.prepare'
   | 'procurement.purchase_return.prepare'
   | 'finance.customer_receipt.prepare'
+  | 'finance.customer_cheque_clearance.prepare'
+  | 'finance.customer_cheque_bounce.prepare'
   | 'finance.supplier_payment.prepare'
   | 'finance.supplier_advance.prepare'
   | 'finance.adjustment_note.prepare'
