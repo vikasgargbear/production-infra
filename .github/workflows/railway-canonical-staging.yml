@@ -1086,6 +1086,13 @@ jobs:
             esac
           }
 
+          deployment_is_materialized() {
+            case "$1" in
+              SUCCESS|SLEEPING) return 0 ;;
+              *) return 1 ;;
+            esac
+          }
+
           require_deployment_contract() {
             local service=$1
             local deployment_id=$2
@@ -1135,7 +1142,15 @@ jobs:
             mcp_status=$(deployment_status "$RAILWAY_MCP_SERVICE" "$mcp_deployment_id")
             frontend_status=$(deployment_status "$RAILWAY_FRONTEND_SERVICE" "$frontend_deployment_id")
 
-            if test "$api_status" = SUCCESS && test "$mcp_status" = SUCCESS && test "$frontend_status" = SUCCESS; then
+            # A service with sleepApplication=true may become SLEEPING after a
+            # successful build while another service is still queued. Railway
+            # keeps the same exact deployment and wakes it on the next public
+            # request. Treat that as materialized here; the immutable manifest
+            # contract below and the subsequent public SHA/health probes still
+            # have to pass before this deployment is accepted.
+            if deployment_is_materialized "$api_status" && \
+               deployment_is_materialized "$mcp_status" && \
+               deployment_is_materialized "$frontend_status"; then
               break
             fi
 
@@ -1144,7 +1159,7 @@ jobs:
             fail_on_terminal_status frontend "$frontend_deployment_id" "$frontend_status"
 
             if test "$attempt" = 180 || test "$SECONDS" -ge "$deployment_poll_deadline"; then
-              echo "Exact Railway uploads did not reach SUCCESS before timeout: " \
+              echo "Exact Railway uploads did not reach a materialized state before timeout: " \
                 "api=$api_deployment_id:$api_status " \
                 "mcp=$mcp_deployment_id:$mcp_status " \
                 "frontend=$frontend_deployment_id:$frontend_status" >&2

@@ -453,6 +453,24 @@ def test_workflow_uploads_fresh_source_and_polls_exact_deployment_ids() -> None:
     assert ".meta.serviceManifest.deploy.sleepApplication == true" in workflow
 
 
+def test_exact_deployment_poll_accepts_reviewed_sleeping_artifacts() -> None:
+    workflow = _workflow()
+    poll = workflow[
+        workflow.index("Require each exact upload to become the active deployment") :
+        workflow.index("Prove exact Railway authority remains closed before demo provisioning")
+    ]
+
+    assert "deployment_is_materialized" in poll
+    assert "SUCCESS|SLEEPING) return 0" in poll
+    assert 'deployment_is_materialized "$api_status"' in poll
+    assert 'deployment_is_materialized "$mcp_status"' in poll
+    assert 'deployment_is_materialized "$frontend_status"' in poll
+    assert poll.index('deployment_is_materialized "$api_status"') < poll.index(
+        'require_deployment_contract "$RAILWAY_API_SERVICE"'
+    )
+    assert "did not reach a materialized state before timeout" in poll
+
+
 def test_exact_deployment_poll_recovers_from_malformed_provider_response(
     tmp_path: Path,
 ) -> None:
