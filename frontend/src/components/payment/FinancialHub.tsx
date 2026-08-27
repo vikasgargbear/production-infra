@@ -11,6 +11,7 @@ import FinancialJournalFlow from './flows/FinancialJournalFlow';
 import ExpenseClaimsFlow from './flows/ExpenseClaimsFlow';
 import BankReconciliationFlow from './flows/BankReconciliationFlow';
 import PaymentHistory from './tracking/PaymentHistory';
+import CustomerChequeLifecycleFlow from './entry/CustomerChequeLifecycleFlow';
 
 
 interface FinancialHubProps {
@@ -40,7 +41,7 @@ interface FinancialModule {
 
 const FinancialHub: React.FC<FinancialHubProps> = ({ open = true, onClose, initialSubpage, onSubpageChange }) => {
   /** All valid sub-module IDs for deep-linking into FinancialHub. */
-  const PAYMENT_SUBPAGE_IDS = ['payment-entry', 'supplier-payment', 'supplier-advance', 'payment-history', 'journal-entry', 'expense-claims', 'bank-reconciliation'] as const;
+  const PAYMENT_SUBPAGE_IDS = ['payment-entry', 'supplier-payment', 'supplier-advance', 'cheque-actions', 'payment-history', 'journal-entry', 'expense-claims', 'bank-reconciliation'] as const;
 
   const resolvedDefault =
     initialSubpage && PAYMENT_SUBPAGE_IDS.includes(initialSubpage as any)
@@ -74,6 +75,15 @@ const FinancialHub: React.FC<FinancialHubProps> = ({ open = true, onClose, initi
       icon: CreditCard,
       color: 'blue',
       component: SupplierAdvance
+    },
+    {
+      id: 'cheque-actions',
+      label: 'Cheque Actions',
+      fullLabel: 'Customer Cheque Clearance / Bounce',
+      description: 'Review and post one terminal action for an exact cheque receipt',
+      icon: RefreshCw,
+      color: 'blue',
+      component: CustomerChequeLifecycleFlow
     },
     {
       id: 'payment-history',

@@ -1,14 +1,26 @@
 import type { CanonicalCommandPreview } from '../../canonicalOperatorActions';
 import {
-  approveAndExecuteCanonicalAction,
+  approveCanonicalAction,
   canonicalExecutionCompleted,
+  executeApprovedCanonicalAction,
+  getCanonicalCommandReview,
   prepareCanonicalAction,
+  type CanonicalCommandReview,
 } from '../../canonicalOperatorActions';
 import { isCanonicalUuid } from '../../../../utils/canonicalUuid';
 import { moneyToCents } from '../../../../components/payment/entry/customerReceiptCommand';
 import { paymentAllocationApi } from './paymentAllocation.api';
 
 export type CustomerChequeAction = 'clearance' | 'bounce';
+
+export interface CustomerChequeReceiptSource {
+  payment_id: string;
+  branch_id: string;
+  row_version: number;
+  payment_method: 'cheque';
+  status: 'posted';
+  evidence_attachment_id: string;
+}
 
 export interface CustomerChequeActionDraft {
   branch_id: string;
@@ -65,15 +77,79 @@ export async function prepareCustomerChequeAction(
   return preview;
 }
 
+export async function loadCustomerChequeReceiptSource(
+  paymentId: string,
+): Promise<CustomerChequeReceiptSource> {
+  if (!isCanonicalUuid(paymentId)) throw new Error('Enter one exact posted cheque receipt UUID.');
+  const response = await paymentAllocationApi.getCustomerReceiptReadback(paymentId);
+  const receipt = response.data && typeof response.data === 'object'
+    ? response.data as Record<string, any>
+    : {};
+  const terminalActions = Array.isArray(receipt.terminal_actions) ? receipt.terminal_actions : [];
+  const rowVersion = Number(receipt.row_version);
+  if (String(receipt.payment_id || '') !== paymentId
+    || receipt.payment_method !== 'cheque'
+    || receipt.status !== 'posted'
+    || !isCanonicalUuid(String(receipt.branch_id || ''))
+    || !isCanonicalUuid(String(receipt.evidence_attachment_id || ''))
+    || !Number.isSafeInteger(rowVersion)
+    || rowVersion <= 0
+    || terminalActions.length !== 0) {
+    throw new Error('The exact receipt is not an uncleared canonical cheque with an authoritative row version.');
+  }
+  return {
+    payment_id: paymentId,
+    branch_id: String(receipt.branch_id),
+    row_version: rowVersion,
+    payment_method: 'cheque',
+    status: 'posted',
+    evidence_attachment_id: String(receipt.evidence_attachment_id || ''),
+  };
+}
+
+export async function reviewCustomerChequeAction(
+  commandRequestId: string,
+): Promise<CanonicalCommandReview> {
+  const review = (await getCanonicalCommandReview(commandRequestId)).data;
+  if (![
+    'finance.customer_cheque_clearance.prepare',
+    'finance.customer_cheque_bounce.prepare',
+  ].includes(review.capability_code)) {
+    throw new Error('The exact command is not a customer cheque terminal action.');
+  }
+  if (review.approval_policy !== 'separate_approver') {
+    throw new Error('Cheque terminal actions require a distinct reviewer.');
+  }
+  return review;
+}
+
+export async function approveCustomerChequeAction(
+  review: CanonicalCommandReview,
+  lifecycleId: string,
+): Promise<void> {
+  if (![
+    'finance.customer_cheque_clearance.prepare',
+    'finance.customer_cheque_bounce.prepare',
+  ].includes(review.capability_code)
+    || review.approval_policy !== 'separate_approver'
+    || review.status !== 'pending_approval') {
+    throw new Error('Load the exact pending cheque command before independent approval.');
+  }
+  await approveCanonicalAction(review.capability_code, review, lifecycleId);
+}
+
 export async function executeCustomerChequeAction(
   action: CustomerChequeAction,
-  preview: CanonicalCommandPreview,
+  review: CanonicalCommandReview,
   lifecycleId: string,
 ): Promise<string> {
   const operation = action === 'clearance'
     ? 'finance.customer_cheque_clearance.prepare' as const
     : 'finance.customer_cheque_bounce.prepare' as const;
-  const { executed } = await approveAndExecuteCanonicalAction(operation, preview, lifecycleId);
+  if (review.capability_code !== operation || review.status !== 'approved') {
+    throw new Error('Load the exact independently approved cheque action before execution.');
+  }
+  const executed = await executeApprovedCanonicalAction(operation, review, lifecycleId);
   const paymentId = String(executed.data.resource_id || '');
   if (!canonicalExecutionCompleted(executed.data) || !isCanonicalUuid(paymentId)) {
     throw new Error('Cheque action did not return one completed compensating payment identity.');

@@ -149,7 +149,7 @@ describe('sub-page deep-links', () => {
   );
 
   // payment sub-pages
-  const paymentSubpages = ['payment-entry', 'supplier-payment', 'supplier-advance', 'payment-history', 'journal-entry', 'expense-claims', 'bank-reconciliation'];
+  const paymentSubpages = ['payment-entry', 'supplier-payment', 'supplier-advance', 'cheque-actions', 'payment-history', 'journal-entry', 'expense-claims', 'bank-reconciliation'];
 
   it.each(paymentSubpages)(
     '#/payment/%s is correctly parsed',

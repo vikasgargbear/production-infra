@@ -25,7 +25,6 @@ import {
 import { clientUuid } from '../../../utils/clientUuid';
 import type { CanonicalCommandPreview } from '../../../services/api/canonicalOperatorActions';
 import CustomerReceiptReviewDialog from './CustomerReceiptReviewDialog';
-import CustomerChequeLifecyclePanel from './CustomerChequeLifecyclePanel';
 
 
 // Import global components
@@ -195,6 +194,10 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
     }
   };
 
+  const receiptSuccessMessage = payment.receipt_purpose === 'customer_advance'
+    ? 'Customer advance posted and reconciled against the authoritative goods order.'
+    : 'Receipt posted and reconciled against the authoritative invoice balance.';
+
   const requestPaymentReview = async (): Promise<void> => {
     if (!selectedCustomer || saving) return;
     try {
@@ -205,7 +208,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
         const readback = await reconcileCustomerReceipt(posted.paymentId, posted.payload, posted.invoiceByOpenItem);
         setPostedReceiptRowVersion(readback.row_version);
         setPaymentField('receipt_no', readback.payment_number || readback.payment_id);
-        setMessage('Receipt posted and reconciled against the authoritative invoice balance.', 'success');
+        setMessage(receiptSuccessMessage, 'success');
         setCurrentStep(3);
         return;
       }
@@ -287,7 +290,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
       const readback = await reconcileCustomerReceipt(executed.payment_id, payload, invoiceByOpenItem);
       setPostedReceiptRowVersion(readback.row_version);
       setPaymentField('receipt_no', readback.payment_number || readback.payment_id);
-      setMessage('Receipt posted and reconciled against the authoritative invoice balance.', 'success');
+      setMessage(receiptSuccessMessage, 'success');
       setCurrentStep(3);
     } catch (saveError: any) {
       const detail = saveError?.response?.data?.detail;
@@ -453,7 +456,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                 <CheckCircle className="w-8 h-8 text-blue-600" />
               </div>
               <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                Receipt posted and reconciled against the authoritative invoice balance.
+                {receiptSuccessMessage}
               </h2>
               <p data-testid="canonical-posted-resource-id" className="mb-3 break-all font-mono text-sm text-gray-700">
                 {postedPaymentId}
@@ -462,16 +465,11 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                 Amount: ₹{centsToMoney(moneyToCents(payment.amount))}
               </p>
 
-              {payment.payment_mode === 'cheque'
-                && postedPaymentId
-                && postedReceiptRowVersion > 0
-                && (
-                  <CustomerChequeLifecyclePanel
-                    branchId={postedReceiptRef.current?.payload.branch_id || payment.branch_id}
-                    paymentId={postedPaymentId}
-                    rowVersion={postedReceiptRowVersion}
-                  />
-                )}
+              {payment.payment_mode === 'cheque' && postedPaymentId && postedReceiptRowVersion > 0 && (
+                <p className="mb-6 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+                  This cheque is in hand. Clearance or bounce is a separate command under Financial Hub → Cheque Actions and requires approval by another finance member.
+                </p>
+              )}
 
               <div className="flex justify-center space-x-3">
                 <button
