@@ -116,6 +116,7 @@ export async function prepareCanonicalAction(
   const prepared = await apiHelpers.post<CanonicalCommandPreview>(
     `/web/actions/${operationKey}/prepare`,
     payload,
+    { preserveExactDecimals: true },
   );
   requirePreview(prepared.data);
   return prepared;
@@ -145,6 +146,7 @@ export async function approveCanonicalAction(
       approval_intent: 'approve',
       idempotency_key: `erp-web-${namespace}-approve:${lifecycleId}`,
     },
+    { preserveExactDecimals: true },
   );
 }
 
@@ -161,6 +163,7 @@ export async function executeApprovedCanonicalAction(
       preview_hash: preview.preview_hash,
       idempotency_key: `erp-web-${namespace}-execute:${lifecycleId}`,
     },
+    { preserveExactDecimals: true },
   );
   requireExecution(executed.data);
   return executed;
@@ -174,6 +177,7 @@ export async function getCanonicalCommandStatus(
   }
   const response = await apiHelpers.get<CanonicalCommandExecution>(
     `/web/actions/commands/${commandRequestId}`,
+    { preserveExactDecimals: true },
   );
   requireExecution(response.data);
   return response;
@@ -187,6 +191,7 @@ export async function getCanonicalCommandReview(
   }
   const response = await apiHelpers.get<CanonicalCommandReview>(
     `/web/actions/commands/${commandRequestId}/review`,
+    { preserveExactDecimals: true },
   );
   const review = requirePreview(response.data) as CanonicalCommandReview;
   if (!review.capability_code || !review.target_resource_type || !isCanonicalUuid(review.target_resource_id)) {

@@ -3,6 +3,7 @@ import {
   canonicalExecutionCompleted,
   executeCanonicalAction,
   getCanonicalCommandReview,
+  getCanonicalCommandStatus,
 } from './canonicalOperatorActions';
 
 jest.mock('./apiClient', () => ({
@@ -37,6 +38,7 @@ describe('canonical browser command transport', () => {
       1,
       '/web/actions/sales.invoice.prepare/prepare',
       { branch_id: 'branch' },
+      { preserveExactDecimals: true },
     );
     expect(post).toHaveBeenNthCalledWith(
       2,
@@ -46,6 +48,7 @@ describe('canonical browser command transport', () => {
         approval_intent: 'approve',
         idempotency_key: expect.stringMatching(/^erp-web-sales-invoice-approve:/),
       }),
+      { preserveExactDecimals: true },
     );
     expect(post).toHaveBeenNthCalledWith(
       3,
@@ -54,6 +57,7 @@ describe('canonical browser command transport', () => {
         preview_hash: previewHash,
         idempotency_key: expect.stringMatching(/^erp-web-sales-invoice-execute:/),
       }),
+      { preserveExactDecimals: true },
     );
     expect(canonicalExecutionCompleted(result.executed.data)).toBe(true);
   });
@@ -92,7 +96,28 @@ describe('canonical browser command transport', () => {
 
     const response = await getCanonicalCommandReview(commandId);
 
-    expect(get).toHaveBeenCalledWith(`/web/actions/commands/${commandId}/review`);
+    expect(get).toHaveBeenCalledWith(
+      `/web/actions/commands/${commandId}/review`,
+      { preserveExactDecimals: true },
+    );
     expect(response.data.capability_code).toBe('finance.adjustment_note.prepare');
+  });
+
+  it('loads command status without passing canonical audit decimals through the legacy adapter', async () => {
+    const get = apiHelpers.get as jest.Mock;
+    get.mockResolvedValueOnce({ data: {
+      command_request_id: commandId,
+      preview_hash: previewHash,
+      status: 'approved',
+      audit_references: [{ amount: '168.01' }],
+    } });
+
+    const response = await getCanonicalCommandStatus(commandId);
+
+    expect(get).toHaveBeenCalledWith(
+      `/web/actions/commands/${commandId}`,
+      { preserveExactDecimals: true },
+    );
+    expect(response.data.status).toBe('approved');
   });
 });

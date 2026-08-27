@@ -1,12 +1,3 @@
-jest.mock('../../canonicalOperatorActions', () => ({
-    prepareCanonicalAction: jest.fn(),
-    approveAndExecuteCanonicalAction: jest.fn(),
-    canonicalExecutionCompleted: jest.fn((execution) => execution.status === 'executed'),
-}));
-jest.mock('../../apiClient', () => ({
-    apiHelpers: { get: jest.fn() },
-}));
-
 import { apiHelpers } from '../../apiClient';
 import {
     approveAndExecuteCanonicalAction,
@@ -17,6 +8,15 @@ import {
     canonicalPurchaseOrdersApi,
     requireCanonicalPurchaseOrderReadback,
 } from './canonicalPurchaseOrders.api';
+
+jest.mock('../../canonicalOperatorActions', () => ({
+    prepareCanonicalAction: jest.fn(),
+    approveAndExecuteCanonicalAction: jest.fn(),
+    canonicalExecutionCompleted: jest.fn((execution) => execution.status === 'executed'),
+}));
+jest.mock('../../apiClient', () => ({
+    apiHelpers: { get: jest.fn() },
+}));
 
 const UUID = 'd3000000-0000-7000-8000-000000000001';
 
@@ -201,7 +201,10 @@ describe('canonical purchase-order readback', () => {
         expect(approveAndExecuteCanonicalAction).toHaveBeenCalledWith(
             'procurement.purchase_order.prepare', preview, lifecycleId,
         );
-        expect(apiHelpers.get).toHaveBeenCalledWith(`/canonical/purchase-orders/${UUID}`);
+        expect(apiHelpers.get).toHaveBeenCalledWith(
+            `/canonical/purchase-orders/${UUID}`,
+            { preserveExactDecimals: true },
+        );
         expect(result.execution.resource_id).toBe(UUID);
         expect(detail.purchase_order_number).toBe('PO-1');
     });

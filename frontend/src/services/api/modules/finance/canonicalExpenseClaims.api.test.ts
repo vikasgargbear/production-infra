@@ -78,7 +78,11 @@ describe('canonical expense claim browser boundary', () => {
       tax_impact: [{ treatment: 'non_creditable_gross_expense', gst_input_tax_claimed: '0.00', withholding_amount: '0.00' }],
     } });
     await expect(prepareExpenseClaim(payload())).resolves.toEqual(expect.objectContaining({ data: expect.objectContaining({ command_request_id: ids.command }) }));
-    expect(apiHelpers.post).toHaveBeenCalledWith('/web/actions/finance.expense_claim.prepare/prepare', payload());
+    expect(apiHelpers.post).toHaveBeenCalledWith(
+      '/web/actions/finance.expense_claim.prepare/prepare',
+      payload(),
+      { preserveExactDecimals: true },
+    );
   });
 
   it('rejects a preview that omits receipt authority', async () => {

@@ -171,7 +171,10 @@ export const inventoryTransfersApi = {
     apiHelpers.get<EligibleTransferBatch[]>('/canonical/inventory-transfers/eligible-batches', { params }),
   readback: async (inventoryDocumentId: string) => {
     requireUuid(inventoryDocumentId, 'Transfer');
-    const response = await apiHelpers.get<TransferReadback>(`/canonical/inventory-transfers/${inventoryDocumentId}`);
+    const response = await apiHelpers.get<TransferReadback>(
+      `/canonical/inventory-transfers/${inventoryDocumentId}`,
+      { preserveExactDecimals: true },
+    );
     response.data = decodeTransferReadback(response.data);
     return response;
   },

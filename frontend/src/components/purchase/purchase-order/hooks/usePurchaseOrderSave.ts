@@ -20,6 +20,7 @@ import {
     type PurchaseOrderSupplier,
 } from '../utils/canonicalPurchaseOrderCommand';
 import type { CanonicalDocumentPolicy } from '../../../../services/api/modules/org/canonicalBusinessContext.api';
+import { canonicalActionErrorMessage } from '../../../../services/api/canonicalActionError';
 
 export const PURCHASE_ORDER_CANONICAL_OPERATION = 'procurement.purchase_order.prepare' as const;
 
@@ -50,24 +51,10 @@ export interface UsePurchaseOrderSaveReturn {
     handleSavePurchaseOrder: () => Promise<void>;
 }
 
-const submissionError = (error: unknown): string => {
-    const apiError = error as {
-        message?: string;
-        response?: { data?: { detail?: unknown } };
-    };
-    const detail = apiError.response?.data?.detail;
-    if (Array.isArray(detail)) {
-        return detail.map((entry: { loc?: string[]; msg?: string }) =>
-            `${entry.loc?.join('.') || 'Field'}: ${entry.msg || 'Invalid value'}`
-        ).join('\n');
-    }
-    if (typeof detail === 'string') return detail;
-    if (detail && typeof detail === 'object') {
-        const structured = detail as { message?: string; error?: string };
-        return structured.message || structured.error || JSON.stringify(detail);
-    }
-    return apiError.message || 'Purchase-order submission failed. No approval was executed.';
-};
+const submissionError = (error: unknown): string => canonicalActionErrorMessage(
+    error,
+    'Purchase-order verification failed. No request payload was displayed; retry the read-only reconciliation.',
+);
 
 export function usePurchaseOrderSave(
     props: UsePurchaseOrderSaveProps,

@@ -225,6 +225,7 @@ export const canonicalPurchaseOrdersApi = {
         }
         const readback = await apiHelpers.get<CanonicalPurchaseOrderReadback>(
             `/canonical/purchase-orders/${purchaseOrderId}`,
+            { preserveExactDecimals: true },
         );
         return requireCanonicalPurchaseOrderReadback(readback.data, purchaseOrderId);
     },

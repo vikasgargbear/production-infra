@@ -274,6 +274,13 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
   // The active review is derived only from the immutable canonical prepare.
   const reviewContent = canonicalReview ? (
     <div className="space-y-5" data-testid="canonical-immutable-preview">
+      {errors.submission && <div role="alert" className="border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+        <p>{errors.submission}</p>
+        {executedResourceId && <p className="mt-2">
+          The purchase order was executed as <span className="font-mono">{executedResourceId}</span>,
+          but its exact readback is not verified yet. Use Reconcile Purchase Order; execution will not be repeated.
+        </p>}
+      </div>}
       <div className="border border-blue-200 bg-blue-50 px-4 py-3">
         <div className="flex items-start gap-3">
           <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-blue-700" />

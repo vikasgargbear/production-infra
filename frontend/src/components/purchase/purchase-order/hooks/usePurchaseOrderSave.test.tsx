@@ -103,4 +103,35 @@ describe('usePurchaseOrderSave terminal retry boundary', () => {
         }));
         expect(setters.setShowSuccessModal).toHaveBeenCalledWith(true);
     });
+
+    it('retains the executed identity and does not expose rejected readback payload values', async () => {
+        (canonicalPurchaseOrdersApi.readback as jest.Mock).mockReset().mockRejectedValue({
+            response: { data: { detail: {
+                message: 'Canonical purchase-order readback is temporarily unavailable.',
+                input: { supplier_name: 'must-not-render', password: 'must-not-render' },
+            } } },
+        });
+        const setters = {
+            setPurchaseOrder: jest.fn(), setCreatedPOData: jest.fn(),
+            setShowSuccessModal: jest.fn(), setErrors: jest.fn(),
+        };
+        const { result } = renderHook(() => usePurchaseOrderSave({
+            purchaseOrder,
+            selectedSupplier: { supplier_id: SUPPLIER_ID, supplier_name: 'Supplier' },
+            branchId: BRANCH_ID,
+            isOnline: true,
+            documentPolicy,
+            ...setters,
+        }));
+
+        await act(async () => { expect(await result.current.prepareForReview()).toBe(true); });
+        await act(async () => { await result.current.handleSavePurchaseOrder(); });
+
+        expect(result.current.executedResourceId).toBe(PURCHASE_ORDER_ID);
+        expect(canonicalPurchaseOrdersApi.executePrepared).toHaveBeenCalledTimes(1);
+        const terminalError = setters.setErrors.mock.calls.at(-1)?.[0]?.submission;
+        expect(terminalError).toBe('Canonical purchase-order readback is temporarily unavailable.');
+        expect(terminalError).not.toMatch(/supplier_name|password|must-not-render/);
+        expect(setters.setShowSuccessModal).not.toHaveBeenCalled();
+    });
 });

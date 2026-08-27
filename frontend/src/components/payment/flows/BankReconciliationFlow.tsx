@@ -19,13 +19,14 @@ import {
   type BankReconciliationReadback,
 } from '../../../services/api/modules/controlledOperations.api';
 import { compareExactDecimals, formatExactCurrency } from '../../../utils/exactDecimal';
+import { canonicalActionErrorMessage } from '../../../services/api/canonicalActionError';
 
 interface Props { onClose?: () => void; open?: boolean }
 type Workspace = 'prepare' | 'approve' | 'execute';
-const messageFrom = (error: any): string => {
-  const detail = error?.response?.data?.detail;
-  return detail?.message || detail || error?.message || 'Canonical bank reconciliation request failed.';
-};
+const messageFrom = (error: unknown): string => canonicalActionErrorMessage(
+  error,
+  'Canonical bank reconciliation request failed. No request payload was displayed.',
+);
 const candidateKey = (row: BankReconciliationCandidate) => `${row.bank_statement_line_id}:${row.journal_entry_id}`;
 
 const BankReconciliationFlow: React.FC<Props> = ({ onClose, open = true }) => {

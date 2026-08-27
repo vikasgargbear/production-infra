@@ -25,6 +25,7 @@ import {
   formatExactDecimal,
   normalizeExactDecimal,
 } from '../../../utils/exactDecimal';
+import { canonicalActionErrorMessage } from '../../../services/api/canonicalActionError';
 import { clientUuid } from '../../../utils/clientUuid';
 import { GlobalDocumentFlow, ProductSearch, useToast } from '../../global';
 import {
@@ -326,8 +327,11 @@ const StockTransfer = ({ open = true, onClose }: { open?: boolean; onClose: () =
       });
       setPrepared(data); setConfirmOpen(true);
     } catch (reason: any) {
-      const message = reason?.response?.data?.detail?.message || reason?.response?.data?.detail || reason?.message || 'Transfer prepare failed. Nothing was posted.';
-      setError(String(message)); toast.error(String(message));
+      const message = canonicalActionErrorMessage(
+        reason,
+        'Transfer prepare failed. No request payload was displayed and nothing was posted.',
+      );
+      setError(message); toast.error(message);
     } finally { setPreparing(false); }
   };
 
@@ -360,10 +364,10 @@ const StockTransfer = ({ open = true, onClose }: { open?: boolean; onClose: () =
       if (executionStarted) {
         try { if (await recoverStatus(prepared.command_request_id)) return; } catch { /* GET-only recovery failed */ }
       }
-      const message = reason?.response?.data?.detail?.message || reason?.message || (executionStarted
+      const message = canonicalActionErrorMessage(reason, executionStarted
         ? 'Execution result is unknown. Check status; do not submit again.'
         : 'Approval did not complete. Nothing was executed; retrying approval is idempotent.');
-      setError(String(message)); toast.error(String(message));
+      setError(message); toast.error(message);
     } finally { setCommitting(false); }
   };
 

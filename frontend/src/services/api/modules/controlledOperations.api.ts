@@ -207,12 +207,18 @@ export function decodeDestructionContext(value: InventoryDestructionContext): In
 
 export const canonicalControlledOperationsApi = {
   bankContext: async () => {
-    const response = await apiHelpers.get<BankReconciliationContext>('/canonical/bank-reconciliation/context');
+    const response = await apiHelpers.get<BankReconciliationContext>(
+      '/canonical/bank-reconciliation/context',
+      { preserveExactDecimals: true },
+    );
     response.data = decodeBankContext(response.data);
     return response;
   },
   destructionContext: async () => {
-    const response = await apiHelpers.get<InventoryDestructionContext>('/canonical/inventory-destruction/context');
+    const response = await apiHelpers.get<InventoryDestructionContext>(
+      '/canonical/inventory-destruction/context',
+      { preserveExactDecimals: true },
+    );
     response.data = decodeDestructionContext(response.data);
     return response;
   },
@@ -220,12 +226,14 @@ export const canonicalControlledOperationsApi = {
     requireUuid(commandRequestId, 'Bank reconciliation command');
     return apiHelpers.get<BankReconciliationReadback>(
       `/web/actions/bank-reconciliation/commands/${commandRequestId}/readback`,
+      { preserveExactDecimals: true },
     );
   },
   destructionReadback: (commandRequestId: string) => {
     requireUuid(commandRequestId, 'Destruction command');
     return apiHelpers.get<InventoryDestructionReadback>(
       `/web/actions/inventory-destruction/commands/${commandRequestId}/readback`,
+      { preserveExactDecimals: true },
     );
   },
 };

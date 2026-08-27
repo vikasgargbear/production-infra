@@ -1,4 +1,9 @@
-import { decodeTransferReadback } from './inventoryTransfers.api';
+import { apiHelpers } from '../../apiClient';
+import { decodeTransferReadback, inventoryTransfersApi } from './inventoryTransfers.api';
+
+jest.mock('../../apiClient', () => ({
+  apiHelpers: { get: jest.fn() },
+}));
 
 const uuid = (suffix: string) => `018f6f6d-4f27-7abc-8000-${suffix.padStart(12, '0')}`;
 
@@ -42,6 +47,8 @@ const readback = (overrides: Record<string, unknown> = {}) => ({
 });
 
 describe('canonical inventory transfer readback', () => {
+  beforeEach(() => jest.clearAllMocks());
+
   it('preserves exact values above 2^53 and reconciles paired ledger evidence', () => {
     const decoded = decodeTransferReadback(readback());
     expect(decoded.total_value).toBe('9007199254740993.30');
@@ -70,5 +77,16 @@ describe('canonical inventory transfer readback', () => {
     const invalid = readback();
     (invalid.lines[0] as any)[field] = value;
     expect(() => decodeTransferReadback(invalid)).toThrow(/greater than zero/);
+  });
+
+  it('opts out of the legacy money-number adapter before decoding exact readback', async () => {
+    (apiHelpers.get as jest.Mock).mockResolvedValue({ data: readback() });
+    await expect(inventoryTransfersApi.readback(uuid('1'))).resolves.toMatchObject({
+      data: { total_value: '9007199254740993.30' },
+    });
+    expect(apiHelpers.get).toHaveBeenCalledWith(
+      `/canonical/inventory-transfers/${uuid('1')}`,
+      { preserveExactDecimals: true },
+    );
   });
 });
