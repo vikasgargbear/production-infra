@@ -8,9 +8,9 @@ declares three manually deployed services:
 - `aasopharma-mcp-pilot`: isolated authenticated MCP service contract
 
 This is not the production-readiness claim. Render free services sleep, have
-cold starts, and provide limited scaling controls. The Google Cloud Run template
-remains the future bounded production option after schema, transaction, OAuth,
-and MCP gates pass.
+cold starts, and provide limited scaling controls. Any provider change requires
+a separately reviewed three-service exact-SHA deployment contract; there is no
+fallback deployment template.
 
 Automatic deploys are disabled in the Blueprint. Pilot revisions require an
 explicit Blueprint sync/deploy after CI results and the current blocker report

@@ -242,8 +242,11 @@ def test_unreachable_legacy_sql_operators_and_docs_stay_retired() -> None:
         "database/schema-docs/generate_schema_docs.sh",
         "database/schema-docs/validate_schemas.py",
         "docs/SECURITY_AUDIT.md",
+        "docs/architecture/hosting-options-2026-08.md",
         "docs/backend/database/finance-gst-hardening-audit.md",
+        "docs/deployment/google-cloud-run-cloudflare-pages.md",
         "docs/quality-improvements-install.md",
+        "deploy/cloud-run/service.template.yaml",
         "scripts/pre-commit-hook.sh",
     )
 

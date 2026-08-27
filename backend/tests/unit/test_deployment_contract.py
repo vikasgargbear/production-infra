@@ -227,7 +227,7 @@ def test_live_browser_two_user_approval_harness_is_explicit_and_ui_driven():
         assert forbidden not in spec
 
 
-def test_backend_image_is_cloud_run_compatible_and_non_root():
+def test_backend_image_is_portable_and_non_root():
     dockerfile = _read("backend/Dockerfile")
     dockerignore = _read("backend/.dockerignore")
 
@@ -243,24 +243,6 @@ def test_backend_image_is_cloud_run_compatible_and_non_root():
     assert ".env.*" in dockerignore
     assert "venv" in dockerignore
     assert "tests" in dockerignore
-
-
-def test_cloud_run_template_is_mumbai_bounded_and_probed():
-    template = _read("deploy/cloud-run/service.template.yaml")
-
-    assert "asia-south1-docker.pkg.dev/" in template
-    assert 'autoscaling.knative.dev/minScale: "0"' in template
-    max_scale = int(re.search(
-        r'autoscaling\.knative\.dev/maxScale: "(\d+)"', template
-    ).group(1))
-    concurrency = int(re.search(r"containerConcurrency: (\d+)", template).group(1))
-    assert 1 <= max_scale <= 10
-    assert 1 <= concurrency <= 40
-    assert "timeoutSeconds: 300" in template
-    assert template.count("path: /health") == 2
-    assert "startupProbe:" in template
-    assert "livenessProbe:" in template
-    assert "serviceAccountName:" in template
 
 
 def test_render_blueprint_is_manual_free_and_health_checked():
@@ -1171,49 +1153,6 @@ def test_render_runbook_separates_supabase_and_google_redirects():
     assert "core.memberships" in runbook
     assert "master.org_users" not in runbook
     assert "email-only lookup" in runbook
-
-
-def test_runtime_credentials_only_use_secret_manager_references():
-    template = _read("deploy/cloud-run/service.template.yaml")
-    secret_names = (
-        "DATABASE_URL",
-        "JWT_SECRET_KEY",
-        "SUPABASE_URL",
-        "SUPABASE_ANON_KEY",
-        "SMTP_USER",
-        "SMTP_PASSWORD",
-    )
-
-    for name in secret_names:
-        block = template.split(f"- name: {name}", 1)[1].split("- name:", 1)[0]
-        assert "valueFrom:" in block, name
-        assert "secretKeyRef:" in block, name
-        assert re.search(r"\n\s+value:", block) is None, name
-
-    assert "SUPABASE_SERVICE_ROLE_KEY" not in template
-    assert "- name: ENV" not in template
-
-
-def test_cloudflare_pages_build_has_spa_fallback_and_public_api_config_only():
-    redirects = _read("frontend/public/_redirects").strip()
-    runbook = _read("docs/deployment/google-cloud-run-cloudflare-pages.md")
-
-    assert redirects == "/* /index.html 200"
-    assert "Root directory: `frontend`" in runbook
-    assert "Build output: `build`" in runbook
-    assert "Node version: `20`" in runbook
-    assert "No secret belongs in a `REACT_APP_*` variable" in runbook
-
-
-def test_mcp_shares_the_api_container_or_remains_an_explicit_release_gate():
-    main = _read("backend/app/main.py")
-    runbook = _read("docs/deployment/google-cloud-run-cloudflare-pages.md")
-
-    if '"/mcp"' in main or "'/mcp'" in main:
-        assert "same Cloud Run origin" in runbook
-    else:
-        assert "`/mcp` check must fail release if the transport is absent" in runbook
-        assert "Do not expose\n`/mcp` publicly" in runbook
 
 
 def test_production_runbook_matches_manual_render_and_fail_closed_migration() -> None:
