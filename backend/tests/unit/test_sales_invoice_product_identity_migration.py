@@ -60,7 +60,12 @@ def test_product_identity_calculator_privilege_is_exactly_reviewed() -> None:
         "erp_automation_commands.resolve_sales_invoice_product_identities(uuid,jsonb)"
     )
 
-    assert fixture.count(signature) == 5
+    assert fixture.count(signature) == 6
+    assert f"'{signature}'\n       ) IS NOT NULL THEN" in fixture
+    assert (
+        "procedure.oid IS DISTINCT FROM pg_catalog.to_regprocedure("
+        in fixture
+    )
     for role in ("erp_runtime", "erp_app", "public"):
-        assert f"'{role}',\n         '{signature}'" in fixture
-    assert "'erp_calculator',\n         '" + signature + "'" in fixture
+        assert f"'{role}',\n             '{signature}'" in fixture
+    assert "'erp_calculator',\n             '" + signature + "'" in fixture

@@ -98,30 +98,31 @@ BEGIN
 
     IF pg_catalog.to_regprocedure(
          'erp_automation_commands.resolve_sales_invoice_product_identities(uuid,jsonb)'
-       ) IS NULL
-       OR pg_catalog.has_function_privilege(
-         'erp_calculator',
-         'erp_automation_commands.resolve_sales_invoice_product_identities(uuid,jsonb)',
-         'EXECUTE'
-       ) IS DISTINCT FROM true THEN
-        RAISE EXCEPTION 'calculator lacks reviewed sales-invoice product-identity read privilege';
-    END IF;
-    IF pg_catalog.has_function_privilege(
-         'erp_runtime',
-         'erp_automation_commands.resolve_sales_invoice_product_identities(uuid,jsonb)',
-         'EXECUTE'
-       )
-       OR pg_catalog.has_function_privilege(
-         'erp_app',
-         'erp_automation_commands.resolve_sales_invoice_product_identities(uuid,jsonb)',
-         'EXECUTE'
-       )
-       OR pg_catalog.has_function_privilege(
-         'public',
-         'erp_automation_commands.resolve_sales_invoice_product_identities(uuid,jsonb)',
-         'EXECUTE'
-       ) THEN
-        RAISE EXCEPTION 'sales-invoice product identity read privilege is broader than calculator';
+       ) IS NOT NULL THEN
+        IF pg_catalog.has_function_privilege(
+             'erp_calculator',
+             'erp_automation_commands.resolve_sales_invoice_product_identities(uuid,jsonb)',
+             'EXECUTE'
+           ) IS DISTINCT FROM true THEN
+            RAISE EXCEPTION 'calculator lacks reviewed sales-invoice product-identity read privilege';
+        END IF;
+        IF pg_catalog.has_function_privilege(
+             'erp_runtime',
+             'erp_automation_commands.resolve_sales_invoice_product_identities(uuid,jsonb)',
+             'EXECUTE'
+           )
+           OR pg_catalog.has_function_privilege(
+             'erp_app',
+             'erp_automation_commands.resolve_sales_invoice_product_identities(uuid,jsonb)',
+             'EXECUTE'
+           )
+           OR pg_catalog.has_function_privilege(
+             'public',
+             'erp_automation_commands.resolve_sales_invoice_product_identities(uuid,jsonb)',
+             'EXECUTE'
+           ) THEN
+            RAISE EXCEPTION 'sales-invoice product identity read privilege is broader than calculator';
+        END IF;
     END IF;
 
     SELECT count(*) INTO bad_count
@@ -134,8 +135,10 @@ BEGIN
                                      'resolve_supplier_invoice_prepare','persist_supplier_invoice_prepare',
                                      'resolve_sales_return_prepare','persist_sales_return_prepare',
                                      'resolve_purchase_return_prepare','persist_purchase_return_prepare',
-                                     'resolve_adjustment_note_prepare','persist_adjustment_note_prepare',
-                                     'resolve_sales_invoice_product_identities')
+                                     'resolve_adjustment_note_prepare','persist_adjustment_note_prepare')
+       AND procedure.oid IS DISTINCT FROM pg_catalog.to_regprocedure(
+         'erp_automation_commands.resolve_sales_invoice_product_identities(uuid,jsonb)'
+       )
        AND pg_catalog.has_function_privilege('erp_calculator',procedure.oid,'EXECUTE');
     IF bad_count<>0 THEN
         RAISE EXCEPTION 'calculator can execute an unreviewed automation helper';

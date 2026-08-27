@@ -383,7 +383,15 @@ def test_postgres_fixture_is_rollback_only() -> None:
     assert "calculator_count<>12" in fixture
     assert fixture.count(
         "erp_automation_commands.resolve_sales_invoice_product_identities(uuid,jsonb)"
-    ) == 5
+    ) == 6
+    assert (
+        "erp_automation_commands.resolve_sales_invoice_product_identities(uuid,jsonb)'\n"
+        "       ) IS NOT NULL THEN"
+    ) in fixture
+    assert (
+        "procedure.oid IS DISTINCT FROM pg_catalog.to_regprocedure("
+        in fixture
+    )
     assert (
         "calculator lacks reviewed sales-invoice product-identity read privilege"
         in fixture
