@@ -49,7 +49,7 @@ async def test_valid_asymmetric_token_checks_issuer_audience_and_required_claims
             "iss": config.supabase_issuer,
             "aud": config.supabase_audience,
             "sub": subject,
-            "app_metadata": {"organization_id": organization_id},
+            "app_metadata": {"org_id": organization_id},
             "client_id": "chatgpt-installation",
             "scope": "openid offline_access email profile",
             "iat": int(time.time()) - 1,
@@ -87,7 +87,7 @@ async def test_missing_scope_or_non_uuid_subject_is_rejected_without_network() -
         "iss": config.supabase_issuer,
         "aud": config.supabase_audience,
         "client_id": "client",
-        "app_metadata": {"organization_id": str(uuid4())},
+        "app_metadata": {"org_id": str(uuid4())},
         "iat": int(time.time()) - 1,
         "exp": int(time.time()) + 300,
     }
@@ -102,6 +102,26 @@ async def test_missing_scope_or_non_uuid_subject_is_rejected_without_network() -
             config, Resolver(), lambda *_args, **_kwargs: claims
         )
         assert await verifier.verify_token(_token()) is None
+
+
+@pytest.mark.asyncio
+async def test_legacy_organization_id_metadata_alias_is_rejected() -> None:
+    config = settings()
+    claims = {
+        "iss": config.supabase_issuer,
+        "aud": config.supabase_audience,
+        "sub": str(uuid4()),
+        "client_id": "chatgpt-installation",
+        "app_metadata": {"organization_id": str(uuid4())},
+        "scope": "openid offline_access",
+        "iat": int(time.time()) - 1,
+        "exp": int(time.time()) + 300,
+    }
+    verifier = SupabaseTokenVerifier(
+        config, Resolver(), lambda *_args, **_kwargs: claims
+    )
+
+    assert await verifier.verify_token(_token()) is None
 
 
 @pytest.mark.asyncio

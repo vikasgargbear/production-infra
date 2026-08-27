@@ -69,7 +69,10 @@ class SupabaseTokenVerifier:
             app_metadata = claims.get("app_metadata")
             if not isinstance(app_metadata, dict):
                 return None
-            organization_id = str(UUID(str(app_metadata.get("organization_id"))))
+            # Supabase persists the canonical tenant anchor under app_metadata.org_id.
+            # Keep the wire claim singular; the normalized AccessToken claim below is
+            # named organization_id for the typed MCP -> API grant contract.
+            organization_id = str(UUID(str(app_metadata.get("org_id"))))
             client_id = claims["client_id"]
             scope_claim = claims.get("scope", "")
             if not isinstance(client_id, str) or not client_id.strip():

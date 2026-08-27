@@ -27,6 +27,7 @@
   },
   "oauth": {
     "audience": "authenticated",
+    "tenant_metadata_claim": "org_id",
     "required_scopes": ["openid", "offline_access"],
     "allowed_scopes": ["openid", "profile", "email", "phone", "offline_access"],
     "dynamic_client_registration": false,
