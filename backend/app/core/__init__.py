@@ -36,4 +36,4 @@ from .utils import (
 )
 
 # Database (stays at root)
-from .database import get_db, engine, SessionLocal, Base, set_org_context
+from .database import get_db, engine, SessionLocal, Base

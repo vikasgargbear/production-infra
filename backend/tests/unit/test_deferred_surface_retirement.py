@@ -7,6 +7,7 @@ from app.main import app
 
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
+REPOSITORY_ROOT = BACKEND_ROOT.parent
 
 
 def test_deferred_routes_are_absent_from_openapi() -> None:
@@ -100,3 +101,33 @@ def test_retired_audit_and_settings_routes_are_absent() -> None:
     } == {"app.api.routes.canonical_erp_reads"}
     main_source = (BACKEND_ROOT / "app/main.py").read_text(encoding="utf-8")
     assert "api.include_router(canonical_erp_reads.router" in main_source
+
+
+def test_unreachable_legacy_sql_operators_and_docs_stay_retired() -> None:
+    retired_paths = (
+        "backend/scripts/repair_finance_denormalized_drift.py",
+        "backend/scripts/schema_audit.py",
+        "database/schema-docs/CURRENT_SCHEMA_STATE.txt",
+        "database/schema-docs/README.md",
+        "database/schema-docs/finance_gst_audit_queries.sql",
+        "database/schema-docs/generate_schema_docs.sh",
+        "database/schema-docs/validate_schemas.py",
+        "docs/SECURITY_AUDIT.md",
+        "docs/backend/database/finance-gst-hardening-audit.md",
+    )
+
+    assert [
+        path for path in retired_paths if (REPOSITORY_ROOT / path).exists()
+    ] == []
+
+    core_sources = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in (
+            BACKEND_ROOT / "app/core/__init__.py",
+            BACKEND_ROOT / "app/core/database.py",
+            BACKEND_ROOT / "app/core/auth/jwt_auth.py",
+        )
+    )
+    assert "set_org_context" not in core_sources
+    assert "verify_user_org_access" not in core_sources
+    assert "master.org_users" not in core_sources
