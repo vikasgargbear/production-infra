@@ -2,10 +2,15 @@ import React from 'react';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import PurchaseListHistory from './PurchaseListHistory';
 import { canonicalDocumentHistoryApi } from '../../services/api';
+import { canonicalGoodsReceiptsApi } from '../../services/api/modules/purchase/canonicalGoodsReceipts.api';
 
 jest.mock('../../services/api', () => ({
   canonicalDocumentHistoryApi: { get: jest.fn() },
   requireCanonicalHistoryAmount: (value: string) => value,
+}));
+
+jest.mock('../../services/api/modules/purchase/canonicalGoodsReceipts.api', () => ({
+  canonicalGoodsReceiptsApi: { getPurchaseOrderContext: jest.fn() },
 }));
 
 jest.mock('../global', () => ({
@@ -109,7 +114,7 @@ test('offers receipt navigation for the exact approved canonical purchase order'
   expect(onRecordReceipt).toHaveBeenCalledWith(purchaseOrderId);
 });
 
-test('searches the exact approved PO before business-date bootstrap finishes', async () => {
+test('uses receipt context when history cannot expose the exact approved PO', async () => {
   jest.useFakeTimers();
   const purchaseOrderId = '6ef82619-a636-5c6b-8125-7635848028e5';
   const supplierBootstrap = deferred<any>();
@@ -117,19 +122,21 @@ test('searches the exact approved PO before business-date bootstrap finishes', a
   const onRecordReceipt = jest.fn();
   (canonicalDocumentHistoryApi.get as jest.Mock)
     .mockReturnValueOnce(supplierBootstrap.promise)
-    .mockReturnValueOnce(purchaseBootstrap.promise)
-    .mockResolvedValueOnce({
-      total: 1, page: 1, page_size: 25, business_date: '2026-08-27',
-      items: [{
-        ...response('LIVE18-PO').items[0],
-        document_kind: 'purchase_order',
-        document_id: purchaseOrderId,
-        status: 'approved',
-        paid_amount: null,
-        outstanding_amount: null,
-        payment_status: null,
-      }],
-    });
+    .mockReturnValueOnce(purchaseBootstrap.promise);
+  (canonicalGoodsReceiptsApi.getPurchaseOrderContext as jest.Mock).mockResolvedValue({
+    data: {
+      purchase_order_id: purchaseOrderId,
+      purchase_order_number: 'LIVE18-PO',
+      order_date: '2026-08-27',
+      total_amount: '112.00',
+      branch_id: '11111111-1111-7111-8111-333333333333',
+      supplier_account_id: '33333333-3333-7333-8333-333333333333',
+      supplier_name: 'Demo Supplier',
+      organization_timezone: 'Asia/Kolkata',
+      status: 'approved',
+      lines: [{ purchase_order_line_id: '11111111-1111-7111-8111-555555555555' }],
+    },
+  });
 
   render(<PurchaseListHistory onRecordReceipt={onRecordReceipt} />);
   fireEvent.click(screen.getByRole('button', { name: 'Purchase Orders' }));
@@ -138,12 +145,8 @@ test('searches the exact approved PO before business-date bootstrap finishes', a
   });
   await act(async () => { jest.advanceTimersByTime(500); });
 
-  expect(canonicalDocumentHistoryApi.get).toHaveBeenLastCalledWith(
-    expect.objectContaining({
-      document_kind: 'purchase_order',
-      search: purchaseOrderId,
-    }),
-  );
+  expect(canonicalGoodsReceiptsApi.getPurchaseOrderContext).toHaveBeenCalledWith(purchaseOrderId);
+  expect(canonicalDocumentHistoryApi.get).toHaveBeenCalledTimes(2);
   expect(screen.getByRole('button', {
     name: `Record canonical receipt for purchase order ${purchaseOrderId}`,
   })).toBeTruthy();
@@ -153,7 +156,16 @@ test('searches the exact approved PO before business-date bootstrap finishes', a
       items: [], total: 0, page: 1, page_size: 25, business_date: '2026-08-27',
     });
     purchaseBootstrap.resolve({
-      items: [], total: 0, page: 1, page_size: 25, business_date: '2026-08-27',
+      total: 1, page: 1, page_size: 25, business_date: '2026-08-27',
+      items: [{
+        ...response('BASELINE-PO').items[0],
+        document_kind: 'purchase_order',
+        document_id: '77777777-7777-7777-8777-777777777777',
+        status: 'approved',
+        paid_amount: null,
+        outstanding_amount: null,
+        payment_status: null,
+      }],
     });
   });
   expect(screen.getByRole('button', {

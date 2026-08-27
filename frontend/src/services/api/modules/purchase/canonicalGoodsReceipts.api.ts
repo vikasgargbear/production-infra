@@ -38,6 +38,8 @@ export interface CanonicalReceiptContextLine {
 export interface CanonicalReceiptContext {
   purchase_order_id: string;
   purchase_order_number: string;
+  order_date: string;
+  total_amount: string;
   branch_id: string;
   supplier_account_id: string;
   supplier_name: string;

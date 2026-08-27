@@ -10,6 +10,8 @@ import type { CanonicalReceiptContext } from '../../../services/api/modules/purc
 const context: CanonicalReceiptContext = {
   purchase_order_id: '10000000-0000-7000-8000-000000000001',
   purchase_order_number: 'CODEX-E2E-PO-0001',
+  order_date: '2026-08-28',
+  total_amount: '112.00',
   branch_id: '10000000-0000-7000-8000-000000000002',
   supplier_account_id: '10000000-0000-7000-8000-000000000003',
   supplier_name: 'Canonical Supplier',

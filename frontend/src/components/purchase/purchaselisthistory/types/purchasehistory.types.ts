@@ -15,8 +15,8 @@ export interface PurchaseOrder {
     payment_status: 'paid' | 'partial' | 'pending' | 'overdue' | 'cancelled' | null;
     status: string;
     items_count: number;
-    created_at: string;
-    updated_at: string;
+    created_at?: string;
+    updated_at?: string;
 }
 
 export interface PurchaseListHistoryProps {

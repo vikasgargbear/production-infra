@@ -15,8 +15,10 @@ import {
 } from 'lucide-react';
 import { Button, StatusBadge, DataTable, Pagination, ModuleHeader, InlineFilterPanel } from '../global';
 import { canonicalDocumentHistoryApi, requireCanonicalHistoryAmount } from '../../services/api';
+import { canonicalGoodsReceiptsApi } from '../../services/api/modules/purchase/canonicalGoodsReceipts.api';
 import { formatExactCurrency } from '../../utils/exactDecimal';
 import { formatCalendarDate } from '../../utils/calendarDate';
+import { isCanonicalUuid } from '../../utils/canonicalUuid';
 
 // Import hooks and types
 import { usePurchaseListHistoryState } from './purchaselisthistory/hooks/usePurchaseListHistoryState';
@@ -75,6 +77,34 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
     dispatch({ type: 'SET_ERROR', error: null });
 
     try {
+      const exactPurchaseOrderId = onRecordReceipt && docType === 'purchase_order'
+        && typeof searchFilters.search === 'string'
+        && isCanonicalUuid(searchFilters.search)
+        ? searchFilters.search.trim()
+        : null;
+      if (exactPurchaseOrderId) {
+        const context = (await canonicalGoodsReceiptsApi.getPurchaseOrderContext(
+          exactPurchaseOrderId,
+        )).data;
+        if (requestSequence !== requestSequenceRef.current) return;
+        dispatch({ type: 'SET_PURCHASES', purchases: [{
+          id: context.purchase_order_id,
+          po_number: context.purchase_order_number,
+          po_date: context.order_date,
+          supplier_id: context.supplier_account_id,
+          supplier_name: context.supplier_name,
+          total_amount: context.total_amount,
+          paid_amount: null,
+          pending_amount: null,
+          payment_status: null,
+          status: context.status,
+          items_count: context.lines.length,
+        }] });
+        dispatch({ type: 'SET_PAGINATION', pagination: {
+          total: 1, page: 1, total_pages: 1,
+        } });
+        return;
+      }
       const response = await canonicalDocumentHistoryApi.get({
         document_kind: docType === 'grn' ? 'goods_receipt' : docType,
         page,
@@ -113,7 +143,7 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
         dispatch({ type: 'SET_LOADING', loading: false });
       }
     }
-  }, [dispatch, pagination.per_page, documentType]);
+  }, [dispatch, pagination.per_page, documentType, onRecordReceipt]);
 
   // Alias for backward compatibility
   const fetchPurchases = fetchDocuments;

@@ -7,6 +7,7 @@ command and the immutable inventory evidence produced after execution.
 
 from __future__ import annotations
 
+from datetime import date
 from decimal import Decimal
 from typing import Any, Dict, Literal, Optional
 from uuid import UUID, uuid4
@@ -105,6 +106,8 @@ class ReceiptContextLine(BaseModel):
 class ReceiptContextResponse(BaseModel):
     purchase_order_id: UUID
     purchase_order_number: str
+    order_date: date
+    total_amount: Decimal
     branch_id: UUID
     supplier_account_id: UUID
     supplier_name: str
@@ -258,6 +261,8 @@ def _canonical_purchase_order_receipt_context(
     header = _one(db, """
         SELECT purchase_order.id AS purchase_order_id,
                purchase_order.purchase_order_number,
+               purchase_order.order_date,
+               purchase_order.grand_total AS total_amount,
                purchase_order.branch_id,
                purchase_order.supplier_account_id,
                party.legal_name AS supplier_name,

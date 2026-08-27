@@ -127,6 +127,8 @@ def test_openapi_publishes_bearer_auth_and_uuid_path_contracts():
         "type": "http",
         "scheme": "bearer",
     }
+    context_schema = schema["components"]["schemas"]["ReceiptContextResponse"]
+    assert {"order_date", "total_amount"} <= set(context_schema["required"])
 
 
 def test_purchase_permission_rejects_missing_bearer_token():
@@ -189,6 +191,8 @@ def test_context_requires_at_least_one_receivable_line():
         canonical_goods_receipts.ReceiptContextResponse.model_validate({
             "purchase_order_id": "10000000-0000-7000-8000-000000000005",
             "purchase_order_number": "CODEX-E2E-PO-0001",
+            "order_date": "2026-08-28",
+            "total_amount": "112.00",
             "branch_id": "10000000-0000-7000-8000-000000000003",
             "supplier_account_id": "10000000-0000-7000-8000-000000000004",
             "supplier_name": "Canonical Supplier",
