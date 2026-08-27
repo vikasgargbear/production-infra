@@ -1,3 +1,4 @@
+import hashlib
 import json
 from pathlib import Path
 
@@ -10,20 +11,29 @@ from scripts import package_canonical_baseline_migration as packager
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
-def test_checked_migration_is_exact_generator_output_and_hash_bound() -> None:
-    generated = packager.generate_source()
+def test_checked_migration_is_immutable_and_hash_bound() -> None:
     checked = package.BASELINE_SQL_PATH.read_text(encoding="utf-8")
     manifest = json.loads(package.BASELINE_MANIFEST_PATH.read_text(encoding="utf-8"))
+    body, loaded_manifest = package.load_packaged_baseline()
 
-    assert checked == generated
-    assert packager.render_manifest(generated) == (
-        package.BASELINE_MANIFEST_PATH.read_text(encoding="utf-8")
-    )
+    assert hashlib.sha256(checked.encode("utf-8")).hexdigest() == manifest[
+        "source_sql_sha256"
+    ]
+    assert hashlib.sha256(body.encode("utf-8")).hexdigest() == manifest[
+        "alembic_body_sha256"
+    ]
+    assert loaded_manifest == manifest
+    assert packager.verify_package_only() == manifest["source_sql_sha256"]
     assert manifest["generator_command"] == (
         "python3 backend/scripts/generate_canonical_baseline.py "
         "--enforcement-root database/canonical"
     )
     assert "IF NOT EXISTS" not in checked.upper()
+
+
+def test_packager_refuses_to_rewrite_deployed_baseline(capsys) -> None:
+    assert packager.main(["--write"]) == 2
+    assert "20260820_0001 is immutable" in capsys.readouterr().err
 
 
 def test_packaged_migration_removes_only_generator_outer_transaction() -> None:

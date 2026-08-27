@@ -68,7 +68,10 @@ export const ordersApi = {
     }
     return executed;
   },
-  getCanonical: (id: string) => apiHelpers.get(`/canonical/sales-orders/${id}/acceptance-readback`),
+  getCanonical: (id: string) => apiHelpers.get(
+    `/canonical/sales-orders/${id}/acceptance-readback`,
+    { preserveExactDecimals: true },
+  ),
 
   /** Canonical approved orders eligible for explicit dispatch selection. */
   listApprovedForDispatch: async (search = '', pageSize = 50) => {

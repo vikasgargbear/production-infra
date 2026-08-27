@@ -35,19 +35,20 @@ baseline and head-only rollback fixtures in isolated PostgreSQL 15 CI jobs. A
 disposable Supabase deployment rehearsal is still required before any live
 reset.
 
-Regenerate the package only after all catalog-bound artifacts are current, then
-review and verify the checked output:
+The deployed baseline package is immutable. Verify its reviewed bytes separately
+from the current catalog-bound sources, which evolve through new hash-bound
+Alembic revisions:
 
 ```bash
 python3 backend/scripts/check_canonical_artifacts.py
-python3 backend/scripts/package_canonical_baseline_migration.py --write
+python3 backend/scripts/package_canonical_baseline_migration.py --verify-package
 python3 backend/scripts/package_canonical_baseline_migration.py
 export CANONICAL_BASELINE_APPROVED_SHA256="$(python3 backend/scripts/package_canonical_baseline_migration.py --print-sha256)"
 ```
 
-`--write` is a review-time repository operation, never a deploy hook. The image
-contains only the checked SQL, manifest, revision, and package verifier; its
-build cannot regenerate from paths outside the backend Docker context.
+`--write` is refused after the baseline has shipped. The image contains only the
+checked SQL, manifest, revision, and package verifier; its build cannot
+regenerate or rewrite historical migration bytes.
 
 The live ERP rows are disposable, but Supabase Auth, Storage, secrets and project
 configuration are not. A schema reset must preserve every Supabase-owned schema.

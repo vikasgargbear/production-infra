@@ -378,6 +378,7 @@ async def test_prepare_routes_exact_business_input_through_bounded_action_grant(
         "idempotency_key": "prepare-sales-order-0001",
         "branch_id": branch_id,
         "order_date": "2026-08-22",
+        "requested_delivery_date": "2026-08-24",
         "document_discount": {
             "document_discount_kind": "none",
             "document_discount_basis": "taxable_value",
