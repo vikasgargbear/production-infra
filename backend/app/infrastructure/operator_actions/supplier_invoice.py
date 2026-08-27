@@ -58,7 +58,7 @@ def landed_cost_preview(
     calculated = {
         str(line["line_id"]): line for line in calculation_output["lines"]
     }
-    product_targets = [
+    product_allocations = [
         allocation
         for line in resolution["lines"]
         if line["line_kind"] == "product"
@@ -75,11 +75,21 @@ def landed_cost_preview(
             raise ValueError("capitalized supplier line lacks reviewed allocation method")
         output_line = calculated[str(line["line_id"])]
         total_pool = Decimal(str(output_line["net_value_amount"]))
-        targets = line.get("receipt_allocations") or product_targets
+        allocations = line.get("receipt_allocations") or product_allocations
         if line["line_kind"] == "product":
             total_pool -= Decimal(str(line["receipt_cost"]))
-        if not targets:
+        if not allocations:
             raise ValueError("capitalized supplier line has no receipt stock lineage")
+        for allocation in allocations:
+            lineage = allocation.get("landed_cost_lineage")
+            if (
+                not isinstance(lineage, Mapping)
+                or lineage.get("contract_version")
+                != "supplier_invoice_landed_cost_lineage_v1"
+                or int(lineage.get("source_identity_count", 0)) != 1
+                or not isinstance(lineage.get("targets"), list)
+            ):
+                raise ValueError("landed-cost receipt lineage contract is invalid")
         if total_pool == 0:
             effects.append({
                 "supplier_invoice_line_id": str(line["line_id"]),
@@ -88,62 +98,58 @@ def landed_cost_preview(
                 "total_landed_cost_pool": "0.00",
                 "landed_cost_inventory_value_delta": "0.00",
                 "consumed_variance_amount": "0.00",
-                "targets": [{
-                    "goods_receipt_line_id": target["goods_receipt_line_id"],
-                    "location_id": target["location_id"],
-                    "product_id": target["product_id"],
-                    "batch_id": target["batch_id"],
-                    "remaining_on_hand_quantity": target["stock_on_hand_quantity"],
-                    "stock_row_version": target["stock_row_version"],
-                } for target in targets],
+                "targets": [
+                    {
+                        "goods_receipt_line_id": allocation["goods_receipt_line_id"],
+                        "location_id": target["location_id"],
+                        "product_id": target["product_id"],
+                        "batch_id": target["batch_id"],
+                        "remaining_on_hand_quantity": target["on_hand_quantity"],
+                        "remaining_inventory_value": target["inventory_value"],
+                        "stock_row_version": target["stock_row_version"],
+                        "last_ledger_entry_id": target["last_ledger_entry_id"],
+                    }
+                    for allocation in allocations
+                    for target in allocation["landed_cost_lineage"]["targets"]
+                ],
             })
             continue
-        if method == "direct" and len({
-            (target["location_id"], target["product_id"], target["batch_id"])
-            for target in targets
-        }) != 1:
-            raise ValueError("direct landed-cost allocation requires one stock identity")
+        if method == "direct" and len(allocations) != 1:
+            raise ValueError("direct landed-cost allocation requires one receipt identity")
 
         source_basis = Decimal("0")
         remaining_basis = Decimal("0")
         target_effects: list[dict[str, Any]] = []
-        for target in targets:
-            if target.get("exact_receipt_source_provenance") is not True:
-                raise ValueError(
-                    "landed-cost remaining stock lacks exclusive receipt provenance"
-                )
-            allocated_quantity = (
-                Decimal(str(target["allocated_base_billed_quantity"]))
-                + Decimal(str(target["allocated_base_free_quantity"]))
-            )
-            remaining_quantity = min(
-                allocated_quantity, Decimal(str(target["stock_on_hand_quantity"]))
-            )
-            if Decimal(str(target["stock_on_hand_quantity"])) > allocated_quantity:
-                raise ValueError(
-                    "landed-cost target on-hand exceeds its exact receipt allocation"
-                )
-            receipt_cost = Decimal(str(target["receipt_unit_cost"]))
-            source = (
-                allocated_quantity * receipt_cost
-                if method == "value_weighted"
-                else allocated_quantity
-            )
-            remaining = (
-                remaining_quantity * receipt_cost
-                if method == "value_weighted"
-                else remaining_quantity
-            )
-            source_basis += source
-            remaining_basis += remaining
-            target_effects.append({
-                "goods_receipt_line_id": target["goods_receipt_line_id"],
-                "location_id": target["location_id"],
-                "product_id": target["product_id"],
-                "batch_id": target["batch_id"],
-                "remaining_on_hand_quantity": str(remaining_quantity),
-                "stock_row_version": target["stock_row_version"],
-            })
+        for allocation in allocations:
+            lineage = allocation["landed_cost_lineage"]
+            source_basis += Decimal(str(
+                lineage[
+                    "source_value_basis"
+                    if method == "value_weighted"
+                    else "source_quantity_basis"
+                ]
+            ))
+            remaining_basis += Decimal(str(
+                lineage[
+                    "remaining_value_basis"
+                    if method == "value_weighted"
+                    else "remaining_quantity_basis"
+                ]
+            ))
+            for target in lineage["targets"]:
+                target_effects.append({
+                    "goods_receipt_line_id": allocation["goods_receipt_line_id"],
+                    "location_id": target["location_id"],
+                    "product_id": target["product_id"],
+                    "batch_id": target["batch_id"],
+                    "remaining_on_hand_quantity": target["on_hand_quantity"],
+                    "remaining_inventory_value": target["inventory_value"],
+                    "stock_row_version": target["stock_row_version"],
+                    "last_ledger_entry_id": target["last_ledger_entry_id"],
+                    "origin_location_id": target["origin_location_id"],
+                    "origin_product_id": target["origin_product_id"],
+                    "origin_batch_id": target["origin_batch_id"],
+                })
         if source_basis <= 0:
             raise ValueError("landed-cost allocation basis must be positive")
         capitalized = (total_pool * remaining_basis / source_basis).quantize(

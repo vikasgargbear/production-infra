@@ -1703,20 +1703,19 @@ DECLARE requested_branch_id uuid:=NULLIF(request_document->>'branch_id','')::uui
         input_cess_account finance.accounts%ROWTYPE; rounding_gain_account finance.accounts%ROWTYPE;
         rounding_loss_account finance.accounts%ROWTYPE; variance_account finance.accounts%ROWTYPE;
         receipt_line procurement.goods_receipt_lines%ROWTYPE; receipt procurement.goods_receipts%ROWTYPE;
-        balance inventory.stock_balances%ROWTYPE;
         order_line procurement.purchase_order_lines%ROWTYPE; purchase_order procurement.purchase_orders%ROWTYPE;
         product catalog.products%ROWTYPE;
         tax_version tax.tax_code_versions%ROWTYPE; tax_release core.reference_data_releases%ROWTYPE;
         profile catalog.commercial_charge_tax_profiles%ROWTYPE; expense_account finance.accounts%ROWTYPE;
         requested_line jsonb; requested_allocation jsonb; resolved_allocations jsonb;
+        landed_cost_lineage jsonb; landed_cost_target jsonb;
         resolved_lines jsonb:='[]'::jsonb; source_versions jsonb:='[]'::jsonb;
         resolved_receipt_ids jsonb:='[]'::jsonb; source_purchase_order_id uuid;
         base_billed numeric(20,6); base_free numeric(20,6); prior_billed numeric(20,6); prior_free numeric(20,6);
         receipt_cost numeric(20,2); line_product_id uuid; line_purchase_order_line_id uuid;
         line_uom text; line_factor numeric(20,6); receipt_business_date date;
         ruleset_version text; supply_type text; candidate_count integer; address_count integer;
-        allocation_count integer; distinct_allocation_count integer; foreign_positive_count integer;
-        exact_receipt_source_provenance boolean;
+        allocation_count integer; distinct_allocation_count integer;
 BEGIN
     IF organization_id IS NULL OR membership_id IS NULL OR auth_user_id IS NULL OR application_user_id IS NULL
        OR grant_id IS NULL OR supplier_invoice_id IS NULL OR requested_branch_id IS NULL
@@ -1903,9 +1902,6 @@ BEGIN
         receipt_business_date:=(receipt.received_at AT TIME ZONE organization.timezone)::date;
         IF received_date<receipt_business_date THEN
           RAISE EXCEPTION USING ERRCODE='22007', MESSAGE='supplier invoice received date cannot precede the organization-local goods receipt date'; END IF;
-        SELECT * INTO STRICT balance FROM inventory.stock_balances
-         WHERE org_id=organization_id AND location_id=receipt_line.location_id
-           AND product_id=receipt_line.product_id AND batch_id=receipt_line.batch_id FOR SHARE;
         SELECT * INTO STRICT order_line FROM procurement.purchase_order_lines
          WHERE org_id=organization_id AND id=receipt_line.purchase_order_line_id AND line_kind='product' FOR SHARE;
         SELECT * INTO STRICT purchase_order FROM procurement.purchase_orders
@@ -1948,23 +1944,14 @@ BEGIN
            OR prior_billed+(requested_allocation->>'allocated_base_billed_quantity')::numeric>receipt_line.base_accepted_quantity
            OR prior_free+(requested_allocation->>'allocated_base_free_quantity')::numeric>receipt_line.base_free_quantity THEN
           RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='supplier invoice exceeds separate posted receipt billed or free ceiling'; END IF;
-        SELECT count(*) INTO foreign_positive_count
-          FROM inventory.stock_ledger_entries AS entry
-          JOIN inventory.inventory_document_lines AS document_line
-            ON document_line.org_id=entry.org_id
-           AND document_line.id=entry.inventory_document_line_id
-         WHERE entry.org_id=organization_id
-           AND entry.location_id=receipt_line.location_id
-           AND entry.product_id=receipt_line.product_id
-           AND entry.batch_id=receipt_line.batch_id
-           AND entry.quantity_delta>0
-           AND document_line.goods_receipt_line_id IS DISTINCT FROM receipt_line.id;
-        exact_receipt_source_provenance:=
-          (requested_allocation->>'allocated_base_billed_quantity')::numeric
-            IS NOT DISTINCT FROM receipt_line.base_accepted_quantity
-          AND (requested_allocation->>'allocated_base_free_quantity')::numeric
-            IS NOT DISTINCT FROM receipt_line.base_free_quantity
-          AND foreign_positive_count=0;
+        landed_cost_lineage:=erp_trade_commands_v2.landed_cost_receipt_lineage_state(
+          organization_id,receipt_line.id,
+          (requested_allocation->>'allocated_base_billed_quantity')::numeric,
+          (requested_allocation->>'allocated_base_free_quantity')::numeric);
+        IF landed_cost_lineage->>'contract_version'<>'supplier_invoice_landed_cost_lineage_v1'
+           OR (landed_cost_lineage->>'source_identity_count')::integer<>1
+           OR pg_catalog.jsonb_typeof(landed_cost_lineage->'targets')<>'array' THEN
+          RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='supplier invoice landed-cost lineage contract is invalid'; END IF;
         base_billed:=base_billed+(requested_allocation->>'allocated_base_billed_quantity')::numeric;
         base_free:=base_free+(requested_allocation->>'allocated_base_free_quantity')::numeric;
         receipt_cost:=receipt_cost+pg_catalog.round(((requested_allocation->>'allocated_base_billed_quantity')::numeric+
@@ -1975,9 +1962,7 @@ BEGIN
           'product_id',product.id,'receipt_unit_cost',receipt_line.unit_cost::text,'receipt_base_accepted_quantity',receipt_line.base_accepted_quantity::text,
           'receipt_base_free_quantity',receipt_line.base_free_quantity::text,'prior_allocated_base_billed_quantity',prior_billed::text,
           'prior_allocated_base_free_quantity',prior_free::text,'location_id',receipt_line.location_id,'batch_id',receipt_line.batch_id,
-          'stock_on_hand_quantity',balance.on_hand_quantity::text,'stock_inventory_value',balance.inventory_value::text,
-          'stock_average_unit_cost',balance.average_unit_cost::text,'stock_row_version',balance.row_version,
-          'exact_receipt_source_provenance',exact_receipt_source_provenance));
+          'landed_cost_lineage',landed_cost_lineage));
         resolved_receipt_ids:=resolved_receipt_ids||pg_catalog.jsonb_build_array(receipt.id::text);
         source_versions:=source_versions||pg_catalog.jsonb_build_array(
           pg_catalog.jsonb_build_object('resource_type','purchase_order','id',purchase_order.id,'row_version',purchase_order.row_version,
@@ -1986,10 +1971,17 @@ BEGIN
           pg_catalog.jsonb_build_object('resource_type','goods_receipt','id',receipt.id,'row_version',receipt.row_version,
             'status',receipt.status,'received_at',receipt.received_at,'business_date',receipt_business_date),
           pg_catalog.jsonb_build_object('resource_type','goods_receipt_line','id',receipt_line.id,'goods_receipt_line_id',receipt_line.id,'base_accepted_quantity',receipt_line.base_accepted_quantity::text,'base_free_quantity',receipt_line.base_free_quantity::text,'unit_cost',receipt_line.unit_cost::text),
-          pg_catalog.jsonb_build_object('resource_type','stock_balance','location_id',receipt_line.location_id,'product_id',receipt_line.product_id,
-            'batch_id',receipt_line.batch_id,'row_version',balance.row_version,'on_hand_quantity',balance.on_hand_quantity::text,
-            'inventory_value',balance.inventory_value::text,'average_unit_cost',balance.average_unit_cost::text),
           pg_catalog.jsonb_build_object('resource_type','receipt_invoice_ceiling','goods_receipt_line_id',receipt_line.id,'allocated_base_billed_quantity',prior_billed::text,'allocated_base_free_quantity',prior_free::text));
+        FOR landed_cost_target IN SELECT value FROM pg_catalog.jsonb_array_elements(landed_cost_lineage->'targets') LOOP
+          source_versions:=source_versions||pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
+            'resource_type','landed_cost_stock_target','goods_receipt_line_id',receipt_line.id,
+            'location_id',landed_cost_target->>'location_id','branch_id',landed_cost_target->>'branch_id',
+            'product_id',landed_cost_target->>'product_id','batch_id',landed_cost_target->>'batch_id',
+            'row_version',(landed_cost_target->>'stock_row_version')::bigint,
+            'last_ledger_entry_id',landed_cost_target->>'last_ledger_entry_id',
+            'on_hand_quantity',landed_cost_target->>'on_hand_quantity',
+            'inventory_value',landed_cost_target->>'inventory_value'));
+        END LOOP;
       END LOOP;
       IF base_billed IS DISTINCT FROM pg_catalog.round((requested_line->>'billed_quantity')::numeric*line_factor,6)
          OR base_free IS DISTINCT FROM pg_catalog.round((requested_line->>'free_quantity')::numeric*line_factor,6) THEN

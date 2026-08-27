@@ -109,8 +109,9 @@ def main() -> None:
                 "'erp_automation_commands.resolve_supplier_invoice_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)'::regprocedure"
             ))
             for token in (
-                "stock_row_version", "purchase_price_variance", "exact_receipt_source_provenance",
-                "foreign_positive_count", "supplier invoice exceeds separate posted receipt billed or free ceiling",
+                "landed_cost_receipt_lineage_state", "purchase_price_variance",
+                "landed_cost_stock_target", "last_ledger_entry_id",
+                "supplier invoice exceeds separate posted receipt billed or free ceiling",
             ):
                 assert token in resolver
 
