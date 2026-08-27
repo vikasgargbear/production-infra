@@ -219,6 +219,9 @@ def test_unreachable_legacy_sql_operators_and_docs_stay_retired() -> None:
     retired_paths = (
         "TODO.md",
         "backend/migrate_to_secure_auth.py",
+        "backend/scripts/audit_sales_schema.py",
+        "backend/scripts/audit/comprehensive_schema_audit.py",
+        "backend/scripts/audit/validate_constants.py",
         "backend/scripts/repair_finance_denormalized_drift.py",
         "backend/scripts/extract_schema_docs.py",
         "backend/scripts/schema_audit.py",

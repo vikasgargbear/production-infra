@@ -16,9 +16,9 @@ required evidence.
 | `tax_provider_operational_readiness.py` | Tax-provider operational evidence |
 | `transaction_integrity_audit.py` | Exact-commit canonical transaction invariants |
 
-`comprehensive_schema_audit.py`, `validate_constants.py`, and
-`test_implementation_audit.py` are static diagnostics. They do not establish
-runtime correctness or promotion readiness.
+`test_implementation_audit.py` verifies that required test collections contain
+executable tests. It does not establish runtime correctness or promotion
+readiness.
 
 Canonical repository-level checks:
 
