@@ -1696,8 +1696,9 @@ DECLARE requested_branch_id uuid:=NULLIF(request_document->>'branch_id','')::uui
         payable_account finance.accounts%ROWTYPE; input_cgst_account finance.accounts%ROWTYPE;
         input_sgst_account finance.accounts%ROWTYPE; input_igst_account finance.accounts%ROWTYPE;
         input_cess_account finance.accounts%ROWTYPE; rounding_gain_account finance.accounts%ROWTYPE;
-        rounding_loss_account finance.accounts%ROWTYPE;
+        rounding_loss_account finance.accounts%ROWTYPE; variance_account finance.accounts%ROWTYPE;
         receipt_line procurement.goods_receipt_lines%ROWTYPE; receipt procurement.goods_receipts%ROWTYPE;
+        balance inventory.stock_balances%ROWTYPE;
         order_line procurement.purchase_order_lines%ROWTYPE; purchase_order procurement.purchase_orders%ROWTYPE;
         product catalog.products%ROWTYPE;
         tax_version tax.tax_code_versions%ROWTYPE; tax_release core.reference_data_releases%ROWTYPE;
@@ -1709,7 +1710,8 @@ DECLARE requested_branch_id uuid:=NULLIF(request_document->>'branch_id','')::uui
         receipt_cost numeric(20,2); line_product_id uuid; line_purchase_order_line_id uuid;
         line_uom text; line_factor numeric(20,6);
         ruleset_version text; supply_type text; candidate_count integer; address_count integer;
-        allocation_count integer; distinct_allocation_count integer;
+        allocation_count integer; distinct_allocation_count integer; foreign_positive_count integer;
+        exact_receipt_source_provenance boolean;
 BEGIN
     IF organization_id IS NULL OR membership_id IS NULL OR auth_user_id IS NULL OR application_user_id IS NULL
        OR grant_id IS NULL OR supplier_invoice_id IS NULL OR requested_branch_id IS NULL
@@ -1731,13 +1733,20 @@ BEGIN
           <>(SELECT count(DISTINCT value) FROM pg_catalog.jsonb_array_elements_text(request_document->'goods_receipt_ids')) THEN
       RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='supplier invoice requires unique receipt lines and a unique exact GRN set'; END IF;
     IF EXISTS (SELECT 1 FROM pg_catalog.jsonb_array_elements(request_document->'lines') line(value)
-      WHERE line.value->>'product_inventory_cost_treatment'<>'capitalize' OR line.value->>'itc_eligibility'<>'eligible'
+      WHERE line.value->>'product_inventory_cost_treatment'<>'capitalize'
+         OR line.value->>'landed_cost_allocation_method' NOT IN ('direct','quantity_weighted','value_weighted')
+         OR line.value->>'itc_eligibility'<>'eligible'
          OR line.value->>'itc_eligibility_basis'<>'taxable_resale_not_blocked_under_section_17')
        OR EXISTS (SELECT 1 FROM pg_catalog.jsonb_array_elements(COALESCE(request_document->'expense_charge_lines','[]'::jsonb)) line(value)
-      WHERE line.value->>'charge_inventory_cost_treatment'<>'expense' OR line.value->>'itc_eligibility'<>'eligible'
+      WHERE line.value->>'charge_inventory_cost_treatment' NOT IN ('expense','capitalize')
+         OR (line.value->>'charge_inventory_cost_treatment'='capitalize'
+             AND line.value->>'landed_cost_allocation_method' NOT IN ('direct','quantity_weighted','value_weighted'))
+         OR (line.value->>'charge_inventory_cost_treatment'='expense'
+             AND line.value ? 'landed_cost_allocation_method')
+         OR line.value->>'itc_eligibility'<>'eligible'
          OR line.value->>'itc_eligibility_basis'<>'taxable_resale_not_blocked_under_section_17'
          OR line.value->>'expense_charge_code' NOT IN ('freight','packing','insurance','handling')) THEN
-      RAISE EXCEPTION USING ERRCODE='0A000', MESSAGE='supplier-invoice pilot requires reviewed eligible resale ITC, capitalized products, and reviewed expense charges'; END IF;
+      RAISE EXCEPTION USING ERRCODE='0A000', MESSAGE='supplier-invoice requires reviewed ITC and explicit product or charge landed-cost treatment'; END IF;
     PERFORM 1 FROM core.memberships membership JOIN core.users user_row ON user_row.id=membership.user_id
       JOIN core.organizations organization_row ON organization_row.id=membership.org_id
       JOIN automation.agent_grants grant_row ON grant_row.org_id=membership.org_id AND grant_row.subject_membership_id=membership.id
@@ -1835,6 +1844,8 @@ BEGIN
        AND id=erp_commercial_commands.resolve_role_account(organization_id,branch.id,'rounding_gain','income','INR',false) FOR SHARE;
     SELECT * INTO STRICT rounding_loss_account FROM finance.accounts WHERE org_id=organization_id
        AND id=erp_commercial_commands.resolve_role_account(organization_id,branch.id,'rounding_loss','expense','INR',false) FOR SHARE;
+    SELECT * INTO STRICT variance_account FROM finance.accounts WHERE org_id=organization_id
+       AND id=erp_commercial_commands.resolve_role_account(organization_id,branch.id,'purchase_price_variance','expense','INR',false) FOR SHARE;
     source_versions:=pg_catalog.jsonb_build_array(
       pg_catalog.jsonb_build_object('resource_type','organization','id',organization.id,'row_version',organization.row_version),
       pg_catalog.jsonb_build_object('resource_type','branch','id',branch.id,'row_version',branch.row_version),
@@ -1853,7 +1864,8 @@ BEGIN
       pg_catalog.jsonb_build_object('resource_type','finance_account','role','input_igst','id',input_igst_account.id,'row_version',input_igst_account.row_version),
       pg_catalog.jsonb_build_object('resource_type','finance_account','role','input_cess','id',input_cess_account.id,'row_version',input_cess_account.row_version),
       pg_catalog.jsonb_build_object('resource_type','finance_account','role','rounding_gain','id',rounding_gain_account.id,'row_version',rounding_gain_account.row_version),
-      pg_catalog.jsonb_build_object('resource_type','finance_account','role','rounding_loss','id',rounding_loss_account.id,'row_version',rounding_loss_account.row_version));
+      pg_catalog.jsonb_build_object('resource_type','finance_account','role','rounding_loss','id',rounding_loss_account.id,'row_version',rounding_loss_account.row_version),
+      pg_catalog.jsonb_build_object('resource_type','finance_account','role','purchase_price_variance','id',variance_account.id,'row_version',variance_account.row_version));
     PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
         organization_id::text||':supplier-receipt:'||locked.goods_receipt_line_id,630195401))
       FROM (
@@ -1880,6 +1892,9 @@ BEGIN
            AND line.purchase_order_line_id IS NOT NULL FOR SHARE OF line,header;
         SELECT * INTO STRICT receipt FROM procurement.goods_receipts
          WHERE org_id=organization_id AND id=receipt_line.goods_receipt_id AND status='posted' FOR SHARE;
+        SELECT * INTO STRICT balance FROM inventory.stock_balances
+         WHERE org_id=organization_id AND location_id=receipt_line.location_id
+           AND product_id=receipt_line.product_id AND batch_id=receipt_line.batch_id FOR SHARE;
         SELECT * INTO STRICT order_line FROM procurement.purchase_order_lines
          WHERE org_id=organization_id AND id=receipt_line.purchase_order_line_id AND line_kind='product' FOR SHARE;
         SELECT * INTO STRICT purchase_order FROM procurement.purchase_orders
@@ -1922,6 +1937,23 @@ BEGIN
            OR prior_billed+(requested_allocation->>'allocated_base_billed_quantity')::numeric>receipt_line.base_accepted_quantity
            OR prior_free+(requested_allocation->>'allocated_base_free_quantity')::numeric>receipt_line.base_free_quantity THEN
           RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='supplier invoice exceeds separate posted receipt billed or free ceiling'; END IF;
+        SELECT count(*) INTO foreign_positive_count
+          FROM inventory.stock_ledger_entries AS entry
+          JOIN inventory.inventory_document_lines AS document_line
+            ON document_line.org_id=entry.org_id
+           AND document_line.id=entry.inventory_document_line_id
+         WHERE entry.org_id=organization_id
+           AND entry.location_id=receipt_line.location_id
+           AND entry.product_id=receipt_line.product_id
+           AND entry.batch_id=receipt_line.batch_id
+           AND entry.quantity_delta>0
+           AND document_line.goods_receipt_line_id IS DISTINCT FROM receipt_line.id;
+        exact_receipt_source_provenance:=
+          (requested_allocation->>'allocated_base_billed_quantity')::numeric
+            IS NOT DISTINCT FROM receipt_line.base_accepted_quantity
+          AND (requested_allocation->>'allocated_base_free_quantity')::numeric
+            IS NOT DISTINCT FROM receipt_line.base_free_quantity
+          AND foreign_positive_count=0;
         base_billed:=base_billed+(requested_allocation->>'allocated_base_billed_quantity')::numeric;
         base_free:=base_free+(requested_allocation->>'allocated_base_free_quantity')::numeric;
         receipt_cost:=receipt_cost+pg_catalog.round(((requested_allocation->>'allocated_base_billed_quantity')::numeric+
@@ -1930,13 +1962,19 @@ BEGIN
           'goods_receipt_id',receipt.id,'goods_receipt_row_version',receipt.row_version,'goods_receipt_line_row_id',receipt_line.id,
           'product_id',product.id,'receipt_unit_cost',receipt_line.unit_cost::text,'receipt_base_accepted_quantity',receipt_line.base_accepted_quantity::text,
           'receipt_base_free_quantity',receipt_line.base_free_quantity::text,'prior_allocated_base_billed_quantity',prior_billed::text,
-          'prior_allocated_base_free_quantity',prior_free::text));
+          'prior_allocated_base_free_quantity',prior_free::text,'location_id',receipt_line.location_id,'batch_id',receipt_line.batch_id,
+          'stock_on_hand_quantity',balance.on_hand_quantity::text,'stock_inventory_value',balance.inventory_value::text,
+          'stock_average_unit_cost',balance.average_unit_cost::text,'stock_row_version',balance.row_version,
+          'exact_receipt_source_provenance',exact_receipt_source_provenance));
         resolved_receipt_ids:=resolved_receipt_ids||pg_catalog.jsonb_build_array(receipt.id::text);
         source_versions:=source_versions||pg_catalog.jsonb_build_array(
           pg_catalog.jsonb_build_object('resource_type','purchase_order','id',purchase_order.id,'row_version',purchase_order.row_version,'status',purchase_order.status),
           pg_catalog.jsonb_build_object('resource_type','purchase_order_line','id',order_line.id,'purchase_order_id',purchase_order.id),
           pg_catalog.jsonb_build_object('resource_type','goods_receipt','id',receipt.id,'row_version',receipt.row_version,'status',receipt.status),
           pg_catalog.jsonb_build_object('resource_type','goods_receipt_line','id',receipt_line.id,'goods_receipt_line_id',receipt_line.id,'base_accepted_quantity',receipt_line.base_accepted_quantity::text,'base_free_quantity',receipt_line.base_free_quantity::text,'unit_cost',receipt_line.unit_cost::text),
+          pg_catalog.jsonb_build_object('resource_type','stock_balance','location_id',receipt_line.location_id,'product_id',receipt_line.product_id,
+            'batch_id',receipt_line.batch_id,'row_version',balance.row_version,'on_hand_quantity',balance.on_hand_quantity::text,
+            'inventory_value',balance.inventory_value::text,'average_unit_cost',balance.average_unit_cost::text),
           pg_catalog.jsonb_build_object('resource_type','receipt_invoice_ceiling','goods_receipt_line_id',receipt_line.id,'allocated_base_billed_quantity',prior_billed::text,'allocated_base_free_quantity',prior_free::text));
       END LOOP;
       IF base_billed IS DISTINCT FROM pg_catalog.round((requested_line->>'billed_quantity')::numeric*line_factor,6)
@@ -1955,6 +1993,7 @@ BEGIN
         'purchase_order_line_id',line_purchase_order_line_id,'product_id',product.id,'hsn_code',product.hsn_code,'uom_code',line_uom,'multiplier',line_factor::text,
         'tax_code_version_id',tax_version.id,'taxability','taxable','gst_rate',tax_version.igst_rate::text,'cess_rate',tax_version.cess_rate::text,
         'ruleset_version',tax_version.ruleset_version,'net_value_account_id',inventory_account.id,'inventory_cost_treatment','capitalize',
+        'landed_cost_allocation_method',requested_line->>'landed_cost_allocation_method',
         'itc_eligibility','eligible','receipt_cost',receipt_cost::text,'receipt_allocations',resolved_allocations,'input',requested_line));
       source_versions:=source_versions||pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
         'resource_type','supplier_invoice_product_tax','product_id',product.id,'product_row_version',product.row_version,
@@ -1971,16 +2010,24 @@ BEGIN
       SELECT * INTO STRICT tax_release FROM core.reference_data_releases WHERE id=tax_version.release_id
        AND dataset_kind='hsn_sac_tax' AND status='active' AND effective_from<=invoice_date
        AND (effective_to IS NULL OR effective_to>=invoice_date) FOR SHARE;
-      SELECT * INTO STRICT expense_account FROM finance.accounts WHERE org_id=organization_id
-       AND id=NULLIF(requested_line->>'net_value_account_id','')::uuid AND account_type='expense'
-       AND currency_code='INR' AND status='active' AND NOT allows_party_posting FOR SHARE;
+      IF requested_line->>'charge_inventory_cost_treatment'='capitalize' THEN
+        IF NULLIF(requested_line->>'net_value_account_id','')::uuid IS DISTINCT FROM inventory_account.id THEN
+          RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='capitalized supplier charge account differs from the canonical inventory role'; END IF;
+        expense_account:=inventory_account;
+      ELSE
+        SELECT * INTO STRICT expense_account FROM finance.accounts WHERE org_id=organization_id
+         AND id=NULLIF(requested_line->>'net_value_account_id','')::uuid AND account_type='expense'
+         AND currency_code='INR' AND status='active' AND NOT allows_party_posting FOR SHARE;
+      END IF;
       IF ruleset_version IS NULL THEN ruleset_version:=tax_version.ruleset_version;
       ELSIF ruleset_version<>tax_version.ruleset_version THEN RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='supplier invoice tax rulesets differ'; END IF;
       resolved_lines:=resolved_lines||pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
         'line_number',pg_catalog.jsonb_array_length(resolved_lines)+1,'line_kind','charge','line_id',requested_line->>'line_id',
         'charge_code',profile.charge_code,'sac_code',tax_version.code,'tax_code_version_id',tax_version.id,
         'taxability','taxable','gst_rate',tax_version.igst_rate::text,'cess_rate',tax_version.cess_rate::text,
-        'ruleset_version',tax_version.ruleset_version,'net_value_account_id',expense_account.id,'inventory_cost_treatment','expense',
+        'ruleset_version',tax_version.ruleset_version,'net_value_account_id',expense_account.id,
+        'inventory_cost_treatment',requested_line->>'charge_inventory_cost_treatment',
+        'landed_cost_allocation_method',requested_line->>'landed_cost_allocation_method',
         'itc_eligibility','eligible','input',requested_line||pg_catalog.jsonb_build_object(
           'charge_code',profile.charge_code,'price_basis',requested_line->>'expense_price_basis',
           'document_discount_eligible',requested_line->'expense_document_discount_eligible')));
@@ -2014,7 +2061,8 @@ BEGIN
       'portal_cess_amount',portal_line.cess_amount::text,'ruleset_version',ruleset_version,'lines',resolved_lines,
       'legal_scope',pg_catalog.jsonb_build_object('country','IN','currency','INR','normal_charge',true,
         'posted_grn_match_required',true,'gstr2b_required',true,'itc_business_use_attestation_required',true,
-        'landed_cost_supported',false,'import_supported',false,'sez_supported',false,'reverse_charge_supported',false),
+        'landed_cost_supported',true,'landed_cost_methods',pg_catalog.jsonb_build_array('direct','quantity_weighted','value_weighted'),
+        'consumed_variance_role','purchase_price_variance','import_supported',false,'sez_supported',false,'reverse_charge_supported',false),
       'source_versions',source_versions);
 END
 ''',
@@ -2055,13 +2103,6 @@ BEGIN
        OR (totals->>'igst_total')::numeric IS DISTINCT FROM (resolved_document->>'portal_igst_amount')::numeric
        OR (totals->>'cess_total')::numeric IS DISTINCT FROM (resolved_document->>'portal_cess_amount')::numeric THEN
       RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='calculated supplier invoice GST components differ from the unique GSTR-2B evidence'; END IF;
-    FOR resolved_line IN SELECT value FROM pg_catalog.jsonb_array_elements(resolved_document->'lines') LOOP
-      SELECT value INTO STRICT calculated_line FROM pg_catalog.jsonb_array_elements(output_document->'lines')
-       WHERE value->>'line_id'=resolved_line->>'line_id';
-      IF resolved_line->>'line_kind'='product' AND (calculated_line->>'net_value_amount')::numeric
-           IS DISTINCT FROM (resolved_line->>'receipt_cost')::numeric THEN
-        RAISE EXCEPTION USING ERRCODE='0A000', MESSAGE='product invoice price variance requires reviewed unsold-stock landed-cost allocation'; END IF;
-    END LOOP;
     SELECT * INTO existing FROM automation.command_requests WHERE org_id=organization_id AND agent_grant_id=grant_id
       AND capability_code='procurement.supplier_invoice.prepare' AND idempotency_key_hash=key_hash FOR SHARE;
     IF FOUND THEN
@@ -2102,7 +2143,7 @@ BEGIN
         free_supply_tax_treatment,quoted_unit_rate,price_basis,tax_charge_mechanism,gross_amount,line_discount_kind,line_discount_basis,
         line_discount_value,document_discount_eligible,line_discount_amount,line_taxable_discount_amount,document_discount_amount,
         document_taxable_discount_amount,net_value_amount,gst_taxable_value,tax_classification_code_snapshot,tax_code_version_id,
-        taxability_snapshot,inventory_cost_treatment,net_value_account_id,withholding_nature_code,itc_eligibility,cgst_rate,sgst_rate,igst_rate,cess_rate,
+        taxability_snapshot,inventory_cost_treatment,landed_cost_allocation_method,net_value_account_id,withholding_nature_code,itc_eligibility,cgst_rate,sgst_rate,igst_rate,cess_rate,
         cgst_amount,sgst_amount,igst_amount,cess_amount,line_total)
       VALUES(organization_id,(resolved_line->>'line_id')::uuid,supplier_invoice_id,(resolved_line->>'line_number')::integer,
         resolved_line->>'line_kind',NULLIF(resolved_line->>'purchase_order_line_id','')::uuid,
@@ -2121,6 +2162,7 @@ BEGIN
         (calculated_line->>'document_taxable_discount_amount')::numeric,(calculated_line->>'net_value_amount')::numeric,
         (calculated_line->>'gst_taxable_value')::numeric,CASE WHEN resolved_line->>'line_kind'='product' THEN resolved_line->>'hsn_code' ELSE resolved_line->>'sac_code' END,
         (resolved_line->>'tax_code_version_id')::uuid,'taxable',resolved_line->>'inventory_cost_treatment',
+        NULLIF(resolved_line->>'landed_cost_allocation_method',''),
         (resolved_line->>'net_value_account_id')::uuid,
         CASE WHEN resolved_line->>'line_kind'='product' THEN 'purchase_of_goods' END,
         'eligible',(calculated_line->>'cgst_rate')::numeric,
@@ -7019,16 +7061,6 @@ BEGIN
            OR calculation_artifact.aggregate_version IS DISTINCT FROM supplier_invoice.row_version
            OR calculation_artifact.actor_membership_id IS DISTINCT FROM actor_id
            OR calculation_artifact.request_sha256 IS DISTINCT FROM request_row.request_hash
-           OR EXISTS (
-                SELECT 1 FROM pg_catalog.jsonb_array_elements(current_resolution->'lines') resolved(value)
-                JOIN LATERAL (
-                  SELECT output.value FROM pg_catalog.jsonb_array_elements(
-                    pg_catalog.convert_from(calculation_artifact.output_bytes,'UTF8')::jsonb->'lines') output(value)
-                   WHERE output.value->>'line_id'=resolved.value->>'line_id'
-                ) calculated ON true
-               WHERE resolved.value->>'line_kind'='product'
-                 AND (calculated.value->>'net_value_amount')::numeric
-                     IS DISTINCT FROM (resolved.value->>'receipt_cost')::numeric)
            OR EXISTS (SELECT 1 FROM inventory.inventory_documents document
                 WHERE document.org_id=organization_id AND document.supplier_invoice_id=request_row.target_resource_id) THEN
           RAISE EXCEPTION USING ERRCODE='40001', MESSAGE='supplier invoice GRN, ceiling, GST, portal, ITC, account, or calculation source changed'; END IF;
@@ -7435,7 +7467,10 @@ BEGIN
           calculation_artifact.request_id,request_row.id,
           (request_document->>'tax_document_id')::uuid,(request_document->>'journal_id')::uuid,
           invoice_journal_number,(request_document->>'event_id')::uuid,(request_document->>'open_item_id')::uuid,
-          NULL::uuid,NULL::bytea,NULL::bytea,request_row.idempotency_key_hash,request_row.request_hash,
+          (request_document->>'inventory_document_id')::uuid,
+          extensions.digest(request_row.idempotency_key_hash||pg_catalog.convert_to(':landed-cost','UTF8'),'sha256'),
+          extensions.digest(request_row.request_hash||pg_catalog.convert_to(':landed-cost','UTF8'),'sha256'),
+          request_row.idempotency_key_hash,request_row.request_hash,
           least(request_row.expires_at,calculation_artifact.expires_at));
       WHEN 'sales.dispatch.post' THEN
         PERFORM erp_trade_commands.post_dispatch(
@@ -8116,15 +8151,17 @@ def generated_artifacts() -> tuple[str, str]:
                     "one_unique_parsed_gstr2b_row",
                 ],
                 "itc_basis": "explicit_human_attestation_taxable_resale_not_blocked_under_section_17",
-                "landed_cost_effect": "zero_exact_receipt_cost_match",
-                "supported_charge_treatment": "reviewed_charge_codes_expensed_only",
+                "landed_cost_effect": "reviewed_zero_quantity_value_adjustment_for_exclusive_remaining_receipt_stock",
+                "supported_allocation_methods": ["direct", "quantity_weighted", "value_weighted"],
+                "consumed_variance_role": "purchase_price_variance",
+                "supported_charge_treatment": "reviewed_expense_or_capitalize_with_explicit_basis",
                 "unsupported_fail_closed": [
                     "import",
                     "sez",
                     "reverse_charge",
                     "composition_or_unregistered_supplier",
                     "direct_unreceived_product_lines",
-                    "price_variance_or_capitalized_charge",
+                    "partial_or_co_mingled_receipt_stock",
                     "ineligible_blocked_or_deferred_itc",
                     "withholding",
                 ],

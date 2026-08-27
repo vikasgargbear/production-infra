@@ -2491,6 +2491,13 @@
           "regulated"
         ],
         [
+          "landed_cost_allocation_method",
+          "text",
+          true,
+          null,
+          "regulated"
+        ],
+        [
           "net_value_account_id",
           "uuid",
           false,
@@ -2797,6 +2804,10 @@
           "expression": "inventory_cost_treatment IN ('capitalize','expense')"
         },
         {
+          "name": "ck_supplier_invoice_lines_landed_cost_allocation_method",
+          "expression": "(inventory_cost_treatment='capitalize' AND landed_cost_allocation_method IN ('direct','quantity_weighted','value_weighted')) OR (inventory_cost_treatment='expense' AND landed_cost_allocation_method IS NULL)"
+        },
+        {
           "name": "ck_supplier_invoice_lines_itc_eligibility",
           "expression": "itc_eligibility IN ('eligible','ineligible','blocked','deferred')"
         },
@@ -2826,7 +2837,7 @@
         {
           "name": "procurement_supplier_invoice_lines_invariant_1",
           "enforcement": "transaction_guard",
-          "rule": "For product rows, derive base_billed_quantity and base_free_quantity from the immutable uom_conversion_factor at six-decimal precision. Recompute product quantities or typed charge amounts using persisted price_basis and product free_supply_tax_treatment, then discounts, taxable value, tax amounts, and line total from the immutable HSN/SAC tax version and calculation ruleset. Posted price basis, UOM conversion, free-supply treatment, inventory_cost_treatment, net_value_account_id and itc_eligibility are immutable. Posting locks the active same-tenant asset/expense account selected by inventory_cost_treatment. Only product lines may allocate to goods receipts. Persist line discount kind/basis/value, document-discount eligibility and both nominal/taxable discount allocations; all outputs must match the canonical engine exactly. taxability_snapshot must match the effective tax-code default, except zero_rated is allowed only for qualifying SEZ inward-supply header context with preserved ITC/refund treatment. net_value_amount retains all pre-tax payable value while gst_taxable_value excludes exempt, nil-rated and non-GST value. Eligible ITC posts only to configured ITC assets; ineligible, blocked, or deferred tax follows inventory_cost_treatment and net_value_account_id without inferred credit. For zero_rated lines, enforce the header mode: without_payment has zero GST; with_igst permits only IGST. tax_charge_mechanism must equal the header; reverse_charge records compliance components and excludes those components from line_total while posting configured liability and treatment-directed debit. Intra-state component rates and rounded amounts have exact CGST=SGST equality; inter-state, import, or zero-rated-with-IGST has zero CGST and SGST."
+          "rule": "For product rows, derive base_billed_quantity and base_free_quantity from the immutable uom_conversion_factor at six-decimal precision. Recompute product quantities or typed charge amounts using persisted price_basis and product free_supply_tax_treatment, then discounts, taxable value, tax amounts, and line total from the immutable HSN/SAC tax version and calculation ruleset. Posted price basis, UOM conversion, free-supply treatment, inventory_cost_treatment, landed_cost_allocation_method, net_value_account_id and itc_eligibility are immutable. Capitalized supplier-invoice price variance or reviewed landed charge uses only direct, quantity_weighted, or value_weighted allocation with database-derived exact weights; there is no default or fallback method. Only the exact remaining on-hand share may become a zero-quantity inventory value adjustment; the consumed share posts to the configured purchase-price-variance expense account. Posting locks the active same-tenant asset/expense account selected by inventory_cost_treatment. Only product lines may allocate to goods receipts. Persist line discount kind/basis/value, document-discount eligibility and both nominal/taxable discount allocations; all outputs must match the canonical engine exactly. taxability_snapshot must match the effective tax-code default, except zero_rated is allowed only for qualifying SEZ inward-supply header context with preserved ITC/refund treatment. net_value_amount retains all pre-tax payable value while gst_taxable_value excludes exempt, nil-rated and non-GST value. Eligible ITC posts only to configured ITC assets; ineligible, blocked, or deferred tax follows inventory_cost_treatment and net_value_account_id without inferred credit. For zero_rated lines, enforce the header mode: without_payment has zero GST; with_igst permits only IGST. tax_charge_mechanism must equal the header; reverse_charge records compliance components and excludes those components from line_total while posting configured liability and treatment-directed debit. Intra-state component rates and rounded amounts have exact CGST=SGST equality; inter-state, import, or zero-rated-with-IGST has zero CGST and SGST."
         }
       ]
     },

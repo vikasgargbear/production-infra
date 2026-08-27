@@ -88,6 +88,22 @@ def test_landed_cost_uses_persisted_pools_and_deterministic_residuals() -> None:
     assert "pool-COALESCE" in text
     assert "balance.on_hand_quantity<=0" in text
     assert "balance.inventory_value+line.extended_cost<0" in text
+    assert "fully_allocated_receipt" in text
+    assert "entry.quantity_delta>0" in text
+    assert "receipt stock is partial or co-mingled" in text
+    assert "FOR UPDATE OF balance" in text
+
+
+def test_supplier_invoice_freezes_landed_cost_before_journal_construction() -> None:
+    commercial = (
+        REPO
+        / "database/canonical/commands_commercial/baseline-commercial-command-enforcements.json"
+    ).read_text()
+    prepare = commercial.index("prepare_supplier_invoice_landed_cost_adjustment")
+    journal = commercial.index("INSERT INTO finance.journal_entries", prepare)
+    consumed = commercial.index("consumed_landed_cost_pool", prepare)
+    post = commercial.index("post_landed_cost_adjustment", consumed)
+    assert prepare < journal < consumed < post
 
 
 def test_followup_composes_the_only_writer_and_projector() -> None:

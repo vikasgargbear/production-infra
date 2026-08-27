@@ -18,6 +18,7 @@
       "output_cgst": "active liability account",
       "output_igst": "active liability account",
       "output_sgst": "active liability account",
+      "purchase_price_variance": "active expense account without party posting",
       "purchase_return_inventory_variance": "active expense account",
       "rcm_cess_payable": "active liability account",
       "rcm_cgst_payable": "active liability account",
@@ -44,7 +45,7 @@
   ],
   "blocked_count": 0,
   "blocked_invariants": {},
-  "catalog_sha256": "fbb0f9e88cc227131c83669df326c507621154a40fe56a71ac1a116bb1c6e4d8",
+  "catalog_sha256": "387ca25682ab4f0254afb42d0266f0f6eb20cbbb2457660a17879b9fe8a582c5",
   "generic_adjustment_tax_boundary": {
     "blocked_count": 0,
     "blocked_invariants": {},
@@ -281,7 +282,7 @@
   },
   "manifest_version": "1.0.0",
   "mapping_file": "baseline-commercial-command-enforcements.json",
-  "mapping_sha256": "b85de99480a2aeefd6ac44fc6ad07fc3614cf3df86a6855364e4a63564781a6d",
+  "mapping_sha256": "fac42dc59d3309b5251709aefa809d4f3f11e92efb7c8efbdb7df851374e602b",
   "postgresql": "15+",
   "prohibitions": [
     "No dynamic SQL.",
@@ -550,6 +551,6 @@
     "tax.documents:documents_cross_row_guard"
   ],
   "source_manifest": "commands_trade_v2/trade-posting-manifest.json",
-  "source_manifest_sha256": "f2e8226739fd1951ce1d878fd9db81e1cdc9d62784113ffd1d1f8e1524c9d148",
+  "source_manifest_sha256": "9d22deb2d6d279dcf5a7be75a24d41f87b1d55f19a24778f47490cbc81d31e01",
   "target_resolved_count_after_catalog_correction": 11
 }

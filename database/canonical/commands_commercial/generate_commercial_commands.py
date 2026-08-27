@@ -273,6 +273,7 @@ ACCOUNT_ROLE_SETTINGS = {
         "inventory_asset": "active asset account",
         "inventory_count_gain": "active income account without party posting",
         "cost_of_goods_sold": "active expense account",
+        "purchase_price_variance": "active expense account without party posting",
         "rounding_gain": "active income account",
         "rounding_loss": "active expense account",
     },
@@ -380,24 +381,35 @@ def _common_definitions() -> list[str]:
             "uuid",
             '''
 DECLARE setting_value text; account_id uuid; account finance.accounts%ROWTYPE;
+        setting_count bigint;
 BEGIN
-    SELECT value_text INTO setting_value FROM core.settings
+    SELECT count(*),min(value_text) INTO setting_count,setting_value FROM core.settings
      WHERE org_id=organization_id AND status='active' AND namespace='finance.account_roles'
-       AND key=role_key AND value_type='text' AND core.settings.branch_id=target_branch_id
-     FOR SHARE;
-    IF setting_value IS NULL THEN
-        SELECT value_text INTO setting_value FROM core.settings
+       AND key=role_key AND value_type='text' AND core.settings.branch_id=target_branch_id;
+    IF setting_count>1 THEN
+        RAISE EXCEPTION USING ERRCODE='21000', MESSAGE='active branch finance account-role mapping is ambiguous';
+    END IF;
+    IF setting_count=0 THEN
+        SELECT count(*),min(value_text) INTO setting_count,setting_value FROM core.settings
          WHERE org_id=organization_id AND status='active' AND namespace='finance.account_roles'
-           AND key=role_key AND value_type='text' AND core.settings.branch_id IS NULL FOR SHARE;
+           AND key=role_key AND value_type='text' AND core.settings.branch_id IS NULL;
+        IF setting_count>1 THEN
+            RAISE EXCEPTION USING ERRCODE='21000', MESSAGE='active organization finance account-role mapping is ambiguous';
+        END IF;
     END IF;
     IF setting_value IS NULL OR setting_value !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' THEN
         RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='active finance account-role UUID setting is missing';
     END IF;
+    PERFORM id FROM core.settings
+     WHERE org_id=organization_id AND status='active' AND namespace='finance.account_roles'
+       AND key=role_key AND value_type='text'
+       AND (branch_id=target_branch_id OR (branch_id IS NULL AND setting_count=1))
+     ORDER BY branch_id NULLS LAST,id FOR SHARE;
     account_id:=setting_value::uuid;
     SELECT * INTO account FROM finance.accounts
      WHERE org_id=organization_id AND id=account_id FOR SHARE;
     IF account.id IS NULL OR account.status<>'active' OR account.account_type<>expected_type
-       OR account.currency_code<>currency OR (require_party AND NOT account.allows_party_posting) THEN
+       OR account.currency_code<>currency OR account.allows_party_posting IS DISTINCT FROM require_party THEN
         RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='finance account-role target is inactive or incompatible';
     END IF;
     RETURN account_id;
@@ -789,6 +801,21 @@ def _invoice_command(*, sales: bool) -> list[str]:
         END IF;
         PERFORM "{SCHEMA}".add_journal_line(organization_id,journal_id,line_no,line.{account_line},header.branch_id,NULL,
           'Supplier invoice net value and noncreditable tax',line.net_value_amount+noncreditable_tax,0,actor_id); line_no:=line_no+1;
+        IF line.inventory_cost_treatment='capitalize' THEN
+          consumed_variance:=erp_trade_commands_v2.consumed_landed_cost_pool(organization_id,line.id);
+          IF consumed_variance<>0 THEN
+            role_account:=erp_commercial_commands.resolve_role_account(
+              organization_id,header.branch_id,'purchase_price_variance','expense',header.currency_code,false);
+            PERFORM "{SCHEMA}".add_journal_line(organization_id,journal_id,line_no,role_account,header.branch_id,NULL,
+              'Consumed supplier price or landed-cost variance',
+              CASE WHEN consumed_variance>0 THEN consumed_variance ELSE 0 END,
+              CASE WHEN consumed_variance<0 THEN -consumed_variance ELSE 0 END,actor_id); line_no:=line_no+1;
+            PERFORM "{SCHEMA}".add_journal_line(organization_id,journal_id,line_no,line.{account_line},header.branch_id,NULL,
+              'Reclassify consumed variance out of inventory',
+              CASE WHEN consumed_variance<0 THEN -consumed_variance ELSE 0 END,
+              CASE WHEN consumed_variance>0 THEN consumed_variance ELSE 0 END,actor_id); line_no:=line_no+1;
+          END IF;
+        END IF;
     END LOOP;'''
     )
     party_line = (
@@ -837,13 +864,17 @@ def _invoice_command(*, sales: bool) -> list[str]:
           IF inventory_entries=0 OR inventory_value<=0 THEN RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='posted sales issue has no authoritative ledger value'; END IF;
         END IF;'''
         if sales
-        else "NULL;"
+        else '''IF inventory_document_id IS NOT NULL THEN
+          inventory_document_id:=erp_trade_commands_v2.prepare_supplier_invoice_landed_cost_adjustment(
+            organization_id,resource_id,inventory_document_id,actor_id);
+        END IF;'''
     )
     inventory_after = (
         "NULL;"
         if sales
         else '''IF inventory_document_id IS NOT NULL THEN
-          PERFORM erp_trade_commands_v2.post_landed_cost_adjustment(organization_id,inventory_document_id,actor_id,inventory_key_hash,inventory_request_hash,expires_at);
+          PERFORM erp_trade_commands_v2.post_landed_cost_adjustment(
+            organization_id,inventory_document_id,actor_id,inventory_key_hash,inventory_request_hash,expires_at);
         END IF;'''
     )
     inventory_journal = (
@@ -884,7 +915,7 @@ def _invoice_command(*, sales: bool) -> list[str]:
 DECLARE header {header_table}%ROWTYPE; artifact calculation.artifacts%ROWTYPE; line record;
         claim_id uuid; replay_id uuid; input_doc jsonb; output_doc jsonb; consumed bytea;
         party_id uuid; party_account uuid; party_default_account uuid; posted_time timestamptz:=pg_catalog.transaction_timestamp();
-        line_no integer:=2; component_amount numeric(20,2); role_account uuid; role_key varchar;
+        line_no integer:=2; component_amount numeric(20,2); consumed_variance numeric(20,2); role_account uuid; role_key varchar;
         total_debit numeric(20,2); total_credit numeric(20,2); tax_effective date; source_hash bytea; noncreditable_tax numeric(20,2);
         eligible_cgst numeric(20,2):=0; eligible_sgst numeric(20,2):=0; eligible_igst numeric(20,2):=0; eligible_cess numeric(20,2):=0;
         inventory_value numeric(20,2):=0; inventory_entries bigint:=0; product_lines boolean:=false; allocated_lines boolean:=false;

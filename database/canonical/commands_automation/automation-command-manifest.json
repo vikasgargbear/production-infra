@@ -1,7 +1,7 @@
 {
   "blocked_count": 0,
   "blocked_invariants": {},
-  "catalog_sha256": "fbb0f9e88cc227131c83669df326c507621154a40fe56a71ac1a116bb1c6e4d8",
+  "catalog_sha256": "387ca25682ab4f0254afb42d0266f0f6eb20cbbb2457660a17879b9fe8a582c5",
   "dispatcher": {
     "adjustment_note_pilot_scope": {
       "required_matching": [
@@ -405,15 +405,21 @@
       ]
     },
     "supplier_invoice_pilot_scope": {
+      "consumed_variance_role": "purchase_price_variance",
       "itc_basis": "explicit_human_attestation_taxable_resale_not_blocked_under_section_17",
-      "landed_cost_effect": "zero_exact_receipt_cost_match",
+      "landed_cost_effect": "reviewed_zero_quantity_value_adjustment_for_exclusive_remaining_receipt_stock",
       "required_matching": [
         "one_purchase_order",
         "exact_posted_grn_set",
         "separate_billed_and_free_receipt_ceilings",
         "one_unique_parsed_gstr2b_row"
       ],
-      "supported_charge_treatment": "reviewed_charge_codes_expensed_only",
+      "supported_allocation_methods": [
+        "direct",
+        "quantity_weighted",
+        "value_weighted"
+      ],
+      "supported_charge_treatment": "reviewed_expense_or_capitalize_with_explicit_basis",
       "supported_product_kinds": [
         "medicine",
         "medical_device",
@@ -432,7 +438,7 @@
         "reverse_charge",
         "composition_or_unregistered_supplier",
         "direct_unreceived_product_lines",
-        "price_variance_or_capitalized_charge",
+        "partial_or_co_mingled_receipt_stock",
         "ineligible_blocked_or_deferred_itc",
         "withholding"
       ]
@@ -467,7 +473,7 @@
   },
   "manifest_version": "1.0.0",
   "mapping_file": "baseline-automation-command-enforcements.json",
-  "mapping_sha256": "de2e714036f138126a1db25b0ec49e84a8e0e51b720533a2d82ce0a224e71066",
+  "mapping_sha256": "40449635684377ab47fa18ef68b8ffe3a5008ed42ace6c01952e2e69566ea8c8",
   "postgresql": "15+",
   "resolved_count": 3,
   "resolved_invariants": [

@@ -30,10 +30,10 @@
     "required_interface": "The canonical calculation.artifacts authority supplies authenticated, database-hashed fixed input/output bytes and a private one-time consumer. The order commands in this fragment reconstruct inputs, compare every persisted result, and consume the artifact atomically; an application-supplied hash alone is never proof.",
     "status": "consumed_for_order_approvals; downstream-posting-effects-still-blocked"
   },
-  "catalog_sha256": "fbb0f9e88cc227131c83669df326c507621154a40fe56a71ac1a116bb1c6e4d8",
+  "catalog_sha256": "387ca25682ab4f0254afb42d0266f0f6eb20cbbb2457660a17879b9fe8a582c5",
   "manifest_version": "1.0.0",
   "mapping_file": "baseline-trade-posting-enforcements.json",
-  "mapping_sha256": "82e388ae1ab4a3063f4fa53e21e9d4144fb0a9d20812dc480ab970e72e9d0c5a",
+  "mapping_sha256": "0ab59ec422f82b57f414c3c14562bbc1f0c0f429e02d272cf70df0546b5f7268",
   "ownership": {
     "composed_ledger_writer": "erp_trade_commands.emit_entry",
     "composed_projector": "erp_trade_commands.project_entry",

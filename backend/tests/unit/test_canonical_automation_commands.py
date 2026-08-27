@@ -831,14 +831,17 @@ def test_supplier_invoice_prepare_and_execute_are_closed_typed_and_atomic() -> N
         "supplier invoice exceeds separate posted receipt billed or free ceiling",
         "taxable_resale_not_blocked_under_section_17",
         "product_kind IN ('medicine','medical_device','consumable')",
-        "product invoice price variance requires reviewed unsold-stock landed-cost allocation",
+        "landed_cost_allocation_method' NOT IN ('direct','quantity_weighted','value_weighted')",
+        "'exact_receipt_source_provenance',exact_receipt_source_provenance",
+        "'purchase_price_variance','expense','INR',false",
         "INSERT INTO procurement.supplier_invoices",
         "INSERT INTO procurement.supplier_invoice_lines",
         "INSERT INTO procurement.supplier_invoice_receipt_allocations",
         "erp_commercial_commands.assert_supplier_invoice_artifact(",
         "erp_calculation_authority.issue_artifact(",
         "erp_commercial_commands.post_supplier_invoice(",
-        "NULL::uuid,NULL::bytea,NULL::bytea",
+        "(request_document->>'inventory_document_id')::uuid",
+        "pg_catalog.convert_to(':landed-cost','UTF8')",
     ):
         assert fragment in mapping
     function_at = mapping.index(

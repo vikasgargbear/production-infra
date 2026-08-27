@@ -156,6 +156,7 @@ def test_account_roles_and_cogs_are_explicit_and_fail_closed() -> None:
     assert {
         "inventory_asset", "inventory_count_gain", "cost_of_goods_sold", "rcm_igst_payable",
         "sales_revenue", "supplier_prepayment", "income_tax_tds_payable", "gst_tds_payable",
+        "purchase_price_variance",
     } <= set(
         roles["required_roles"]
     )
@@ -165,6 +166,10 @@ def test_account_roles_and_cogs_are_explicit_and_fail_closed() -> None:
     assert "No invented account IDs or fallback suspense account." in manifest["prohibitions"]
     assert "line.revenue_account_id,'income',header.currency_code" in mapping
     assert "line.revenue_account_id,income,header.currency_code" not in mapping
+    assert "active branch finance account-role mapping is ambiguous" in mapping
+    assert "active organization finance account-role mapping is ambiguous" in mapping
+    assert "active finance account-role UUID setting is missing" in mapping
+    assert "account.allows_party_posting IS DISTINCT FROM require_party" in mapping
 
 
 def test_generic_adjustment_catalog_persists_fixed_calculation_and_lineage_facts() -> None:
