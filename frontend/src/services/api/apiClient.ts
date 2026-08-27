@@ -44,7 +44,17 @@ apiClient.interceptors.request.use(
  */
 apiClient.interceptors.response.use(
   (response) => {
-    response.data = normalizeMoneyResponse(response.data);
+    // Canonical command/read clients validate exact decimal strings before
+    // they enter UI state.  Those callers opt out of the legacy numeric-model
+    // adapter so a wire value such as "150.00" is not silently converted to a
+    // JavaScript number and then rejected (or rounded) downstream.
+    const preserveExactDecimals = Boolean(
+      (response.config as typeof response.config & { preserveExactDecimals?: boolean })
+        .preserveExactDecimals
+    );
+    if (!preserveExactDecimals) {
+      response.data = normalizeMoneyResponse(response.data);
+    }
     return response;
   },
   (error) => {

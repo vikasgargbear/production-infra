@@ -51,6 +51,8 @@ export const batchesApi = {
         if (!isCanonicalUuid(productId)) {
             throw new Error('Product batch lookup requires a canonical product UUID.');
         }
-        return apiHelpers.get(ENDPOINTS.BY_PRODUCT(productId));
+        return apiHelpers.get(ENDPOINTS.BY_PRODUCT(productId), {
+            preserveExactDecimals: true,
+        });
     },
 };

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import ast
 import inspect
 import json
+import textwrap
 from datetime import date, datetime, timezone
 from uuid import uuid4
 
@@ -55,6 +57,24 @@ def test_destruction_projection_is_evidence_and_full_balance_only() -> None:
     ):
         assert fragment in source
     assert "legacy" not in source.lower()
+
+
+def test_destruction_candidate_query_has_balanced_parentheses() -> None:
+    """Guard the mounted SQL itself, not only its expected relation names."""
+
+    tree = ast.parse(textwrap.dedent(inspect.getsource(reads.inventory_destruction_context)))
+    candidate_queries = [
+        node.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Constant)
+        and isinstance(node.value, str)
+        and "FROM inventory.stock_balances balance" in node.value
+        and "inventory_destruction_loss" in node.value
+    ]
+
+    assert len(candidate_queries) == 1
+    candidate_query = candidate_queries[0]
+    assert candidate_query.count("(") == candidate_query.count(")")
 
 
 def test_exact_wire_models_keep_fail_closed_flags_and_decimal_strings() -> None:

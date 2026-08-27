@@ -418,7 +418,7 @@ def inventory_destruction_context(
                     AND returned_ledger.batch_id=balance.batch_id
                     AND returned_ledger.quantity_delta>0
                     AND returned_document.document_type='sales_return_receipt'
-                    AND returned_document.status='posted'))
+                    AND returned_document.status='posted')))
                AND batch.expires_on IS NOT NULL AND batch.mrp>0
                AND batch.mrp_uom_conversion_id IS NOT NULL
               JOIN catalog.uom_conversions conversion
