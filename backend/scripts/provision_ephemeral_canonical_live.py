@@ -175,6 +175,23 @@ def _baseline_grants(fixture_run_token: str) -> dict[str, str]:
     }
 
 
+def _set_mcp_audit_context(cursor, request_id: str) -> None:
+    """Bind direct acceptance-only authority mutations to one audited actor."""
+
+    try:
+        request_id = str(UUID(request_id))
+    except (TypeError, ValueError) as exc:
+        raise CanonicalLiveIdentityError(
+            "Canonical live MCP audit request ID is invalid"
+        ) from exc
+    for name, value in (
+        ("app.org_id", DEMO_ORG_ID),
+        ("app.membership_id", DEMO_REVIEWER_MEMBERSHIP_ID),
+        ("app.request_id", request_id),
+    ):
+        cursor.execute("SELECT set_config(%s,%s,true)", (name, value))
+
+
 def _mask(value: str) -> None:
     if "\n" in value or "\r" in value:
         raise CanonicalLiveIdentityError("Refusing to mask a multiline credential")
@@ -702,6 +719,8 @@ def recover_lost_live18_mcp_state(
             )
             membership_options = _enter_migration_owner(cursor)
             run_token = _resolve_bound_live18_run_token(cursor, auth_records)
+            if run_token is not None:
+                _set_mcp_audit_context(cursor, run_token)
             _baseline_versions, temporary_ids = _mcp_authority_snapshot(
                 cursor, client_id, run_token, fixture_run_token
             )
@@ -783,6 +802,7 @@ def _provision_database(
             )
             cursor.execute("SET CONSTRAINTS ALL DEFERRED")
             membership_options = _enter_migration_owner(cursor)
+            _set_mcp_audit_context(cursor, browser_state["run_token"])
             for role in ("requester", "reviewer"):
                 cursor.execute(
                     """
@@ -1104,6 +1124,7 @@ def cleanup(state_path: Path) -> None:
                 "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))", (LOCK_KEY,)
             )
             membership_options = _enter_migration_owner(cursor)
+            _set_mcp_audit_context(cursor, state["browser_run_token"])
             grants = list(state["temporary_grants"].values())
             cursor.execute(
                 """

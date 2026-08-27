@@ -294,6 +294,37 @@ def test_mcp_baseline_ids_share_the_demo_run_scoped_authority():
     )
 
 
+def test_mcp_authority_mutations_bind_the_reviewed_audit_context():
+    class Cursor:
+        def __init__(self):
+            self.executions = []
+
+        def execute(self, query, parameters):
+            self.executions.append((query, parameters))
+
+    cursor = Cursor()
+    request_id = "11111111-1111-4111-8111-111111111111"
+
+    MODULE._set_mcp_audit_context(cursor, request_id)
+
+    assert cursor.executions == [
+        (
+            "SELECT set_config(%s,%s,true)",
+            ("app.org_id", MODULE.DEMO_ORG_ID),
+        ),
+        (
+            "SELECT set_config(%s,%s,true)",
+            ("app.membership_id", MODULE.DEMO_REVIEWER_MEMBERSHIP_ID),
+        ),
+        ("SELECT set_config(%s,%s,true)", ("app.request_id", request_id)),
+    ]
+    source = SCRIPT.read_text(encoding="utf-8")
+    assert source.count("_set_mcp_audit_context(cursor,") == 4
+
+    with pytest.raises(MODULE.CanonicalLiveIdentityError, match="request ID"):
+        MODULE._set_mcp_audit_context(cursor, "not-a-uuid")
+
+
 def test_live18_auth_records_require_exact_same_project_metadata(monkeypatch):
     monkeypatch.setattr(MODULE, "_auth_admin_authority", lambda _token: object())
     monkeypatch.setattr(
