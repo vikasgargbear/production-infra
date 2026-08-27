@@ -421,6 +421,8 @@ def test_sales_invoice_template_compiles_exact_canonical_selectors_and_reviewed_
         "sales_invoice_free_quantity": "1.000000",
         "sales_invoice_free_supply_tax_treatment": "excluded_from_taxable_value",
         "sales_invoice_distance_km": "1.25",
+        "sales_order_quantity": "1.125000",
+        "sales_order_rate": "84.1250",
     }
     facts = {
         "identity": {
@@ -450,18 +452,22 @@ def test_sales_invoice_template_compiles_exact_canonical_selectors_and_reviewed_
         used,
     )
     _validate_compiled_steps("sales_invoice", operation, "actor_confirmation")
-    assert used == set(scalars)
-    assert operation["prepare_steps"][5]["locator"]["name"] == (
-        "select-batch-d3000000-0000-7000-8000-000000000042"
+    assert used == {
+        "sales_invoice_quantity",
+        "sales_invoice_rate",
+        "sales_invoice_discount_percent",
+        "sales_invoice_free_quantity",
+        "sales_invoice_distance_km",
+    }
+    assert operation["prepare_steps"][1]["locator"]["name"] == (
+        "Import posted delivery challan"
     )
-    assert operation["prepare_steps"][11]["locator"]["name"] == (
-        "desktop-free-supply-treatment-d3000000-0000-7000-8000-000000000042"
+    assert operation["prepare_steps"][2]["locator"]["name"] == (
+        "Select canonical challan {{resource_delivery_challan}}"
     )
-    assert operation["prepare_steps"][14]["locator"]["name"] == (
+    assert operation["prepare_steps"][3]["locator"]["name"] == "Import Selected"
+    assert operation["prepare_steps"][6]["locator"]["name"] == (
         "select-address-d3000000-0000-7000-8000-000000000041-v7"
-    )
-    assert operation["prepare_steps"][15]["locator"]["name"] == (
-        "invoice-logistics-mode-in_person"
     )
 
     bad_scalars = {**scalars, "sales_invoice_free_quantity": "0.000000"}
@@ -473,7 +479,14 @@ def test_sales_invoice_template_compiles_exact_canonical_selectors_and_reviewed_
     }
     with pytest.raises(FixtureCompileError, match="explicit canonical treatment"):
         _operation_facts("sales_invoice", facts, bad_treatment, set())
-    insufficient_stock = {**scalars, "sales_invoice_quantity": "10.000000"}
+    mismatched_rate = {**scalars, "sales_invoice_rate": "84.1251"}
+    with pytest.raises(FixtureCompileError, match="rate must equal"):
+        _operation_facts("sales_invoice", facts, mismatched_rate, set())
+    insufficient_stock = {
+        **scalars,
+        "sales_invoice_quantity": "10.000000",
+        "sales_order_quantity": "10.000000",
+    }
     with pytest.raises(FixtureCompileError, match="exceed the exact selected batch stock"):
         _operation_facts("sales_invoice", facts, insufficient_stock, set())
 
@@ -526,7 +539,9 @@ def test_stock_adjustment_runs_before_mutating_sales_and_uses_authoritative_stoc
     _validate_compiled_steps("stock_adjustment", operation, "separate_approver")
     assert used == {"stock_adjustment_gain_quantity"}
     operation_ids = [row["id"] for row in matrix["operations"]]
-    assert operation_ids.index("stock_adjustment") < operation_ids.index("sales_invoice")
+    assert operation_ids.index("stock_adjustment") < operation_ids.index("sales_order")
+    assert operation_ids.index("sales_order") < operation_ids.index("delivery_challan")
+    assert operation_ids.index("delivery_challan") < operation_ids.index("sales_invoice")
     assert operation_facts["choice"] == {
         "stock_adjustment_counted_quantity": "11.000000",
         "stock_adjustment_expected_system_base_quantity": "100.000000",
@@ -560,7 +575,7 @@ def test_delivery_challan_proves_ordered_selected_batch_stock_prerequisite() -> 
     }
     scalars = {
         "stock_adjustment_gain_quantity": "1.000000",
-        "sales_invoice_quantity": "9.000000",
+        "sales_invoice_quantity": "1.000000",
         "sales_invoice_free_quantity": "1.000000",
         "sales_order_quantity": "1.000000",
     }
@@ -570,6 +585,18 @@ def test_delivery_challan_proves_ordered_selected_batch_stock_prerequisite() -> 
     ) is facts
 
     with pytest.raises(FixtureCompileError, match="stock remaining"):
+        _operation_facts(
+            "delivery_challan",
+            facts,
+            {
+                **scalars,
+                "sales_invoice_quantity": "11.000001",
+                "sales_order_quantity": "11.000001",
+            },
+            set(),
+        )
+
+    with pytest.raises(FixtureCompileError, match="must equal"):
         _operation_facts(
             "delivery_challan",
             facts,
@@ -850,6 +877,9 @@ def test_sales_order_template_compiles_reviewed_commercial_choices() -> None:
         "sales_order_delivery_offset_days": "2",
         "sales_order_quantity": "1.125000",
         "sales_order_rate": "84.1250",
+        "sales_invoice_discount_percent": "5.000000",
+        "sales_invoice_free_quantity": "0.250000",
+        "sales_invoice_free_supply_tax_treatment": "included_at_unit_rate",
     }
     used: set[str] = set()
     facts = _operation_facts(
@@ -898,6 +928,9 @@ def test_sales_order_template_compiles_reviewed_commercial_choices() -> None:
     }
     assert operation["prepare_steps"][8]["value"] == "1.125000"
     assert operation["prepare_steps"][9]["value"] == "84.1250"
+    assert operation["prepare_steps"][10]["value"] == "5.000000"
+    assert operation["prepare_steps"][11]["value"] == "0.250000"
+    assert operation["prepare_steps"][12]["value"] == "included_at_unit_rate"
 
 
 def test_live18_templates_use_only_canonical_hash_routes() -> None:
@@ -1267,6 +1300,28 @@ def test_delivery_challan_template_targets_prior_certified_sales_order() -> None
     assert operation["prepare_steps"][5]["value"] == "1.25"
     assert operation["approval_steps"][0]["value"] == "{{command_request_id}}"
     assert operation["execute_steps"][0]["value"] == "{{command_request_id}}"
+
+
+def test_sales_invoice_template_targets_prior_certified_dispatch() -> None:
+    root = Path(__file__).resolve().parents[3]
+    matrix = json.loads(
+        (root / "backend/tests/live_acceptance/operation_matrix.json").read_text()
+    )
+    template = json.loads(
+        (root / "frontend/e2e/live18/templates/sales_invoice.json").read_text()
+    )
+    operation_ids = [row["id"] for row in matrix["operations"]]
+    assert operation_ids.index("sales_order") < operation_ids.index("delivery_challan")
+    assert operation_ids.index("delivery_challan") < operation_ids.index("sales_invoice")
+    serialized = json.dumps(template, sort_keys=True)
+    assert "{{resource_delivery_challan}}" in serialized
+    assert "{{resource_sales_order}}" not in serialized
+    assert template["steps"]["prepare_steps"][2]["locator"] == {
+        "kind": "role",
+        "role": "button",
+        "name": "Select canonical challan {{resource_delivery_challan}}",
+        "exact": True,
+    }
 
 
 def test_goods_receipt_template_derives_clock_and_expiry_and_targets_prior_po() -> None:

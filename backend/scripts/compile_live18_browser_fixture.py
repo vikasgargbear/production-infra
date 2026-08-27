@@ -1287,19 +1287,25 @@ def _operation_facts(
                 scalars, "stock_adjustment_gain_quantity", "reviewed scalar"
             )) * count_multiplier
         )
-        invoice_base = (
-            Decimal(_leaf(scalars, "sales_invoice_quantity", "reviewed scalar"))
-            + Decimal(_leaf(
-                scalars, "sales_invoice_free_quantity", "reviewed scalar"
-            ))
-        ) * sales_multiplier
-        dispatch_base = Decimal(_leaf(
+        invoice_quantity = Decimal(_leaf(
+            scalars, "sales_invoice_quantity", "reviewed scalar"
+        ))
+        order_quantity = Decimal(_leaf(
             scalars, "sales_order_quantity", "reviewed scalar"
-        )) * sales_multiplier
-        if adjusted_base - invoice_base < dispatch_base:
+        ))
+        free_quantity = Decimal(_leaf(
+            scalars, "sales_invoice_free_quantity", "reviewed scalar"
+        ))
+        if order_quantity != invoice_quantity:
+            raise FixtureCompileError(
+                "delivery_challan reviewed sales-order billed quantity must equal "
+                "the downstream dispatch-allocated invoice quantity"
+            )
+        dispatch_base = (order_quantity + free_quantity) * sales_multiplier
+        if adjusted_base < dispatch_base:
             raise FixtureCompileError(
                 "delivery_challan reviewed sales order exceeds the exact selected "
-                "batch stock remaining after its prior adjustment and sales invoice"
+                "batch stock remaining after its prior adjustment"
             )
         return facts
     if operation_id == "supplier_invoice":
@@ -1506,6 +1512,27 @@ def _operation_facts(
             raise FixtureCompileError(
                 "sales_invoice_free_supply_tax_treatment must be an explicit canonical treatment"
             )
+        if Decimal(_leaf(
+            scalars, "sales_invoice_quantity", "reviewed scalar"
+        )) != Decimal(_leaf(
+            scalars, "sales_order_quantity", "reviewed scalar"
+        )):
+            raise FixtureCompileError(
+                "sales_invoice_quantity must equal the exact billed quantity dispatched "
+                "from the prior sales order"
+            )
+        if Decimal(_leaf(
+            scalars, "sales_invoice_rate", "reviewed scalar"
+        )) != Decimal(_leaf(
+            scalars, "sales_order_rate", "reviewed scalar"
+        )):
+            raise FixtureCompileError(
+                "sales_invoice_rate must equal the exact rate inherited from the prior sales order"
+            )
+        # The base Live18 invoice consumes the exact posted dispatch. This reviewed
+        # distance remains active authority for the direct-issue Live23 invoice
+        # variants compiled from the same scalar pack.
+        used.add("sales_invoice_distance_km")
         available_base = Decimal(_leaf(
             facts, "display.direct_issue_available_base_quantity", "canonical fact"
         ))

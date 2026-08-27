@@ -112,17 +112,13 @@ six-place quantity within the server-returned FEFO tier) and
 `stock_transfer_distance_km` (an exact positive two-place distance). Branch,
 location, product, UOM, business date, transport mode, and eligible batch facts
 remain canonical runtime facts and are forbidden in the scalar secret.
-Sales invoice reviews billed/free quantities, quoted rate, line discount,
-free-supply tax treatment, and measured direct-issue distance. It selects the
-exact canonical FEFO batch and primary saved delivery-address UUID plus row
-version resolved after provisioning. A zero free quantity is deterministically
-`excluded_from_taxable_value`; every positive free quantity clears that
-deterministic value and requires the operator to select one of the two command
-contract treatments. The sole `in_person` logistics mode is visibly sourced
-from the authenticated server policy; no carrier, vehicle, or transport
-document is synthesized.
-Sales order additionally reviews `sales_order_quantity`, `sales_order_rate`,
-and `sales_order_delivery_offset_days`. The compiler combines the bounded
+The base sales chain runs in its business order: sales order, delivery challan,
+then sales invoice. Sales order reviews `sales_order_quantity`,
+`sales_order_rate`, `sales_invoice_discount_percent`,
+`sales_invoice_free_quantity`, `sales_invoice_free_supply_tax_treatment`, and
+`sales_order_delivery_offset_days`. The reviewed order quantity and rate must
+equal the downstream invoice scalar authority; the compiler fails closed on
+any mismatch. The compiler combines the bounded
 1–30-day offset with the canonical organization business date; no calendar
 date is accepted from the secret. Customer, default canonical delivery-address
 identity/row version, product, FEFO batch, GST, and document policy are resolved
@@ -132,6 +128,14 @@ exact certified sales-order UUID produced earlier in the run; customer, lines,
 batch allocations, address, dispatch date, and the allowed default transport
 mode are authoritative API or server-policy facts. A transporter is neither
 requested nor invented when that policy mode does not require one.
+Sales invoice imports the exact completed delivery-challan UUID produced by the
+preceding operation, then selects the compiler-proven delivery-address UUID and
+row version. Customer, line pricing, billed/free split, tax treatment, batch,
+inventory document, and dispatch-line identities come from that authoritative
+import detail; the invoice performs no second stock issue.
+`sales_invoice_distance_km` remains reviewed only for the separate direct-issue
+Live23 invoice variants. Downstream customer receipt, sales return, and customer
+credit note all consume this same captured dispatch-allocated invoice UUID.
 Purchase order reviews its quantity, rate, line discount, free quantity,
 document discount, freight charge, and a bounded delivery offset. Its supplier,
 product/UOM, branch, business date, GST facts, and immutable preview remain

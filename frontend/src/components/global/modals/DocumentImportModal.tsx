@@ -162,6 +162,10 @@ const DocumentImportModal: React.FC<DocumentImportModalProps> = ({
     });
   };
 
+  const documentIdentity = (document: Record<string, unknown>): string => String(
+    document.id ?? document.invoice_id ?? document.order_id ?? document.challan_id ?? '',
+  );
+
   if (!isOpen) return null;
 
   return (
@@ -241,15 +245,18 @@ const DocumentImportModal: React.FC<DocumentImportModalProps> = ({
           ) : (
             <div className="space-y-2">
               {documents.map((doc) => (
-                <div
+                <button
+                  type="button"
                   key={doc.id || doc.invoice_id || doc.order_id || doc.challan_id}
+                  data-testid={`import-document-${selectedType}-${documentIdentity(doc)}`}
+                  aria-label={`Select canonical ${selectedType} ${documentIdentity(doc)}`}
+                  aria-pressed={Boolean(
+                    selectedDoc && documentIdentity(selectedDoc) === documentIdentity(doc),
+                  )}
                   onClick={() => setSelectedDoc(doc)}
                   className={`
-                    p-4 border rounded-lg cursor-pointer transition-all
-                    ${selectedDoc?.id === doc.id ||
-                      selectedDoc?.invoice_id === doc.invoice_id ||
-                      selectedDoc?.order_id === doc.order_id ||
-                      selectedDoc?.challan_id === doc.challan_id
+                    w-full p-4 border rounded-lg cursor-pointer text-left transition-all
+                    ${selectedDoc && documentIdentity(selectedDoc) === documentIdentity(doc)
                       ? 'border-blue-500 bg-blue-50'
                       : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                     }
@@ -300,7 +307,7 @@ const DocumentImportModal: React.FC<DocumentImportModalProps> = ({
                       )}
                     </div>
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           )}

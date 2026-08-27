@@ -6,6 +6,26 @@ jest.mock('react-toastify', () => ({
 }));
 
 describe('DocumentImportModal detail resolution', () => {
+    it('publishes the exact canonical source identity for deterministic browser selection', async () => {
+        render(<DocumentImportModal isOpen onClose={jest.fn()} onImport={jest.fn()}
+            documentTypes={[{
+                value: 'challan', label: 'Delivery Challans',
+                loadFunction: async () => [{
+                    challan_id: '10000000-0000-7000-8000-000000000041',
+                    challan_number: 'DC-41', customer_name: 'Canonical Customer',
+                }],
+            }]}
+        />);
+
+        const exactSource = await screen.findByRole('button', {
+            name: 'Select canonical challan 10000000-0000-7000-8000-000000000041',
+        });
+        expect(exactSource.getAttribute('data-testid')).toBe(
+            'import-document-challan-10000000-0000-7000-8000-000000000041',
+        );
+        expect(exactSource.textContent).toContain('DC-41');
+    });
+
     it('labels a non-monetary dispatch instead of inventing a zero amount', async () => {
         render(<DocumentImportModal isOpen onClose={jest.fn()} onImport={jest.fn()}
             documentTypes={[{

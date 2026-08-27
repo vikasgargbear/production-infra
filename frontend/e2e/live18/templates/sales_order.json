@@ -28,6 +28,9 @@
       {"actor":"requester","action":"click","locator":{"kind":"testId","name":"select-batch-{{fact.identity.direct_issue_batch_id}}"}},
       {"actor":"requester","action":"fill","locator":{"kind":"label","name":"{{fact.display.product_name}} quantity","exact":true},"value":"{{scalar.sales_order_quantity}}"},
       {"actor":"requester","action":"fill","locator":{"kind":"label","name":"{{fact.display.product_name}} rate","exact":true},"value":"{{scalar.sales_order_rate}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"{{fact.display.product_name}} discount percent","exact":true},"value":"{{scalar.sales_invoice_discount_percent}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"{{fact.display.product_name}} free quantity","exact":true},"value":"{{scalar.sales_invoice_free_quantity}}"},
+      {"actor":"requester","action":"select","locator":{"kind":"testId","name":"desktop-free-supply-treatment-{{fact.identity.direct_issue_batch_id}}"},"value":"{{scalar.sales_invoice_free_supply_tax_treatment}}"},
       {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Continue","exact":true}},
       {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Generate Order","exact":true}}
     ],

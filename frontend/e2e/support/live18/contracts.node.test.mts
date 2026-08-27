@@ -107,6 +107,9 @@ test('live18 discovery names all 17 ready operations and preserves one explicit 
   assert.equal(new Set(matrixIds).size, 18);
   assert.equal(readiness.ready_count, 17);
   assert.equal(readiness.deferred_count, 1);
+  assert.deepEqual(matrixIds.slice(0, 4), [
+    'stock_adjustment', 'sales_order', 'delivery_challan', 'sales_invoice',
+  ]);
   assert.deepEqual(matrix.deferred_operations, [{
     id: 'expense_claim',
     status: 'deferred',
@@ -121,6 +124,16 @@ test('live18 discovery names all 17 ready operations and preserves one explicit 
     [{ id: 'expense_claim', blocker_code: 'EXPENSE_EVIDENCE_STORAGE_DEFERRED' }],
   );
   assert.deepEqual([...readyIds].sort(), matrixIds.filter(id => id !== 'expense_claim').sort());
+
+  const salesInvoiceTemplate = JSON.parse(fs.readFileSync(path.join(
+    repositoryRoot, 'frontend/e2e/live18/templates/sales_invoice.json',
+  ), 'utf8'));
+  const serializedSalesInvoice = JSON.stringify(salesInvoiceTemplate);
+  assert.equal(
+    (serializedSalesInvoice.match(/\{\{resource_delivery_challan\}\}/g) || []).length,
+    1,
+  );
+  assert.doesNotMatch(serializedSalesInvoice, /\{\{resource_(?!delivery_challan)[a-z0-9_]+\}\}/);
 });
 
 test('operation failure evidence excludes messages, locator values, and credentials', () => {

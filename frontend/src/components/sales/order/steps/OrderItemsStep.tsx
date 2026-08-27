@@ -171,6 +171,7 @@ const OrderItemsStep: React.FC<OrderItemsStepProps> = ({
                         productSearchRef={productSearchRef as any}
                         currencySymbol="₹"
                         preserveExactDecimals
+                        showFreeSupplyTaxTreatment
                     />
                 </div>
             )}

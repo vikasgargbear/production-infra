@@ -33,17 +33,6 @@
       "availability": "published"
     },
     {
-      "id": "sales_invoice",
-      "command_operation": "sales.invoice.prepare",
-      "prepare_tool": "erp_sales_invoice_prepare",
-      "approval_policy": "actor_confirmation",
-      "rest_readback": "/api/canonical/sales-invoices/{resource_id}/posting-readback",
-      "mcp_readback_tool": "erp_sales_invoice_get",
-      "database_relations": ["sales.invoices", "sales.invoice_lines", "sales.invoice_dispatch_allocations", "inventory.inventory_documents", "inventory.inventory_document_lines", "inventory.stock_balances", "inventory.stock_ledger_entries", "tax.documents", "finance.open_items", "finance.accounting_events", "finance.journal_entries", "finance.journal_lines"],
-      "scenario_steps": ["sales_invoice_mixed", "sales_invoice_inter", "sales_invoice_sez_with_igst"],
-      "availability": "published"
-    },
-    {
       "id": "sales_order",
       "command_operation": "sales.order.prepare",
       "prepare_tool": "erp_sales_order_prepare",
@@ -63,6 +52,17 @@
       "mcp_readback_tool": "erp_sales_dispatch_readback",
       "database_relations": ["sales.dispatches", "sales.dispatch_lines", "inventory.inventory_documents", "inventory.inventory_document_lines", "inventory.stock_ledger_entries", "inventory.stock_balances", "finance.accounting_events", "finance.journal_entries", "finance.journal_lines"],
       "scenario_steps": ["sales_dispatch_mixed"],
+      "availability": "published"
+    },
+    {
+      "id": "sales_invoice",
+      "command_operation": "sales.invoice.prepare",
+      "prepare_tool": "erp_sales_invoice_prepare",
+      "approval_policy": "actor_confirmation",
+      "rest_readback": "/api/canonical/sales-invoices/{resource_id}/posting-readback",
+      "mcp_readback_tool": "erp_sales_invoice_get",
+      "database_relations": ["sales.invoices", "sales.invoice_lines", "sales.invoice_dispatch_allocations", "inventory.inventory_documents", "inventory.inventory_document_lines", "inventory.stock_balances", "inventory.stock_ledger_entries", "tax.documents", "finance.open_items", "finance.accounting_events", "finance.journal_entries", "finance.journal_lines"],
+      "scenario_steps": ["sales_invoice_mixed", "sales_invoice_inter", "sales_invoice_sez_with_igst"],
       "availability": "published"
     },
     {
