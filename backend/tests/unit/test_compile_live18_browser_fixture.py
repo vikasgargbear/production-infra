@@ -1023,7 +1023,11 @@ def test_supplier_invoice_template_uses_run_scoped_authority_and_reviewed_attest
     assert used == set(scalars)
     assert operation["prepare_steps"][1]["value"] == "{{resource_goods_receipt}}"
     assert operation["prepare_steps"][2]["value"] == facts["choice"]["supplier_invoice_number"]
-    assert operation["prepare_steps"][6]["locator"]["name"] == attestation
+    assert operation["prepare_steps"][6]["locator"]["name"] == (
+        "Landed-cost basis for Demo Product"
+    )
+    assert operation["prepare_steps"][6]["value"] == "direct"
+    assert operation["prepare_steps"][7]["locator"]["name"] == attestation
 
 
 def test_supplier_invoice_chain_normalizes_exact_reviewed_economics() -> None:

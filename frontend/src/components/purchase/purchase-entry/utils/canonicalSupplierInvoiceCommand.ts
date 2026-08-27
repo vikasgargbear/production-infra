@@ -1,5 +1,8 @@
 import { isCanonicalUuid } from '../../../../utils/canonicalUuid';
-import type { CanonicalSupplierInvoiceContext } from '../../../../services/api/modules/purchase/canonicalSupplierInvoices.api';
+import type {
+  CanonicalSupplierInvoiceContext,
+  LandedCostAllocationMethod,
+} from '../../../../services/api/modules/purchase/canonicalSupplierInvoices.api';
 import type { CanonicalCommandPreview } from '../../../../services/api/canonicalOperatorActions';
 
 const QUANTITY = /^(?:0|[1-9][0-9]{0,13})(?:\.[0-9]{1,6})?$/;
@@ -21,6 +24,7 @@ function nonnegativeDecimal(value: string, pattern: RegExp, label: string): stri
 export interface SupplierInvoiceLineInput {
   goodsReceiptLineId: string;
   quotedUnitRate: string;
+  landedCostAllocationMethod: LandedCostAllocationMethod;
 }
 
 export interface SupplierInvoiceDraftInput {
@@ -30,6 +34,7 @@ export interface SupplierInvoiceDraftInput {
   receivedDate: string;
   itcBusinessUseAttested: boolean;
   lines: SupplierInvoiceLineInput[];
+  chargeAllocationMethods?: Record<string, LandedCostAllocationMethod>;
 }
 
 export function buildCanonicalSupplierInvoicePreparePayload(
@@ -55,8 +60,8 @@ export function buildCanonicalSupplierInvoicePreparePayload(
   if (draft.lines.length !== context.lines.length) {
     throw new Error('Every unallocated posted-GRN line must be represented exactly once.');
   }
-  const selectedRates = new Map(draft.lines.map((line) => [line.goodsReceiptLineId, line.quotedUnitRate]));
-  if (selectedRates.size !== draft.lines.length) throw new Error('A posted-GRN line is repeated.');
+  const selectedLines = new Map(draft.lines.map((line) => [line.goodsReceiptLineId, line]));
+  if (selectedLines.size !== draft.lines.length) throw new Error('A posted-GRN line is repeated.');
 
   return {
     idempotency_key: draft.idempotencyKey,
@@ -81,8 +86,8 @@ export function buildCanonicalSupplierInvoicePreparePayload(
     portal_document_line_id: context.portal_evidence.portal_document_line_id,
     goods_receipt_ids: context.goods_receipt_ids,
     lines: context.lines.map((line) => {
-      const rate = selectedRates.get(line.goods_receipt_line_id);
-      if (rate === undefined) throw new Error(`Rate for ${line.product_name} is missing.`);
+      const selected = selectedLines.get(line.goods_receipt_line_id);
+      if (!selected) throw new Error(`Rate for ${line.product_name} is missing.`);
       const billed = nonnegativeDecimal(line.remaining_billed_quantity, QUANTITY, `${line.product_name} billed quantity`);
       const free = nonnegativeDecimal(line.remaining_free_quantity, QUANTITY, `${line.product_name} free quantity`);
       if (/^0(?:\.0+)?$/.test(billed) && /^0(?:\.0+)?$/.test(free)) {
@@ -92,7 +97,7 @@ export function buildCanonicalSupplierInvoicePreparePayload(
         billed_quantity: billed,
         free_quantity: free,
         free_supply_tax_treatment: line.suggested_free_supply_tax_treatment,
-        quoted_unit_rate: positiveDecimal(rate, MONEY_RATE, `${line.product_name} rate`),
+        quoted_unit_rate: positiveDecimal(selected.quotedUnitRate, MONEY_RATE, `${line.product_name} rate`),
         price_basis: line.suggested_price_basis,
         line_discount: {
           line_discount_kind: line.suggested_line_discount_kind,
@@ -116,6 +121,7 @@ export function buildCanonicalSupplierInvoicePreparePayload(
           `${line.product_name} free base allocation`,
         ),
         product_inventory_cost_treatment: 'capitalize',
+        landed_cost_allocation_method: selected.landedCostAllocationMethod,
         itc_eligibility: 'eligible',
         itc_eligibility_basis: 'taxable_resale_not_blocked_under_section_17',
       };
@@ -134,7 +140,12 @@ export function buildCanonicalSupplierInvoicePreparePayload(
           ),
           expense_price_basis: line.expense_price_basis,
           expense_document_discount_eligible: line.expense_document_discount_eligible,
-          charge_inventory_cost_treatment: 'expense',
+          charge_inventory_cost_treatment: 'capitalize',
+          landed_cost_allocation_method: (() => {
+            const method = draft.chargeAllocationMethods?.[line.purchase_order_line_id];
+            if (!method) throw new Error(`Select a landed-cost basis for ${line.expense_charge_code}.`);
+            return method;
+          })(),
           net_value_account_id: line.net_value_account_id,
           itc_eligibility: 'eligible',
           itc_eligibility_basis: 'taxable_resale_not_blocked_under_section_17',
@@ -155,7 +166,6 @@ export function validateCanonicalSupplierInvoicePreview(
   const inventory = Array.isArray(preview.inventory_impact) ? preview.inventory_impact : [];
   const tax = Array.isArray(preview.tax_impact) ? preview.tax_impact : [];
   const payable = financial[0] as Record<string, unknown> | undefined;
-  const stock = inventory[0] as Record<string, unknown> | undefined;
   const inputTax = tax[0] as Record<string, unknown> | undefined;
   const exactMoney = /^(?:0|[1-9][0-9]{0,17})\.[0-9]{2}$/;
   if (
@@ -168,12 +178,16 @@ export function validateCanonicalSupplierInvoicePreview(
     throw new Error('Canonical supplier-invoice preview has no exact INR payable impact.');
   }
   if (
-    inventory.length !== 1
-    || !stock
-    || stock.effect !== 'receipt_cost_match_no_landed_cost'
-    || stock.inventory_value_delta !== '0.00'
+    inventory.some((effect) => {
+      const stock = effect as Record<string, unknown>;
+      return !['direct', 'quantity_weighted', 'value_weighted'].includes(
+        String(stock.allocation_method),
+      )
+        || typeof stock.landed_cost_inventory_value_delta !== 'string'
+        || typeof stock.consumed_variance_amount !== 'string';
+    })
   ) {
-    throw new Error('Canonical supplier-invoice preview must confirm zero second inventory movement.');
+    throw new Error('Canonical supplier-invoice preview lacks reviewed landed-cost split evidence.');
   }
   if (
     tax.length !== 1

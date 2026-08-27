@@ -13,6 +13,7 @@ import {
   type CanonicalEligibleReceipt,
   type CanonicalPostedSupplierInvoice,
   type CanonicalSupplierInvoiceContext,
+  type LandedCostAllocationMethod,
 } from '../../../services/api/modules/purchase/canonicalSupplierInvoices.api';
 import { canonicalBusinessContextApi } from '../../../services/api/modules/org/canonicalBusinessContext.api';
 import { clientUuid } from '../../../utils/clientUuid';
@@ -39,6 +40,12 @@ const CanonicalSupplierInvoiceFlow: React.FC<{ onClose?: () => void }> = ({ onCl
   const [businessDateError, setBusinessDateError] = useState('');
   const [context, setContext] = useState<CanonicalSupplierInvoiceContext | null>(null);
   const [rates, setRates] = useState<Record<string, string>>({});
+  const [allocationMethods, setAllocationMethods] = useState<
+    Record<string, LandedCostAllocationMethod | ''>
+  >({});
+  const [chargeAllocationMethods, setChargeAllocationMethods] = useState<
+    Record<string, LandedCostAllocationMethod | ''>
+  >({});
   const [itcAttested, setItcAttested] = useState(false);
   const [prepared, setPrepared] = useState<CanonicalCommandPreview | null>(null);
   const [posted, setPosted] = useState<CanonicalPostedSupplierInvoice | null>(null);
@@ -101,6 +108,8 @@ const CanonicalSupplierInvoiceFlow: React.FC<{ onClose?: () => void }> = ({ onCl
     setLoading(false);
     setContext(null);
     setRates({});
+    setAllocationMethods({});
+    setChargeAllocationMethods({});
     resetReview();
   };
 
@@ -124,11 +133,21 @@ const CanonicalSupplierInvoiceFlow: React.FC<{ onClose?: () => void }> = ({ onCl
         line.goods_receipt_line_id,
         line.suggested_quoted_unit_rate,
       ])));
+      setAllocationMethods(Object.fromEntries(response.data.lines.map((line) => [
+        line.goods_receipt_line_id,
+        '',
+      ])));
+      setChargeAllocationMethods(Object.fromEntries(response.data.expense_charge_lines.map((line) => [
+        line.purchase_order_line_id,
+        '',
+      ])));
       if (!response.data.ready) toast.error(response.data.blocking_reasons[0]);
     } catch (error) {
       if (requestSequence !== contextRequestSequence.current) return;
       setContext(null);
       setRates({});
+      setAllocationMethods({});
+      setChargeAllocationMethods({});
       toast.error(errorMessage(error));
     } finally {
       if (requestSequence === contextRequestSequence.current) setLoading(false);
@@ -143,10 +162,21 @@ const CanonicalSupplierInvoiceFlow: React.FC<{ onClose?: () => void }> = ({ onCl
       invoiceDate,
       receivedDate,
       itcBusinessUseAttested: itcAttested,
-      lines: context.lines.map((line) => ({
-        goodsReceiptLineId: line.goods_receipt_line_id,
-        quotedUnitRate: rates[line.goods_receipt_line_id] || '',
-      })),
+      lines: context.lines.map((line) => {
+        const method = allocationMethods[line.goods_receipt_line_id];
+        if (!method) throw new Error(`Select a landed-cost basis for ${line.product_name}.`);
+        return {
+          goodsReceiptLineId: line.goods_receipt_line_id,
+          quotedUnitRate: rates[line.goods_receipt_line_id] || '',
+          landedCostAllocationMethod: method,
+        };
+      }),
+      chargeAllocationMethods: Object.fromEntries(
+        context.expense_charge_lines.map((line) => {
+          const method = chargeAllocationMethods[line.purchase_order_line_id];
+          if (!method) throw new Error(`Select a landed-cost basis for ${line.expense_charge_code}.`);
+          return [line.purchase_order_line_id, method];
+        })),
     });
   };
 
@@ -207,9 +237,10 @@ const CanonicalSupplierInvoiceFlow: React.FC<{ onClose?: () => void }> = ({ onCl
               <div><p className="text-slate-500">Grand total</p><p className="font-semibold">₹{posted.grand_total}</p></div>
               <div><p className="text-slate-500">Journal</p><p className="font-semibold">{posted.journal_number}</p></div>
               <div><p className="text-slate-500">Inventory delta</p><p className="font-semibold">₹{posted.supplier_invoice_inventory_value_delta}</p></div>
+              <div><p className="text-slate-500">Consumed variance</p><p className="font-semibold">₹{posted.consumed_variance_amount}</p></div>
             </div>
             <p className="mt-4 rounded border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
-              Receipt stock was already capitalized. This invoice created no second stock movement; GRN allocations, ITC, payable, and the balanced journal reconcile to the posted detail.
+              GRN remains the only quantity owner. The invoice posted only reviewed zero-quantity value adjustments for exact remaining receipt stock and routed the consumed share through the configured variance account.
             </p>
           </section>
         </main>
@@ -260,12 +291,12 @@ const CanonicalSupplierInvoiceFlow: React.FC<{ onClose?: () => void }> = ({ onCl
                   <>
                     <div className="mt-4 overflow-x-auto rounded border border-slate-200">
                       <table className="w-full text-sm">
-                        <thead className="bg-slate-50 text-left text-slate-600"><tr><th className="p-3">Product</th><th className="p-3">Billed / Free</th><th className="p-3">Receipt value</th><th className="p-3">Quoted rate</th></tr></thead>
-                        <tbody>{context.lines.map((line) => <tr key={line.goods_receipt_line_id} className="border-t border-slate-200"><td className="p-3"><p className="font-medium">{line.product_name}</p><p className="text-xs text-slate-500">{line.sku} · HSN {line.hsn_code} · {line.uom_code}</p></td><td className="p-3 font-mono">{line.remaining_billed_quantity} / {line.remaining_free_quantity}</td><td className="p-3 font-mono">₹{line.remaining_capitalized_value}</td><td className="p-3"><input aria-label={`Quoted rate for ${line.product_name}`} value={rates[line.goods_receipt_line_id] || ''} onChange={(event) => { setRates((current) => ({ ...current, [line.goods_receipt_line_id]: event.target.value })); resetReview(); }} inputMode="decimal" className="min-h-11 w-36 rounded border border-slate-300 px-3 font-mono" /></td></tr>)}</tbody>
+                        <thead className="bg-slate-50 text-left text-slate-600"><tr><th className="p-3">Product</th><th className="p-3">Billed / Free</th><th className="p-3">Receipt value</th><th className="p-3">Quoted rate</th><th className="p-3">Landed-cost basis</th></tr></thead>
+                        <tbody>{context.lines.map((line) => <tr key={line.goods_receipt_line_id} className="border-t border-slate-200"><td className="p-3"><p className="font-medium">{line.product_name}</p><p className="text-xs text-slate-500">{line.sku} · HSN {line.hsn_code} · {line.uom_code}</p></td><td className="p-3 font-mono">{line.remaining_billed_quantity} / {line.remaining_free_quantity}</td><td className="p-3 font-mono">₹{line.remaining_capitalized_value}</td><td className="p-3"><input aria-label={`Quoted rate for ${line.product_name}`} value={rates[line.goods_receipt_line_id] || ''} onChange={(event) => { setRates((current) => ({ ...current, [line.goods_receipt_line_id]: event.target.value })); resetReview(); }} inputMode="decimal" className="min-h-11 w-36 rounded border border-slate-300 px-3 font-mono" /></td><td className="p-3"><select aria-label={`Landed-cost basis for ${line.product_name}`} value={allocationMethods[line.goods_receipt_line_id] || ''} onChange={(event) => { setAllocationMethods((current) => ({ ...current, [line.goods_receipt_line_id]: event.target.value as LandedCostAllocationMethod })); resetReview(); }} className="min-h-11 rounded border border-slate-300 bg-white px-3"><option value="">Review basis</option><option value="direct">Direct</option><option value="quantity_weighted">Quantity weighted</option><option value="value_weighted">Value weighted</option></select></td></tr>)}</tbody>
                       </table>
                     </div>
                     <div className="mt-4 rounded border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">GSTR-2B: taxable ₹{context.portal_evidence?.taxable_amount}; CGST ₹{context.portal_evidence?.cgst_amount}; SGST ₹{context.portal_evidence?.sgst_amount}; IGST ₹{context.portal_evidence?.igst_amount}.</div>
-                    {context.expense_charge_lines.length > 0 && <div className="mt-3 rounded border border-slate-200 p-3 text-sm text-slate-700">Reviewed PO charges: {context.expense_charge_lines.map((line) => `${line.expense_charge_code} ₹${line.quoted_amount} → ${line.account_code}`).join(', ')}</div>}
+                    {context.expense_charge_lines.length > 0 && <div className="mt-3 space-y-3 rounded border border-slate-200 p-3 text-sm text-slate-700"><p>Reviewed PO landed charges use canonical inventory account {context.expense_charge_lines[0].account_code}.</p>{context.expense_charge_lines.map((line) => <label key={line.purchase_order_line_id} className="flex items-center justify-between gap-3">Landed-cost basis for {line.expense_charge_code}<select value={chargeAllocationMethods[line.purchase_order_line_id] || ''} onChange={(event) => { setChargeAllocationMethods((current) => ({ ...current, [line.purchase_order_line_id]: event.target.value as LandedCostAllocationMethod })); resetReview(); }} className="min-h-11 rounded border border-slate-300 bg-white px-3"><option value="">Review basis</option><option value="direct">Direct</option><option value="quantity_weighted">Quantity weighted</option><option value="value_weighted">Value weighted</option></select></label>)}</div>}
                     <label className="mt-4 flex min-h-11 items-start gap-3 rounded border border-slate-200 p-3 text-sm"><input type="checkbox" checked={itcAttested} onChange={(event) => { setItcAttested(event.target.checked); resetReview(); }} className="mt-1 h-5 w-5" /><span>I confirm taxable resale business use and that no Section 17 blocked-credit condition applies to these goods.</span></label>
                     <button type="button" onClick={prepareReview} disabled={loading || !itcAttested} className="mt-4 inline-flex min-h-11 items-center rounded-md bg-blue-600 px-4 font-medium text-white disabled:bg-slate-300">{loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Review server calculation</button>
                   </>

@@ -373,7 +373,8 @@ def resolve_authoritative_facts(
              portal_line.taxable_amount::text, portal_line.cgst_amount::text,
              portal_line.sgst_amount::text, portal_line.igst_amount::text,
              portal_line.cess_amount::text, portal_line.total_amount::text,
-             pg_catalog.encode(portal_line.source_row_hash,'hex')
+             pg_catalog.encode(portal_line.source_row_hash,'hex'),
+             variance_account.id::text
         FROM tax.portal_document_lines AS portal_line
         JOIN tax.portal_documents AS portal_document
           ON portal_document.org_id=portal_line.org_id
@@ -398,6 +399,21 @@ def resolve_authoritative_facts(
          AND supplier_registration.party_id=supplier.party_id
          AND supplier_registration.registration_type='GSTIN'
          AND supplier_registration.status='active'
+        JOIN core.settings AS variance_role
+          ON variance_role.org_id=portal_line.org_id
+         AND variance_role.scope_kind='organization'
+         AND variance_role.branch_id IS NULL
+         AND variance_role.namespace='finance.account_roles'
+         AND variance_role.key='purchase_price_variance'
+         AND variance_role.value_type='text'
+         AND variance_role.status='active'
+        JOIN finance.accounts AS variance_account
+          ON variance_account.org_id=variance_role.org_id
+         AND variance_account.id=variance_role.value_text::uuid
+         AND variance_account.account_type='expense'
+         AND variance_account.currency_code='INR'
+         AND variance_account.status='active'
+         AND NOT variance_account.allows_party_posting
        WHERE portal_line.org_id=%s
          AND portal_line.document_type='invoice'
          AND portal_line.supplier_gstin=supplier_registration.registration_number
@@ -1002,6 +1018,7 @@ def resolve_authoritative_facts(
         supplier_invoice_portal_cess_amount,
         supplier_invoice_portal_total_amount,
         supplier_invoice_portal_source_row_hash,
+        supplier_invoice_variance_account_id,
     ) = supplier_invoice_rows[0]
     if resolved_invoice_number != supplier_invoice_number:
         raise FixtureCompileError("run-scoped supplier-invoice authority drifted")
@@ -1221,6 +1238,7 @@ def resolve_authoritative_facts(
             "supplier_invoice_portal_cess_amount": supplier_invoice_portal_cess_amount,
             "supplier_invoice_portal_total_amount": supplier_invoice_portal_total_amount,
             "supplier_invoice_portal_source_row_hash": supplier_invoice_portal_source_row_hash,
+            "supplier_invoice_variance_account_id": supplier_invoice_variance_account_id,
         },
     }
 

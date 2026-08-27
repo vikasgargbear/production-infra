@@ -166,6 +166,7 @@ IDS = {
     "rounding_loss_account": "d3210000-0000-7000-8000-000000000013",
     "expense_claim_expense_account": "d3210000-0000-7000-8000-000000000014",
     "expense_claim_reimbursement_account": "d3210000-0000-7000-8000-000000000015",
+    "purchase_price_variance_account": "d3210000-0000-7000-8000-000000000017",
 }
 INDIA_BUSINESS_DATE = datetime.now(timezone.utc).astimezone(
     ZoneInfo("Asia/Kolkata")
@@ -2418,6 +2419,7 @@ def seed_end_to_end_master(
             (IDS["inventory_count_gain_account"], "4200-DEMO-ICG", "Demo inventory count gain", "income", False, False),
             (IDS["rounding_gain_account"], "4900-DEMO-RG", "Demo rounding gain", "income", False, False),
             (IDS["rounding_loss_account"], "5900-DEMO-RL", "Demo rounding loss", "expense", False, False),
+            (IDS["purchase_price_variance_account"], "5300-DEMO-PPV", "Demo purchase price variance", "expense", False, False),
             (
                 IDS["destruction_loss_account"],
                 f"LIVE18-DSTR-{DEMO_RUN_ID}-{DEMO_RUN_ATTEMPT}",
@@ -2509,6 +2511,7 @@ def seed_end_to_end_master(
             "cost_of_goods_sold": IDS["cogs_account"],
             "rounding_gain": IDS["rounding_gain_account"],
             "rounding_loss": IDS["rounding_loss_account"],
+            "purchase_price_variance": IDS["purchase_price_variance_account"],
             "inventory_destruction_loss": IDS["destruction_loss_account"],
             "inventory_itc_reversal_expense": IDS["destruction_loss_account"],
             "member_reimbursement_liability": IDS[
