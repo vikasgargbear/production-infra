@@ -69,6 +69,16 @@ def test_zero_consumer_backend_archaeology_stays_retired() -> None:
         "app/api/routes/sales/conversions/routes.py",
         "app/api/services/dashboard_service.py",
         "app/api/services/email/email_service.py",
+        "app/api/services/finance/expense",
+        "app/api/services/finance/outstanding",
+        "app/api/services/finance/tax",
+        "app/api/services/master/department_branch_service.py",
+        "app/api/services/master/employee",
+        "app/api/services/purchase/shared",
+        "app/api/services/purchase/supplier_invoice",
+        "app/api/services/sales/challan",
+        "app/api/services/sales/conversion",
+        "app/api/services/sales/shared",
         "app/api/services/settings/settings_service.py",
     )
 
