@@ -144,6 +144,15 @@ async def exchange_supabase_session(
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=401, detail="Invalid Supabase identity") from exc
 
+    if not UserRepository.canonical_session_authority_available(db):
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "erp_maintenance",
+                "message": "ERP maintenance is in progress. Please retry shortly.",
+            },
+        )
+
     try:
         organization_id = UUID(str(identity.get("app_metadata", {}).get("org_id")))
     except (TypeError, ValueError) as exc:
@@ -154,15 +163,6 @@ async def exchange_supabase_session(
                 "message": "Your identity is not assigned to an ERP organization.",
             },
         ) from exc
-
-    if not UserRepository.canonical_session_authority_available(db):
-        raise HTTPException(
-            status_code=503,
-            detail={
-                "error": "erp_maintenance",
-                "message": "ERP maintenance is in progress. Please retry shortly.",
-            },
-        )
 
     try:
         user_data = UserRepository.find_by_auth_user_id(auth_user_id, organization_id, db)

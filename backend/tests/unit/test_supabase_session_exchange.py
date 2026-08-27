@@ -226,6 +226,28 @@ def test_exchange_requires_admin_assigned_organization(monkeypatch):
     assert exc_info.value.detail["error"] == "erp_organization_assignment_required"
 
 
+def test_closed_authority_precedes_missing_organization_assignment(monkeypatch):
+    async def verified_identity(_token):
+        return _identity(app_metadata={"provider": "google"})
+
+    monkeypatch.setattr(
+        oauth.supabase_auth,
+        "get_user_from_access_token",
+        verified_identity,
+    )
+    monkeypatch.setattr(
+        oauth.UserRepository,
+        "canonical_session_authority_available",
+        lambda _db: False,
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        _run(oauth.exchange_supabase_session(_credentials(), db=object()))
+
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.detail["error"] == "erp_maintenance"
+
+
 @pytest.mark.parametrize(
     ("membership_overrides", "expected_detail"),
     [

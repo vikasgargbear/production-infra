@@ -1,4 +1,5 @@
 import base64
+import contextlib
 import json
 import os
 import subprocess
@@ -136,6 +137,19 @@ def test_demo_opens_session_authority_only_through_reviewed_fence(monkeypatch) -
     calls = []
     monkeypatch.setattr(
         phase,
+        "_verify_admin_owner_delegation_removed",
+        lambda _database_url: calls.append("preverified"),
+    )
+
+    @contextlib.contextmanager
+    def delegation(_database_url):
+        calls.append("delegated")
+        yield
+        calls.append("removed")
+
+    monkeypatch.setattr(phase, "_temporary_admin_owner_delegation", delegation)
+    monkeypatch.setattr(
+        phase,
         "apply_fence",
         lambda database_url, *, action, commit_sha: calls.append(
             (database_url, action, commit_sha)
@@ -149,11 +163,25 @@ def test_demo_opens_session_authority_only_through_reviewed_fence(monkeypatch) -
 
     assert receipt["state"] == "open"
     assert calls == [
-        ("postgresql://admin@canonical/postgres", "open", "a" * 40)
+        "preverified",
+        "delegated",
+        ("postgresql://admin@canonical/postgres", "open", "a" * 40),
+        "removed",
     ]
 
 
 def test_demo_refuses_to_publish_unopened_session_authority(monkeypatch) -> None:
+    monkeypatch.setattr(
+        phase,
+        "_verify_admin_owner_delegation_removed",
+        lambda _database_url: None,
+    )
+
+    @contextlib.contextmanager
+    def delegation(_database_url):
+        yield
+
+    monkeypatch.setattr(phase, "_temporary_admin_owner_delegation", delegation)
     monkeypatch.setattr(
         phase,
         "apply_fence",
@@ -168,6 +196,59 @@ def test_demo_refuses_to_publish_unopened_session_authority(monkeypatch) -> None
             "postgresql://admin@canonical/postgres",
             "a" * 40,
         )
+
+
+def test_open_cleanup_failure_compensates_back_to_closed(monkeypatch) -> None:
+    actions = []
+    delegation_count = 0
+
+    monkeypatch.setattr(
+        phase,
+        "_verify_admin_owner_delegation_removed",
+        lambda _database_url: None,
+    )
+
+    @contextlib.contextmanager
+    def delegation(_database_url):
+        nonlocal delegation_count
+        delegation_count += 1
+        yield
+        if delegation_count == 1:
+            raise RuntimeError("injected cleanup failure")
+
+    def fence(_database_url, *, action, commit_sha):
+        actions.append(action)
+        return {
+            "state": "open" if action == "open" else "closed",
+            "commit_sha": commit_sha,
+        }
+
+    monkeypatch.setattr(phase, "_temporary_admin_owner_delegation", delegation)
+    monkeypatch.setattr(phase, "apply_fence", fence)
+
+    with pytest.raises(
+        phase.RailwayDatabasePhaseError,
+        match="could not be opened from a clean owner boundary",
+    ):
+        phase._open_session_authority_after_demo(
+            "postgresql://admin@canonical/postgres",
+            "a" * 40,
+        )
+
+    assert actions == ["open", "close"]
+
+
+def test_demo_validates_owner_cleanup_and_evidence_before_opening() -> None:
+    source = phase.Path(phase.__file__).read_text(encoding="utf-8")
+    demo = source.split("def _demo_provision", 1)[1].split(
+        "\ndef _parse_environment_file", 1
+    )[0]
+
+    provision = demo.index("with _temporary_admin_owner_delegation(admin_url):")
+    summary = demo.index("summary_path = evidence_dir")
+    evidence = demo.index("evidence_hashes =")
+    opening = demo.index("write_fence = _open_session_authority_after_demo")
+    assert provision < summary < evidence < opening
 
 
 def test_railway_live18_demo_restores_the_reviewed_web_operator() -> None:

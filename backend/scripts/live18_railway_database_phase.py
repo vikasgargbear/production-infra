@@ -577,12 +577,43 @@ def _open_session_authority_after_demo(
     admin_url: str,
     expected_sha: str,
 ) -> dict[str, Any]:
-    """Open the canonical fence only after the complete demo has succeeded."""
-    receipt = apply_fence(
-        admin_url,
-        action="open",
-        commit_sha=expected_sha,
-    )
+    """Open only from a clean owner boundary, compensating cleanup failure."""
+    _verify_admin_owner_delegation_removed(admin_url)
+    receipt: dict[str, Any] | None = None
+    try:
+        with _temporary_admin_owner_delegation(admin_url):
+            receipt = apply_fence(
+                admin_url,
+                action="open",
+                commit_sha=expected_sha,
+            )
+    except Exception as error:
+        if receipt is not None and receipt.get("state") == "open":
+            try:
+                with _temporary_admin_owner_delegation(admin_url):
+                    compensation = apply_fence(
+                        admin_url,
+                        action="close",
+                        commit_sha=expected_sha,
+                    )
+                if compensation.get("state") != "closed":
+                    raise RailwayDatabasePhaseError(
+                        "Canonical session-authority compensation did not close"
+                    )
+            except Exception:
+                raise RailwayDatabasePhaseError(
+                    "Canonical session authority opened but owner cleanup and "
+                    "compensating closure failed"
+                ) from None
+        if isinstance(error, RailwayDatabasePhaseError):
+            raise
+        raise RailwayDatabasePhaseError(
+            "Canonical session authority could not be opened from a clean owner boundary"
+        ) from None
+    if receipt is None:
+        raise RailwayDatabasePhaseError(
+            "Canonical session authority produced no opening receipt"
+        )
     if receipt.get("state") != "open":
         raise RailwayDatabasePhaseError(
             "Canonical session authority was not opened after demo provisioning"
@@ -681,10 +712,6 @@ def _demo_provision(request: dict[str, Any]) -> dict[str, Any]:
 
                 if provision_canonical_demo.main() != 0:
                     raise RailwayDatabasePhaseError("Canonical demo returned non-zero")
-            write_fence = _open_session_authority_after_demo(
-                admin_url,
-                expected_sha,
-            )
         summary_path = evidence_dir / "canonical-demo-summary.json"
         if not summary_path.is_file():
             raise RailwayDatabasePhaseError("Canonical demo summary was not produced")
@@ -694,6 +721,10 @@ def _demo_provision(request: dict[str, Any]) -> dict[str, Any]:
             for path in sorted(evidence_dir.iterdir())
             if path.is_file()
         }
+        write_fence = _open_session_authority_after_demo(
+            admin_url,
+            expected_sha,
+        )
     response = {
         "schema": RESPONSE_SCHEMA,
         "action": "provision-demo",
