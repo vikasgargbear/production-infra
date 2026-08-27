@@ -28,6 +28,33 @@ def test_master_lists_have_no_first_organization_or_default_record_fallback() ->
         assert "scalar_one_or_none" not in source
 
 
+def test_product_search_serializes_exact_decimals_as_strings() -> None:
+    source = inspect.getsource(canonical_erp_reads.products)
+    assert "END)::text AS gst_percent" in source
+    assert "COALESCE(stock.current_stock, 0)::text AS current_stock" in source
+
+
+def test_product_batch_reads_serialize_exact_decimals_as_strings() -> None:
+    aggregate_source = inspect.getsource(canonical_erp_reads.products_with_batches)
+    detail_source = inspect.getsource(canonical_erp_reads.product_batches)
+    for exact_projection in (
+        "batch.mrp::text",
+        "stock.average_unit_cost::text",
+        "COALESCE(stock.quantity_available, 0)::text",
+        "COALESCE(batch_data.total_quantity_available, 0)::text",
+        "END)::text AS gst_percent",
+    ):
+        assert exact_projection in aggregate_source
+    for exact_projection in (
+        "batch.mrp::text AS mrp_per_unit",
+        "batch.mrp::text AS sale_price_per_unit",
+        "balance.average_unit_cost::text AS cost_per_unit",
+        "balance.on_hand_quantity::text AS quantity_available",
+        "END)::text AS gst_percent",
+    ):
+        assert exact_projection in detail_source
+
+
 def test_bank_projection_never_exposes_or_guesses_secret_or_balance_facts() -> None:
     source = inspect.getsource(canonical_erp_reads.canonical_bank_accounts)
     for forbidden in (

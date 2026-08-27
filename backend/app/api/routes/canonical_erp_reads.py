@@ -430,15 +430,15 @@ def products(limit: int = Query(100, ge=1, le=500), skip: int = Query(0, ge=0),
                p.generic_name, p.product_kind AS product_type, p.base_uom_code AS unit,
                conversion.id AS uom_conversion_id,
                tax_version.taxability,
-               CASE WHEN tax_version.taxability IS NULL THEN NULL
-                    WHEN tax_version.taxability='taxable' THEN tax_version.igst_rate
-                    ELSE 0 END AS gst_percent,
+               (CASE WHEN tax_version.taxability IS NULL THEN NULL
+                     WHEN tax_version.taxability='taxable' THEN tax_version.igst_rate
+                     ELSE 0 END)::text AS gst_percent,
                CASE WHEN p.status='draft' AND p.hsn_code='0000' THEN NULL ELSE p.hsn_code END AS hsn_code,
                p.dosage_form, p.strength_display, p.drug_schedule,
                p.requires_prescription, p.cold_chain_required,
                p.status='active' AS is_active, p.status, p.row_version,
                p.created_at, p.updated_at,
-               COALESCE(stock.current_stock, 0) AS current_stock
+               COALESCE(stock.current_stock, 0)::text AS current_stock
           FROM catalog.products p
           JOIN core.organizations organization
             ON organization.id=p.org_id AND organization.status='active'
@@ -611,12 +611,12 @@ def products_with_batches(
                product.base_uom_code AS unit, product.product_kind AS product_type,
                conversion.id AS uom_conversion_id,
                tax_version.taxability,
-               CASE WHEN tax_version.taxability IS NULL THEN NULL
-                    WHEN tax_version.taxability='taxable' THEN tax_version.igst_rate
-                    ELSE 0 END AS gst_percent,
+               (CASE WHEN tax_version.taxability IS NULL THEN NULL
+                     WHEN tax_version.taxability='taxable' THEN tax_version.igst_rate
+                     ELSE 0 END)::text AS gst_percent,
                product.status='active' AS is_active,
                COALESCE(batch_data.batches, '[]'::jsonb) AS batches,
-               COALESCE(batch_data.total_quantity_available, 0) AS total_quantity_available
+               COALESCE(batch_data.total_quantity_available, 0)::text AS total_quantity_available
           FROM catalog.products product
           JOIN core.organizations organization
             ON organization.id=product.org_id AND organization.status='active'
@@ -643,10 +643,10 @@ def products_with_batches(
                          'batch_id', batch.id, 'product_id', batch.product_id,
                          'batch_number', batch.batch_number,
                          'manufacturing_date', batch.manufactured_on,
-                         'expiry_date', batch.expires_on, 'mrp_per_unit', batch.mrp,
+                         'expiry_date', batch.expires_on, 'mrp_per_unit', batch.mrp::text,
                          'sale_price_per_unit', NULL,
-                         'cost_per_unit', stock.average_unit_cost,
-                         'quantity_available', COALESCE(stock.quantity_available, 0),
+                         'cost_per_unit', stock.average_unit_cost::text,
+                         'quantity_available', COALESCE(stock.quantity_available, 0)::text,
                          'location_id', stock.location_id,
                          'branch_id', stock.branch_id,
                          'uom_conversion_id', conversion.id,
@@ -701,13 +701,13 @@ def product_batches(
     rows = _rows(db, """
         SELECT batch.id AS batch_id, batch.product_id, product.name AS product_name,
                batch.batch_number, batch.manufactured_on AS manufacturing_date,
-               batch.expires_on AS expiry_date, batch.mrp AS mrp_per_unit,
-               batch.mrp AS sale_price_per_unit,
+               batch.expires_on AS expiry_date, batch.mrp::text AS mrp_per_unit,
+               batch.mrp::text AS sale_price_per_unit,
                conversion.id AS uom_conversion_id,
                balance.location_id, balance.branch_id,
                location.name AS location_name, branch.name AS branch_name,
-               balance.average_unit_cost AS cost_per_unit,
-               balance.on_hand_quantity AS quantity_available,
+               balance.average_unit_cost::text AS cost_per_unit,
+               balance.on_hand_quantity::text AS quantity_available,
                (batch.expires_on - business_clock.business_date)::integer AS days_to_expiry,
                CASE WHEN batch.status='released'
                           AND batch.released_at IS NOT NULL
@@ -721,9 +721,9 @@ def product_batches(
                     ELSE NULL END AS fefo_expiry_tier,
                false AS has_pending_sync,
                tax_version.taxability,
-               CASE WHEN tax_version.taxability IS NULL THEN NULL
-                    WHEN tax_version.taxability='taxable' THEN tax_version.igst_rate
-                    ELSE 0 END AS gst_percent,
+               (CASE WHEN tax_version.taxability IS NULL THEN NULL
+                     WHEN tax_version.taxability='taxable' THEN tax_version.igst_rate
+                     ELSE 0 END)::text AS gst_percent,
                batch.status AS batch_status
           FROM inventory.batches batch
           JOIN catalog.products product
