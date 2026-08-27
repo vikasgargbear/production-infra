@@ -1167,7 +1167,9 @@ def test_render_runbook_separates_supabase_and_google_redirects():
     assert "allow `http://localhost:3000`" in runbook
     assert "https://<project-ref>.supabase.co/auth/v1/callback" in runbook
     assert "Do not use wildcard production redirects" in runbook
-    assert "master.org_users.auth_user_id" in runbook
+    assert "core.users.auth_user_id" in runbook
+    assert "core.memberships" in runbook
+    assert "master.org_users" not in runbook
     assert "email-only lookup" in runbook
 
 

@@ -9,12 +9,11 @@ claim.
 - `aasopharma-api-pilot`: FastAPI Docker service in Singapore, exposing
   `/health`, `/ready`, and `/api`.
 - `aasopharma-erp-pilot`: compiled React static site.
-- `aasopharma-mcp-pilot`: isolated Python 3.11 MCP source contract; readiness
-  remains hard-failed by its OAuth consent and canonical-read gates.
-- Supabase project `jfrairkkzxwkhbtqejnz`: PostgreSQL and Supabase Auth.
+- `aasopharma-mcp-pilot`: isolated authenticated Python 3.11 MCP service.
+- The disposable canonical staging database and configured Supabase Auth issuer.
 
-Do not create a Render database. Do not advertise `/mcp`; the transport source
-exists, but hosted OAuth consent and canonical read authorization are blocked.
+Do not create a Render database. Advertise `/mcp` only when its public `/health`
+and `/ready` responses expose the same reviewed SHA as the API and frontend.
 See `docs/deployment/render-mcp.md`.
 
 Automatic Render deployments are disabled. Every Blueprint sync and deployment
@@ -36,7 +35,7 @@ Backend public configuration:
 
 - `CORS_ORIGINS`: exact Render frontend origin, without a wildcard.
 - `APP_URL`: the same frontend origin.
-- `SUPABASE_URL`: `https://jfrairkkzxwkhbtqejnz.supabase.co`.
+- `SUPABASE_URL`: the reviewed OAuth issuer project URL for this environment.
 - `SUPABASE_ANON_KEY`: Supabase publishable/anon key.
 - `SMTP_HOST` and `SMTP_PORT` when email is enabled.
 
