@@ -452,7 +452,8 @@ def _filter_sql() -> str:
         AND (:status IS NULL OR status=:status OR payment_status=:status)
         AND (:date_from IS NULL OR document_date>=CAST(:date_from AS date))
         AND (:date_to IS NULL OR document_date<=CAST(:date_to AS date))
-        AND (:search IS NULL OR document_number ILIKE '%' || CAST(:search AS text) || '%'
+        AND (:search IS NULL OR document_id::text=CAST(:search AS text)
+             OR document_number ILIKE '%' || CAST(:search AS text) || '%'
              OR party_name ILIKE '%' || CAST(:search AS text) || '%')
     """
 

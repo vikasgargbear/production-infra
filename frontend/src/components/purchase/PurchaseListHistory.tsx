@@ -430,7 +430,7 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
 
             {/* Filters */}
             <InlineFilterPanel
-              searchPlaceholder={`Search ${documentTypeConfig[documentType].label.toLowerCase()} by number or supplier...`}
+              searchPlaceholder={`Search ${documentTypeConfig[documentType].label.toLowerCase()} by number, canonical UUID, or supplier...`}
               searchQuery={filters.searchQuery}
               filters={[
                 {

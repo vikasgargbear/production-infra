@@ -1262,13 +1262,17 @@ def test_goods_receipt_template_derives_clock_and_expiry_and_targets_prior_po() 
     )
     _validate_compiled_steps("goods_receipt", operation, "actor_confirmation")
     assert used == set(scalars)
-    assert operation["prepare_steps"][2]["locator"]["name"] == (
+    assert operation["missing_required_steps"][2]["value"] == (
+        "{{resource_purchase_order}}"
+    )
+    assert operation["prepare_steps"][2]["value"] == "{{resource_purchase_order}}"
+    assert operation["prepare_steps"][3]["locator"]["name"] == (
         "Record canonical receipt for purchase order {{resource_purchase_order}}"
     )
-    assert operation["prepare_steps"][3]["value"] == "2026-08-25T14:30"
-    assert operation["prepare_steps"][6]["value"] == "2027-08-25"
-    assert operation["prepare_steps"][12]["value"] == facts["identity"]["uom_conversion_id"]
-    assert operation["prepare_steps"][13]["value"] == facts["identity"]["saleable_location_id"]
+    assert operation["prepare_steps"][4]["value"] == "2026-08-25T14:30"
+    assert operation["prepare_steps"][7]["value"] == "2027-08-25"
+    assert operation["prepare_steps"][13]["value"] == facts["identity"]["uom_conversion_id"]
+    assert operation["prepare_steps"][14]["value"] == facts["identity"]["saleable_location_id"]
 
 
 def test_purchase_return_template_targets_prior_supplier_invoice_and_split_review() -> None:

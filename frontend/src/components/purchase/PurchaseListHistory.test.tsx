@@ -11,7 +11,12 @@ jest.mock('../../services/api', () => ({
 jest.mock('../global', () => ({
   Button: ({ children, ...props }: any) => <button {...props}>{children}</button>,
   StatusBadge: () => <span />,
-  DataTable: ({ data }: any) => <div>{data.map((row: any) => row.po_number).join(',')}</div>,
+  DataTable: ({ columns, data }: any) => <div>{data.map((row: any) => (
+    <span key={row.id}>
+      {row.po_number}
+      {columns.find((column: any) => column.key === 'actions')?.render(undefined, row)}
+    </span>
+  ))}</div>,
   Pagination: () => <div />,
   ModuleHeader: () => <div />,
   InlineFilterPanel: ({ searchQuery, onSearchChange }: any) => (
@@ -65,4 +70,36 @@ test('debounces deterministically and ignores an older purchase search response'
   expect(screen.getByText('NEW')).toBeTruthy();
   expect(canonicalDocumentHistoryApi.get).toHaveBeenLastCalledWith(expect.objectContaining({ search: 'new' }));
   jest.useRealTimers();
+});
+
+test('offers receipt navigation for the exact approved canonical purchase order', async () => {
+  const purchaseOrderId = '11111111-1111-7111-8111-444444444444';
+  const onRecordReceipt = jest.fn();
+  (canonicalDocumentHistoryApi.get as jest.Mock)
+    .mockResolvedValueOnce({
+      items: [], total: 0, page: 1, page_size: 25, business_date: '2026-08-25',
+    })
+    .mockResolvedValueOnce({
+      total: 1, page: 1, page_size: 25, business_date: '2026-08-25',
+      items: [{
+        ...response('PO-NEW').items[0],
+        document_kind: 'purchase_order',
+        document_id: purchaseOrderId,
+        status: 'approved',
+        paid_amount: null,
+        outstanding_amount: null,
+        payment_status: null,
+      }],
+    });
+
+  render(<PurchaseListHistory onRecordReceipt={onRecordReceipt} />);
+  await act(async () => undefined);
+  fireEvent.click(screen.getByRole('button', { name: 'Purchase Orders' }));
+  await act(async () => undefined);
+
+  const receipt = screen.getByRole('button', {
+    name: `Record canonical receipt for purchase order ${purchaseOrderId}`,
+  });
+  fireEvent.click(receipt);
+  expect(onRecordReceipt).toHaveBeenCalledWith(purchaseOrderId);
 });

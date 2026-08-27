@@ -143,6 +143,7 @@ def test_query_is_branch_scoped_filtered_paginated_and_reversal_safe():
     assert "branch_id=ANY" in filters
     assert "document_kind IN ('sales_return','purchase_return')" in filters
     assert ":date_from" in filters and ":date_to" in filters and ":search" in filters and ":status" in filters
+    assert "document_id::text=CAST(:search AS text)" in filters
     assert source.count("allocation.reversal_of_allocation_id IS NULL") == 2
     assert source.count("reversal.reversal_of_allocation_id=allocation.id") == 2
     assert "allocation.status='posted'" in source

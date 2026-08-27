@@ -6,6 +6,7 @@
     "missing_required_steps": [
       {"actor":"requester","action":"goto","value":"/#/purchase/purchase-history"},
       {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Purchase Orders","exact":true}},
+      {"actor":"requester","action":"fill","locator":{"kind":"placeholder","name":"Search purchase orders by number, canonical UUID, or supplier...","exact":true},"value":"{{resource_purchase_order}}"},
       {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Record canonical receipt for purchase order {{resource_purchase_order}}","exact":true}},
       {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Required: select at least one PO line and record physical receipt time, batch, expiry, quantities, MRP unit, destination, and QC disposition.","exact":true},"value":"Required: select at least one PO line and record physical receipt time, batch, expiry, quantities, MRP unit, destination, and QC disposition."},
       {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Review stock impact","exact":true}},
@@ -14,6 +15,7 @@
     "prepare_steps": [
       {"actor":"requester","action":"goto","value":"/#/purchase/purchase-history"},
       {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Purchase Orders","exact":true}},
+      {"actor":"requester","action":"fill","locator":{"kind":"placeholder","name":"Search purchase orders by number, canonical UUID, or supplier...","exact":true},"value":"{{resource_purchase_order}}"},
       {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Record canonical receipt for purchase order {{resource_purchase_order}}","exact":true}},
       {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Physical receipt time","exact":true},"value":"{{fact.clock.business_datetime_local}}"},
       {"actor":"requester","action":"click","locator":{"kind":"testId","name":"receive-po-product-{{fact.identity.product_id}}"}},
