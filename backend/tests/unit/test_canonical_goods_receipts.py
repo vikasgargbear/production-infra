@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 from copy import deepcopy
 from decimal import Decimal
 from pathlib import Path
 from typing import get_type_hints
 from uuid import UUID
-import asyncio
 
 import pytest
 from fastapi import FastAPI, HTTPException
@@ -84,6 +84,46 @@ def _detail_payload():
                 "current_inventory_value": "120.00",
                 "current_average_unit_cost": "10.0000",
             },
+        }],
+    }
+
+
+def _context_payload():
+    return {
+        "purchase_order_id": "10000000-0000-7000-8000-000000000005",
+        "purchase_order_number": "CODEX-E2E-PO-0001",
+        "order_date": "2026-08-28",
+        "total_amount": "188.16",
+        "branch_id": "10000000-0000-7000-8000-000000000003",
+        "supplier_account_id": "10000000-0000-7000-8000-000000000004",
+        "supplier_name": "Canonical Supplier",
+        "organization_timezone": "Asia/Kolkata",
+        "status": "approved",
+        "lines": [{
+            "purchase_order_line_id": "10000000-0000-7000-8000-000000000008",
+            "line_number": 1,
+            "product_id": "10000000-0000-7000-8000-000000000009",
+            "product_name": "Canonical Product",
+            "sku": "CODEX-E2E-SKU",
+            "ordered_uom_code": "PACK",
+            "base_uom_code": "PACK",
+            "uom_conversion_factor": "1.000000",
+            "ordered_billed_quantity": "2.000000",
+            "ordered_free_quantity": "0.000000",
+            "remaining_billed_quantity": "2.000000",
+            "remaining_free_quantity": "0.000000",
+            "eligible_locations": [{
+                "id": "10000000-0000-7000-8000-000000000011",
+                "code": "SALEABLE",
+                "name": "Saleable",
+                "location_type": "saleable",
+            }],
+            "mrp_conversions": [{
+                "id": "10000000-0000-7000-8000-000000000014",
+                "from_uom_code": "PACK",
+                "to_uom_code": "PACK",
+                "multiplier": "1.000000",
+            }],
         }],
     }
 
@@ -187,16 +227,23 @@ def test_detail_returns_404_instead_of_falling_back_to_legacy(monkeypatch):
 
 
 def test_context_requires_at_least_one_receivable_line():
+    payload = _context_payload()
+    payload["lines"] = []
     with pytest.raises(ValidationError, match="no remaining canonical receipt lines"):
-        canonical_goods_receipts.ReceiptContextResponse.model_validate({
-            "purchase_order_id": "10000000-0000-7000-8000-000000000005",
-            "purchase_order_number": "CODEX-E2E-PO-0001",
-            "order_date": "2026-08-28",
-            "total_amount": "112.00",
-            "branch_id": "10000000-0000-7000-8000-000000000003",
-            "supplier_account_id": "10000000-0000-7000-8000-000000000004",
-            "supplier_name": "Canonical Supplier",
-            "organization_timezone": "Asia/Kolkata",
-            "status": "approved",
-            "lines": [],
-        })
+        canonical_goods_receipts.ReceiptContextResponse.model_validate(payload)
+
+
+def test_receipt_wire_decimals_remain_exact_strings():
+    context_wire = canonical_goods_receipts.ReceiptContextResponse.model_validate(
+        _context_payload()
+    ).model_dump(mode="json")
+    assert context_wire["total_amount"] == "188.16"
+    assert context_wire["lines"][0]["uom_conversion_factor"] == "1.000000"
+    assert context_wire["lines"][0]["mrp_conversions"][0]["multiplier"] == "1.000000"
+
+    detail_wire = canonical_goods_receipts.ReceiptDetailResponse.model_validate(
+        _detail_payload()
+    ).model_dump(mode="json")
+    assert detail_wire["total_inventory_value"] == "120.00"
+    assert detail_wire["lines"][0]["mrp"] == "20.00"
+    assert detail_wire["lines"][0]["inventory"]["current_average_unit_cost"] == "10.0000"

@@ -135,11 +135,15 @@ export const canonicalGoodsReceiptsApi = {
     const id = requireUuid(purchaseOrderId, 'Purchase order identity');
     return apiHelpers.get(
       `/canonical/goods-receipts/purchase-orders/${id}/context`,
+      { preserveExactDecimals: true },
     );
   },
 
   getDetail(goodsReceiptId: string): Promise<AxiosResponse<CanonicalReceiptDetail>> {
     const id = requireUuid(goodsReceiptId, 'Goods receipt identity');
-    return apiHelpers.get(`/canonical/goods-receipts/${id}`);
+    return apiHelpers.get(
+      `/canonical/goods-receipts/${id}`,
+      { preserveExactDecimals: true },
+    );
   },
 };

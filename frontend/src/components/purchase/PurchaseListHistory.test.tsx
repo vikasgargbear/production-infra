@@ -19,6 +19,7 @@ jest.mock('../global', () => ({
   DataTable: ({ columns, data }: any) => <div>{data.map((row: any) => (
     <span key={row.id}>
       {row.po_number}
+      {columns.find((column: any) => column.key === 'total_amount')?.render(row.total_amount, row)}
       {columns.find((column: any) => column.key === 'actions')?.render(undefined, row)}
     </span>
   ))}</div>,
@@ -128,7 +129,7 @@ test('uses receipt context when history cannot expose the exact approved PO', as
       purchase_order_id: purchaseOrderId,
       purchase_order_number: 'LIVE18-PO',
       order_date: '2026-08-27',
-      total_amount: '112.00',
+      total_amount: '188.16',
       branch_id: '11111111-1111-7111-8111-333333333333',
       supplier_account_id: '33333333-3333-7333-8333-333333333333',
       supplier_name: 'Demo Supplier',

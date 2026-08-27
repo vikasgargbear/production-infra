@@ -5,6 +5,8 @@ import { apiHelpers } from './apiClient';
 const responseAdapter: AxiosAdapter = async config => ({
   data: {
     sale_price_per_unit: '150.00',
+    total_amount: '188.16',
+    mrp: '199.99',
     quantity_available: '82.000000',
   },
   status: 200,
@@ -22,6 +24,8 @@ describe('API exact-decimal response boundary', () => {
 
     expect(response.data).toEqual({
       sale_price_per_unit: '150.00',
+      total_amount: '188.16',
+      mrp: '199.99',
       quantity_available: '82.000000',
     });
   });
@@ -33,6 +37,8 @@ describe('API exact-decimal response boundary', () => {
 
     expect(response.data).toEqual({
       sale_price_per_unit: 150,
+      total_amount: 188.16,
+      mrp: 199.99,
       quantity_available: '82.000000',
     });
   });

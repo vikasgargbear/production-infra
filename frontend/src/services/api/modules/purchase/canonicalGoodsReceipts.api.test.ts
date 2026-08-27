@@ -16,6 +16,7 @@ describe('canonical goods-receipt read transport', () => {
     await canonicalGoodsReceiptsApi.getPurchaseOrderContext(PO_ID);
     expect(apiHelpers.get).toHaveBeenCalledWith(
       `/canonical/goods-receipts/purchase-orders/${PO_ID}/context`,
+      { preserveExactDecimals: true },
     );
   });
 
@@ -24,6 +25,7 @@ describe('canonical goods-receipt read transport', () => {
     await canonicalGoodsReceiptsApi.getDetail(GRN_ID);
     expect(apiHelpers.get).toHaveBeenCalledWith(
       `/canonical/goods-receipts/${GRN_ID}`,
+      { preserveExactDecimals: true },
     );
   });
 
