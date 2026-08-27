@@ -269,6 +269,7 @@ def _post_consumption(
     *,
     batch_id: UUID,
     uom_code: str,
+    business_date: date,
 ) -> None:
     document_id, line_id = uuid4(), uuid4()
     with psycopg2.connect(runtime_dsn) as connection, connection.cursor() as cursor:
@@ -306,7 +307,7 @@ def _post_consumption(
             """,
             (
                 fixture.IDS["org"], document_id, fixture.IDS["branch"],
-                f"PG15-CONSUME-{document_id}", fixture.SOURCE_RETRIEVED_ON,
+                f"PG15-CONSUME-{document_id}", business_date,
                 EXPECTED["issued_quantity"], EXPECTED["issued_value"],
                 fixture.IDS["operator_membership"], fixture.IDS["operator_membership"],
                 fixture.IDS["operator_membership"],
@@ -854,7 +855,12 @@ def run_lifecycle() -> None:
             admin_dsn, goods_receipt_id
         )
         assert source_order_line_id == purchase_order_line_id
-        _post_consumption(runtime_dsn, batch_id=batch_id, uom_code=uom_code)
+        _post_consumption(
+            runtime_dsn,
+            batch_id=batch_id,
+            uom_code=uom_code,
+            business_date=business_date,
+        )
         _assert_upstream_has_no_payable_or_tax(runtime_dsn)
         payload = _supplier_invoice_payload(
             goods_receipt_id, goods_receipt_line_id, portal_evidence,

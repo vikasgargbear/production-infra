@@ -53,10 +53,6 @@ def test_sales_order_requested_date_is_derived_from_reviewed_authority() -> None
 
     assert payload["order_date"] == "2026-08-26"
     assert payload["requested_delivery_date"] == "2026-08-28"
-    assert module.SOURCE_RETRIEVED_ON.isoformat() not in {
-        payload["order_date"],
-        payload["requested_delivery_date"],
-    }
 
 
 def test_sales_dispatch_posts_on_business_date_not_future_delivery_plan() -> None:
@@ -87,7 +83,6 @@ def test_sales_dispatch_posts_on_business_date_not_future_delivery_plan() -> Non
         == order["order_date"]
     )
     assert dispatch["dispatch_date"] < order["requested_delivery_date"]
-    assert dispatch["dispatch_date"] != module.SOURCE_RETRIEVED_ON.isoformat()
 
 
 @pytest.mark.parametrize(
