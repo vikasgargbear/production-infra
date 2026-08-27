@@ -21,6 +21,7 @@ import {
 } from './utils/canonicalInvoiceCommand';
 import CanonicalSalesCommandReview from '../CanonicalSalesCommandReview';
 import { formatExactCurrency } from '../../../utils/exactDecimal';
+import { applyCanonicalInvoicePreview } from './utils/invoicePreviewState';
 
 // ==================== TYPE DEFINITIONS ====================
 
@@ -232,11 +233,11 @@ ${companyInfo.name}`;
             const result = await calculateInvoicePreview(invoice, isOnline);
 
             // Update invoice with calculated totals
-            setInvoice(prev => ({
-                ...prev,
-                totals: result.totals,
-                final_amount: result.totals.final_amount
-            }));
+            setInvoice(prev => applyCanonicalInvoicePreview(
+                prev,
+                result,
+                { replaceItems: false },
+            ));
             setCurrentStep(2);
         } catch (calcError) {
             toast.error('Calculation error. Please try again.');
@@ -258,12 +259,11 @@ ${companyInfo.name}`;
             const result = await calculateInvoicePreview(invoice, isOnline);
 
             // Update invoice with latest totals
-            setInvoice(prev => ({
-                ...prev,
-                totals: result.totals,
-                final_amount: result.totals.final_amount,
-                items: result.items
-            }));
+            setInvoice(prev => applyCanonicalInvoicePreview(
+                prev,
+                result,
+                { replaceItems: true },
+            ));
             setCurrentStep(3);
         } catch (calcError) {
             toast.error('Calculation error. Please try again.');
