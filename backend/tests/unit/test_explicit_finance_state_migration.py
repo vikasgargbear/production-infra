@@ -45,3 +45,4 @@ def test_explicit_finance_state_migration_owns_lineage_and_named_transitions():
     ):
         assert function in migration
     assert 'FROM PUBLIC, "erp_app", "erp_runtime"' in migration
+    assert 'TO "erp_runtime"' in migration

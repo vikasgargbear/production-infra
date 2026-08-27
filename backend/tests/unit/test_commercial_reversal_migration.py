@@ -47,3 +47,4 @@ def test_commercial_reversal_migration_owns_compensation_and_closed_fences():
     assert "commercial reversal residual was consumed" in migration
     assert "mark_journal_reversed" in migration
     assert 'FROM PUBLIC, "erp_app", "erp_runtime"' in migration
+    assert 'TO "erp_app", "erp_runtime"' in migration

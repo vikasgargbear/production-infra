@@ -1134,4 +1134,13 @@ ALTER FUNCTION "erp_finance_invariants"."guard_allocation"() OWNER TO "erp_migra
 
 REVOKE ALL ON FUNCTION "erp_finance_invariants"."guard_allocation"() FROM PUBLIC, "erp_app", "erp_runtime";
 
+GRANT EXECUTE ON FUNCTION "erp_commercial_commands"."prepare_sales_return_reversal"(uuid,uuid,bigint,date,text,uuid) TO "erp_app", "erp_runtime";
+GRANT EXECUTE ON FUNCTION "erp_commercial_commands"."prepare_purchase_return_reversal"(uuid,uuid,bigint,date,text,uuid) TO "erp_app", "erp_runtime";
+GRANT EXECUTE ON FUNCTION "erp_commercial_commands"."prepare_adjustment_note_reversal"(uuid,uuid,bigint,date,text,uuid) TO "erp_app", "erp_runtime";
+GRANT EXECUTE ON FUNCTION "erp_commercial_commands"."persist_commercial_reversal_prepare"(uuid,text,uuid,uuid,uuid,uuid,bytea,bytea,bytea,bytea,timestamptz) TO "erp_app", "erp_runtime";
+GRANT EXECUTE ON FUNCTION "erp_commercial_commands"."post_sales_return_reversal"(uuid,uuid,bigint,uuid,varchar,uuid,varchar,uuid,varchar,uuid,uuid,date,text,uuid,bytea,bytea,timestamptz) TO "erp_app", "erp_runtime";
+GRANT EXECUTE ON FUNCTION "erp_commercial_commands"."post_purchase_return_reversal"(uuid,uuid,bigint,uuid,varchar,uuid,varchar,uuid,varchar,uuid,uuid,date,text,uuid,bytea,bytea,timestamptz) TO "erp_app", "erp_runtime";
+GRANT EXECUTE ON FUNCTION "erp_commercial_commands"."post_adjustment_note_reversal"(uuid,uuid,bigint,uuid,varchar,uuid,varchar,uuid,varchar,uuid,uuid,date,text,uuid,bytea,bytea,timestamptz) TO "erp_app", "erp_runtime";
+GRANT EXECUTE ON FUNCTION "erp_commercial_commands"."execute_approved_commercial_reversal"(uuid,uuid) TO "erp_app", "erp_runtime";
+
 RESET ROLE;

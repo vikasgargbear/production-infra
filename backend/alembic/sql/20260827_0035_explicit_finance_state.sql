@@ -2434,4 +2434,13 @@ ALTER FUNCTION "erp_finance_invariants"."guard_open_item"() OWNER TO "erp_migrat
 
 REVOKE ALL ON FUNCTION "erp_finance_invariants"."guard_open_item"() FROM PUBLIC, "erp_app", "erp_runtime";
 
+GRANT EXECUTE ON FUNCTION "erp_automation_commands"."resolve_inventory_adjustment_prepare"(organization_id uuid, membership_id uuid, auth_user_id uuid, application_user_id uuid, grant_id uuid, caller_client_id varchar, inventory_document_id uuid, request_document jsonb) TO "erp_runtime";
+GRANT EXECUTE ON FUNCTION "erp_automation_commands"."persist_inventory_adjustment_prepare"(organization_id uuid, membership_id uuid, auth_user_id uuid, application_user_id uuid, grant_id uuid, caller_client_id varchar, inventory_document_id uuid, command_id uuid, journal_id uuid, event_id uuid, key_hash bytea, document_sequence_key_hash bytea, journal_sequence_key_hash bytea, request_bytes bytea, resolved_bytes bytea, preview_bytes bytea, expires_at timestamptz) TO "erp_runtime";
+GRANT EXECUTE ON FUNCTION "erp_automation_commands"."execute_approved_command"(organization_id uuid, command_request_id uuid) TO "erp_runtime";
+GRANT EXECUTE ON FUNCTION "erp_commercial_commands"."post_adjustment_note"(uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,varchar,uuid,uuid,uuid,bytea,bytea,timestamptz) TO "erp_app", "erp_runtime";
+GRANT EXECUTE ON FUNCTION "erp_commercial_commands"."post_purchase_return"(uuid,uuid,uuid,uuid,uuid,uuid,uuid,varchar,uuid,uuid,varchar,uuid,uuid,uuid,uuid,bytea,bytea,timestamptz) TO "erp_app", "erp_runtime";
+GRANT EXECUTE ON FUNCTION "erp_commercial_commands"."post_sales_return"(uuid,uuid,uuid,uuid,uuid,uuid,uuid,varchar,uuid,uuid,varchar,uuid,uuid,uuid,uuid,bytea,bytea,timestamptz) TO "erp_app", "erp_runtime";
+GRANT EXECUTE ON FUNCTION "erp_finance_commands"."apply_supplier_advance"(organization_id uuid, advance_allocation_id uuid, supplier_invoice_line_id uuid, invoice_open_item_id uuid, allocation_id uuid, journal_id uuid, journal_number varchar, event_id uuid) TO "erp_app";
+GRANT EXECUTE ON FUNCTION "erp_finance_commands"."reverse_payment"(organization_id uuid, original_payment_id uuid, reversal_payment_id uuid, reversal_payment_number varchar, reversal_journal_id uuid, reversal_journal_number varchar, reversal_event_id uuid, reason text) TO "erp_app";
+
 RESET ROLE;
