@@ -83,6 +83,8 @@ def test_zero_consumer_backend_archaeology_stays_retired() -> None:
         "app/api/services/sales/shared",
         "app/api/services/settings/settings_service.py",
         "app/core/idempotency.py",
+        "scripts/audit/payment_idempotency_readiness.py",
+        "scripts/validate_routes.py",
     )
 
     assert [path for path in retired_paths if (BACKEND_ROOT / path).exists()] == []

@@ -8,7 +8,6 @@ Comprehensive code quality and schema validation tools.
 scripts/
 ├── audit/
 │   ├── comprehensive_schema_audit.py  # Full schema validation
-│   ├── payment_idempotency_readiness.py # Dedicated payment replay store gate
 │   ├── validate_constants.py          # Constants usage checker
 │   ├── transaction_integrity_audit.py # Stock and finance release blockers
 │   ├── contract_consistency_audit.py  # Identifier and API contract blockers
@@ -61,10 +60,8 @@ python scripts/audit/validate_constants.py --show-all
 
 ### 3. Transaction Integrity Audit
 
-**Purpose**: Fails the release when inventory or finance has competing mutation
-owners, missing payment idempotency, mutable posted journals, missing allocation
-projection reconciliation, unbaselined finance schema, or duplicated calculation
-ownership.
+**Purpose**: Validates hash-bound canonical staging evidence for transaction
+integrity against the exact Git commit and Alembic revision.
 
 ```bash
 python scripts/audit/transaction_integrity_audit.py
@@ -75,33 +72,16 @@ blockers that require an implemented invariant, not an allowlist entry.
 
 ### 4. Contract Consistency Audit
 
-**Purpose**: Fails the release for competing document-number authorities,
-divergent status enums, untrusted GST rate inputs, tenant/branch identifier
-conflicts, lossy money or timestamp serialization, and untyped mutation
-responses.
+**Purpose**: Fails the release for divergent status enums, untrusted GST rate
+inputs, tenant/branch identifier conflicts, lossy money or timestamp
+serialization, and untyped mutation responses in reachable API code.
 
 ```bash
 python scripts/audit/contract_consistency_audit.py
 ```
 
-This audit reports checked-in conflicts without assuming which unbaselined SQL
-definition is deployed. Resolve an issue by establishing and testing one
-authority; do not suppress the code with an allowlist.
-
-### 5. Payment Idempotency Readiness
-
-**Purpose**: Prevents promotion while payment replay relies on a temporary
-payment-note field or the live schema and dedicated replay store are unbaselined.
-Cancel, reconciliation, and allocation routes require an idempotency key and
-fail before database access until that store is implemented.
-
-```bash
-python scripts/audit/payment_idempotency_readiness.py
-```
-
-The audit consumes `docs/architecture/payment-idempotency-store.json`. That
-contract is migration-neutral and must not be marked implemented until the live
-schema baseline and reviewed Alembic migration exist.
+Resolve an issue by establishing and testing one authority; do not suppress the
+code with an allowlist.
 
 ## Best Practices
 
@@ -161,9 +141,6 @@ Add to your CI pipeline:
 
 - name: Transaction Integrity Audit
   run: python scripts/audit/transaction_integrity_audit.py
-
-- name: Payment Idempotency Readiness
-  run: python scripts/audit/payment_idempotency_readiness.py
 
 - name: Contract Consistency Audit
   run: python scripts/audit/contract_consistency_audit.py
