@@ -1939,6 +1939,12 @@ jobs:
             --proof-receipt "$LIVE18_RECONCILIATION_EVIDENCE_PATH" \
             --render-api-service-id "$RENDER_API_SERVICE_ID" \
             --receipt "$LIVE18_EVIDENCE_CREDENTIAL_RETIREMENT_PATH"
+      - name: Re-close canonical authority immediately after any Live18 failure
+        if: failure() && env.LIVE18_PROVIDER == 'railway'
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: PYTHONPATH=backend python3 backend/scripts/close_live18_railway_authority.py
       - name: Always suspend temporary MCP authorities
         if: always() && env.LIVE18_PROVIDER == 'render'
         env:
@@ -2066,7 +2072,7 @@ jobs:
           PY
           rm -f "$LIVE18_RAILWAY_IDENTITY_ATTEMPTED_PATH" \
             "$LIVE18_RAILWAY_PRE_DEMO_RECOVERY_ATTEMPTED_PATH"
-      - name: Re-close canonical authority immediately after any Live18 failure
+      - name: Re-close canonical authority after any identity cleanup failure
         if: failure() && env.LIVE18_PROVIDER == 'railway'
         env:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}

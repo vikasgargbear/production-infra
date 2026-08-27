@@ -1324,6 +1324,7 @@ def test_live18_is_opt_in_exact_sha_external_fixture_and_always_cleaned():
         "Capture PostgreSQL evidence from exact Railway deployment over direct IPv6",
         "Always clean Railway-direct temporary identities and authorities",
         "Re-close canonical authority immediately after any Live18 failure",
+        "Re-close canonical authority after any identity cleanup failure",
         "Re-close canonical authority after any evidence failure",
         "Always remove the run-scoped Railway SSH key",
     }
@@ -1331,6 +1332,10 @@ def test_live18_is_opt_in_exact_sha_external_fixture_and_always_cleaned():
     demo_step = "Verify exact migration head and provision same-run demo over Railway direct IPv6"
     identity_step = "Provision disposable identities and MCP authority over Railway direct IPv6"
     always_clean_step = "Always clean Railway-direct temporary identities and authorities"
+    failure_close_step = "Re-close canonical authority immediately after any Live18 failure"
+    cleanup_failure_close_step = (
+        "Re-close canonical authority after any identity cleanup failure"
+    )
     assert live18.index(recovery_step) < live18.index(demo_step) < live18.index(identity_step)
     recovery = live18[
         live18.index(recovery_step):live18.index(demo_step)
@@ -1368,6 +1373,8 @@ def test_live18_is_opt_in_exact_sha_external_fixture_and_always_cleaned():
     postgres_gate = _read("database/canonical/ci/run_alembic_postgres15_gate.sh")
     assert "check_live18_ephemeral_identity_terminal_cleanup.py" in postgres_gate
     assert live18.index(always_clean_step) > live18.index(identity_step)
+    assert live18.index(failure_close_step) < live18.index(always_clean_step)
+    assert live18.index(always_clean_step) < live18.index(cleanup_failure_close_step)
     assert 'test "$(git rev-parse HEAD)" = "$REVIEWED_DEPLOY_SHA"' in live18
     assert "verify_live18_deployment_sha.py" in live18
     assert '--provider "$LIVE18_PROVIDER"' in live18

@@ -1302,6 +1302,9 @@ def test_railway_live18_workflow_has_fail_closed_remote_lifecycle():
     compensation = live18.index(
         "- name: Re-close canonical authority immediately after any Live18 failure"
     )
+    cleanup_compensation = live18.index(
+        "- name: Re-close canonical authority after any identity cleanup failure"
+    )
     final_compensation = live18.index(
         "- name: Re-close canonical authority after any evidence failure"
     )
@@ -1316,6 +1319,7 @@ def test_railway_live18_workflow_has_fail_closed_remote_lifecycle():
     )
     assert (
         compensation
+        < cleanup_compensation
         < fixture_cleanup
         < evidence_upload
         < final_compensation
