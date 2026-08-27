@@ -12,6 +12,11 @@ REVISION_PATH = (
     ROOT
     / "backend/alembic/versions/20260828_0037_sales_invoice_product_identity.py"
 )
+AUTOMATION_PRIVILEGE_FIXTURE = (
+    ROOT / "database/canonical/commands_automation/test_automation_commands_rollback.sql"
+)
+
+
 def _load(path: Path, name: str):
     spec = importlib.util.spec_from_file_location(name, path)
     assert spec is not None and spec.loader is not None
@@ -47,3 +52,15 @@ def test_product_identity_is_read_for_exact_resolved_product_versions() -> None:
     assert "GRANT SELECT" not in sql
     assert "TO erp_calculator" in sql
     assert "TO erp_runtime" not in sql.split("GRANT EXECUTE", 1)[-1]
+
+
+def test_product_identity_calculator_privilege_is_exactly_reviewed() -> None:
+    fixture = AUTOMATION_PRIVILEGE_FIXTURE.read_text(encoding="utf-8")
+    signature = (
+        "erp_automation_commands.resolve_sales_invoice_product_identities(uuid,jsonb)"
+    )
+
+    assert fixture.count(signature) == 5
+    for role in ("erp_runtime", "erp_app", "public"):
+        assert f"'{role}',\n         '{signature}'" in fixture
+    assert "'erp_calculator',\n         '" + signature + "'" in fixture

@@ -381,6 +381,17 @@ def test_postgres_fixture_is_rollback_only() -> None:
     assert "THEN 28" in fixture
     assert "ELSE 32" in fixture
     assert "calculator_count<>12" in fixture
+    assert fixture.count(
+        "erp_automation_commands.resolve_sales_invoice_product_identities(uuid,jsonb)"
+    ) == 5
+    assert (
+        "calculator lacks reviewed sales-invoice product-identity read privilege"
+        in fixture
+    )
+    assert (
+        "sales-invoice product identity read privilege is broader than calculator"
+        in fixture
+    )
     assert "calculator can execute an unreviewed automation helper" in fixture
 
 
