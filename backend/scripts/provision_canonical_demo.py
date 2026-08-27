@@ -4946,11 +4946,27 @@ def sales_dispatch_payload(
     sales_order_id: str,
     sales_order_line_id: str,
     batch_allocations: list[dict[str, str]],
+    *,
+    requested_delivery_date: str,
 ) -> dict[str, Any]:
+    if not isinstance(requested_delivery_date, str):
+        raise ValueError(
+            "sales dispatch requires the approved order requested delivery date"
+        )
+    try:
+        dispatch_date = date.fromisoformat(requested_delivery_date)
+    except ValueError as error:
+        raise ValueError(
+            "sales dispatch requires the approved order requested delivery date"
+        ) from error
+    if dispatch_date.isoformat() != requested_delivery_date:
+        raise ValueError(
+            "sales dispatch requires the canonical requested delivery date"
+        )
     return {
         "idempotency_key": f"demo-sales-dispatch-{os.getenv('GITHUB_RUN_ID', 'local')}",
         "branch_id": IDS["branch"],
-        "dispatch_date": SOURCE_RETRIEVED_ON.isoformat(),
+        "dispatch_date": requested_delivery_date,
         "sales_order_id": sales_order_id,
         "from_location_id": IDS["saleable_location"],
         "lines": [
@@ -4968,7 +4984,7 @@ def sales_dispatch_payload(
             "vehicle_number": "MH01DE2026",
             "vehicle_type": "regular",
             "transport_document_number": f"DEMO-DC-{os.getenv('GITHUB_RUN_ID', 'local')}",
-            "transport_document_date": SOURCE_RETRIEVED_ON.isoformat(),
+            "transport_document_date": requested_delivery_date,
         },
     }
 
@@ -6105,7 +6121,10 @@ def main() -> int:
     with database_connection("ERP_RUNTIME_DATABASE_URL") as runtime:
         dispatch_allocations = resolve_fefo_dispatch_allocations(runtime)
     dispatch_request = sales_dispatch_payload(
-        reconciliation["id"], reconciliation["line_ids"][0], dispatch_allocations
+        reconciliation["id"],
+        reconciliation["line_ids"][0],
+        dispatch_allocations,
+        requested_delivery_date=payload["requested_delivery_date"],
     )
     preflight_action("sales.dispatch.prepare", dispatch_request)
     dispatch_journey = exercise_action(

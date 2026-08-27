@@ -152,8 +152,17 @@ def _cases() -> list[tuple[str, str, dict[str, Any], dict[str, Any]]]:
         (
             "sales_dispatch",
             "sales.dispatch.prepare",
-            module.sales_dispatch_payload(UUID_A, UUID_B, dispatch_batches),
-            {"sales_order_id": UUID_A},
+            module.sales_dispatch_payload(
+                UUID_A,
+                UUID_B,
+                dispatch_batches,
+                requested_delivery_date="2026-08-28",
+            ),
+            {
+                "sales_order_id": UUID_A,
+                "dispatch_date": "2026-08-28",
+                "logistics.transport_document_date": "2026-08-28",
+            },
         ),
         (
             "sales_invoice",
@@ -301,6 +310,7 @@ def test_demo_chain_keeps_exact_lineage_between_each_prepare_payload() -> None:
         UUID_A,
         UUID_B,
         [{"batch_id": UUID_C, "billed_quantity": "12", "free_quantity": "2"}],
+        requested_delivery_date="2026-08-28",
     )
     invoice = module.sales_invoice_payload([dispatch_line], 7)
     sales_return = module.sales_return_payload(UUID_A, UUID_B, [dispatch_line])

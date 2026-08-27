@@ -57,6 +57,52 @@ def test_sales_order_requested_date_is_derived_from_reviewed_authority() -> None
     }
 
 
+def test_sales_dispatch_uses_the_exact_derived_order_delivery_date() -> None:
+    module = _module()
+    order = module.sales_order_payload(
+        7,
+        business_date=date(2026, 8, 26),
+        delivery_offset_days="2",
+    )
+
+    dispatch = module.sales_dispatch_payload(
+        str(UUID(int=1)),
+        str(UUID(int=2)),
+        [
+            {
+                "batch_id": str(UUID(int=3)),
+                "billed_quantity": "12",
+                "free_quantity": "2",
+            }
+        ],
+        requested_delivery_date=order["requested_delivery_date"],
+    )
+
+    assert dispatch["dispatch_date"] == order["requested_delivery_date"]
+    assert (
+        dispatch["logistics"]["transport_document_date"]
+        == order["requested_delivery_date"]
+    )
+    assert dispatch["dispatch_date"] != module.SOURCE_RETRIEVED_ON.isoformat()
+
+
+@pytest.mark.parametrize(
+    "requested_delivery_date", [None, date(2026, 8, 28), "28-08-2026"]
+)
+def test_sales_dispatch_rejects_noncanonical_delivery_date_authority(
+    requested_delivery_date: object,
+) -> None:
+    module = _module()
+
+    with pytest.raises(ValueError, match="approved order requested delivery date"):
+        module.sales_dispatch_payload(
+            str(UUID(int=1)),
+            str(UUID(int=2)),
+            [],
+            requested_delivery_date=requested_delivery_date,
+        )
+
+
 @pytest.mark.parametrize("delivery_offset_days", ["0", "31", 2, "two"])
 def test_sales_order_requested_date_rejects_unreviewed_offsets(
     delivery_offset_days: object,

@@ -343,9 +343,14 @@ def main() -> None:
             assert len(lines) == 1
             order_line_id = UUID(str(lines[0][0]))
 
-        dispatch_payload = fixture.sales_dispatch_payload(str(order_id), str(order_line_id), [{
-            "batch_id": str(batch_id), "billed_quantity": "12", "free_quantity": "2",
-        }])
+        dispatch_payload = fixture.sales_dispatch_payload(
+            str(order_id),
+            str(order_line_id),
+            [{
+                "batch_id": str(batch_id), "billed_quantity": "12", "free_quantity": "2",
+            }],
+            requested_delivery_date=order_payload["requested_delivery_date"],
+        )
         policy = ACTION_POLICIES["sales.dispatch.prepare"]
         try:
             model = PREPARE_PAYLOAD_MODELS["sales.dispatch.prepare"].model_validate(
