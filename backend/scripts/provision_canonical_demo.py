@@ -5732,11 +5732,17 @@ def main() -> int:
     expense_receipt_bytes = reviewed_expense_receipt()
     reviewed_live18_scalars = live18_reviewed_scalars()
 
+    reviewed_web_auth_user_id = os.getenv(
+        "CANONICAL_STAGING_WEB_TEST_AUTH_USER_ID", ""
+    ).strip()
     with database_connection("PSYCOPG_DATABASE_URL") as bootstrap:
         bootstrap_identity(bootstrap)
-        reviewed_web_auth_user_id = os.getenv(
-            "CANONICAL_STAGING_WEB_TEST_AUTH_USER_ID", ""
-        ).strip()
+
+    # bootstrap_identity deliberately assumes the migration-owner role for its
+    # whole transaction.  Start a fresh owner transaction before consulting
+    # Supabase-owned auth.users; the canonical migration role must never gain
+    # privileges on the auth schema merely to restore a reviewed web operator.
+    with database_connection("PSYCOPG_DATABASE_URL") as bootstrap:
         reviewed_web_operator = (
             bind_reviewed_web_operator(bootstrap, reviewed_web_auth_user_id)
             if reviewed_web_auth_user_id

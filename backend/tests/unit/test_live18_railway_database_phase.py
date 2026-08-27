@@ -116,6 +116,17 @@ def test_railway_live18_demo_restores_the_reviewed_web_operator() -> None:
     ).read_text(encoding="utf-8")
     assert "bind_reviewed_web_operator(bootstrap, reviewed_web_auth_user_id)" in source
     assert '"reviewed_web_operator": reviewed_web_operator' in source
+    bootstrap_call = source.index("bootstrap_identity(bootstrap)")
+    auth_lookup = source.index(
+        "bind_reviewed_web_operator(bootstrap, reviewed_web_auth_user_id)",
+        bootstrap_call,
+    )
+    assert source.count(
+        'with database_connection("PSYCOPG_DATABASE_URL") as bootstrap:',
+        bootstrap_call,
+        auth_lookup,
+    ) == 1
+    assert "auth schema" in source[bootstrap_call:auth_lookup]
 
 
 def test_captured_database_evidence_replaces_the_runner_database_secret():
