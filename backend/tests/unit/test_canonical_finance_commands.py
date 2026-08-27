@@ -112,11 +112,29 @@ def test_open_item_state_is_explicitly_owned_by_named_commands() -> None:
 
     assert '"synchronize_open_item_status"' in sql
     assert "FROM finance.allocations allocation" in sql
+    assert "allocation.source_open_item_id=open_item_id" in sql
     assert "reversal.reversal_of_allocation_id=allocation.id" in sql
     assert "reversed open item cannot be settled or reopened" in sql
     assert "open item is overallocated" in sql
     assert "SET status=CASE WHEN active_total=item.principal_amount" in sql
     assert 'GRANT EXECUTE ON FUNCTION "erp_finance_commands"."synchronize_open_item_status"' not in sql
+
+
+def test_journal_reversal_transition_is_explicitly_owned_by_named_commands() -> None:
+    sql = "\n".join(
+        statement
+        for statements in _load_generator()._definitions().values()
+        for statement in statements
+    )
+
+    assert '"mark_journal_reversed"' in sql
+    assert "journal reversal command requires an exact posted sign inversion" in sql
+    assert "reversal.reversal_of_journal_entry_id IS DISTINCT FROM original.id" in sql
+    assert "UPDATE finance.journal_entries SET status='reversed'" in sql
+    assert 'GRANT EXECUTE ON FUNCTION "erp_finance_commands"."mark_journal_reversed"' not in sql
+    posting = sql.index("WHERE org_id=organization_id AND id=reversal_journal_id;")
+    transition = sql.index('"mark_journal_reversed"(', posting)
+    assert posting < transition
 
 
 def test_supplier_advance_is_gross_typed_and_applied_once_to_matching_invoice() -> None:

@@ -117,7 +117,8 @@ BEGIN
     END IF;
     SELECT coalesce(sum(allocation.amount),0) INTO active_total
       FROM finance.allocations allocation
-     WHERE allocation.org_id=organization_id AND allocation.open_item_id=open_item_id
+     WHERE allocation.org_id=organization_id
+       AND (allocation.open_item_id=open_item_id OR allocation.source_open_item_id=open_item_id)
        AND allocation.status='posted'
        AND NOT EXISTS (SELECT 1 FROM finance.allocations reversal
          WHERE reversal.org_id=allocation.org_id
@@ -130,6 +131,49 @@ BEGIN
            settled_at=CASE WHEN active_total=item.principal_amount
              THEN coalesce(item.settled_at,pg_catalog.transaction_timestamp()) ELSE NULL END
      WHERE org_id=organization_id AND id=open_item_id;
+END
+""",
+        ),
+        *_function(
+            '"mark_journal_reversed"(organization_id uuid, original_journal_id uuid, reversal_journal_id uuid)',
+            "void",
+            """
+DECLARE original finance.journal_entries%ROWTYPE; reversal finance.journal_entries%ROWTYPE;
+BEGIN
+    SELECT * INTO STRICT original FROM finance.journal_entries
+     WHERE org_id=organization_id AND id=original_journal_id FOR UPDATE;
+    SELECT * INTO STRICT reversal FROM finance.journal_entries
+     WHERE org_id=organization_id AND id=reversal_journal_id FOR SHARE;
+    IF original.status='reversed' THEN
+      IF reversal.status='posted' AND reversal.reversal_of_journal_entry_id=original.id THEN RETURN; END IF;
+      RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='journal reversal replay differs from posted evidence';
+    END IF;
+    IF original.status<>'posted' OR reversal.status<>'posted'
+       OR reversal.reversal_of_journal_entry_id IS DISTINCT FROM original.id
+       OR ROW(reversal.transaction_currency,reversal.functional_currency,reversal.fx_rate,
+              reversal.transaction_debit_total,reversal.transaction_credit_total,
+              reversal.functional_debit_total,reversal.functional_credit_total)
+          IS DISTINCT FROM ROW(original.transaction_currency,original.functional_currency,original.fx_rate,
+              original.transaction_credit_total,original.transaction_debit_total,
+              original.functional_credit_total,original.functional_debit_total)
+       OR EXISTS (SELECT 1 FROM finance.journal_lines old_line
+          FULL JOIN finance.journal_lines new_line
+            ON new_line.org_id=organization_id AND new_line.journal_entry_id=reversal.id
+           AND new_line.line_number=old_line.line_number
+         WHERE old_line.org_id=organization_id AND old_line.journal_entry_id=original.id
+           AND (new_line.id IS NULL OR ROW(new_line.account_id,new_line.branch_id,new_line.party_id,
+                  new_line.transaction_debit,new_line.transaction_credit,new_line.functional_debit,new_line.functional_credit)
+             IS DISTINCT FROM ROW(old_line.account_id,old_line.branch_id,old_line.party_id,
+                  old_line.transaction_credit,old_line.transaction_debit,old_line.functional_credit,old_line.functional_debit)))
+       OR (SELECT count(*) FROM finance.journal_lines
+            WHERE org_id=organization_id AND journal_entry_id=reversal.id)
+          <> (SELECT count(*) FROM finance.journal_lines
+            WHERE org_id=organization_id AND journal_entry_id=original.id) THEN
+      RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='journal reversal command requires an exact posted sign inversion';
+    END IF;
+    UPDATE finance.journal_entries SET status='reversed',updated_at=pg_catalog.transaction_timestamp(),
+      row_version=row_version+1 WHERE org_id=organization_id AND id=original.id AND status='posted';
+    IF NOT FOUND THEN RAISE EXCEPTION USING ERRCODE='40001', MESSAGE='original journal changed before reversal transition'; END IF;
 END
 """,
         ),
@@ -504,6 +548,8 @@ BEGIN
     UPDATE finance.journal_entries SET status='posted',posted_at=reversed_time,posted_by_membership_id=actor,
       updated_at=reversed_time,updated_by_membership_id=actor,row_version=row_version+1
       WHERE org_id=organization_id AND id=reversal_journal_id;
+    PERFORM "{FUNCTION_SCHEMA}"."mark_journal_reversed"(
+      organization_id,original_journal.id,reversal_journal_id);
     UPDATE finance.payments SET status='posted',posted_at=reversed_time,posted_by_membership_id=actor,
       updated_at=reversed_time,updated_by_membership_id=actor,row_version=row_version+1
       WHERE org_id=organization_id AND id=reversal_payment_id;

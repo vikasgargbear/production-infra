@@ -118,6 +118,22 @@ def test_allocation_trigger_is_deferred_and_assertion_only() -> None:
     )
     assert "UPDATE finance.open_items" not in allocation_guard
     assert "allocated>item.principal_amount" in allocation_guard
+    assert "NEW.source_open_item_id" in allocation_guard
+    assert "event.event_type='adjustment_note'" in allocation_guard
+    assert "source_item.item_side=item.item_side" in allocation_guard
+    assert "residual adjustment open item over-allocation" in allocation_guard
+
+
+def test_journal_trigger_is_assertion_only() -> None:
+    journal_guard = "\n".join(
+        _load_generator()._definitions()[
+            "finance.journal_entries:journal_entries_cross_row_guard"
+        ]
+    )
+
+    assert "journal reversal is not an exact sign inversion" in journal_guard
+    assert "journal can be reversed only by a posted compensating journal" in journal_guard
+    assert "UPDATE finance.journal_entries" not in journal_guard
 
 
 def test_finance_fragment_composes_and_resolves_exactly_its_reviewed_keys() -> None:

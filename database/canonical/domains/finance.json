@@ -2361,7 +2361,7 @@
     },
     {
       "name": "finance.allocations",
-      "fact_owner": "Immutable settlement or reversal amount from one payment to one open item",
+      "fact_owner": "Immutable settlement or reversal amount from one typed source to one open item",
       "tenant_class": "tenant_direct",
       "mutation_class": "append_only_settlement",
       "lifecycle": {
@@ -2425,6 +2425,7 @@
           "internal"
         ],
         ["purchase_order_advance_allocation_id", "uuid", true, null, "internal"],
+        ["source_open_item_id", "uuid", true, null, "internal"],
         [
           "open_item_id",
           "uuid",
@@ -2597,6 +2598,15 @@
           "deferrable": false
         },
         {
+          "name": "allocations_source_open_item_fk",
+          "columns": ["org_id", "source_open_item_id"],
+          "references": "finance.open_items",
+          "referenced_columns": ["org_id", "id"],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
           "name": "allocations_reversal_fk",
           "columns": [
             "org_id",
@@ -2646,7 +2656,7 @@
       "checks": [
         {
           "name": "allocations_exact_source_ck",
-          "expression": "num_nonnulls(payment_id,withholding_id,adjustment_note_id,purchase_order_advance_allocation_id) = 1"
+          "expression": "num_nonnulls(payment_id,withholding_id,adjustment_note_id,purchase_order_advance_allocation_id,source_open_item_id) = 1"
         },
         {
           "name": "allocations_amount_ck",
@@ -2701,6 +2711,13 @@
           "purpose": "payment application history"
         },
         {
+          "name": "allocations_source_open_item_idx",
+          "columns": ["org_id", "source_open_item_id", "allocation_date", "id"],
+          "unique": false,
+          "where": "source_open_item_id IS NOT NULL",
+          "purpose": "residual adjustment-note application lineage"
+        },
+        {
           "name": "allocations_withholding_uq",
           "columns": [
             "org_id",
@@ -2726,7 +2743,7 @@
         {
           "name": "allocations_cross_row_guard",
           "enforcement": "transaction_guard",
-          "rule": "Lock the exact settlement source (posted payment, deducted withholding, or posted adjustment note) and open item; require source/open-item compatibility, same party and currency, and total active allocations not above either source amount or open-item principal. A withholding or adjustment source targets its declared open item and is allocated once. Any adjustment residual becomes a new opposite-side open item owned by the adjustment accounting event. Reversal rows copy and negate settlement effect while original evidence remains immutable."
+          "rule": "Lock the exact settlement source (posted payment, deducted withholding, posted adjustment note, supplier advance, or opposite-side adjustment residual open item) and target open item; require source/target compatibility, same party and currency, and total active allocations not above either source amount or target principal. A withholding or original adjustment source targets its declared open item. Any adjustment residual becomes a new opposite-side open item owned by the adjustment accounting event and may later be paired directly to a target with no second journal. Reversal rows copy settlement facts while original evidence remains immutable."
         }
       ]
     },

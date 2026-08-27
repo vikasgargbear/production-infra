@@ -107,7 +107,7 @@
       "reason": "The typed rule and basis model exists, but no reviewed command yet proves exact imported-rule selection, earlier-event timing, cumulative threshold basis, journal/allocation creation, and corrective reversal."
     }
   },
-  "catalog_invariant_sha256": "2c0e12e6b2f37ff2d60ab2051086c39e928ff998c19311f7bdcaad8f02e2aed3",
+  "catalog_invariant_sha256": "3ef639b3d7c7b3cde30e655f00da599515eefa3b7cd012af4d638a75091840fb",
   "domains": [
     "finance",
     "tax",
@@ -115,7 +115,7 @@
   ],
   "manifest_version": "1.0.0",
   "mapping_file": "baseline-finance-enforcements.json",
-  "mapping_sha256": "c9a3fbc63aa53179fbbabb15d91b187fc22d4c56d7d7f1fb8bef50430629bc28",
+  "mapping_sha256": "f6051c5d14fdb09247721fad6af304c27a3479798e1a0c0a24a6389330971446",
   "postgresql": "15+",
   "resolved_count": 14,
   "resolved_invariants": [
