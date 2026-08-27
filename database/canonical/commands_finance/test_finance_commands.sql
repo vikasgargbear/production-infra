@@ -21,9 +21,8 @@ BEGIN
       JOIN pg_catalog.pg_namespace AS namespace ON namespace.oid=procedure.pronamespace
      WHERE namespace.nspname='erp_finance_commands'
        AND procedure.proname NOT IN (
-          'import_bank_statement_lines','parse_portal_document','post_payment','post_supplier_advance_payment',
-          'apply_supplier_advance',
-          'resolve_reconciliation_item','reverse_payment','run_tax_reconciliation'
+          'import_bank_statement_lines','parse_portal_document',
+          'resolve_reconciliation_item','run_tax_reconciliation'
        )
        AND (pg_catalog.has_function_privilege('erp_runtime',procedure.oid,'EXECUTE')
             OR pg_catalog.has_function_privilege('erp_app',procedure.oid,'EXECUTE')
@@ -54,9 +53,8 @@ BEGIN
       JOIN pg_catalog.pg_namespace AS namespace ON namespace.oid=procedure.pronamespace
      WHERE namespace.nspname='erp_finance_commands'
        AND procedure.proname IN (
-          'import_bank_statement_lines','parse_portal_document','post_payment','post_supplier_advance_payment',
-          'apply_supplier_advance',
-          'resolve_reconciliation_item','reverse_payment','run_tax_reconciliation'
+          'import_bank_statement_lines','parse_portal_document',
+          'resolve_reconciliation_item','run_tax_reconciliation'
        )
        AND NOT pg_catalog.has_function_privilege('erp_app',procedure.oid,'EXECUTE');
     IF bad_count<>0 THEN
