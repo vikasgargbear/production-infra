@@ -19,6 +19,11 @@ const ids = {
   document: '10000000-0000-7000-8000-000000000002',
   line: '10000000-0000-7000-8000-000000000003',
   note: '10000000-0000-7000-8000-000000000004',
+  command: '10000000-0000-7000-8000-000000000005',
+};
+const preview = {
+  command_request_id: ids.command,
+  preview_hash: `sha256:${'a'.repeat(64)}`,
 };
 const payload: AdjustmentNotePreparePayload = {
   idempotency_key: 'adjustment:attempt-1', branch_id: ids.branch,
@@ -55,12 +60,44 @@ it('rejects preview source or financial-effect drift before approval', async () 
 
 it('requires exact posted source lines and a balanced journal', async () => {
   (apiHelpers.get as jest.Mock).mockResolvedValue({ data: {
-    id: ids.note, note_number: 'CN-1', note_date: '2026-08-25', side: 'sales', direction: 'credit',
+    id: ids.note, ...preview, note_number: 'CN-1', note_date: '2026-08-25', side: 'sales', direction: 'credit',
     status: 'posted', original_document_id: ids.document, party_id: ids.branch,
     counterparty_payable_amount: '168.00', accounting_event_id: ids.branch,
     journal_entry_id: ids.branch, journal_debit_total: '168.00', journal_credit_total: '167.99',
     allocated_amount: '168.00', residual_open_item_amount: '0.00',
     lines: [{ id: ids.branch, original_line_id: ids.line, line_total: '168.00' }],
   } });
-  await expect(reconcileAdjustmentNote(ids.note, payload)).rejects.toThrow(/did not reconcile/i);
+  await expect(reconcileAdjustmentNote(ids.note, preview, payload)).rejects.toThrow(/did not reconcile/i);
+});
+
+it('binds GET-only recovery readback to the exact checked command and preview hash', async () => {
+  (apiHelpers.get as jest.Mock).mockResolvedValue({ data: {
+    id: ids.note, ...preview, preview_hash: `sha256:${'b'.repeat(64)}`,
+    note_number: 'CN-1', note_date: '2026-08-25', side: 'sales', direction: 'credit',
+    status: 'posted', original_document_id: ids.document, party_id: ids.branch,
+    counterparty_payable_amount: '168.00', accounting_event_id: ids.branch,
+    journal_entry_id: ids.branch, journal_debit_total: '168.00', journal_credit_total: '168.00',
+    allocated_amount: '168.00', residual_open_item_amount: '0.00',
+    lines: [{ id: ids.branch, original_line_id: ids.line, line_total: '168.00' }],
+  } });
+
+  await expect(reconcileAdjustmentNote(ids.note, preview)).rejects.toThrow(/did not reconcile/i);
+});
+
+it('permits GET-only recovery when readback matches the checked command provenance', async () => {
+  (apiHelpers.get as jest.Mock).mockResolvedValue({ data: {
+    id: ids.note, ...preview,
+    note_number: 'CN-1', note_date: '2026-08-25', side: 'sales', direction: 'credit',
+    status: 'posted', original_document_id: ids.document, party_id: ids.branch,
+    counterparty_payable_amount: '168.00', accounting_event_id: ids.branch,
+    journal_entry_id: ids.branch, journal_debit_total: '168.00', journal_credit_total: '168.00',
+    allocated_amount: '168.00', residual_open_item_amount: '0.00',
+    lines: [{ id: ids.branch, original_line_id: ids.line, line_total: '168.00' }],
+  } });
+
+  await expect(reconcileAdjustmentNote(ids.note, preview)).resolves.toMatchObject({
+    id: ids.note,
+    command_request_id: ids.command,
+    preview_hash: preview.preview_hash,
+  });
 });

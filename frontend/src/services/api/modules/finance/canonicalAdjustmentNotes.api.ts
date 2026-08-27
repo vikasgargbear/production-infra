@@ -119,6 +119,8 @@ export interface AdjustmentNotePreparePayload {
 
 export interface PostedAdjustmentNote {
   id: string;
+  command_request_id: string;
+  preview_hash: string;
   note_number: string;
   note_date: string;
   side: AdjustmentSide;
@@ -192,16 +194,23 @@ export async function executeApprovedAdjustmentNote(
 
 export async function reconcileAdjustmentNote(
   noteId: string,
-  payload: AdjustmentNotePreparePayload,
+  preview: Pick<CanonicalCommandPreview, 'command_request_id' | 'preview_hash'>,
+  payload?: AdjustmentNotePreparePayload,
 ): Promise<PostedAdjustmentNote> {
   const posted = (await canonicalAdjustmentNotesApi.getPosted(noteId)).data;
-  const sourceLines = new Set(payload.lines.map(row => row.original_line_id));
+  const sourceLines = payload
+    ? new Set(payload.lines.map(row => row.original_line_id))
+    : null;
   if (posted.id !== noteId || posted.status !== 'posted'
-    || posted.side !== payload.side || posted.direction !== payload.direction
-    || posted.original_document_id !== payload.original_document_id
+    || posted.command_request_id !== preview.command_request_id
+    || posted.preview_hash !== preview.preview_hash
     || posted.journal_debit_total !== posted.journal_credit_total
-    || posted.lines.length !== sourceLines.size
-    || posted.lines.some(row => !sourceLines.has(row.original_line_id))) {
+    || (payload && (
+      posted.side !== payload.side || posted.direction !== payload.direction
+      || posted.original_document_id !== payload.original_document_id
+      || posted.lines.length !== sourceLines!.size
+      || posted.lines.some(row => !sourceLines!.has(row.original_line_id))
+    ))) {
     throw new Error('Adjustment posted, but authoritative note, source-line, allocation, or journal readback did not reconcile. Do not execute again.');
   }
   return posted;

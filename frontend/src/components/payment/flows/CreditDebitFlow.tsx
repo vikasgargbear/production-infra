@@ -26,6 +26,7 @@ import {
 } from '../../../services/api/modules/history/canonicalDocumentHistory.api';
 import { buildAdjustmentNotePayload } from './adjustmentNoteCommand';
 import { compareExactDecimals } from '../../../utils/exactDecimal';
+import { isCanonicalUuid } from '../../../utils/canonicalUuid';
 
 interface CreditDebitFlowProps { onClose: () => void; open?: boolean; noteType?: 'credit' | 'debit' }
 type Workspace = 'prepare' | 'approve' | 'execute';
@@ -54,12 +55,14 @@ const CreditDebitFlow: React.FC<CreditDebitFlowProps> = ({ onClose, open = true,
   const [review, setReview] = useState<CanonicalCommandReview | null>(null);
   const [statusPreview, setStatusPreview] = useState<CanonicalCommandPreview | null>(null);
   const [posted, setPosted] = useState<PostedAdjustmentNote | null>(null);
+  const [executedNoteId, setExecutedNoteId] = useState('');
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const prepareKey = useRef(`erp-web-adjustment-note-prepare:${clientUuid()}`);
   const approvalKey = useRef(clientUuid());
   const executeKey = useRef(clientUuid());
+  const authorityRequestSequence = useRef(0);
 
   const invalidatePreparedDraft = () => {
     setPrepared(null);
@@ -68,19 +71,21 @@ const CreditDebitFlow: React.FC<CreditDebitFlowProps> = ({ onClose, open = true,
   };
   const changeCommandId = (value: string) => {
     setCommandId(value);
-    setReview(null); setStatusPreview(null); setPosted(null); setConfirmed(false);
+    setReview(null); setStatusPreview(null); setPosted(null); setExecutedNoteId(''); setConfirmed(false);
     approvalKey.current = clientUuid();
     executeKey.current = clientUuid();
   };
 
   const loadDocuments = useCallback(async (selectedSide: AdjustmentSide) => {
-    setBusy(true); setError(''); setContext(null); setDocumentId(''); setPrepared(null); setPreparedPayload(null); setPosted(null);
+    const requestSequence = ++authorityRequestSequence.current;
+    setBusy(true); setError(''); setContext(null); setDocumentId(''); setPrepared(null); setPreparedPayload(null); setPosted(null); setExecutedNoteId('');
     prepareKey.current = `erp-web-adjustment-note-prepare:${clientUuid()}`;
     try {
       const history = await canonicalDocumentHistoryApi.get({
         document_kind: selectedSide === 'sales' ? 'sales_invoice' : 'supplier_invoice',
         status: 'posted', page_size: 100,
       });
+      if (requestSequence !== authorityRequestSequence.current) return;
       setBusinessDate(history.business_date);
       setDocuments(history.items.filter(row => row.status === 'posted'
         && row.outstanding_amount !== null
@@ -88,23 +93,35 @@ const CreditDebitFlow: React.FC<CreditDebitFlowProps> = ({ onClose, open = true,
           scale: 2, maximumWholeDigits: 20,
         }) > 0));
     } catch (requestError) {
+      if (requestSequence !== authorityRequestSequence.current) return;
       setDocuments([]); setError(messageFrom(requestError));
-    } finally { setBusy(false); }
+    } finally {
+      if (requestSequence === authorityRequestSequence.current) setBusy(false);
+    }
   }, []);
 
   useEffect(() => { if (open) void loadDocuments(side); }, [loadDocuments, open, side]);
 
   const selectDocument = async (nextId: string) => {
+    const requestSequence = ++authorityRequestSequence.current;
     setDocumentId(nextId); setContext(null); invalidatePreparedDraft(); setError(''); setQuantities({});
-    if (!nextId || !businessDate) return;
+    if (!nextId || !businessDate) {
+      setBusy(false);
+      return;
+    }
     setBusy(true);
     try {
       const next = (await canonicalAdjustmentNotesApi.getContext(side, nextId, businessDate)).data;
+      if (requestSequence !== authorityRequestSequence.current) return;
       setContext(next);
       setRuleId('');
       setQuantities(Object.fromEntries(next.lines.map(line => [line.original_line_id, { billed: '', free: '' }])));
-    } catch (requestError) { setError(messageFrom(requestError)); }
-    finally { setBusy(false); }
+    } catch (requestError) {
+      if (requestSequence === authorityRequestSequence.current) setError(messageFrom(requestError));
+    }
+    finally {
+      if (requestSequence === authorityRequestSequence.current) setBusy(false);
+    }
   };
 
   const chosenRule = context?.rule_choices.find(row => row.id === ruleId) || null;
@@ -123,7 +140,7 @@ const CreditDebitFlow: React.FC<CreditDebitFlowProps> = ({ onClose, open = true,
         recipientEvidenceId, recipientConfirmedAt, portalLineId,
       }, prepareKey.current);
       const response = await prepareAdjustmentNote(payload);
-      setPreparedPayload(payload); setPrepared(response.data); setCommandId(response.data.command_request_id);
+      setExecutedNoteId(''); setPreparedPayload(payload); setPrepared(response.data); setCommandId(response.data.command_request_id);
     } catch (requestError) { setError(messageFrom(requestError)); }
     finally { setBusy(false); }
   };
@@ -149,22 +166,33 @@ const CreditDebitFlow: React.FC<CreditDebitFlowProps> = ({ onClose, open = true,
   };
 
   const fetchStatus = async () => {
-    setBusy(true); setError(''); setStatusPreview(null); setPosted(null); setConfirmed(false);
+    setBusy(true); setError(''); setStatusPreview(null); setPosted(null); setExecutedNoteId(''); setConfirmed(false);
     try {
       const next = (await getCanonicalCommandStatus(commandId.trim())).data;
       setStatusPreview(next as CanonicalCommandPreview);
+      if (String(next.status) === 'succeeded') {
+        const resourceId = String(next.resource_id || '');
+        if (!isCanonicalUuid(resourceId)) {
+          throw new Error('Succeeded adjustment command omitted its canonical note identity.');
+        }
+        setExecutedNoteId(resourceId);
+      }
     } catch (requestError) { setError(messageFrom(requestError)); }
     finally { setBusy(false); }
   };
 
   const execute = async () => {
-    if (!statusPreview || !confirmed) return;
+    if (!statusPreview || (!executedNoteId && !confirmed)) return;
     setBusy(true); setError('');
     try {
-      const noteId = await executeApprovedAdjustmentNote(statusPreview, executeKey.current);
-      setPosted(preparedPayload
-        ? await reconcileAdjustmentNote(noteId, preparedPayload)
-        : (await canonicalAdjustmentNotesApi.getPosted(noteId)).data);
+      const noteId = executedNoteId
+        || await executeApprovedAdjustmentNote(statusPreview, executeKey.current);
+      setExecutedNoteId(noteId);
+      setPosted(await reconcileAdjustmentNote(
+        noteId,
+        statusPreview,
+        preparedPayload || undefined,
+      ));
     } catch (requestError) { setError(messageFrom(requestError)); }
     finally { setBusy(false); }
   };
@@ -205,7 +233,7 @@ const CreditDebitFlow: React.FC<CreditDebitFlowProps> = ({ onClose, open = true,
 
       {workspace === 'approve' && <section className="rounded-xl border border-slate-200 bg-white p-5"><h2 className="text-lg font-semibold">Independent checker approval</h2><p className="text-sm text-slate-600">Sign in as a different authorized reviewer. The API loads immutable preview bytes; it rejects self-approval and cross-tenant commands.</p><div className="mt-4 flex gap-3"><label className="flex-1 text-sm font-medium">Command ID<input value={commandId} onChange={event => changeCommandId(event.target.value)} className="mt-1 min-h-11 w-full rounded-lg border px-3" /></label><button type="button" onClick={() => void fetchReview()} disabled={busy || !commandId} className="min-h-11 self-end rounded-lg border px-5">Load review</button></div>{review && <div className="mt-5 rounded-lg border p-4"><p className="font-medium">{review.command_type} · {review.status}</p><p className="mt-1 break-all text-xs text-slate-600">{review.preview_hash}</p><pre className="mt-3 max-h-64 overflow-auto whitespace-pre-wrap rounded bg-slate-50 p-3 text-xs">{review.preview_canonical_json}</pre>{review.status === 'prepared' && <><label className="mt-4 flex min-h-11 items-center gap-3 rounded-lg border p-3"><input type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} /><span>I independently reviewed the exact immutable preview and approve this command.</span></label><button type="button" onClick={() => void approve()} disabled={!confirmed || busy} className="mt-4 min-h-11 rounded-lg bg-blue-600 px-6 font-medium text-white disabled:bg-slate-300">Approve exact preview</button></>}</div>}</section>}
 
-      {workspace === 'execute' && <section className="rounded-xl border border-slate-200 bg-white p-5"><h2 className="text-lg font-semibold">Requester execute and authoritative readback</h2><p className="text-sm text-slate-600">Return as the original requester. Status is read-only; execution is allowed only after the separate approval exists.</p><div className="mt-4 flex gap-3"><label className="flex-1 text-sm font-medium">Command ID<input value={commandId} onChange={event => changeCommandId(event.target.value)} className="mt-1 min-h-11 w-full rounded-lg border px-3" /></label><button type="button" onClick={() => void fetchStatus()} disabled={busy || !commandId} className="min-h-11 self-end rounded-lg border px-5">Check status</button></div>{statusPreview && !posted && <div className="mt-5 rounded-lg border p-4"><p className="font-medium">Status: {String((statusPreview as any).status)}</p><p className="break-all text-xs text-slate-600">{statusPreview.preview_hash}</p>{String((statusPreview as any).status) === 'approved' && <><label className="mt-4 flex min-h-11 items-center gap-3 rounded-lg border p-3"><input type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} /><span>I am the requester and authorize one idempotent execution of this approved preview.</span></label><button type="button" onClick={() => void execute()} disabled={!confirmed || busy} className="mt-4 min-h-11 rounded-lg bg-blue-600 px-6 font-medium text-white disabled:bg-slate-300">Execute approved note</button></>}</div>}{posted && <div className="mt-5 flex gap-3 rounded-lg border border-green-200 bg-green-50 p-5 text-green-900"><CheckCircle className="h-6 w-6 shrink-0" /><div><h3 className="font-semibold">Posted and reconciled</h3><p className="break-all font-mono text-xs">{posted.id}</p><p>{posted.note_number} · ₹{posted.counterparty_payable_amount}</p><p className="text-sm">Journal debit ₹{posted.journal_debit_total} = credit ₹{posted.journal_credit_total}; allocation and residual were loaded from the canonical readback.</p></div></div>}</section>}
+      {workspace === 'execute' && <section className="rounded-xl border border-slate-200 bg-white p-5"><h2 className="text-lg font-semibold">Requester execute and authoritative readback</h2><p className="text-sm text-slate-600">Return as the original requester. Status is read-only; execution is allowed only after the separate approval exists.</p><div className="mt-4 flex gap-3"><label className="flex-1 text-sm font-medium">Command ID<input value={commandId} onChange={event => changeCommandId(event.target.value)} className="mt-1 min-h-11 w-full rounded-lg border px-3" /></label><button type="button" onClick={() => void fetchStatus()} disabled={busy || !commandId} className="min-h-11 self-end rounded-lg border px-5">Check status</button></div>{statusPreview && !posted && <div className="mt-5 rounded-lg border p-4"><p className="font-medium">Status: {String((statusPreview as any).status)}</p><p className="break-all text-xs text-slate-600">{statusPreview.preview_hash}</p>{executedNoteId ? <><p className="mt-4 break-all text-sm">Posted resource: {executedNoteId}</p><button type="button" onClick={() => void execute()} disabled={busy} className="mt-4 min-h-11 rounded-lg border border-blue-300 px-6 font-medium text-blue-800 disabled:text-slate-300">Retry exact readback (GET only)</button></> : String((statusPreview as any).status) === 'approved' && <><label className="mt-4 flex min-h-11 items-center gap-3 rounded-lg border p-3"><input type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} /><span>I am the requester and authorize one idempotent execution of this approved preview.</span></label><button type="button" onClick={() => void execute()} disabled={!confirmed || busy} className="mt-4 min-h-11 rounded-lg bg-blue-600 px-6 font-medium text-white disabled:bg-slate-300">Execute approved note</button></>}</div>}{posted && <div className="mt-5 flex gap-3 rounded-lg border border-green-200 bg-green-50 p-5 text-green-900"><CheckCircle className="h-6 w-6 shrink-0" /><div><h3 className="font-semibold">Posted and reconciled</h3><p className="break-all font-mono text-xs">{posted.id}</p><p>{posted.note_number} · ₹{posted.counterparty_payable_amount}</p><p className="text-sm">Journal debit ₹{posted.journal_debit_total} = credit ₹{posted.journal_credit_total}; allocation and residual were loaded from the canonical readback.</p></div></div>}</section>}
       {selectedDocument && <p className="sr-only">Selected source {selectedDocument.document_number}</p>}
     </div></main>
   </div>;

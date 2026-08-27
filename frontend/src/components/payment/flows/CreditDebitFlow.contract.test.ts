@@ -12,7 +12,16 @@ it('uses one canonical maker-checker-execute lifecycle for standalone notes', ()
   expect(source).toContain('getCanonicalCommandStatus');
   expect(source).toContain('executeApprovedAdjustmentNote');
   expect(source).toContain('reconcileAdjustmentNote');
+  expect(source).not.toContain('canonicalAdjustmentNotesApi.getPosted(noteId)');
+  expect(source).toContain('setExecutedNoteId(noteId)');
+  expect(source).toMatch(/setPosted\(null\); setExecutedNoteId\(''\); setConfirmed\(false\)/);
+  expect(source).toContain('Retry exact readback (GET only)');
   expect(source).toContain('Independent checker approval');
+});
+
+it('ignores stale source-list and document-context responses', () => {
+  expect(source).toContain('authorityRequestSequence');
+  expect(source).toMatch(/requestSequence !== authorityRequestSequence\.current/);
 });
 
 it('does not retain or submit adjustment notes through a legacy/offline fallback', () => {

@@ -98,6 +98,19 @@ it('returns a persisted result when readback fails and retry performs GET only',
   expect(canonicalReturnsApi.getSalesReadback).toHaveBeenCalledTimes(2);
 });
 
+it('rejects a readback whose body does not match the requested return resource', async () => {
+  (canonicalReturnsApi.getPurchaseReadback as jest.Mock).mockResolvedValue({
+    data: {
+      return_id: 'd3000000-0000-7000-8000-000000000099',
+      status: 'posted',
+    },
+  });
+
+  await expect(retryCanonicalReturnReadback('purchase', resourceId)).rejects.toThrow(
+    /does not match the persisted resource identity/i,
+  );
+});
+
 it.each([
   detail({ status: 'succeeded', resource_id: resourceId }),
   detail({ status: 'rejected' }),

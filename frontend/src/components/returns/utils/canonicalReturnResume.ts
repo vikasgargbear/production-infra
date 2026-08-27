@@ -41,7 +41,11 @@ export async function retryCanonicalReturnReadback(
   const response = returnKind === 'sales'
     ? await canonicalReturnsApi.getSalesReadback(resourceId)
     : await canonicalReturnsApi.getPurchaseReadback(resourceId);
-  return response.data as CanonicalReturnReadback;
+  const readback = response.data as CanonicalReturnReadback;
+  if (readback.return_id !== resourceId || readback.status !== 'posted') {
+    throw new Error('Canonical return readback does not match the persisted resource identity.');
+  }
+  return readback;
 }
 
 /**
