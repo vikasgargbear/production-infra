@@ -188,8 +188,11 @@ def _phase_diagnostics(manifest: Mapping[str, Any]) -> list[Diagnostic]:
     required_edges = {
         "pre_fence_provenance": "deploy_exact_sha",
         "prove_competing_providers_inactive": "pre_fence_provenance",
-        "open_fence": "prove_competing_providers_inactive",
+        "provisioning_fence": "prove_competing_providers_inactive",
+        "provision_demo": "provisioning_fence",
+        "open_fence": "provision_demo",
         "full_readiness": "open_fence",
+        "live18": "full_readiness",
     }
     by_name = {phase["name"]: set(phase["after"]) for phase in phases}
     for phase, dependency in required_edges.items():
@@ -357,9 +360,13 @@ def validate_manifest(manifest: Mapping[str, Any]) -> list[Diagnostic]:
                 )
             has_readiness = "readiness" in service
             has_closed_fence_status = "closed_fence_status" in service
+            has_closed_fence_reported_status = (
+                "closed_fence_reported_status" in service
+            )
             if (
                 (service_name in {"api", "mcp"} and not has_readiness)
                 or has_readiness != has_closed_fence_status
+                or has_readiness != has_closed_fence_reported_status
             ):
                 diagnostics.append(
                     Diagnostic(
@@ -600,7 +607,11 @@ def status_diagnostics(
         expected_status = (
             200 if fence == "open" else service["closed_fence_status"]
         )
-        expected_reported_status = "ready" if expected_status == 200 else "not_ready"
+        expected_reported_status = (
+            "ready"
+            if fence == "open"
+            else service["closed_fence_reported_status"]
+        )
         if status != expected_status or not body or body.get("status") != expected_reported_status:
             diagnostic_code = (
                 "LIVE_FENCE_SEMANTICS_DRIFT"

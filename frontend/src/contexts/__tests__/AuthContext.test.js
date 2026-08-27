@@ -56,6 +56,7 @@ beforeEach(() => {
     jest.clearAllMocks();
     mockAuthStateCallback = undefined;
     localStorage.clear();
+    sessionStorage.clear();
     window.history.replaceState({}, '', '/');
     mockGetSession.mockResolvedValue({ data: { session: null }, error: null });
     mockSignOut.mockResolvedValue({ error: null });
@@ -284,6 +285,74 @@ test('a transient token-refresh failure preserves the last valid ERP session', a
 
     expect(fetch).toHaveBeenCalledTimes(4);
     expect(currentAuth.isAuthenticated).toBe(true);
+    expect(mockSignOut).not.toHaveBeenCalled();
+    jest.useRealTimers();
+});
+
+
+test('maintenance on token refresh clears only ERP state without retrying or signing out cloud auth', async () => {
+    render(<AuthProvider><Probe /></AuthProvider>);
+    await waitFor(() => expect(currentAuth.isLoading).toBe(false));
+
+    await act(async () => {
+        mockAuthStateCallback('SIGNED_IN', { access_token: 'initial-access' });
+    });
+    await waitFor(() => expect(currentAuth.isAuthenticated).toBe(true));
+    expect(sessionStorage.getItem('authToken')).toBeTruthy();
+
+    fetch.mockResolvedValueOnce({
+        ok: false,
+        status: 503,
+        json: async () => ({
+            detail: {
+                error: 'erp_maintenance',
+                message: 'ERP is in maintenance while canonical data is provisioned.',
+            },
+        }),
+    });
+    await act(async () => {
+        mockAuthStateCallback('TOKEN_REFRESHED', { access_token: 'rotated-access' });
+    });
+
+    await waitFor(() => expect(currentAuth.isAuthenticated).toBe(false));
+    expect(currentAuth.hasCloudSession).toBe(true);
+    expect(currentAuth.sessionExchangeError).toBe(
+        'ERP is in maintenance while canonical data is provisioned.',
+    );
+    expect(sessionStorage.getItem('authToken')).toBeNull();
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(mockSignOut).not.toHaveBeenCalled();
+});
+
+
+test('cold-start maintenance returns immediately and preserves the cloud session', async () => {
+    jest.useFakeTimers();
+    mockGetSession.mockResolvedValue({
+        data: { session: { access_token: 'maintenance-access' } },
+        error: null,
+    });
+    fetch.mockResolvedValue({
+        ok: false,
+        status: 503,
+        json: async () => ({
+            detail: {
+                error: 'erp_maintenance',
+                message: 'Canonical provisioning is still in progress.',
+            },
+        }),
+    });
+
+    render(<AuthProvider><Probe /></AuthProvider>);
+    await act(async () => Promise.resolve());
+    await act(async () => Promise.resolve());
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(currentAuth.isLoading).toBe(false);
+    expect(currentAuth.isAuthenticated).toBe(false);
+    expect(currentAuth.hasCloudSession).toBe(true);
+    expect(currentAuth.sessionExchangeError).toBe(
+        'Canonical provisioning is still in progress.',
+    );
     expect(mockSignOut).not.toHaveBeenCalled();
     jest.useRealTimers();
 });

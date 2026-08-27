@@ -6,12 +6,14 @@ services:
     region: singapore
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
-    healthCheckPath: /ready
+    healthCheckPath: /health
     maxShutdownDelaySeconds: 60
     autoDeployTrigger: "off"
     envVars:
       - key: APP_ENV
         value: production
+      - key: CANONICAL_APPLICATION_PROVIDER
+        value: render
       - key: LOG_LEVEL
         value: INFO
       - key: LOG_FORMAT

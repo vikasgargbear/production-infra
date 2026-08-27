@@ -12,8 +12,11 @@ from typing import Any, Dict, Iterable, Mapping, Optional, Set
 
 from fastapi import Depends, Header, HTTPException, status
 from jwt import InvalidTokenError as JWTError
+from sqlalchemy.orm import Session
 
 from ..auth.jwt_auth import decode_jwt
+from ..auth.session_authority import require_canonical_session_authority
+from ..database import get_db
 from ..env import is_production, is_test_mode_enabled
 
 logger = logging.getLogger(__name__)
@@ -109,7 +112,11 @@ class PermissionChecker:
         self.permission = permission
         self.require_admin = require_admin
 
-    async def __call__(self, authorization: str = Header(None)) -> Dict[str, Any]:
+    async def __call__(
+        self,
+        authorization: str = Header(None),
+        db: Session = Depends(get_db),
+    ) -> Dict[str, Any]:
         if is_test_mode_enabled():
             if is_production():
                 logger.critical("SECURITY: TEST_MODE=true blocked in production environment")
@@ -130,6 +137,7 @@ class PermissionChecker:
             payload = decode_jwt(authorization.removeprefix("Bearer "))
             if not payload.get("user_id") or not payload.get("org_id"):
                 raise HTTPException(status_code=401, detail="Invalid token payload")
+            require_canonical_session_authority(db)
             user = _user_from_claims(payload)
             if self.require_admin and not user["is_admin"]:
                 raise HTTPException(status_code=403, detail="Admin access required")
@@ -172,8 +180,11 @@ def require_permission(module: str = None, permission: str = None, require_admin
     return decorator
 
 
-async def get_current_user(authorization: str = Header(None)) -> Dict[str, Any]:
-    return await PermissionChecker()(authorization)
+async def get_current_user(
+    authorization: str = Header(None),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    return await PermissionChecker()(authorization, db)
 
 
 def check_module_access(user: Dict[str, Any], module: str) -> bool:

@@ -143,7 +143,6 @@ jobs:
     with:
       reviewed_sha: ${{ inputs.canonical_staging_deploy_sha }}
       reset_disposable_data: ${{ inputs.reset_canonical_staging }}
-      defer_write_fence_open: ${{ inputs.reset_canonical_staging && inputs.provision_canonical_demo }}
     secrets: inherit
 
   canonical-application-promotion-evidence:
@@ -1176,6 +1175,7 @@ jobs:
             echo "LIVE18_RAILWAY_SSH_AGENT_STARTED_PATH=$RUNNER_TEMP/live18-railway-ssh-agent-started"
             echo "LIVE18_RAILWAY_PRE_DEMO_RECOVERY_ATTEMPTED_PATH=$RUNNER_TEMP/live18-railway-pre-demo-recovery-attempted"
             echo "LIVE18_RAILWAY_IDENTITY_ATTEMPTED_PATH=$RUNNER_TEMP/live18-railway-identity-attempted"
+            echo "LIVE18_RAILWAY_AUTHORITY_OPEN_ATTEMPTED_PATH=$RUNNER_TEMP/live18-railway-authority-open-attempted"
           } >> "$GITHUB_ENV"
       - name: Bind live18 to one reviewed staging provider
         env:
@@ -1619,6 +1619,9 @@ jobs:
           Path(sys.argv[1]).write_text(json.dumps(request), encoding="utf-8")
           PY
           trap 'rm -f "$request"' EXIT
+          # Write before the remote call: an ambiguous SSH result may have
+          # opened public authority even when no response reached this runner.
+          touch "$LIVE18_RAILWAY_AUTHORITY_OPEN_ATTEMPTED_PATH"
           railway ssh \
             --project "$RAILWAY_PROJECT_ID" \
             --environment "$RAILWAY_ENVIRONMENT_ID" \
@@ -1645,6 +1648,20 @@ jobs:
               raise SystemExit("Railway direct demo response has the wrong transport")
           if response.get("temporary_owner_delegation_removed") is not True:
               raise SystemExit("Railway direct demo retained temporary owner delegation")
+          provisioning_fence = response.get("provisioning_fence")
+          if not isinstance(provisioning_fence, dict) or not (
+              provisioning_fence.get("state") == "provisioning"
+              and provisioning_fence.get("commit_sha") == os.environ["REVIEWED_DEPLOY_SHA"]
+          ):
+              raise SystemExit(
+                  "Railway direct demo did not attest exact-SHA provisioning authority"
+              )
+          reviewed_operator = response.get("reviewed_web_operator")
+          if not isinstance(reviewed_operator, dict) or (
+              reviewed_operator.get("auth_user_id")
+              != os.environ["CANONICAL_STAGING_WEB_TEST_AUTH_USER_ID"]
+          ):
+              raise SystemExit("Railway direct demo did not attest the reviewed web operator")
           write_fence = response.get("write_fence")
           if not isinstance(write_fence, dict) or not (
               write_fence.get("state") == "open"
@@ -2049,6 +2066,55 @@ jobs:
           PY
           rm -f "$LIVE18_RAILWAY_IDENTITY_ATTEMPTED_PATH" \
             "$LIVE18_RAILWAY_PRE_DEMO_RECOVERY_ATTEMPTED_PATH"
+      - name: Re-close canonical authority immediately after any Live18 failure
+        if: failure() && env.LIVE18_PROVIDER == 'railway'
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: PYTHONPATH=backend python3 backend/scripts/close_live18_railway_authority.py
+      - name: Always remove external reviewed choices and compiled fixture
+        if: always()
+        run: rm -f "$LIVE18_FIXTURE_PATH" "$LIVE18_REVIEWED_SCALARS_INPUT_PATH" "$LIVE18_REVIEWED_SCALARS_PATH" "$LIVE18_EXPENSE_RECEIPT_PATH" "$LIVE18_RAILWAY_IDENTITY_RESPONSE_PATH" "$LIVE18_RAILWAY_IDENTITY_ATTEMPTED_PATH" "$LIVE18_RAILWAY_PRE_DEMO_RECOVERY_ATTEMPTED_PATH" "$RUNNER_TEMP/live18-railway-demo-request.json" "$RUNNER_TEMP/live18-railway-identity-request.json" "$RUNNER_TEMP/live18-railway-evidence-request.json" "$RUNNER_TEMP/live18-railway-cleanup-request.json" "$RUNNER_TEMP/live18-railway-cleanup-response.json"
+      - name: Build scrubbed allowlisted live18 evidence manifest
+        if: always() && env.LIVE18_DEPLOYMENT_BOUND == 'true'
+        env:
+          LIVE18_BROWSER_OUTCOME: ${{ steps.live18_browser.outcome }}
+        run: |
+          set -euo pipefail
+          output="$RUNNER_TEMP/live18-upload/live18-evidence-manifest.json"
+          python3 backend/scripts/build_live18_artifact_manifest.py \
+            --deployed-sha "$RUNNER_TEMP/live18-deployed-sha.json" \
+            --evidence-dir "$LIVE18_EVIDENCE_DIR" \
+            --database-evidence "$LIVE18_DATABASE_EVIDENCE_PATH" \
+            --demo-evidence "$LIVE18_DEMO_EVIDENCE_PATH" \
+            --reconciliation-evidence "$LIVE18_RECONCILIATION_EVIDENCE_PATH" \
+            --operation-matrix backend/tests/live_acceptance/operation_matrix.json \
+            --browser-outcome "${LIVE18_BROWSER_OUTCOME:-skipped}" \
+            --screenshot-dir "$LIVE18_PLAYWRIGHT_ARTIFACT_DIR/screenshots" \
+            --output "$output"
+          test "$(find "$RUNNER_TEMP/live18-upload" -type f | wc -l | tr -d ' ')" = 1
+      - name: Upload scrubbed allowlisted live18 evidence only
+        if: always() && env.LIVE18_DEPLOYMENT_BOUND == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: canonical-live18-acceptance-evidence
+          path: ${{ runner.temp }}/live18-upload/live18-evidence-manifest.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload bounded evidence credential cutover receipt
+        if: always() && steps.evidence_credential_retirement.outcome != 'skipped'
+        uses: actions/upload-artifact@v4
+        with:
+          name: canonical-evidence-credential-cutover-${{ github.run_id }}
+          path: ${{ runner.temp }}/live18-evidence-credential-retirement.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Re-close canonical authority after any evidence failure
+        if: failure() && env.LIVE18_PROVIDER == 'railway'
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: PYTHONPATH=backend python3 backend/scripts/close_live18_railway_authority.py
       - name: Always remove the run-scoped Railway SSH key
         if: always() && env.LIVE18_PROVIDER == 'railway'
         env:
@@ -2092,45 +2158,9 @@ jobs:
             "$LIVE18_RAILWAY_SSH_FINGERPRINT_PATH" \
             "$LIVE18_RAILWAY_SSH_REGISTERED_PATH" \
             "$LIVE18_RAILWAY_SSH_AGENT_STARTED_PATH" \
+            "$LIVE18_RAILWAY_AUTHORITY_OPEN_ATTEMPTED_PATH" \
             "$RUNNER_TEMP/live18-railway-ssh-probe.err" \
             "$RUNNER_TEMP/live18-railway-ssh-keys-before-remove.txt" \
             "$RUNNER_TEMP/live18-railway-ssh-keys.txt" \
             "$RUNNER_TEMP/live18-railway-ssh-keys-after.txt"
           exit "$cleanup_failed"
-      - name: Always remove external reviewed choices and compiled fixture
-        if: always()
-        run: rm -f "$LIVE18_FIXTURE_PATH" "$LIVE18_REVIEWED_SCALARS_INPUT_PATH" "$LIVE18_REVIEWED_SCALARS_PATH" "$LIVE18_EXPENSE_RECEIPT_PATH" "$LIVE18_RAILWAY_IDENTITY_RESPONSE_PATH" "$LIVE18_RAILWAY_IDENTITY_ATTEMPTED_PATH" "$LIVE18_RAILWAY_PRE_DEMO_RECOVERY_ATTEMPTED_PATH" "$RUNNER_TEMP/live18-railway-demo-request.json" "$RUNNER_TEMP/live18-railway-identity-request.json" "$RUNNER_TEMP/live18-railway-evidence-request.json" "$RUNNER_TEMP/live18-railway-cleanup-request.json" "$RUNNER_TEMP/live18-railway-cleanup-response.json"
-      - name: Build scrubbed allowlisted live18 evidence manifest
-        if: always() && env.LIVE18_DEPLOYMENT_BOUND == 'true'
-        env:
-          LIVE18_BROWSER_OUTCOME: ${{ steps.live18_browser.outcome }}
-        run: |
-          set -euo pipefail
-          output="$RUNNER_TEMP/live18-upload/live18-evidence-manifest.json"
-          python3 backend/scripts/build_live18_artifact_manifest.py \
-            --deployed-sha "$RUNNER_TEMP/live18-deployed-sha.json" \
-            --evidence-dir "$LIVE18_EVIDENCE_DIR" \
-            --database-evidence "$LIVE18_DATABASE_EVIDENCE_PATH" \
-            --demo-evidence "$LIVE18_DEMO_EVIDENCE_PATH" \
-            --reconciliation-evidence "$LIVE18_RECONCILIATION_EVIDENCE_PATH" \
-            --operation-matrix backend/tests/live_acceptance/operation_matrix.json \
-            --browser-outcome "${LIVE18_BROWSER_OUTCOME:-skipped}" \
-            --screenshot-dir "$LIVE18_PLAYWRIGHT_ARTIFACT_DIR/screenshots" \
-            --output "$output"
-          test "$(find "$RUNNER_TEMP/live18-upload" -type f | wc -l | tr -d ' ')" = 1
-      - name: Upload scrubbed allowlisted live18 evidence only
-        if: always() && env.LIVE18_DEPLOYMENT_BOUND == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: canonical-live18-acceptance-evidence
-          path: ${{ runner.temp }}/live18-upload/live18-evidence-manifest.json
-          if-no-files-found: error
-          retention-days: 30
-      - name: Upload bounded evidence credential cutover receipt
-        if: always() && steps.evidence_credential_retirement.outcome != 'skipped'
-        uses: actions/upload-artifact@v4
-        with:
-          name: canonical-evidence-credential-cutover-${{ github.run_id }}
-          path: ${{ runner.temp }}/live18-evidence-credential-retirement.json
-          if-no-files-found: error
-          retention-days: 30

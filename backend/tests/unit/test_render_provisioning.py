@@ -133,8 +133,10 @@ def test_environment_mapping_uses_derived_service_origins():
 
     assert backend["CORS_ORIGINS"] == "https://frontend.onrender.com"
     assert backend["APP_URL"] == "https://frontend.onrender.com"
+    assert backend["CANONICAL_APPLICATION_PROVIDER"] == "render"
     assert set(backend) == {
         "APP_ENV",
+        "CANONICAL_APPLICATION_PROVIDER",
         "LOG_LEVEL",
         "LOG_FORMAT",
         "CORS_ORIGINS",

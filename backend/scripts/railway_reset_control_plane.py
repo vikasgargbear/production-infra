@@ -416,9 +416,22 @@ def _fence(request: Mapping[str, Any], *, action: str) -> dict[str, Any]:
     }
 
 
+def _prepare_boundary(request: Mapping[str, Any]) -> dict[str, Any]:
+    """Close public authority and migrate the reviewed source without data reset."""
+
+    secrets = _secret_environment(request, FENCE_SECRET_KEYS)
+    return prepare_reset_boundary(
+        **_request_arguments(request),
+        password=secrets["SUPABASE_DB_PASSWORD"],
+        control_transport=CONTROL_TRANSPORT_RAILWAY_IPV6,
+    )
+
+
 def execute(request: Mapping[str, Any], action: str) -> dict[str, Any]:
     boundary = _execution_boundary(request)
-    if action == "reset-boundary":
+    if action == "prepare-boundary":
+        payload = _prepare_boundary(request)
+    elif action == "reset-boundary":
         payload = _reset_boundary(request)
     elif action in {"open-fence", "close-fence"}:
         payload = _fence(request, action=action)
@@ -499,7 +512,13 @@ def _safe_error(error: BaseException, request: Mapping[str, Any] | None) -> str:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "action", choices=("reset-boundary", "open-fence", "close-fence")
+        "action",
+        choices=(
+            "prepare-boundary",
+            "reset-boundary",
+            "open-fence",
+            "close-fence",
+        ),
     )
     parser.add_argument("--input", default="-")
     parser.add_argument("--output", default="-")

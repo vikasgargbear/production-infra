@@ -41,6 +41,7 @@ export interface LoginResult {
     user?: User;
     error?: string;
     authorizationFailure?: boolean;
+    maintenanceFailure?: boolean;
     superseded?: boolean;
 }
 
@@ -80,7 +81,16 @@ const wait = (delayMs: number): Promise<void> => (
     new Promise((resolve) => window.setTimeout(resolve, delayMs))
 );
 
-async function requestErpSession(accessToken: string): Promise<Response> {
+interface ErpSessionResponse {
+    response: Response;
+    data: any;
+}
+
+function isErpMaintenance(data: any): boolean {
+    return data?.detail?.error === 'erp_maintenance';
+}
+
+async function requestErpSession(accessToken: string): Promise<ErpSessionResponse> {
     let networkError: unknown;
 
     for (const [attempt, delayMs] of SESSION_EXCHANGE_RETRY_DELAYS_MS.entries()) {
@@ -96,9 +106,14 @@ async function requestErpSession(accessToken: string): Promise<Response> {
                 headers: { Authorization: `Bearer ${accessToken}` },
                 signal: controller.signal,
             });
+            const data = await response.json().catch(() => ({}));
             const finalAttempt = attempt === SESSION_EXCHANGE_RETRY_DELAYS_MS.length - 1;
-            if (!TRANSIENT_SESSION_STATUSES.has(response.status) || finalAttempt) {
-                return response;
+            if (
+                isErpMaintenance(data)
+                || !TRANSIENT_SESSION_STATUSES.has(response.status)
+                || finalAttempt
+            ) {
+                return { response, data };
             }
         } catch (error) {
             networkError = error;
@@ -167,6 +182,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setHasCloudSession(true);
         setSessionExchangeError(result.error || 'The ERP session could not be established.');
         setState((previous) => {
+            if (result.maintenanceFailure) {
+                clearErpSessionStorage();
+                return { user: null, token: null, isAuthenticated: false, isLoading: false };
+            }
             if (previous.isAuthenticated && !result.authorizationFailure) {
                 return { ...previous, isLoading: false };
             }
@@ -191,13 +210,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 return result;
             };
             try {
-                const response = await requestErpSession(accessToken);
-                const data = await response.json().catch(() => ({}));
+                const { response, data } = await requestErpSession(accessToken);
                 if (!response.ok) {
                     return applyFailure({
                         success: false,
                         error: errorMessage(data, 'ERP access is not authorized'),
                         authorizationFailure: response.status === 401 || response.status === 403,
+                        maintenanceFailure: isErpMaintenance(data),
                     });
                 }
 

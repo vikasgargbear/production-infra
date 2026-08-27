@@ -100,7 +100,7 @@ def test_each_railway_service_is_a_single_singapore_docker_replica() -> None:
 
 
 def test_railway_healthchecks_match_service_readiness_boundaries() -> None:
-    assert _config("api")["deploy"]["healthcheckPath"] == "/ready"
+    assert _config("api")["deploy"]["healthcheckPath"] == "/health"
     assert _config("mcp")["deploy"]["healthcheckPath"] == "/health"
     assert _config("frontend")["deploy"]["healthcheckPath"] == "/health"
 
@@ -117,8 +117,8 @@ def test_force_deploy_markers_are_watched_and_bound_into_exact_images() -> None:
         assert any(fnmatch(marker, pattern) for pattern in patterns)
 
     workflow = _workflow()
-    for marker in markers.values():
-        assert f"> {marker.removeprefix('/')}" in workflow
+    assert "for marker in api mcp frontend; do" in workflow
+    assert '> "deploy/railway/$marker.force-deploy"' in workflow
     assert 'DEPLOYMENT_NONCE: ${{ github.run_id }}:${{ github.run_attempt }}' in workflow
 
     dockerfiles = {
@@ -438,7 +438,7 @@ def test_workflow_uploads_fresh_source_and_polls_exact_deployment_ids() -> None:
     assert ".meta.serviceManifest.build.builder" in workflow
     assert ".meta.serviceManifest.build.dockerfilePath" in workflow
     assert ".meta.serviceManifest.deploy.startCommand" in workflow
-    assert 'require_deployment_contract "$RAILWAY_API_SERVICE" "$api_deployment_id" /deploy/railway/api.railway.json /deploy/railway/api.Dockerfile /ready "" "$api_deployment_message" true' in workflow
+    assert 'require_deployment_contract "$RAILWAY_API_SERVICE" "$api_deployment_id" /deploy/railway/api.railway.json /deploy/railway/api.Dockerfile /health "" "$api_deployment_message" true' in workflow
     assert 'require_deployment_contract "$RAILWAY_MCP_SERVICE" "$mcp_deployment_id" /deploy/railway/mcp.railway.json /deploy/railway/mcp.Dockerfile /health "$mcp_start_command" "$mcp_deployment_message" false' in workflow
     assert 'require_deployment_contract "$RAILWAY_FRONTEND_SERVICE" "$frontend_deployment_id" /deploy/railway/frontend.railway.json /frontend/Dockerfile /health "" "$frontend_deployment_message" false' in workflow
     assert ".meta.serviceManifest.deploy.healthcheckPath" in workflow
@@ -453,7 +453,7 @@ def test_exact_deployment_poll_recovers_from_malformed_provider_response(
 ) -> None:
     script = _workflow_run_script(
         "Require each exact upload to become the active deployment",
-        "Prove exact Railway authority before reopening reset fence",
+        "Prove exact Railway authority remains closed before demo provisioning",
     )
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
@@ -489,7 +489,7 @@ case "$service" in
     id=11111111-1111-4111-8111-111111111111
     config=/deploy/railway/api.railway.json
     dockerfile=/deploy/railway/api.Dockerfile
-    health=/ready
+        health=/health
     start=""
     ipv6=true
     message=$(<api-deployment-message)
@@ -812,14 +812,18 @@ def test_workflow_requires_all_public_health_and_readiness_boundaries() -> None:
     ):
         assert endpoint in workflow
 
-    # One pre-reset wake-up plus the two public readiness probes.
-    assert workflow.count("curl --fail-with-body") == 3
-    assert "Verify exact API database isolation before reopening writes" in workflow
+    # Pre-reset wake-up and liveness probes use fail-with-body; the deliberate
+    # maintenance readiness probe captures its expected HTTP 503 explicitly.
+    assert workflow.count("curl --fail-with-body") == 2
+    assert "--write-out '%{http_code}'" in workflow
+    assert 'test "$status" = 503' in workflow
+    assert '.status == "maintenance"' in workflow
+    assert "Verify exact API maintenance and database isolation before demo provisioning" in workflow
     assert "fetch()" in workflow
     assert workflow.count(" &\n") >= 6
     assert '.status == "healthy" and .git_commit == $sha' in workflow
     assert '.status == "ok" and .git_commit == $sha' in workflow
-    assert workflow.count('.status == "ready"') == 3
+    assert workflow.count('.status == "ready"') == 2
     assert workflow.count('.database.transport == "supabase_direct"') == 2
     assert workflow.count('.database.principal == "erp_runtime"') == 2
     assert workflow.count(".database.principal_isolated == true") == 2

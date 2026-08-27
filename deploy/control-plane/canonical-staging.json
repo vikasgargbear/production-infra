@@ -67,7 +67,8 @@
           "kind": "web_service",
           "health": "/health",
           "readiness": "/ready",
-          "closed_fence_status": 200
+          "closed_fence_status": 503,
+          "closed_fence_reported_status": "maintenance"
         },
         "mcp": {
           "id": "srv-da39uem7bikc739guke0",
@@ -76,7 +77,8 @@
           "kind": "web_service",
           "health": "/health",
           "readiness": "/ready",
-          "closed_fence_status": 503
+          "closed_fence_status": 503,
+          "closed_fence_reported_status": "not_ready"
         },
         "frontend": {
           "id": "srv-da2saj1t0dsc73b3fkbg",
@@ -119,7 +121,8 @@
           "kind": "web_service",
           "health": "/health",
           "readiness": "/ready",
-          "closed_fence_status": 200
+          "closed_fence_status": 503,
+          "closed_fence_reported_status": "maintenance"
         },
         "mcp": {
           "id": "64896a64-7eae-4ece-a8a4-bc4499c7c7e0",
@@ -128,7 +131,8 @@
           "kind": "web_service",
           "health": "/health",
           "readiness": "/ready",
-          "closed_fence_status": 503
+          "closed_fence_status": 503,
+          "closed_fence_reported_status": "not_ready"
         },
         "frontend": {
           "id": "c0ae6736-d7cc-46ee-bbcf-f9604b6c6950",
@@ -209,9 +213,11 @@
     {"name": "deploy_exact_sha", "after": ["close_fence"]},
     {"name": "pre_fence_provenance", "after": ["deploy_exact_sha"]},
     {"name": "prove_competing_providers_inactive", "after": ["pre_fence_provenance"]},
-    {"name": "open_fence", "after": ["prove_competing_providers_inactive"]},
+    {"name": "provisioning_fence", "after": ["prove_competing_providers_inactive"]},
+    {"name": "provision_demo", "after": ["provisioning_fence"]},
+    {"name": "open_fence", "after": ["provision_demo"]},
     {"name": "full_readiness", "after": ["open_fence"]},
-    {"name": "oauth_demo_live18", "after": ["full_readiness"]},
-    {"name": "promotion_evidence", "after": ["oauth_demo_live18"]}
+    {"name": "live18", "after": ["full_readiness"]},
+    {"name": "promotion_evidence", "after": ["live18"]}
   ]
 }

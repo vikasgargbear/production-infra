@@ -257,7 +257,7 @@ def test_render_blueprint_is_manual_free_and_health_checked():
     assert "region: singapore" in backend
     assert "dockerfilePath: ./backend/Dockerfile" in backend
     assert "dockerContext: ./backend" in backend
-    assert "healthCheckPath: /ready" in backend
+    assert "healthCheckPath: /health" in backend
     assert "maxShutdownDelaySeconds: 60" in backend
     assert 'autoDeployTrigger: "off"' in backend
     assert "key: PORT" not in backend
@@ -351,10 +351,9 @@ def test_render_readiness_requires_database_without_replacing_liveness():
     mcp_service = blueprint.split("name: aasopharma-mcp-pilot", 1)[1].split(
         "  - type: web", 1
     )[0]
-    assert "healthCheckPath: /ready" in api_service
+    assert "healthCheckPath: /health" in api_service
     assert "healthCheckPath: /health" in mcp_service
-    assert provisioner.count('"healthCheckPath": "/ready"') == 1
-    assert provisioner.count('"healthCheckPath": "/health"') == 1
+    assert provisioner.count('"healthCheckPath": "/health"') == 3
 
 
 def test_render_pilot_deploys_from_main_only_after_deterministic_ci_passes():
@@ -1324,6 +1323,8 @@ def test_live18_is_opt_in_exact_sha_external_fixture_and_always_cleaned():
         "Provision disposable identities and MCP authority over Railway direct IPv6",
         "Capture PostgreSQL evidence from exact Railway deployment over direct IPv6",
         "Always clean Railway-direct temporary identities and authorities",
+        "Re-close canonical authority immediately after any Live18 failure",
+        "Re-close canonical authority after any evidence failure",
         "Always remove the run-scoped Railway SSH key",
     }
     recovery_step = "Recover stale Railway-direct identities before demo provisioning"

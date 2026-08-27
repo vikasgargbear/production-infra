@@ -216,6 +216,8 @@ def test_closed_fence_distinguishes_expected_mcp_not_ready(monkeypatch) -> None:
             return 404, None, ""
         if url.endswith("/build-metadata.json") or url.endswith("/health"):
             return 200, {"git_commit": EXPECTED_SHA}, ""
+        if "aasopharma-api-pilot-production" in url and url.endswith("/ready"):
+            return 503, {"status": "maintenance"}, ""
         if "pharma-backend" in url and url.endswith("/ready"):
             return 503, {"status": "not_ready"}, ""
         return 200, {"status": "ready"}, ""

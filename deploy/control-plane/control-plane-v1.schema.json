@@ -214,7 +214,8 @@
         "kind": {"enum": ["web_service", "static_site"]},
         "health": {"type": "string", "pattern": "^/"},
         "readiness": {"type": "string", "pattern": "^/"},
-        "closed_fence_status": {"enum": [200, 503]}
+        "closed_fence_status": {"enum": [200, 503]},
+        "closed_fence_reported_status": {"enum": ["maintenance", "not_ready"]}
       }
     }
   }

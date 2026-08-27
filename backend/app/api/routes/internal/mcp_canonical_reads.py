@@ -14,6 +14,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from ....core.auth.jwt_auth import decode_jwt
+from ....core.auth.session_authority import require_canonical_session_authority
 from ....core.database import get_db
 from .mcp_agent_grants import _internal_auth, bearer
 from .mcp_contract import CanonicalReadPolicy, policy_for
@@ -93,6 +94,7 @@ def get_canonical_delegation(
 ) -> CanonicalDelegation:
     """Authenticate service+delegation and revalidate all canonical authority facts."""
     _internal_auth(service_credentials)
+    require_canonical_session_authority(db)
     claims = _parse_delegated_token(delegated_authorization)
     operation_key = claims.get("mcp_operation")
     capability_code = claims.get("mcp_capability")

@@ -17,6 +17,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from ....core.auth.jwt_auth import create_access_token
+from ....core.auth.session_authority import require_canonical_session_authority
 from ....core.database import get_db
 from ....domain.operator_actions import ActionPolicy
 from ....domain.operator_actions import policy_for as operator_policy_for
@@ -551,6 +552,7 @@ def authorize_agent_grant(
     db: Session = Depends(get_db),
 ) -> GrantResponse:
     _internal_auth(credentials)
+    require_canonical_session_authority(db)
     _require_release_gates()
     policy = policy_for(request.operation_key)
     if (
@@ -621,6 +623,7 @@ def authorize_operator_action(
 ) -> OperatorGrantResponse:
     """Issue one short-lived, command/branch-bound operator delegation."""
     _internal_auth(credentials)
+    require_canonical_session_authority(db)
     _require_operator_release_gates()
     policy = operator_policy_for(request.operation_key) or master_create_policy_for(
         request.operation_key
@@ -711,6 +714,7 @@ def agent_grant_readiness(
     db: Session = Depends(get_db),
 ):
     _internal_auth(credentials)
+    require_canonical_session_authority(db)
     _require_readiness_gates()
     client_ids = _configured_client_ids()
     if not client_ids:

@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Close or open the canonical staging write boundary during deployment.
+"""Control the canonical deployment command and public-session boundaries.
 
 Render cannot replace a suspended service without briefly resuming its current
 artifact.  The database fence makes that interval read-only for every
 application/service role by revoking schema usage from every canonical command
-schema.  Opening the fence restores the exact Alembic-owned grant matrix; it
-never copies mutable ACL state from the database.
+schema.  Provisioning restores only the exact Alembic-owned command matrix;
+opening additionally admits public sessions through one dedicated NOLOGIN
+role.  The controller never copies mutable ACL state from the database.
 """
 
 from __future__ import annotations
@@ -24,6 +25,7 @@ from psycopg2 import sql
 
 
 MIGRATION_OWNER: Final = "erp_migration_owner"
+SESSION_AUTHORITY_ROLE: Final = "erp_session_authority"
 MANAGED_PRINCIPALS: Final = (
     "erp_app",
     "erp_runtime",
@@ -56,6 +58,7 @@ EXPECTED_OPEN_EFFECTIVE_USAGE: Final[dict[str, tuple[str, ...]]] = {
     for schema, direct_grants in COMMAND_SCHEMA_GRANTS.items()
 }
 FENCE_LOCK_KEY: Final = 8_260_826_1
+FENCE_STATES: Final = ("closed", "provisioning", "open")
 
 
 class FenceError(RuntimeError):
@@ -90,7 +93,40 @@ def _database_failure_code(error: Exception) -> str:
     return f"{type(error).__name__}{suffix}"
 
 
-def _assert_catalog(cursor: Any) -> None:
+def _session_role_exists(cursor: Any) -> bool:
+    cursor.execute(
+        "SELECT EXISTS(SELECT 1 FROM pg_catalog.pg_roles WHERE rolname=%s)",
+        (SESSION_AUTHORITY_ROLE,),
+    )
+    return bool(cursor.fetchone()[0])
+
+
+def _assert_session_role_posture(cursor: Any) -> None:
+    cursor.execute(
+        """
+        SELECT rolcanlogin,rolsuper,rolcreatedb,rolcreaterole,rolinherit,
+               rolbypassrls,rolreplication
+          FROM pg_catalog.pg_roles
+         WHERE rolname=%s
+        """,
+        (SESSION_AUTHORITY_ROLE,),
+    )
+    row = cursor.fetchone()
+    if row is None:
+        raise FenceError("canonical session-authority role is absent")
+    if tuple(bool(value) for value in row) != (
+        False,
+        False,
+        False,
+        False,
+        True,
+        False,
+        False,
+    ):
+        raise FenceError("canonical session-authority role posture is invalid")
+
+
+def _assert_catalog(cursor: Any, *, require_session_role: bool) -> None:
     cursor.execute(
         """
         SELECT namespace.nspname, owner.rolname
@@ -123,6 +159,8 @@ def _assert_catalog(cursor: Any) -> None:
     if principals != set(MANAGED_PRINCIPALS):
         missing = sorted(set(MANAGED_PRINCIPALS) - principals)
         raise FenceError(f"canonical service role set is incomplete: {missing}")
+    if require_session_role:
+        _assert_session_role_posture(cursor)
 
 
 def _set_usage(cursor: Any, *, open_fence: bool) -> None:
@@ -147,16 +185,69 @@ def _set_usage(cursor: Any, *, open_fence: bool) -> None:
             )
 
 
-def _set_runtime_membership(cursor: Any, *, open_fence: bool) -> None:
+def _set_runtime_membership(cursor: Any, *, command_authority: bool) -> None:
     cursor.execute(
         "GRANT erp_app TO erp_runtime"
-        if open_fence
+        if command_authority
         else "REVOKE erp_app FROM erp_runtime"
     )
 
 
+def _set_session_authority(cursor: Any, *, enabled: bool) -> bool:
+    role_exists = _session_role_exists(cursor)
+    if not role_exists:
+        if enabled:
+            raise FenceError("canonical session-authority role is absent")
+        return False
+    cursor.execute(
+        sql.SQL("REVOKE {} FROM {}").format(
+            sql.Identifier(SESSION_AUTHORITY_ROLE),
+            sql.SQL(", ").join(
+                sql.Identifier(principal) for principal in MANAGED_PRINCIPALS
+            ),
+        )
+    )
+    if enabled:
+        cursor.execute(
+            sql.SQL("GRANT {} TO {}").format(
+                sql.Identifier(SESSION_AUTHORITY_ROLE),
+                sql.Identifier("erp_runtime"),
+            )
+        )
+    return True
+
+
 def _runtime_inherits_app(cursor: Any) -> bool:
     cursor.execute("SELECT pg_catalog.pg_has_role('erp_runtime','erp_app','USAGE')")
+    return bool(cursor.fetchone()[0])
+
+
+def _session_authority_members(cursor: Any) -> tuple[str, ...]:
+    if not _session_role_exists(cursor):
+        return ()
+    cursor.execute(
+        """
+        SELECT member.rolname
+          FROM pg_catalog.pg_auth_members AS membership
+          JOIN pg_catalog.pg_roles AS granted
+            ON granted.oid=membership.roleid
+          JOIN pg_catalog.pg_roles AS member
+            ON member.oid=membership.member
+         WHERE granted.rolname=%s
+         ORDER BY member.rolname
+        """,
+        (SESSION_AUTHORITY_ROLE,),
+    )
+    return tuple(str(row[0]) for row in cursor.fetchall())
+
+
+def _runtime_inherits_session_authority(cursor: Any) -> bool:
+    if not _session_role_exists(cursor):
+        return False
+    cursor.execute(
+        "SELECT pg_catalog.pg_has_role('erp_runtime',%s,'USAGE')",
+        (SESSION_AUTHORITY_ROLE,),
+    )
     return bool(cursor.fetchone()[0])
 
 
@@ -254,8 +345,10 @@ def apply_fence(
     commit_sha: str,
 ) -> dict[str, Any]:
     commit_sha = _validate_commit_sha(commit_sha)
-    if action not in {"close", "open", "status"}:
-        raise FenceError("write-fence action must be close, open, or status")
+    if action not in {"close", "provision", "open", "status"}:
+        raise FenceError(
+            "write-fence action must be close, provision, open, or status"
+        )
 
     stage = "connect"
     try:
@@ -271,29 +364,63 @@ def apply_fence(
                         (FENCE_LOCK_KEY,),
                     )
                     stage = "catalog"
-                    _assert_catalog(cursor)
+                    # The close operation is intentionally usable at revision
+                    # 0031, before the dedicated 0032 session role exists.  It
+                    # must first remove every older command path so migration
+                    # ordering cannot deadlock deployment recovery.
+                    _assert_catalog(
+                        cursor,
+                        require_session_role=action != "close",
+                    )
                     if action != "status":
+                        command_authority = action in {"provision", "open"}
+                        stage = "session_authority_membership"
+                        session_role_present = _set_session_authority(
+                            cursor,
+                            enabled=action == "open",
+                        )
                         stage = "runtime_membership"
-                        _set_runtime_membership(cursor, open_fence=action == "open")
+                        _set_runtime_membership(
+                            cursor,
+                            command_authority=command_authority,
+                        )
+                    else:
+                        session_role_present = True
                     stage = "migration_owner_role"
                     cursor.execute("SET LOCAL ROLE erp_migration_owner")
                     if action != "status":
                         stage = "schema_usage"
-                        _set_usage(cursor, open_fence=action == "open")
+                        _set_usage(
+                            cursor,
+                            open_fence=action in {"provision", "open"},
+                        )
                     stage = "matrix_readback"
                     matrix = _read_matrix(cursor)
                     stage = "runtime_membership_readback"
                     runtime_inherits_app = _runtime_inherits_app(cursor)
+                    stage = "session_authority_readback"
+                    session_role_present = _session_role_exists(cursor)
+                    runtime_inherits_session_authority = (
+                        _runtime_inherits_session_authority(cursor)
+                    )
+                    session_authority_members = _session_authority_members(cursor)
                     stage = "mutation_privilege_readback"
                     mutation_privileges = _service_mutation_privileges(cursor)
                     if action != "status":
                         stage = "matrix_validation"
-                        _validate_matrix(matrix, open_fence=action == "open")
+                        _validate_matrix(
+                            matrix,
+                            open_fence=action in {"provision", "open"},
+                        )
                     stage = "state_validation"
                     if action == "close":
-                        if runtime_inherits_app:
+                        if runtime_inherits_app or runtime_inherits_session_authority:
                             raise FenceError(
-                                "closed write fence retained erp_runtime membership in erp_app"
+                                "closed write fence retained runtime authority membership"
+                            )
+                        if session_authority_members:
+                            raise FenceError(
+                                "closed write fence retained unexpected session-authority members"
                             )
                         offenders = {
                             principal: counts
@@ -307,10 +434,25 @@ def apply_fence(
                                     offenders, sort_keys=True, separators=(",", ":")
                                 )
                             )
-                    elif action == "open" and not runtime_inherits_app:
-                        raise FenceError(
-                            "open write fence did not restore erp_runtime membership in erp_app"
+                    elif action in {"provision", "open"}:
+                        if not runtime_inherits_app:
+                            raise FenceError(
+                                f"{action} write fence did not restore command authority"
+                            )
+                        expected_session_members = (
+                            ("erp_runtime",) if action == "open" else ()
                         )
+                        if (
+                            runtime_inherits_session_authority
+                            == (action == "open")
+                            and session_authority_members
+                            == expected_session_members
+                        ):
+                            pass
+                        else:
+                            raise FenceError(
+                                f"{action} write fence session authority is inconsistent"
+                            )
 
                     schema_usage_open = all(
                         {
@@ -331,18 +473,30 @@ def apply_fence(
                     )
                     state = (
                         "open"
-                        if schema_usage_open and runtime_inherits_app
+                        if schema_usage_open
+                        and runtime_inherits_app
+                        and runtime_inherits_session_authority
+                        and session_authority_members == ("erp_runtime",)
+                        else "provisioning"
+                        if schema_usage_open
+                        and runtime_inherits_app
+                        and not runtime_inherits_session_authority
+                        and not session_authority_members
                         else "closed"
                         if schema_usage_closed
                         and not runtime_inherits_app
+                        and not runtime_inherits_session_authority
+                        and not session_authority_members
                         and no_service_mutations
                         else "drifted"
                     )
                     if action == "status" and state == "drifted":
                         raise FenceError("canonical write-fence ACL matrix is drifted")
-                    if action != "status" and state != action.replace(
-                        "close", "closed"
-                    ):
+                    expected_state = {
+                        "close": "closed",
+                        "provision": "provisioning",
+                    }.get(action, action)
+                    if action != "status" and state != expected_state:
                         raise FenceError(
                             f"canonical write fence did not reach {action} state"
                         )
@@ -364,6 +518,9 @@ def apply_fence(
         },
         "effective_usage": matrix,
         "runtime_inherits_erp_app": runtime_inherits_app,
+        "session_authority_role_present": session_role_present,
+        "runtime_inherits_session_authority": runtime_inherits_session_authority,
+        "session_authority_members": list(session_authority_members),
         "service_mutation_privileges": mutation_privileges,
     }
 
@@ -384,7 +541,9 @@ def _write_receipt(path: Path, payload: dict[str, Any]) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("close", "open", "status"))
+    parser.add_argument(
+        "action", choices=("close", "provision", "open", "status")
+    )
     parser.add_argument("--database-url", default=os.getenv("PSYCOPG_DATABASE_URL", ""))
     parser.add_argument("--commit-sha", required=True)
     parser.add_argument("--receipt", type=Path, required=True)

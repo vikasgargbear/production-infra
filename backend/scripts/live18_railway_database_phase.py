@@ -91,6 +91,7 @@ DEMO_SECRET_KEYS = {
     "SUPABASE_DB_PASSWORD",
     "ERP_REGULATORY_IMPORTER_PASSWORD",
 }
+CLOSE_SECRET_KEYS = {"SUPABASE_DB_PASSWORD"}
 IDENTITY_ENVIRONMENT_KEYS = {
     "PLAYWRIGHT_LIVE_REQUESTER_EMAIL",
     "PLAYWRIGHT_LIVE_REQUESTER_PASSWORD",
@@ -621,6 +622,59 @@ def _open_session_authority_after_demo(
     return receipt
 
 
+def _set_session_authority_state(
+    admin_url: str,
+    expected_sha: str,
+    *,
+    action: str,
+    expected_state: str,
+) -> dict[str, Any]:
+    """Apply one exact fence transition from a clean temporary owner boundary."""
+
+    _verify_admin_owner_delegation_removed(admin_url)
+    with _temporary_admin_owner_delegation(admin_url):
+        receipt = apply_fence(
+            admin_url,
+            action=action,
+            commit_sha=expected_sha,
+        )
+    if receipt.get("state") != expected_state:
+        raise RailwayDatabasePhaseError(
+            f"Canonical session authority did not enter {expected_state}"
+        )
+    return receipt
+
+
+def _validate_reviewed_web_operator(
+    summary: Any,
+    reviewed_web_auth_user_id: str,
+) -> dict[str, str]:
+    if not isinstance(summary, dict):
+        raise RailwayDatabasePhaseError("Canonical demo summary is not one object")
+    authority = summary.get("reviewed_web_operator")
+    required_keys = {
+        "auth_user_id",
+        "user_id",
+        "membership_id",
+        "access_grant_id",
+    }
+    if not isinstance(authority, dict) or set(authority) != required_keys:
+        raise RailwayDatabasePhaseError(
+            "Canonical demo omitted reviewed web authority readback"
+        )
+    try:
+        canonical = {key: str(UUID(str(value))) for key, value in authority.items()}
+    except ValueError as exc:
+        raise RailwayDatabasePhaseError(
+            "Canonical demo reviewed web authority is not UUID-bound"
+        ) from exc
+    if canonical["auth_user_id"] != reviewed_web_auth_user_id:
+        raise RailwayDatabasePhaseError(
+            "Canonical demo reviewed web authority differs from the reviewed identity"
+        )
+    return canonical
+
+
 def _demo_provision(request: dict[str, Any]) -> dict[str, Any]:
     expected_sha, project_ref = _validated_boundary(request)
     _deployed_oauth_client_id()
@@ -677,54 +731,85 @@ def _demo_provision(request: dict[str, Any]) -> dict[str, Any]:
     migration = _verify_migration_head(admin_url)
     if migration["revision"] != expected_head:
         raise RailwayDatabasePhaseError("Repeated Alembic upgrade did not reach exact head")
-    with tempfile.TemporaryDirectory(prefix="live18-railway-demo-") as raw:
-        directory = Path(raw)
-        receipt_path = directory / "reviewed-expense-receipt.pdf"
-        receipt_path.write_bytes(receipt)
-        receipt_path.chmod(0o600)
-        evidence_dir = directory / "evidence"
-        environment = {
-            "CANONICAL_DEMO_WRITE_ACK": "PROVISION_DISPOSABLE_DEMO",
-            "CANONICAL_STAGING_PROJECT_REF": project_ref,
-            "CANONICAL_PRODUCTION_PROJECT_REFS": production_refs,
-            "CANONICAL_DEMO_EVIDENCE_DIR": str(evidence_dir),
-            "CANONICAL_DEMO_EXPENSE_RECEIPT_PATH": str(receipt_path),
-            "CANONICAL_DEMO_EXPENSE_RECEIPT_SHA256": receipt_sha256,
-            "CANONICAL_DEMO_API_URL": api_origin,
-            "LIVE18_REVIEWED_SCALARS_JSON": reviewed_scalar_json,
-            "PSYCOPG_DATABASE_URL": admin_url,
-            "ERP_RUNTIME_DATABASE_URL": runtime_url,
-            "ERP_CALCULATOR_DATABASE_URL": calculator_url,
-            "ERP_REGULATORY_IMPORTER_DATABASE_URL": importer_url,
-            "GITHUB_RUN_ID": run_id,
-            "GITHUB_RUN_ATTEMPT": run_attempt,
-            "CANONICAL_STAGING_WEB_TEST_AUTH_USER_ID": reviewed_web_auth_user_id,
-            "PGOPTIONS": (
-                "-c statement_timeout=120000 -c lock_timeout=15000 "
-                "-c idle_in_transaction_session_timeout=180000"
-            ),
-        }
-        with _temporary_admin_owner_delegation(admin_url):
-            with _temporary_environment(environment), contextlib.redirect_stdout(sys.stderr):
-                # Import after binding the run-scoped environment because the demo module
-                # intentionally derives deterministic IDs at import time.
-                import provision_canonical_demo  # noqa: PLC0415
-
-                if provision_canonical_demo.main() != 0:
-                    raise RailwayDatabasePhaseError("Canonical demo returned non-zero")
-        summary_path = evidence_dir / "canonical-demo-summary.json"
-        if not summary_path.is_file():
-            raise RailwayDatabasePhaseError("Canonical demo summary was not produced")
-        summary = json.loads(summary_path.read_text(encoding="utf-8"))
-        evidence_hashes = {
-            path.name: hashlib.sha256(path.read_bytes()).hexdigest()
-            for path in sorted(evidence_dir.iterdir())
-            if path.is_file()
-        }
-        write_fence = _open_session_authority_after_demo(
+    provisioning_attempted = False
+    try:
+        # Provisioning restores only the command authority required by the
+        # exact deployed demo process. Public browser and normal MCP sessions
+        # remain closed until all data and reviewed-user readbacks reconcile.
+        provisioning_attempted = True
+        provisioning_fence = _set_session_authority_state(
             admin_url,
             expected_sha,
+            action="provision",
+            expected_state="provisioning",
         )
+        with tempfile.TemporaryDirectory(prefix="live18-railway-demo-") as raw:
+            directory = Path(raw)
+            receipt_path = directory / "reviewed-expense-receipt.pdf"
+            receipt_path.write_bytes(receipt)
+            receipt_path.chmod(0o600)
+            evidence_dir = directory / "evidence"
+            environment = {
+                "CANONICAL_DEMO_WRITE_ACK": "PROVISION_DISPOSABLE_DEMO",
+                "CANONICAL_PROVISIONING_PROVIDER": "railway",
+                "CANONICAL_STAGING_PROJECT_REF": project_ref,
+                "CANONICAL_PRODUCTION_PROJECT_REFS": production_refs,
+                "CANONICAL_DEMO_EVIDENCE_DIR": str(evidence_dir),
+                "CANONICAL_DEMO_EXPENSE_RECEIPT_PATH": str(receipt_path),
+                "CANONICAL_DEMO_EXPENSE_RECEIPT_SHA256": receipt_sha256,
+                "CANONICAL_DEMO_API_URL": api_origin,
+                "LIVE18_REVIEWED_SCALARS_JSON": reviewed_scalar_json,
+                "PSYCOPG_DATABASE_URL": admin_url,
+                "ERP_RUNTIME_DATABASE_URL": runtime_url,
+                "ERP_CALCULATOR_DATABASE_URL": calculator_url,
+                "ERP_REGULATORY_IMPORTER_DATABASE_URL": importer_url,
+                "GITHUB_RUN_ID": run_id,
+                "GITHUB_RUN_ATTEMPT": run_attempt,
+                "CANONICAL_STAGING_WEB_TEST_AUTH_USER_ID": reviewed_web_auth_user_id,
+                "PGOPTIONS": (
+                    "-c statement_timeout=120000 -c lock_timeout=15000 "
+                    "-c idle_in_transaction_session_timeout=180000"
+                ),
+            }
+            with _temporary_admin_owner_delegation(admin_url):
+                with _temporary_environment(environment), contextlib.redirect_stdout(sys.stderr):
+                    # Import after binding the run-scoped environment because the demo module
+                    # intentionally derives deterministic IDs at import time.
+                    import provision_canonical_demo  # noqa: PLC0415
+
+                    if provision_canonical_demo.main() != 0:
+                        raise RailwayDatabasePhaseError("Canonical demo returned non-zero")
+            summary_path = evidence_dir / "canonical-demo-summary.json"
+            if not summary_path.is_file():
+                raise RailwayDatabasePhaseError("Canonical demo summary was not produced")
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            reviewed_web_operator = _validate_reviewed_web_operator(
+                summary,
+                reviewed_web_auth_user_id,
+            )
+            evidence_hashes = {
+                path.name: hashlib.sha256(path.read_bytes()).hexdigest()
+                for path in sorted(evidence_dir.iterdir())
+                if path.is_file()
+            }
+            write_fence = _open_session_authority_after_demo(
+                admin_url,
+                expected_sha,
+            )
+    except BaseException as error:
+        if provisioning_attempted:
+            try:
+                _set_session_authority_state(
+                    admin_url,
+                    expected_sha,
+                    action="close",
+                    expected_state="closed",
+                )
+            except BaseException:
+                raise RailwayDatabasePhaseError(
+                    "Canonical demo failed and compensating session-authority closure failed"
+                ) from None
+        raise error
     response = {
         "schema": RESPONSE_SCHEMA,
         "action": "provision-demo",
@@ -732,10 +817,38 @@ def _demo_provision(request: dict[str, Any]) -> dict[str, Any]:
         "migration": migration,
         "demo_summary": summary,
         "reviewed_web_auth_user_id": reviewed_web_auth_user_id,
+        "reviewed_web_operator": reviewed_web_operator,
         "evidence_sha256": evidence_hashes,
         "transport": "supabase_direct_ipv6_from_railway",
         "temporary_owner_delegation_removed": True,
+        "provisioning_fence": provisioning_fence,
         "write_fence": write_fence,
+    }
+    response["content_sha256"] = _content_hash(response)
+    return response
+
+
+def _close_authority(request: dict[str, Any]) -> dict[str, Any]:
+    expected_sha, project_ref = _validated_boundary(request)
+    secrets = _exact_secret_environment(request, CLOSE_SECRET_KEYS)
+    admin_url = _admin_direct_url(
+        project_ref,
+        secrets["SUPABASE_DB_PASSWORD"],
+        "canonical_live18_failure_compensation",
+    )
+    receipt = _set_session_authority_state(
+        admin_url,
+        expected_sha,
+        action="close",
+        expected_state="closed",
+    )
+    response = {
+        "schema": RESPONSE_SCHEMA,
+        "action": "close-authority",
+        **_response_boundary(request),
+        "write_fence": receipt,
+        "transport": "supabase_direct_ipv6_from_railway",
+        "temporary_owner_delegation_removed": True,
     }
     response["content_sha256"] = _content_hash(response)
     return response
@@ -1367,6 +1480,7 @@ def main(argv: list[str] | None = None) -> int:
         "action",
         choices=(
             "provision-demo",
+            "close-authority",
             "provision-identities",
             "recover-identities-before-demo",
             "cleanup-identities",
@@ -1379,6 +1493,8 @@ def main(argv: list[str] | None = None) -> int:
     request = _read_request(arguments.input)
     if arguments.action == "provision-demo":
         response = _demo_provision(request)
+    elif arguments.action == "close-authority":
+        response = _close_authority(request)
     elif arguments.action == "provision-identities":
         response = _identity_provision(request)
     elif arguments.action == "recover-identities-before-demo":

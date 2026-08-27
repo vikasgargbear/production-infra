@@ -240,6 +240,22 @@ def _database_readiness() -> dict:
                            'erp_migration_owner',
                            'MEMBER'
                        ) AS migration_owner_member,
+                       pg_has_role(
+                           current_user,
+                           'erp_app',
+                           'USAGE'
+                       ) AS command_authority,
+                       pg_catalog.to_regrole('erp_session_authority') IS NOT NULL
+                         AS session_role_exists,
+                       CASE
+                         WHEN pg_catalog.to_regrole('erp_session_authority') IS NULL
+                           THEN false
+                         ELSE pg_has_role(
+                           current_user,
+                           pg_catalog.to_regrole('erp_session_authority'),
+                           'USAGE'
+                         )
+                       END AS session_authority,
                        current_setting('row_security') = 'on' AS row_security
                   FROM pg_catalog.pg_roles AS role
                  WHERE role.rolname=current_user
@@ -269,6 +285,9 @@ def _database_readiness() -> dict:
         "principal": row["principal"],
         "principal_isolated": principal_isolated,
         "migration_owner_member": bool(row["migration_owner_member"]),
+        "command_authority": bool(row["command_authority"]),
+        "session_role_exists": bool(row["session_role_exists"]),
+        "session_authority": bool(row["session_authority"]),
         "row_security": row_security,
         "ip_version": required_ip_version,
     }
@@ -286,6 +305,17 @@ async def readiness_check():
 
     if not ready:
         return JSONResponse(status_code=503, content={"status": "not_ready"})
+    authority_open = (
+        ready["principal_isolated"]
+        and ready["command_authority"]
+        and ready["session_role_exists"]
+        and ready["session_authority"]
+    )
+    if not authority_open:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "maintenance", "database": ready},
+        )
     return {"status": "ready", "database": ready}
 
 # =============================================================================

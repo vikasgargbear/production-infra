@@ -2710,9 +2710,38 @@ def token(
     user_id = IDS["reviewer_user"] if approver else IDS["operator_user"]
     membership_id = IDS["reviewer_membership"] if approver else IDS["operator_membership"]
     agent_grant_id = IDS["legacy_approver_agent_grant"] if approver else IDS["agent_grant"]
+    provisioning_provider = os.getenv("CANONICAL_PROVISIONING_PROVIDER", "").strip().lower()
+    token_profile = "canonical_operator_delegation_v1"
+    provisioning_claims: dict[str, str] = {}
+    if provisioning_provider:
+        sha_environment = {
+            "railway": "RAILWAY_GIT_COMMIT_SHA",
+            "render": "RENDER_GIT_COMMIT",
+        }.get(provisioning_provider)
+        if sha_environment is None:
+            raise RuntimeError("canonical demo provisioning provider is not reviewed")
+        deployment_sha = required(sha_environment).lower()
+        if re.fullmatch(r"[0-9a-f]{40}", deployment_sha) is None:
+            raise RuntimeError("canonical demo provisioning SHA is not exact")
+        run_id = required("GITHUB_RUN_ID")
+        run_attempt = required("GITHUB_RUN_ATTEMPT")
+        if (
+            not run_id.isdigit()
+            or str(int(run_id)) != run_id
+            or not run_attempt.isdigit()
+            or str(int(run_attempt)) != run_attempt
+        ):
+            raise RuntimeError("canonical demo provisioning run identity is invalid")
+        token_profile = "canonical_provisioning_operator_v1"
+        provisioning_claims = {
+            "provisioning_provider": provisioning_provider,
+            "provisioning_deployment_sha": deployment_sha,
+            "provisioning_run_id": run_id,
+            "provisioning_run_attempt": run_attempt,
+        }
     claims: dict[str, Any] = {
         "operator_delegated": True,
-        "token_profile": "canonical_operator_delegation_v1",
+        "token_profile": token_profile,
         "operator_operation": operation,
         "operator_permission": permission,
         "operator_organization_scope": True,
@@ -2729,6 +2758,7 @@ def token(
         "iss": "aasopharma-api",
         "aud": "aasopharma-api",
         "token_use": "access",
+        **provisioning_claims,
     }
     if command_id:
         claims["operator_command_request_id"] = command_id
@@ -5826,16 +5856,7 @@ def main() -> int:
     with database_connection("PSYCOPG_DATABASE_URL") as bootstrap:
         bootstrap_identity(bootstrap)
 
-    # bootstrap_identity deliberately assumes the migration-owner role for its
-    # whole transaction.  Start a fresh owner transaction before consulting
-    # Supabase-owned auth.users; the canonical migration role must never gain
-    # privileges on the auth schema merely to restore a reviewed web operator.
     with database_connection("PSYCOPG_DATABASE_URL") as bootstrap:
-        reviewed_web_operator = (
-            bind_reviewed_web_operator(bootstrap, reviewed_web_auth_user_id)
-            if reviewed_web_auth_user_id
-            else None
-        )
         release_exists = demo_tax_release_exists(bootstrap)
         adjustment_release_exists = demo_adjustment_release_exists(bootstrap)
         gstr1_reporting_release_exists = demo_gstr1_reporting_release_exists(bootstrap)
@@ -6176,6 +6197,16 @@ def main() -> int:
                 )
             ],
         )
+    # Bind the reviewed human only after every synthetic import, command, and
+    # database reconciliation succeeds. This prevents a partially provisioned
+    # staging database from becoming reachable through a real cloud identity.
+    with database_connection("PSYCOPG_DATABASE_URL") as bootstrap:
+        reviewed_web_operator = (
+            bind_reviewed_web_operator(bootstrap, reviewed_web_auth_user_id)
+            if reviewed_web_auth_user_id
+            else None
+        )
+
     summary = {
         "project_ref": PROJECT_REF,
         "organization_id": IDS["org"],

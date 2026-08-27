@@ -162,6 +162,43 @@ def test_secret_contract_rejects_missing_or_extra_authority(
         CONTROL._secret_environment(request, expected)
 
 
+def test_prepare_boundary_migrates_without_resetting_business_data(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = []
+
+    def prepare(**kwargs):
+        calls.append(kwargs)
+        return {
+            "action": "prepare-reset",
+            "write_fence": {"state": "closed"},
+            "migration": {"alembic_head": "20260827_0032"},
+        }
+
+    monkeypatch.setattr(CONTROL, "prepare_reset_boundary", prepare)
+    monkeypatch.setattr(
+        CONTROL,
+        "reset_disposable_staging",
+        lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("migration-only preparation must not reset data")
+        ),
+    )
+    request = _request(secrets={"SUPABASE_DB_PASSWORD": DB_PASSWORD})
+
+    result = CONTROL._prepare_boundary(request)
+
+    assert result["migration"]["alembic_head"] == "20260827_0032"
+    assert calls == [
+        {
+            "expected_sha": EXPECTED_SHA,
+            "project_ref": PROJECT_REF,
+            "production_project_refs": PRODUCTION_REFS,
+            "password": DB_PASSWORD,
+            "control_transport": CONTROL.CONTROL_TRANSPORT_RAILWAY_IPV6,
+        }
+    ]
+
+
 def test_reset_boundary_orders_prepare_cleanup_and_reset_over_ipv6(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

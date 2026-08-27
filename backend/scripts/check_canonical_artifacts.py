@@ -90,6 +90,10 @@ CONTRACTS = (
     GeneratorContract(
         "master_codes/generate_master_code_contract.py", ("MANIFEST_PATH",)
     ),
+    GeneratorContract(
+        "session_authority/generate_session_authority.py",
+        ("SQL_PATH", "MANIFEST_PATH"),
+    ),
 )
 
 

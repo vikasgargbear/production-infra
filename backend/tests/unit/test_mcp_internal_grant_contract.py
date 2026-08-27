@@ -9,7 +9,7 @@ from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.routes.internal import mcp_agent_grants, mcp_canonical_reads
-from app.api.routes.internal.mcp_agent_grants import GrantRequest
+from app.api.routes.internal.mcp_agent_grants import GrantRequest, OperatorGrantRequest
 from app.api.routes.internal.mcp_contract import (
     ALL_CANONICAL_READ_POLICIES,
     CANONICAL_READ_POLICIES,
@@ -17,6 +17,16 @@ from app.api.routes.internal.mcp_contract import (
 
 
 ROOT = Path(__file__).resolve().parents[3]
+
+
+@pytest.fixture(autouse=True)
+def _open_session_authority(monkeypatch):
+    monkeypatch.setattr(
+        mcp_agent_grants, "require_canonical_session_authority", lambda _db: None
+    )
+    monkeypatch.setattr(
+        mcp_canonical_reads, "require_canonical_session_authority", lambda _db: None
+    )
 
 
 def test_internal_auth_is_constant_time_and_requires_a_real_secret(monkeypatch):
@@ -44,6 +54,64 @@ def test_release_gates_require_a_reviewed_live_client(monkeypatch):
         mcp_agent_grants._require_readiness_gates()
     assert blocked.value.status_code == 503
     assert "no client is pre-registered" in blocked.value.detail
+
+
+def test_mcp_issuance_readiness_and_consumption_all_fail_during_maintenance(
+    monkeypatch,
+):
+    monkeypatch.setenv("MCP_INTERNAL_SERVICE_TOKEN", "s" * 48)
+    credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials="s" * 48)
+
+    def maintenance(_db):
+        raise HTTPException(
+            status_code=503,
+            detail={"error": "erp_maintenance", "message": "maintenance"},
+        )
+
+    monkeypatch.setattr(
+        mcp_agent_grants, "require_canonical_session_authority", maintenance
+    )
+    monkeypatch.setattr(
+        mcp_canonical_reads, "require_canonical_session_authority", maintenance
+    )
+    database = object()
+    read_request = GrantRequest(
+        issuer="https://example.supabase.co/auth/v1",
+        subject=uuid4(),
+        organization_id=uuid4(),
+        client_id="client-1",
+        operation_key="master.products.search",
+        capability_code="master.products.search",
+        operation_mode="read",
+    )
+    action_request = OperatorGrantRequest(
+        issuer="https://example.supabase.co/auth/v1",
+        subject=uuid4(),
+        organization_id=uuid4(),
+        client_id="client-1",
+        operation_key="sales.order.prepare",
+        capability_code="sales.order.prepare",
+        operation_mode="write",
+        branch_ids=[uuid4()],
+    )
+
+    calls = (
+        lambda: mcp_agent_grants.authorize_agent_grant(
+            read_request, credentials, database
+        ),
+        lambda: mcp_agent_grants.authorize_operator_action(
+            action_request, credentials, database
+        ),
+        lambda: mcp_agent_grants.agent_grant_readiness(credentials, database),
+        lambda: mcp_canonical_reads.get_canonical_delegation(
+            "Bearer stale-token", credentials, database
+        ),
+    )
+    for call in calls:
+        with pytest.raises(HTTPException) as blocked:
+            call()
+        assert blocked.value.status_code == 503
+        assert blocked.value.detail["error"] == "erp_maintenance"
 
 
 def test_internal_authority_is_canonical_and_never_uses_service_role():

@@ -3,8 +3,12 @@ Enterprise Authentication API
 """
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy.orm import Session
 from typing import Dict, Any
 import logging
+
+from ....core.database import get_db
+from ....core.auth.session_authority import require_canonical_session_authority
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +72,7 @@ async def logout(
 @router.get("/verify-token")
 async def verify_token(
     credentials: HTTPAuthorizationCredentials = Depends(bearer),
+    db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     """
     Verify if current token is valid (not expired, not blacklisted).
@@ -94,6 +99,8 @@ async def verify_token(
     try:
         # Decode and validate token (includes blacklist check)
         payload = decode_jwt(token, check_blacklist=True)
+
+        require_canonical_session_authority(db)
         
         return {
             "valid": True,

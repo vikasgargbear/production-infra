@@ -346,12 +346,14 @@ class BankReconciliationReadback(StrictDTO):
 
 async def _web_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Security(WEB_BEARER),
+    db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     """Expose the existing ERP bearer requirement in the public OpenAPI contract."""
     if credentials is None:
         raise HTTPException(status_code=401, detail="Missing or invalid authentication token")
     return await PermissionChecker()(
-        authorization=f"{credentials.scheme} {credentials.credentials}"
+        authorization=f"{credentials.scheme} {credentials.credentials}",
+        db=db,
     )
 
 

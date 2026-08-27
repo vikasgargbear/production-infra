@@ -86,6 +86,7 @@ API_ALLOWED_ENV_KEYS = frozenset(
         "LOG_FORMAT",
         "CORS_ORIGINS",
         "APP_URL",
+        "CANONICAL_APPLICATION_PROVIDER",
         *BACKEND_REQUIRED,
         *SMTP_KEYS,
         *SMTP_OPTIONAL_KEYS,
@@ -314,6 +315,7 @@ def operator_values(env_file: Optional[Path]) -> Dict[str, str]:
 def backend_env(values: Mapping[str, str], frontend_url: str) -> Dict[str, str]:
     result = {
         "APP_ENV": "production",
+        "CANONICAL_APPLICATION_PROVIDER": "render",
         "LOG_LEVEL": "INFO",
         "LOG_FORMAT": "json",
         "CORS_ORIGINS": frontend_url,
@@ -375,7 +377,7 @@ def api_create_payload(
             "runtime": "docker",
             "plan": "free",
             "region": "singapore",
-            "healthCheckPath": "/ready",
+            "healthCheckPath": "/health",
             "maxShutdownDelaySeconds": 60,
             "envSpecificDetails": {
                 "dockerContext": "./backend",
@@ -588,9 +590,7 @@ class RenderClient:
             desired = {
                 "runtime": "docker",
                 "plan": "free",
-                "healthCheckPath": (
-                    "/ready" if service.name == API_NAME else "/health"
-                ),
+                "healthCheckPath": "/health",
                 "maxShutdownDelaySeconds": 60,
                 "envSpecificDetails": docker,
             }

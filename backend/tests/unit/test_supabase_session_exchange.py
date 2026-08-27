@@ -69,8 +69,8 @@ def _membership(**overrides):
 @pytest.fixture(autouse=True)
 def _open_canonical_session_authority(monkeypatch):
     monkeypatch.setattr(
-        oauth.UserRepository,
-        "canonical_session_authority_available",
+        oauth,
+        "require_canonical_session_authority",
         lambda _db: True,
     )
 
@@ -188,9 +188,17 @@ def test_exchange_reports_maintenance_before_membership_lookup_when_fenced(
         verified_identity,
     )
     monkeypatch.setattr(
-        oauth.UserRepository,
-        "canonical_session_authority_available",
-        lambda _db: False,
+        oauth,
+        "require_canonical_session_authority",
+        lambda _db: (_ for _ in ()).throw(
+            HTTPException(
+                status_code=503,
+                detail={
+                    "error": "erp_maintenance",
+                    "message": "ERP maintenance is in progress. Please retry shortly.",
+                },
+            )
+        ),
     )
     monkeypatch.setattr(
         oauth.UserRepository,
@@ -236,9 +244,17 @@ def test_closed_authority_precedes_missing_organization_assignment(monkeypatch):
         verified_identity,
     )
     monkeypatch.setattr(
-        oauth.UserRepository,
-        "canonical_session_authority_available",
-        lambda _db: False,
+        oauth,
+        "require_canonical_session_authority",
+        lambda _db: (_ for _ in ()).throw(
+            HTTPException(
+                status_code=503,
+                detail={
+                    "error": "erp_maintenance",
+                    "message": "ERP maintenance is in progress. Please retry shortly.",
+                },
+            )
+        ),
     )
 
     with pytest.raises(HTTPException) as exc_info:
@@ -458,6 +474,35 @@ def test_consent_proposal_rejects_wrong_client_before_database_lookup(monkeypatc
 
     assert denied.value.status_code == 403
     assert denied.value.detail == "OAuth client is not pre-registered"
+
+
+def test_consent_proposal_rejects_stale_cloud_session_during_maintenance(monkeypatch):
+    async def verified_identity(_token):
+        return _identity()
+
+    monkeypatch.setenv("MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS", "client-1")
+    monkeypatch.setattr(oauth.supabase_auth, "get_user_from_access_token", verified_identity)
+    monkeypatch.setattr(
+        oauth,
+        "require_canonical_session_authority",
+        lambda _db: (_ for _ in ()).throw(
+            HTTPException(
+                status_code=503,
+                detail={"error": "erp_maintenance", "message": "maintenance"},
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        oauth,
+        "_mcp_consent_proposal_rows",
+        lambda *_args: pytest.fail("maintenance must precede grant lookup"),
+    )
+
+    with pytest.raises(HTTPException) as blocked:
+        _run(oauth.get_mcp_consent_proposal("client-1", _credentials(), db=object()))
+
+    assert blocked.value.status_code == 503
+    assert blocked.value.detail["error"] == "erp_maintenance"
 
 
 def test_consent_proposal_sql_requires_live_canonical_authority():

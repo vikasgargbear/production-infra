@@ -46,6 +46,37 @@ def test_open_matrix_is_the_exact_alembic_grant_contract() -> None:
     }
 
 
+def test_three_states_separate_command_and_public_session_authority() -> None:
+    assert fence.FENCE_STATES == ("closed", "provisioning", "open")
+    assert fence.SESSION_AUTHORITY_ROLE == "erp_session_authority"
+    source = SCRIPT.read_text(encoding="utf-8")
+    shell = (ROOT / "backend/scripts/run_canonical_write_fence.sh").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'action in {"provision", "open"}' in source
+    assert 'enabled=action == "open"' in source
+    assert 'require_session_role=action != "close"' in source
+    assert "close|provision|open|status" in shell
+
+
+def test_close_is_the_only_action_that_tolerates_pre_0032_role_absence() -> None:
+    class Cursor:
+        def __init__(self):
+            self.row = (False,)
+
+        def execute(self, statement, _params=None):
+            assert "pg_roles" in str(statement)
+
+        def fetchone(self):
+            return self.row
+
+    cursor = Cursor()
+    assert fence._set_session_authority(cursor, enabled=False) is False
+    with pytest.raises(fence.FenceError, match="role is absent"):
+        fence._set_session_authority(cursor, enabled=True)
+
+
 def test_closed_matrix_accepts_no_effective_schema_usage() -> None:
     matrix = {
         schema: {principal: False for principal in ("public", *fence.MANAGED_PRINCIPALS)}

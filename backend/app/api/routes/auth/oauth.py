@@ -17,6 +17,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from ....core.auth.jwt_auth import create_access_token
+from ....core.auth.session_authority import require_canonical_session_authority
 from ....core.auth.supabase_auth import supabase_auth
 from ....core.database import get_db
 from ....repositories.user_repository import MembershipContextDenied, UserRepository
@@ -144,14 +145,7 @@ async def exchange_supabase_session(
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=401, detail="Invalid Supabase identity") from exc
 
-    if not UserRepository.canonical_session_authority_available(db):
-        raise HTTPException(
-            status_code=503,
-            detail={
-                "error": "erp_maintenance",
-                "message": "ERP maintenance is in progress. Please retry shortly.",
-            },
-        )
+    require_canonical_session_authority(db)
 
     try:
         organization_id = UUID(str(identity.get("app_metadata", {}).get("org_id")))
@@ -235,6 +229,8 @@ async def get_mcp_consent_proposal(
         subject = UUID(str(identity["id"]))
     except (KeyError, TypeError, ValueError) as exc:
         raise HTTPException(status_code=401, detail="Invalid Supabase identity") from exc
+
+    require_canonical_session_authority(db)
 
     try:
         rows = _mcp_consent_proposal_rows(db, subject, client_id)

@@ -19,22 +19,6 @@ class UserRepository:
     """
 
     @staticmethod
-    def canonical_session_authority_available(db: Session) -> bool:
-        """Return whether the deployment has opened canonical ERP authority.
-
-        The canonical reset boundary revokes ``erp_runtime`` membership in
-        ``erp_app`` before destructive staging work and restores it only after
-        the reviewed authority is ready.  Session exchange must observe that
-        same boundary so an intentionally quiesced environment is not
-        misreported as a permanent user-membership denial.
-        """
-        return bool(
-            db.execute(
-                text("SELECT pg_has_role(current_user,'erp_app','USAGE')")
-            ).scalar_one()
-        )
-    
-    @staticmethod
     def find_by_auth_user_id(
         auth_user_id: UUID,
         organization_id: UUID,

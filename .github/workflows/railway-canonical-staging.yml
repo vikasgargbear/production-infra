@@ -12,11 +12,6 @@ on:
         required: false
         default: false
         type: boolean
-      defer_write_fence_open:
-        description: Keep reset staging in maintenance until same-run demo provisioning succeeds
-        required: false
-        default: false
-        type: boolean
   workflow_call:
     inputs:
       reviewed_sha:
@@ -25,11 +20,6 @@ on:
         type: string
       reset_disposable_data:
         description: Close writes and reset disposable canonical staging before the exact deployment
-        required: false
-        default: false
-        type: boolean
-      defer_write_fence_open:
-        description: Keep reset staging in maintenance until same-run demo provisioning succeeds
         required: false
         default: false
         type: boolean
@@ -99,7 +89,7 @@ jobs:
       SUPABASE_URL: ${{ vars.SUPABASE_URL }}
       SUPABASE_OAUTH_ISSUER: ${{ vars.SUPABASE_OAUTH_ISSUER }}
       REVIEWED_SHA: ${{ inputs.reviewed_sha }}
-      DEFER_WRITE_FENCE_OPEN: ${{ inputs.defer_write_fence_open }}
+      DEFER_WRITE_FENCE_OPEN: "true"
       RAILWAY_RESET_SSH_PRIVATE_KEY: /tmp/railway-reset-${{ github.run_id }}-${{ github.run_attempt }}-ssh
       RAILWAY_RESET_SSH_FINGERPRINT: /tmp/railway-reset-${{ github.run_id }}-${{ github.run_attempt }}-ssh-fingerprint
       RAILWAY_RESET_SSH_AGENT_STARTED: /tmp/railway-reset-${{ github.run_id }}-${{ github.run_attempt }}-ssh-agent-started
@@ -120,9 +110,7 @@ jobs:
             *[!0-9a-f]*|'') echo "reviewed_sha must be an exact lowercase commit SHA" >&2; exit 2 ;;
           esac
           test "${#REVIEWED_SHA}" = 40
-          if test "$DEFER_WRITE_FENCE_OPEN" = true; then
-            test '${{ inputs.reset_disposable_data }}' = true
-          fi
+          test "$DEFER_WRITE_FENCE_OPEN" = true
 
       - uses: actions/setup-node@v4
         with:
@@ -269,7 +257,6 @@ jobs:
           fi
 
       - name: Register one run-scoped Railway reset SSH key
-        if: inputs.reset_disposable_data == true
         run: |
           set -euo pipefail
           umask 077
@@ -311,7 +298,6 @@ jobs:
           grep -F -- "$fingerprint" "$RUNNER_TEMP/railway-reset-ssh-keys.txt" >/dev/null
 
       - name: Execute the reviewed reset source inside Railway direct IPv6
-        if: inputs.reset_disposable_data == true
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
@@ -518,6 +504,40 @@ jobs:
           PY
           touch "$RAILWAY_RESET_FENCE_CLOSED"
 
+          # Schema migration is mandatory for every exact-SHA deployment,
+          # independently of whether disposable business rows are reset.
+          # Expansion belongs to the remote shell.
+          # shellcheck disable=SC2016
+          remote_ssh /bin/sh -c \
+            'cd "$1/source"; exec python backend/scripts/railway_reset_control_plane.py prepare-boundary --input - --output -' \
+            sh "$RAILWAY_RESET_REMOTE_ROOT" \
+            < "$close_request" > railway-reset-evidence/railway-migration-prepared.json
+          expected_head=$(python3 backend/scripts/canonical_migration_contract.py --print-head)
+          PYTHONPATH=backend python3 - \
+            "$close_request" railway-reset-evidence/railway-migration-prepared.json \
+            "$expected_head" <<'PY'
+          import json
+          from pathlib import Path
+          import sys
+          from scripts.railway_reset_control_plane import verify_response
+
+          request = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          response = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+          verify_response(response, request, action="prepare-boundary")
+          result = response["result"]
+          if not (
+              result["action"] == "prepare-reset"
+              and result["expected_sha"] == request["expected_sha"]
+              and result["write_fence"]["state"] == "closed"
+              and result["migration"]["alembic_head"] == sys.argv[3]
+              and result["role_cleanup"]["postgres_migration_owner_set"] is False
+              and result["role_cleanup"]["postgres_migration_owner_usage"] is False
+          ):
+              raise SystemExit("Railway migration preparation receipt is incomplete")
+          PY
+          touch "$RAILWAY_RESET_FENCE_CLOSED"
+
+          if test '${{ inputs.reset_disposable_data }}' = true; then
           reset_request="$RUNNER_TEMP/railway-reset-request.json"
           jq \
             --arg access "$SUPABASE_ACCESS_TOKEN" \
@@ -537,7 +557,6 @@ jobs:
             sh "$RAILWAY_RESET_REMOTE_ROOT" \
             < "$reset_request" > railway-reset-evidence/railway-reset-control.json
 
-          expected_head=$(python3 backend/scripts/canonical_migration_contract.py --print-head)
           PYTHONPATH=backend python3 - \
             "$reset_request" railway-reset-evidence/railway-reset-control.json \
             "$expected_head" <<'PY'
@@ -572,6 +591,7 @@ jobs:
           )
           PY
           touch "$RAILWAY_RESET_FENCE_CLOSED"
+          fi
 
       - name: Reconcile the reviewed staging MCP OAuth client authority
         env:
@@ -661,6 +681,7 @@ jobs:
           echo "::add-mask::$provider_url"
 
           set_variable "$RAILWAY_API_SERVICE" APP_ENV production
+          set_variable "$RAILWAY_API_SERVICE" CANONICAL_APPLICATION_PROVIDER railway
           set_variable "$RAILWAY_API_SERVICE" LOG_LEVEL INFO
           set_variable "$RAILWAY_API_SERVICE" LOG_FORMAT json
           set_variable "$RAILWAY_API_SERVICE" DATABASE_URL "$runtime_url"
@@ -707,9 +728,10 @@ jobs:
           # Railway watch paths compare changed archive paths. These provenance-only
           # markers make an unchanged reviewed commit uploadable without modifying
           # product code or falling back to an older Railway deployment.
-          printf '%s\n' "$REVIEWED_SHA:$DEPLOYMENT_NONCE" > deploy/railway/api.force-deploy
-          printf '%s\n' "$REVIEWED_SHA:$DEPLOYMENT_NONCE" > deploy/railway/mcp.force-deploy
-          printf '%s\n' "$REVIEWED_SHA:$DEPLOYMENT_NONCE" > deploy/railway/frontend.force-deploy
+          for marker in api mcp frontend; do
+            printf '%s\n' "$REVIEWED_SHA:$DEPLOYMENT_NONCE" \
+              > "deploy/railway/$marker.force-deploy"
+          done
 
           upload_diagnostic() {
             python3 "$GITHUB_WORKSPACE/backend/scripts/railway_upload_diagnostic.py" \
@@ -902,9 +924,11 @@ jobs:
           deployment_id_from_payload api-deploy.json > api-deployment-id
           deployment_id_from_payload mcp-deploy.json > mcp-deployment-id
           deployment_id_from_payload frontend-deploy.json > frontend-deployment-id
-          echo "api_deployment_id=$(<api-deployment-id)" >> "$GITHUB_OUTPUT"
-          echo "mcp_deployment_id=$(<mcp-deployment-id)" >> "$GITHUB_OUTPUT"
-          echo "frontend_deployment_id=$(<frontend-deployment-id)" >> "$GITHUB_OUTPUT"
+          {
+            echo "api_deployment_id=$(<api-deployment-id)"
+            echo "mcp_deployment_id=$(<mcp-deployment-id)"
+            echo "frontend_deployment_id=$(<frontend-deployment-id)"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Require each exact upload to become the active deployment
         run: |
@@ -1047,119 +1071,32 @@ jobs:
           done
 
           mcp_start_command=$(jq -er '.deploy.startCommand | strings | select(length > 0)' deploy/railway/mcp.railway.json)
-          require_deployment_contract "$RAILWAY_API_SERVICE" "$api_deployment_id" /deploy/railway/api.railway.json /deploy/railway/api.Dockerfile /ready "" "$api_deployment_message" true
+          require_deployment_contract "$RAILWAY_API_SERVICE" "$api_deployment_id" /deploy/railway/api.railway.json /deploy/railway/api.Dockerfile /health "" "$api_deployment_message" true
           require_deployment_contract "$RAILWAY_MCP_SERVICE" "$mcp_deployment_id" /deploy/railway/mcp.railway.json /deploy/railway/mcp.Dockerfile /health "$mcp_start_command" "$mcp_deployment_message" false
           require_deployment_contract "$RAILWAY_FRONTEND_SERVICE" "$frontend_deployment_id" /deploy/railway/frontend.railway.json /frontend/Dockerfile /health "" "$frontend_deployment_message" false
 
-      - name: Prove exact Railway authority before reopening reset fence
-        if: inputs.reset_disposable_data == true
+      - name: Prove exact Railway authority remains closed before demo provisioning
         run: |
           set -euo pipefail
           python3 backend/scripts/deployment_control.py status \
             --expected-sha "$REVIEWED_SHA" \
             --fence closed
 
-      - name: Verify exact API database isolation before reopening writes
-        if: inputs.reset_disposable_data == true
+      - name: Verify exact API maintenance and database isolation before demo provisioning
         run: |
           set -euo pipefail
-          curl --fail-with-body --silent --show-error --max-time 15 \
-            "$RAILWAY_API_URL/ready" > api-ready-before-fence-open.json
-          jq -e '.status == "ready" and
+          status=$(curl --silent --show-error --max-time 15 \
+            --output api-ready-before-demo.json --write-out '%{http_code}' \
+            "$RAILWAY_API_URL/ready")
+          test "$status" = 503
+          jq -e '.status == "maintenance" and
                  .database.transport == "supabase_direct" and
                  .database.principal == "erp_runtime" and
                  .database.principal_isolated == true and
                  .database.migration_owner_member == false and
                  .database.row_security == true and
                  .database.ip_version == 6' \
-            api-ready-before-fence-open.json >/dev/null
-
-      - name: Open writes after exact Railway provenance proof
-        if: inputs.reset_disposable_data == true && inputs.defer_write_fence_open != true
-        env:
-          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-        run: |
-          set -euo pipefail
-          status="$RUNNER_TEMP/railway-exact-api-status.json"
-          railway status \
-            --project "$RAILWAY_PROJECT_ID" \
-            --environment "$RAILWAY_ENVIRONMENT_ID" \
-            --json > "$status"
-          exact=$(jq -er \
-            --arg environment "$RAILWAY_ENVIRONMENT_ID" \
-            --arg service "$RAILWAY_API_SERVICE" \
-            --arg deployment "$(<api-deployment-id)" '
-              [.environments.edges[].node
-               | select(.id == $environment)
-               | .serviceInstances.edges[].node
-               | select(.serviceName == $service)
-               | .activeDeployments[]
-               | select(.id == $deployment and .status == "SUCCESS")
-               | .instances[]
-               | select(.status == "RUNNING")
-               | {deployment_id:$deployment,instance_id:.id}]
-              | if length == 1 then .[0] else error("expected one exact running Railway API instance") end
-            ' "$status")
-          exact_deployment_id=$(jq -r .deployment_id <<<"$exact")
-          exact_instance_id=$(jq -r .instance_id <<<"$exact")
-          printf '%s\n' "$exact_deployment_id" > "$RUNNER_TEMP/railway-exact-api-deployment-id"
-          printf '%s\n' "$exact_instance_id" > "$RUNNER_TEMP/railway-exact-api-instance-id"
-          request="$RUNNER_TEMP/railway-fence-open-request.json"
-          request_nonce=$(openssl rand -hex 32)
-          jq -n \
-            --arg expected_sha "$REVIEWED_SHA" \
-            --arg project_ref "$CANONICAL_STAGING_PROJECT_REF" \
-            --arg production_project_refs "$CANONICAL_PRODUCTION_PROJECT_REFS" \
-            --arg run_id "$GITHUB_RUN_ID" \
-            --arg run_attempt "$GITHUB_RUN_ATTEMPT" \
-            --arg request_nonce "$request_nonce" \
-            --arg deployment_id "$exact_deployment_id" \
-            --arg deployment_instance_id "$exact_instance_id" \
-            --arg password "$SUPABASE_DB_PASSWORD" \
-            '{schema:"aasopharma.railway-reset-control-request.v1",
-              expected_sha:$expected_sha,project_ref:$project_ref,
-              production_project_refs:$production_project_refs,
-              run_id:$run_id,run_attempt:$run_attempt,request_nonce:$request_nonce,
-              deployment_id:$deployment_id,deployment_instance_id:$deployment_instance_id,
-              host_deployed_sha:$expected_sha,execution_source:"exact_railway_deployment",
-              source_archive_sha256:"",secrets:{SUPABASE_DB_PASSWORD:$password}}' \
-            > "$request"
-          chmod 600 "$request"
-          # From this point until the open receipt is verified, failure
-          # compensation must actively close through this exact instance.
-          rm -f "$RAILWAY_RESET_FENCE_CLOSED"
-          railway ssh \
-            --project "$RAILWAY_PROJECT_ID" \
-            --environment "$RAILWAY_ENVIRONMENT_ID" \
-            --service "$RAILWAY_API_SERVICE" \
-            --deployment-instance "$exact_instance_id" \
-            --identity-file "$RAILWAY_RESET_SSH_PRIVATE_KEY" \
-            -- python scripts/railway_reset_control_plane.py open-fence \
-              --input - --output - \
-            < "$request" > railway-canonical-fence-open.json
-          PYTHONPATH=backend python3 - "$request" railway-canonical-fence-open.json <<'PY'
-          import json
-          from pathlib import Path
-          import sys
-          from scripts.railway_reset_control_plane import verify_response
-
-          request = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-          response = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
-          verify_response(response, request, action="open-fence")
-          result = response["result"]
-          closure = result["evidence_writer_closure"]
-          if not (
-              result["write_fence"]["state"] == "open"
-              and result["transport"]["network_family"] == 6
-              and result["role_cleanup"]["postgres_migration_owner_set"] is False
-              and result["role_cleanup"]["postgres_migration_owner_usage"] is False
-              and closure["membership_open"] is False
-              and closure["role_posture_safe"] is True
-              and closure["remaining_preclosure_authenticator_session_count"] == 0
-          ):
-              raise SystemExit("Railway write-fence open receipt is incomplete")
-          PY
-          touch "$RAILWAY_RESET_FENCE_OPENED"
+            api-ready-before-demo.json >/dev/null
 
       - name: Verify all public services publish the reviewed SHA
         run: |
@@ -1187,7 +1124,8 @@ jobs:
               mcp_contract_ready=true
             fi
             if jq -e --arg sha "$REVIEWED_SHA" '.status == "healthy" and .git_commit == $sha' <<<"$api_health" >/dev/null 2>&1 && \
-               jq -e '.status == "ready" and .database.transport == "supabase_direct" and .database.principal == "erp_runtime" and .database.principal_isolated == true and .database.migration_owner_member == false and .database.row_security == true and .database.ip_version == 6' <<<"$api_ready" >/dev/null 2>&1 && \
+               { test "$DEFER_WRITE_FENCE_OPEN" != true && jq -e '.status == "ready"' <<<"$api_ready" >/dev/null 2>&1 || test "$DEFER_WRITE_FENCE_OPEN" = true && jq -e '.status == "maintenance"' <<<"$api_ready" >/dev/null 2>&1; } && \
+               jq -e '.database.transport == "supabase_direct" and .database.principal == "erp_runtime" and .database.principal_isolated == true and .database.migration_owner_member == false and .database.row_security == true and .database.ip_version == 6' <<<"$api_ready" >/dev/null 2>&1 && \
                jq -e --arg sha "$REVIEWED_SHA" '.status == "ok" and .git_commit == $sha' <<<"$mcp_health" >/dev/null 2>&1 && \
                { test "$DEFER_WRITE_FENCE_OPEN" = true || test "$mcp_contract_ready" = true; } && \
                test "$frontend_health" = ok && \
@@ -1214,7 +1152,7 @@ jobs:
                 --arg api_url "$RAILWAY_API_URL" \
                 --arg mcp_url "$RAILWAY_MCP_URL" \
                 --arg frontend_url "$RAILWAY_FRONTEND_URL" \
-                '{provider:"railway",git_commit:$git_commit,status:$status,write_fence:$write_fence,oauth:{client_id:$oauth_client_id,client_type:"public",dynamic_registration:false,evidence_sha256:$oauth_evidence_sha256},services:{api:{url:$api_url,deployment_id:$api_deployment_id,health:"healthy",readiness:"ready"},mcp:{url:$mcp_url,deployment_id:$mcp_deployment_id,health:"ok",readiness:$mcp_readiness},frontend:{url:$frontend_url,deployment_id:$frontend_deployment_id,health:"ok"}}}' \
+              '{provider:"railway",git_commit:$git_commit,status:$status,write_fence:$write_fence,oauth:{client_id:$oauth_client_id,client_type:"public",dynamic_registration:false,evidence_sha256:$oauth_evidence_sha256},services:{api:{url:$api_url,deployment_id:$api_deployment_id,health:"healthy",readiness:(if $write_fence=="closed" then "maintenance" else "ready" end)},mcp:{url:$mcp_url,deployment_id:$mcp_deployment_id,health:"ok",readiness:$mcp_readiness},frontend:{url:$frontend_url,deployment_id:$frontend_deployment_id,health:"ok"}}}' \
                 > railway-pilot-evidence.json
               exit 0
             fi
@@ -1257,14 +1195,13 @@ jobs:
             railway-pilot-evidence.json
             railway-supabase-auth-redirect.json
             railway-canonical-reset.json
-            railway-canonical-fence-open.json
             railway-reset-evidence/*.json
             ${{ runner.temp }}/railway-oauth-evidence/canonical-staging-oauth-client.json
           if-no-files-found: error
           retention-days: 14
 
       - name: Re-close writes after any certification failure
-        if: failure() && inputs.reset_disposable_data == true
+        if: failure()
         env:
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: |
@@ -1362,7 +1299,7 @@ jobs:
           touch "$RAILWAY_RESET_FENCE_CLOSED"
 
       - name: Remove the run-scoped Railway reset source
-        if: always() && inputs.reset_disposable_data == true
+        if: always()
         run: |
           set -euo pipefail
           if test ! -s "$RUNNER_TEMP/railway-reset-bootstrap-instance-id" || \
@@ -1385,7 +1322,7 @@ jobs:
               sh "$RAILWAY_RESET_REMOTE_ROOT" >/dev/null || true
 
       - name: Remove the run-scoped Railway reset SSH key
-        if: always() && inputs.reset_disposable_data == true
+        if: always()
         run: |
           set -euo pipefail
           cleanup_failed=0

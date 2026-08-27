@@ -14,6 +14,9 @@ def test_database_readiness_probe_attests_transport_and_principal(monkeypatch):
         "rolsuper": False,
         "rolbypassrls": False,
         "migration_owner_member": False,
+        "command_authority": True,
+        "session_role_exists": True,
+        "session_authority": True,
         "row_security": True,
     }
 
@@ -66,6 +69,9 @@ def test_database_readiness_probe_attests_transport_and_principal(monkeypatch):
         "principal": "erp_runtime",
         "principal_isolated": True,
         "migration_owner_member": False,
+        "command_authority": True,
+        "session_role_exists": True,
+        "session_authority": True,
         "row_security": True,
         "ip_version": 6,
     }
@@ -96,6 +102,9 @@ def test_database_readiness_fails_closed_on_unattested_direct_transport(monkeypa
                 "rolsuper": False,
                 "rolbypassrls": False,
                 "migration_owner_member": False,
+                "command_authority": True,
+                "session_role_exists": True,
+                "session_authority": True,
                 "row_security": True,
             }
 
@@ -140,6 +149,9 @@ def test_database_readiness_accepts_attested_direct_ipv4(monkeypatch):
         "rolsuper": False,
         "rolbypassrls": False,
         "migration_owner_member": False,
+        "command_authority": True,
+        "session_role_exists": True,
+        "session_authority": True,
         "row_security": True,
     }
 
@@ -188,6 +200,9 @@ def test_ready_returns_success_only_after_database_probe(monkeypatch):
         "principal": "erp_runtime",
         "principal_isolated": True,
         "migration_owner_member": False,
+        "command_authority": True,
+        "session_role_exists": True,
+        "session_authority": True,
         "row_security": True,
         "ip_version": 6,
     }
@@ -197,6 +212,62 @@ def test_ready_returns_success_only_after_database_probe(monkeypatch):
         "status": "ready",
         "database": database,
     }
+
+
+def test_ready_reports_maintenance_until_public_session_authority_opens(monkeypatch):
+    database = {
+        "transport": "supabase_direct",
+        "principal": "erp_runtime",
+        "principal_isolated": True,
+        "migration_owner_member": False,
+        "command_authority": True,
+        "session_role_exists": True,
+        "session_authority": False,
+        "row_security": True,
+        "ip_version": 6,
+    }
+    monkeypatch.setattr(main, "_database_readiness", lambda: database)
+
+    response = asyncio.run(main.readiness_check())
+
+    assert isinstance(response, JSONResponse)
+    assert response.status_code == 503
+    assert json.loads(response.body) == {
+        "status": "maintenance",
+        "database": database,
+    }
+
+
+def test_ready_fails_closed_on_partial_authority_drift(monkeypatch):
+    open_state = {
+        "transport": "supabase_direct",
+        "principal": "erp_runtime",
+        "principal_isolated": True,
+        "migration_owner_member": False,
+        "command_authority": True,
+        "session_role_exists": True,
+        "session_authority": True,
+        "row_security": True,
+        "ip_version": 6,
+    }
+
+    for field in (
+        "principal_isolated",
+        "command_authority",
+        "session_role_exists",
+        "session_authority",
+    ):
+        database = {**open_state, field: False}
+        monkeypatch.setattr(main, "_database_readiness", lambda: database)
+
+        response = asyncio.run(main.readiness_check())
+
+        assert isinstance(response, JSONResponse)
+        assert response.status_code == 503
+        assert json.loads(response.body) == {
+            "status": "maintenance",
+            "database": database,
+        }
 
 
 def test_ready_returns_generic_503_without_exception_details(monkeypatch):

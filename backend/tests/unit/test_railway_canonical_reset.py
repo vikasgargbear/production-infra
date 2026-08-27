@@ -408,11 +408,10 @@ def test_workflow_orders_reset_fence_and_exact_deployment() -> None:
         "Execute the reviewed reset source inside Railway direct IPv6"
     )
     deploy = workflow.index("Force-upload the exact source tree")
-    prove = workflow.index("Prove exact Railway authority before reopening reset fence")
+    prove = workflow.index("Prove exact Railway authority remains closed before demo provisioning")
     api_isolation = workflow.index(
-        "Verify exact API database isolation before reopening writes"
+        "Verify exact API maintenance and database isolation before demo provisioning"
     )
-    open_fence = workflow.index("Open writes after exact Railway provenance proof")
     public_readiness = workflow.index("Verify all public services publish the reviewed SHA")
     prove_open = workflow.index("Prove selected provider authority and inactive standbys")
     oauth = workflow.index("Reconcile the exact Railway frontend OAuth redirect")
@@ -421,7 +420,7 @@ def test_workflow_orders_reset_fence_and_exact_deployment() -> None:
     remove_key = workflow.index("Remove the run-scoped Railway reset SSH key")
     upload = workflow.index("name: railway-canonical-staging-")
     assert (
-        register_key < reset < deploy < prove < api_isolation < open_fence
+        register_key < reset < deploy < prove < api_isolation
         < public_readiness < prove_open < oauth < upload < reclose
         < remove_source < remove_key
     )
@@ -429,10 +428,23 @@ def test_workflow_orders_reset_fence_and_exact_deployment() -> None:
     assert "git archive --format=tar.gz" in reset_block
     assert 'test "$upload_result" = "UPLOAD_OK:$source_sha256"' in reset_block
     assert "railway_reset_control_plane.py close-fence" in reset_block
+    assert "railway_reset_control_plane.py prepare-boundary" in reset_block
     assert "railway_reset_control_plane.py reset-boundary" in reset_block
     assert 'execution_source:"reviewed_source_archive"' in reset_block
     assert 'action="close-fence"' in reset_block
+    assert 'action="prepare-boundary"' in reset_block
     assert "verify_response(reset_response" in reset_block
+    prepare_call = reset_block.index(
+        "railway_reset_control_plane.py prepare-boundary"
+    )
+    reset_guard = reset_block.index(
+        "if test '${{ inputs.reset_disposable_data }}' = true; then"
+    )
+    assert prepare_call < reset_guard < reset_block.index(
+        "railway_reset_control_plane.py reset-boundary"
+    )
+    execute_step_header = reset_block.split("run: |", 1)[0]
+    assert "if: inputs.reset_disposable_data" not in execute_step_header
     register_block = workflow[register_key:reset]
     assert 'eval "$(ssh-agent -s)"' in register_block
     assert 'ssh-add "$RAILWAY_RESET_SSH_PRIVATE_KEY"' in register_block
@@ -453,16 +465,11 @@ def test_workflow_orders_reset_fence_and_exact_deployment() -> None:
     assert preclose_marker < uncertain_marker < reset_call < verified_marker
     assert reset_block.count("evidence_writer_closure") >= 1
     assert "DELETE FROM storage.objects" not in workflow
-    assert "--fence closed" in workflow[prove:open_fence]
-    open_block = workflow[open_fence:public_readiness]
-    assert "inputs.defer_write_fence_open != true" in open_block
-    assert "railway_reset_control_plane.py open-fence" in open_block
-    assert workflow.count("defer_write_fence_open:") == 2
-    assert (
-        "defer_write_fence_open: "
-        "${{ inputs.reset_canonical_staging && inputs.provision_canonical_demo }}"
-        in production
-    )
+    assert "--fence closed" in workflow[prove:public_readiness]
+    assert "railway_reset_control_plane.py open-fence" not in workflow
+    assert "defer_write_fence_open:" not in workflow
+    assert "defer_write_fence_open:" not in production
+    assert 'DEFER_WRITE_FENCE_OPEN: "true"' in workflow
     public_block = workflow[public_readiness:prove_open]
     assert 'test "$DEFER_WRITE_FENCE_OPEN" = true' in public_block
     assert "lifecycle_status=maintenance" in public_block
@@ -470,8 +477,7 @@ def test_workflow_orders_reset_fence_and_exact_deployment() -> None:
     prove_block = workflow[prove_open:oauth]
     assert '--fence "$fence_state"' in prove_block
     assert "railway_reset_control_plane.py close-fence" in workflow[reclose:remove_source]
-    assert 'execution_source:"exact_railway_deployment"' in workflow[open_fence:]
-    assert "if: failure() && inputs.reset_disposable_data == true" in workflow[reclose:]
+    assert "if: failure()" in workflow[reclose:]
     compensation = workflow[reclose:remove_source]
     assert 'test -f "$RAILWAY_RESET_FENCE_CLOSED"' in compensation
     assert 'test ! -f "$RAILWAY_RESET_FENCE_OPENED"' in compensation

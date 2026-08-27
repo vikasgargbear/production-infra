@@ -72,6 +72,9 @@ def _row(*, now, grant_branch_id=None, command_request_id=None, command_branches
 
 @pytest.fixture
 def enabled_issuer(monkeypatch):
+    monkeypatch.setattr(
+        mcp_agent_grants, "require_canonical_session_authority", lambda _db: None
+    )
     monkeypatch.setattr(mcp_agent_grants, "HOSTED_OAUTH_CONSENT_IMPLEMENTED", True)
     monkeypatch.setattr(mcp_agent_grants, "CANONICAL_SCHEMA_DEPLOYMENT_VERIFIED", True)
     monkeypatch.setattr(mcp_agent_grants, "MCP_STAGING_VERIFIED", True)

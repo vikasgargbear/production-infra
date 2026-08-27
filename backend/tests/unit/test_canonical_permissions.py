@@ -38,6 +38,10 @@ def test_actions_are_fail_closed_and_capability_backed():
 @pytest.mark.asyncio
 async def test_checker_uses_signed_claims_without_database(monkeypatch):
     monkeypatch.setattr(
+        "app.core.security.permissions.require_canonical_session_authority",
+        lambda _db: None,
+    )
+    monkeypatch.setattr(
         "app.core.security.permissions.decode_jwt",
         lambda _: {
             "user_id": "5c3fd8ee-5768-437a-bec4-94a175f224cd",
@@ -47,9 +51,31 @@ async def test_checker_uses_signed_claims_without_database(monkeypatch):
         },
     )
 
-    user = await PermissionChecker("sales", "create")("Bearer signed-token")
+    user = await PermissionChecker("sales", "create")("Bearer signed-token", object())
     assert user["permissions"] == {"sales.invoice.create": True}
 
     with pytest.raises(HTTPException) as denied:
-        await PermissionChecker("inventory", "view")("Bearer signed-token")
+        await PermissionChecker("inventory", "view")("Bearer signed-token", object())
     assert denied.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_checker_rejects_stale_signed_claims_while_authority_is_closed(monkeypatch):
+    monkeypatch.setattr(
+        "app.core.security.permissions.decode_jwt",
+        lambda _: {
+            "user_id": "5c3fd8ee-5768-437a-bec4-94a175f224cd",
+            "org_id": "01e3fe3d-437d-4d52-a1de-701313b3c08b",
+        },
+    )
+    monkeypatch.setattr(
+        "app.core.security.permissions.require_canonical_session_authority",
+        lambda _db: (_ for _ in ()).throw(
+            HTTPException(status_code=503, detail={"error": "erp_maintenance"})
+        ),
+    )
+
+    with pytest.raises(HTTPException) as blocked:
+        await PermissionChecker()("Bearer stale-token", object())
+    assert blocked.value.status_code == 503
+    assert blocked.value.detail["error"] == "erp_maintenance"

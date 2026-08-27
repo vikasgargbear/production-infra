@@ -7,7 +7,7 @@ receipt="${3:?receipt path is required}"
 : "${PSYCOPG_DATABASE_URL:?}"
 
 case "$action" in
-  close|open|status) ;;
+  close|provision|open|status) ;;
   *) echo "unsupported canonical write-fence action" >&2; exit 2 ;;
 esac
 

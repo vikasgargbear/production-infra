@@ -5,7 +5,7 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 import pytest
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, FastAPI, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
@@ -456,9 +456,13 @@ def _sales_dispatch_payload():
     }
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def enabled_boundary(monkeypatch):
     # The injected fake service proves the deployed boundary for route tests.
+    monkeypatch.setattr(mcp_actions, "require_canonical_session_authority", lambda _db: None)
+    monkeypatch.setattr(
+        mcp_actions, "require_canonical_provisioning_authority", lambda _db: None
+    )
     yield
 
 
@@ -1645,6 +1649,7 @@ def test_service_and_operator_delegation_are_both_required(monkeypatch):
     context = mcp_actions.get_action_context(
         "Bearer delegated-token",
         HTTPAuthorizationCredentials(scheme="Bearer", credentials="s" * 32),
+        object(),
     )
     assert context.operation_key == "sales.order.prepare"
     assert context.branch_ids == (BRANCH_ID,)
@@ -1653,8 +1658,93 @@ def test_service_and_operator_delegation_are_both_required(monkeypatch):
         mcp_actions.get_action_context(
             "Bearer delegated-token",
             HTTPAuthorizationCredentials(scheme="Bearer", credentials="wrong"),
+            object(),
         )
     assert getattr(error.value, "status_code", None) == 401
+
+
+def test_public_operator_delegation_is_blocked_while_session_authority_is_closed(
+    monkeypatch,
+):
+    monkeypatch.setenv("MCP_INTERNAL_SERVICE_TOKEN", "s" * 32)
+    monkeypatch.setattr(
+        mcp_actions,
+        "decode_jwt",
+        lambda *_args, **_kwargs: {
+            "operator_delegated": True,
+            "token_profile": mcp_actions.ACTION_TOKEN_PROFILE,
+        },
+    )
+    monkeypatch.setattr(
+        mcp_actions,
+        "require_canonical_session_authority",
+        lambda _db: (_ for _ in ()).throw(
+            HTTPException(status_code=503, detail={"error": "erp_maintenance"})
+        ),
+    )
+
+    with pytest.raises(HTTPException) as blocked:
+        mcp_actions.get_action_context(
+            "Bearer stale-token",
+            HTTPAuthorizationCredentials(scheme="Bearer", credentials="s" * 32),
+            object(),
+        )
+    assert blocked.value.status_code == 503
+
+
+@pytest.mark.parametrize(
+    ("provider", "sha_environment"),
+    (("railway", "RAILWAY_GIT_COMMIT_SHA"), ("render", "RENDER_GIT_COMMIT")),
+)
+def test_provisioning_operator_delegation_is_provider_and_exact_sha_bound(
+    monkeypatch, provider, sha_environment
+):
+    deployed_sha = "a" * 40
+    monkeypatch.setenv("MCP_INTERNAL_SERVICE_TOKEN", "s" * 32)
+    monkeypatch.setenv("CANONICAL_APPLICATION_PROVIDER", provider)
+    monkeypatch.setenv(sha_environment, deployed_sha)
+    claims = {
+        "operator_delegated": True,
+        "token_profile": mcp_actions.PROVISIONING_ACTION_TOKEN_PROFILE,
+        "provisioning_provider": provider,
+        "provisioning_deployment_sha": deployed_sha,
+        "provisioning_run_id": "32984377332",
+        "provisioning_run_attempt": "1",
+        "operator_operation": "sales.order.prepare",
+        "operator_permission": "sales.order.create",
+        "mcp_client_id": "client-1",
+        "branch_ids": [str(BRANCH_ID)],
+        "auth_user_id": str(uuid4()),
+        "user_id": str(uuid4()),
+        "org_id": str(uuid4()),
+        "membership_id": str(uuid4()),
+        "agent_grant_id": str(uuid4()),
+    }
+    monkeypatch.setattr(mcp_actions, "decode_jwt", lambda *_args, **_kwargs: claims)
+    provisioning_checks = []
+    monkeypatch.setattr(
+        mcp_actions,
+        "require_canonical_provisioning_authority",
+        lambda db: provisioning_checks.append(db),
+    )
+
+    database = object()
+    context = mcp_actions.get_action_context(
+        "Bearer provisioning-token",
+        HTTPAuthorizationCredentials(scheme="Bearer", credentials="s" * 32),
+        database,
+    )
+    assert context.operation_key == "sales.order.prepare"
+    assert provisioning_checks == [database]
+
+    claims["provisioning_deployment_sha"] = "b" * 40
+    with pytest.raises(HTTPException) as blocked:
+        mcp_actions.get_action_context(
+            "Bearer provisioning-token",
+            HTTPAuthorizationCredentials(scheme="Bearer", credentials="s" * 32),
+            database,
+        )
+    assert blocked.value.status_code == 401
 
 
 def test_default_readiness_fails_closed_with_explicit_blockers(monkeypatch):

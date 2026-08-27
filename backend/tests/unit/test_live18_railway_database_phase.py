@@ -244,11 +244,74 @@ def test_demo_validates_owner_cleanup_and_evidence_before_opening() -> None:
         "\ndef _parse_environment_file", 1
     )[0]
 
+    provisioning = demo.index('action="provision"')
     provision = demo.index("with _temporary_admin_owner_delegation(admin_url):")
     summary = demo.index("summary_path = evidence_dir")
+    reviewed_operator = demo.index("_validate_reviewed_web_operator")
     evidence = demo.index("evidence_hashes =")
     opening = demo.index("write_fence = _open_session_authority_after_demo")
-    assert provision < summary < evidence < opening
+    compensation = demo.index('action="close"')
+    assert provisioning < provision < summary < reviewed_operator < evidence < opening < compensation
+
+
+def test_demo_provisioning_and_close_transitions_use_exact_fence_receipts(monkeypatch) -> None:
+    calls = []
+    monkeypatch.setattr(
+        phase,
+        "_verify_admin_owner_delegation_removed",
+        lambda _database_url: calls.append("preverified"),
+    )
+
+    @contextlib.contextmanager
+    def delegation(_database_url):
+        calls.append("delegated")
+        yield
+        calls.append("removed")
+
+    monkeypatch.setattr(phase, "_temporary_admin_owner_delegation", delegation)
+    monkeypatch.setattr(
+        phase,
+        "apply_fence",
+        lambda database_url, *, action, commit_sha: calls.append(
+            (database_url, action, commit_sha)
+        ) or {"state": "provisioning" if action == "provision" else "closed", "commit_sha": commit_sha},
+    )
+
+    receipt = phase._set_session_authority_state(
+        "postgresql://admin@canonical/postgres",
+        "a" * 40,
+        action="provision",
+        expected_state="provisioning",
+    )
+
+    assert receipt["state"] == "provisioning"
+    assert calls == [
+        "preverified",
+        "delegated",
+        ("postgresql://admin@canonical/postgres", "provision", "a" * 40),
+        "removed",
+    ]
+
+
+def test_reviewed_web_operator_readback_must_match_exact_auth_user() -> None:
+    auth_user_id = "11111111-1111-4111-8111-111111111111"
+    authority = {
+        "auth_user_id": auth_user_id,
+        "user_id": "22222222-2222-4222-8222-222222222222",
+        "membership_id": "33333333-3333-4333-8333-333333333333",
+        "access_grant_id": "44444444-4444-4444-8444-444444444444",
+    }
+    assert phase._validate_reviewed_web_operator(
+        {"reviewed_web_operator": authority}, auth_user_id
+    ) == authority
+
+    with pytest.raises(
+        phase.RailwayDatabasePhaseError, match="differs from the reviewed identity"
+    ):
+        phase._validate_reviewed_web_operator(
+            {"reviewed_web_operator": authority},
+            "55555555-5555-4555-8555-555555555555",
+        )
 
 
 def test_railway_live18_demo_restores_the_reviewed_web_operator() -> None:
@@ -271,16 +334,32 @@ def test_railway_live18_demo_restores_the_reviewed_web_operator() -> None:
     assert "bind_reviewed_web_operator(bootstrap, reviewed_web_auth_user_id)" in source
     assert '"reviewed_web_operator": reviewed_web_operator' in source
     bootstrap_call = source.index("bootstrap_identity(bootstrap)")
+    reconciliation = source.index("cross_table_reconciliation =")
     auth_lookup = source.index(
         "bind_reviewed_web_operator(bootstrap, reviewed_web_auth_user_id)",
         bootstrap_call,
     )
-    assert source.count(
-        'with database_connection("PSYCOPG_DATABASE_URL") as bootstrap:',
-        bootstrap_call,
-        auth_lookup,
-    ) == 1
-    assert "auth schema" in source[bootstrap_call:auth_lookup]
+    summary = source.index("summary = {", auth_lookup)
+    assert bootstrap_call < reconciliation < auth_lookup < summary
+    assert "partially provisioned" in source[reconciliation:auth_lookup]
+
+
+def test_demo_uses_a_deployment_bound_provisioning_token_profile() -> None:
+    source = phase.BACKEND_DIRECTORY.joinpath(
+        "scripts", "provision_canonical_demo.py"
+    ).read_text(encoding="utf-8")
+    token_source = source.split("def token(", 1)[1].split("\ndef api_call", 1)[0]
+    for contract in (
+        'CANONICAL_PROVISIONING_PROVIDER',
+        'canonical_provisioning_operator_v1',
+        'provisioning_provider',
+        'provisioning_deployment_sha',
+        'provisioning_run_id',
+        'provisioning_run_attempt',
+        'RAILWAY_GIT_COMMIT_SHA',
+        'RENDER_GIT_COMMIT',
+    ):
+        assert contract in token_source
 
 
 def test_captured_database_evidence_replaces_the_runner_database_secret():
@@ -1143,10 +1222,16 @@ def test_railway_live18_workflow_has_fail_closed_remote_lifecycle():
         / "production-readiness.yml"
     ).read_text(encoding="utf-8")
     live18 = workflow.split("\n  live18-acceptance:", 1)[1]
+    close_helper = (
+        phase.BACKEND_DIRECTORY / "scripts" / "close_live18_railway_authority.py"
+    ).read_text(encoding="utf-8")
 
     assert "needs.canonical-free-staging.result == 'skipped'" in live18
     assert "needs.railway-canonical-staging.result == 'success'" in live18
     assert "live18_railway_database_phase.py provision-demo" in live18
+    assert "backend/scripts/close_live18_railway_authority.py" in live18
+    assert "scripts/live18_railway_database_phase.py" in close_helper
+    assert '"close-authority"' in close_helper
     assert "live18_railway_database_phase.py provision-identities" in live18
     assert "live18_railway_database_phase.py capture-evidence" in live18
     assert "live18_railway_database_phase.py recover-identities-before-demo" in live18
@@ -1207,6 +1292,44 @@ def test_railway_live18_workflow_has_fail_closed_remote_lifecycle():
     assert 'ref: ${{ inputs.canonical_staging_deploy_sha }}' in live18
     assert '--project "$RAILWAY_PROJECT_ID"' in live18
     assert '--environment "$RAILWAY_ENVIRONMENT_ID"' in live18
+    demo_step = live18.split(
+        "- name: Verify exact migration head and provision same-run demo over Railway direct IPv6",
+        1,
+    )[1].split("- name: Build the masked exact erp_runtime connection", 1)[0]
+    assert demo_step.index(
+        'touch "$LIVE18_RAILWAY_AUTHORITY_OPEN_ATTEMPTED_PATH"'
+    ) < demo_step.index("live18_railway_database_phase.py provision-demo")
+    compensation = live18.index(
+        "- name: Re-close canonical authority immediately after any Live18 failure"
+    )
+    final_compensation = live18.index(
+        "- name: Re-close canonical authority after any evidence failure"
+    )
+    ssh_teardown = live18.index(
+        "- name: Always remove the run-scoped Railway SSH key"
+    )
+    evidence_upload = live18.index(
+        "- name: Upload scrubbed allowlisted live18 evidence only"
+    )
+    fixture_cleanup = live18.index(
+        "- name: Always remove external reviewed choices and compiled fixture"
+    )
+    assert (
+        compensation
+        < fixture_cleanup
+        < evidence_upload
+        < final_compensation
+        < ssh_teardown
+    )
+    close_step = live18[compensation:fixture_cleanup]
+    assert "if: failure() && env.LIVE18_PROVIDER == 'railway'" in close_step
+    assert "backend/scripts/close_live18_railway_authority.py" in close_step
+    final_close_step = live18[final_compensation:ssh_teardown]
+    assert "if: failure() && env.LIVE18_PROVIDER == 'railway'" in final_close_step
+    assert "backend/scripts/close_live18_railway_authority.py" in final_close_step
+    assert 'response.get("action") == "close-authority"' in close_helper
+    assert 'fence.get("state") == "closed"' in close_helper
+    assert "marker.unlink()" in close_helper
     artifact = live18.split(
         "- name: Upload scrubbed allowlisted live18 evidence only", 1
     )[1]

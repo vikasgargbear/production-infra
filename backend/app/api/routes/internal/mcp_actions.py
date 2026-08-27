@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
+import os
+import re
 from typing import Any, Literal, Optional
 from uuid import UUID
 
@@ -14,6 +16,10 @@ from jwt import InvalidTokenError as JWTError
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy.orm import Session
 from ....core.auth.jwt_auth import decode_jwt
+from ....core.auth.session_authority import (
+    require_canonical_provisioning_authority,
+    require_canonical_session_authority,
+)
 from ....core.database import get_db
 from ....domain.operator_actions import (
     ACTION_POLICIES,
@@ -72,6 +78,12 @@ router = APIRouter(
 )
 
 ACTION_TOKEN_PROFILE = "canonical_operator_delegation_v1"
+PROVISIONING_ACTION_TOKEN_PROFILE = "canonical_provisioning_operator_v1"
+DEPLOYED_SHA_ENV_BY_PROVIDER = {
+    "railway": "RAILWAY_GIT_COMMIT_SHA",
+    "render": "RENDER_GIT_COMMIT",
+}
+EXACT_SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 PREVIEW_HASH_PATTERN = r"^sha256:[0-9a-f]{64}$"
 IDEMPOTENCY_KEY_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$"
 
@@ -256,10 +268,10 @@ def _parse_action_token(header: str) -> dict[str, Any]:
             status_code=401,
             detail=_error_detail(ActionErrorCode.AUTH_REQUIRED, "Invalid canonical delegation"),
         ) from exc
-    if (
-        claims.get("operator_delegated") is not True
-        or claims.get("token_profile") != ACTION_TOKEN_PROFILE
-    ):
+    if claims.get("operator_delegated") is not True or claims.get("token_profile") not in {
+        ACTION_TOKEN_PROFILE,
+        PROVISIONING_ACTION_TOKEN_PROFILE,
+    }:
         raise HTTPException(
             status_code=401,
             detail=_error_detail(ActionErrorCode.AUTH_REQUIRED, "Invalid canonical delegation"),
@@ -267,15 +279,62 @@ def _parse_action_token(header: str) -> dict[str, Any]:
     return claims
 
 
+def _canonical_numeric_claim(claims: dict[str, Any], name: str) -> str:
+    value = claims.get(name)
+    if not isinstance(value, str) or not value.isdigit() or int(value) < 1:
+        raise HTTPException(
+            status_code=401,
+            detail=_error_detail(ActionErrorCode.AUTH_REQUIRED, "Invalid provisioning delegation"),
+        )
+    if str(int(value)) != value:
+        raise HTTPException(
+            status_code=401,
+            detail=_error_detail(ActionErrorCode.AUTH_REQUIRED, "Invalid provisioning delegation"),
+        )
+    return value
+
+
+def _require_provisioning_deployment_identity(claims: dict[str, Any]) -> None:
+    """Bind the provisioning token to one provider deployment and workflow run."""
+
+    provider = os.getenv("CANONICAL_APPLICATION_PROVIDER", "").strip().lower()
+    claim_provider = claims.get("provisioning_provider")
+    sha_environment = DEPLOYED_SHA_ENV_BY_PROVIDER.get(provider)
+    if sha_environment is None or claim_provider != provider:
+        raise HTTPException(
+            status_code=401,
+            detail=_error_detail(ActionErrorCode.AUTH_REQUIRED, "Invalid provisioning delegation"),
+        )
+    deployed_sha = os.getenv(sha_environment, "").strip().lower()
+    claim_sha = claims.get("provisioning_deployment_sha")
+    if (
+        not EXACT_SHA_PATTERN.fullmatch(deployed_sha)
+        or not isinstance(claim_sha, str)
+        or claim_sha != deployed_sha
+    ):
+        raise HTTPException(
+            status_code=401,
+            detail=_error_detail(ActionErrorCode.AUTH_REQUIRED, "Invalid provisioning delegation"),
+        )
+    _canonical_numeric_claim(claims, "provisioning_run_id")
+    _canonical_numeric_claim(claims, "provisioning_run_attempt")
+
+
 def get_action_context(
     delegated_authorization: str = Header(
         ..., alias="X-MCP-Delegated-Authorization", min_length=8, max_length=8192
     ),
     service_credentials: HTTPAuthorizationCredentials = Depends(bearer),
+    db: Session = Depends(get_db),
 ) -> ActionContext:
     """Require service authentication and a short-lived signed action grant."""
     _internal_auth(service_credentials)
     claims = _parse_action_token(delegated_authorization)
+    if claims["token_profile"] == ACTION_TOKEN_PROFILE:
+        require_canonical_session_authority(db)
+    else:
+        require_canonical_provisioning_authority(db)
+        _require_provisioning_deployment_identity(claims)
     operation_key = claims.get("operator_operation")
     permission = claims.get("operator_permission")
     client_id = claims.get("mcp_client_id")

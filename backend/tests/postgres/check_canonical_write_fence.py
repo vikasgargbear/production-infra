@@ -13,7 +13,7 @@ import psycopg2
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "backend/scripts"))
-from manage_canonical_write_fence import apply_fence  # noqa: E402
+from manage_canonical_write_fence import FenceError, apply_fence  # noqa: E402
 
 
 DATABASE_URL = os.environ["DATABASE_URL"]
@@ -28,6 +28,12 @@ def scalar(query: str):
         with connection.cursor() as cursor:
             cursor.execute(query)
             return cursor.fetchone()[0]
+
+
+def execute(query: str) -> None:
+    with psycopg2.connect(PSYCOPG_DSN) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(query)
 
 
 def require_runtime_denial(statement: str) -> None:
@@ -47,6 +53,9 @@ def require_runtime_denial(statement: str) -> None:
 
 closed = False
 try:
+    # Explicitly reproduce the deployment transition from head 0031: closing
+    # must work before the session role exists, while every later transition
+    # must require the role installed by 0032.
     close_receipt = apply_fence(
         DATABASE_URL,
         action="close",
@@ -55,6 +64,7 @@ try:
     closed = True
     assert close_receipt["state"] == "closed"
     assert close_receipt["runtime_inherits_erp_app"] is False
+    assert close_receipt["runtime_inherits_session_authority"] is False
     assert all(
         not any(counts.values())
         for counts in close_receipt["service_mutation_privileges"].values()
@@ -82,8 +92,67 @@ try:
     require_runtime_denial(
         "SELECT erp_automation_commands.execute_approved_command(NULL,NULL)"
     )
+
+    execute("DROP ROLE erp_session_authority")
+    assert scalar(
+        "SELECT pg_catalog.to_regrole('erp_session_authority') IS NULL"
+    ) is True
+    pre_migration_close = apply_fence(
+        DATABASE_URL,
+        action="close",
+        commit_sha=COMMIT_SHA,
+    )
+    assert pre_migration_close["state"] == "closed"
+    assert pre_migration_close["session_authority_role_present"] is False
+    try:
+        apply_fence(
+            DATABASE_URL,
+            action="status",
+            commit_sha=COMMIT_SHA,
+        )
+    except FenceError as error:
+        assert str(error) == "canonical session-authority role is absent"
+    else:
+        raise AssertionError("status accepted a missing session-authority role")
+
+    migration_sql = (
+        ROOT / "backend/alembic/sql/20260827_0032_session_authority.sql"
+    ).read_text(encoding="utf-8")
+    execute(migration_sql)
+    assert scalar(
+        """
+        SELECT NOT rolcanlogin AND NOT rolsuper AND NOT rolcreatedb
+               AND NOT rolcreaterole AND rolinherit AND NOT rolbypassrls
+               AND NOT rolreplication
+          FROM pg_catalog.pg_roles
+         WHERE rolname='erp_session_authority'
+        """
+    ) is True
+
+    provisioning_receipt = apply_fence(
+        DATABASE_URL,
+        action="provision",
+        commit_sha=COMMIT_SHA,
+    )
+    assert provisioning_receipt["state"] == "provisioning"
+    assert provisioning_receipt["runtime_inherits_erp_app"] is True
+    assert provisioning_receipt["runtime_inherits_session_authority"] is False
+    assert provisioning_receipt["session_authority_members"] == []
+    assert apply_fence(
+        DATABASE_URL,
+        action="status",
+        commit_sha=COMMIT_SHA,
+    )["state"] == "provisioning"
 finally:
     if closed:
+        if scalar(
+            "SELECT pg_catalog.to_regrole('erp_session_authority') IS NULL"
+        ):
+            execute(
+                (
+                    ROOT / "backend/alembic/sql/20260827_0032_session_authority.sql"
+                ).read_text(encoding="utf-8")
+            )
         open_receipt = apply_fence(
             DATABASE_URL,
             action="open",
@@ -91,6 +160,13 @@ finally:
         )
         assert open_receipt["state"] == "open"
         assert open_receipt["runtime_inherits_erp_app"] is True
+        assert open_receipt["runtime_inherits_session_authority"] is True
+        assert open_receipt["session_authority_members"] == ["erp_runtime"]
+        assert apply_fence(
+            DATABASE_URL,
+            action="status",
+            commit_sha=COMMIT_SHA,
+        )["state"] == "open"
 
 assert scalar(
     "SELECT pg_catalog.has_table_privilege('erp_runtime','catalog.products','UPDATE')"
