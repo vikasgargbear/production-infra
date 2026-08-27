@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+from datetime import date, datetime
 from pathlib import Path
 import re
 from uuid import UUID
@@ -25,7 +26,11 @@ def _module():
 def test_sales_payloads_bind_the_exact_selected_delivery_address_version() -> None:
     module = _module()
 
-    order = module.sales_order_payload(7)
+    order = module.sales_order_payload(
+        7,
+        business_date=date(2026, 8, 26),
+        delivery_offset_days="2",
+    )
     invoice = module.sales_invoice_payload([], 7)
 
     for payload in (order, invoice):
@@ -33,6 +38,51 @@ def test_sales_payloads_bind_the_exact_selected_delivery_address_version() -> No
         assert payload["delivery_address_row_version"] == "7"
         assert "place_of_supply_state_code" not in payload
         assert "shipping_address_id" not in payload
+
+
+def test_sales_order_requested_date_is_derived_from_reviewed_authority() -> None:
+    module = _module()
+
+    payload = module.sales_order_payload(
+        7,
+        business_date=date(2026, 8, 26),
+        delivery_offset_days="2",
+    )
+
+    assert payload["order_date"] == "2026-08-26"
+    assert payload["requested_delivery_date"] == "2026-08-28"
+    assert module.SOURCE_RETRIEVED_ON.isoformat() not in {
+        payload["order_date"],
+        payload["requested_delivery_date"],
+    }
+
+
+@pytest.mark.parametrize("delivery_offset_days", ["0", "31", 2, "two"])
+def test_sales_order_requested_date_rejects_unreviewed_offsets(
+    delivery_offset_days: object,
+) -> None:
+    module = _module()
+
+    with pytest.raises(ValueError, match="reviewed integer from 1 through 30"):
+        module.sales_order_payload(
+            7,
+            business_date=date(2026, 8, 26),
+            delivery_offset_days=delivery_offset_days,
+        )
+
+
+@pytest.mark.parametrize("business_date", ["2026-08-26", datetime(2026, 8, 26)])
+def test_sales_order_requested_date_rejects_non_date_authority(
+    business_date: object,
+) -> None:
+    module = _module()
+
+    with pytest.raises(ValueError, match="authoritative organization business date"):
+        module.sales_order_payload(
+            7,
+            business_date=business_date,
+            delivery_offset_days="2",
+        )
 
 
 def test_demo_identity_rejects_an_invalid_organization_pan_before_database_use() -> None:
@@ -80,6 +130,10 @@ def test_sales_payloads_reject_invalid_delivery_address_versions(
     module = _module()
 
     with pytest.raises(ValueError, match="positive integer"):
-        module.sales_order_payload(row_version)
+        module.sales_order_payload(
+            row_version,
+            business_date=date(2026, 8, 26),
+            delivery_offset_days="2",
+        )
     with pytest.raises(ValueError, match="positive integer"):
         module.sales_invoice_payload([], row_version)

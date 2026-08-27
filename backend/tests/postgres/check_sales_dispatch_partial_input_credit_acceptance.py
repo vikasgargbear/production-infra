@@ -313,6 +313,7 @@ def main() -> None:
         fixture.seed_end_to_end_master(connection)
     with psycopg2.connect(runtime_dsn) as connection:
         fixture.activate_demo_product(connection)
+        business_date = fixture.live18_business_date(connection)
 
     batch_id = _seed_opening_stock(runtime_dsn)
     lot_id, other_lot_id, other_org = _seed_partial_itc(admin_dsn, batch_id)
@@ -322,7 +323,11 @@ def main() -> None:
         address_version = int(cursor.fetchone()[0])
 
     with _service(runtime_url, calculator_url) as service:
-        order_payload = fixture.sales_order_payload(address_version)
+        order_payload = fixture.sales_order_payload(
+            address_version,
+            business_date=business_date,
+            delivery_offset_days="2",
+        )
         order_key = f"pg15-partial-order-{uuid4()}"
         order = _prepare(service, "sales.order.prepare", order_payload, order_key)
         assert _prepare(service, "sales.order.prepare", order_payload, order_key).command_request_id == order.command_request_id

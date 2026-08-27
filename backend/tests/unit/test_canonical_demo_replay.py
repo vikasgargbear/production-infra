@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 from contextlib import contextmanager
+from datetime import date
 from pathlib import Path
 from uuid import UUID
 
@@ -51,10 +52,16 @@ def test_sales_order_uses_exact_database_address_identity_and_version() -> None:
     connection = _Connection()
 
     row_version = module.selected_customer_delivery_address_row_version(connection)
-    payload = module.sales_order_payload(row_version)
+    payload = module.sales_order_payload(
+        row_version,
+        business_date=date(2026, 8, 26),
+        delivery_offset_days="2",
+    )
 
     assert payload["delivery_address_id"] == module.IDS["customer_address"]
     assert payload["delivery_address_row_version"] == "7"
+    assert payload["order_date"] == "2026-08-26"
+    assert payload["requested_delivery_date"] == "2026-08-28"
     assert "shipping_address_id" not in payload
     assert "place_of_supply_state_code" not in payload
     authority_sql = connection.cursor_value.executions[1][0]

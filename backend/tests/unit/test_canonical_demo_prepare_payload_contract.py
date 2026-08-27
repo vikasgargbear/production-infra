@@ -98,11 +98,17 @@ def _cases() -> list[tuple[str, str, dict[str, Any], dict[str, Any]]]:
         (
             "sales_order",
             "sales.order.prepare",
-            module.sales_order_payload(7),
+            module.sales_order_payload(
+                7,
+                business_date=date(2026, 8, 26),
+                delivery_offset_days="2",
+            ),
             {
                 "customer_account_id": module.IDS["customer_account"],
                 "delivery_address_id": module.IDS["customer_address"],
                 "delivery_address_row_version": "7",
+                "order_date": "2026-08-26",
+                "requested_delivery_date": "2026-08-28",
             },
         ),
         (

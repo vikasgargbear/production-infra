@@ -3162,16 +3162,35 @@ def selected_customer_delivery_address_row_version(connection) -> int:
     return rows[0][0]
 
 
-def sales_order_payload(delivery_address_row_version: int) -> dict[str, Any]:
+def sales_order_payload(
+    delivery_address_row_version: int,
+    *,
+    business_date: date,
+    delivery_offset_days: str,
+) -> dict[str, Any]:
     if (
         isinstance(delivery_address_row_version, bool)
         or delivery_address_row_version < 1
     ):
         raise ValueError("delivery address row version must be a positive integer")
+    if not isinstance(business_date, date) or isinstance(business_date, datetime):
+        raise ValueError(
+            "sales order requires the authoritative organization business date"
+        )
+    if not isinstance(delivery_offset_days, str) or not re.fullmatch(
+        r"[1-9]|[12][0-9]|30", delivery_offset_days
+    ):
+        raise ValueError(
+            "sales order delivery offset must be a reviewed integer from 1 through 30"
+        )
+    requested_delivery_date = business_date + timedelta(
+        days=int(delivery_offset_days)
+    )
     return {
         "idempotency_key": f"demo-sales-order-{os.getenv('GITHUB_RUN_ID', 'local')}",
         "branch_id": IDS["branch"],
-        "order_date": SOURCE_RETRIEVED_ON.isoformat(),
+        "order_date": business_date.isoformat(),
+        "requested_delivery_date": requested_delivery_date.isoformat(),
         "document_discount": {
             "document_discount_kind": "amount",
             "document_discount_basis": "taxable_value",
@@ -6067,7 +6086,13 @@ def main() -> int:
         delivery_address_row_version = selected_customer_delivery_address_row_version(
             runtime
         )
-    payload = sales_order_payload(delivery_address_row_version)
+    payload = sales_order_payload(
+        delivery_address_row_version,
+        business_date=reviewed_live18_business_date,
+        delivery_offset_days=reviewed_live18_scalars[
+            "sales_order_delivery_offset_days"
+        ],
+    )
     preflight_sales_order(payload, evidence_dir)
     journey = exercise_sales_order(evidence_dir, payload)
     with database_connection("ERP_RUNTIME_DATABASE_URL") as runtime:
