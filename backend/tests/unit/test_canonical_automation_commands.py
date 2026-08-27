@@ -190,6 +190,29 @@ def test_customer_receipt_prepare_and_execute_reauthorize_exact_non_cash_allocat
         assert fragment in mapping
 
 
+def test_customer_advance_is_branch_bound_and_bounce_releases_order_capacity() -> None:
+    mapping = _sql()
+
+    assert "FROM sales.orders AS source_order" in mapping
+    assert "source_order.branch_id=branch_id" in mapping
+    assert "AND branch_id=branch_id AND customer_account_id=customer.id" not in mapping
+    assert ":customer-advance-order:" in mapping
+    assert "reversal.related_payment_id=existing.id" in mapping
+    assert "reversal.payment_purpose='cheque_bounce'" in mapping
+    assert "payment.payment_purpose NOT IN ('commercial_settlement','customer_advance')" in mapping
+    assert "FROM finance.payments AS source_payment" in mapping
+    assert "source_payment.branch_id=branch_id" in mapping
+    assert "SELECT event.journal_entry_id INTO STRICT original_journal_id" in mapping
+    assert "event.payment_id=(resolved_document->>'original_payment_id')::uuid" in mapping
+
+
+def test_shared_prepare_dispatch_includes_post_baseline_capabilities() -> None:
+    source = GENERATOR.read_text(encoding="utf-8")
+    assert "for capability, (_, resource_type) in OPERATOR_COMMANDS.items()" in source
+    assert "for capability, (operation, _) in OPERATOR_COMMANDS.items()" in source
+    assert "operator_capabilities = _sql_text_list(sorted(OPERATOR_COMMANDS))" in source
+
+
 def test_finance_payment_dates_use_one_organization_timezone_authority() -> None:
     mapping = _sql()
     business_clock = (

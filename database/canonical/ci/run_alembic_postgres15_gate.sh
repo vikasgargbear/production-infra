@@ -185,6 +185,8 @@ PYTHONPATH=backend \
 PYTHONPATH=backend \
   python backend/tests/postgres/check_posting_chronology_runtime_role.py
 PYTHONPATH=backend \
+  python backend/tests/postgres/check_customer_advance_cheque_bounce_lifecycle_runtime_role.py
+PYTHONPATH=backend \
   python backend/tests/postgres/check_canonical_demo_replay_hardening.py
 PYTHONPATH=backend \
   python backend/tests/postgres/check_application_promotion_content_digest.py

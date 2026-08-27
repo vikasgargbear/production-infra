@@ -52,17 +52,6 @@ OPERATOR_COMMANDS = {
     "procurement.purchase_return.reversal.prepare": ("procurement.purchase_return.reversal.post", "adjustment_note_reversal"),
     "finance.adjustment_note.reversal.prepare": ("finance.adjustment_note.reversal.post", "adjustment_note_reversal"),
 }
-BASELINE_OPERATOR_COMMANDS = {
-    capability: binding
-    for capability, binding in OPERATOR_COMMANDS.items()
-    if capability not in {
-        "finance.adjustment_note.prepare",
-        "finance.bank_reconciliation.prepare",
-        "finance.expense_claim.prepare",
-    }
-}
-
-
 def _sql_text_list(values: list[str]) -> str:
     return ",".join("'" + value.replace("'", "''") + "'" for value in values)
 
@@ -70,7 +59,7 @@ def _sql_text_list(values: list[str]) -> str:
 def _target_case(expression: str) -> str:
     branches = " ".join(
         f"WHEN '{capability}' THEN '{resource_type}'"
-        for capability, (_, resource_type) in BASELINE_OPERATOR_COMMANDS.items()
+        for capability, (_, resource_type) in OPERATOR_COMMANDS.items()
     )
     return f"CASE {expression} {branches} ELSE NULL END"
 
@@ -78,7 +67,7 @@ def _target_case(expression: str) -> str:
 def _operation_case(expression: str) -> str:
     branches = " ".join(
         f"WHEN '{capability}' THEN '{operation}'"
-        for capability, (operation, _) in BASELINE_OPERATOR_COMMANDS.items()
+        for capability, (operation, _) in OPERATOR_COMMANDS.items()
     )
     return f"CASE {expression} {branches} ELSE NULL END"
 
@@ -3126,7 +3115,7 @@ END
 
 
 def _request_match_definition() -> list[str]:
-    operator_capabilities = _sql_text_list(sorted(BASELINE_OPERATOR_COMMANDS))
+    operator_capabilities = _sql_text_list(sorted(OPERATOR_COMMANDS))
     trigger_target_case = _target_case("NEW.capability_code")
     trigger_operation_case = _operation_case("NEW.capability_code")
     prepare_target_case = _target_case("capability_name")
@@ -3276,13 +3265,13 @@ BEGIN
        OR (NEW.capability_code IN (
              'sales.order.prepare','procurement.purchase_order.prepare',
              'sales.invoice.prepare','procurement.supplier_invoice.prepare',
-             'sales.return.prepare','procurement.purchase_return.prepare'
+             'sales.return.prepare','procurement.purchase_return.prepare','finance.adjustment_note.prepare'
            ) AND
            NULLIF(preview_document->>'calculation_artifact_id','')::uuid IS NULL)
        OR (NEW.capability_code IN (
              'sales.order.prepare','procurement.purchase_order.prepare',
              'sales.invoice.prepare','procurement.supplier_invoice.prepare',
-             'sales.return.prepare','procurement.purchase_return.prepare'
+             'sales.return.prepare','procurement.purchase_return.prepare','finance.adjustment_note.prepare'
            ) AND
            NEW.aggregate_version_hash IS DISTINCT FROM "{SCHEMA}"."aggregate_version_hash"(
                NEW.target_resource_type,NEW.target_resource_id,NEW.target_row_version
@@ -3290,7 +3279,7 @@ BEGIN
        OR (NEW.capability_code NOT IN (
              'sales.order.prepare','procurement.purchase_order.prepare',
              'sales.invoice.prepare','procurement.supplier_invoice.prepare',
-             'sales.return.prepare','procurement.purchase_return.prepare'
+             'sales.return.prepare','procurement.purchase_return.prepare','finance.adjustment_note.prepare'
            ) AND
            NEW.aggregate_version_hash IS DISTINCT FROM extensions.digest(
                pg_catalog.convert_to(source_versions::text,'UTF8'),'sha256'
@@ -6610,18 +6599,25 @@ BEGIN
     SELECT * INTO STRICT settlement FROM finance.accounts WHERE org_id=organization_id AND id=settlement_id FOR SHARE;
   END IF;
   IF purpose='customer_advance' THEN
-    SELECT * INTO STRICT sales_order FROM sales.orders WHERE org_id=organization_id AND id=sales_order_id
-      AND branch_id=branch_id AND customer_account_id=customer.id AND status IN ('approved','partially_fulfilled')
-      AND currency_code='INR' AND tax_charge_mechanism='normal' AND supply_type IN ('intra_state','inter_state') FOR SHARE;
+    SELECT source_order.* INTO STRICT sales_order FROM sales.orders AS source_order
+     WHERE source_order.org_id=organization_id AND source_order.id=sales_order_id
+      AND source_order.branch_id=branch_id AND source_order.customer_account_id=customer.id
+      AND source_order.status IN ('approved','partially_fulfilled')
+      AND source_order.currency_code='INR' AND source_order.tax_charge_mechanism='normal'
+      AND source_order.supply_type IN ('intra_state','inter_state') FOR SHARE;
     IF EXISTS (SELECT 1 FROM sales.order_lines line WHERE line.org_id=organization_id AND line.order_id=sales_order.id
        AND line.line_kind<>'product') OR NOT EXISTS (SELECT 1 FROM sales.order_lines line
        WHERE line.org_id=organization_id AND line.order_id=sales_order.id AND line.line_kind='product') THEN
       RAISE EXCEPTION USING ERRCODE='0A000', MESSAGE='customer advance is restricted to an approved goods-only sales order'; END IF;
+    PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
+      organization_id::text||':customer-advance-order:'||sales_order.id::text,672009));
     SELECT coalesce(sum(existing.amount),0) INTO customer_advance_prior FROM finance.payments existing
       WHERE existing.org_id=organization_id AND existing.sales_order_id=sales_order.id
         AND existing.payment_purpose='customer_advance' AND existing.status='posted'
         AND NOT EXISTS (SELECT 1 FROM finance.payments reversal WHERE reversal.org_id=existing.org_id
-          AND reversal.reversal_of_payment_id=existing.id AND reversal.status='posted');
+          AND reversal.status='posted' AND (
+            reversal.reversal_of_payment_id=existing.id OR
+            (reversal.related_payment_id=existing.id AND reversal.payment_purpose='cheque_bounce')));
     IF customer_advance_prior+payment_amount>sales_order.grand_total THEN
       RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='customer advance exceeds locked goods-order residual'; END IF;
     SELECT * INTO STRICT customer_advance_account FROM finance.accounts WHERE org_id=organization_id
@@ -6886,10 +6882,12 @@ BEGIN
      OR erp_security.has_permission('finance.journal.post',branch_id) IS DISTINCT FROM true
      OR erp_security.has_permission('automation.command.execute',branch_id) IS DISTINCT FROM true THEN
     RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='cheque terminal-action permission is inactive'; END IF;
-  SELECT * INTO STRICT original FROM finance.payments WHERE org_id=organization_id AND id=original_id
-    AND branch_id=branch_id AND status='posted' AND direction='receipt' AND payment_method='cheque'
-    AND payment_purpose IN ('commercial_settlement','customer_advance')
-    AND account_payee_confirmed AND row_version=requested_version FOR UPDATE;
+  SELECT source_payment.* INTO STRICT original FROM finance.payments AS source_payment
+   WHERE source_payment.org_id=organization_id AND source_payment.id=original_id
+    AND source_payment.branch_id=branch_id AND source_payment.status='posted'
+    AND source_payment.direction='receipt' AND source_payment.payment_method='cheque'
+    AND source_payment.payment_purpose IN ('commercial_settlement','customer_advance')
+    AND source_payment.account_payee_confirmed AND source_payment.row_version=requested_version FOR UPDATE;
   IF action_date<original.payment_date OR (action_kind='bounce' AND original.payment_purpose='customer_advance'
      AND NOT EXISTS (SELECT 1 FROM finance.open_items item JOIN finance.accounting_events event
        ON event.org_id=item.org_id AND event.id=item.accounting_event_id
@@ -7015,8 +7013,10 @@ BEGIN
     AND fiscal_year_start=pg_catalog.make_date(fiscal_year,4,1) AND status='active' FOR SHARE;
   payment_number:=erp_core_commands.allocate_document_number(organization_id,payment_sequence_id,payment_sequence_key_hash,expires_at);
   journal_number:=erp_core_commands.allocate_document_number(organization_id,journal_sequence_id,journal_sequence_key_hash,expires_at);
-  IF '{action}'='bounce' THEN SELECT journal_entry_id INTO STRICT original_journal_id FROM finance.accounting_events
-    WHERE org_id=organization_id AND payment_id=(resolved_document->>'original_payment_id')::uuid FOR SHARE; END IF;
+  IF '{action}'='bounce' THEN SELECT event.journal_entry_id INTO STRICT original_journal_id
+    FROM finance.accounting_events AS event
+    WHERE event.org_id=organization_id
+      AND event.payment_id=(resolved_document->>'original_payment_id')::uuid FOR SHARE; END IF;
   INSERT INTO finance.payments(org_id,id,payment_number,payment_date,direction,party_id,branch_id,bank_account_id,
     settlement_account_id,payment_method,payment_purpose,currency_code,amount,functional_amount,fx_rate,external_reference,
     related_payment_id,evidence_attachment_id,memo,status,approved_at,approved_by_membership_id)
@@ -7038,13 +7038,22 @@ BEGIN
   INSERT INTO finance.journal_lines(org_id,id,journal_entry_id,line_number,account_id,branch_id,party_id,description,
     transaction_debit,transaction_credit,functional_debit,functional_credit)
   VALUES
-   (organization_id,pg_catalog.gen_random_uuid(),journal_id,1,(CASE '{action}' WHEN 'bounce' THEN resolved_document->>'offset_account_id'
-      ELSE resolved_document->>'settlement_account_id' END)::uuid,(resolved_document->>'branch_id')::uuid,
-      CASE '{action}' WHEN 'bounce' THEN (resolved_document->>'customer_party_id')::uuid ELSE NULL END,'Cheque {action} debit',
-      (resolved_document->>'amount')::numeric,0,(resolved_document->>'amount')::numeric,0),
-   (organization_id,pg_catalog.gen_random_uuid(),journal_id,2,(resolved_document->>'cheques_in_hand_account_id')::uuid,
-      (resolved_document->>'branch_id')::uuid,NULL,'Cheque {action} credit',0,(resolved_document->>'amount')::numeric,
-      0,(resolved_document->>'amount')::numeric);
+   (organization_id,pg_catalog.gen_random_uuid(),journal_id,1,(CASE '{action}' WHEN 'bounce'
+      THEN resolved_document->>'cheques_in_hand_account_id' ELSE resolved_document->>'settlement_account_id' END)::uuid,
+      (resolved_document->>'branch_id')::uuid,NULL,'Cheque {action} line 1',
+      CASE '{action}' WHEN 'bounce' THEN 0 ELSE (resolved_document->>'amount')::numeric END,
+      CASE '{action}' WHEN 'bounce' THEN (resolved_document->>'amount')::numeric ELSE 0 END,
+      CASE '{action}' WHEN 'bounce' THEN 0 ELSE (resolved_document->>'amount')::numeric END,
+      CASE '{action}' WHEN 'bounce' THEN (resolved_document->>'amount')::numeric ELSE 0 END),
+   (organization_id,pg_catalog.gen_random_uuid(),journal_id,2,(CASE '{action}' WHEN 'bounce'
+      THEN resolved_document->>'offset_account_id' ELSE resolved_document->>'cheques_in_hand_account_id' END)::uuid,
+      (resolved_document->>'branch_id')::uuid,
+      CASE '{action}' WHEN 'bounce' THEN (resolved_document->>'customer_party_id')::uuid ELSE NULL END,
+      'Cheque {action} line 2',
+      CASE '{action}' WHEN 'bounce' THEN (resolved_document->>'amount')::numeric ELSE 0 END,
+      CASE '{action}' WHEN 'bounce' THEN 0 ELSE (resolved_document->>'amount')::numeric END,
+      CASE '{action}' WHEN 'bounce' THEN (resolved_document->>'amount')::numeric ELSE 0 END,
+      CASE '{action}' WHEN 'bounce' THEN 0 ELSE (resolved_document->>'amount')::numeric END);
   RETURN pg_catalog.jsonb_build_object('command_request_id',command_id,'expires_at',expires_at,
     'preview_hash',pg_catalog.encode(extensions.digest(preview_bytes,'sha256'),'hex'),'replayed',false);
 END''',
@@ -7645,7 +7654,8 @@ BEGIN
           organization_id,actor_id,application_user.auth_user_id,application_membership.user_id,
           grant_row.id,grant_row.client_id,request_row.target_resource_id,request_document);
         IF request_row.target_resource_type<>'payment' OR request_row.target_row_version IS DISTINCT FROM payment.row_version
-           OR payment.status<>'approved' OR payment.direction<>'receipt' OR payment.payment_purpose<>'commercial_settlement'
+           OR payment.status<>'approved' OR payment.direction<>'receipt'
+           OR payment.payment_purpose NOT IN ('commercial_settlement','customer_advance')
            OR payment.branch_id IS DISTINCT FROM request_row.branch_id
            OR request_document->>'payment_id' IS DISTINCT FROM request_row.target_resource_id::text
            OR NULLIF(request_document->>'journal_id','')::uuid IS NULL OR NULLIF(request_document->>'event_id','')::uuid IS NULL
