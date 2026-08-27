@@ -83,6 +83,13 @@ def render_manifest() -> str:
             },
             "membership_authority": "backend/scripts/manage_canonical_write_fence.py",
             "public_session_principal": "erp_runtime",
+            "postgresql_creator_administration": {
+                "allowed_principal": "reviewed_control_session_user",
+                "admin_option": True,
+                "usage": False,
+                "set": False,
+                "counts_as_public_session_authority": False,
+            },
             "migration_default": "closed",
             "states": {
                 "closed": {

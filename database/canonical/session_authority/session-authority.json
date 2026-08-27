@@ -1,6 +1,13 @@
 {
   "membership_authority": "backend/scripts/manage_canonical_write_fence.py",
   "migration_default": "closed",
+  "postgresql_creator_administration": {
+    "admin_option": true,
+    "allowed_principal": "reviewed_control_session_user",
+    "counts_as_public_session_authority": false,
+    "set": false,
+    "usage": false
+  },
   "public_session_principal": "erp_runtime",
   "role": "erp_session_authority",
   "role_posture": {

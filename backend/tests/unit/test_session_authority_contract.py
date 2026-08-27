@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import json
 from pathlib import Path
 
 import pytest
@@ -20,6 +21,7 @@ MIGRATION_SQL = ROOT / "backend/alembic/sql/20260827_0032_session_authority.sql"
 MIGRATION_REVISION = (
     ROOT / "backend/alembic/versions/20260827_0032_session_authority.py"
 )
+MANIFEST = ROOT / "database/canonical/session_authority/session-authority.json"
 
 
 def _load(path: Path, name: str):
@@ -53,6 +55,18 @@ def test_role_is_non_login_non_owner_and_migration_does_not_open_it() -> None:
     assert "INHERIT NOBYPASSRLS NOREPLICATION" in sql
     assert "REVOKE erp_session_authority FROM" in sql
     assert "GRANT erp_session_authority" not in sql
+
+
+def test_pg16_creator_administration_is_explicitly_non_executable() -> None:
+    contract = json.loads(MANIFEST.read_text(encoding="utf-8"))
+
+    assert contract["postgresql_creator_administration"] == {
+        "admin_option": True,
+        "allowed_principal": "reviewed_control_session_user",
+        "counts_as_public_session_authority": False,
+        "set": False,
+        "usage": False,
+    }
 
 
 class _Result:

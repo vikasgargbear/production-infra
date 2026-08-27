@@ -77,6 +77,62 @@ def test_close_is_the_only_action_that_tolerates_pre_0032_role_absence() -> None
         fence._set_session_authority(cursor, enabled=True)
 
 
+def test_pg16_admin_only_creator_is_not_executable_session_authority() -> None:
+    class Cursor:
+        def __init__(self):
+            self.executions = []
+
+        def execute(self, statement, params=None):
+            self.executions.append((str(statement), params))
+
+        def fetchone(self):
+            return (True,)
+
+        def fetchall(self):
+            return [
+                ("migration_runner", True, False, False, True),
+                ("erp_runtime", False, True, True, False),
+            ]
+
+    cursor = Cursor()
+
+    executable, admin_only = fence._session_authority_memberships(cursor)
+
+    assert executable == ("erp_runtime",)
+    assert admin_only == ("migration_runner",)
+    membership_query = cursor.executions[-1][0]
+    assert "pg_has_role(member.oid,granted.oid,'USAGE')" in membership_query
+    assert (
+        "current_setting('server_version_num')::integer >= 160000"
+        in membership_query
+    )
+    assert "pg_has_role(member.oid,granted.oid,'SET')" in membership_query
+    assert "pg_has_role(member.oid,granted.oid,'MEMBER')" in membership_query
+    assert "member.rolname=SESSION_USER" in membership_query
+
+
+@pytest.mark.parametrize(
+    "row",
+    (
+        ("old_migration_runner", True, False, False, False),
+        ("mystery_role", False, False, False, True),
+    ),
+)
+def test_unreviewed_non_executable_session_membership_fails_closed(row) -> None:
+    class Cursor:
+        def execute(self, _statement, _params=None):
+            return None
+
+        def fetchone(self):
+            return (True,)
+
+        def fetchall(self):
+            return [row]
+
+    with pytest.raises(fence.FenceError, match="unexplained non-executable"):
+        fence._session_authority_memberships(Cursor())
+
+
 def test_closed_matrix_accepts_no_effective_schema_usage() -> None:
     matrix = {
         schema: {principal: False for principal in ("public", *fence.MANAGED_PRINCIPALS)}

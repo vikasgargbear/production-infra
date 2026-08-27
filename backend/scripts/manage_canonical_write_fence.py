@@ -222,12 +222,30 @@ def _runtime_inherits_app(cursor: Any) -> bool:
     return bool(cursor.fetchone()[0])
 
 
-def _session_authority_members(cursor: Any) -> tuple[str, ...]:
+def _session_authority_memberships(
+    cursor: Any,
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Separate executable session authority from PG16 creator administration.
+
+    PostgreSQL 16 records a non-superuser role creator as an ADMIN-only member
+    granted by the bootstrap principal.  With both USAGE and SET false, that
+    row cannot admit a session and the creator cannot reliably revoke it.  It
+    is safe only for the reviewed control connection's SESSION_USER.  Every
+    executable or otherwise unexplained membership remains fail-closed.
+    """
     if not _session_role_exists(cursor):
-        return ()
+        return (), ()
     cursor.execute(
         """
-        SELECT member.rolname
+        SELECT member.rolname,
+               membership.admin_option,
+               pg_catalog.pg_has_role(member.oid,granted.oid,'USAGE'),
+               CASE
+                 WHEN current_setting('server_version_num')::integer >= 160000
+                 THEN pg_catalog.pg_has_role(member.oid,granted.oid,'SET')
+                 ELSE pg_catalog.pg_has_role(member.oid,granted.oid,'MEMBER')
+               END,
+               member.rolname=SESSION_USER
           FROM pg_catalog.pg_auth_members AS membership
           JOIN pg_catalog.pg_roles AS granted
             ON granted.oid=membership.roleid
@@ -238,7 +256,29 @@ def _session_authority_members(cursor: Any) -> tuple[str, ...]:
         """,
         (SESSION_AUTHORITY_ROLE,),
     )
-    return tuple(str(row[0]) for row in cursor.fetchall())
+    executable: set[str] = set()
+    reviewed_admin_only: set[str] = set()
+    unexpected: set[str] = set()
+    for (
+        member_name,
+        admin_option,
+        can_use,
+        can_set,
+        is_session_user,
+    ) in cursor.fetchall():
+        member = str(member_name)
+        if bool(can_use) or bool(can_set):
+            executable.add(member)
+        elif bool(admin_option) and bool(is_session_user):
+            reviewed_admin_only.add(member)
+        else:
+            unexpected.add(member)
+    if unexpected:
+        raise FenceError(
+            "session-authority retained unexplained non-executable members: "
+            + ", ".join(sorted(unexpected))
+        )
+    return tuple(sorted(executable)), tuple(sorted(reviewed_admin_only))
 
 
 def _runtime_inherits_session_authority(cursor: Any) -> bool:
@@ -403,7 +443,10 @@ def apply_fence(
                     runtime_inherits_session_authority = (
                         _runtime_inherits_session_authority(cursor)
                     )
-                    session_authority_members = _session_authority_members(cursor)
+                    (
+                        session_authority_members,
+                        session_authority_admin_members,
+                    ) = _session_authority_memberships(cursor)
                     stage = "mutation_privilege_readback"
                     mutation_privileges = _service_mutation_privileges(cursor)
                     if action != "status":
@@ -521,6 +564,7 @@ def apply_fence(
         "session_authority_role_present": session_role_present,
         "runtime_inherits_session_authority": runtime_inherits_session_authority,
         "session_authority_members": list(session_authority_members),
+        "session_authority_admin_members": list(session_authority_admin_members),
         "service_mutation_privileges": mutation_privileges,
     }
 
