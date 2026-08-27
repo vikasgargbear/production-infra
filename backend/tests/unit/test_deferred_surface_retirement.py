@@ -132,6 +132,18 @@ def test_retired_numbering_and_bank_reads_have_canonical_owners() -> None:
     assert set(paths["/api/bank-accounts"]) == {"get"}
 
 
+def test_legacy_live_erp_harness_stays_retired() -> None:
+    legacy_root = BACKEND_ROOT / "tests/live_erp"
+    implementation_audit = (
+        BACKEND_ROOT / "scripts/audit/test_implementation_audit.py"
+    ).read_text(encoding="utf-8")
+
+    assert [path for path in legacy_root.rglob("*") if path.is_file()] == []
+    assert 'ROOT / "backend/tests/live_canonical"' in implementation_audit
+    assert 'ROOT / "backend/tests/live_acceptance"' in implementation_audit
+    assert 'ROOT / "backend/tests/live_erp"' not in implementation_audit
+
+
 def test_retired_audit_and_settings_routes_are_absent() -> None:
     api_routes = [
         route for route in app.routes

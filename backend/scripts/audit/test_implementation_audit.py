@@ -13,7 +13,8 @@ from typing import Iterable, List
 ROOT = Path(__file__).resolve().parents[3]
 CRITICAL_TEST_ROOTS = (
     ROOT / "backend/tests/api",
-    ROOT / "backend/tests/live_erp",
+    ROOT / "backend/tests/live_canonical",
+    ROOT / "backend/tests/live_acceptance",
 )
 PLACEHOLDER_PATTERN = re.compile(
     r"#\s*Implementation\b|simplified\s*-\s*actual\b|Actual\s+.+\s+would\b|"
