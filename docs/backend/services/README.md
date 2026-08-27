@@ -1,132 +1,37 @@
-# Service Layer Documentation
+# Runtime business-logic ownership
 
-Business logic services organized by domain.
+Consequential ERP writes do not use a parallel route → service → repository
+stack. Their maintained path is:
 
-**Code Location**: `app/api/services/`
-
----
-
-## Architecture
-
-```mermaid
-flowchart TB
-    subgraph "API Layer"
-        Routes[HTTP Routes]
-    end
-    
-    subgraph "Service Layer"
-        Sales[Sales Services]
-        Purchase[Purchase Services]
-        Finance[Finance Services]
-        Inventory[Inventory Services]
-        Master[Master Services]
-        Returns[Returns Services]
-        Core[Core Services]
-    end
-    
-    subgraph "Data Layer"
-        Repos[Repositories]
-        DB[(PostgreSQL)]
-    end
-    
-    Routes --> Sales & Purchase & Finance & Inventory & Master & Returns
-    Sales & Purchase & Finance --> Core
-    Sales & Purchase & Finance & Inventory & Master & Returns --> Repos
-    Repos --> DB
+```text
+frontend CTA
+  → /api/web/actions or internal MCP command route
+  → backend/app/infrastructure/operator_actions
+  → named erp_* PostgreSQL prepare/approve/execute function
+  → canonical readback route and MCP tool
 ```
 
----
+Start debugging an operation in
+[`core-operation-authority-matrix.json`](../../architecture/core-operation-authority-matrix.json).
+Each of its 18 entries names the operation key, REST context/readback, MCP
+prepare tool, PostgreSQL functions, and affected canonical relations.
 
-## Services by Domain
+The remaining `backend/app/api/services` modules are deliberately narrow:
 
-| Domain | Services | Description |
-|--------|----------|-------------|
-| [Sales](sales/) | 4 | Orders, invoices, challans |
-| [Purchase](purchase/) | 4 | PO, GRN, supplier invoices |
-| [Finance](finance/) | 7 | Payments, ledger, credit notes |
-| [Inventory](inventory/) | 2 | Stock, batches, movements |
-| [Master](master/) | 5 | Products, customers, suppliers |
-| [Returns](returns/) | 2 | Sales & purchase returns |
-| [Core](core/) | 5 | Auth, compliance, utilities |
+- authenticated ERP claim construction;
+- sales, purchase, return, and adjustment-note calculations;
+- effective-dated sales tax resolution; and
+- parse-only purchase invoice upload helpers.
 
-**Total**: 29 services
+They are not alternative write authorities. New business mutations must extend
+the typed operator-action boundary and a canonical database command. Do not add
+legacy table writes, compatibility services, browser-owned business facts, or
+offline fallbacks.
 
----
+For current verification, use:
 
-## Quick Reference
-
-### Most Used Services
-
-| Service | Location | Primary Use |
-|---------|----------|-------------|
-| `InvoiceService` | `sales/invoice/` | Invoice lifecycle |
-| `GRNService` | `purchase/grn/` | Goods receipt |
-| `PaymentService` | `finance/payment/` | Payment processing |
-| `ProductService` | `master/product/` | Product management |
-| `LedgerService` | `finance/ledger/` | Account statements |
-| `DocumentNumberService` | `core/` | Auto-numbering |
-
----
-
-## Patterns
-
-### Service-Repository Pattern
-
-```python
-# Service: Business logic
-class InvoiceService:
-    @staticmethod
-    def create_invoice(db, org_id, data):
-        # Validate
-        validate_customer(data["customer_id"])
-        
-        # Calculate
-        totals = calculate_totals(data["items"])
-        
-        # Persist via repository
-        invoice_id = InvoiceRepository.insert(db, {...})
-        InvoiceRepository.insert_items_bulk(db, items)
-        
-        return invoice_id
-
-# Repository: Data access
-class InvoiceRepository:
-    @staticmethod
-    def insert(db, data):
-        return db.execute(text("INSERT INTO...")).scalar()
-```
-
-### Multi-Tenancy
-
-```python
-@with_tenant_context
-async def endpoint(context: OrgContext):
-    # org_id automatically available
-    result = InvoiceService.list(db, context.org_id)
-```
-
-### Constants Usage
-
-```python
-from app.core.utils.constants import OrderStatus
-
-# Always use constants, not strings
-status = OrderStatus.PENDING.value
-```
-
----
-
-## Performance Optimizations
-
-Applied across all services:
-
-| Optimization | Impact |
-|--------------|--------|
-| Bulk inserts | 98% fewer queries |
-| LATERAL JOIN | N+1 elimination |
-| Index usage | 60% faster filters |
-| Caching | 90% faster dashboard |
-
----
-
-**See also**: [Backend Overview](../README.md) · [API Reference](../api/)
+- `backend/tests/unit/test_core_operation_authority_matrix.py`;
+- `backend/tests/unit/test_mcp_operator_action_contract.py`;
+- `backend/tests/unit/test_deferred_surface_retirement.py`;
+- the PostgreSQL runtime-role checks under `backend/tests/postgres`; and
+- the Live18 contract in `backend/tests/live_acceptance/operation_matrix.json`.
