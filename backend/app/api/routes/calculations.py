@@ -2,16 +2,15 @@
 
 import time
 from typing import Any, Dict, Optional, Sequence, Type, TypeVar
+from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Security
+from fastapi.security import HTTPBearer
 from pydantic import BaseModel
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 
-from ...core.auth.org_context import OrgContext, get_org_context
-from ...core.auth.tenant_service import (
-    TenantAwareSession,
-    get_tenant_aware_db,
-    with_tenant_context,
-)
+from ...core.database import get_db
 from ...core.security.permissions import PermissionChecker
 from ..services.sales.calculation import calculate_sales_totals
 from ..services.sales.tax_authority import resolve_sales_tax_authority
@@ -22,10 +21,31 @@ from ..schemas.calculations import (
 )
 
 
-router = APIRouter(prefix="/calculations", tags=["Calculations"])
+router = APIRouter(
+    prefix="/calculations",
+    tags=["Calculations"],
+    dependencies=[Security(HTTPBearer(auto_error=False))],
+)
 
 
 PreviewResponse = TypeVar("PreviewResponse", bound=BaseModel)
+
+
+def _activate(db: Session, user: Dict[str, Any]) -> UUID:
+    """Activate the canonical actor before any forced-RLS calculation reads."""
+    org_id = UUID(str(user["org_id"]))
+    db.execute(
+        text("""
+            SELECT erp_security.activate_context(:auth_user_id, :org_id),
+                   pg_catalog.set_config('app.request_id', :request_id, true)
+        """),
+        {
+            "auth_user_id": UUID(str(user["auth_user_id"])),
+            "org_id": org_id,
+            "request_id": str(uuid4()),
+        },
+    )
+    return org_id
 
 
 def _preview_response(
@@ -75,18 +95,17 @@ def _preview_response(
     response_model=InvoiceCalculationPreviewResponse,
     response_model_exclude_none=True,
 )
-@with_tenant_context
 async def preview_invoice_totals(
     invoice_data: InvoiceCalculationRequest,
-    _: dict = Depends(PermissionChecker("sales", "view")),
-    db: TenantAwareSession = Depends(get_tenant_aware_db),
-    context: OrgContext = Depends(get_org_context),
+    user: dict = Depends(PermissionChecker("sales", "view")),
+    db: Session = Depends(get_db),
 ):
     """Calculate an invoice without writing it; commit uses the same service method."""
+    org_id = _activate(db, user)
     try:
         authority = resolve_sales_tax_authority(
             db,
-            org_id=context.org_id,
+            org_id=org_id,
             branch_id=invoice_data.branch_id,
             customer_account_id=invoice_data.customer_id,
             product_ids=[item.product_id for item in invoice_data.items],
@@ -124,18 +143,17 @@ async def preview_invoice_totals(
     response_model=InvoiceCalculationPreviewResponse,
     response_model_exclude_none=True,
 )
-@with_tenant_context
 async def preview_sales_order_totals(
     order_data: SalesOrderCalculationRequest,
-    _: dict = Depends(PermissionChecker("sales", "view")),
-    db: TenantAwareSession = Depends(get_tenant_aware_db),
-    context: OrgContext = Depends(get_org_context),
+    user: dict = Depends(PermissionChecker("sales", "view")),
+    db: Session = Depends(get_db),
 ):
     """Calculate a sales order without writing or allocating inventory."""
+    org_id = _activate(db, user)
     try:
         authority = resolve_sales_tax_authority(
             db,
-            org_id=context.org_id,
+            org_id=org_id,
             branch_id=order_data.branch_id,
             customer_account_id=order_data.customer_id,
             product_ids=[item.product_id for item in order_data.items],
