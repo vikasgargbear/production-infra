@@ -407,20 +407,6 @@ def get_db() -> Generator:
         db.close()
 
 
-# Simple RLS function - call this manually in endpoints where needed
-def set_org_context(db, org_id: str):
-    """
-    Set org_id context for RLS in database session.
-    This sets the session variable that RLS policies use for filtering.
-    Call this after getting org_id in your route handler.
-    
-    Usage:
-        set_org_context(db, context.org_id)
-    """
-    from sqlalchemy import text
-    db.execute(text("SELECT set_config('app.org_id', :org_id, true)"), {"org_id": str(org_id)})
-    return db
-
 # Test connection
 def test_db_connection():
     """Test database connection"""
