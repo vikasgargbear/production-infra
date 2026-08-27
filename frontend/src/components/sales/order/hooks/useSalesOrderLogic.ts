@@ -10,7 +10,6 @@ import {
     calculateSalesOrderPreview,
     isSalesOrderPreviewReady,
 } from '../../../../services/calculations/salesOrderCalculationService';
-import { useNetworkStatus } from '../../../../hooks/useNetworkStatus';
 import { useSalesOrderSave } from './useSalesOrderSave';
 import { useCompany } from '../../../../contexts/CompanyContext';
 import type { Order, OrderItem, Address, CreatedOrderData, BankAccount, Product } from '../../../../types/models';
@@ -158,9 +157,6 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
     const [createdOrderData, setCreatedOrderData] = useState<CreatedOrderData | null>(null);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
 
-    // Network status is retained for read-only API availability messaging.
-    const { isOnline } = useNetworkStatus();
-
     // Fail closed until the sales-order canonical command is available.
     const {
         saving: submissionSaving,
@@ -173,7 +169,6 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
     } = useSalesOrderSave({
         order,
         selectedCustomer,
-        isOnline,
         documentPolicy,
         setOrder,
         setCreatedOrderData,
