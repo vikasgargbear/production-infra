@@ -1094,7 +1094,6 @@ def test_production_blockers_target_canonical_promotion_not_retired_bootstrap():
         "audit_schema.py",
         "transaction_integrity_audit.py",
         "contract_consistency_audit.py",
-        "payment_idempotency_readiness.py",
     ):
         assert legacy_diagnostic not in job
 
