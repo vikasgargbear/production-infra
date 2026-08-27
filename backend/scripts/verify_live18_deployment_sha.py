@@ -256,8 +256,14 @@ def main() -> None:
     parser.add_argument("--frontend-origin", required=True)
     parser.add_argument("--api-origin", required=True)
     parser.add_argument("--mcp-origin", required=True)
+    parser.add_argument(
+        "--provenance-only",
+        action="store_true",
+        help="Verify exact public service builds without claiming readiness",
+    )
     args = parser.parse_args()
-    evidence = verify(
+    verifier = verify_provenance if args.provenance_only else verify
+    evidence = verifier(
         provider=args.provider,
         commit_sha=args.commit_sha,
         frontend_origin=args.frontend_origin,

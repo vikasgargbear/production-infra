@@ -132,6 +132,44 @@ def test_remote_demo_rejects_missing_or_oversized_scalar_authority() -> None:
         phase._reviewed_scalar_environment_value({"reviewed_scalars": pack})
 
 
+def test_demo_opens_session_authority_only_through_reviewed_fence(monkeypatch) -> None:
+    calls = []
+    monkeypatch.setattr(
+        phase,
+        "apply_fence",
+        lambda database_url, *, action, commit_sha: calls.append(
+            (database_url, action, commit_sha)
+        ) or {"state": "open", "commit_sha": commit_sha},
+    )
+
+    receipt = phase._open_session_authority_after_demo(
+        "postgresql://admin@canonical/postgres",
+        "a" * 40,
+    )
+
+    assert receipt["state"] == "open"
+    assert calls == [
+        ("postgresql://admin@canonical/postgres", "open", "a" * 40)
+    ]
+
+
+def test_demo_refuses_to_publish_unopened_session_authority(monkeypatch) -> None:
+    monkeypatch.setattr(
+        phase,
+        "apply_fence",
+        lambda *_args, **_kwargs: {"state": "closed"},
+    )
+
+    with pytest.raises(
+        phase.RailwayDatabasePhaseError,
+        match="session authority was not opened",
+    ):
+        phase._open_session_authority_after_demo(
+            "postgresql://admin@canonical/postgres",
+            "a" * 40,
+        )
+
+
 def test_railway_live18_demo_restores_the_reviewed_web_operator() -> None:
     workflow = (
         phase.BACKEND_DIRECTORY.parent

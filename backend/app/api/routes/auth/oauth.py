@@ -155,6 +155,15 @@ async def exchange_supabase_session(
             },
         ) from exc
 
+    if not UserRepository.canonical_session_authority_available(db):
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "erp_maintenance",
+                "message": "ERP maintenance is in progress. Please retry shortly.",
+            },
+        )
+
     try:
         user_data = UserRepository.find_by_auth_user_id(auth_user_id, organization_id, db)
     except MembershipContextDenied as exc:

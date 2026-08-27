@@ -454,7 +454,21 @@ def test_workflow_orders_reset_fence_and_exact_deployment() -> None:
     assert reset_block.count("evidence_writer_closure") >= 1
     assert "DELETE FROM storage.objects" not in workflow
     assert "--fence closed" in workflow[prove:open_fence]
-    assert "railway_reset_control_plane.py open-fence" in workflow[open_fence:prove_open]
+    open_block = workflow[open_fence:public_readiness]
+    assert "inputs.defer_write_fence_open != true" in open_block
+    assert "railway_reset_control_plane.py open-fence" in open_block
+    assert workflow.count("defer_write_fence_open:") == 2
+    assert (
+        "defer_write_fence_open: "
+        "${{ inputs.reset_canonical_staging && inputs.provision_canonical_demo }}"
+        in production
+    )
+    public_block = workflow[public_readiness:prove_open]
+    assert 'test "$DEFER_WRITE_FENCE_OPEN" = true' in public_block
+    assert "lifecycle_status=maintenance" in public_block
+    assert "fence_state=closed" in public_block
+    prove_block = workflow[prove_open:oauth]
+    assert '--fence "$fence_state"' in prove_block
     assert "railway_reset_control_plane.py close-fence" in workflow[reclose:remove_source]
     assert 'execution_source:"exact_railway_deployment"' in workflow[open_fence:]
     assert "if: failure() && inputs.reset_disposable_data == true" in workflow[reclose:]
@@ -475,6 +489,19 @@ def test_workflow_orders_reset_fence_and_exact_deployment() -> None:
     assert "ssh-agent -k" in workflow[remove_key:]
     assert "manage_render_pilot_lifecycle.py" not in workflow
     assert "reset_disposable_data: ${{ inputs.reset_canonical_staging }}" in production
+
+    live18 = production.split("\n  live18-acceptance:", 1)[1]
+    demo_step = live18.split(
+        "Verify exact migration head and provision same-run demo over Railway direct IPv6",
+        1,
+    )[1].split("Build the masked exact erp_runtime connection", 1)[0]
+    assert "Railway direct demo did not open exact-SHA canonical session authority" in demo_step
+    assert 'write_fence.get("state") == "open"' in demo_step
+    assert "--provenance-only" in live18[: live18.index(demo_step)]
+    assert "--provenance-only" not in demo_step
+    assert demo_step.count("verify_live18_deployment_sha.py") == 1
+    assert "for attempt in $(seq 1 30); do" in demo_step
+    assert "Railway did not become ready after canonical session authority opened" in demo_step
 
 
 def test_railway_reset_reuses_version_safe_role_cleanup_authority() -> None:

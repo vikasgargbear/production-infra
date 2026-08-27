@@ -12,6 +12,11 @@ on:
         required: false
         default: false
         type: boolean
+      defer_write_fence_open:
+        description: Keep reset staging in maintenance until same-run demo provisioning succeeds
+        required: false
+        default: false
+        type: boolean
   workflow_call:
     inputs:
       reviewed_sha:
@@ -20,6 +25,11 @@ on:
         type: string
       reset_disposable_data:
         description: Close writes and reset disposable canonical staging before the exact deployment
+        required: false
+        default: false
+        type: boolean
+      defer_write_fence_open:
+        description: Keep reset staging in maintenance until same-run demo provisioning succeeds
         required: false
         default: false
         type: boolean
@@ -81,6 +91,7 @@ jobs:
       SUPABASE_URL: ${{ vars.SUPABASE_URL }}
       SUPABASE_OAUTH_ISSUER: ${{ vars.SUPABASE_OAUTH_ISSUER }}
       REVIEWED_SHA: ${{ inputs.reviewed_sha }}
+      DEFER_WRITE_FENCE_OPEN: ${{ inputs.defer_write_fence_open }}
       RAILWAY_RESET_SSH_PRIVATE_KEY: /tmp/railway-reset-${{ github.run_id }}-${{ github.run_attempt }}-ssh
       RAILWAY_RESET_SSH_FINGERPRINT: /tmp/railway-reset-${{ github.run_id }}-${{ github.run_attempt }}-ssh-fingerprint
       RAILWAY_RESET_SSH_AGENT_STARTED: /tmp/railway-reset-${{ github.run_id }}-${{ github.run_attempt }}-ssh-agent-started
@@ -101,6 +112,9 @@ jobs:
             *[!0-9a-f]*|'') echo "reviewed_sha must be an exact lowercase commit SHA" >&2; exit 2 ;;
           esac
           test "${#REVIEWED_SHA}" = 40
+          if test "$DEFER_WRITE_FENCE_OPEN" = true; then
+            test '${{ inputs.reset_disposable_data }}' = true
+          fi
 
       - uses: actions/setup-node@v4
         with:
@@ -1051,7 +1065,7 @@ jobs:
             api-ready-before-fence-open.json >/dev/null
 
       - name: Open writes after exact Railway provenance proof
-        if: inputs.reset_disposable_data == true
+        if: inputs.reset_disposable_data == true && inputs.defer_write_fence_open != true
         env:
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: |
@@ -1158,15 +1172,30 @@ jobs:
             mcp_ready=$(<mcp-ready.json)
             frontend_health=$(<frontend-health.txt)
             frontend_metadata=$(<frontend-metadata.json)
+            mcp_contract_ready=false
+            if jq -e '.status == "ready"' <<<"$mcp_ready" >/dev/null 2>&1; then
+              mcp_contract_ready=true
+            fi
             if jq -e --arg sha "$REVIEWED_SHA" '.status == "healthy" and .git_commit == $sha' <<<"$api_health" >/dev/null 2>&1 && \
                jq -e '.status == "ready" and .database.transport == "supabase_direct" and .database.principal == "erp_runtime" and .database.principal_isolated == true and .database.migration_owner_member == false and .database.row_security == true and .database.ip_version == 6' <<<"$api_ready" >/dev/null 2>&1 && \
                jq -e --arg sha "$REVIEWED_SHA" '.status == "ok" and .git_commit == $sha' <<<"$mcp_health" >/dev/null 2>&1 && \
-               jq -e '.status == "ready"' <<<"$mcp_ready" >/dev/null 2>&1 && \
+               { test "$DEFER_WRITE_FENCE_OPEN" = true || test "$mcp_contract_ready" = true; } && \
                test "$frontend_health" = ok && \
                jq -e --arg sha "$REVIEWED_SHA" '.service == "aasopharma-erp" and .git_commit == $sha' <<<"$frontend_metadata" >/dev/null 2>&1; then
               oauth_client_id=$(jq -er '.client_id | select(type == "string" and length > 0)' "$RUNNER_TEMP/railway-oauth-evidence/canonical-staging-oauth-client.json")
+              lifecycle_status=live
+              fence_state=open
+              mcp_readiness=ready
+              if test "$DEFER_WRITE_FENCE_OPEN" = true; then
+                lifecycle_status=maintenance
+                fence_state=closed
+                mcp_readiness=not_ready
+              fi
               jq -n \
                 --arg git_commit "$REVIEWED_SHA" \
+                --arg status "$lifecycle_status" \
+                --arg write_fence "$fence_state" \
+                --arg mcp_readiness "$mcp_readiness" \
                 --arg oauth_client_id "$oauth_client_id" \
                 --arg oauth_evidence_sha256 "$RAILWAY_OAUTH_EVIDENCE_SHA256" \
                 --arg api_deployment_id "$(<api-deployment-id)" \
@@ -1175,7 +1204,7 @@ jobs:
                 --arg api_url "$RAILWAY_API_URL" \
                 --arg mcp_url "$RAILWAY_MCP_URL" \
                 --arg frontend_url "$RAILWAY_FRONTEND_URL" \
-                '{provider:"railway",git_commit:$git_commit,status:"live",oauth:{client_id:$oauth_client_id,client_type:"public",dynamic_registration:false,evidence_sha256:$oauth_evidence_sha256},services:{api:{url:$api_url,deployment_id:$api_deployment_id,health:"healthy",readiness:"ready"},mcp:{url:$mcp_url,deployment_id:$mcp_deployment_id,health:"ok",readiness:"ready"},frontend:{url:$frontend_url,deployment_id:$frontend_deployment_id,health:"ok"}}}' \
+                '{provider:"railway",git_commit:$git_commit,status:$status,write_fence:$write_fence,oauth:{client_id:$oauth_client_id,client_type:"public",dynamic_registration:false,evidence_sha256:$oauth_evidence_sha256},services:{api:{url:$api_url,deployment_id:$api_deployment_id,health:"healthy",readiness:"ready"},mcp:{url:$mcp_url,deployment_id:$mcp_deployment_id,health:"ok",readiness:$mcp_readiness},frontend:{url:$frontend_url,deployment_id:$frontend_deployment_id,health:"ok"}}}' \
                 > railway-pilot-evidence.json
               exit 0
             fi
@@ -1191,9 +1220,13 @@ jobs:
       - name: Prove selected provider authority and inactive standbys
         run: |
           set -euo pipefail
+          fence_state=open
+          if test "$DEFER_WRITE_FENCE_OPEN" = true; then
+            fence_state=closed
+          fi
           python3 backend/scripts/deployment_control.py status \
             --expected-sha "$REVIEWED_SHA" \
-            --fence open
+            --fence "$fence_state"
 
       - name: Reconcile the exact Railway frontend OAuth redirect
         env:

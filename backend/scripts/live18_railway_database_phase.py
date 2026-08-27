@@ -52,6 +52,7 @@ from compile_live18_browser_fixture import (  # noqa: E402
     validate_reviewed_scalar_pack,
 )
 from live18_evidence_contract import MANDATORY_LINEAGE_PATHS  # noqa: E402
+from manage_canonical_write_fence import apply_fence  # noqa: E402
 from provision_ephemeral_browser_identities import (  # noqa: E402
     EXPECTED_PROJECT_REF,
     PROFILE_LIVE18,
@@ -572,6 +573,23 @@ def _reviewed_scalar_environment_value(request: dict[str, Any]) -> str:
     return reviewed_scalar_json
 
 
+def _open_session_authority_after_demo(
+    admin_url: str,
+    expected_sha: str,
+) -> dict[str, Any]:
+    """Open the canonical fence only after the complete demo has succeeded."""
+    receipt = apply_fence(
+        admin_url,
+        action="open",
+        commit_sha=expected_sha,
+    )
+    if receipt.get("state") != "open":
+        raise RailwayDatabasePhaseError(
+            "Canonical session authority was not opened after demo provisioning"
+        )
+    return receipt
+
+
 def _demo_provision(request: dict[str, Any]) -> dict[str, Any]:
     expected_sha, project_ref = _validated_boundary(request)
     _deployed_oauth_client_id()
@@ -663,6 +681,10 @@ def _demo_provision(request: dict[str, Any]) -> dict[str, Any]:
 
                 if provision_canonical_demo.main() != 0:
                     raise RailwayDatabasePhaseError("Canonical demo returned non-zero")
+            write_fence = _open_session_authority_after_demo(
+                admin_url,
+                expected_sha,
+            )
         summary_path = evidence_dir / "canonical-demo-summary.json"
         if not summary_path.is_file():
             raise RailwayDatabasePhaseError("Canonical demo summary was not produced")
@@ -682,6 +704,7 @@ def _demo_provision(request: dict[str, Any]) -> dict[str, Any]:
         "evidence_sha256": evidence_hashes,
         "transport": "supabase_direct_ipv6_from_railway",
         "temporary_owner_delegation_removed": True,
+        "write_fence": write_fence,
     }
     response["content_sha256"] = _content_hash(response)
     return response

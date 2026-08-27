@@ -66,6 +66,15 @@ def _membership(**overrides):
     return membership
 
 
+@pytest.fixture(autouse=True)
+def _open_canonical_session_authority(monkeypatch):
+    monkeypatch.setattr(
+        oauth.UserRepository,
+        "canonical_session_authority_available",
+        lambda _db: True,
+    )
+
+
 def test_exchange_requires_bearer_credentials():
     with pytest.raises(HTTPException) as exc_info:
         _run(oauth.exchange_supabase_session(credentials=None, db=object()))
@@ -164,6 +173,40 @@ def test_exchange_returns_forbidden_for_database_membership_denial(monkeypatch):
 
     assert exc_info.value.status_code == 403
     assert exc_info.value.detail["error"] == "erp_membership_required"
+
+
+def test_exchange_reports_maintenance_before_membership_lookup_when_fenced(
+    monkeypatch,
+):
+    async def verified_identity(_token):
+        return _identity()
+
+    membership_lookups = []
+    monkeypatch.setattr(
+        oauth.supabase_auth,
+        "get_user_from_access_token",
+        verified_identity,
+    )
+    monkeypatch.setattr(
+        oauth.UserRepository,
+        "canonical_session_authority_available",
+        lambda _db: False,
+    )
+    monkeypatch.setattr(
+        oauth.UserRepository,
+        "find_by_auth_user_id",
+        lambda *_args: membership_lookups.append(True),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        _run(oauth.exchange_supabase_session(_credentials(), db=object()))
+
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.detail == {
+        "error": "erp_maintenance",
+        "message": "ERP maintenance is in progress. Please retry shortly.",
+    }
+    assert membership_lookups == []
 
 
 def test_exchange_requires_admin_assigned_organization(monkeypatch):

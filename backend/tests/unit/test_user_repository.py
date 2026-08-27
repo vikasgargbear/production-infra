@@ -21,6 +21,14 @@ class _Rows:
         return self.rows
 
 
+class _Scalar:
+    def __init__(self, value):
+        self.value = value
+
+    def scalar_one(self):
+        return self.value
+
+
 class _Database:
     def __init__(self, rows):
         self.rows = rows
@@ -51,6 +59,22 @@ def _row():
         {"sales.read": True},
         "organization",
     )
+
+
+@pytest.mark.parametrize(("available", "expected"), ((True, True), (False, False)))
+def test_canonical_session_authority_follows_runtime_role_membership(
+    available,
+    expected,
+):
+    statements = []
+
+    class Database:
+        def execute(self, statement):
+            statements.append(str(statement))
+            return _Scalar(available)
+
+    assert UserRepository.canonical_session_authority_available(Database()) is expected
+    assert statements == ["SELECT pg_has_role(current_user,'erp_app','USAGE')"]
 
 
 def test_identity_lookup_activates_canonical_context_and_returns_permissions():
