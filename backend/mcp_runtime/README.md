@@ -28,7 +28,8 @@ uses `SUPABASE_SERVICE_ROLE_KEY`, `APP_ENV`, or `ENV`. See
 
 Only ES256/RS256 Supabase tokens with the exact issuer, `authenticated`
 audience, UUID subject, pre-registered client ID, and standard `openid` plus
-`offline_access` scopes are accepted. ERP permission names are not OAuth
+`offline_access` scopes are accepted. The signed tenant anchor is exactly
+`app_metadata.org_id`; metadata aliases are rejected. ERP permission names are not OAuth
 scopes. Each tool separately checks the app-owned active grant, exact capability,
 operation mode, approval policy, permission, expiry, tenant, and branch scope.
 The OAuth bearer is never forwarded to ERP.

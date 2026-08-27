@@ -61,6 +61,7 @@ def test_machine_service_contract_matches_runtime() -> None:
     assert contract["tools"] == list(registered_tool_names())
     assert contract["writes_exported"] is True
     assert contract["oauth"]["audience"] == "authenticated"
+    assert contract["oauth"]["tenant_metadata_claim"] == "org_id"
     assert contract["oauth"]["required_scopes"] == ["openid", "offline_access"]
     assert contract["oauth"]["dynamic_client_registration"] is False
     assert "SUPABASE_SERVICE_ROLE_KEY" not in contract["required_environment"]
