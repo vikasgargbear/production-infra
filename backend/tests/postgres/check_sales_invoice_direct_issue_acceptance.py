@@ -104,6 +104,26 @@ def _seed_reference_authority(connection: Any) -> None:
     source_hash = hashlib.sha256(b"pg15 sales invoice tax fixture").digest()
     dataset_hash = hashlib.sha256(b"481910:6:6:12:0").digest()
     with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT release.id,version.id
+              FROM core.reference_data_releases AS release
+              JOIN tax.tax_code_versions AS version
+                ON version.release_id=release.id
+             WHERE release.dataset_kind='hsn_sac_tax'
+               AND release.dataset_sha256=%s
+               AND release.status='active'
+               AND version.code='481910'
+               AND version.code_kind='hsn'
+               AND version.status='active'
+            """,
+            (psycopg2.Binary(dataset_hash),),
+        )
+        existing = cursor.fetchone()
+        if existing is not None:
+            fixture.IDS["tax_release"] = str(existing[0])
+            fixture.IDS["tax_version"] = str(existing[1])
+            return
         cursor.execute('SET LOCAL ROLE "erp_migration_owner"')
         cursor.execute("SET CONSTRAINTS ALL DEFERRED")
         for setting, value in (
