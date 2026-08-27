@@ -198,17 +198,17 @@ class CommercialReversalReadback(StrictDTO):
     reversal_note_status: Literal["posted"]
     original_adjustment_note_id: UUID
     original_note_status: Literal["reversed"]
-    original_return_status: Literal["reversed"] | None
+    original_return_status: Optional[Literal["reversed"]]
     reversal_journal_id: UUID
     reversal_journal_status: Literal["posted"]
     original_journal_id: UUID
     original_journal_status: Literal["reversed"]
     journal_debit_total: Decimal
     journal_credit_total: Decimal
-    reversal_tax_document_id: UUID | None
-    original_tax_document_id: UUID | None
-    reversal_inventory_document_id: UUID | None
-    original_inventory_document_id: UUID | None
+    reversal_tax_document_id: Optional[UUID]
+    original_tax_document_id: Optional[UUID]
+    reversal_inventory_document_id: Optional[UUID]
+    original_inventory_document_id: Optional[UUID]
     reversed_allocation_count: int
     stock_entries: list[CommercialReversalStockEntry]
 

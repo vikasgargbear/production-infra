@@ -960,10 +960,11 @@ def _prepare_actions() -> dict[str, OperatorAction]:
         {
             "batch_id": _uuid("Canonical manufacturer batch selected for this movement."),
             "counted_quantity": _decimal("Exact physical count in the selected effective UOM."),
-            "stock_balance_row_version": _string(
-                "Exact positive authoritative stock-balance row version selected before prepare.",
-                pattern=r"^[1-9][0-9]*$",
-            ),
+            "stock_balance_row_version": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "Exact positive authoritative stock-balance row version selected before prepare.",
+            },
         },
         ("batch_id", "counted_quantity", "stock_balance_row_version"),
         "One unique existing lot count. The backend derives system quantity, base quantity, variance, and MWA value.",
@@ -1092,9 +1093,11 @@ def _prepare_actions() -> dict[str, OperatorAction]:
 
     commercial_reversal = {
         "original_resource_id": _uuid("Exact posted return or adjustment-note identity to correct."),
-        "expected_row_version": _string(
-            "Exact positive posted source row version.", pattern=r"^[1-9][0-9]*$"
-        ),
+        "expected_row_version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Exact positive posted source row version.",
+        },
         "reversal_date": _date("Counter-document date, not before the original note date."),
         "reason": _string("Required auditable reason explaining why the posted source was erroneous."),
         "amendment_evidence_attachment_id": _uuid(

@@ -700,6 +700,12 @@ def _validate_schema(schema: Mapping[str, Any], path: str) -> list[str]:
     elif schema_type == "boolean":
         if not schema.get("description"):
             issues.append(f"{path}: boolean field lacks a semantic description")
+    elif schema_type == "integer" and path.rsplit(".", 1)[-1] in {
+        "expected_row_version",
+        "stock_balance_row_version",
+    }:
+        if schema.get("minimum") != 1:
+            issues.append(f"{path}: row version integer must have minimum 1")
     elif schema_type in {"number", "integer"}:
         issues.append(f"{path}: numeric JSON values are forbidden; use exact decimal strings")
     else:

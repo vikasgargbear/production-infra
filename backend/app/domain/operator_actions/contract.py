@@ -47,6 +47,14 @@ def _schema_type(schema: Mapping[str, Any], model_name: str):
     if schema_type == "boolean":
         return StrictBool
 
+    if schema_type == "integer":
+        constraints: dict[str, Any] = {"strict": True}
+        if "minimum" in schema:
+            constraints["ge"] = int(schema["minimum"])
+        if "maximum" in schema:
+            constraints["le"] = int(schema["maximum"])
+        return Annotated[int, Field(**constraints)]
+
     if schema_type == "string":
         enum_values = schema.get("enum")
         if enum_values:

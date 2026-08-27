@@ -22,12 +22,32 @@ from app.domain.operator_actions import (
     PreparedCommand,
     get_operator_action_service,
 )
+from app.domain.operator_actions.contract import _schema_type
 from mcp_runtime.aasopharma_mcp.operator_actions import PREPARE_ACTIONS
 
 
 PREVIEW_HASH = "sha256:" + "a" * 64
 BRANCH_ID = uuid4()
 COMMAND_ID = uuid4()
+
+
+def test_operator_schema_integer_compiles_to_strict_bounded_int() -> None:
+    from pydantic import BaseModel, ConfigDict, create_model
+
+    integer_type = _schema_type(
+        {"type": "integer", "minimum": 1, "maximum": 9},
+        "StrictRowVersion",
+    )
+    model = create_model(
+        "StrictIntegerEnvelope",
+        __config__=ConfigDict(extra="forbid"),
+        row_version=(integer_type, ...),
+    )
+    assert issubclass(model, BaseModel)
+    assert model.model_validate({"row_version": 1}).row_version == 1
+    for invalid in (True, "1", 0, 10):
+        with pytest.raises(ValidationError):
+            model.model_validate({"row_version": invalid})
 
 
 class FakeOperatorActionService:
@@ -1532,7 +1552,7 @@ def test_routes_are_hidden_from_public_openapi_and_keep_auth_dependency():
         if path.startswith("/api/internal/mcp/")
         for route in routes
     ]
-    assert len(action_routes) == 16
+    assert len(action_routes) == 19
     assert all(route.include_in_schema is False for route in action_routes)
     assert all(
         mcp_actions.get_action_context
