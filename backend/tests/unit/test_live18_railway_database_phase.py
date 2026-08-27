@@ -66,6 +66,40 @@ def _reviewed_scalar_pack() -> dict[str, object]:
     }
 
 
+def _fixture_identities() -> dict[str, str]:
+    keys = (
+        "branch_id",
+        "customer_account_id",
+        "supplier_account_id",
+        "product_id",
+        "uom_conversion_id",
+        "count_uom_conversion_id",
+        "saleable_location_id",
+        "quarantine_location_id",
+        "transfer_destination_branch_id",
+        "transfer_destination_location_id",
+        "bank_account_id",
+        "bank_ledger_id",
+    )
+    return {
+        key: f"00000000-0000-4000-8000-{index:012d}"
+        for index, key in enumerate(keys, start=1)
+    }
+
+
+def _authoritative_fact_evidence() -> dict[str, object]:
+    return {
+        "schema": "aasopharma.live18.authoritative-facts.v1",
+        "expected_sha": "a" * 40,
+        "project_ref": phase.EXPECTED_PROJECT_REF,
+        "run_token": "1234-2",
+        "organization_id": "11111111-1111-4111-8111-111111111111",
+        "auth_user_id": "22222222-2222-4222-8222-222222222222",
+        "fixture_identities": _fixture_identities(),
+        "facts": {key: {} for key in ("identity", "display", "clock", "choice")},
+    }
+
+
 def test_remote_demo_accepts_only_a_reconciled_reviewed_scalar_pack() -> None:
     pack = _reviewed_scalar_pack()
 
@@ -303,6 +337,7 @@ def test_identity_response_applies_only_the_exact_reviewed_environment(tmp_path)
         "browser_state": {"version": 1},
         "mcp_state": {"version": 1},
         "fixture_evidence": {"organization_id": "fixture"},
+        "authoritative_facts": _authoritative_fact_evidence(),
     }
     response["content_sha256"] = phase._content_hash(response)
     request["response"] = response
@@ -311,6 +346,9 @@ def test_identity_response_applies_only_the_exact_reviewed_environment(tmp_path)
     assert json.loads((tmp_path / "live18-browser-identities.json").read_text()) == {
         "version": 1
     }
+    assert json.loads(
+        (tmp_path / "live18-authoritative-facts.json").read_text()
+    ) == _authoritative_fact_evidence()
 
     unexpected = dict(environment)
     unexpected["UNREVIEWED_SECRET"] = "must-not-apply"
@@ -336,8 +374,12 @@ def test_remote_identity_success_retains_only_nonsecret_cleanup_state(
         for index, key in enumerate(sorted(phase.IDENTITY_ENVIRONMENT_KEYS))
     }
     generated["MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS"] = deployed_client_id
+    generated["PHARMA_CANONICAL_LIVE_TEST_AUTH_USER_ID"] = (
+        "22222222-2222-4222-8222-222222222222"
+    )
     observed_api_origins = []
     observed_fixture_run_tokens = []
+    observed_fact_resolution = []
 
     def provision_browser(state_path, _profile):
         observed_api_origins.append(
@@ -359,8 +401,9 @@ def test_remote_identity_success_retains_only_nonsecret_cleanup_state(
         ).write_text(
             json.dumps(
                 {
-                    "organization_id": "fixture",
+                    "organization_id": "11111111-1111-4111-8111-111111111111",
                     "oauth_client_id": deployed_client_id,
+                    "fixture_identities": _fixture_identities(),
                 }
             )
             + "\n",
@@ -373,6 +416,21 @@ def test_remote_identity_success_retains_only_nonsecret_cleanup_state(
     )
     monkeypatch.setattr(phase, "provision_browser_identities", provision_browser)
     monkeypatch.setattr(phase, "provision_mcp_identities", provision_mcp)
+    monkeypatch.setattr(
+        phase,
+        "_validated_direct_role_url",
+        lambda value, project_ref, role: "validated-runtime-url",
+    )
+    monkeypatch.setattr(
+        phase,
+        "resolve_authoritative_facts",
+        lambda database_url, auth_user_id, org_id, fixture_ids, run_token: (
+            observed_fact_resolution.append(
+                (database_url, auth_user_id, org_id, fixture_ids, run_token)
+            )
+            or {key: {} for key in ("identity", "display", "clock", "choice")}
+        ),
+    )
     for key in phase.IDENTITY_ENVIRONMENT_KEYS:
         monkeypatch.delenv(key, raising=False)
     monkeypatch.setenv("MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS", deployed_client_id)
@@ -387,6 +445,16 @@ def test_remote_identity_success_retains_only_nonsecret_cleanup_state(
         "mcp-state.json",
     ]
     assert phase._decrypt_environment(request, response["encrypted_environment"]) == generated
+    assert observed_fact_resolution == [
+        (
+            "validated-runtime-url",
+            "22222222-2222-4222-8222-222222222222",
+            "11111111-1111-4111-8111-111111111111",
+            _fixture_identities(),
+            "1234-2",
+        )
+    ]
+    assert response["authoritative_facts"] == _authoritative_fact_evidence()
     assert all(
         key not in os.environ
         for key in phase.IDENTITY_ENVIRONMENT_KEYS

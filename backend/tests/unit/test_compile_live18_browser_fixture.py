@@ -10,6 +10,7 @@ from scripts.compile_live18_browser_fixture import (
     SCALAR_SCHEMA,
     TEMPLATE_SCHEMA,
     compile_fixture,
+    load_authoritative_facts,
     load_reviewed_scalars,
     supplier_invoice_chain_choices,
     validate_reviewed_scalar_pack,
@@ -17,6 +18,47 @@ from scripts.compile_live18_browser_fixture import (
     _validate_compiled_steps,
     _operation_facts,
 )
+
+
+def test_authoritative_fact_evidence_is_bound_to_exact_identity_and_run(
+    tmp_path: Path,
+) -> None:
+    identities = {"branch_id": "11111111-1111-4111-8111-111111111111"}
+    evidence = {
+        "schema": "aasopharma.live18.authoritative-facts.v1",
+        "expected_sha": "a" * 40,
+        "project_ref": "abcdefghijklmnopqrst",
+        "run_token": "1234-2",
+        "auth_user_id": "22222222-2222-4222-8222-222222222222",
+        "organization_id": "33333333-3333-4333-8333-333333333333",
+        "fixture_identities": identities,
+        "facts": {key: {} for key in ("identity", "display", "clock", "choice")},
+    }
+    path = tmp_path / "facts.json"
+    path.write_text(json.dumps(evidence), encoding="utf-8")
+
+    assert load_authoritative_facts(
+        path,
+        expected_sha="a" * 40,
+        project_ref="abcdefghijklmnopqrst",
+        run_token="1234-2",
+        auth_user_id="22222222-2222-4222-8222-222222222222",
+        org_id="33333333-3333-4333-8333-333333333333",
+        identities=identities,
+    ) == evidence["facts"]
+
+    evidence["run_token"] = "other-run"
+    path.write_text(json.dumps(evidence), encoding="utf-8")
+    with pytest.raises(FixtureCompileError, match="run_token differs"):
+        load_authoritative_facts(
+            path,
+            expected_sha="a" * 40,
+            project_ref="abcdefghijklmnopqrst",
+            run_token="1234-2",
+            auth_user_id="22222222-2222-4222-8222-222222222222",
+            org_id="33333333-3333-4333-8333-333333333333",
+            identities=identities,
+        )
 
 
 def _matrix(path: Path) -> Path:

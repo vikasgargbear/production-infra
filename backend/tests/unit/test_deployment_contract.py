@@ -1452,6 +1452,10 @@ def test_live18_is_opt_in_exact_sha_external_fixture_and_always_cleaned():
         'echo "LIVE18_DEMO_EVIDENCE_PATH=$RUNNER_TEMP/live18-demo-evidence.json"'
         in live18
     )
+    assert (
+        'echo "LIVE18_AUTHORITATIVE_FACTS_PATH='
+        '$RUNNER_TEMP/live18-authoritative-facts.json"' in live18
+    )
     assert "LIVE18_RAILWAY_DEMO_EVIDENCE_PATH" not in live18
     render_database_step = live18.split(
         "- name: Build the masked exact erp_runtime connection", 1
@@ -1473,6 +1477,14 @@ def test_live18_is_opt_in_exact_sha_external_fixture_and_always_cleaned():
         "compile_live18_browser_fixture.py"
     )
     assert "compile_live18_browser_fixture.py" in live18
+    compile_step = live18.split(
+        "- name: Compile browser fixture from canonical facts and reviewed choices", 1
+    )[1].split("\n      - name:", 1)[0]
+    assert 'fact_source=(--resolve-from-database)' in compile_step
+    assert 'if test "$LIVE18_PROVIDER" = railway' in compile_step
+    assert 'fact_source=(--authoritative-facts "$LIVE18_AUTHORITATIVE_FACTS_PATH")' in compile_step
+    assert '"${fact_source[@]}"' in compile_step
+    assert "PHARMA_CANONICAL_LIVE_DATABASE_URL" not in compile_step
     assert "--readiness docs/testing/live18-ui-template-readiness.json" in live18
     assert live18.index("provision_ephemeral_canonical_live.py provision") < live18.index(
         "compile_live18_browser_fixture.py"

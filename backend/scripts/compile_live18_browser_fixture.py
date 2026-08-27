@@ -24,6 +24,7 @@ import psycopg2
 FIXTURE_SCHEMA = "aasopharma.live18.fixture.v1"
 SCALAR_SCHEMA = "aasopharma.live18.reviewed-scalars.v1"
 TEMPLATE_SCHEMA = "aasopharma.live18.ui-template.v1"
+AUTHORITATIVE_FACTS_SCHEMA = "aasopharma.live18.authoritative-facts.v1"
 MAX_SCALAR_BYTES = 32 * 1024
 UUID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
@@ -205,6 +206,44 @@ def load_identity_evidence(path: Path) -> tuple[str, dict[str, str]]:
         if not isinstance(key, str) or not isinstance(value, str) or not UUID_RE.fullmatch(value):
             raise FixtureCompileError(f"invalid canonical fixture identity: {key}")
     return org_id, identities
+
+
+def load_authoritative_facts(
+    path: Path,
+    *,
+    expected_sha: str,
+    project_ref: str,
+    run_token: str,
+    auth_user_id: str,
+    org_id: str,
+    identities: dict[str, str],
+) -> dict[str, Any]:
+    evidence = _object(path, "authoritative fact evidence")
+    expected_boundary = {
+        "schema": AUTHORITATIVE_FACTS_SCHEMA,
+        "expected_sha": expected_sha,
+        "project_ref": project_ref,
+        "run_token": run_token,
+        "auth_user_id": auth_user_id,
+        "organization_id": org_id,
+        "fixture_identities": identities,
+    }
+    for key, expected in expected_boundary.items():
+        if evidence.get(key) != expected:
+            raise FixtureCompileError(
+                f"authoritative fact evidence {key} differs from the reviewed boundary"
+            )
+    facts = evidence.get("facts")
+    if not isinstance(facts, dict) or set(facts) != {
+        "identity",
+        "display",
+        "clock",
+        "choice",
+    }:
+        raise FixtureCompileError("authoritative fact evidence is incomplete")
+    if any(not isinstance(facts[key], dict) for key in facts):
+        raise FixtureCompileError("authoritative fact evidence domains are malformed")
+    return facts
 
 
 def resolve_authoritative_facts(
@@ -1697,15 +1736,29 @@ def main() -> None:
     parser.add_argument("--readiness", type=Path, required=True)
     parser.add_argument("--templates", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    fact_source = parser.add_mutually_exclusive_group(required=True)
+    fact_source.add_argument("--authoritative-facts", type=Path)
+    fact_source.add_argument("--resolve-from-database", action="store_true")
     args = parser.parse_args()
     org_id, identities = load_identity_evidence(args.identity_evidence)
-    facts = resolve_authoritative_facts(
-        os.environ["PHARMA_CANONICAL_LIVE_DATABASE_URL"],
-        os.environ["PHARMA_CANONICAL_LIVE_TEST_AUTH_USER_ID"],
-        org_id,
-        identities,
-        os.environ["LIVE18_RUN_TOKEN"],
-    )
+    if args.authoritative_facts is not None:
+        facts = load_authoritative_facts(
+            args.authoritative_facts,
+            expected_sha=os.environ["REVIEWED_DEPLOY_SHA"],
+            project_ref=os.environ["CANONICAL_STAGING_PROJECT_REF"],
+            run_token=os.environ["LIVE18_RUN_TOKEN"],
+            auth_user_id=os.environ["PHARMA_CANONICAL_LIVE_TEST_AUTH_USER_ID"],
+            org_id=org_id,
+            identities=identities,
+        )
+    else:
+        facts = resolve_authoritative_facts(
+            os.environ["PHARMA_CANONICAL_LIVE_DATABASE_URL"],
+            os.environ["PHARMA_CANONICAL_LIVE_TEST_AUTH_USER_ID"],
+            org_id,
+            identities,
+            os.environ["LIVE18_RUN_TOKEN"],
+        )
     fixture = compile_fixture(
         args.matrix,
         args.templates,

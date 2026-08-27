@@ -47,6 +47,7 @@ from app.domain.operator_actions.contract import (  # noqa: E402
 from canonical_migration_contract import load_contract  # noqa: E402
 from compile_live18_browser_fixture import (  # noqa: E402
     FixtureCompileError,
+    resolve_authoritative_facts,
     supplier_invoice_chain_choices,
     validate_reviewed_scalar_pack,
 )
@@ -799,6 +800,26 @@ def _identity_provision(request: dict[str, Any]) -> dict[str, Any]:
                 raise RailwayDatabasePhaseError(
                     "Ephemeral OAuth authority differs from the exact API deployment"
                 )
+            organization_id = str(UUID(str(fixture_payload["organization_id"])))
+            auth_user_id = str(
+                UUID(generated["PHARMA_CANONICAL_LIVE_TEST_AUTH_USER_ID"])
+            )
+            fixture_identities = fixture_payload.get("fixture_identities")
+            if not isinstance(fixture_identities, dict) or not fixture_identities:
+                raise RailwayDatabasePhaseError(
+                    "Fixture identity evidence omitted canonical identities"
+                )
+            run_token = f"{request['run_id']}-{request['run_attempt']}"
+            runtime_url = _validated_direct_role_url(
+                os.getenv("DATABASE_URL", ""), project_ref, "erp_runtime"
+            )
+            authoritative_facts = resolve_authoritative_facts(
+                runtime_url,
+                auth_user_id,
+                organization_id,
+                {str(key): str(value) for key, value in fixture_identities.items()},
+                run_token,
+            )
             encrypted_environment = _encrypt_environment(request, generated)
             github_environment.unlink()
             fixture_evidence.unlink()
@@ -810,6 +831,16 @@ def _identity_provision(request: dict[str, Any]) -> dict[str, Any]:
                 "browser_state": browser_payload,
                 "mcp_state": mcp_payload,
                 "fixture_evidence": fixture_payload,
+                "authoritative_facts": {
+                    "schema": "aasopharma.live18.authoritative-facts.v1",
+                    "expected_sha": expected_sha,
+                    "project_ref": project_ref,
+                    "run_token": run_token,
+                    "organization_id": organization_id,
+                    "auth_user_id": auth_user_id,
+                    "fixture_identities": fixture_identities,
+                    "facts": authoritative_facts,
+                },
             }
             response["content_sha256"] = _content_hash(response)
             return response
@@ -1249,6 +1280,7 @@ def _apply_identity_response(request: dict[str, Any], output_directory: Path) ->
         ("live18-browser-identities.json", "browser_state"),
         ("live18-mcp-identities.json", "mcp_state"),
         ("live18-fixture-identities.json", "fixture_evidence"),
+        ("live18-authoritative-facts.json", "authoritative_facts"),
     ):
         target = output_directory / name
         target.write_text(
