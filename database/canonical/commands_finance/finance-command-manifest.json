@@ -82,7 +82,7 @@
   },
   "manifest_version": "1.0.0",
   "mapping_file": "baseline-finance-command-enforcements.json",
-  "mapping_sha256": "1e7ebccd4d34f3aa832720402d7f903a9eb9406990e0ee96bd5fcd21a14826ac",
+  "mapping_sha256": "503a623f428d0e9f48fd072d2d6e61c15b83c58d4de97d91247d8a290a84aa72",
   "postgresql": "15+",
   "resolved_count": 8,
   "resolved_invariants": [
@@ -102,8 +102,13 @@
     "runtime_callable_functions": [
       "import_bank_statement_lines(uuid,uuid,jsonb)",
       "apply_supplier_advance(uuid,uuid,uuid,uuid,uuid,uuid,varchar,uuid)",
+      "apply_supplier_adjustment_credit(uuid,uuid,uuid,uuid,uuid)",
       "parse_portal_document(uuid,uuid,jsonb)",
       "post_payment(uuid,uuid,uuid,uuid)",
+      "post_customer_receipt(uuid,uuid,uuid,uuid,jsonb,uuid)",
+      "post_customer_cheque_clearance(uuid,uuid,uuid,uuid,uuid)",
+      "post_customer_cheque_bounce(uuid,uuid,uuid,uuid,uuid,jsonb)",
+      "post_supplier_payment(uuid,uuid,uuid,uuid,jsonb)",
       "post_supplier_advance_payment(uuid,uuid,uuid,uuid,jsonb)",
       "resolve_reconciliation_item(uuid,uuid,text,text)",
       "reverse_payment(uuid,uuid,uuid,varchar,uuid,varchar,uuid,text)",

@@ -4,7 +4,10 @@
     "required_roles": {
       "accounts_payable": "active liability account with allows_party_posting",
       "accounts_receivable": "active asset account with allows_party_posting",
+      "cash_on_hand": "active asset account without party posting",
+      "cheques_in_hand": "active asset account without party posting",
       "cost_of_goods_sold": "active expense account",
+      "customer_advance": "active liability account with allows_party_posting",
       "goods_received_not_invoiced": "active liability account",
       "gst_tds_payable": "active liability account",
       "income_tax_tds_payable": "active liability account",
@@ -46,7 +49,7 @@
   ],
   "blocked_count": 0,
   "blocked_invariants": {},
-  "catalog_sha256": "c5ea3af416d63a91556cde706e9499e7fd5399a0b6896494247cce532f012825",
+  "catalog_sha256": "6c3b6652b8c4822d964e0b0f8f964ad6c0d826ebee6bb7ecfce73c921140a37a",
   "generic_adjustment_tax_boundary": {
     "blocked_count": 0,
     "blocked_invariants": {},
@@ -552,6 +555,6 @@
     "tax.documents:documents_cross_row_guard"
   ],
   "source_manifest": "commands_trade_v2/trade-posting-manifest.json",
-  "source_manifest_sha256": "61b1961777cdc43193d07f6c57b253722a5692bbf95eb1da1ed8cb01efd8da52",
+  "source_manifest_sha256": "ed9a19991641fbf4d4bd1aa3e2637be8afaef126642f39b8d406bbc97b24aad0",
   "target_resolved_count_after_catalog_correction": 11
 }

@@ -30,7 +30,7 @@
     "required_interface": "The canonical calculation.artifacts authority supplies authenticated, database-hashed fixed input/output bytes and a private one-time consumer. The order commands in this fragment reconstruct inputs, compare every persisted result, and consume the artifact atomically; an application-supplied hash alone is never proof.",
     "status": "consumed_for_order_approvals; downstream-posting-effects-still-blocked"
   },
-  "catalog_sha256": "c5ea3af416d63a91556cde706e9499e7fd5399a0b6896494247cce532f012825",
+  "catalog_sha256": "6c3b6652b8c4822d964e0b0f8f964ad6c0d826ebee6bb7ecfce73c921140a37a",
   "manifest_version": "1.0.0",
   "mapping_file": "baseline-trade-posting-enforcements.json",
   "mapping_sha256": "0ab59ec422f82b57f414c3c14562bbc1f0c0f429e02d272cf70df0546b5f7268",

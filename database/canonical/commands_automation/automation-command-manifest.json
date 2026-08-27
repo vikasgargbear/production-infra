@@ -1,7 +1,7 @@
 {
   "blocked_count": 0,
   "blocked_invariants": {},
-  "catalog_sha256": "c5ea3af416d63a91556cde706e9499e7fd5399a0b6896494247cce532f012825",
+  "catalog_sha256": "6c3b6652b8c4822d964e0b0f8f964ad6c0d826ebee6bb7ecfce73c921140a37a",
   "dispatcher": {
     "adjustment_note_pilot_scope": {
       "required_matching": [
@@ -49,6 +49,8 @@
     },
     "blocked_prepare_capabilities": [
       "finance.adjustment_note.reversal.prepare",
+      "finance.customer_cheque_bounce.prepare",
+      "finance.customer_cheque_clearance.prepare",
       "procurement.purchase_return.reversal.prepare",
       "sales.return.reversal.prepare"
     ],
@@ -56,6 +58,8 @@
       "finance.adjustment_note.prepare": "finance.adjustment_note.post",
       "finance.adjustment_note.reversal.prepare": "finance.adjustment_note.reversal.post",
       "finance.bank_reconciliation.prepare": "finance.bank_reconciliation.match",
+      "finance.customer_cheque_bounce.prepare": "finance.customer_cheque_bounce.post",
+      "finance.customer_cheque_clearance.prepare": "finance.customer_cheque_clearance.post",
       "finance.customer_receipt.prepare": "finance.payment.post",
       "finance.expense_claim.prepare": "finance.expense_claim.post",
       "finance.supplier_advance.prepare": "finance.supplier_advance.post",
@@ -327,6 +331,8 @@
       "finance.adjustment_note.prepare",
       "finance.adjustment_note.reversal.prepare",
       "finance.bank_reconciliation.prepare",
+      "finance.customer_cheque_bounce.prepare",
+      "finance.customer_cheque_clearance.prepare",
       "finance.customer_receipt.prepare",
       "finance.expense_claim.prepare",
       "finance.supplier_advance.prepare",
@@ -485,7 +491,7 @@
   },
   "manifest_version": "1.0.0",
   "mapping_file": "baseline-automation-command-enforcements.json",
-  "mapping_sha256": "3fd8155696cb90ecc4a246de4eb01407ff4ea0f17104baecf57d4c849f284f2d",
+  "mapping_sha256": "0910ea4440a483cc167e95eac4fa15018486dc295b865e3f19ae98abce951a35",
   "postgresql": "15+",
   "resolved_count": 3,
   "resolved_invariants": [

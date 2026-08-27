@@ -1,7 +1,7 @@
 {
   "canonical_table": "calculation.artifacts",
   "canonical_table_count": 93,
-  "catalog_sha256": "73702c7d207ee61c83a83f6d89ebf781c97c0f31f3d6bd9fafb347e58f4b5e10",
+  "catalog_sha256": "6c3b6652b8c4822d964e0b0f8f964ad6c0d826ebee6bb7ecfce73c921140a37a",
   "deployment_blockers": [
     "Provision an independent erp_calculator password in the deployment secret store; never embed it in migrations or expose it to browser/API/MCP clients.",
     "Configure a calculator-only database connection whose session_user is erp_calculator; the standard erp_runtime connection cannot issue artifacts.",

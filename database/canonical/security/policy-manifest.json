@@ -1,6 +1,6 @@
 {
   "baseline_integration": {
-    "catalog_sha256": "13e250153f81833b8b64e1ae2ddc92dcb3137050185d716e69ba01d2e4862833",
+    "catalog_sha256": "ad9004d6666ef7d545e71d04e24933864d06d9adc09ce359e46fa75ba30d7a72",
     "mapping_file": "baseline-platform-enforcements.json",
     "mapping_sha256": "b9105bdcf470481135299a92f5e35c2a8cff3c65a8daaf5f0af02e431a6e9294",
     "resolved_platform_blocker_count": 115,
@@ -10,7 +10,7 @@
       "roles_grants": 4
     }
   },
-  "catalog_sha256": "13e250153f81833b8b64e1ae2ddc92dcb3137050185d716e69ba01d2e4862833",
+  "catalog_sha256": "ad9004d6666ef7d545e71d04e24933864d06d9adc09ce359e46fa75ba30d7a72",
   "catalog_table_count": 110,
   "contract_version": "1.0.0",
   "identity_provisioning": {

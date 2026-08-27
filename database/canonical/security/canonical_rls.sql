@@ -1,6 +1,6 @@
 -- Canonical ERP runtime roles and row-level security
 -- REVIEWED, NOT APPLIED. Include only after the canonical baseline tables exist.
--- canonical_catalog_sha256: 13e250153f81833b8b64e1ae2ddc92dcb3137050185d716e69ba01d2e4862833
+-- canonical_catalog_sha256: ad9004d6666ef7d545e71d04e24933864d06d9adc09ce359e46fa75ba30d7a72
 -- PostgreSQL 15+; execute as a role allowed to create roles and transfer ownership.
 
 BEGIN;

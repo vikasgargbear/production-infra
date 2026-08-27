@@ -224,29 +224,45 @@ def validate_prepare_payload_semantics(
         method = values["payment_method"]
         bank_account_id = values.get("bank_account_id")
         external_reference = values.get("external_reference")
-        if method == "cash":
+        if method in {"cash", "cheque"}:
             if bank_account_id is not None:
-                raise ValueError("cash payment must not include bank_account_id")
+                raise ValueError("cash or uncleared cheque must not include bank_account_id")
         elif bank_account_id is None:
             raise ValueError("non-cash payment requires bank_account_id")
         if method != "cash" and not external_reference:
             raise ValueError("non-cash payment requires external_reference")
 
     if operation_key == "finance.customer_receipt.prepare":
-        if values["payment_method"] not in {"bank_transfer", "card", "upi"}:
-            raise ValueError(
-                "customer receipt supports only bank_transfer, card, or upi"
-            )
+        method = values["payment_method"]
+        purpose = values["receipt_purpose"]
         allocations = values["allocations"]
         open_item_ids = [item["open_item_id"] for item in allocations]
         if len(set(open_item_ids)) != len(open_item_ids):
             raise ValueError("customer receipt allocations require unique open_item_id")
         if any(Decimal(str(item["amount"])) <= 0 for item in allocations):
             raise ValueError("customer receipt allocations must be positive")
-        if sum(Decimal(str(item["amount"])) for item in allocations) != Decimal(
-            str(values["amount"])
+        allocated = sum(Decimal(str(item["amount"])) for item in allocations)
+        if purpose == "invoice_settlement" and allocated != Decimal(str(values["amount"])):
+            raise ValueError("invoice-settlement allocations must exactly equal amount")
+        if purpose == "customer_advance" and allocations:
+            raise ValueError("customer advance must have zero invoice allocations")
+        if method == "cheque":
+            required = (
+                values.get("instrument_number"),
+                values.get("instrument_date"),
+                values.get("drawee_bank_name"),
+                values.get("account_payee_confirmed"),
+                values.get("evidence_attachment_id"),
+            )
+            if not all(required):
+                raise ValueError("cheque receipt requires exact account-payee instrument evidence")
+        elif any(
+            values.get(field) is not None
+            for field in ("instrument_number", "instrument_date", "drawee_bank_name", "account_payee_confirmed")
         ):
-            raise ValueError("customer receipt allocations must exactly equal amount")
+            raise ValueError("non-cheque receipt cannot include cheque instrument fields")
+        if method == "cash" and values.get("evidence_attachment_id") is None:
+            raise ValueError("cash receipt requires immutable tender evidence")
 
     if operation_key == "finance.supplier_advance.prepare":
         if values["payment_method"] not in {"bank_transfer", "upi"}:
@@ -271,14 +287,23 @@ def validate_prepare_payload_semantics(
         open_item_ids = [item["open_item_id"] for item in allocations]
         if len(set(open_item_ids)) != len(open_item_ids):
             raise ValueError("supplier payment allocations require unique open_item_id")
-        if any(Decimal(str(item["amount"])) <= 0 for item in allocations):
-            raise ValueError("supplier payment allocations must be positive")
-        if sum(Decimal(str(item["amount"])) for item in allocations) != Decimal(
-            str(values["gross_amount"])
+        if any(Decimal(str(item["cash_amount"])) < 0 for item in allocations):
+            raise ValueError("supplier payment cash components cannot be negative")
+        source_ids = [
+            item[field]
+            for item in allocations
+            for field in ("supplier_advance_open_item_id", "adjustment_note_open_item_id")
+            if item.get(field) is not None
+        ]
+        if len(source_ids) != len(set(source_ids)):
+            raise ValueError("each supplier credit source may be selected only once")
+        if all(
+            Decimal(str(item["cash_amount"])) == 0
+            and item.get("supplier_advance_open_item_id") is None
+            and item.get("adjustment_note_open_item_id") is None
+            for item in allocations
         ):
-            raise ValueError(
-                "supplier payment allocations must exactly equal gross_amount"
-            )
+            raise ValueError("supplier payment must select at least one settlement component")
 
     if operation_key == "finance.adjustment_note.prepare":
         side = values["side"]

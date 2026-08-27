@@ -5,7 +5,7 @@
     "current_catalog_resolved": 8,
     "pre_correction_global_net": -1
   },
-  "catalog_sha256": "73702c7d207ee61c83a83f6d89ebf781c97c0f31f3d6bd9fafb347e58f4b5e10",
+  "catalog_sha256": "6c3b6652b8c4822d964e0b0f8f964ad6c0d826ebee6bb7ecfce73c921140a37a",
   "manifest_version": "1.0.0",
   "mapping_file": "baseline-regulatory-command-enforcements.json",
   "mapping_sha256": "d02a7b1863b12fc0817120e1ca6bdac123342287edf1f5ca1318f42d87e3ed80",
