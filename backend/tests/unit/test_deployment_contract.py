@@ -731,8 +731,8 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     assert 'endswith("@example.invalid")' in provisioner
     canonical_model = json.loads(_read("docs/architecture/canonical-data-model.json"))
     app_contract = json.loads(_read("docs/architecture/app-data-contract.json"))
+    assert "parties.contacts" in canonical_model["canonical_tables"]["parties"]
     for source in ("parties.customers", "parties.suppliers"):
-        assert "parties.contacts" in canonical_model["source_mapping"][source]["targets"]
         assert "parties.contacts" in app_contract["legacy_relation_map"][source][
             "also_targets"
         ]

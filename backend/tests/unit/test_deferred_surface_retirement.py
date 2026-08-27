@@ -254,6 +254,10 @@ def test_reset_only_strategy_has_no_retired_project_conversion_tools() -> None:
         "backend/tests/unit/test_legacy_conversion_plan.py",
         "database/live-conversion-preflight-evidence.json",
         "database/live-source-relation-inventory.json",
+        "backend/scripts/capture_supabase_schema.py",
+        "backend/scripts/sql/capture_supabase_schema.sql",
+        "backend/tests/unit/test_supabase_schema_capture.py",
+        "docs/operations/supabase-live-schema-capture.md",
     )
 
     assert [
