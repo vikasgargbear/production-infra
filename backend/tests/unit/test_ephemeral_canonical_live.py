@@ -72,8 +72,9 @@ def test_live18_capabilities_extend_only_the_live18_profile_from_generated_autho
 
 
 def test_live23_fixture_resolution_requires_a_bounded_run_token_and_lineage() -> None:
-    with pytest.raises(MODULE.CanonicalLiveIdentityError, match="run token"):
-        MODULE._resolve_fixture_identities(object(), "local")
+    for invalid in ("local", "0-1", "1-0", "1" * 21 + "-1", "1-" + "1" * 11):
+        with pytest.raises(MODULE.CanonicalLiveIdentityError, match="run token"):
+            MODULE._resolve_fixture_identities(object(), invalid)
 
     source = SCRIPT.read_text(encoding="utf-8")
     for authority in (
@@ -88,6 +89,29 @@ def test_live23_fixture_resolution_requires_a_bounded_run_token_and_lineage() ->
         "state_code<>branch.state_code",
     ):
         assert authority in source
+
+
+def test_live23_fixture_resolution_uses_the_same_run_demo_namespace() -> None:
+    class Cursor:
+        def __init__(self):
+            self.parameters = None
+
+        def execute(self, _query, parameters):
+            self.parameters = parameters
+
+        @staticmethod
+        def fetchall():
+            return [tuple(f"id-{index}" for index in range(18))]
+
+    cursor = Cursor()
+
+    resolved = MODULE._resolve_fixture_identities(cursor, "33019161460-1")
+
+    assert cursor.parameters[11:13] == (
+        "LIVE23-INTER-33019161460-1",
+        "LIVE23-SEZ-33019161460-1",
+    )
+    assert resolved["branch_id"] == "id-0"
 
 
 def test_pkce_token_comes_from_real_authorization_code_exchange(monkeypatch):

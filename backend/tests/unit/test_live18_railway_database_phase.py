@@ -305,6 +305,7 @@ def test_remote_identity_success_retains_only_nonsecret_cleanup_state(
     }
     generated["MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS"] = deployed_client_id
     observed_api_origins = []
+    observed_fixture_run_tokens = []
 
     def provision_browser(state_path, _profile):
         observed_api_origins.append(
@@ -315,7 +316,8 @@ def test_remote_identity_success_retains_only_nonsecret_cleanup_state(
             for key, value in generated.items():
                 handle.write(f"{key}={value}\n")
 
-    def provision_mcp(state_path, _browser_state_path):
+    def provision_mcp(state_path, _browser_state_path, fixture_run_token):
+        observed_fixture_run_tokens.append(fixture_run_token)
         state_path.write_text(
             json.dumps({"version": 1, "client_id": deployed_client_id}) + "\n",
             encoding="utf-8",
@@ -360,6 +362,7 @@ def test_remote_identity_success_retains_only_nonsecret_cleanup_state(
     )
     assert os.environ["MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS"] == deployed_client_id
     assert observed_api_origins == [request["api_origin"]]
+    assert observed_fixture_run_tokens == ["1234-2"]
 
 
 def test_remote_identity_rejects_nonreviewed_api_origin(monkeypatch, tmp_path):
@@ -421,7 +424,7 @@ def test_remote_identity_client_mismatch_fails_through_cleanup(monkeypatch, tmp_
                 )
                 handle.write(f"{key}={value}\n")
 
-    def provision_mcp(state_path, _browser_state_path):
+    def provision_mcp(state_path, _browser_state_path, _fixture_run_token):
         state_path.write_text(
             '{"version":1,"client_id":"different-client"}\n', encoding="utf-8"
         )

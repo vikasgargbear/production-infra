@@ -31,6 +31,7 @@ def test_live_promotion_is_exact_sha_canonical_and_disposable_org_bound():
     assert "PHARMA_CANONICAL_LIVE_TARGET_KIND: disposable_test" in live_job
     assert "PHARMA_CANONICAL_LIVE_PROJECT_REF: rgihahbmkrmhitjdjvev" in live_job
     assert "provision_ephemeral_canonical_live.py provision" in live_job
+    assert '--fixture-run-token "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"' in live_job
     assert "PHARMA_CANONICAL_MCP_REVIEWER_ACCESS_TOKEN" in live_job
     assert "PHARMA_CANONICAL_LIVE_DELEGATED_TOKENS_JSON" not in live_job
     assert "PHARMA_CANONICAL_LIVE_FIXTURE_INPUT_JSON" in live_job

@@ -65,6 +65,7 @@ from supabase_auth_admin import mask_auth_admin_secret  # noqa: E402
 STATE_VERSION = 1
 PURPOSE = "canonical-staging-rest-mcp-live-e2e"
 LOCK_KEY = "canonical-staging-live-browser-identities"
+FIXTURE_RUN_TOKEN = re.compile(r"[1-9][0-9]{0,19}-[1-9][0-9]{0,9}")
 BRANCH_ID = "d3000000-0000-7000-8000-000000000005"
 TRANSFER_DESTINATION_BRANCH_ID = "d3000000-0000-7000-8000-000000000028"
 CUSTOMER_ACCOUNT_ID = "d3000000-0000-7000-8000-000000000011"
@@ -124,6 +125,14 @@ def _required(name: str) -> str:
     value = os.getenv(name, "").strip()
     if not value:
         raise CanonicalLiveIdentityError(f"{name} is required")
+    return value
+
+
+def _validated_fixture_run_token(value: str) -> str:
+    if FIXTURE_RUN_TOKEN.fullmatch(value) is None:
+        raise CanonicalLiveIdentityError(
+            "Canonical live fixture run token is invalid"
+        )
     return value
 
 
@@ -214,8 +223,7 @@ def _capabilities(role: str, *, live18: bool = False):
 
 
 def _resolve_fixture_identities(cursor, run_token: str) -> dict[str, str]:
-    if not re.fullmatch(r"[1-9][0-9]*-[1-9][0-9]*", run_token):
-        raise CanonicalLiveIdentityError("Canonical live fixture run token is invalid")
+    run_token = _validated_fixture_run_token(run_token)
     cursor.execute(
         """
         SELECT branch.id::text,customer.id::text,supplier.id::text,
@@ -350,6 +358,7 @@ def _resolve_fixture_identities(cursor, run_token: str) -> dict[str, str]:
 def _provision_database(
     management_token: str,
     browser_state: dict[str, Any],
+    fixture_run_token: str,
     client_id: str,
     state: dict[str, Any],
 ) -> tuple[str, dict[str, str]]:
@@ -440,7 +449,7 @@ def _provision_database(
                 )
             denial_org_id = denial_orgs[0][0]
             fixture_identities = _resolve_fixture_identities(
-                cursor, browser_state["run_token"]
+                cursor, fixture_run_token
             )
             cursor.execute(
                 """
@@ -571,9 +580,14 @@ def _provision_database(
     return denial_org_id, fixture_identities
 
 
-def provision(state_path: Path, browser_state_path: Path) -> None:
+def provision(
+    state_path: Path,
+    browser_state_path: Path,
+    fixture_run_token: str,
+) -> None:
     if state_path.exists():
         raise CanonicalLiveIdentityError("Clean canonical live state before provisioning")
+    fixture_run_token = _validated_fixture_run_token(fixture_run_token)
     management_token = _required("SUPABASE_ACCESS_TOKEN")
     _validate_target(management_token)
     browser_state = _read_browser_state(browser_state_path)
@@ -595,6 +609,7 @@ def provision(state_path: Path, browser_state_path: Path) -> None:
         "purpose": PURPOSE,
         "state_path": str(state_path),
         "browser_run_token": browser_state["run_token"],
+        "fixture_run_token": fixture_run_token,
         "client_id": client_id,
         "temporary_grants": {
             "requester": str(uuid4()),
@@ -604,7 +619,11 @@ def provision(state_path: Path, browser_state_path: Path) -> None:
     }
     _write_state(state_path, state)
     denial_org_id, fixture_identities = _provision_database(
-        management_token, browser_state, client_id, state
+        management_token,
+        browser_state,
+        fixture_run_token,
+        client_id,
+        state,
     )
     credentials = {
         "requester": (
@@ -747,11 +766,20 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("action", choices=("provision", "cleanup"))
     parser.add_argument("--state", required=True, type=Path)
     parser.add_argument("--browser-state", type=Path)
+    parser.add_argument("--fixture-run-token")
     arguments = parser.parse_args(argv)
     if arguments.action == "provision":
         if arguments.browser_state is None:
             raise CanonicalLiveIdentityError("--browser-state is required for provision")
-        provision(arguments.state, arguments.browser_state)
+        if arguments.fixture_run_token is None:
+            raise CanonicalLiveIdentityError(
+                "--fixture-run-token is required for provision"
+            )
+        provision(
+            arguments.state,
+            arguments.browser_state,
+            arguments.fixture_run_token,
+        )
     else:
         cleanup(arguments.state)
     return 0

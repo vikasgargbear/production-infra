@@ -761,7 +761,11 @@ def _identity_provision(request: dict[str, Any]) -> dict[str, Any]:
                 browser_provisioned = True
                 browser_environment = _parse_environment_file(github_environment)
                 with _temporary_environment(browser_environment):
-                    provision_mcp_identities(mcp_state, browser_state)
+                    provision_mcp_identities(
+                        mcp_state,
+                        browser_state,
+                        f"{request['run_id']}-{request['run_attempt']}",
+                    )
                 mcp_provisioned = True
                 generated = _parse_environment_file(github_environment)
             browser_payload = json.loads(browser_state.read_text(encoding="utf-8"))

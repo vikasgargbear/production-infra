@@ -822,7 +822,8 @@ jobs:
         run: |
           python3 backend/scripts/provision_ephemeral_canonical_live.py provision \
             --state "$RUNNER_TEMP/canonical-live-mcp-identities.json" \
-            --browser-state "$RUNNER_TEMP/canonical-live-browser-identities.json"
+            --browser-state "$RUNNER_TEMP/canonical-live-browser-identities.json" \
+            --fixture-run-token "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
       - name: Refuse an incompletely configured canonical live run
         env:
           PHARMA_CANONICAL_LIVE_FIXTURE_INPUT_JSON: ${{ secrets.PHARMA_CANONICAL_LIVE_FIXTURE_INPUT_JSON }}
@@ -1751,7 +1752,8 @@ jobs:
         run: |
           python3 backend/scripts/provision_ephemeral_canonical_live.py provision \
             --state "$RUNNER_TEMP/live18-mcp-identities.json" \
-            --browser-state "$RUNNER_TEMP/live18-browser-identities.json"
+            --browser-state "$RUNNER_TEMP/live18-browser-identities.json" \
+            --fixture-run-token "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
       - name: Refuse inconsistent REST, MCP, organization, or branch mapping
         run: |
           set -euo pipefail
