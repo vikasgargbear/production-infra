@@ -360,6 +360,7 @@ def _supplier_invoice_payload():
             "allocated_base_billed_quantity": "20.000000",
             "allocated_base_free_quantity": "10.000000",
             "product_inventory_cost_treatment": "capitalize",
+            "landed_cost_allocation_method": "direct",
             "itc_eligibility": "eligible",
             "itc_eligibility_basis": (
                 "taxable_resale_not_blocked_under_section_17"
