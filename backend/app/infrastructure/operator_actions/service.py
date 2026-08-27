@@ -81,6 +81,12 @@ from .commercial_reversal import (
     PERSIST_COMMERCIAL_REVERSAL_SQL,
     RESOLVE_COMMERCIAL_REVERSAL_SQL,
 )
+from .customer_cheque import (
+    PERSIST_CUSTOMER_CHEQUE_BOUNCE_SQL,
+    PERSIST_CUSTOMER_CHEQUE_CLEARANCE_SQL,
+    RESOLVE_CUSTOMER_CHEQUE_BOUNCE_SQL,
+    RESOLVE_CUSTOMER_CHEQUE_CLEARANCE_SQL,
+)
 from .supplier_advance import (
     PERSIST_SUPPLIER_ADVANCE_SQL,
     RESOLVE_SUPPLIER_ADVANCE_SQL,
@@ -675,6 +681,16 @@ class SqlAlchemyOperatorActionService:
             )
         if policy.operation_key == "finance.customer_receipt.prepare":
             return self._prepare_customer_receipt(
+                policy=policy,
+                payload=payload,
+                idempotency_key=idempotency_key,
+                context=context,
+            )
+        if policy.operation_key in {
+            "finance.customer_cheque_clearance.prepare",
+            "finance.customer_cheque_bounce.prepare",
+        }:
+            return self._prepare_customer_cheque_action(
                 policy=policy,
                 payload=payload,
                 idempotency_key=idempotency_key,
@@ -2530,7 +2546,13 @@ class SqlAlchemyOperatorActionService:
         )
         identifiers = {
             name: uuid5(NAMESPACE_URL, identity + f":{name}")
-            for name in ("payment_id", "command_request_id", "journal_id", "event_id")
+            for name in (
+                "payment_id",
+                "command_request_id",
+                "journal_id",
+                "event_id",
+                "customer_advance_open_item_id",
+            )
         }
         normalized = {key: _json_value(value) for key, value in payload.items()}
         normalized.update({key: str(value) for key, value in identifiers.items()})
@@ -2667,6 +2689,115 @@ class SqlAlchemyOperatorActionService:
                     required_approvals=(
                         {"policy": policy.approval_policy, "count": 1},
                     ),
+                )
+
+    def _prepare_customer_cheque_action(
+        self,
+        *,
+        policy: ActionPolicy,
+        payload: Mapping[str, Any],
+        idempotency_key: str,
+        context: ActionContext,
+    ) -> PreparedCommand:
+        if not self.adapter_readiness()[policy.operation_key]:
+            self._unavailable(policy.operation_key)
+        action = "bounce" if "bounce" in policy.operation_key else "clearance"
+        identity = (
+            f"aasopharma:{context.organization_id}:{context.membership_id}:"
+            f"{policy.operation_key}:{idempotency_key}"
+        )
+        identifiers = {
+            name: uuid5(NAMESPACE_URL, identity + f":{name}")
+            for name in ("payment_id", "command_request_id", "journal_id", "event_id")
+        }
+        normalized = {key: _json_value(value) for key, value in payload.items()}
+        normalized.update({key: str(value) for key, value in identifiers.items()})
+        if action == "bounce":
+            normalized["compensating_allocation_ids"] = [
+                str(uuid5(NAMESPACE_URL, identity + f":compensation:{index}"))
+                for index in range(1, 501)
+            ]
+        request_bytes = canonical_json_bytes(normalized)
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+        params = {
+            "org_id": context.organization_id,
+            "membership_id": context.membership_id,
+            "auth_user_id": context.auth_user_id,
+            "user_id": context.user_id,
+            "agent_grant_id": context.agent_grant_id,
+            "client_id": context.client_id,
+            **identifiers,
+            "idempotency_key_hash": hashlib.sha256(idempotency_key.encode()).digest(),
+            "payment_sequence_key_hash": hashlib.sha256((idempotency_key + ":cheque-action-number").encode()).digest(),
+            "journal_sequence_key_hash": hashlib.sha256((idempotency_key + ":cheque-action-journal").encode()).digest(),
+            "request_json": request_bytes.decode(),
+            "request_bytes": request_bytes,
+            "expires_at": expires_at,
+        }
+        resolve_sql = (
+            RESOLVE_CUSTOMER_CHEQUE_BOUNCE_SQL
+            if action == "bounce"
+            else RESOLVE_CUSTOMER_CHEQUE_CLEARANCE_SQL
+        )
+        persist_sql = (
+            PERSIST_CUSTOMER_CHEQUE_BOUNCE_SQL
+            if action == "bounce"
+            else PERSIST_CUSTOMER_CHEQUE_CLEARANCE_SQL
+        )
+        with self._session_factory() as session:
+            with session.begin():
+                assert_runtime_principal(session)
+                _lock_prepare_idempotency(session, params, policy.operation_key)
+                rows = _mapping_rows(session.execute(resolve_sql, params))
+                if len(rows) != 1:
+                    raise OperatorActionError(ActionErrorCode.POLICY_BLOCKED, "Canonical cheque action resolution is unavailable")
+                resolution = _json_document(rows[0]["resolution"])
+                source_versions = tuple(resolution["source_versions"])
+                resolved_references = tuple(
+                    {key: value for key, value in source.items() if key in {"resource_type", "id", "role"}}
+                    for source in source_versions if source.get("id") is not None
+                )
+                financial_impact = ({
+                    "currency_code": "INR",
+                    "action": action,
+                    "original_payment_id": resolution["original_payment_id"],
+                    "amount": resolution["amount"],
+                    "settlement_account_id": resolution["settlement_account_id"],
+                    "compensating_allocations": resolution["compensating_allocations"],
+                },)
+                preview = {
+                    "branch_id": resolution["branch_id"],
+                    "calculation_ruleset": [],
+                    "capability_code": policy.operation_key,
+                    "command_request_id": str(identifiers["command_request_id"]),
+                    "destination_branch_id": None,
+                    "financial_impact": list(financial_impact),
+                    "inventory_impact": [],
+                    "legal_scope": resolution["legal_scope"],
+                    "operation": resolution["operation"],
+                    "organization_id": str(context.organization_id),
+                    "request_hash": hashlib.sha256(request_bytes).hexdigest(),
+                    "resolved_references": list(resolved_references),
+                    "source_versions": list(source_versions),
+                    "target_resource_id": str(identifiers["payment_id"]),
+                    "target_resource_type": "payment",
+                    "tax_impact": [],
+                }
+                params.update({"resolved_bytes": canonical_json_bytes(resolution), "preview_bytes": canonical_json_bytes(preview)})
+                persisted = _mapping_rows(session.execute(persist_sql, params))
+                if len(persisted) != 1:
+                    raise OperatorActionError(ActionErrorCode.POLICY_BLOCKED, "Canonical cheque action did not persist exactly once")
+                result = _json_document(persisted[0]["command_request_id"])
+                return PreparedCommand(
+                    command_request_id=identifiers["command_request_id"],
+                    command_type=resolution["operation"],
+                    preview_hash="sha256:" + str(result["preview_hash"]),
+                    expires_at=_persisted_expiry(result["expires_at"]),
+                    resolved_references=resolved_references,
+                    source_versions=source_versions,
+                    calculation_ruleset=(), inventory_impact=(),
+                    financial_impact=financial_impact, tax_impact=(),
+                    required_approvals=({"policy": policy.approval_policy, "count": 1},),
                 )
 
     def _prepare_supplier_payment(

@@ -109,11 +109,25 @@ _PREPARE_BINDINGS = {
         execute_function="erp_finance_commands.post_payment + finance.allocations",
         unavailable_reason=None,
     ),
+    "finance.customer_cheque_clearance.prepare": ActionAdapterBinding(
+        operation_key="finance.customer_cheque_clearance.prepare",
+        available=True,
+        prepare_function="erp_automation_commands.persist_customer_cheque_clearance_prepare",
+        execute_function="erp_finance_commands.post_customer_cheque_clearance",
+        unavailable_reason=None,
+    ),
+    "finance.customer_cheque_bounce.prepare": ActionAdapterBinding(
+        operation_key="finance.customer_cheque_bounce.prepare",
+        available=True,
+        prepare_function="erp_automation_commands.persist_customer_cheque_bounce_prepare",
+        execute_function="erp_finance_commands.post_customer_cheque_bounce",
+        unavailable_reason=None,
+    ),
     "finance.supplier_payment.prepare": ActionAdapterBinding(
         operation_key="finance.supplier_payment.prepare",
         available=True,
         prepare_function="erp_automation_commands.persist_supplier_payment_prepare",
-        execute_function="erp_finance_commands.post_payment + finance.allocations",
+        execute_function="erp_finance_commands.post_supplier_payment",
         unavailable_reason=None,
     ),
     "finance.supplier_advance.prepare": ActionAdapterBinding(
