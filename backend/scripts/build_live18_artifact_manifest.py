@@ -45,6 +45,12 @@ DEFAULT_OPERATION_MATRIX = (
     / "live_acceptance"
     / "operation_matrix.json"
 )
+DEFAULT_SUPPORTED_BUSINESS_READINESS = (
+    Path(__file__).resolve().parents[1]
+    / "tests"
+    / "live_acceptance"
+    / "live23_supported_business_readiness.json"
+)
 RECONCILIATION_SCHEMA = "aasopharma.live18.reconciliation-attestation.v1"
 RENDER_DEMO_RECEIPT_SCHEMA = "aasopharma.live18.render-demo-receipt.v1"
 
@@ -171,6 +177,38 @@ def _expected_operations(path: Path) -> dict[str, str]:
             expected[operation_id] = command_operation
     if len(expected) != value["required_operation_count"]:
         raise ArtifactManifestError("operation matrix ready scope is incomplete")
+    return expected
+
+
+def _expected_business_variants(path: Path) -> dict[str, str]:
+    value = _read_json(path)
+    rows = value.get("variants")
+    if (
+        value.get("schema")
+        != "aasopharma.live23.supported-business-readiness.v1"
+        or value.get("required_variant_count") != 7
+        or value.get("ready_count") != 7
+        or not isinstance(rows, list)
+        or len(rows) != 7
+    ):
+        raise ArtifactManifestError(
+            "supported-business readiness must declare exactly seven ready variants"
+        )
+    expected: dict[str, str] = {}
+    for row in rows:
+        if not isinstance(row, dict) or row.get("status") != "ready":
+            raise ArtifactManifestError("supported-business variant is not ready")
+        variant_id = row.get("id")
+        command_operation = row.get("command_operation")
+        if (
+            not isinstance(variant_id, str)
+            or SAFE_IDENTIFIER.fullmatch(variant_id) is None
+            or not isinstance(command_operation, str)
+            or not command_operation.endswith(".prepare")
+            or variant_id in expected
+        ):
+            raise ArtifactManifestError("supported-business readiness contains an invalid variant")
+        expected[variant_id] = command_operation
     return expected
 
 
@@ -393,7 +431,10 @@ def _deployment_summary(
 
 
 def _database_summary(
-    path: Path, deployment: dict[str, Any]
+    path: Path,
+    deployment: dict[str, Any],
+    *,
+    expected_scope: str = "live18",
 ) -> dict[str, Any]:
     value = _read_json(path)
     provider = deployment["provider"]
@@ -406,6 +447,7 @@ def _database_summary(
         value.get("schema") != expected_schema
         or value.get("action") != "capture-evidence"
         or value.get("expected_sha") != deployment["commit_sha"]
+        or value.get("evidence_scope", "live18") != expected_scope
         or not isinstance(value.get("project_ref"), str)
         or SAFE_PROJECT_REF.fullmatch(value["project_ref"]) is None
         or value.get("content_sha256") != expected_content_hash
@@ -478,6 +520,7 @@ def _database_summary(
         "transport",
     )
     return {
+        "evidence_scope": expected_scope,
         "expected_sha": deployment["commit_sha"],
         "project_ref": value["project_ref"],
         "organization_id": _required_text(value, "organization_id", UUID),
@@ -487,6 +530,159 @@ def _database_summary(
         },
         "resources": safe_resources,
         "raw_evidence_sha256": _digest(path),
+    }
+
+
+def _business_variant_inventory(
+    *,
+    evidence_dir: Path,
+    screenshot_dir: Path,
+    database_evidence: Path,
+    reconciliation_evidence: Path,
+    deployment: dict[str, Any],
+    readiness: Path,
+    reconciliation_outcome: str,
+) -> dict[str, Any]:
+    if reconciliation_outcome != "success":
+        raise ArtifactManifestError(
+            "supported-business MCP/PostgreSQL reconciliation did not succeed"
+        )
+    expected = _expected_business_variants(readiness)
+    if not evidence_dir.is_dir() or not screenshot_dir.is_dir():
+        raise ArtifactManifestError(
+            "supported-business browser evidence directories are missing"
+        )
+    evidence_paths = sorted(evidence_dir.glob("*.json"))
+    if {path.stem for path in evidence_paths} != set(expected):
+        raise ArtifactManifestError(
+            "supported-business browser evidence must contain exactly seven variant IDs"
+        )
+    browser = [_browser_summary(path, screenshot_dir) for path in evidence_paths]
+    actual = {row["operation_id"]: row["command_operation"] for row in browser}
+    if actual != expected:
+        raise ArtifactManifestError(
+            "supported-business browser evidence differs from the reviewed variant scope"
+        )
+    expected_screenshots = {
+        row["filename"] for item in browser for row in item["screenshots"]
+    }
+    actual_screenshots = {
+        path.name for path in screenshot_dir.iterdir()
+        if path.is_file() or path.is_symlink()
+    }
+    if (
+        len(expected_screenshots) != 14
+        or actual_screenshots != expected_screenshots
+    ):
+        raise ArtifactManifestError(
+            "supported-business browser evidence requires exactly fourteen reviewed screenshots"
+        )
+    database = _database_summary(
+        database_evidence,
+        deployment,
+        expected_scope="supported_business_variants",
+    )
+    if set(database["resources"]) != set(expected):
+        raise ArtifactManifestError(
+            "supported-business PostgreSQL evidence differs from the seven variants"
+        )
+    browser_organizations = {row["organization_id"] for row in browser}
+    browser_branches = {row["branch_id"] for row in browser}
+    if (
+        len(browser_organizations) != 1
+        or len(browser_branches) != 1
+        or database["organization_id"] not in browser_organizations
+        or database["denial_organization_id"] == database["organization_id"]
+    ):
+        raise ArtifactManifestError(
+            "supported-business database evidence differs from its browser tenant"
+        )
+    browser_by_id = {row["operation_id"]: row for row in browser}
+    attestation = _read_json(reconciliation_evidence)
+    attestation_rows = attestation.get("variants")
+    if (
+        attestation.get("schema")
+        != "aasopharma.live23.business-variant-reconciliation.v1"
+        or attestation.get("expected_sha") != deployment["commit_sha"]
+        or attestation.get("organization_id") != database["organization_id"]
+        or attestation.get("branch_id") not in browser_branches
+        or attestation.get("variant_count") != 7
+        or attestation.get("variant_ids") != sorted(expected)
+        or attestation.get("variant_set_sha256") != _operation_set_sha256(expected)
+        or attestation.get("content_sha256") != _content_sha256(attestation)
+        or not isinstance(attestation_rows, list)
+        or len(attestation_rows) != 7
+    ):
+        raise ArtifactManifestError(
+            "supported-business reconciliation attestation is invalid"
+        )
+    attestation_by_id = {
+        row.get("variant_id"): row
+        for row in attestation_rows
+        if isinstance(row, dict)
+    }
+    if set(attestation_by_id) != set(expected):
+        raise ArtifactManifestError(
+            "supported-business reconciliation attestation omits a variant"
+        )
+    reconciled: list[dict[str, Any]] = []
+    for variant_id in sorted(expected):
+        browser_row = browser_by_id[variant_id]
+        database_row = database["resources"][variant_id]
+        attested = attestation_by_id[variant_id]
+        if (
+            browser_row["tested_sha"] != deployment["commit_sha"]
+            or database_row["command_operation"] != expected[variant_id]
+            or database_row["command_request_id"] != browser_row["command_request_id"]
+            or database_row["resource_id"] != browser_row["resource_id"]
+            or database_row["cross_tenant_denied"] is not True
+            or attested.get("command_operation") != expected[variant_id]
+            or attested.get("command_request_id") != browser_row["command_request_id"]
+            or attested.get("resource_id") != browser_row["resource_id"]
+            or attested.get("browser_evidence_sha256")
+            != browser_row["raw_evidence_sha256"]
+            or attested.get("database_projection_sha256")
+            != database_row["database_sha256"]
+            or SHA256.fullmatch(str(attested.get("mcp_status_sha256", ""))) is None
+            or SHA256.fullmatch(str(attested.get("mcp_readback_sha256", ""))) is None
+        ):
+            raise ArtifactManifestError(
+                f"supported-business evidence drifted for {variant_id}"
+            )
+        identity = {
+            "variant_id": variant_id,
+            "command_operation": expected[variant_id],
+            "command_request_id": browser_row["command_request_id"],
+            "resource_id": browser_row["resource_id"],
+            "browser_evidence_sha256": browser_row["raw_evidence_sha256"],
+            "database_projection_sha256": database_row["database_sha256"],
+            "mcp_status_sha256": attested["mcp_status_sha256"],
+            "mcp_readback_sha256": attested["mcp_readback_sha256"],
+        }
+        identity["reconciliation_sha256"] = hashlib.sha256(
+            json.dumps(identity, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+        reconciled.append(identity)
+    reconciliation_set_sha256 = hashlib.sha256(
+        json.dumps(
+            {row["variant_id"]: row["reconciliation_sha256"] for row in reconciled},
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+    return {
+        "status": "success",
+        "variant_count": 7,
+        "variant_ids": sorted(expected),
+        "variant_set_sha256": _operation_set_sha256(expected),
+        "browser_evidence_set_sha256": _evidence_set_sha256(browser),
+        "database_evidence_sha256": database["raw_evidence_sha256"],
+        "reconciliation_evidence_sha256": _digest(reconciliation_evidence),
+        "mcp_postgresql_reconciliation_outcome": "success",
+        "reconciliation_set_sha256": reconciliation_set_sha256,
+        "variants": reconciled,
+        "browser": browser,
+        "database": database,
     }
 
 
@@ -621,6 +817,13 @@ def build_manifest(
     screenshot_dir: Path | None = None,
     reconciliation_evidence: Path | None = None,
     operation_matrix: Path = DEFAULT_OPERATION_MATRIX,
+    business_variants_required: bool = False,
+    business_variant_evidence_dir: Path | None = None,
+    business_variant_database_evidence: Path | None = None,
+    business_variant_reconciliation_evidence: Path | None = None,
+    business_variant_screenshot_dir: Path | None = None,
+    business_variant_readiness: Path = DEFAULT_SUPPORTED_BUSINESS_READINESS,
+    business_variant_reconciliation_outcome: str = "skipped",
 ) -> dict[str, Any]:
     if browser_outcome not in {"success", "failure", "cancelled", "skipped"}:
         raise ArtifactManifestError("invalid browser outcome")
@@ -753,6 +956,32 @@ def build_manifest(
                 raise ArtifactManifestError(
                     f"database evidence drifted for {operation_id}"
                 )
+    business_variants = None
+    if business_variants_required and browser_outcome == "success":
+        if (
+            business_variant_evidence_dir is None
+            or business_variant_database_evidence is None
+            or business_variant_reconciliation_evidence is None
+            or business_variant_screenshot_dir is None
+            or _optional_nonempty_file(business_variant_database_evidence) is None
+            or _optional_nonempty_file(business_variant_reconciliation_evidence) is None
+        ):
+            raise ArtifactManifestError(
+                "successful release evidence requires all supported-business artifacts"
+            )
+        business_variants = _business_variant_inventory(
+            evidence_dir=business_variant_evidence_dir,
+            screenshot_dir=business_variant_screenshot_dir,
+            database_evidence=business_variant_database_evidence,
+            reconciliation_evidence=business_variant_reconciliation_evidence,
+            deployment=deployment,
+            readiness=business_variant_readiness,
+            reconciliation_outcome=business_variant_reconciliation_outcome,
+        )
+        if business_variants["database"]["organization_id"] != database["organization_id"]:
+            raise ArtifactManifestError(
+                "Live17 and supported-business evidence use different organizations"
+            )
     return {
         "schema": "aasopharma.live18.upload-manifest.v1",
         "run": {"id": run_id, "attempt": run_attempt, "browser_outcome": browser_outcome},
@@ -762,6 +991,7 @@ def build_manifest(
         "database": database,
         "demo": demo,
         "reconciliation": reconciliation,
+        "business_variants": business_variants,
     }
 
 
@@ -777,6 +1007,20 @@ def main() -> None:
     parser.add_argument(
         "--operation-matrix", type=Path, default=DEFAULT_OPERATION_MATRIX
     )
+    parser.add_argument("--require-business-variants", action="store_true")
+    parser.add_argument("--business-variant-evidence-dir", type=Path)
+    parser.add_argument("--business-variant-database-evidence", type=Path)
+    parser.add_argument("--business-variant-reconciliation-evidence", type=Path)
+    parser.add_argument("--business-variant-screenshot-dir", type=Path)
+    parser.add_argument(
+        "--business-variant-readiness",
+        type=Path,
+        default=DEFAULT_SUPPORTED_BUSINESS_READINESS,
+    )
+    parser.add_argument(
+        "--business-variant-reconciliation-outcome",
+        default="skipped",
+    )
     parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args()
     manifest = build_manifest(
@@ -790,6 +1034,17 @@ def main() -> None:
         screenshot_dir=args.screenshot_dir,
         reconciliation_evidence=args.reconciliation_evidence,
         operation_matrix=args.operation_matrix,
+        business_variants_required=args.require_business_variants,
+        business_variant_evidence_dir=args.business_variant_evidence_dir,
+        business_variant_database_evidence=args.business_variant_database_evidence,
+        business_variant_reconciliation_evidence=(
+            args.business_variant_reconciliation_evidence
+        ),
+        business_variant_screenshot_dir=args.business_variant_screenshot_dir,
+        business_variant_readiness=args.business_variant_readiness,
+        business_variant_reconciliation_outcome=(
+            args.business_variant_reconciliation_outcome
+        ),
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")

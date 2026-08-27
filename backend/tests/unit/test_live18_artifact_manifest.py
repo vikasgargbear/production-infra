@@ -15,6 +15,10 @@ from scripts.build_live18_artifact_manifest import (
 )
 from scripts.build_live18_reconciliation_attestation import build_attestation
 from scripts.build_live18_render_demo_receipt import build_receipt
+from tests.live_acceptance.business_variant_reconciliation_evidence import (
+    BusinessVariantReconciliationEvidenceRecorder,
+    OUTPUT_ENV as BUSINESS_VARIANT_RECONCILIATION_OUTPUT_ENV,
+)
 
 
 SHA = "a" * 40
@@ -33,6 +37,9 @@ PNG_1X1 = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl9sAAAAASUVORK5CYII="
 )
 MATRIX_PATH = Path("backend/tests/live_acceptance/operation_matrix.json")
+BUSINESS_VARIANT_PATH = Path(
+    "backend/tests/live_acceptance/live23_supported_business_readiness.json"
+)
 
 
 def _write(path: Path, value: object) -> Path:
@@ -108,6 +115,11 @@ def _matrix_operations() -> list[dict[str, str]]:
     return [row for row in value["operations"] if row["id"] not in deferred]
 
 
+def _business_variants() -> list[dict[str, str]]:
+    value = json.loads(BUSINESS_VARIANT_PATH.read_text(encoding="utf-8"))
+    return value["variants"]
+
+
 def _http_evidence(operation_id: str) -> list[dict[str, object]]:
     if operation_id != "expense_claim":
         return []
@@ -144,7 +156,12 @@ def _matrix_database_resources() -> dict[str, object]:
     }
 
 
-def _signed_database(*, provider: str, resources: dict[str, object]) -> dict[str, object]:
+def _signed_database(
+    *,
+    provider: str,
+    resources: dict[str, object],
+    evidence_scope: str | None = None,
+) -> dict[str, object]:
     value: dict[str, object] = {
         "schema": (
             "aasopharma.live18.railway-database-response.v1"
@@ -171,9 +188,105 @@ def _signed_database(*, provider: str, resources: dict[str, object]) -> dict[str
         },
         "resources": resources,
     }
+    if evidence_scope is not None:
+        value["evidence_scope"] = evidence_scope
     unsigned = json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
     value["content_sha256"] = hashlib.sha256(unsigned).hexdigest()
     return value
+
+
+def _write_business_variant_set(
+    tmp_path: Path,
+    *,
+    provider: str,
+) -> tuple[Path, Path, Path, Path]:
+    evidence_dir = tmp_path / "evidence" / "business-variants"
+    screenshot_dir = tmp_path / "screenshots" / "business-variants"
+    screenshot_dir.mkdir(parents=True, mode=0o700)
+    resources: dict[str, object] = {}
+    for index, variant in enumerate(_business_variants(), start=1):
+        variant_id = variant["id"]
+        command_id = f"018f0000-0000-7000-8000-{index:012d}"
+        resource_id = f"028f0000-0000-7000-8000-{index:012d}"
+        screenshots: list[dict[str, object]] = []
+        for stage in ("missing-required", "posted"):
+            filename = f"{variant_id}-{stage}.png"
+            screenshot = screenshot_dir / filename
+            screenshot.write_bytes(PNG_1X1)
+            screenshot.chmod(0o600)
+            screenshots.append({
+                "stage": stage,
+                "filename": filename,
+                "sha256": hashlib.sha256(PNG_1X1).hexdigest(),
+                "byte_size": len(PNG_1X1),
+                "width": 1,
+                "height": 1,
+            })
+        _write(evidence_dir / f"{variant_id}.json", {
+            "evidence_schema": "aasopharma.live18.browser.v1",
+            "tested_sha": SHA,
+            "operation_id": variant_id,
+            "command_operation": variant["command_operation"],
+            "command_request_id": command_id,
+            "resource_id": resource_id,
+            "preview_hash": "sha256:" + "b" * 64,
+            "requester_user_id": REQUESTER,
+            "reviewer_user_id": REVIEWER,
+            "organization_id": ORG,
+            "branch_id": BRANCH,
+            "cleanup_id": None,
+            "self_approval_probe": None,
+            "missing_required_http_evidence": [],
+            "http_evidence": [],
+            "screenshots": screenshots,
+        })
+        resources[variant_id] = {
+            "command_operation": variant["command_operation"],
+            "command_request_id": command_id,
+            "resource_id": resource_id,
+            "cross_tenant_denied": True,
+            "database": {"row_count": 1, "variant_id": variant_id},
+        }
+    database = _write(
+        tmp_path / "variant-database.json",
+        _signed_database(
+            provider=provider,
+            resources=resources,
+            evidence_scope="supported_business_variants",
+        ),
+    )
+    expected = {
+        row["id"]: row["command_operation"] for row in _business_variants()
+    }
+    reconciliation = BusinessVariantReconciliationEvidenceRecorder.from_environment(
+        expected,
+        {
+            "RUNNER_TEMP": str(tmp_path),
+            BUSINESS_VARIANT_RECONCILIATION_OUTPUT_ENV: str(
+                tmp_path / "variant-reconciliation.json"
+            ),
+        },
+    )
+    assert reconciliation is not None
+    for variant in _business_variants():
+        variant_id = variant["id"]
+        row = resources[variant_id]
+        reconciliation.record(
+            variant_id=variant_id,
+            command_operation=variant["command_operation"],
+            command_request_id=row["command_request_id"],
+            resource_id=row["resource_id"],
+            browser_evidence_path=evidence_dir / f"{variant_id}.json",
+            mcp_status={"status": "succeeded", "resource_id": row["resource_id"]},
+            mcp_readback={"resource_id": row["resource_id"], "posted": True},
+            database=row["database"],
+        )
+    reconciliation.finalize(
+        expected_sha=SHA,
+        organization_id=ORG,
+        branch_id=BRANCH,
+    )
+    return evidence_dir, screenshot_dir, database, reconciliation.output_path
 
 
 def _render_demo_receipt(tmp_path: Path, *, run_id: str, run_attempt: str) -> Path:
@@ -395,6 +508,91 @@ def test_success_requires_all_17_ready_operations_and_34_reviewed_pngs(
     assert sum(len(row["screenshots"]) for row in manifest["browser"]) == 34
     assert "expense_claim" not in {row["operation_id"] for row in manifest["browser"]}
     assert len(manifest["reconciliation"]["operation_set_sha256"]) == 64
+
+    (
+        variant_evidence,
+        variant_screenshots,
+        variant_database,
+        variant_reconciliation,
+    ) = (
+        _write_business_variant_set(tmp_path, provider="render")
+    )
+    complete = build_manifest(
+        deployed_sha=deployed,
+        evidence_dir=evidence_dir,
+        database_evidence=database,
+        demo_evidence=demo,
+        browser_outcome="success",
+        run_id="123",
+        run_attempt="1",
+        screenshot_dir=screenshot_dir,
+        reconciliation_evidence=attestation,
+        operation_matrix=MATRIX_PATH,
+        business_variants_required=True,
+        business_variant_evidence_dir=variant_evidence,
+        business_variant_database_evidence=variant_database,
+        business_variant_reconciliation_evidence=variant_reconciliation,
+        business_variant_screenshot_dir=variant_screenshots,
+        business_variant_readiness=BUSINESS_VARIANT_PATH,
+        business_variant_reconciliation_outcome="success",
+    )
+    variants = complete["business_variants"]
+    assert len(complete["browser"]) == 17
+    assert variants["variant_count"] == 7
+    assert variants["variant_ids"] == sorted(row["id"] for row in _business_variants())
+    assert len(variants["browser"]) == 7
+    assert len(variants["variants"]) == 7
+    assert len(variants["variant_set_sha256"]) == 64
+    assert len(variants["browser_evidence_set_sha256"]) == 64
+    assert len(variants["database_evidence_sha256"]) == 64
+    assert len(variants["reconciliation_evidence_sha256"]) == 64
+    assert len(variants["reconciliation_set_sha256"]) == 64
+    assert all(len(row["reconciliation_sha256"]) == 64 for row in variants["variants"])
+    assert all(len(row["mcp_status_sha256"]) == 64 for row in variants["variants"])
+    assert all(len(row["mcp_readback_sha256"]) == 64 for row in variants["variants"])
+
+    with pytest.raises(ArtifactManifestError, match="all supported-business artifacts"):
+        build_manifest(
+            deployed_sha=deployed,
+            evidence_dir=evidence_dir,
+            database_evidence=database,
+            demo_evidence=demo,
+            browser_outcome="success",
+            run_id="123",
+            run_attempt="1",
+            screenshot_dir=screenshot_dir,
+            reconciliation_evidence=attestation,
+            operation_matrix=MATRIX_PATH,
+            business_variants_required=True,
+            business_variant_evidence_dir=variant_evidence,
+            business_variant_database_evidence=variant_database,
+            business_variant_screenshot_dir=variant_screenshots,
+            business_variant_readiness=BUSINESS_VARIANT_PATH,
+            business_variant_reconciliation_outcome="success",
+        )
+
+    missing_variant = variant_evidence / f"{_business_variants()[0]['id']}.json"
+    missing_variant.unlink()
+    with pytest.raises(ArtifactManifestError, match="exactly seven variant IDs"):
+        build_manifest(
+            deployed_sha=deployed,
+            evidence_dir=evidence_dir,
+            database_evidence=database,
+            demo_evidence=demo,
+            browser_outcome="success",
+            run_id="123",
+            run_attempt="1",
+            screenshot_dir=screenshot_dir,
+            reconciliation_evidence=attestation,
+            operation_matrix=MATRIX_PATH,
+            business_variants_required=True,
+            business_variant_evidence_dir=variant_evidence,
+            business_variant_database_evidence=variant_database,
+            business_variant_reconciliation_evidence=variant_reconciliation,
+            business_variant_screenshot_dir=variant_screenshots,
+            business_variant_readiness=BUSINESS_VARIANT_PATH,
+            business_variant_reconciliation_outcome="success",
+        )
 
     (screenshot_dir / "unreviewed.png").write_bytes(PNG_1X1)
     (screenshot_dir / "unreviewed.png").chmod(0o600)

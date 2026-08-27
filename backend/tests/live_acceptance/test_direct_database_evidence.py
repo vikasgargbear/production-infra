@@ -16,7 +16,10 @@ from .direct_database_evidence import (
     OUTPUT_ENV,
     DirectDatabaseEvidenceError,
     DirectDatabaseEvidenceRecorder,
+    VARIANT_CAPTURED_EVIDENCE_ENV,
+    VARIANT_OUTPUT_ENV,
 )
+from scripts.live_acceptance.live23_variants import load_supported_business_registry
 
 
 SHA = "a" * 40
@@ -113,6 +116,7 @@ def test_direct_database_evidence_writes_one_hashed_owner_only_ready_scope_artif
     ).hexdigest()
     assert artifact["schema"] == "aasopharma.live18.database-evidence.v1"
     assert artifact["action"] == "capture-evidence"
+    assert artifact["evidence_scope"] == "live18"
     assert artifact["content_sha256"] == digest
     assert artifact["organization_id"] == ORG
     assert artifact["denial_organization_id"] == DENIAL_ORG
@@ -212,3 +216,44 @@ def test_direct_database_evidence_rejects_credentials_before_recording(tmp_path:
             database={"password": "must-not-write"},
         )
     assert recorder.resources == {}
+
+
+def test_direct_database_evidence_supports_separate_exact_variant_scope(
+    tmp_path: Path,
+) -> None:
+    commands = {
+        str(row["id"]): str(row["command_operation"])
+        for row in load_supported_business_registry()
+    }
+    environment = {
+        "RUNNER_TEMP": str(tmp_path),
+        VARIANT_OUTPUT_ENV: str(tmp_path / "live23-business-database-evidence.json"),
+    }
+    recorder = DirectDatabaseEvidenceRecorder.from_environment(
+        commands,
+        environment,
+        output_env=VARIANT_OUTPUT_ENV,
+        captured_evidence_env=VARIANT_CAPTURED_EVIDENCE_ENV,
+        evidence_scope="supported_business_variants",
+    )
+    assert recorder is not None
+    for index, (variant_id, command) in enumerate(commands.items(), start=1):
+        recorder.record(
+            operation_id=variant_id,
+            command_operation=command,
+            command_request_id=str(UUID(int=index, version=4)),
+            resource_id=str(UUID(int=index + 100, version=4)),
+            database={"variant_id": variant_id},
+        )
+    recorder.finalize(
+        organization_id=ORG,
+        denial_organization_id=DENIAL_ORG,
+        expected_sha=SHA,
+        project_ref="rgihahbmkrmhitjdjvev",
+        query=_safe_role_query,
+    )
+
+    artifact = json.loads(recorder.output_path.read_text(encoding="utf-8"))
+    assert artifact["evidence_scope"] == "supported_business_variants"
+    assert len(artifact["resources"]) == 7
+    assert set(artifact["resources"]) == set(commands)

@@ -1421,6 +1421,14 @@ def test_production_readiness_runs_supported_variants_without_inflating_live18_e
     assert "visible variant UI to REST readback" in workflow
     assert '"evidence_scope": "supported_business_variants"' in workflow
     assert "PHARMA_CANONICAL_BUSINESS_VARIANT_DATABASE_EVIDENCE_PATH" in workflow
+    assert "LIVE23_DIRECT_DATABASE_EVIDENCE_OUTPUT_PATH" in workflow
     assert 'Path(os.environ["LIVE18_EVIDENCE_DIR"]) / "business-variants"' in workflow
+    assert "BUSINESS_VARIANT_RECONCILIATION_OUTCOME" in workflow
+    assert "--require-business-variants" in workflow
+    assert '--business-variant-evidence-dir "$LIVE18_EVIDENCE_DIR/business-variants"' in workflow
+    assert '--business-variant-database-evidence "$LIVE23_BUSINESS_DATABASE_EVIDENCE_PATH"' in workflow
+    assert '--business-variant-reconciliation-evidence "$LIVE23_BUSINESS_RECONCILIATION_EVIDENCE_PATH"' in workflow
+    assert '--business-variant-screenshot-dir "$LIVE18_PLAYWRIGHT_ARTIFACT_DIR/screenshots/business-variants"' in workflow
+    assert "--business-variant-reconciliation-outcome" in workflow
     assert '--evidence-dir "$LIVE18_EVIDENCE_DIR"' in workflow
     assert '--operation-matrix backend/tests/live_acceptance/operation_matrix.json' in workflow

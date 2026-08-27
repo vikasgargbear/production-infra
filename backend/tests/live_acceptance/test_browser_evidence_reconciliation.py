@@ -346,6 +346,8 @@ def test_browser_resource_reconciles_through_mcp_and_postgresql(
 def test_supported_business_variant_reconciles_through_mcp_and_postgresql(
     contract,
     canonical_live_config,
+    business_variant_reconciliation_evidence_recorder,
+    direct_business_variant_database_evidence_recorder,
     mcp_client,
     request,
 ) -> None:
@@ -421,3 +423,23 @@ def test_supported_business_variant_reconciles_through_mcp_and_postgresql(
         mcp=declared_readback,
         database=database,
     )
+    if business_variant_reconciliation_evidence_recorder is not None:
+        business_variant_reconciliation_evidence_recorder.record(
+            variant_id=operation_id,
+            command_operation=contract["command_operation"],
+            command_request_id=command_id,
+            resource_id=resource_id,
+            browser_evidence_path=evidence_path,
+            mcp_status=mcp_status,
+            mcp_readback=declared_readback,
+            database=database,
+        )
+    if direct_business_variant_database_evidence_recorder is not None:
+        assert captured is None, "direct variant evidence cannot reuse Railway evidence"
+        direct_business_variant_database_evidence_recorder.record(
+            operation_id=operation_id,
+            command_operation=contract["command_operation"],
+            command_request_id=command_id,
+            resource_id=resource_id,
+            database=database,
+        )

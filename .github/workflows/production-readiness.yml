@@ -1165,6 +1165,7 @@ jobs:
             echo "LIVE18_PLAYWRIGHT_ARTIFACT_DIR=$RUNNER_TEMP/live18-playwright"
             echo "LIVE18_DATABASE_EVIDENCE_PATH=$RUNNER_TEMP/live18-database-evidence.json"
             echo "LIVE23_BUSINESS_DATABASE_EVIDENCE_PATH=$RUNNER_TEMP/live23-business-database-evidence.json"
+            echo "LIVE23_BUSINESS_RECONCILIATION_EVIDENCE_PATH=$RUNNER_TEMP/live23-business-reconciliation-evidence.json"
             echo "LIVE18_RECONCILIATION_EVIDENCE_PATH=$RUNNER_TEMP/live18-reconciliation-attestation.json"
             echo "LIVE18_DEMO_EVIDENCE_PATH=$RUNNER_TEMP/live18-demo-evidence.json"
             echo "LIVE18_EVIDENCE_IDENTITY_PREPARE_PATH=$RUNNER_TEMP/live18-evidence-identity-prepare.json"
@@ -1704,8 +1705,11 @@ jobs:
           encoded_password=$(jq -nr --arg value "$ERP_RUNTIME_PASSWORD" '$value|@uri')
           runtime_url="postgresql://erp_runtime:${encoded_password}@db.${CANONICAL_STAGING_PROJECT_REF}.supabase.co:5432/postgres?sslmode=require&gssencmode=disable&connect_timeout=15&application_name=canonical_live18"
           echo "::add-mask::$runtime_url"
-          echo "PHARMA_CANONICAL_LIVE_DATABASE_URL=$runtime_url" >> "$GITHUB_ENV"
-          echo "LIVE18_DIRECT_DATABASE_EVIDENCE_OUTPUT_PATH=$LIVE18_DATABASE_EVIDENCE_PATH" >> "$GITHUB_ENV"
+          {
+            echo "PHARMA_CANONICAL_LIVE_DATABASE_URL=$runtime_url"
+            echo "LIVE18_DIRECT_DATABASE_EVIDENCE_OUTPUT_PATH=$LIVE18_DATABASE_EVIDENCE_PATH"
+            echo "LIVE23_DIRECT_DATABASE_EVIDENCE_OUTPUT_PATH=$LIVE23_BUSINESS_DATABASE_EVIDENCE_PATH"
+          } >> "$GITHUB_ENV"
       - name: Provision disposable live18 requester, reviewer, and denial identities
         if: env.LIVE18_PROVIDER == 'render'
         env:
@@ -2173,6 +2177,7 @@ jobs:
         if: always() && env.LIVE18_DEPLOYMENT_BOUND == 'true'
         env:
           LIVE18_BROWSER_OUTCOME: ${{ steps.live18_browser.outcome }}
+          BUSINESS_VARIANT_RECONCILIATION_OUTCOME: ${{ steps.business_variant_reconciliation.outcome }}
         run: |
           set -euo pipefail
           output="$RUNNER_TEMP/live18-upload/live18-evidence-manifest.json"
@@ -2183,6 +2188,13 @@ jobs:
             --demo-evidence "$LIVE18_DEMO_EVIDENCE_PATH" \
             --reconciliation-evidence "$LIVE18_RECONCILIATION_EVIDENCE_PATH" \
             --operation-matrix backend/tests/live_acceptance/operation_matrix.json \
+            --require-business-variants \
+            --business-variant-evidence-dir "$LIVE18_EVIDENCE_DIR/business-variants" \
+            --business-variant-database-evidence "$LIVE23_BUSINESS_DATABASE_EVIDENCE_PATH" \
+            --business-variant-reconciliation-evidence "$LIVE23_BUSINESS_RECONCILIATION_EVIDENCE_PATH" \
+            --business-variant-screenshot-dir "$LIVE18_PLAYWRIGHT_ARTIFACT_DIR/screenshots/business-variants" \
+            --business-variant-readiness backend/tests/live_acceptance/live23_supported_business_readiness.json \
+            --business-variant-reconciliation-outcome "${BUSINESS_VARIANT_RECONCILIATION_OUTCOME:-skipped}" \
             --browser-outcome "${LIVE18_BROWSER_OUTCOME:-skipped}" \
             --screenshot-dir "$LIVE18_PLAYWRIGHT_ARTIFACT_DIR/screenshots" \
             --output "$output"

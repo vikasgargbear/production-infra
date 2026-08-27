@@ -1414,9 +1414,15 @@ def test_live18_is_opt_in_exact_sha_external_fixture_and_always_cleaned():
     )[1].split("\n      - name:", 1)[0]
     assert (
         'echo "LIVE18_DIRECT_DATABASE_EVIDENCE_OUTPUT_PATH='
-        '$LIVE18_DATABASE_EVIDENCE_PATH" >> "$GITHUB_ENV"'
+        '$LIVE18_DATABASE_EVIDENCE_PATH"'
         in render_database_step
     )
+    assert (
+        'echo "LIVE23_DIRECT_DATABASE_EVIDENCE_OUTPUT_PATH='
+        '$LIVE23_BUSINESS_DATABASE_EVIDENCE_PATH"'
+        in render_database_step
+    )
+    assert '} >> "$GITHUB_ENV"' in render_database_step
     assert "if: env.LIVE18_PROVIDER == 'render'" in render_database_step
     assert "secrets.LIVE18_REVIEWED_SCALARS_JSON" in live18
     assert "secrets.CANONICAL_DEMO_EXPENSE_RECEIPT_BASE64" in live18

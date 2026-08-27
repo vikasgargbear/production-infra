@@ -18,6 +18,10 @@ from uuid import UUID
 
 OUTPUT_ENV = "LIVE18_DIRECT_DATABASE_EVIDENCE_OUTPUT_PATH"
 CAPTURED_EVIDENCE_ENV = "PHARMA_CANONICAL_LIVE_DATABASE_EVIDENCE_PATH"
+VARIANT_OUTPUT_ENV = "LIVE23_DIRECT_DATABASE_EVIDENCE_OUTPUT_PATH"
+VARIANT_CAPTURED_EVIDENCE_ENV = (
+    "PHARMA_CANONICAL_BUSINESS_VARIANT_DATABASE_EVIDENCE_PATH"
+)
 SCHEMA = "aasopharma.live18.database-evidence.v1"
 TRANSPORT = "supabase_direct_ipv4_from_github_actions"
 PROJECT_REF = re.compile(r"^[a-z0-9]{20}$")
@@ -98,11 +102,16 @@ def _canonical_uuid(value: str, label: str) -> str:
     return str(parsed)
 
 
-def _configured_output_path(environment: Mapping[str, str]) -> Path | None:
-    value = environment.get(OUTPUT_ENV, "").strip()
+def _configured_output_path(
+    environment: Mapping[str, str],
+    *,
+    output_env: str = OUTPUT_ENV,
+    captured_evidence_env: str = CAPTURED_EVIDENCE_ENV,
+) -> Path | None:
+    value = environment.get(output_env, "").strip()
     if not value:
         return None
-    if environment.get(CAPTURED_EVIDENCE_ENV, "").strip():
+    if environment.get(captured_evidence_env, "").strip():
         raise DirectDatabaseEvidenceError(
             "direct and captured database evidence cannot be selected together"
         )
@@ -170,6 +179,7 @@ def _runtime_role(query: Query) -> dict[str, Any]:
 class DirectDatabaseEvidenceRecorder:
     output_path: Path
     expected_commands: dict[str, str]
+    evidence_scope: str = "live18"
     resources: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     @classmethod
@@ -177,13 +187,29 @@ class DirectDatabaseEvidenceRecorder:
         cls,
         expected_commands: Mapping[str, str],
         environment: Mapping[str, str] | None = None,
+        *,
+        output_env: str = OUTPUT_ENV,
+        captured_evidence_env: str = CAPTURED_EVIDENCE_ENV,
+        evidence_scope: str = "live18",
     ) -> DirectDatabaseEvidenceRecorder | None:
-        output = _configured_output_path(os.environ if environment is None else environment)
+        output = _configured_output_path(
+            os.environ if environment is None else environment,
+            output_env=output_env,
+            captured_evidence_env=captured_evidence_env,
+        )
         if output is None:
             return None
-        if len(expected_commands) != 17 or len(set(expected_commands)) != 17:
+        expected_count = {
+            "live18": 17,
+            "supported_business_variants": 7,
+        }.get(evidence_scope)
+        if (
+            expected_count is None
+            or len(expected_commands) != expected_count
+            or len(set(expected_commands)) != expected_count
+        ):
             raise DirectDatabaseEvidenceError(
-                "direct database evidence requires the exact 17-operation ready scope"
+                "direct database evidence requires its exact reviewed scope"
             )
         if any(
             not operation_id or not command.endswith(".prepare")
@@ -192,7 +218,11 @@ class DirectDatabaseEvidenceRecorder:
             raise DirectDatabaseEvidenceError(
                 "direct database evidence matrix contains an invalid command"
             )
-        return cls(output_path=output, expected_commands=dict(expected_commands))
+        return cls(
+            output_path=output,
+            expected_commands=dict(expected_commands),
+            evidence_scope=evidence_scope,
+        )
 
     def record(
         self,
@@ -263,6 +293,7 @@ class DirectDatabaseEvidenceRecorder:
         unsigned = {
             "schema": SCHEMA,
             "action": "capture-evidence",
+            "evidence_scope": self.evidence_scope,
             "expected_sha": expected_sha,
             "project_ref": project_ref,
             "organization_id": canonical_org,
