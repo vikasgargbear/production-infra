@@ -104,3 +104,23 @@ def test_exact_wire_models_keep_fail_closed_flags_and_decimal_strings() -> None:
         match_methods=["reference_exact", "manual"],
     )
     assert json.loads(candidate.model_dump_json())["matched_amount"] == "168.00"
+
+
+def test_returned_released_batch_is_a_valid_destruction_candidate() -> None:
+    """A released manufacturer batch can be destroyed from quarantine after a return."""
+
+    candidate = reads.DestructionStockCandidate(
+        branch_id=uuid4(), branch_code="MAIN", branch_name="Main",
+        location_id=uuid4(), location_code="QUAR", location_name="Quarantine",
+        product_id=uuid4(), product_code="PROD-000001", product_name="Product",
+        uom_conversion_id=uuid4(), selected_uom_code="EA", base_uom_code="EA",
+        uom_multiplier="1.000000", batch_id=uuid4(), batch_number="BATCH-1",
+        batch_status="released", expires_on=date(2027, 8, 25),
+        available_selected_quantity="4.000000",
+        available_base_quantity="4.000000", average_unit_cost="95.237500",
+        inventory_value="380.95", input_credit_lot_count=1,
+        eligible_itc_cgst_amount="24.29", eligible_itc_sgst_amount="24.29",
+        eligible_itc_igst_amount="0.00", eligible_itc_cess_amount="0.00",
+    )
+
+    assert candidate.batch_status == "released"

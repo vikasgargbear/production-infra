@@ -1477,24 +1477,13 @@ def _operation_facts(
         initial_base = Decimal(_leaf(
             facts, "display.cycle_count_system_base_quantity", "canonical fact"
         ))
-        sales_multiplier = Decimal(_leaf(
-            facts, "display.sales_uom_multiplier", "canonical fact"
-        ))
         count_multiplier = Decimal(_leaf(
             facts, "display.cycle_count_uom_multiplier", "canonical fact"
         ))
-        issued_sales_units = sum((
-            Decimal(_leaf(scalars, key, "reviewed scalar"))
-            for key in (
-                "sales_invoice_quantity",
-                "sales_invoice_free_quantity",
-                "sales_order_quantity",
-            )
-        ), Decimal("0"))
-        expected_system_base = initial_base - issued_sales_units * sales_multiplier
+        expected_system_base = initial_base
         if expected_system_base <= 0 or count_multiplier <= 0:
             raise FixtureCompileError(
-                "prior reviewed sales issues leave no eligible cycle-count stock"
+                "authoritative cycle-count stock and selected UOM multiplier must be positive"
             )
         counted_quantity = expected_system_base / count_multiplier + gain_quantity
         exact_counted_quantity = counted_quantity.quantize(Decimal("0.000001"))

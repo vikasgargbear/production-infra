@@ -118,7 +118,7 @@ class DestructionStockCandidate(StrictDTO):
     uom_multiplier: ExactQuantity
     batch_id: UUID
     batch_number: str
-    batch_status: Literal["quarantined", "blocked", "expired"]
+    batch_status: Literal["released", "quarantined", "blocked", "expired"]
     expires_on: date
     available_selected_quantity: ExactQuantity
     available_base_quantity: ExactQuantity

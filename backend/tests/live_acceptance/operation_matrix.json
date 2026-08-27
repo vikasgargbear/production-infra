@@ -22,6 +22,17 @@
   ],
   "operations": [
     {
+      "id": "stock_adjustment",
+      "command_operation": "inventory.adjustment.prepare",
+      "prepare_tool": "erp_inventory_adjustment_prepare",
+      "approval_policy": "separate_approver",
+      "rest_readback": "/api/web/actions/inventory-adjustment/commands/{command_request_id}/readback",
+      "mcp_readback_tool": "erp_inventory_adjustment_readback",
+      "database_relations": ["inventory.inventory_documents", "inventory.inventory_document_lines", "inventory.stock_ledger_entries", "inventory.stock_balances", "finance.journal_entries", "finance.journal_lines"],
+      "scenario_steps": ["inventory_adjustment_cycle_count_gain"],
+      "availability": "published"
+    },
+    {
       "id": "sales_invoice",
       "command_operation": "sales.invoice.prepare",
       "prepare_tool": "erp_sales_invoice_prepare",
@@ -140,17 +151,6 @@
       "mcp_readback_tool": "erp_purchase_return_readback",
       "database_relations": ["procurement.purchase_returns", "procurement.purchase_return_lines", "inventory.inventory_documents", "inventory.inventory_document_lines", "inventory.stock_ledger_entries", "inventory.stock_balances", "finance.adjustment_notes", "finance.adjustment_note_lines", "finance.accounting_events", "finance.journal_entries", "finance.journal_lines", "finance.allocations", "finance.open_items", "tax.documents"],
       "scenario_steps": ["purchase_return_partial", "purchase_return_final"],
-      "availability": "published"
-    },
-    {
-      "id": "stock_adjustment",
-      "command_operation": "inventory.adjustment.prepare",
-      "prepare_tool": "erp_inventory_adjustment_prepare",
-      "approval_policy": "separate_approver",
-      "rest_readback": "/api/web/actions/inventory-adjustment/commands/{command_request_id}/readback",
-      "mcp_readback_tool": "erp_inventory_adjustment_readback",
-      "database_relations": ["inventory.inventory_documents", "inventory.inventory_document_lines", "inventory.stock_ledger_entries", "inventory.stock_balances", "finance.journal_entries", "finance.journal_lines"],
-      "scenario_steps": ["inventory_adjustment_cycle_count_gain"],
       "availability": "published"
     },
     {
