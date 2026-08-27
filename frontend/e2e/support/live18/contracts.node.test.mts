@@ -57,26 +57,51 @@ test('session bootstrap accepts only the exact reviewed API origin', () => {
   ), false);
 });
 
-test('live18 discovery names exactly 18 unique ready operations', () => {
+test('live18 discovery names all 17 ready operations and preserves one explicit deferral', () => {
   const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..');
   const matrix = JSON.parse(fs.readFileSync(path.join(
     repositoryRoot, 'backend/tests/live_acceptance/operation_matrix.json',
-  ), 'utf8')) as { required_operation_count: number; operations: Array<{ id: string }> };
+  ), 'utf8')) as {
+    operation_count: number;
+    required_operation_count: number;
+    deferred_operations: Array<{ id: string; status: 'deferred'; blocker_code: string }>;
+    operations: Array<{ id: string }>;
+  };
   const readiness = JSON.parse(fs.readFileSync(path.join(
     repositoryRoot, 'docs/testing/live18-ui-template-readiness.json',
   ), 'utf8')) as {
     ready_count: number;
-    operations: Array<{ id: string; status: 'ready' | 'blocked' }>;
+    deferred_count: number;
+    operations: Array<{
+      id: string;
+      status: 'ready' | 'blocked' | 'deferred';
+      blocker_code?: string;
+    }>;
   };
   const matrixIds = matrix.operations.map(operation => operation.id);
   const readyIds = readiness.operations
     .filter(operation => operation.status === 'ready')
     .map(operation => operation.id);
-  assert.equal(matrix.required_operation_count, 18);
+  assert.equal(matrix.operation_count, 18);
+  assert.equal(matrix.required_operation_count, 17);
   assert.equal(matrixIds.length, 18);
   assert.equal(new Set(matrixIds).size, 18);
-  assert.equal(readiness.ready_count, 18);
-  assert.deepEqual([...readyIds].sort(), [...matrixIds].sort());
+  assert.equal(readiness.ready_count, 17);
+  assert.equal(readiness.deferred_count, 1);
+  assert.deepEqual(matrix.deferred_operations, [{
+    id: 'expense_claim',
+    status: 'deferred',
+    blocker_code: 'EXPENSE_EVIDENCE_STORAGE_DEFERRED',
+    blocker: 'Expense receipt upload certification is deferred until canonical evidence storage is enabled and least-privilege verified on the selected deployment provider.',
+  }]);
+  assert.deepEqual(
+    readiness.operations.filter(operation => operation.status === 'deferred').map(operation => ({
+      id: operation.id,
+      blocker_code: operation.blocker_code,
+    })),
+    [{ id: 'expense_claim', blocker_code: 'EXPENSE_EVIDENCE_STORAGE_DEFERRED' }],
+  );
+  assert.deepEqual([...readyIds].sort(), matrixIds.filter(id => id !== 'expense_claim').sort());
 });
 
 test('operation failure evidence excludes messages, locator values, and credentials', () => {

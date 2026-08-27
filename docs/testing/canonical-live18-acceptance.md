@@ -1,10 +1,12 @@
 # Canonical ERP live18 acceptance
 
 This harness catalogs all 18 named desktop ERP operations without implementing
-or repairing product behavior. It executes only operations marked `ready` in
+or repairing product behavior. The current release scope requires all 17
+operations marked `ready` in
 `docs/testing/live18-ui-template-readiness.json`; the checked-in matrix remains
-`backend/tests/live_acceptance/operation_matrix.json`. A blocked operation is
-never silently skipped or represented as passing evidence. Moving it to
+`backend/tests/live_acceptance/operation_matrix.json`. A blocked or explicitly
+deferred operation is never silently skipped or represented as passing
+evidence. Moving it to
 `ready` automatically makes its template, browser run, and reconciliation
 mandatory.
 
@@ -39,7 +41,11 @@ A run is not live evidence unless all of the following are true:
 At the checked-in base, all 18 business operations map to 17 published canonical
 prepare commands. Customer credit note and supplier debit note are two bounded
 uses of `finance.adjustment_note.prepare`; expense claim is published through
-`finance.expense_claim.prepare` and migration `0009`.
+`finance.expense_claim.prepare` and migration `0009`, but its release
+certification is explicitly deferred under
+`EXPENSE_EVIDENCE_STORAGE_DEFERRED`. The source contract remains intact for
+future re-enable; neither the API nor UI may fall back when evidence storage is
+disabled.
 
 ## Configuration
 
@@ -70,7 +76,8 @@ rows use canonical-ID test IDs rather than display-name substring matches.
 
 Each successful operation captures exactly two viewport PNGs: one after its
 visible missing-required validation and one after the UI visibly shows the
-posted canonical resource UUID. Across Live18 this is exactly 36 screenshots.
+posted canonical resource UUID. Across the current 17-operation release scope
+this is exactly 34 screenshots.
 Capture is allowed only when `PHARMA_CANONICAL_LIVE_TARGET_KIND` is
 `disposable_test`, `CANONICAL_STAGING_PROJECT_REF` is the exact reviewed
 canonical staging project, and `LIVE18_PLAYWRIGHT_ARTIFACT_DIR` is an absolute
@@ -86,7 +93,8 @@ runner-local file. Automatic Playwright screenshots, traces, videos, and HTML
 reports remain disabled so an unexpected authenticated failure cannot create
 an unreviewed rich artifact.
 
-Expense-claim certification additionally requires one externally reviewed
+Expense-claim certification is outside the current release scope. Re-enabling
+it additionally requires one externally reviewed
 synthetic PDF receipt. Canonical staging materializes it only from the protected
 `CANONICAL_DEMO_EXPENSE_RECEIPT_BASE64` secret and verifies the lowercase
 `CANONICAL_DEMO_EXPENSE_RECEIPT_SHA256` secret before inserting its run-scoped

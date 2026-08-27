@@ -173,9 +173,12 @@ curl --fail --silent --show-error https://your-frontend.onrender.com/
 These public checks prove process availability only. Production certification
 uses the exact-SHA workflow in `.github/workflows/production-readiness.yml`.
 That workflow provisions a disposable organization and two users, compiles the
-reviewed Live18 fixture, drives all 18 operations through the browser, and
-reconciles UI, REST, MCP, and PostgreSQL evidence. The executable contracts are
-documented in `docs/testing/canonical-live18-acceptance.md`.
+reviewed Live18 fixture, drives every release-ready operation through the
+browser, and reconciles UI, REST, MCP, and PostgreSQL evidence. The current
+scope contains 17 required operations; expense-claim upload remains explicitly
+deferred until canonical evidence storage is enabled and verified. The
+executable contracts are documented in
+`docs/testing/canonical-live18-acceptance.md`.
 
 Do not run mutating acceptance commands manually against a real operating
 organization. Live18 must run through the protected workflow against the

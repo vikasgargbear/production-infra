@@ -57,7 +57,8 @@ def _screenshots(root: Path, operation_id: str) -> tuple[list[dict[str, object]]
 
 def _matrix_operations() -> list[dict[str, str]]:
     value = json.loads(MATRIX_PATH.read_text(encoding="utf-8"))
-    return value["operations"]
+    deferred = {row["id"] for row in value["deferred_operations"]}
+    return [row for row in value["operations"] if row["id"] not in deferred]
 
 
 def _http_evidence(operation_id: str) -> list[dict[str, object]]:
@@ -253,7 +254,7 @@ def test_manifest_omits_credentials_and_raw_request_response_bodies(tmp_path: Pa
     assert manifest["browser"][0]["screenshots"] == screenshots
 
 
-def test_success_requires_exactly_18_operations_and_36_reviewed_pngs(
+def test_success_requires_all_17_ready_operations_and_34_reviewed_pngs(
     tmp_path: Path,
 ) -> None:
     deployed = _write(tmp_path / "deployed.json", {
@@ -319,13 +320,14 @@ def test_success_requires_exactly_18_operations_and_36_reviewed_pngs(
         operation_matrix=MATRIX_PATH,
     )
 
-    assert len(manifest["browser"]) == 18
-    assert sum(len(row["screenshots"]) for row in manifest["browser"]) == 36
+    assert len(manifest["browser"]) == 17
+    assert sum(len(row["screenshots"]) for row in manifest["browser"]) == 34
+    assert "expense_claim" not in {row["operation_id"] for row in manifest["browser"]}
     assert len(manifest["reconciliation"]["operation_set_sha256"]) == 64
 
     (screenshot_dir / "unreviewed.png").write_bytes(PNG_1X1)
     (screenshot_dir / "unreviewed.png").chmod(0o600)
-    with pytest.raises(ArtifactManifestError, match="exactly 36"):
+    with pytest.raises(ArtifactManifestError, match="two reviewed screenshots"):
         build_manifest(
             deployed_sha=deployed,
             evidence_dir=evidence_dir,

@@ -1,6 +1,15 @@
 {
   "schema_version": "1.0.0",
-  "required_operation_count": 18,
+  "operation_count": 18,
+  "required_operation_count": 17,
+  "deferred_operations": [
+    {
+      "id": "expense_claim",
+      "status": "deferred",
+      "blocker_code": "EXPENSE_EVIDENCE_STORAGE_DEFERRED",
+      "blocker": "Expense receipt upload certification is deferred until canonical evidence storage is enabled and least-privilege verified on the selected deployment provider."
+    }
+  ],
   "required_chain": [
     "desktop_ui",
     "rest_prepare",

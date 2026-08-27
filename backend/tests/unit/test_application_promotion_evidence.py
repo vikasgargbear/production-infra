@@ -184,9 +184,14 @@ def _evidence_cleanup_facts() -> dict:
 
 def _live18_manifest(git_commit: str, binding: dict) -> dict:
     matrix = json.loads(evidence.LIVE18_MATRIX_PATH.read_text(encoding="utf-8"))
+    deferred = {row["id"] for row in matrix["deferred_operations"]}
+    operations = [
+        operation for operation in matrix["operations"]
+        if operation["id"] not in deferred
+    ]
     browser = []
     resources = {}
-    for index, operation in enumerate(matrix["operations"], 1):
+    for index, operation in enumerate(operations, 1):
         command_id = f"10000000-0000-4000-8000-{index:012d}"
         resource_id = f"20000000-0000-4000-8000-{index:012d}"
         browser.append({
@@ -256,7 +261,7 @@ def _live18_manifest(git_commit: str, binding: dict) -> dict:
     operation_set_sha256 = hashlib.sha256(json.dumps(
         {
             operation["id"]: operation["command_operation"]
-            for operation in matrix["operations"]
+            for operation in operations
         },
         sort_keys=True,
         separators=(",", ":"),
@@ -314,7 +319,7 @@ def _live18_manifest(git_commit: str, binding: dict) -> dict:
             "status": "success",
             "provider": provider,
             "commit_sha": git_commit,
-            "operation_count": 18,
+            "operation_count": len(resources),
             "operation_ids": sorted(resources),
             "operation_set_sha256": operation_set_sha256,
             "browser_evidence_set_sha256": browser_evidence_set_sha256,
@@ -492,7 +497,7 @@ def test_live18_acceptance_requires_exact_matrix_and_runtime_reconciliation():
         artifact_sha256="f" * 64,
         artifact_digest="sha256:" + "8" * 64,
     )
-    assert artifact["payload"]["operation_count"] == 18
+    assert artifact["payload"]["operation_count"] == 17
 
     replay_diagnostic = json.loads(json.dumps(manifest))
     next(
@@ -632,7 +637,7 @@ def test_live18_acceptance_requires_exact_matrix_and_runtime_reconciliation():
 
     missing = json.loads(json.dumps(manifest))
     missing["browser"].pop()
-    with pytest.raises(evidence.EvidenceError, match="exactly 18"):
+    with pytest.raises(evidence.EvidenceError, match="every ready operation"):
         evidence.capture_live18_acceptance(
             manifest=missing, binding=binding,
             workflow_run_id=123, workflow_run_attempt=1, artifact_id=456,
@@ -749,7 +754,7 @@ def test_live18_render_acceptance_requires_direct_isolated_runtime_evidence():
         artifact_sha256="f" * 64,
         artifact_digest="sha256:" + "8" * 64,
     )
-    assert artifact["payload"]["operation_count"] == 18
+    assert artifact["payload"]["operation_count"] == 17
 
     wrong_transport = json.loads(json.dumps(manifest))
     wrong_transport["database"]["runtime_role"]["transport"] = (

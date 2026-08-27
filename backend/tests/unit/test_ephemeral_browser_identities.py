@@ -1191,7 +1191,11 @@ def test_core_fixture_is_resolved_from_available_live_fefo_stock():
 def test_live18_profile_derives_every_prepare_permission_from_generated_contract():
     contract = json.loads(identities.OPERATOR_CONTRACT_PATH.read_text(encoding="utf-8"))
     matrix = json.loads(identities.LIVE18_MATRIX_PATH.read_text(encoding="utf-8"))
-    operations = {row["command_operation"] for row in matrix["operations"]}
+    deferred = {row["id"] for row in matrix["deferred_operations"]}
+    operations = {
+        row["command_operation"] for row in matrix["operations"]
+        if row["id"] not in deferred
+    }
     actions = {
         row["operation_key"]: row for row in contract["prepare_actions"]
     }
@@ -1201,9 +1205,13 @@ def test_live18_profile_derives_every_prepare_permission_from_generated_contract
         if capability.endswith(".prepare")
     }
 
-    assert matrix["required_operation_count"] == 18
-    assert len(operations) == 17
-    assert set(capabilities) == operations == set(actions)
+    assert matrix["operation_count"] == 18
+    assert matrix["required_operation_count"] == 17
+    assert len(operations) == 16
+    assert set(capabilities) == operations
+    assert operations < set(actions)
+    assert "finance.expense_claim.prepare" in actions
+    assert "finance.expense_claim.prepare" not in capabilities
     assert capabilities == {
         operation: actions[operation]["approval_policy"] for operation in operations
     }
@@ -1221,17 +1229,8 @@ def test_seeded_boundary_requires_every_typed_operator_capability_bound():
         for row in identities.LIVE18_BASELINE_OPERATOR_CAPABILITY_BOUNDS
     }
 
-    assert len(bounds) == 21
-    assert bounds["finance.expense_claim.prepare"] == {
-        "capability_code": "finance.expense_claim.prepare",
-        "operation_mode": "write",
-        "risk_class": "consequential_write",
-        "approval_policy": "separate_approver",
-        "maximum_amount": 1_000_000,
-        "currency_code": "INR",
-        "allow_sensitive_read": False,
-        "status": "active",
-    }
+    assert len(bounds) == 20
+    assert "finance.expense_claim.prepare" not in bounds
     assert bounds["automation.command.status.get"]["maximum_amount"] is None
     assert bounds["inventory.destructions.get"]["operation_mode"] == "read"
     assert identities.LIVE18_BASELINE_REVIEWER_CAPABILITY_BOUNDS == ({

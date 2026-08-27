@@ -1541,18 +1541,31 @@ def capture_live18_acceptance(
 
     matrix = _load_json(LIVE18_MATRIX_PATH)
     operations = matrix.get("operations")
-    if matrix.get("required_operation_count") != 18 or not isinstance(operations, list):
+    deferred_rows = matrix.get("deferred_operations")
+    if (
+        matrix.get("operation_count") != 18
+        or not isinstance(operations, list)
+        or len(operations) != matrix["operation_count"]
+        or not isinstance(deferred_rows, list)
+        or matrix.get("required_operation_count") != len(operations) - len(deferred_rows)
+    ):
         raise EvidenceError("Live18 operation authority is invalid")
+    deferred = {
+        row.get("id") for row in deferred_rows
+        if isinstance(row, dict) and row.get("status") == "deferred"
+    }
+    if len(deferred) != len(deferred_rows):
+        raise EvidenceError("Live18 deferred operation authority is invalid")
     required = {
         row["id"]: (row["command_operation"], row.get("approval_policy"))
         for row in operations
-        if isinstance(row, dict)
+        if isinstance(row, dict) and row.get("id") not in deferred
     }
-    if len(required) != 18:
-        raise EvidenceError("Live18 operation authority must contain exactly 18 operations")
+    if len(required) != matrix["required_operation_count"]:
+        raise EvidenceError("Live18 ready operation authority is incomplete")
     browser = manifest.get("browser")
-    if not isinstance(browser, list) or len(browser) != 18:
-        raise EvidenceError("Live18 browser evidence must contain exactly 18 operations")
+    if not isinstance(browser, list) or len(browser) != len(required):
+        raise EvidenceError("Live18 browser evidence must contain every ready operation")
     by_operation: dict[str, Mapping[str, Any]] = {}
     requester: str | None = None
     reviewer: str | None = None
@@ -1622,8 +1635,10 @@ def capture_live18_acceptance(
         by_operation[str(operation_id)] = row
     if set(by_operation) != set(required):
         raise EvidenceError("Live18 browser evidence does not cover the exact operation matrix")
-    if screenshot_commitment_count != 36:
-        raise EvidenceError("Live18 evidence must retain exactly 36 screenshot commitments")
+    if screenshot_commitment_count != len(required) * 2:
+        raise EvidenceError(
+            "Live18 evidence must retain two screenshot commitments per ready operation"
+        )
     if manifest.get("browser_failures") != []:
         raise EvidenceError("Successful Live18 evidence cannot retain browser failures")
 
@@ -1728,7 +1743,7 @@ def capture_live18_acceptance(
         or reconciliation.get("status") != "success"
         or reconciliation.get("provider") != provider
         or reconciliation.get("commit_sha") != binding.get("git_commit")
-        or reconciliation.get("operation_count") != 18
+        or reconciliation.get("operation_count") != len(required)
         or reconciliation.get("operation_ids") != sorted(required)
         or reconciliation.get("operation_set_sha256") != operation_set_sha256
         or reconciliation.get("browser_evidence_set_sha256")
@@ -1785,7 +1800,7 @@ def capture_live18_acceptance(
             "artifact_id": artifact_id,
             "artifact_sha256": artifact_sha256,
             "artifact_digest": artifact_digest,
-            "operation_count": 18,
+            "operation_count": len(required),
             "screenshot_commitment_count": screenshot_commitment_count,
             "operation_ids": sorted(required),
             "requester_user_id": requester,
@@ -1887,7 +1902,7 @@ def assemble_manifest(
             "artifact_sha256": reconciliation_hash,
         },
         "live18_acceptance": {
-            "state": "verified", "operation_count": 18,
+            "state": "verified", "operation_count": 17,
             "artifact": live18_ref, "artifact_sha256": live18_hash,
         },
         "rollback_decommission": {
@@ -2079,9 +2094,9 @@ def _validate_artifact_payloads(artifacts: Mapping[str, Mapping[str, Any]]) -> N
     if (
         live18.get("evidence_kind") != "canonical_live18_acceptance"
         or not isinstance(live18_payload, dict)
-        or live18_payload.get("operation_count") != 18
+        or live18_payload.get("operation_count") != 17
         or not isinstance(live18_payload.get("operation_ids"), list)
-        or len(set(live18_payload["operation_ids"])) != 18
+        or len(set(live18_payload["operation_ids"])) != 17
         or int(live18_payload.get("workflow_run_id", 0)) <= 0
         or int(live18_payload.get("workflow_run_attempt", 0)) <= 0
         or int(live18_payload.get("artifact_id", 0)) <= 0

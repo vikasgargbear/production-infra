@@ -66,7 +66,7 @@ def build_attestation(
     expected_files = {f"{operation_id}.json" for operation_id in expected}
     if actual_files != expected_files:
         raise ArtifactManifestError(
-            "reconciliation requires the exact 18 browser evidence files"
+            "reconciliation requires the exact release-ready browser evidence files"
         )
 
     rows: list[dict[str, Any]] = []
@@ -127,7 +127,11 @@ def build_attestation(
             f"{provider.title()} reconciliation requires captured database evidence"
         )
 
-    if provider == "render" and evidence_storage_backend_proof is None:
+    if (
+        provider == "render"
+        and "expense_claim" in expected
+        and evidence_storage_backend_proof is None
+    ):
         raise ArtifactManifestError(
             "reconciliation omitted the evidence-storage backend proof"
         )

@@ -1144,7 +1144,8 @@ def test_identity_phase_binds_project_only_in_process_environment():
     assert '"CANONICAL_STAGING_PROJECT_REF": project_ref' in identity
 
 
-def test_packaged_remote_matrix_covers_all_18_operations():
+def test_packaged_remote_matrix_covers_all_17_ready_operations():
     operations = phase._ready_operations()
-    assert len(operations) == 18
-    assert len({row["command_operation"] for row in operations}) == 17
+    assert len(operations) == 17
+    assert len({row["command_operation"] for row in operations}) == 16
+    assert "expense_claim" not in {row["id"] for row in operations}

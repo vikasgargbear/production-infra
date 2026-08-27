@@ -251,8 +251,11 @@ def validate_promotion_evidence(
                 if section.get(predicate) is not True:
                     errors.append(f"promotion evidence reconciliation_backup.{predicate} is not verified")
         elif section_name == "live18_acceptance":
-            if section.get("operation_count") != 18:
-                errors.append("promotion evidence live18_acceptance must verify exactly 18 operations")
+            if section.get("operation_count") != 17:
+                errors.append(
+                    "promotion evidence live18_acceptance must verify exactly "
+                    "17 release-ready operations"
+                )
     verified = all(
         isinstance(evidence.get(name), dict)
         and evidence[name].get("state") == "verified"

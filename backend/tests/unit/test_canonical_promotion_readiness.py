@@ -285,8 +285,8 @@ def _fixture_root(
             "artifact_id": 456,
             "artifact_sha256": "c" * 64,
             "artifact_digest": "sha256:" + "d" * 64,
-            "operation_count": 18,
-            "operation_ids": [f"operation-{index}" for index in range(18)],
+            "operation_count": 17,
+            "operation_ids": [f"operation-{index}" for index in range(17)],
         }),
         "rollback.json": artifact("rollback_plan", _rollback_payload()),
         "decommission.json": artifact(
@@ -335,7 +335,7 @@ def _fixture_root(
             "artifact_sha256": artifact_hashes["reconciliation.json"],
         },
         "live18_acceptance": {
-            "state": state, "operation_count": 18,
+            "state": state, "operation_count": 17,
             "artifact": "evidence/live18.json",
             "artifact_sha256": artifact_hashes["live18.json"],
         },

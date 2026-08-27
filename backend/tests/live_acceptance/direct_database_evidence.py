@@ -181,9 +181,9 @@ class DirectDatabaseEvidenceRecorder:
         output = _configured_output_path(os.environ if environment is None else environment)
         if output is None:
             return None
-        if len(expected_commands) != 18 or len(set(expected_commands)) != 18:
+        if len(expected_commands) != 17 or len(set(expected_commands)) != 17:
             raise DirectDatabaseEvidenceError(
-                "direct database evidence requires the exact 18-operation matrix"
+                "direct database evidence requires the exact 17-operation ready scope"
             )
         if any(
             not operation_id or not command.endswith(".prepare")

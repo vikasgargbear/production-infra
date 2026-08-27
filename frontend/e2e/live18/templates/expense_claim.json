@@ -1,6 +1,8 @@
 {
   "template_schema": "aasopharma.live18.ui-template.v1",
   "operation_id": "expense_claim",
+  "release_status": "deferred",
+  "release_blocker_code": "EXPENSE_EVIDENCE_STORAGE_DEFERRED",
   "lifecycle_mode": "split",
   "steps": {
     "missing_required_steps": [

@@ -1,4 +1,4 @@
-"""Strict loader for the 18-operation live acceptance registry."""
+"""Strict loader for the 18-operation registry and its release-ready scope."""
 
 from __future__ import annotations
 
@@ -19,6 +19,7 @@ RELATION_RE = re.compile(
 )
 APPROVAL_POLICIES = {"actor_confirmation", "separate_approver"}
 AVAILABILITY = {"published", "blocked"}
+CERTIFICATION_STATUS = {"ready", "blocked", "deferred"}
 
 # Minimum persisted effects that Live18 must reconcile for each operation.  This
 # is deliberately narrower than the authority matrix (which also includes
@@ -136,6 +137,9 @@ class OperationContract:
     scenario_steps: tuple[str, ...]
     availability: str
     blocker: str | None = None
+    certification_status: str = "ready"
+    certification_blocker_code: str | None = None
+    certification_blocker: str | None = None
 
 
 def _required_text(row: dict[str, Any], field: str) -> str:
@@ -148,9 +152,34 @@ def _required_text(row: dict[str, Any], field: str) -> str:
 def load_operation_matrix(path: Path = MATRIX_PATH) -> tuple[OperationContract, ...]:
     raw = json.loads(path.read_text())
     rows = raw.get("operations")
-    expected_count = raw.get("required_operation_count")
-    if not isinstance(rows, list) or expected_count != 18 or len(rows) != expected_count:
-        raise MatrixContractError("live acceptance requires exactly 18 business operations")
+    operation_count = raw.get("operation_count")
+    required_count = raw.get("required_operation_count")
+    deferred_rows = raw.get("deferred_operations")
+    if (
+        not isinstance(rows, list)
+        or operation_count != 18
+        or len(rows) != operation_count
+        or not isinstance(required_count, int)
+        or isinstance(required_count, bool)
+        or not isinstance(deferred_rows, list)
+    ):
+        raise MatrixContractError(
+            "live acceptance must declare 18 business operations and an explicit ready scope"
+        )
+    deferred: dict[str, tuple[str, str]] = {}
+    for row in deferred_rows:
+        if not isinstance(row, dict) or row.get("status") != "deferred":
+            raise MatrixContractError("every deferred operation must declare deferred status")
+        operation_id = _required_text(row, "id")
+        blocker_code = _required_text(row, "blocker_code")
+        blocker = _required_text(row, "blocker")
+        if operation_id in deferred or not re.fullmatch(r"[A-Z][A-Z0-9_]+", blocker_code):
+            raise MatrixContractError("deferred operation identity or blocker code is invalid")
+        deferred[operation_id] = (blocker_code, blocker)
+    if required_count != operation_count - len(deferred):
+        raise MatrixContractError(
+            "required operation count must equal the catalog minus explicit deferrals"
+        )
 
     contracts: list[OperationContract] = []
     seen: set[str] = set()
@@ -212,7 +241,23 @@ def load_operation_matrix(path: Path = MATRIX_PATH) -> tuple[OperationContract, 
             scenario_steps=tuple(steps),
             availability=availability,
             blocker=blocker,
+            certification_status=(
+                "blocked" if availability == "blocked"
+                else "deferred" if operation_id in deferred
+                else "ready"
+            ),
+            certification_blocker_code=(
+                deferred[operation_id][0] if operation_id in deferred else None
+            ),
+            certification_blocker=(
+                deferred[operation_id][1] if operation_id in deferred else None
+            ),
         ))
+    if set(deferred) - seen:
+        raise MatrixContractError("deferred operation is absent from the operation catalog")
+    ready_count = sum(item.certification_status == "ready" for item in contracts)
+    if ready_count != required_count:
+        raise MatrixContractError("matrix ready scope does not match required operation count")
     return tuple(contracts)
 
 
@@ -242,10 +287,25 @@ def load_ready_operation_matrix(
             "live18 UI readiness count does not match its ready operations"
         )
     unknown_status = [
-        row.get("id") for row in rows if row.get("status") not in {"ready", "blocked"}
+        row.get("id") for row in rows if row.get("status") not in CERTIFICATION_STATUS
     ]
     if unknown_status:
         raise MatrixContractError(
             f"live18 UI readiness has invalid status: {unknown_status}"
         )
+    status_by_id = {row["id"]: row.get("status") for row in rows}
+    for item in contracts:
+        if status_by_id[item.id] != item.certification_status:
+            raise MatrixContractError(
+                f"{item.id}: UI readiness differs from authoritative certification status"
+            )
+        if item.certification_status == "deferred":
+            row = next(value for value in rows if value["id"] == item.id)
+            if (
+                row.get("blocker_code") != item.certification_blocker_code
+                or row.get("blocker") != item.certification_blocker
+            ):
+                raise MatrixContractError(
+                    f"{item.id}: deferred blocker differs from authoritative matrix"
+                )
     return tuple(item for item in contracts if item.id in ready_ids)

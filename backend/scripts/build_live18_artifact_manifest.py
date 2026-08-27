@@ -136,8 +136,23 @@ def _http_summary(row: Any) -> dict[str, Any]:
 def _expected_operations(path: Path) -> dict[str, str]:
     value = _read_json(path)
     rows = value.get("operations")
-    if value.get("required_operation_count") != 18 or not isinstance(rows, list):
-        raise ArtifactManifestError("operation matrix must declare exactly 18 operations")
+    deferred_rows = value.get("deferred_operations")
+    if (
+        value.get("operation_count") != 18
+        or not isinstance(rows, list)
+        or len(rows) != value["operation_count"]
+        or not isinstance(deferred_rows, list)
+        or value.get("required_operation_count") != len(rows) - len(deferred_rows)
+    ):
+        raise ArtifactManifestError(
+            "operation matrix must declare 18 operations and an exact ready scope"
+        )
+    deferred = {
+        row.get("id") for row in deferred_rows
+        if isinstance(row, dict) and row.get("status") == "deferred"
+    }
+    if len(deferred) != len(deferred_rows):
+        raise ArtifactManifestError("operation matrix contains an invalid deferral")
     expected: dict[str, str] = {}
     for row in rows:
         if not isinstance(row, dict) or row.get("availability") != "published":
@@ -152,9 +167,10 @@ def _expected_operations(path: Path) -> dict[str, str]:
             or operation_id in expected
         ):
             raise ArtifactManifestError("operation matrix contains an invalid operation")
-        expected[operation_id] = command_operation
-    if len(expected) != 18:
-        raise ArtifactManifestError("operation matrix must contain 18 unique operations")
+        if operation_id not in deferred:
+            expected[operation_id] = command_operation
+    if len(expected) != value["required_operation_count"]:
+        raise ArtifactManifestError("operation matrix ready scope is incomplete")
     return expected
 
 
@@ -581,7 +597,7 @@ def build_manifest(
     if browser_outcome == "success":
         if actual_operations != expected_operations:
             raise ArtifactManifestError(
-                "successful browser outcome requires the exact registered 18 operations"
+                "successful browser outcome requires the exact release-ready operations"
             )
         if screenshot_dir is None or not screenshot_dir.is_dir():
             raise ArtifactManifestError("successful browser outcome requires screenshot evidence")
@@ -594,9 +610,10 @@ def build_manifest(
             path.name for path in screenshot_dir.iterdir()
             if path.is_file() or path.is_symlink()
         }
-        if len(expected_files) != 36 or actual_files != expected_files:
+        expected_screenshot_count = len(expected_operations) * len(SAFE_SCREENSHOT_STAGES)
+        if len(expected_files) != expected_screenshot_count or actual_files != expected_files:
             raise ArtifactManifestError(
-                "successful browser outcome requires exactly 36 reviewed screenshots"
+                "successful browser outcome requires two reviewed screenshots per ready operation"
             )
     deployment = _deployment_summary(deployed_sha)
     reconciliation_path = _optional_nonempty_file(reconciliation_evidence)

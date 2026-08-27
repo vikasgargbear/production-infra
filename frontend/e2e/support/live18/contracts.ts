@@ -16,16 +16,32 @@ export interface OperationContract {
   scenario_steps: string[];
   availability: 'published' | 'blocked';
   blocker?: string;
+  certification_status: 'ready' | 'blocked' | 'deferred';
+  certification_blocker_code?: string;
+  certification_blocker?: string;
 }
 
 interface OperationMatrix {
+  operation_count: number;
   required_operation_count: number;
+  deferred_operations: Array<{
+    id: string;
+    status: 'deferred';
+    blocker_code: string;
+    blocker: string;
+  }>;
   operations: OperationContract[];
 }
 
 interface TemplateReadiness {
   ready_count: number;
-  operations: Array<{ id: string; status: 'ready' | 'blocked' }>;
+  deferred_count: number;
+  operations: Array<{
+    id: string;
+    status: 'ready' | 'blocked' | 'deferred';
+    blocker_code?: string;
+    blocker?: string;
+  }>;
 }
 
 export type LocatorKind = 'role' | 'label' | 'placeholder' | 'text' | 'testId';
@@ -60,11 +76,38 @@ export function loadOperationMatrix(): OperationContract[] {
     repositoryRoot, 'backend/tests/live_acceptance/operation_matrix.json',
   );
   const matrix = JSON.parse(fs.readFileSync(matrixPath, 'utf8')) as OperationMatrix;
-  if (matrix.required_operation_count !== 18 || matrix.operations.length !== 18
-    || new Set(matrix.operations.map(item => item.id)).size !== 18) {
-    throw new Error('The live18 matrix must contain exactly 18 operations.');
+  if (matrix.operation_count !== 18 || matrix.operations.length !== matrix.operation_count
+    || new Set(matrix.operations.map(item => item.id)).size !== matrix.operation_count
+    || !Array.isArray(matrix.deferred_operations)
+    || matrix.required_operation_count !== matrix.operation_count - matrix.deferred_operations.length) {
+    throw new Error('The live18 matrix must contain 18 catalogued operations and an exact ready scope.');
   }
-  return matrix.operations;
+  const deferred = new Map(matrix.deferred_operations.map(item => {
+    if (item.status !== 'deferred' || !item.id || !item.blocker || !/^[A-Z][A-Z0-9_]+$/.test(item.blocker_code)) {
+      throw new Error('The live18 matrix contains an invalid deferred operation.');
+    }
+    return [item.id, item] as const;
+  }));
+  if (deferred.size !== matrix.deferred_operations.length
+    || [...deferred.keys()].some(id => !matrix.operations.some(item => item.id === id))) {
+    throw new Error('The live18 matrix deferred operation set is invalid.');
+  }
+  const contracts = matrix.operations.map(item => {
+    const deferredItem = deferred.get(item.id);
+    return {
+      ...item,
+      certification_status: item.availability === 'blocked'
+        ? 'blocked' as const
+        : deferredItem ? 'deferred' as const : 'ready' as const,
+      certification_blocker_code: deferredItem?.blocker_code,
+      certification_blocker: deferredItem?.blocker,
+    };
+  });
+  if (contracts.filter(item => item.certification_status === 'ready').length
+      !== matrix.required_operation_count) {
+    throw new Error('The live18 matrix ready scope does not match its required count.');
+  }
+  return contracts;
 }
 
 export function loadReadyOperationMatrix(): OperationContract[] {
@@ -78,7 +121,7 @@ export function loadReadyOperationMatrix(): OperationContract[] {
   const matrix = loadOperationMatrix();
   const matrixIds = new Set(matrix.map(item => item.id));
   const readinessIds = readiness.operations.map(item => item.id);
-  if (readiness.operations.some(item => item.status !== 'ready' && item.status !== 'blocked')) {
+  if (readiness.operations.some(item => !['ready', 'blocked', 'deferred'].includes(item.status))) {
     throw new Error('The live18 UI readiness registry contains an invalid status.');
   }
   if (readinessIds.length !== matrix.length
@@ -91,6 +134,20 @@ export function loadReadyOperationMatrix(): OperationContract[] {
   );
   if (readyIds.size !== readiness.ready_count) {
     throw new Error('The live18 UI readiness count does not match its ready operations.');
+  }
+  const deferredRows = readiness.operations.filter(item => item.status === 'deferred');
+  if (deferredRows.length !== readiness.deferred_count) {
+    throw new Error('The live18 UI deferred count does not match its deferred operations.');
+  }
+  for (const contract of matrix) {
+    const row = readiness.operations.find(item => item.id === contract.id)!;
+    if (row.status !== contract.certification_status
+      || (row.status === 'deferred' && (
+        row.blocker_code !== contract.certification_blocker_code
+        || row.blocker !== contract.certification_blocker
+      ))) {
+      throw new Error(`${contract.id} readiness differs from the authoritative matrix.`);
+    }
   }
   return matrix.filter(item => readyIds.has(item.id));
 }
@@ -114,13 +171,13 @@ export function loadFixture(required: boolean): Live18Fixture | null {
     throw new Error('The reviewed live18 fixture has an invalid schema or operations object.');
   }
   const operationMatrix = loadReadyOperationMatrix();
-  if (required && operationMatrix.length !== 18) {
-    throw new Error('A required live18 run must discover all 18 reviewed operations.');
+  if (required && operationMatrix.length === 0) {
+    throw new Error('A required live18 run must discover the complete ready operation scope.');
   }
   const expected = operationMatrix.map(item => item.id).sort();
   const actual = Object.keys(fixture.operations).sort();
   if (JSON.stringify(actual) !== JSON.stringify(expected)) {
-    throw new Error('The reviewed live18 fixture must name exactly the 18 registered operations.');
+    throw new Error('The reviewed live18 fixture must name exactly the release-ready operations.');
   }
   const supportedActions: UiAction[] = [
     'goto', 'click', 'fill', 'select', 'setInputFiles', 'press', 'expectText', 'expectDisabled',

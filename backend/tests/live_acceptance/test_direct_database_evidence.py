@@ -90,7 +90,7 @@ def test_direct_database_evidence_is_opt_in_and_rejects_ambiguous_paths(
         )
 
 
-def test_direct_database_evidence_writes_one_hashed_owner_only_exact_18_artifact(
+def test_direct_database_evidence_writes_one_hashed_owner_only_ready_scope_artifact(
     tmp_path: Path,
 ) -> None:
     recorder = DirectDatabaseEvidenceRecorder.from_environment(
@@ -126,7 +126,8 @@ def test_direct_database_evidence_writes_one_hashed_owner_only_exact_18_artifact
         "transport": "supabase_direct_ipv4_from_github_actions",
     }
     assert set(artifact["resources"]) == set(_commands())
-    assert len(artifact["resources"]) == 18
+    assert len(artifact["resources"]) == 17
+    assert "expense_claim" not in artifact["resources"]
     assert all(
         row["command_operation"] == _commands()[operation_id]
         and row["cross_tenant_denied"] is True

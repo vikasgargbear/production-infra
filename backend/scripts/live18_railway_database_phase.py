@@ -212,15 +212,31 @@ def _read_request(path: str) -> dict[str, Any]:
 def _ready_operations() -> list[dict[str, Any]]:
     value = json.loads(OPERATION_MATRIX_PATH.read_text(encoding="utf-8"))
     operations = value.get("operations") if isinstance(value, dict) else None
-    if not isinstance(operations, list):
+    deferred_rows = value.get("deferred_operations") if isinstance(value, dict) else None
+    if not isinstance(operations, list) or not isinstance(deferred_rows, list):
         raise RailwayDatabasePhaseError("Packaged Live18 operation matrix is invalid")
+    deferred = {
+        row.get("id") for row in deferred_rows
+        if isinstance(row, dict) and row.get("status") == "deferred"
+    }
+    if len(deferred) != len(deferred_rows):
+        raise RailwayDatabasePhaseError("Packaged Live18 deferral set is invalid")
     ready = [
         operation
         for operation in operations
-        if isinstance(operation, dict) and operation.get("availability") == "published"
+        if (
+            isinstance(operation, dict)
+            and operation.get("availability") == "published"
+            and operation.get("id") not in deferred
+        )
     ]
     required_count = value.get("required_operation_count")
-    if len(ready) != required_count or len({row.get("id") for row in ready}) != len(ready):
+    if (
+        value.get("operation_count") != 18
+        or len(operations) != value["operation_count"]
+        or len(ready) != required_count
+        or len({row.get("id") for row in ready}) != len(ready)
+    ):
         raise RailwayDatabasePhaseError("Packaged Live18 operation matrix is incomplete")
     return ready
 

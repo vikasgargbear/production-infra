@@ -42,6 +42,14 @@ def test_browser_certification_selects_only_explicitly_ready_templates() -> None
         row["id"] for row in readiness["operations"] if row["status"] == "ready"
     }
     assert "destruction" in {item.id for item in ready}
+    assert len(ready) == 17
+    assert "expense_claim" not in {item.id for item in ready}
+    deferred = next(
+        item for item in load_operation_matrix() if item.id == "expense_claim"
+    )
+    assert deferred.certification_status == "deferred"
+    assert deferred.certification_blocker_code == "EXPENSE_EVIDENCE_STORAGE_DEFERRED"
+    assert deferred.certification_blocker
 
 
 def test_published_matrix_matches_the_reviewed_mcp_registry() -> None:
@@ -107,7 +115,7 @@ def test_every_published_rest_readback_is_mounted() -> None:
             assert shape(contract.rest_readback or "") in mounted, contract.id
 
 
-def test_all_18_operations_now_have_published_authority() -> None:
+def test_all_18_source_operations_remain_published_despite_one_release_deferral() -> None:
     contracts = load_operation_matrix()
     assert all(item.availability == "published" for item in contracts)
     expense = next(item for item in contracts if item.id == "expense_claim")

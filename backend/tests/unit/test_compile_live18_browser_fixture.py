@@ -61,12 +61,23 @@ def test_authoritative_fact_evidence_is_bound_to_exact_identity_and_run(
         )
 
 
-def _matrix(path: Path) -> Path:
+def _matrix(path: Path, *, defer_last: bool = False) -> Path:
     operations = [
         {"id": f"operation_{number}", "approval_policy": "actor_confirmation"}
         for number in range(1, 19)
     ]
-    path.write_text(json.dumps({"required_operation_count": 18, "operations": operations}))
+    deferred = [{
+        "id": "operation_18",
+        "status": "deferred",
+        "blocker_code": "EXPLICIT_TEST_DEFERRAL",
+        "blocker": "Test-only operation is outside the ready scope.",
+    }] if defer_last else []
+    path.write_text(json.dumps({
+        "operation_count": 18,
+        "required_operation_count": 17 if defer_last else 18,
+        "deferred_operations": deferred,
+        "operations": operations,
+    }))
     return path
 
 
@@ -88,12 +99,13 @@ def _templates(root: Path) -> Path:
         }
         if number == 1:
             steps["prepare_steps"].append({"actor": "requester", "action": "fill", "locator": {"kind": "label", "name": "Quantity", "exact": True}, "value": "{{scalar.quantity}}"})
-        (root / f"{operation}.json").write_text(json.dumps({
+        template = {
             "template_schema": TEMPLATE_SCHEMA,
             "operation_id": operation,
             "lifecycle_mode": "split",
             "steps": steps,
-        }))
+        }
+        (root / f"{operation}.json").write_text(json.dumps(template))
     return root
 
 
@@ -108,19 +120,33 @@ def test_compiles_exact_18_from_facts_and_only_used_reviewed_scalars(tmp_path: P
     assert fixture["operations"]["operation_1"]["approval_steps"][0]["locator"]["name"] == "{{command_request_id}}"
 
 
-def test_compiles_only_registry_ready_templates_without_claiming_blocked_work(
+def test_compiles_only_registry_ready_templates_without_claiming_deferred_work(
     tmp_path: Path,
 ) -> None:
-    matrix = _matrix(tmp_path / "matrix.json")
+    matrix = _matrix(tmp_path / "matrix.json", defer_last=True)
     templates = _templates(tmp_path / "templates")
-    (templates / "operation_18.json").unlink()
+    deferred_template = json.loads((templates / "operation_18.json").read_text())
+    deferred_template["release_status"] = "deferred"
+    deferred_template["release_blocker_code"] = "EXPLICIT_TEST_DEFERRAL"
+    deferred_template["steps"]["prepare_steps"].append({
+        "actor": "requester",
+        "action": "fill",
+        "locator": {"kind": "label", "name": "Deferred", "exact": True},
+        "value": "{{scalar.deferred_value}}",
+    })
+    (templates / "operation_18.json").write_text(json.dumps(deferred_template))
     readiness = tmp_path / "readiness.json"
     readiness.write_text(json.dumps({
         "ready_count": 17,
+        "deferred_count": 1,
         "operations": [
             {
                 "id": f"operation_{number}",
-                "status": "blocked" if number == 18 else "ready",
+                "status": "deferred" if number == 18 else "ready",
+                **({
+                    "blocker_code": "EXPLICIT_TEST_DEFERRAL",
+                    "blocker": "Test-only operation is outside the ready scope.",
+                } if number == 18 else {}),
             }
             for number in range(1, 19)
         ],
@@ -130,7 +156,7 @@ def test_compiles_only_registry_ready_templates_without_claiming_blocked_work(
         matrix,
         templates,
         {"display": {"branch_code": "sales"}},
-        {"quantity": "1.000000"},
+        {"quantity": "1.000000", "deferred_value": "reviewed-later"},
         readiness,
     )
 
@@ -314,12 +340,20 @@ def test_template_readiness_names_all_18_operations_without_false_ready_claims()
     assert readiness["ready_count"] == sum(
         row["status"] == "ready" for row in readiness["operations"]
     )
-    assert all(row["status"] in {"ready", "blocked"} for row in readiness["operations"])
+    assert readiness["ready_count"] == matrix["required_operation_count"] == 17
+    assert readiness["deferred_count"] == len(matrix["deferred_operations"]) == 1
     assert all(
-        (row["status"] == "ready" and not row["missing"])
-        or (row["status"] == "blocked" and row["missing"])
+        row["status"] in {"ready", "blocked", "deferred"}
         for row in readiness["operations"]
     )
+    assert all(
+        (row["status"] == "ready" and not row["missing"])
+        or (row["status"] in {"blocked", "deferred"} and row["missing"])
+        for row in readiness["operations"]
+    )
+    deferred = next(row for row in readiness["operations"] if row["status"] == "deferred")
+    assert deferred["id"] == "expense_claim"
+    assert deferred["blocker_code"] == "EXPENSE_EVIDENCE_STORAGE_DEFERRED"
     assert all(
         all((root / source).is_file() for source in row["evidence_sources"])
         for row in readiness["operations"]

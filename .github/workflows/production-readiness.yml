@@ -17,7 +17,7 @@ on:
         default: false
         type: boolean
       run_live18:
-        description: Run the reviewed exact-SHA disposable 18-operation UI/REST/MCP/PostgreSQL certification
+        description: Run the reviewed exact-SHA disposable 17-ready-operation UI/REST/MCP/PostgreSQL certification
         required: true
         default: false
         type: boolean

@@ -1670,9 +1670,57 @@ def compile_fixture(
     readiness_path: Path | None = None,
 ) -> dict[str, Any]:
     matrix = _object(matrix_path, "operation matrix")
-    expected = [row["id"] for row in matrix.get("operations", [])]
-    if matrix.get("required_operation_count") != 18 or len(expected) != 18 or len(set(expected)) != 18:
-        raise FixtureCompileError("operation matrix must declare exactly 18 unique operations")
+    catalog = matrix.get("operations", [])
+    expected_catalog = [row["id"] for row in catalog]
+    operation_count = matrix.get("operation_count")
+    required_count = matrix.get("required_operation_count")
+    deferred_rows = matrix.get("deferred_operations")
+    if (
+        operation_count != 18
+        or len(expected_catalog) != operation_count
+        or len(set(expected_catalog)) != operation_count
+        or not isinstance(deferred_rows, list)
+        or required_count != operation_count - len(deferred_rows)
+    ):
+        raise FixtureCompileError(
+            "operation matrix must declare 18 unique operations and an exact ready scope"
+        )
+    deferred: dict[str, dict[str, Any]] = {}
+    for row in deferred_rows:
+        if (
+            not isinstance(row, dict)
+            or row.get("status") != "deferred"
+            or row.get("id") not in expected_catalog
+            or not isinstance(row.get("blocker"), str)
+            or not row["blocker"].strip()
+            or not isinstance(row.get("blocker_code"), str)
+            or re.fullmatch(r"[A-Z][A-Z0-9_]+", row["blocker_code"]) is None
+            or row["id"] in deferred
+        ):
+            raise FixtureCompileError("operation matrix contains an invalid deferral")
+        deferred[row["id"]] = row
+    expected = [value for value in expected_catalog if value not in deferred]
+    if len(expected) != required_count:
+        raise FixtureCompileError("operation matrix ready scope is incomplete")
+    deferred_scalar_keys: set[str] = set()
+    for operation_id, deferral in deferred.items():
+        path = template_directory / f"{operation_id}.json"
+        template = _object(path, f"{operation_id} deferred template")
+        if (
+            template.get("template_schema") != TEMPLATE_SCHEMA
+            or template.get("operation_id") != operation_id
+            or template.get("release_status") != "deferred"
+            or template.get("release_blocker_code") != deferral["blocker_code"]
+            or not isinstance(template.get("steps"), dict)
+        ):
+            raise FixtureCompileError(
+                f"invalid deferred UI template authority: {operation_id}"
+            )
+        deferred_scalar_keys.update(
+            dotted
+            for authority, dotted in TOKEN_RE.findall(json.dumps(template, sort_keys=True))
+            if authority == "scalar"
+        )
     if readiness_path is not None:
         readiness = _object(readiness_path, "UI template readiness")
         readiness_rows = readiness.get("operations")
@@ -1682,16 +1730,16 @@ def compile_fixture(
             row.get("id") for row in readiness_rows if isinstance(row, dict)
         ]
         if (
-            len(readiness_ids) != len(expected)
+            len(readiness_ids) != len(expected_catalog)
             or len(set(readiness_ids)) != len(readiness_ids)
-            or set(readiness_ids) != set(expected)
+            or set(readiness_ids) != set(expected_catalog)
         ):
             raise FixtureCompileError(
                 "UI template readiness must cover the exact operation matrix"
             )
         invalid_status = [
             row.get("id") for row in readiness_rows
-            if row.get("status") not in {"ready", "blocked"}
+            if row.get("status") not in {"ready", "blocked", "deferred"}
         ]
         if invalid_status:
             raise FixtureCompileError(
@@ -1704,6 +1752,29 @@ def compile_fixture(
             raise FixtureCompileError(
                 "UI template readiness count does not match its ready operations"
             )
+        if readiness.get("ready_count") != required_count:
+            raise FixtureCompileError(
+                "UI template readiness does not match the matrix required scope"
+            )
+        deferred_readiness = {
+            row["id"]: row for row in readiness_rows if row["status"] == "deferred"
+        }
+        if readiness.get("deferred_count") != len(deferred_readiness):
+            raise FixtureCompileError(
+                "UI template readiness deferred count does not match its operations"
+            )
+        if set(deferred_readiness) != set(deferred):
+            raise FixtureCompileError(
+                "UI template readiness deferrals differ from the operation matrix"
+            )
+        for operation_id, row in deferred_readiness.items():
+            if (
+                row.get("blocker_code") != deferred[operation_id]["blocker_code"]
+                or row.get("blocker") != deferred[operation_id]["blocker"]
+            ):
+                raise FixtureCompileError(
+                    f"{operation_id} deferred blocker differs from the operation matrix"
+                )
         expected = [operation_id for operation_id in expected if operation_id in ready_ids]
     missing_templates = [
         operation_id
@@ -1742,7 +1813,7 @@ def compile_fixture(
             operation_id, compiled_operation, matrix_row.get("approval_policy")
         )
         operations[operation_id] = compiled_operation
-    unused = sorted(set(scalars) - used)
+    unused = sorted(set(scalars) - used - deferred_scalar_keys)
     if unused:
         raise FixtureCompileError(f"unreviewed/unused scalar values are forbidden: {unused}")
     return {"fixture_schema": FIXTURE_SCHEMA, "operations": operations}

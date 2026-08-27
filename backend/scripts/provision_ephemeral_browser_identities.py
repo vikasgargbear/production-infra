@@ -231,18 +231,34 @@ def _live18_authority() -> tuple[tuple[tuple[str, str, str, str], ...], tuple[st
     contract = json.loads(OPERATOR_CONTRACT_PATH.read_text(encoding="utf-8"))
     matrix = json.loads(LIVE18_MATRIX_PATH.read_text(encoding="utf-8"))
     operations = matrix.get("operations", [])
-    required = {item.get("command_operation") for item in operations}
-    if matrix.get("required_operation_count") != 18 or len(operations) != 18 or None in required:
-        raise EphemeralIdentityError("Live18 operation matrix must contain exactly 18 named operations")
+    deferred_rows = matrix.get("deferred_operations", [])
+    deferred = {
+        item.get("id") for item in deferred_rows
+        if isinstance(item, dict) and item.get("status") == "deferred"
+    }
+    required = {
+        item.get("command_operation") for item in operations
+        if isinstance(item, dict) and item.get("id") not in deferred
+    }
+    if (
+        matrix.get("operation_count") != 18
+        or matrix.get("required_operation_count") != 17
+        or len(operations) != matrix["operation_count"]
+        or len(deferred) != len(deferred_rows)
+        or None in required
+    ):
+        raise EphemeralIdentityError(
+            "Live18 operation matrix must contain 18 named operations and an exact ready scope"
+        )
     actions = contract.get("prepare_actions", [])
     by_operation = {
         action.get("operation_key"): action
         for action in actions
         if isinstance(action, dict) and action.get("operation_key")
     }
-    if len(required) != 17 or set(by_operation) != required:
+    if len(required) != 16 or not required <= set(by_operation):
         raise EphemeralIdentityError(
-            "Generated operator contract must expose exactly the 17 live18 prepare commands"
+            "Generated operator contract must expose all 16 release-ready prepare commands"
         )
     capabilities = tuple(
         (
