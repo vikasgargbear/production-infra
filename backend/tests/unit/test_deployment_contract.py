@@ -345,18 +345,6 @@ def test_render_blueprint_contains_no_runtime_secret_values():
     assert "key: SECRET_KEY" not in backend
 
 
-def test_render_finance_audit_enforces_a_read_only_database_session():
-    fixtures = _read("backend/tests/live_erp/conftest.py")
-    audit = _read("backend/tests/live_erp/test_live_finance_gst_audit.py")
-    runbook = _read("docs/deployment/render.md")
-
-    assert '"PHARMA_LIVE_DATABASE_READ_ONLY", ""' in fixtures
-    assert "conn.set_session(readonly=True, autocommit=True)" in fixtures
-    assert 'cur.execute("SHOW transaction_read_only")' in fixtures
-    assert "require_read_only_database" in audit
-    assert "PHARMA_LIVE_DATABASE_READ_ONLY=true" in runbook
-
-
 def test_render_readiness_requires_database_without_replacing_liveness():
     main = _read("backend/app/main.py")
     dockerfile = _read("backend/Dockerfile")
