@@ -26,7 +26,6 @@ GRANT_A = UUID("ec000000-0000-7000-8000-000000000014")
 GRANT_B = UUID("ec000000-0000-7000-8000-000000000015")
 PENDING = UUID("ec000000-0000-7000-8000-000000000016")
 REJECTED = UUID("ec000000-0000-7000-8000-000000000017")
-HELD = UUID("ec000000-0000-7000-8000-000000000018")
 
 
 def _expect_denied(connection, statement: str, parameters: dict) -> None:
@@ -84,7 +83,9 @@ def _seed(connection) -> None:
             INSERT INTO core.role_permissions(
               org_id,role_id,permission_code,created_by_membership_id)
             VALUES (:org_a,:role_a,'core.attachment.manage',:member_a),
-                   (:org_b,:role_b,'core.attachment.manage',:member_b);
+                   (:org_a,:role_a,'finance.expense.manage',:member_a),
+                   (:org_b,:role_b,'core.attachment.manage',:member_b),
+                   (:org_b,:role_b,'finance.expense.manage',:member_b);
             INSERT INTO core.access_grants(
               org_id,id,membership_id,role_id,scope_kind,branch_id,
               valid_from_at,status,created_by_membership_id)
@@ -112,7 +113,7 @@ def _seed(connection) -> None:
     connection.exec_driver_sql("RESET ROLE")
 
 
-def _insert_sql() -> str:
+def _direct_insert_sql() -> str:
     return """
         INSERT INTO core.attachments(
           org_id,branch_id,id,storage_bucket,storage_object_path,original_filename,
@@ -133,6 +134,41 @@ def _parameters(org_id: UUID, branch_id: UUID, attachment_id: UUID, byte: str) -
         "digest": digest,
         "object_path": f"{org_id}/{branch_id}/expense_receipt/{digest}.pdf",
     }
+
+
+def _initiate(connection, parameters: dict):
+    return connection.execute(
+        text(
+            """
+            SELECT attachment_id,attachment_status,idempotency_replayed
+              FROM erp_core_commands.initiate_expense_receipt_attachment(
+                :org_id,:branch_id,:attachment_id,'canonical-evidence-private-v1',
+                :object_path,'receipt.pdf',38,decode(:digest,'hex'),
+                current_date,current_date+365
+              )
+            """
+        ),
+        parameters,
+    ).one()
+
+
+def _transition(connection, attachment_id: UUID, target_status: str):
+    return connection.execute(
+        text(
+            """
+            SELECT attachment_id,attachment_status,idempotency_replayed
+              FROM erp_core_commands.transition_expense_receipt_attachment(
+                :org_id,:branch_id,:attachment_id,:target_status
+              )
+            """
+        ),
+        {
+            "org_id": ORG_A,
+            "branch_id": BRANCH_A,
+            "attachment_id": attachment_id,
+            "target_status": target_status,
+        },
+    ).one()
 
 
 def main() -> None:
@@ -167,21 +203,47 @@ def main() -> None:
                 text("SELECT erp_security.activate_context(:auth,:org)"),
                 {"auth": AUTH_A, "org": ORG_A},
             )
-            connection.execute(text(_insert_sql()), _parameters(ORG_A, BRANCH_A, PENDING, "a"))
+            pending_parameters = _parameters(ORG_A, BRANCH_A, PENDING, "a")
+            _expect_denied(connection, _direct_insert_sql(), pending_parameters)
+            assert _initiate(connection, pending_parameters) == (
+                PENDING,
+                "pending_upload",
+                False,
+            )
+            assert _initiate(connection, pending_parameters) == (
+                PENDING,
+                "pending_upload",
+                True,
+            )
             assert connection.scalar(
                 text("SELECT count(*) FROM core.attachments WHERE id=:id"), {"id": PENDING}
             ) == 1
             _expect_denied(
-                connection, _insert_sql(),
+                connection,
+                """
+                SELECT * FROM erp_core_commands.initiate_expense_receipt_attachment(
+                  :org_id,:branch_id,:attachment_id,'canonical-evidence-private-v1',
+                  :object_path,'receipt.pdf',38,decode(:digest,'hex'),
+                  current_date,current_date+365
+                )
+                """,
                 _parameters(ORG_A, BRANCH_A_HIDDEN, REJECTED, "b"),
             )
 
-            connection.execute(
-                text(
-                    "UPDATE core.attachments SET status='verified',"
-                    "verified_at=transaction_timestamp() WHERE id=:id"
-                ),
+            _expect_denied(
+                connection,
+                "UPDATE core.attachments SET status='verified' WHERE id=:id",
                 {"id": PENDING},
+            )
+            assert _transition(connection, PENDING, "verified") == (
+                PENDING,
+                "verified",
+                False,
+            )
+            assert _transition(connection, PENDING, "verified") == (
+                PENDING,
+                "verified",
+                True,
             )
             assert connection.execute(
                 text("SELECT status,verified_at IS NOT NULL FROM core.attachments WHERE id=:id"),
@@ -196,21 +258,25 @@ def main() -> None:
                 connection, "DELETE FROM core.attachments WHERE id=:id", {"id": PENDING}
             )
 
-            connection.execute(text(_insert_sql()), _parameters(ORG_A, BRANCH_A, REJECTED, "b"))
-            connection.execute(
-                text("UPDATE core.attachments SET status='rejected' WHERE id=:id"),
-                {"id": REJECTED},
+            rejected_parameters = _parameters(ORG_A, BRANCH_A, REJECTED, "b")
+            assert _initiate(connection, rejected_parameters) == (
+                REJECTED,
+                "pending_upload",
+                False,
+            )
+            assert _transition(connection, REJECTED, "rejected") == (
+                REJECTED,
+                "rejected",
+                False,
             )
             assert connection.scalar(
                 text("SELECT status FROM core.attachments WHERE id=:id"), {"id": REJECTED}
             ) == "rejected"
 
-            connection.execute(text(_insert_sql()), _parameters(ORG_A, BRANCH_A, HELD, "c"))
-            connection.execute(
-                text("UPDATE core.attachments SET legal_hold=true WHERE id=:id"), {"id": HELD}
-            )
             _expect_denied(
-                connection, "DELETE FROM core.attachments WHERE id=:id", {"id": HELD}
+                connection,
+                "UPDATE core.attachments SET legal_hold=true WHERE id=:id",
+                {"id": PENDING},
             )
 
             connection.execute(
@@ -221,7 +287,15 @@ def main() -> None:
                 text("SELECT count(*) FROM core.attachments WHERE id=:id"), {"id": PENDING}
             ) == 0
             _expect_denied(
-                connection, _insert_sql(), _parameters(ORG_A, BRANCH_A, PENDING, "d")
+                connection,
+                """
+                SELECT * FROM erp_core_commands.initiate_expense_receipt_attachment(
+                  :org_id,:branch_id,:attachment_id,'canonical-evidence-private-v1',
+                  :object_path,'receipt.pdf',38,decode(:digest,'hex'),
+                  current_date,current_date+365
+                )
+                """,
+                _parameters(ORG_A, BRANCH_A, PENDING, "d"),
             )
         finally:
             transaction.rollback()

@@ -528,7 +528,7 @@ def _assert_tenant_and_write_boundaries(
             (
                 "UPDATE catalog.products SET sku='FORGED' WHERE org_id=%s AND id=%s",
                 (ORG, product[0]),
-                "23514",
+                "42501",
             ),
             (
                 "UPDATE parties.customer_accounts SET customer_code='FORGED' "

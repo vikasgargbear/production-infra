@@ -1099,9 +1099,12 @@ def test_created_customer_and_supplier_resolve_to_active_account_ids(monkeypatch
 
 
 def test_customer_address_primary_is_scoped_by_address_kind() -> None:
-    source = Path(canonical_erp_reads.__file__).read_text(encoding="utf-8")
-    assert source.count("address_kind=:kind") >= 4
-    assert "other.address_kind=:kind" in source
+    source = (
+        Path(__file__).parents[3]
+        / "database/canonical/operations/master/customer_address_commands.sql"
+    ).read_text(encoding="utf-8")
+    assert source.count("address.address_kind=address_kind") >= 4
+    assert "address.id<>address_identifier" in source
 
 
 def test_canonical_reads_activate_rls_and_do_not_use_legacy_schemas() -> None:
@@ -1955,25 +1958,30 @@ def test_party_address_state_code_has_no_application_owned_name_mapping() -> Non
         )
 
 
-def test_delete_product_draft_fails_closed_without_a_canonical_command() -> None:
-    class UnexpectedDatabaseUse:
-        def __getattr__(self, name):
-            raise AssertionError(f"product deletion used database.{name}")
+def test_product_draft_delete_has_one_canonical_function_owner() -> None:
+    route_source = inspect.getsource(canonical_erp_reads.delete_product_draft)
+    adapter_source = inspect.getsource(
+        canonical_erp_reads.canonical_write_commands.delete_product_draft
+    )
 
-    with pytest.raises(HTTPException) as error:
-        canonical_erp_reads.delete_product_draft(
-            uuid4(),
-            user={"org_id": str(uuid4()), "auth_user_id": str(uuid4())},
-            db=UnexpectedDatabaseUse(),
+    assert "canonical_write_commands.delete_product_draft" in route_source
+    assert "erp_master_commands.delete_product_draft" in adapter_source
+    assert "DELETE FROM catalog.products" not in route_source
+    assert "DELETE FROM catalog.products" not in adapter_source
+
+
+def test_reachable_product_address_and_evidence_routes_have_no_direct_dml() -> None:
+    route_sources = "\n".join(
+        inspect.getsource(endpoint)
+        for endpoint in (
+            canonical_erp_reads.update_product_draft,
+            canonical_erp_reads.delete_product_draft,
+            canonical_erp_reads.create_customer_address,
+            canonical_erp_reads.update_customer_address,
         )
-
-    assert error.value.status_code == 503
-    assert error.value.detail == (
-        "Product draft deletion is unavailable until its canonical command is installed"
     )
-    assert "DELETE FROM catalog.products" not in inspect.getsource(
-        canonical_erp_reads.delete_product_draft
-    )
+    for token in ("INSERT INTO", "UPDATE catalog.", "UPDATE parties.", "DELETE FROM"):
+        assert token not in route_sources
 
 
 def test_tax_master_does_not_double_count_intra_and_interstate_rates() -> None:
