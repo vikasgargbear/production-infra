@@ -577,7 +577,7 @@ def test_delivery_challan_proves_ordered_selected_batch_stock_prerequisite() -> 
         "stock_adjustment_loss_quantity": "1.000000",
         "sales_invoice_quantity": "7.000000",
         "sales_invoice_free_quantity": "1.000000",
-        "sales_order_quantity": "1.000000",
+        "sales_order_quantity": "7.000000",
     }
 
     assert _operation_facts(

@@ -2101,6 +2101,12 @@ BEGIN
     preview_document:=pg_catalog.convert_from(preview_bytes,'UTF8')::jsonb;
     input_document:=pg_catalog.convert_from(calculation_input_bytes,'UTF8')::jsonb;
     output_document:=pg_catalog.convert_from(calculation_output_bytes,'UTF8')::jsonb;
+    existing:="{SCHEMA}"."find_exact_prepare_replay"(organization_id,grant_id,
+      'procurement.supplier_invoice.prepare',supplier_invoice_id,key_hash,request_bytes,preview_bytes);
+    IF existing.id IS NOT NULL THEN
+      RETURN pg_catalog.jsonb_build_object('command_request_id',existing.id,'expires_at',existing.expires_at,
+        'preview_hash',pg_catalog.encode(existing.preview_hash,'hex'),'replayed',true);
+    END IF;
     current_resolution:="{SCHEMA}"."resolve_supplier_invoice_prepare"(organization_id,membership_id,auth_user_id,application_user_id,
       grant_id,caller_client_id,supplier_invoice_id,request_document);
     PERFORM pg_catalog.set_config('app.request_id',request_id::text,true);
@@ -3621,6 +3627,27 @@ END
             "INSERT",
             "automation.command_requests",
             "guard_command_request_prepare_scope",
+        ),
+        *_function(
+            '"find_exact_prepare_replay"(organization_id uuid, grant_id uuid, capability_name varchar, target_id uuid, key_hash bytea, request_bytes bytea, preview_bytes bytea)',
+            "automation.command_requests",
+            r'''
+DECLARE existing automation.command_requests%ROWTYPE;
+BEGIN
+    PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
+      organization_id::text||grant_id::text||capability_name||pg_catalog.encode(key_hash,'hex'),672044));
+    SELECT * INTO existing FROM automation.command_requests
+     WHERE org_id=organization_id AND agent_grant_id=grant_id
+       AND capability_code=capability_name AND idempotency_key_hash=key_hash FOR SHARE;
+    IF existing.id IS NOT NULL AND (
+       existing.target_resource_id IS DISTINCT FROM target_id
+       OR existing.request_hash IS DISTINCT FROM extensions.digest(request_bytes,'sha256')
+       OR existing.preview_hash IS DISTINCT FROM extensions.digest(preview_bytes,'sha256')) THEN
+      RAISE EXCEPTION USING ERRCODE='23505', MESSAGE='prepare idempotency key has different exact input';
+    END IF;
+    RETURN existing;
+END
+''',
         ),
         *_function(
             '"prepare_operator_command"(organization_id uuid, command_id uuid, grant_id uuid, capability_name varchar, source_branch_id uuid, destination_branch_id uuid, target_id uuid, requested_amount numeric, currency_code char(3), key_hash bytea, request_bytes bytea, preview_bytes bytea, calculation_hash bytea, aggregate_hash bytea, expires_at timestamptz)',
@@ -6139,6 +6166,12 @@ BEGIN
   request_document:=pg_catalog.convert_from(request_bytes,'UTF8')::jsonb;
   resolved_document:=pg_catalog.convert_from(resolved_bytes,'UTF8')::jsonb;
   preview_document:=pg_catalog.convert_from(preview_bytes,'UTF8')::jsonb;
+  existing:="{SCHEMA}"."find_exact_prepare_replay"(organization_id,grant_id,
+    'finance.supplier_payment.prepare',payment_id,key_hash,request_bytes,preview_bytes);
+  IF existing.id IS NOT NULL THEN
+    RETURN pg_catalog.jsonb_build_object('command_request_id',existing.id,'expires_at',existing.expires_at,
+      'preview_hash',pg_catalog.encode(existing.preview_hash,'hex'),'replayed',true);
+  END IF;
   current_resolution:="{SCHEMA}"."resolve_supplier_payment_prepare"(organization_id,membership_id,auth_user_id,
     application_user_id,grant_id,caller_client_id,payment_id,request_document);
   PERFORM pg_catalog.set_config('app.request_id',command_id::text,true);
@@ -6407,6 +6440,12 @@ BEGIN
   request_document:=pg_catalog.convert_from(request_bytes,'UTF8')::jsonb;
   resolved_document:=pg_catalog.convert_from(resolved_bytes,'UTF8')::jsonb;
   preview_document:=pg_catalog.convert_from(preview_bytes,'UTF8')::jsonb;
+  existing:="{SCHEMA}"."find_exact_prepare_replay"(organization_id,grant_id,
+    'finance.supplier_advance.prepare',payment_id,key_hash,request_bytes,preview_bytes);
+  IF existing.id IS NOT NULL THEN
+    RETURN pg_catalog.jsonb_build_object('command_request_id',existing.id,'expires_at',existing.expires_at,
+      'preview_hash',pg_catalog.encode(existing.preview_hash,'hex'),'replayed',true);
+  END IF;
   current_resolution:="{SCHEMA}"."resolve_supplier_advance_prepare"(organization_id,membership_id,auth_user_id,
     application_user_id,grant_id,caller_client_id,payment_id,request_document);
   PERFORM pg_catalog.set_config('app.request_id',command_id::text,true);
@@ -6732,6 +6771,12 @@ BEGIN
     resolved_document:=pg_catalog.convert_from(resolved_bytes,'UTF8')::jsonb;
     preview_document:=pg_catalog.convert_from(preview_bytes,'UTF8')::jsonb;
   EXCEPTION WHEN OTHERS THEN RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='customer receipt persistence requires UTF-8 JSON'; END;
+  existing:="{SCHEMA}"."find_exact_prepare_replay"(organization_id,grant_id,
+    'finance.customer_receipt.prepare',payment_id,key_hash,request_bytes,preview_bytes);
+  IF existing.id IS NOT NULL THEN
+    RETURN pg_catalog.jsonb_build_object('command_request_id',existing.id,'expires_at',existing.expires_at,
+      'preview_hash',pg_catalog.encode(existing.preview_hash,'hex'),'replayed',true);
+  END IF;
   current_resolution:="{SCHEMA}"."resolve_customer_receipt_prepare"(organization_id,membership_id,auth_user_id,
     application_user_id,grant_id,caller_client_id,payment_id,request_document);
   PERFORM pg_catalog.set_config('app.request_id',command_id::text,true);
@@ -6944,6 +6989,12 @@ DECLARE request_document jsonb:=pg_catalog.convert_from(request_bytes,'UTF8')::j
         payment_sequence_id uuid; journal_sequence_id uuid; original_journal_id uuid;
         payment_number text; journal_number text; fiscal_year integer;
 BEGIN
+  existing:="{SCHEMA}"."find_exact_prepare_replay"(organization_id,grant_id,
+    '{operation}',payment_id,key_hash,request_bytes,preview_bytes);
+  IF existing.id IS NOT NULL THEN
+    RETURN pg_catalog.jsonb_build_object('command_request_id',existing.id,'expires_at',existing.expires_at,
+      'preview_hash',pg_catalog.encode(existing.preview_hash,'hex'),'replayed',true);
+  END IF;
   current_resolution:="{SCHEMA}"."resolve_customer_cheque_{action}_prepare"(organization_id,membership_id,
     auth_user_id,application_user_id,grant_id,caller_client_id,payment_id,request_document);
   IF current_resolution IS DISTINCT FROM resolved_document OR preview_document->'source_versions' IS DISTINCT FROM resolved_document->'source_versions'

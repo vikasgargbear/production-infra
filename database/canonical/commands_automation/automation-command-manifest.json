@@ -495,7 +495,7 @@
   },
   "manifest_version": "1.0.0",
   "mapping_file": "baseline-automation-command-enforcements.json",
-  "mapping_sha256": "34b9ff6e0ad49fe8b3e332c2be25cb499ad0611856518fa23953c9766d2a86d3",
+  "mapping_sha256": "af8763f0e78bf6d4ad7c7386b345307f092545988f79fc5383f0a49449125654",
   "postgresql": "15+",
   "resolved_count": 3,
   "resolved_invariants": [

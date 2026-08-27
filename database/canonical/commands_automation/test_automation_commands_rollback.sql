@@ -27,6 +27,8 @@ BEGIN
                                  'resolve_supplier_invoice_prepare','resolve_sales_return_prepare',
                                  'resolve_purchase_return_prepare',
                                  'resolve_customer_receipt_prepare','persist_customer_receipt_prepare',
+                                 'resolve_customer_cheque_clearance_prepare','persist_customer_cheque_clearance_prepare',
+                                 'resolve_customer_cheque_bounce_prepare','persist_customer_cheque_bounce_prepare',
                                  'resolve_supplier_payment_prepare','persist_supplier_payment_prepare',
                                  'resolve_supplier_advance_prepare','persist_supplier_advance_prepare',
                                  'resolve_inventory_transfer_prepare','persist_inventory_transfer_prepare',
@@ -46,7 +48,7 @@ BEGIN
       WHEN pg_catalog.to_regprocedure(
         'erp_automation_commands.execute_approved_expense_claim(uuid,uuid)'
       ) IS NULL THEN 28
-      ELSE 32
+      ELSE 36
     END;
     IF runtime_count<>expected_runtime_count THEN
         RAISE EXCEPTION 'expected % reviewed runtime automation commands, found %',expected_runtime_count,runtime_count;
@@ -63,6 +65,8 @@ BEGIN
                                      'resolve_supplier_invoice_prepare','resolve_sales_return_prepare',
                                      'resolve_purchase_return_prepare',
                                      'resolve_customer_receipt_prepare','persist_customer_receipt_prepare',
+                                     'resolve_customer_cheque_clearance_prepare','persist_customer_cheque_clearance_prepare',
+                                     'resolve_customer_cheque_bounce_prepare','persist_customer_cheque_bounce_prepare',
                                      'resolve_supplier_payment_prepare','persist_supplier_payment_prepare',
                                      'resolve_supplier_advance_prepare','persist_supplier_advance_prepare',
                                      'resolve_inventory_transfer_prepare','persist_inventory_transfer_prepare',

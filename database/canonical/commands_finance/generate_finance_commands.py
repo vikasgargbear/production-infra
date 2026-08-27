@@ -404,7 +404,7 @@ BEGIN
     RETURN payment_id;
 END
 """,
-            runtime_callable=True,
+            runtime_callable=False,
         ),
         *_function(
             '"post_customer_receipt"(organization_id uuid, payment_id uuid, journal_id uuid, event_id uuid, receipt_allocations jsonb, customer_advance_open_item_id uuid)',
@@ -471,7 +471,7 @@ BEGIN
     RETURN payment_id;
 END
 """,
-            runtime_callable=True,
+            runtime_callable=False,
         ),
         *_function(
             '"post_customer_cheque_clearance"(organization_id uuid, original_payment_id uuid, clearance_payment_id uuid, journal_id uuid, event_id uuid)',
@@ -513,7 +513,7 @@ BEGIN
     RETURN "{FUNCTION_SCHEMA}"."post_payment"(organization_id,clearance.id,journal_id,event_id);
 END
 """,
-            runtime_callable=True,
+            runtime_callable=False,
         ),
         *_function(
             '"post_customer_cheque_bounce"(organization_id uuid, original_payment_id uuid, bounce_payment_id uuid, journal_id uuid, event_id uuid, compensating_allocations jsonb)',
@@ -608,7 +608,7 @@ BEGIN
     RETURN bounce.id;
 END
 """,
-            runtime_callable=True,
+            runtime_callable=False,
         ),
         *_function(
             '"apply_supplier_adjustment_credit"(organization_id uuid, adjustment_note_id uuid, source_open_item_id uuid, target_open_item_id uuid, allocation_id uuid, application_date date)',
@@ -634,7 +634,8 @@ BEGIN
        OR source_item.currency_code<>'INR' THEN
       RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='supplier adjustment source and payable must share supplier, branch, and INR currency';
     END IF;
-    IF application_date IS NULL OR application_date<note.note_date OR application_date>CURRENT_DATE THEN
+    IF application_date IS NULL OR application_date<note.note_date
+       OR application_date>"erp_core_commands"."current_organization_business_date"() THEN
       RAISE EXCEPTION USING ERRCODE='22007', MESSAGE='supplier adjustment application date is invalid'; END IF;
     SELECT coalesce(sum(a.amount),0) INTO source_used FROM finance.allocations a WHERE a.org_id=organization_id
       AND a.source_open_item_id=source_item.id AND a.status='posted' AND a.reversal_of_allocation_id IS NULL
@@ -654,7 +655,7 @@ BEGIN
     RETURN residual;
 END
 """,
-            runtime_callable=True,
+            runtime_callable=False,
         ),
         *_function(
             '"post_supplier_payment"(organization_id uuid, payment_id uuid, journal_id uuid, event_id uuid, settlement_components jsonb)',
@@ -759,7 +760,7 @@ BEGIN
     RETURN payment_id;
 END
 """,
-            runtime_callable=True,
+            runtime_callable=False,
         ),
         *_function(
             '"post_supplier_advance_payment"(organization_id uuid, payment_id uuid, journal_id uuid, event_id uuid, advance_allocations jsonb)',
@@ -845,7 +846,7 @@ BEGIN
     RETURN payment_id;
 END
 """,
-            runtime_callable=True,
+            runtime_callable=False,
         ),
         *_function(
             '"reverse_payment"(organization_id uuid, original_payment_id uuid, reversal_payment_id uuid, reversal_payment_number varchar, reversal_journal_id uuid, reversal_journal_number varchar, reversal_event_id uuid, reason text)',
@@ -975,7 +976,7 @@ BEGIN
     RETURN reversal_payment_id;
 END
 """,
-            runtime_callable=True,
+            runtime_callable=False,
         ),
         *_function(
             '"apply_supplier_advance"(organization_id uuid, advance_allocation_id uuid, supplier_invoice_line_id uuid, invoice_open_item_id uuid, allocation_id uuid, journal_id uuid, journal_number varchar, event_id uuid)',
@@ -1059,7 +1060,7 @@ BEGIN
     RETURN advance_allocation_id;
 END
 """,
-            runtime_callable=True,
+            runtime_callable=False,
         ),
     ]
 
@@ -1616,17 +1617,8 @@ def generated_artifacts() -> tuple[str, str]:
             "transaction_scoped_provenance": True,
             "runtime_callable_functions": [
                 "import_bank_statement_lines(uuid,uuid,jsonb)",
-                "apply_supplier_advance(uuid,uuid,uuid,uuid,uuid,uuid,varchar,uuid)",
-                "apply_supplier_adjustment_credit(uuid,uuid,uuid,uuid,uuid,date)",
                 "parse_portal_document(uuid,uuid,jsonb)",
-                "post_payment(uuid,uuid,uuid,uuid)",
-                "post_customer_receipt(uuid,uuid,uuid,uuid,jsonb,uuid)",
-                "post_customer_cheque_clearance(uuid,uuid,uuid,uuid,uuid)",
-                "post_customer_cheque_bounce(uuid,uuid,uuid,uuid,uuid,jsonb)",
-                "post_supplier_payment(uuid,uuid,uuid,uuid,jsonb)",
-                "post_supplier_advance_payment(uuid,uuid,uuid,uuid,jsonb)",
                 "resolve_reconciliation_item(uuid,uuid,text,text)",
-                "reverse_payment(uuid,uuid,uuid,varchar,uuid,varchar,uuid,text)",
                 "run_tax_reconciliation(uuid,uuid,uuid,uuid,uuid,varchar,smallint,numeric)",
             ],
         },

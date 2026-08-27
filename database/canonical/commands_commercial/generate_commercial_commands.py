@@ -1046,7 +1046,7 @@ BEGIN
     RETURN resource_id;
 END
 ''',
-        runtime=True,
+        runtime=sales,
     )
 
 
@@ -2390,6 +2390,8 @@ BEGIN
      OR reversal_kind NOT IN ('sales_return','purchase_return','adjustment_note')
      OR reason IS NULL OR pg_catalog.btrim(reason)='' OR reversal_date IS NULL THEN
     RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='commercial reversal prepare context is invalid'; END IF;
+  IF reversal_date>"erp_core_commands"."current_organization_business_date"() THEN
+    RAISE EXCEPTION USING ERRCODE='22007', MESSAGE='commercial reversal date cannot be in the future'; END IF;
   IF reversal_kind='sales_return' THEN
     SELECT row_version,branch_id INTO STRICT source_version,branch_id FROM sales.returns
      WHERE org_id=organization_id AND id=original_resource_id AND status='posted' FOR UPDATE;
@@ -2418,6 +2420,7 @@ BEGIN
      WHERE source.org_id=organization_id AND source.id=note.id;
   END IF;
   IF source_version IS DISTINCT FROM expected_row_version OR reversal_date<note.note_date
+     OR note.reversal_of_adjustment_note_id IS NOT NULL
      OR EXISTS(SELECT 1 FROM finance.adjustment_notes reversal
        WHERE reversal.org_id=organization_id AND reversal.reversal_of_adjustment_note_id=note.id) THEN
     RAISE EXCEPTION USING ERRCODE='40001', MESSAGE='posted commercial source changed or was already reversed'; END IF;
@@ -2632,7 +2635,7 @@ END
     reversal_inventory_document_number,reversal_journal_id,reversal_journal_number,reversal_event_id,
     reversal_tax_document_id,reversal_date,reason,amendment_evidence_attachment_id,key_hash,request_hash,expires_at);
 END""",
-            runtime=True,
+            runtime=False,
         )
     statements += _function(
         "persist_commercial_reversal_prepare(organization_id uuid, reversal_kind text, original_resource_id uuid, reversal_adjustment_note_id uuid, command_request_id uuid, grant_id uuid, key_hash bytea, request_bytes bytea, resolved_bytes bytea, preview_bytes bytea, expires_at timestamptz)",
@@ -2642,18 +2645,25 @@ DECLARE request_document jsonb:=pg_catalog.convert_from(request_bytes,'UTF8')::j
         resolved_document jsonb:=pg_catalog.convert_from(resolved_bytes,'UTF8')::jsonb;
         preview_document jsonb:=pg_catalog.convert_from(preview_bytes,'UTF8')::jsonb;
         current_resolution jsonb; capability_name text; persisted_id uuid;
+        existing automation.command_requests%ROWTYPE;
 BEGIN
   IF SESSION_USER<>'erp_runtime' OR reversal_kind NOT IN ('sales_return','purchase_return','adjustment_note')
      OR request_document->>'original_resource_id' IS DISTINCT FROM original_resource_id::text
      OR request_document->>'reversal_adjustment_note_id' IS DISTINCT FROM reversal_adjustment_note_id::text THEN
     RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='commercial reversal persistence boundary is invalid'; END IF;
+  capability_name:=CASE reversal_kind WHEN 'sales_return' THEN 'sales.return.reversal.prepare'
+    WHEN 'purchase_return' THEN 'procurement.purchase_return.reversal.prepare'
+    ELSE 'finance.adjustment_note.reversal.prepare' END;
+  existing:=erp_automation_commands.find_exact_prepare_replay(organization_id,grant_id,
+    capability_name,reversal_adjustment_note_id,key_hash,request_bytes,preview_bytes);
+  IF existing.id IS NOT NULL THEN
+    RETURN pg_catalog.jsonb_build_object('command_request_id',existing.id,'expires_at',existing.expires_at,
+      'preview_hash',pg_catalog.encode(existing.preview_hash,'hex'),'replayed',true);
+  END IF;
   current_resolution:=erp_commercial_commands.resolve_commercial_reversal_prepare(organization_id,reversal_kind,
     original_resource_id,(request_document->>'expected_row_version')::bigint,
     (request_document->>'reversal_date')::date,request_document->>'reason',
     NULLIF(request_document->>'amendment_evidence_attachment_id','')::uuid);
-  capability_name:=CASE reversal_kind WHEN 'sales_return' THEN 'sales.return.reversal.prepare'
-    WHEN 'purchase_return' THEN 'procurement.purchase_return.reversal.prepare'
-    ELSE 'finance.adjustment_note.reversal.prepare' END;
   IF current_resolution IS DISTINCT FROM resolved_document
      OR preview_document->>'capability_code' IS DISTINCT FROM capability_name
      OR preview_document->>'target_resource_id' IS DISTINCT FROM reversal_adjustment_note_id::text
@@ -2677,7 +2687,9 @@ END
         "execute_approved_commercial_reversal(organization_id uuid, command_request_id uuid)",
         "bytea",
         r'''
-DECLARE command automation.command_requests%ROWTYPE; request_document jsonb; actor uuid:=erp_security.current_membership_id();
+DECLARE command automation.command_requests%ROWTYPE; grant_row automation.agent_grants%ROWTYPE;
+        capability automation.agent_grant_capabilities%ROWTYPE;
+        request_document jsonb; actor uuid:=erp_security.current_membership_id();
         approval_count bigint; reversal_kind text; fiscal_year integer; note_sequence uuid; journal_sequence uuid;
         inventory_sequence uuid; note_number text; journal_number text; inventory_number text; result_id uuid;
         response_document jsonb; response_body bytea;
@@ -2688,7 +2700,25 @@ BEGIN
   SELECT * INTO STRICT command FROM automation.command_requests
    WHERE org_id=organization_id AND id=command_request_id FOR UPDATE;
   IF command.status='succeeded' THEN RETURN command.response_bytes; END IF;
-  IF command.status<>'approved' OR command.requested_by_membership_id IS DISTINCT FROM actor
+  SELECT * INTO grant_row FROM automation.agent_grants
+   WHERE org_id=organization_id AND id=command.agent_grant_id FOR UPDATE;
+  SELECT * INTO capability FROM automation.agent_grant_capabilities
+   WHERE org_id=organization_id AND agent_grant_id=command.agent_grant_id
+     AND capability_code=command.capability_code FOR SHARE;
+  IF grant_row.id IS NULL OR capability.agent_grant_id IS NULL
+     OR grant_row.status<>'active' OR grant_row.expires_at<=pg_catalog.transaction_timestamp()
+     OR grant_row.subject_membership_id IS DISTINCT FROM actor
+     OR capability.status<>'active'
+     OR capability.operation_mode IS DISTINCT FROM command.operation_mode
+     OR capability.risk_class IS DISTINCT FROM command.risk_class
+     OR capability.approval_policy IS DISTINCT FROM command.approval_policy
+     OR command.branch_id IS NULL
+     OR erp_security.can_access_branch(command.branch_id) IS DISTINCT FROM true
+     OR erp_security.has_permission('automation.command.execute',command.branch_id) IS DISTINCT FROM true
+     OR (grant_row.branch_id IS NOT NULL AND command.branch_id IS DISTINCT FROM grant_row.branch_id) THEN
+    RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='commercial reversal grant or exact capability consent changed before execution'; END IF;
+  IF command.status NOT IN ('prepared','pending_approval','approved')
+     OR command.requested_by_membership_id IS DISTINCT FROM actor
      OR command.expires_at<=pg_catalog.transaction_timestamp()
      OR command.request_hash IS DISTINCT FROM extensions.digest(command.request_bytes,'sha256')
      OR command.preview_hash IS DISTINCT FROM extensions.digest(command.preview_bytes,'sha256') THEN
@@ -2700,6 +2730,15 @@ BEGIN
      AND approval.valid_until_at>pg_catalog.transaction_timestamp()
      AND approval.approver_membership_id<>command.requested_by_membership_id;
   IF approval_count<1 THEN RAISE EXCEPTION USING ERRCODE='55000', MESSAGE='commercial reversal lacks independent immutable approval'; END IF;
+  INSERT INTO erp_automation_commands.execution_scopes
+    VALUES(pg_catalog.pg_backend_pid(),pg_catalog.txid_current(),organization_id,command_request_id);
+  IF command.status<>'approved' THEN
+    UPDATE automation.command_requests SET status='approved',row_version=row_version+1
+     WHERE org_id=organization_id AND id=command.id AND status IN ('prepared','pending_approval');
+  END IF;
+  UPDATE automation.command_requests SET status='executing',execution_started_at=pg_catalog.transaction_timestamp(),
+    row_version=row_version+1 WHERE org_id=organization_id AND id=command.id AND status='approved';
+  IF NOT FOUND THEN RAISE EXCEPTION USING ERRCODE='40001', MESSAGE='commercial reversal begin boundary lost ownership'; END IF;
   request_document:=pg_catalog.convert_from(command.request_bytes,'UTF8')::jsonb;
   reversal_kind:=CASE command.capability_code WHEN 'sales.return.reversal.prepare' THEN 'sales_return'
     WHEN 'procurement.purchase_return.reversal.prepare' THEN 'purchase_return'
@@ -2757,8 +2796,11 @@ BEGIN
     result_resource_type='adjustment_note_reversal',result_resource_id=result_id,response_status=200,
     response_media_type='application/vnd.aasopharma.command-result+json',response_bytes=response_body,
     response_hash=extensions.digest(response_body,'sha256'),row_version=row_version+1
-   WHERE org_id=organization_id AND id=command.id AND status='approved';
+   WHERE org_id=organization_id AND id=command.id AND status='executing';
   IF NOT FOUND THEN RAISE EXCEPTION USING ERRCODE='40001', MESSAGE='commercial reversal finish boundary lost ownership'; END IF;
+  DELETE FROM erp_automation_commands.execution_scopes scope
+   WHERE scope.backend_pid=pg_catalog.pg_backend_pid() AND scope.transaction_id=pg_catalog.txid_current()
+     AND scope.org_id=organization_id AND scope.command_request_id=command.id;
   RETURN response_body;
 END
 ''',

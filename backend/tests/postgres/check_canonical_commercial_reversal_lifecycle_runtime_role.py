@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import importlib.util
+import hashlib
+import json
 import os
 from datetime import timedelta
 from decimal import Decimal
@@ -10,6 +12,7 @@ from pathlib import Path
 from uuid import UUID
 
 from sqlalchemy import create_engine, text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import sessionmaker
 
 
@@ -31,6 +34,8 @@ SOURCE_EVENT = UUID("e3000000-0000-7000-8000-000000000094")
 REVERSAL_NOTE = UUID("e3000000-0000-7000-8000-000000000095")
 REVERSAL_JOURNAL = UUID("e3000000-0000-7000-8000-000000000096")
 REVERSAL_EVENT = UUID("e3000000-0000-7000-8000-000000000097")
+REVERSAL_COMMAND = UUID("e3000000-0000-7000-8000-000000000098")
+REVERSAL_APPROVAL = UUID("e3000000-0000-7000-8000-000000000099")
 CUSTOMER_PARTY = UUID("e3000000-0000-7000-8000-0000000000a0")
 CUSTOMER_ACCOUNT = UUID("e3000000-0000-7000-8000-0000000000a1")
 RECEIVABLE_ACCOUNT = UUID("e3000000-0000-7000-8000-0000000000a2")
@@ -54,6 +59,7 @@ def _seed_source(session, business_date) -> None:
         "finance.open_items",
         "finance.accounts", "parties.parties", "parties.customer_accounts",
         "tax.registrations", "tax.gst_adjustment_rule_versions",
+        "automation.agent_grant_capabilities", "core.document_sequences",
     )
     for table_name in tables:
         session.execute(text(f"ALTER TABLE {table_name} DISABLE TRIGGER USER"))
@@ -61,6 +67,19 @@ def _seed_source(session, business_date) -> None:
     session.execute(text("""
       INSERT INTO finance.accounts(org_id,id,code,name,account_type,currency_code,allows_party_posting,status,created_by_membership_id,updated_by_membership_id)
       VALUES (:org,:receivable,'1200','Trade Receivables','asset','INR',true,'active',:actor,:actor);
+      INSERT INTO automation.agent_grant_capabilities(
+        org_id,agent_grant_id,capability_code,operation_mode,risk_class,approval_policy,
+        maximum_amount,currency_code,created_by_membership_id)
+      VALUES (:org,:grant,'finance.adjustment_note.reversal.prepare','write','consequential_write',
+        'separate_approver',1000,'INR',:actor);
+      INSERT INTO core.document_sequences(
+        org_id,id,branch_id,document_type,fiscal_year_start,prefix,padding,next_value,status,
+        created_by_membership_id,updated_by_membership_id)
+      VALUES (:org,gen_random_uuid(),:branch,'adjustment_note',
+        make_date(CASE WHEN extract(month from CAST(:day AS date))>=4
+          THEN extract(year from CAST(:day AS date))::int
+          ELSE extract(year from CAST(:day AS date))::int-1 END,4,1),
+        'ADJ-',5,1,'active',:actor,:actor);
       INSERT INTO parties.parties(org_id,id,party_kind,legal_name,status,created_by_membership_id,updated_by_membership_id)
       VALUES (:org,:party,'organization','Reversal Fixture Customer','active',:actor,:actor);
       INSERT INTO parties.customer_accounts(org_id,id,party_id,customer_code,default_receivable_account_id,status,created_by_membership_id,updated_by_membership_id)
@@ -124,6 +143,7 @@ def _seed_source(session, business_date) -> None:
         document_date,due_date,currency_code,principal_amount,functional_principal_amount,status,created_by_membership_id)
       VALUES (:org,:open_item,:event,:party,'receivable','REV-SOURCE-NOTE',:day,:day,'INR',10,10,'open',:actor);
     """), {"org": ORG, "branch": BRANCH, "actor": ACTOR, "day": business_date,
+             "grant": COUNT.REQUESTER_GRANT,
              "invoice": SOURCE_INVOICE, "note": SOURCE_NOTE, "note_line": SOURCE_NOTE_LINE,
              "journal": SOURCE_JOURNAL, "event": SOURCE_EVENT,
              "loss": COUNT.LOSS_ACCOUNT, "asset": COUNT.ASSET_ACCOUNT,
@@ -154,21 +174,110 @@ def main() -> None:
                 assert int(connection.scalar(text("SHOW server_version_num"))) // 10000 == 15
                 with sessions.begin() as session:
                     session.execute(text("SELECT erp_security.activate_context(:auth,:org)"), {"auth": AUTH, "org": ORG})
+                    for reversal_kind in (
+                        "sales_return",
+                        "purchase_return",
+                        "adjustment_note",
+                    ):
+                        prepare_function = {
+                            "sales_return": "prepare_sales_return_reversal",
+                            "purchase_return": "prepare_purchase_return_reversal",
+                            "adjustment_note": "prepare_adjustment_note_reversal",
+                        }[reversal_kind]
+                        try:
+                            with session.begin_nested():
+                                session.scalar(text(f"""
+                                  SELECT erp_commercial_commands.{prepare_function}(
+                                    :org,:source,1,:future_day,'Future reversal must fail',NULL)
+                                """), {
+                                    "org": ORG,
+                                    "source": SOURCE_NOTE,
+                                    "future_day": business_date + timedelta(days=1),
+                                })
+                        except DBAPIError as exc:
+                            assert getattr(exc.orig, "pgcode", None) == "22007"
+                        else:
+                            raise AssertionError(
+                                f"{reversal_kind} accepted a future reversal date"
+                            )
                     resolved = session.scalar(text("""
                       SELECT erp_commercial_commands.prepare_adjustment_note_reversal(
                         :org,:source,1,:day,'Erroneous duplicate adjustment note',NULL)
                     """), {"org": ORG, "source": SOURCE_NOTE, "day": business_date})
                     assert resolved["reported_return_membership_count"] == 0
-                    result = session.scalar(text("""
-                      SELECT erp_commercial_commands.post_adjustment_note_reversal(
-                        :org,:source,1,:reversal_note,'REV-COUNTER-NOTE',NULL,NULL,
-                        :reversal_journal,'REV-COUNTER-JRN',:reversal_event,NULL,:day,
-                        'Erroneous duplicate adjustment note',NULL,decode(repeat('81',32),'hex'),
-                        decode(repeat('82',32),'hex'),transaction_timestamp()+interval '10 minutes')
-                    """), {"org": ORG, "source": SOURCE_NOTE, "reversal_note": REVERSAL_NOTE,
-                           "reversal_journal": REVERSAL_JOURNAL, "reversal_event": REVERSAL_EVENT,
-                           "day": business_date})
-                    assert result == REVERSAL_NOTE
+                    for signature in (
+                        "erp_commercial_commands.post_adjustment_note_reversal(uuid,uuid,bigint,uuid,varchar,uuid,varchar,uuid,varchar,uuid,uuid,date,text,uuid,bytea,bytea,timestamptz)",
+                        "erp_finance_commands.post_payment(uuid,uuid,uuid,uuid)",
+                        "erp_finance_commands.reverse_payment(uuid,uuid,uuid,varchar,uuid,varchar,uuid,text)",
+                    ):
+                        assert session.scalar(
+                            text("SELECT has_function_privilege(current_user,:signature,'EXECUTE')"),
+                            {"signature": signature},
+                        ) is False
+                    request_document = {
+                        "branch_id": str(BRANCH),
+                        "original_resource_id": str(SOURCE_NOTE),
+                        "expected_row_version": 1,
+                        "reversal_adjustment_note_id": str(REVERSAL_NOTE),
+                        "reversal_inventory_document_id": None,
+                        "reversal_journal_id": str(REVERSAL_JOURNAL),
+                        "reversal_event_id": str(REVERSAL_EVENT),
+                        "reversal_tax_document_id": None,
+                        "reversal_date": business_date.isoformat(),
+                        "reason": "Erroneous duplicate adjustment note",
+                        "amendment_evidence_attachment_id": None,
+                    }
+                    request_bytes = json.dumps(request_document, sort_keys=True).encode()
+                    preview_document = {
+                        "command_request_id": str(REVERSAL_COMMAND),
+                        "capability_code": "finance.adjustment_note.reversal.prepare",
+                        "operation": "finance.adjustment_note.reversal.post",
+                        "organization_id": str(ORG),
+                        "target_resource_type": "adjustment_note_reversal",
+                        "target_resource_id": str(REVERSAL_NOTE),
+                        "branch_id": str(BRANCH),
+                        "destination_branch_id": None,
+                        "request_hash": hashlib.sha256(request_bytes).hexdigest(),
+                        "resolved_references": [],
+                        "source_versions": resolved["source_versions"],
+                        "legal_scope": resolved["legal_scope"],
+                        "calculation_ruleset": [],
+                        "inventory_impact": [],
+                        "financial_impact": [],
+                        "tax_impact": [],
+                    }
+                    resolved_bytes = json.dumps(resolved, sort_keys=True, default=str).encode()
+                    preview_bytes = json.dumps(preview_document, sort_keys=True, default=str).encode()
+                    persisted = session.scalar(text("""
+                      SELECT erp_commercial_commands.persist_commercial_reversal_prepare(
+                        :org,'adjustment_note',:source,:target,:command,:grant,
+                        decode(repeat('81',32),'hex'),:request_bytes,:resolved_bytes,:preview_bytes,
+                        transaction_timestamp()+interval '10 minutes')
+                    """), {"org": ORG, "source": SOURCE_NOTE, "target": REVERSAL_NOTE,
+                           "command": REVERSAL_COMMAND, "grant": COUNT.REQUESTER_GRANT,
+                           "request_bytes": request_bytes, "resolved_bytes": resolved_bytes,
+                           "preview_bytes": preview_bytes})
+                    assert UUID(persisted["command_request_id"]) == REVERSAL_COMMAND
+                    session.execute(text("SELECT erp_security.activate_context(:auth,:org)"),
+                                    {"auth": COUNT.APPROVER_AUTH, "org": ORG})
+                    preview_hash = hashlib.sha256(preview_bytes).digest()
+                    session.execute(text("SELECT set_config('app.request_id',:request_id,true)"),
+                                    {"request_id": str(REVERSAL_APPROVAL)})
+                    session.scalar(text("""
+                      SELECT erp_automation_commands.approve_operator_command(
+                        :org,:command,:approval,:preview_hash,decode(repeat('83',32),'hex'),
+                        transaction_timestamp()+interval '5 minutes')
+                    """), {"org": ORG, "command": REVERSAL_COMMAND,
+                           "approval": REVERSAL_APPROVAL, "preview_hash": preview_hash})
+                    session.execute(text("SELECT erp_security.activate_context(:auth,:org)"),
+                                    {"auth": AUTH, "org": ORG})
+                    session.execute(text("SELECT set_config('app.command_request_id',:command,true)"),
+                                    {"command": str(REVERSAL_COMMAND)})
+                    result_bytes = session.scalar(text("""
+                      SELECT erp_commercial_commands.execute_approved_commercial_reversal(:org,:command)
+                    """), {"org": ORG, "command": REVERSAL_COMMAND})
+                    result = json.loads(bytes(result_bytes).decode())
+                    assert UUID(result["resource_id"]) == REVERSAL_NOTE
                     evidence = session.execute(text("""
                       SELECT original.status,reversal.status,reversal.direction,reversal.document_effect,
                              original_journal.status,reversal_journal.status,
@@ -197,16 +306,10 @@ def main() -> None:
                         "reversed", "posted", "debit", "increase", "reversed", "posted",
                         SOURCE_JOURNAL, Decimal("10.00"), Decimal("10.00"), 2,
                     )
-                    replay = session.scalar(text("""
-                      SELECT erp_commercial_commands.post_adjustment_note_reversal(
-                        :org,:source,1,:reversal_note,'REV-COUNTER-NOTE',NULL,NULL,
-                        :reversal_journal,'REV-COUNTER-JRN',:reversal_event,NULL,:day,
-                        'Erroneous duplicate adjustment note',NULL,decode(repeat('81',32),'hex'),
-                        decode(repeat('82',32),'hex'),transaction_timestamp()+interval '10 minutes')
-                    """), {"org": ORG, "source": SOURCE_NOTE, "reversal_note": REVERSAL_NOTE,
-                           "reversal_journal": REVERSAL_JOURNAL, "reversal_event": REVERSAL_EVENT,
-                           "day": business_date})
-                    assert replay == REVERSAL_NOTE
+                    replay_bytes = session.scalar(text("""
+                      SELECT erp_commercial_commands.execute_approved_commercial_reversal(:org,:command)
+                    """), {"org": ORG, "command": REVERSAL_COMMAND})
+                    assert bytes(replay_bytes) == bytes(result_bytes)
                     print(
                         "commercial-reversal PostgreSQL 15 lifecycle passed: "
                         f"source={SOURCE_NOTE} counter={REVERSAL_NOTE} "

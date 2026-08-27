@@ -13,7 +13,7 @@ DATABASE_URL = os.environ["DATABASE_URL"].replace(
 )
 RESOLVERS = (
     "erp_automation_commands.resolve_customer_receipt_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)",
-    "erp_automation_commands.resolve_supplier_advance_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)",
+    "erp_automation_commands.resolve_supplier_advance_prepare_with_settlement_identity(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)",
     "erp_automation_commands.resolve_supplier_payment_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)",
 )
 

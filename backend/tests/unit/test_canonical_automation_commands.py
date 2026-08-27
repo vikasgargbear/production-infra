@@ -394,7 +394,7 @@ def test_postgres_fixture_is_rollback_only() -> None:
     assert "execution_scopes" in fixture
     assert "THEN 21" in fixture
     assert "THEN 28" in fixture
-    assert "ELSE 32" in fixture
+    assert "ELSE 36" in fixture
     assert "calculator_count<>12" in fixture
     assert fixture.count(
         "erp_automation_commands.resolve_sales_invoice_product_identities(uuid,jsonb)"
