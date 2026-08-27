@@ -994,7 +994,7 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
             <div>
               <p className="text-sm font-medium text-green-800">Adjustment posted</p>
               <p className="text-sm text-green-700 mt-1">
-                Stock adjustment <strong>{committedRef}</strong> has been committed to inventory.
+                Stock adjustment <strong data-testid="canonical-posted-resource-id">{committedRef}</strong> has been committed to inventory.
               </p>
             </div>
           </div>

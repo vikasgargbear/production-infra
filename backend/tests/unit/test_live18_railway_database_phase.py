@@ -453,6 +453,14 @@ def test_remote_identity_client_mismatch_fails_through_cleanup(monkeypatch, tmp_
         "cleanup_browser_identities",
         lambda path: cleaned.append(("browser", path.name)) or path.unlink(),
     )
+    monkeypatch.setattr(
+        phase,
+        "recover_lost_live18_mcp_state",
+        lambda *_args: {
+            "recovered_active_mcp_grant_count": 0,
+            "remaining_active_mcp_grant_count": 0,
+        },
+    )
     monkeypatch.setenv("MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS", deployed_client_id)
 
     with pytest.raises(phase.RailwayDatabasePhaseError, match="differs from the exact"):
@@ -560,10 +568,22 @@ def test_partial_remote_identity_state_is_still_cleaned(monkeypatch, tmp_path):
         phase, "_validated_boundary", lambda _request: ("a" * 40, phase.EXPECTED_PROJECT_REF)
     )
     monkeypatch.setattr(
-        phase, "cleanup_browser_identities", lambda path: observed.append(path) or path.unlink()
+        phase,
+        "cleanup_browser_identities",
+        lambda path: observed.append("browser") or path.unlink(),
     )
     monkeypatch.setattr(
         phase, "cleanup_mcp_identities", lambda _path: pytest.fail("missing MCP state must be a no-op")
+    )
+    monkeypatch.setenv("MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS", "reviewed-client")
+    monkeypatch.setattr(
+        phase,
+        "recover_lost_live18_mcp_state",
+        lambda *_args: observed.append("mcp-recovery")
+        or {
+            "recovered_active_mcp_grant_count": 0,
+            "remaining_active_mcp_grant_count": 0,
+        },
     )
     monkeypatch.setattr(
         phase,
@@ -572,6 +592,8 @@ def test_partial_remote_identity_state_is_still_cleaned(monkeypatch, tmp_path):
             "recovered_auth_identity_count": 0,
             "remaining_auth_identity_count": 0,
             "remaining_active_temporary_grant_count": 0,
+            "recovered_active_mcp_grant_count": 0,
+            "remaining_active_mcp_grant_count": 0,
             "remaining_denial_role_count": 0,
             "remaining_active_denial_authority_count": 0,
             "remaining_denial_auth_binding_count": 0,
@@ -580,7 +602,7 @@ def test_partial_remote_identity_state_is_still_cleaned(monkeypatch, tmp_path):
 
     response = phase._identity_cleanup(request)
 
-    assert observed == [browser_state]
+    assert observed == ["mcp-recovery", "browser"]
     assert response["cleaned"] is True
     assert not directory.exists()
 
@@ -595,6 +617,8 @@ def test_zero_remote_state_runs_durable_orphan_reconciliation(monkeypatch, tmp_p
         "recovered_auth_identity_count": 3,
         "remaining_auth_identity_count": 0,
         "remaining_active_temporary_grant_count": 0,
+        "recovered_active_mcp_grant_count": 0,
+        "remaining_active_mcp_grant_count": 0,
         "remaining_denial_role_count": 0,
         "remaining_active_denial_authority_count": 0,
         "remaining_denial_auth_binding_count": 0,
@@ -605,6 +629,15 @@ def test_zero_remote_state_runs_durable_orphan_reconciliation(monkeypatch, tmp_p
     )
     monkeypatch.setattr(
         phase, "recover_lost_live18_state", lambda: reconciliation
+    )
+    monkeypatch.setenv("MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS", "reviewed-client")
+    monkeypatch.setattr(
+        phase,
+        "recover_lost_live18_mcp_state",
+        lambda *_args: {
+            "recovered_active_mcp_grant_count": 0,
+            "remaining_active_mcp_grant_count": 0,
+        },
     )
 
     response = phase._identity_cleanup(request)
@@ -626,6 +659,8 @@ def test_pre_demo_cleanup_uses_the_identity_pristine_aware_recovery(
         "recovered_auth_identity_count": 3,
         "remaining_auth_identity_count": 0,
         "remaining_active_temporary_grant_count": 0,
+        "recovered_active_mcp_grant_count": 0,
+        "remaining_active_mcp_grant_count": 0,
         "remaining_denial_role_count": 0,
         "remaining_active_denial_authority_count": 0,
         "remaining_denial_auth_binding_count": 0,
@@ -670,6 +705,8 @@ def test_clean_orphan_reconciliation_supersedes_failed_stateful_cleanup(
         "recovered_auth_identity_count": 3,
         "remaining_auth_identity_count": 0,
         "remaining_active_temporary_grant_count": 0,
+        "recovered_active_mcp_grant_count": 0,
+        "remaining_active_mcp_grant_count": 0,
         "remaining_denial_role_count": 0,
         "remaining_active_denial_authority_count": 0,
         "remaining_denial_auth_binding_count": 0,
@@ -690,6 +727,15 @@ def test_clean_orphan_reconciliation_supersedes_failed_stateful_cleanup(
     monkeypatch.setattr(
         phase, "recover_lost_live18_state", lambda: reconciliation
     )
+    monkeypatch.setenv("MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS", "reviewed-client")
+    monkeypatch.setattr(
+        phase,
+        "recover_lost_live18_mcp_state",
+        lambda *_args: {
+            "recovered_active_mcp_grant_count": 0,
+            "remaining_active_mcp_grant_count": 0,
+        },
+    )
 
     response = phase._identity_cleanup(request)
 
@@ -707,6 +753,8 @@ def test_orphan_reconciliation_rejects_non_integer_zeroes(invalid_zero):
         "recovered_auth_identity_count": 0,
         "remaining_auth_identity_count": invalid_zero,
         "remaining_active_temporary_grant_count": 0,
+        "recovered_active_mcp_grant_count": 0,
+        "remaining_active_mcp_grant_count": 0,
         "remaining_denial_role_count": 0,
         "remaining_active_denial_authority_count": 0,
         "remaining_denial_auth_binding_count": 0,
@@ -715,7 +763,7 @@ def test_orphan_reconciliation_rejects_non_integer_zeroes(invalid_zero):
     assert phase._orphan_reconciliation_is_clean(reconciliation) is False
 
 
-def test_browser_orphan_reconciliation_cannot_supersede_failed_mcp_cleanup(
+def test_exact_mcp_orphan_reconciliation_supersedes_failed_stateful_cleanup(
     monkeypatch, tmp_path
 ):
     request = {
@@ -731,6 +779,8 @@ def test_browser_orphan_reconciliation_cannot_supersede_failed_mcp_cleanup(
         "recovered_auth_identity_count": 0,
         "remaining_auth_identity_count": 0,
         "remaining_active_temporary_grant_count": 0,
+        "recovered_active_mcp_grant_count": 0,
+        "remaining_active_mcp_grant_count": 0,
         "remaining_denial_role_count": 0,
         "remaining_active_denial_authority_count": 0,
         "remaining_denial_auth_binding_count": 0,
@@ -751,12 +801,23 @@ def test_browser_orphan_reconciliation_cannot_supersede_failed_mcp_cleanup(
     monkeypatch.setattr(
         phase, "recover_lost_live18_state", lambda: reconciliation
     )
+    monkeypatch.setenv("MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS", "reviewed-client")
+    monkeypatch.setattr(
+        phase,
+        "recover_lost_live18_mcp_state",
+        lambda *_args: {
+            "recovered_active_mcp_grant_count": 2,
+            "remaining_active_mcp_grant_count": 0,
+        },
+    )
 
-    with pytest.raises(phase.RailwayDatabasePhaseError, match="MCP cleanup failed"):
-        phase._identity_cleanup(request)
+    response = phase._identity_cleanup(request)
 
-    assert directory.exists()
-    assert mcp_state.exists()
+    assert response["cleaned"] is True
+    assert response["cleanup_warnings"] == [
+        "MCP cleanup failed: RuntimeError: temporary MCP authority is still active"
+    ]
+    assert not directory.exists()
 
 
 def test_remote_prepare_rejects_missing_lineage_and_cross_branch(monkeypatch):

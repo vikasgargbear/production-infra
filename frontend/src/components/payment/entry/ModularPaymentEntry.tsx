@@ -425,8 +425,11 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                 <CheckCircle className="w-8 h-8 text-blue-600" />
               </div>
               <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                Payment Recorded Successfully!
+                Receipt posted and reconciled against the authoritative invoice balance.
               </h2>
+              <p data-testid="canonical-posted-resource-id" className="mb-3 break-all font-mono text-sm text-gray-700">
+                {postedPaymentId}
+              </p>
               <p className="text-2xl font-bold text-gray-900 mb-8">
                 Amount: ₹{centsToMoney(moneyToCents(payment.amount))}
               </p>

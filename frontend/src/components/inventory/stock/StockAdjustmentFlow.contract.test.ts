@@ -26,6 +26,7 @@ describe('StockAdjustmentFlow canonical lifecycle contract', () => {
     expect(source).toContain('approveCycleCountReview');
     expect(source).toContain('executeApprovedCycleCount');
     expect(source).toContain('loadAndVerifyCycleCountReadback');
+    expect(source).toContain('data-testid="canonical-posted-resource-id"');
     expect(source).not.toContain('approveAndExecuteCanonicalAction');
     expect(source).toContain("awaitingIndependentApproval ? 'Post Approved Cycle Count Once'");
     expect(source).not.toContain('saveDisabled={awaitingIndependentApproval}');

@@ -147,3 +147,159 @@ def test_pkce_token_comes_from_real_authorization_code_exchange(monkeypatch):
     assert MODULE._oauth_token("user@example", "password", "anon", "client") == (
         "oauth-access"
     )
+
+
+def _authority_rows(*, temporary: bool, run_token: str = "1" * 8 + "-1111-4111-8111-" + "1" * 12):
+    del run_token
+    rows = []
+    for role in ("requester", "reviewer"):
+        membership_id = (
+            MODULE.DEMO_OPERATOR_MEMBERSHIP_ID
+            if role == "requester"
+            else MODULE.DEMO_REVIEWER_MEMBERSHIP_ID
+        )
+        authority = MODULE.BASELINE_AUTHORITY[role]
+        status = "suspended" if temporary else "active"
+        for capability in authority["capabilities"]:
+            rows.append(
+                (
+                    MODULE.DEMO_ORG_ID,
+                    MODULE.BASELINE_GRANTS[role],
+                    membership_id,
+                    "reviewed-client",
+                    authority["display_name"],
+                    True,
+                    "self_consent",
+                    authority["consent_version"],
+                    True,
+                    membership_id,
+                    True,
+                    membership_id,
+                    True,
+                    status,
+                    status == "active",
+                    MODULE.DEMO_REVIEWER_MEMBERSHIP_ID,
+                    MODULE.DEMO_REVIEWER_MEMBERSHIP_ID,
+                    True,
+                    7,
+                    capability["capability_code"],
+                    capability["operation_mode"],
+                    capability["risk_class"],
+                    capability["approval_policy"],
+                    capability["maximum_amount"],
+                    capability["currency_code"],
+                    capability["allow_sensitive_read"],
+                    capability["status"],
+                )
+            )
+        if temporary:
+            for capability in MODULE.LIVE18_TEMPORARY_CAPABILITY_BOUNDS[membership_id]:
+                rows.append(
+                    (
+                        MODULE.DEMO_ORG_ID,
+                        f"{1 if role == 'requester' else 2:08d}-0000-4000-8000-000000000000",
+                        membership_id,
+                        "reviewed-client",
+                        f"Ephemeral canonical live {role}",
+                        True,
+                        "self_consent",
+                        MODULE.MCP_TEMPORARY_CONSENT_VERSION,
+                        True,
+                        membership_id,
+                        True,
+                        MODULE.DEMO_REVIEWER_MEMBERSHIP_ID,
+                        True,
+                        "active",
+                        True,
+                        MODULE.DEMO_REVIEWER_MEMBERSHIP_ID,
+                        MODULE.DEMO_REVIEWER_MEMBERSHIP_ID,
+                        True,
+                        1,
+                        capability["capability_code"],
+                        capability["operation_mode"],
+                        capability["risk_class"],
+                        capability["approval_policy"],
+                        capability["maximum_amount"],
+                        capability["currency_code"],
+                        capability["allow_sensitive_read"],
+                        capability["status"],
+                    )
+                )
+    return sorted(rows, key=lambda row: (row[1], row[19]))
+
+
+class _AuthorityCursor:
+    def __init__(self, rows):
+        self.rows = rows
+        self.parameters = None
+
+    def execute(self, _query, parameters):
+        self.parameters = parameters
+
+    def fetchall(self):
+        return self.rows
+
+
+def test_mcp_authority_snapshot_accepts_only_exact_baseline_or_same_run_pair():
+    baseline_cursor = _AuthorityCursor(_authority_rows(temporary=False))
+    baseline_versions, temporary_ids = MODULE._mcp_authority_snapshot(
+        baseline_cursor, "reviewed-client", None
+    )
+    assert set(baseline_versions) == set(MODULE.BASELINE_GRANTS.values())
+    assert temporary_ids == []
+
+    run_token = "11111111-1111-4111-8111-111111111111"
+    temporary_cursor = _AuthorityCursor(_authority_rows(temporary=True))
+    _baseline_versions, temporary_ids = MODULE._mcp_authority_snapshot(
+        temporary_cursor, "reviewed-client", run_token
+    )
+    assert len(temporary_ids) == 2
+
+    with pytest.raises(MODULE.CanonicalLiveIdentityError, match="same-run Auth anchor"):
+        MODULE._mcp_authority_snapshot(
+            _AuthorityCursor(_authority_rows(temporary=True)),
+            "reviewed-client",
+            None,
+        )
+
+
+def test_mcp_authority_snapshot_rejects_capability_drift():
+    rows = _authority_rows(temporary=True)
+    drifted = list(rows[0])
+    drifted[22] = "none"
+    rows[0] = tuple(drifted)
+
+    with pytest.raises(MODULE.CanonicalLiveIdentityError, match="drifted"):
+        MODULE._mcp_authority_snapshot(
+            _AuthorityCursor(rows),
+            "reviewed-client",
+            "11111111-1111-4111-8111-111111111111",
+        )
+
+
+def test_live18_auth_records_require_exact_same_project_metadata(monkeypatch):
+    monkeypatch.setattr(MODULE, "_auth_admin_authority", lambda _token: object())
+    monkeypatch.setattr(
+        MODULE,
+        "_admin_request",
+        lambda *_args, **_kwargs: {
+            "users": [
+                {
+                    "id": "11111111-1111-4111-8111-111111111111",
+                    "app_metadata": {
+                        "purpose": MODULE.LIVE18_PURPOSE,
+                        "ephemeral_run_token": "22222222-2222-4222-8222-222222222222",
+                        "browser_role": "requester",
+                        "org_id": MODULE.DEMO_ORG_ID,
+                    },
+                }
+            ]
+        },
+    )
+
+    assert MODULE._live18_auth_records("management-token") == {
+        "11111111-1111-4111-8111-111111111111": (
+            "requester",
+            "22222222-2222-4222-8222-222222222222",
+        )
+    }

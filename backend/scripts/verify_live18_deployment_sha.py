@@ -17,6 +17,7 @@ from urllib.request import Request, urlopen
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 PROVIDERS = ("render", "railway")
 MAX_RESPONSE_BYTES = 64 * 1024
+PUBLIC_FETCH_TIMEOUT_SECONDS = 45
 Fetch = Callable[[str], bytes]
 
 
@@ -61,7 +62,9 @@ def _origin(value: str, label: str) -> str:
 def _public_fetch(url: str) -> bytes:
     request = Request(url, headers={"Accept": "application/json, text/plain"})
     try:
-        with urlopen(request, timeout=15) as response:  # noqa: S310 - HTTPS is enforced.
+        with urlopen(
+            request, timeout=PUBLIC_FETCH_TIMEOUT_SECONDS
+        ) as response:  # noqa: S310 - HTTPS is enforced.
             status = getattr(response, "status", None)
             if status != 200:
                 raise Live18DeploymentVerificationError(

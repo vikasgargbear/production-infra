@@ -106,7 +106,8 @@ describe('ModularPaymentEntry canonical retry boundary', () => {
     fireEvent.keyDown(window, { key: 'Escape' });
     expect((await screen.findAllByText(new RegExp(paymentId))).length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole('button', { name: 'Reconcile Receipt' }));
-    await screen.findByText(/Payment Recorded Successfully/);
+    await screen.findByText(/Receipt posted and reconciled against the authoritative invoice balance/);
+    expect(screen.getByTestId('canonical-posted-resource-id')).toHaveTextContent(paymentId);
     expect(prepareCustomerReceipt).toHaveBeenCalledTimes(1);
     expect(approveCustomerReceipt).toHaveBeenCalledTimes(1);
     expect(reconcileCustomerReceipt).toHaveBeenCalledTimes(2);

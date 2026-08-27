@@ -11,6 +11,8 @@ it('selects authoritative exact candidates and uses the reviewed lifecycle', () 
   expect(source).toContain("executeApprovedCanonicalAction('finance.bank_reconciliation.prepare'");
   expect(source).toContain('canonicalControlledOperationsApi.bankReadback');
   expect(source).toContain('compareExactDecimals');
+  expect(source).toContain('data-testid="bank-reconciliation-review-command"');
+  expect(source).toContain('{review.command_request_id}');
 });
 
 it('keeps statement import fail closed without compatibility writes', () => {

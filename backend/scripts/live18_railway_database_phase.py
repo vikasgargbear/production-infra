@@ -62,6 +62,7 @@ from provision_ephemeral_browser_identities import (  # noqa: E402
 from provision_ephemeral_canonical_live import (  # noqa: E402
     cleanup as cleanup_mcp_identities,
     provision as provision_mcp_identities,
+    recover_lost_live18_mcp_state,
 )
 from tests.live_canonical.reconciliation import CanonicalReconciler  # noqa: E402
 
@@ -144,9 +145,17 @@ def _orphan_reconciliation_is_clean(value: Any) -> bool:
     recovered = value.get("recovered_auth_identity_count")
     if not isinstance(recovered, int) or isinstance(recovered, bool) or recovered < 0:
         return False
+    recovered_mcp = value.get("recovered_active_mcp_grant_count")
+    if (
+        not isinstance(recovered_mcp, int)
+        or isinstance(recovered_mcp, bool)
+        or recovered_mcp < 0
+    ):
+        return False
     for key in (
         "remaining_auth_identity_count",
         "remaining_active_temporary_grant_count",
+        "remaining_active_mcp_grant_count",
         "remaining_denial_role_count",
         "remaining_active_denial_authority_count",
         "remaining_denial_auth_binding_count",
@@ -800,6 +809,7 @@ def _identity_provision(request: dict[str, Any]) -> dict[str, Any]:
             )
             mcp_cleanup_errors: list[str] = []
             browser_cleanup_errors: list[str] = []
+            mcp_reconciliation: dict[str, int] | None = None
             with _temporary_environment(environment), contextlib.redirect_stdout(sys.stderr):
                 if mcp_provisioned or mcp_state.exists():
                     try:
@@ -811,6 +821,19 @@ def _identity_provision(request: dict[str, Any]) -> dict[str, Any]:
                                 exc, sensitive_values=tuple(environment.values())
                             )
                         )
+                try:
+                    mcp_reconciliation = recover_lost_live18_mcp_state(
+                        environment["SUPABASE_ACCESS_TOKEN"], deployed_client_id
+                    )
+                    if mcp_reconciliation.get("remaining_active_mcp_grant_count") == 0:
+                        mcp_cleanup_errors.clear()
+                except BaseException as exc:
+                    mcp_cleanup_errors.append(
+                        "MCP orphan reconciliation failed: "
+                        + _safe_error_detail(
+                            exc, sensitive_values=tuple(environment.values())
+                        )
+                    )
                 if browser_provisioned or browser_state.exists():
                     try:
                         cleanup_browser_identities(browser_state)
@@ -824,6 +847,8 @@ def _identity_provision(request: dict[str, Any]) -> dict[str, Any]:
                 if browser_cleanup_errors:
                     try:
                         reconciliation = recover_lost_live18_state()
+                        if mcp_reconciliation is not None:
+                            reconciliation.update(mcp_reconciliation)
                         if _orphan_reconciliation_is_clean(reconciliation):
                             browser_cleanup_errors.clear()
                         else:
@@ -888,6 +913,10 @@ def _identity_cleanup(
     reconciliation_errors: list[str] = []
     cleanup_warnings: list[str] = []
     orphan_reconciliation: dict[str, int] | None = None
+    mcp_reconciliation = {
+        "recovered_active_mcp_grant_count": 0,
+        "remaining_active_mcp_grant_count": 0,
+    }
     try:
         with _temporary_environment(environment), contextlib.redirect_stdout(sys.stderr):
             if mcp_state.exists():
@@ -896,6 +925,16 @@ def _identity_cleanup(
                 except BaseException as exc:  # browser cleanup must still run
                     mcp_cleanup_errors.append(
                         f"MCP cleanup failed: {_safe_error_detail(exc)}"
+                    )
+            if not before_demo:
+                try:
+                    mcp_reconciliation = recover_lost_live18_mcp_state(
+                        environment["SUPABASE_ACCESS_TOKEN"],
+                        _deployed_oauth_client_id(),
+                    )
+                except BaseException as exc:
+                    reconciliation_errors.append(
+                        f"MCP orphan reconciliation failed: {_safe_error_detail(exc)}"
                     )
             if browser_state.exists():
                 try:
@@ -910,14 +949,14 @@ def _identity_cleanup(
                     if before_demo
                     else recover_lost_live18_state()
                 )
+                orphan_reconciliation.update(mcp_reconciliation)
             except BaseException as exc:
                 reconciliation_errors.append(
                     f"orphan reconciliation failed: {_safe_error_detail(exc)}"
                 )
-        if browser_cleanup_errors and _orphan_reconciliation_is_clean(
-            orphan_reconciliation
-        ):
-            cleanup_warnings = browser_cleanup_errors
+        if _orphan_reconciliation_is_clean(orphan_reconciliation):
+            cleanup_warnings = [*mcp_cleanup_errors, *browser_cleanup_errors]
+            mcp_cleanup_errors = []
             browser_cleanup_errors = []
         errors = [
             *mcp_cleanup_errors,

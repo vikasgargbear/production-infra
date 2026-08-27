@@ -1550,6 +1550,7 @@ jobs:
               for key in (
                   "remaining_auth_identity_count",
                   "remaining_active_temporary_grant_count",
+                  "remaining_active_mcp_grant_count",
                   "remaining_denial_role_count",
                   "remaining_active_denial_authority_count",
                   "remaining_denial_auth_binding_count",
@@ -1559,6 +1560,9 @@ jobs:
           recovered = reconciliation.get("recovered_auth_identity_count")
           if not isinstance(recovered, int) or isinstance(recovered, bool) or recovered < 0:
               raise SystemExit("Railway pre-demo recovery count is invalid")
+          recovered_mcp = reconciliation.get("recovered_active_mcp_grant_count")
+          if not isinstance(recovered_mcp, int) or isinstance(recovered_mcp, bool) or recovered_mcp < 0:
+              raise SystemExit("Railway pre-demo MCP recovery count is invalid")
           PY
       - name: Verify exact migration head and provision same-run demo over Railway direct IPv6
         if: env.LIVE18_PROVIDER == 'railway'
@@ -1986,6 +1990,7 @@ jobs:
               for key in (
                   "remaining_auth_identity_count",
                   "remaining_active_temporary_grant_count",
+                  "remaining_active_mcp_grant_count",
                   "remaining_denial_role_count",
                   "remaining_active_denial_authority_count",
                   "remaining_denial_auth_binding_count",
@@ -1995,6 +2000,9 @@ jobs:
           recovered = reconciliation.get("recovered_auth_identity_count")
           if not isinstance(recovered, int) or isinstance(recovered, bool) or recovered < 0:
               raise SystemExit("Railway cleanup recovery count is invalid")
+          recovered_mcp = reconciliation.get("recovered_active_mcp_grant_count")
+          if not isinstance(recovered_mcp, int) or isinstance(recovered_mcp, bool) or recovered_mcp < 0:
+              raise SystemExit("Railway MCP cleanup recovery count is invalid")
           PY
           rm -f "$LIVE18_RAILWAY_IDENTITY_ATTEMPTED_PATH"
       - name: Always remove the run-scoped Railway SSH key
