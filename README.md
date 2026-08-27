@@ -70,8 +70,8 @@ company database.
 
 ## Release boundary
 
-Deployment is an explicit exact-SHA workflow. Do not run an unqualified local
-deployment command, change readiness fields by hand, or claim a live pass from
-a different commit. See [production deployment](docs/deployment/production.md)
+Deployment is an explicit exact-SHA workflow. Do not run an unqualified local `railway up`,
+change readiness fields by hand, or claim a live pass from a different commit.
+See [production deployment](docs/deployment/production.md)
 for the current health, build-metadata, migration, runtime-role, RLS, tenant,
 reconciliation, backup/restore, and browser evidence requirements.
