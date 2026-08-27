@@ -22,6 +22,10 @@ interface ExpenseDraftLine {
   merchant_name: string; receipt_attachment_id: string; claimed_amount: string;
 }
 type Workspace = 'prepare' | 'approve' | 'execute';
+type ReceiptUploadResult = {
+  state: 'pending' | 'verified' | 'failed';
+  message: string;
+};
 const moneyOptions = { scale: 2, maximumWholeDigits: 20 } as const;
 const emptyLine = (): ExpenseDraftLine => ({
   id: clientUuid(), expense_date: '', expense_account_id: '', description: '',
@@ -49,7 +53,7 @@ const ExpenseClaimsFlow: React.FC<ExpenseClaimsFlowProps> = ({ onClose, open = t
   const [posted, setPosted] = useState<PostedExpenseClaim | null>(null);
   const [receiptDate, setReceiptDate] = useState('');
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
-  const [uploadMessage, setUploadMessage] = useState('');
+  const [uploadResult, setUploadResult] = useState<ReceiptUploadResult | null>(null);
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -86,7 +90,7 @@ const ExpenseClaimsFlow: React.FC<ExpenseClaimsFlowProps> = ({ onClose, open = t
       setContext(next); setPeriodStart(''); setPeriodEnd('');
       setReimbursementAccountId('');
       setLines([emptyLine()]);
-      setReceiptDate(''); setReceiptFile(null); setUploadMessage('');
+      setReceiptDate(''); setReceiptFile(null); setUploadResult(null);
       if (receiptInput.current) receiptInput.current.value = '';
     } catch (requestError) { setError(messageFrom(requestError)); }
     finally { setBusy(false); }
@@ -114,7 +118,9 @@ const ExpenseClaimsFlow: React.FC<ExpenseClaimsFlowProps> = ({ onClose, open = t
 
   const uploadReceipt = async () => {
     if (!context || !receiptFile || !receiptDate) return;
-    setBusy(true); setError(''); setUploadMessage(''); invalidatePrepared();
+    setBusy(true); setError('');
+    setUploadResult({ state: 'pending', message: 'Receipt upload in progress.' });
+    invalidatePrepared();
     try {
       const uploaded = (await canonicalExpenseClaimsApi.uploadReceipt(
         context.branch_id, receiptDate, receiptFile,
@@ -135,10 +141,17 @@ const ExpenseClaimsFlow: React.FC<ExpenseClaimsFlowProps> = ({ onClose, open = t
         });
         return selected ? next : [...next, { ...emptyLine(), receipt_attachment_id: uploaded.attachment_id, expense_date: uploaded.document_date }];
       });
-      setUploadMessage(`${uploaded.original_filename} — SHA-256 ${uploaded.sha256.slice(0, 12)}…`);
+      setUploadResult({
+        state: 'verified',
+        message: `Receipt verified and selected. ${uploaded.original_filename} — SHA-256 ${uploaded.sha256.slice(0, 12)}…`,
+      });
       setReceiptDate(''); setReceiptFile(null);
       if (receiptInput.current) receiptInput.current.value = '';
-    } catch (requestError) { setError(messageFrom(requestError)); }
+    } catch (requestError) {
+      const message = messageFrom(requestError);
+      setUploadResult({ state: 'failed', message: `Receipt upload failed. ${message}` });
+      setError(message);
+    }
     finally { setBusy(false); }
   };
 
@@ -203,7 +216,7 @@ const ExpenseClaimsFlow: React.FC<ExpenseClaimsFlowProps> = ({ onClose, open = t
       </nav>
       {error && <div role="alert" className="flex gap-2 rounded-lg border border-red-200 bg-red-50 p-4 text-red-800"><AlertCircle className="h-5 w-5 shrink-0" />{error}</div>}
       {busy && <div role="status" className="flex gap-2 rounded-lg border bg-white p-4"><Loader2 className="h-5 w-5 animate-spin" />Working with the canonical API…</div>}
-      {workspace === 'prepare' && <PrepareWorkspace busy={busy} branches={branches} branchId={branchId} setBranchId={setBranchId} context={context} loadBranches={loadBranches} receiptDate={receiptDate} setReceiptDate={setReceiptDate} receiptFile={receiptFile} setReceiptFile={setReceiptFile} receiptInput={receiptInput} uploadReceipt={uploadReceipt} uploadMessage={uploadMessage} periodStart={periodStart} setPeriodStart={value => { setPeriodStart(value); invalidatePrepared(); }} periodEnd={periodEnd} setPeriodEnd={value => { setPeriodEnd(value); invalidatePrepared(); }} purpose={purpose} setPurpose={value => { setPurpose(value); invalidatePrepared(); }} reimbursementAccountId={reimbursementAccountId} setReimbursementAccountId={value => { setReimbursementAccountId(value); invalidatePrepared(); }} lines={lines} setLines={setLines} updateLine={updateLine} chooseReceipt={chooseReceipt} usedReceipts={usedReceipts} total={total} prepare={prepare} prepared={prepared} invalidatePrepared={invalidatePrepared} />}
+      {workspace === 'prepare' && <PrepareWorkspace busy={busy} branches={branches} branchId={branchId} setBranchId={setBranchId} context={context} loadBranches={loadBranches} receiptDate={receiptDate} setReceiptDate={setReceiptDate} receiptFile={receiptFile} setReceiptFile={setReceiptFile} receiptInput={receiptInput} uploadReceipt={uploadReceipt} uploadResult={uploadResult} periodStart={periodStart} setPeriodStart={value => { setPeriodStart(value); invalidatePrepared(); }} periodEnd={periodEnd} setPeriodEnd={value => { setPeriodEnd(value); invalidatePrepared(); }} purpose={purpose} setPurpose={value => { setPurpose(value); invalidatePrepared(); }} reimbursementAccountId={reimbursementAccountId} setReimbursementAccountId={value => { setReimbursementAccountId(value); invalidatePrepared(); }} lines={lines} setLines={setLines} updateLine={updateLine} chooseReceipt={chooseReceipt} usedReceipts={usedReceipts} total={total} prepare={prepare} prepared={prepared} invalidatePrepared={invalidatePrepared} />}
       {workspace === 'approve' && <ApproveWorkspace busy={busy} commandId={commandId} changeCommandId={changeCommandId} fetchReview={fetchReview} review={review} confirmed={confirmed} setConfirmed={setConfirmed} approve={approve} />}
       {workspace === 'execute' && <ExecuteWorkspace busy={busy} commandId={commandId} changeCommandId={changeCommandId} fetchStatus={fetchStatus} status={status} posted={posted} confirmed={confirmed} setConfirmed={setConfirmed} execute={execute} />}
     </div></main>
@@ -220,7 +233,7 @@ const PrepareWorkspace = (props: any) => <>
       <label className="text-sm font-medium">Server business date<input value={props.context?.business_date || ''} readOnly className="mt-1 min-h-11 w-full rounded-lg border bg-slate-50 px-3" /></label>
     </div>
     {props.context && (props.context.expense_accounts.length === 0 || props.context.reimbursement_accounts.length === 0 || props.context.receipts.length === 0) && <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">Posting is unavailable until this branch has an active INR expense account, a member-reimbursement liability account, and at least one verified unused expense receipt.</p>}
-    {props.context && <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-4"><div className="flex items-start gap-3"><Upload className="mt-0.5 h-5 w-5 shrink-0 text-blue-700" aria-hidden="true" /><div className="min-w-0 flex-1"><h3 className="font-semibold text-blue-950">Add a receipt securely</h3><p className="text-sm text-blue-900">Private PDF only, up to 10 MiB. The server reads it back and verifies SHA-256 before it becomes selectable.</p><div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,12rem)_minmax(0,1fr)_auto] md:items-end"><label className="text-sm font-medium text-slate-800">Receipt date<input aria-label="Receipt date" type="date" max={props.context.business_date} value={props.receiptDate} onChange={event => { props.setReceiptDate(event.target.value); props.invalidatePrepared(); }} className="mt-1 min-h-11 w-full rounded-lg border bg-white px-3" /></label><label className="text-sm font-medium text-slate-800">Receipt PDF<input aria-label="Receipt PDF" ref={props.receiptInput} type="file" accept="application/pdf,.pdf" onChange={event => { props.setReceiptFile(event.target.files?.[0] || null); props.invalidatePrepared(); }} className="mt-1 block min-h-11 w-full rounded-lg border bg-white px-3 py-2 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1" /></label><button type="button" onClick={() => void props.uploadReceipt()} disabled={props.busy || !props.receiptDate || !props.receiptFile} className="min-h-11 rounded-lg bg-blue-700 px-4 font-medium text-white disabled:bg-slate-300">Upload and verify receipt</button></div>{props.uploadMessage && <p role="status" aria-label="Receipt upload verified" className="mt-3 break-all text-sm font-medium text-emerald-800">Receipt verified and selected. {props.uploadMessage}</p>}</div></div></div>}
+    {props.context && <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-4"><div className="flex items-start gap-3"><Upload className="mt-0.5 h-5 w-5 shrink-0 text-blue-700" aria-hidden="true" /><div className="min-w-0 flex-1"><h3 className="font-semibold text-blue-950">Add a receipt securely</h3><p className="text-sm text-blue-900">Private PDF only, up to 10 MiB. The server reads it back and verifies SHA-256 before it becomes selectable.</p><div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,12rem)_minmax(0,1fr)_auto] md:items-end"><label className="text-sm font-medium text-slate-800">Receipt date<input aria-label="Receipt date" type="date" max={props.context.business_date} value={props.receiptDate} onChange={event => { props.setReceiptDate(event.target.value); props.invalidatePrepared(); }} className="mt-1 min-h-11 w-full rounded-lg border bg-white px-3" /></label><label className="text-sm font-medium text-slate-800">Receipt PDF<input aria-label="Receipt PDF" ref={props.receiptInput} type="file" accept="application/pdf,.pdf" onChange={event => { props.setReceiptFile(event.target.files?.[0] || null); props.invalidatePrepared(); }} className="mt-1 block min-h-11 w-full rounded-lg border bg-white px-3 py-2 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1" /></label><button type="button" onClick={() => void props.uploadReceipt()} disabled={props.busy || !props.receiptDate || !props.receiptFile} className="min-h-11 rounded-lg bg-blue-700 px-4 font-medium text-white disabled:bg-slate-300">Upload and verify receipt</button></div>{props.uploadResult && <p data-testid="expense-receipt-upload-result" role={props.uploadResult.state === 'failed' ? 'alert' : 'status'} aria-label="Expense receipt upload result" aria-live={props.uploadResult.state === 'failed' ? 'assertive' : 'polite'} className={`mt-3 break-all text-sm font-medium ${props.uploadResult.state === 'failed' ? 'text-red-800' : props.uploadResult.state === 'verified' ? 'text-emerald-800' : 'text-blue-900'}`}>{props.uploadResult.message}</p>}</div></div></div>}
     {!props.context && <div className="mt-5 flex justify-end"><button type="button" disabled className="min-h-11 rounded-lg bg-slate-300 px-6 font-medium text-white">Prepare immutable preview</button></div>}
   </section>
   {props.context && <section className="rounded-xl border border-slate-200 bg-white p-5"><h2 className="text-lg font-semibold">Claim details</h2><p className="text-sm text-slate-600">Gross receipt expense only. GST input credit, withholding, FX, mileage, per diem, advances, reversals, and partial approval fail closed.</p><div className="mt-4 grid gap-4 md:grid-cols-3">

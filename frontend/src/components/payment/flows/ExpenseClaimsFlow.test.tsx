@@ -124,6 +124,35 @@ it('uploads a PDF through the canonical server boundary and selects verified rea
   await waitFor(() => expect(canonicalExpenseClaimsApi.uploadReceipt).toHaveBeenCalledWith(
     ids.branch, '2026-08-25', pdf,
   ));
-  expect((await screen.findByRole('status', { name: 'Receipt upload verified' })).textContent).toContain('Receipt verified and selected.');
+  const result = await screen.findByTestId('expense-receipt-upload-result');
+  expect(result.getAttribute('role')).toBe('status');
+  expect(result.getAttribute('aria-label')).toBe('Expense receipt upload result');
+  expect(result.textContent).toContain('Receipt verified and selected.');
   expect((screen.getByLabelText('Verified unused receipt') as HTMLSelectElement).value).toBe(ids.receipt);
+});
+
+it('exposes a failed receipt upload at the same deterministic contract without selecting it', async () => {
+  (canonicalExpenseClaimsApi.uploadReceipt as jest.Mock).mockRejectedValueOnce({
+    response: { data: { detail: 'Canonical evidence storage is not enabled.' } },
+  });
+  render(<ExpenseClaimsFlow onClose={jest.fn()} />);
+  await waitFor(() => expect((screen.getByLabelText('Branch') as HTMLSelectElement).options.length).toBe(2));
+  fireEvent.change(screen.getByLabelText('Branch'), { target: { value: ids.branch } });
+  expect(await screen.findByDisplayValue('Canonical Claimant')).not.toBeNull();
+
+  fireEvent.change(screen.getByLabelText('Receipt date'), { target: { value: '2026-08-25' } });
+  const pdf = new File([new Uint8Array([37, 80, 68, 70, 45, 49, 46, 55])], 'receipt.pdf', {
+    type: 'application/pdf',
+  });
+  fireEvent.change(screen.getByLabelText('Receipt PDF'), { target: { files: [pdf] } });
+  fireEvent.click(screen.getByRole('button', { name: 'Upload and verify receipt' }));
+
+  const result = await screen.findByTestId('expense-receipt-upload-result');
+  await waitFor(() => expect(result.textContent).toContain(
+    'Receipt upload failed. Canonical evidence storage is not enabled.',
+  ));
+  expect(result.getAttribute('role')).toBe('alert');
+  expect(result.getAttribute('aria-label')).toBe('Expense receipt upload result');
+  expect((screen.getByLabelText('Verified unused receipt') as HTMLSelectElement).value).toBe('');
+  expect((screen.getByRole('button', { name: 'Prepare immutable preview' }) as HTMLButtonElement).disabled).toBe(true);
 });

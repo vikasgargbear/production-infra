@@ -97,6 +97,7 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
             <label className="text-sm font-medium text-gray-700">
               Branch
               <select
+                aria-label="Purchase order branch"
                 value={branchId}
                 onChange={(event) => setBranchId(event.target.value)}
                 className="mt-1 min-h-11 w-full rounded-lg border border-gray-300 bg-white px-3"

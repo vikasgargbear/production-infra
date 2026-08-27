@@ -100,4 +100,15 @@ describe('active canonical purchase desktop facts', () => {
         expect(read('purchase-entry/CanonicalPurchaseWorkflow.tsx')).not.toContain('Save Purchase');
         expect(existsSync(join(__dirname, 'purchase-entry/PurchaseEntryFlow.tsx'))).toBe(false);
     });
+
+    it('binds the purchase-order branch to an operation-specific accessible name', () => {
+        const flow = read('purchase-order/PurchaseOrderFlow.tsx');
+        const template = JSON.parse(read('../../../e2e/live18/templates/purchase_order.json'));
+        expect(flow).toContain('aria-label="Purchase order branch"');
+        expect(template.steps.prepare_steps[1]).toEqual(expect.objectContaining({
+            action: 'select',
+            locator: { kind: 'label', name: 'Purchase order branch', exact: true },
+            value: '{{fact.identity.branch_id}}',
+        }));
+    });
 });

@@ -10,7 +10,7 @@
     ],
     "prepare_steps": [
       {"actor":"requester","action":"goto","value":"/#/purchase/purchase-order"},
-      {"actor":"requester","action":"select","locator":{"kind":"label","name":"Branch","exact":true},"value":"{{fact.identity.branch_id}}"},
+      {"actor":"requester","action":"select","locator":{"kind":"label","name":"Purchase order branch","exact":true},"value":"{{fact.identity.branch_id}}"},
       {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Expected Delivery","exact":true},"value":"{{fact.choice.purchase_order_expected_delivery_date}}"},
       {"actor":"requester","action":"fill","locator":{"kind":"placeholder","name":"Search supplier by name, phone, or code...","exact":true},"value":"{{fact.display.supplier_code}}"},
       {"actor":"requester","action":"click","locator":{"kind":"testId","name":"entity-search-option-{{fact.identity.supplier_account_id}}"}},
