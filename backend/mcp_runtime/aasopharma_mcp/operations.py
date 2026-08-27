@@ -267,6 +267,15 @@ OPERATOR_READBACK_TOOLS: Mapping[str, tuple[str, str]] = {
     "erp_expense_claim_readback": (
         "expense_claim_readback", "expense-claim-readback"
     ),
+    "erp_sales_return_reversal_readback": (
+        "sales_return_reversal_readback", "sales-return-reversal-readback"
+    ),
+    "erp_purchase_return_reversal_readback": (
+        "purchase_return_reversal_readback", "purchase-return-reversal-readback"
+    ),
+    "erp_adjustment_note_reversal_readback": (
+        "adjustment_note_reversal_readback", "adjustment-note-reversal-readback"
+    ),
 }
 OPERATOR_OPERATIONS.update(
     {

@@ -12,16 +12,19 @@ test('uses only canonical UUID allocation context and readback routes', async ()
   await paymentAllocationApi.getUnpaidInvoices(id);
   await paymentAllocationApi.getInvoicePayments(id);
   await paymentAllocationApi.getCustomerReceiptReadback(id);
+  await paymentAllocationApi.getCustomerChequeActionReadback(id);
 
   expect(apiHelpers.get).toHaveBeenNthCalledWith(1, '/payment-allocation/unpaid-invoices', {
     params: { customer_id: id },
   });
   expect(apiHelpers.get).toHaveBeenNthCalledWith(2, `/payment-allocation/invoice/${id}/payments`);
   expect(apiHelpers.get).toHaveBeenNthCalledWith(3, `/payment-allocation/payment/${id}/readback`);
+  expect(apiHelpers.get).toHaveBeenNthCalledWith(4, `/payment-allocation/payment/${id}/cheque-action-readback`);
 });
 
 test('publishes no legacy allocation or mutation method', () => {
   expect(Object.keys(paymentAllocationApi).sort()).toEqual([
-    'getCustomerReceiptReadback', 'getInvoicePayments', 'getUnpaidInvoices',
+    'getCustomerChequeActionReadback', 'getCustomerReceiptReadback',
+    'getInvoicePayments', 'getUnpaidInvoices',
   ]);
 });

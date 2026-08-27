@@ -29,6 +29,7 @@ jest.mock('../shared/PaymentFlowOptimized', () => () => {
     setPaymentField('reference_number', 'UPI-RETRY-1');
     setPaymentField('bank_account_id', '0198ea37-2b20-7c8d-9123-123456789abc');
     setPaymentField('settlement_account_id', '0198ea37-2b21-7c8d-9123-123456789abc');
+    setPaymentField('evidence_attachment_id', '0198ea37-2b24-7c8d-9123-123456789abc');
     globalThis.dispatchEvent(new CustomEvent('customerSelected', { detail: {
       customer_id: '0198ea37-2b1d-7c8d-9123-123456789abc', customer_name: 'E2E Customer',
     } }));
