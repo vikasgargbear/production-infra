@@ -144,6 +144,35 @@ def test_legacy_live_erp_harness_stays_retired() -> None:
     assert 'ROOT / "backend/tests/live_erp"' not in implementation_audit
 
 
+def test_stale_developer_guides_stay_retired() -> None:
+    retired_guides = (
+        "docs/backend/api/auth/README.md",
+        "docs/backend/api/idempotency.md",
+        "docs/backend/api/sdk-examples.md",
+        "docs/backend/api/webhooks.md",
+        "docs/backend/architecture/authentication.md",
+        "docs/backend/architecture/multi-tenancy.md",
+        "frontend/docs/05-api-integration/api-client-usage.md",
+        "frontend/docs/05-api-integration/endpoints-reference.md",
+        "frontend/docs/08-security/security-guide.md",
+    )
+    maintained_guides = (
+        "docs/backend/api/README.md",
+        "docs/backend/architecture/README.md",
+        "frontend/docs/05-api-integration/README.md",
+        "frontend/docs/08-security/README.md",
+    )
+
+    assert [
+        path for path in retired_guides if (REPOSITORY_ROOT / path).exists()
+    ] == []
+    for relative_path in maintained_guides:
+        source = (REPOSITORY_ROOT / relative_path).read_text(encoding="utf-8")
+        assert "financial." not in source
+        assert "master.org_users" not in source
+        assert "system_config.audit_logs" not in source
+
+
 def test_retired_audit_and_settings_routes_are_absent() -> None:
     api_routes = [
         route for route in app.routes

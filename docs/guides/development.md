@@ -364,9 +364,9 @@ grep -r "console.log" src/
 
 | Doc Type | Location |
 |----------|----------|
-| API Reference | `docs/backend/api/` |
-| Architecture | `docs/backend/architecture/` |
-| Schema | `docs/backend/database/` |
+| API contract | `docs/backend/api/` |
+| Architecture | `docs/architecture/` |
+| Database authority | `database/canonical/` and current Alembic migrations |
 | Guides | `docs/guides/` |
 | Deployment | `docs/deployment/` |
 
