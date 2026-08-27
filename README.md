@@ -227,9 +227,8 @@ production-infra/
 │   ├── docs/                  # Frontend documentation
 │   └── package.json
 │
-├── database/                   # Database migrations & schemas
-│   ├── migrations/
-│   └── schema-docs/
+├── database/                   # Canonical database sources and authority manifests
+│   └── canonical/              # Reviewed canonical catalogs and generators
 │
 ├── docs/                       # Project documentation
 │   ├── backend/               # API, Architecture docs

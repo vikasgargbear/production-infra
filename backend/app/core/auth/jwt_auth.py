@@ -250,26 +250,3 @@ async def get_current_user_and_org(
         import logging
         logging.error(f"JWT decode error: {str(e)}")
         raise credentials_exception
-
-def verify_user_org_access(user_id: str, org_id: str, db) -> bool:
-    """Verify user has access to organization by checking auth.user_organizations or master.org_users."""
-    from sqlalchemy import text
-    try:
-        result = db.execute(
-            text("""
-                SELECT 1 FROM master.org_users
-                WHERE user_id = :user_id
-                  AND org_id = :org_id
-                  AND is_active = true
-                LIMIT 1
-            """),
-            {"user_id": user_id, "org_id": org_id}
-        )
-        return result.first() is not None
-    except Exception:
-        import logging
-        logging.getLogger(__name__).error(
-            f"verify_user_org_access failed for user_id={user_id}",
-            exc_info=True
-        )
-        return False
