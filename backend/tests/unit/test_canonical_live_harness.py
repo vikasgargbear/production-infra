@@ -35,6 +35,11 @@ AUTOMATION_MANIFEST = (
     Path(__file__).resolve().parents[3]
     / "database/canonical/commands_automation/automation-command-manifest.json"
 )
+SUPPORTED_BUSINESS_VARIANT_REGISTRY = (
+    Path(__file__).resolve().parents[1]
+    / "live_acceptance"
+    / "live23_supported_business_readiness.json"
+)
 
 
 def valid_env():
@@ -512,7 +517,12 @@ def test_scenario_matrix_matches_adapter_readiness_and_bounded_pilot_scopes():
         for probe in probes
         if probe["phase"] == "readiness"
     } == unavailable
-    assert {step["operation"] for step in steps} | {
+    variants = json.loads(SUPPORTED_BUSINESS_VARIANT_REGISTRY.read_text())["variants"]
+    variant_operations = {
+        row["command_operation"].removesuffix(".prepare")
+        for row in variants
+    }
+    assert {step["operation"] for step in steps} | variant_operations | {
         probe["operation"] for probe in probes if probe["phase"] == "readiness"
     } == set(RESOURCE_TABLES)
     assert len(steps) == 23
