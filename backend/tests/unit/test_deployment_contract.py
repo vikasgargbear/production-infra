@@ -1401,8 +1401,15 @@ def test_live18_is_opt_in_exact_sha_external_fixture_and_always_cleaned():
         "live18_railway_database_phase.py recover-identities-before-demo"
         in recovery
     )
-    assert 'touch "$LIVE18_RAILWAY_IDENTITY_ATTEMPTED_PATH"' in recovery
-    assert 'rm -f "$LIVE18_RAILWAY_IDENTITY_ATTEMPTED_PATH"' not in recovery
+    assert (
+        'touch "$LIVE18_RAILWAY_PRE_DEMO_RECOVERY_ATTEMPTED_PATH"'
+        in recovery
+    )
+    assert (
+        'rm -f "$LIVE18_RAILWAY_PRE_DEMO_RECOVERY_ATTEMPTED_PATH"'
+        in recovery
+    )
+    assert 'touch "$LIVE18_RAILWAY_IDENTITY_ATTEMPTED_PATH"' not in recovery
     assert "Railway pre-demo recovery left disposable authority behind" in recovery
     assert "remaining_auth_identity_count" in recovery
     assert "remaining_active_temporary_grant_count" in recovery

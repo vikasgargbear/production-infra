@@ -1187,6 +1187,7 @@ jobs:
             echo "LIVE18_RAILWAY_SSH_FINGERPRINT_PATH=$RUNNER_TEMP/live18-railway-ssh-fingerprint"
             echo "LIVE18_RAILWAY_SSH_REGISTERED_PATH=$RUNNER_TEMP/live18-railway-ssh-registered"
             echo "LIVE18_RAILWAY_SSH_AGENT_STARTED_PATH=$RUNNER_TEMP/live18-railway-ssh-agent-started"
+            echo "LIVE18_RAILWAY_PRE_DEMO_RECOVERY_ATTEMPTED_PATH=$RUNNER_TEMP/live18-railway-pre-demo-recovery-attempted"
             echo "LIVE18_RAILWAY_IDENTITY_ATTEMPTED_PATH=$RUNNER_TEMP/live18-railway-identity-attempted"
           } >> "$GITHUB_ENV"
       - name: Bind live18 to one reviewed staging provider
@@ -1520,7 +1521,7 @@ jobs:
           trap 'rm -f "$request" "$response"' EXIT
           # Keep this marker until the always-clean boundary succeeds. If this
           # SSH call fails, final cleanup must retry durable orphan recovery.
-          touch "$LIVE18_RAILWAY_IDENTITY_ATTEMPTED_PATH"
+          touch "$LIVE18_RAILWAY_PRE_DEMO_RECOVERY_ATTEMPTED_PATH"
           railway ssh \
             --project "$RAILWAY_PROJECT_ID" \
             --environment "$RAILWAY_ENVIRONMENT_ID" \
@@ -1564,6 +1565,7 @@ jobs:
           if not isinstance(recovered_mcp, int) or isinstance(recovered_mcp, bool) or recovered_mcp < 0:
               raise SystemExit("Railway pre-demo MCP recovery count is invalid")
           PY
+          rm -f "$LIVE18_RAILWAY_PRE_DEMO_RECOVERY_ATTEMPTED_PATH"
       - name: Verify exact migration head and provision same-run demo over Railway direct IPv6
         if: env.LIVE18_PROVIDER == 'railway'
         env:
@@ -1919,9 +1921,14 @@ jobs:
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
           set -euo pipefail
-          if [ ! -f "$LIVE18_RAILWAY_IDENTITY_ATTEMPTED_PATH" ]; then
+          if [ ! -f "$LIVE18_RAILWAY_IDENTITY_ATTEMPTED_PATH" ] && \
+             [ ! -f "$LIVE18_RAILWAY_PRE_DEMO_RECOVERY_ATTEMPTED_PATH" ]; then
             echo "Railway identity provisioning was never attempted"
             exit 0
+          fi
+          cleanup_action=cleanup-identities
+          if [ ! -f "$LIVE18_RAILWAY_IDENTITY_ATTEMPTED_PATH" ]; then
+            cleanup_action=recover-identities-before-demo
           fi
           request="$RUNNER_TEMP/live18-railway-cleanup-request.json"
           umask 077
@@ -1967,10 +1974,10 @@ jobs:
             --service "$RAILWAY_API_SERVICE" \
             --deployment-instance "$RAILWAY_API_DEPLOYMENT_INSTANCE_ID" \
             --identity-file "$LIVE18_RAILWAY_SSH_PRIVATE_KEY" \
-            -- python scripts/live18_railway_database_phase.py cleanup-identities \
+            -- python scripts/live18_railway_database_phase.py "$cleanup_action" \
               --input - --output - \
             < "$request" > "$response"
-          PYTHONPATH=backend python3 - "$response" "$request" <<'PY'
+          PYTHONPATH=backend python3 - "$response" "$request" "$cleanup_action" <<'PY'
           import json
           from pathlib import Path
           import sys
@@ -1980,7 +1987,7 @@ jobs:
           request = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
           request["response"] = response
           _verify_response(request)
-          if response.get("action") != "cleanup-identities" or response.get("cleaned") is not True:
+          if response.get("action") != sys.argv[3] or response.get("cleaned") is not True:
               raise SystemExit("Railway identity cleanup was not attested")
           reconciliation = response.get("orphan_reconciliation")
           if not isinstance(reconciliation, dict):
@@ -2004,7 +2011,8 @@ jobs:
           if not isinstance(recovered_mcp, int) or isinstance(recovered_mcp, bool) or recovered_mcp < 0:
               raise SystemExit("Railway MCP cleanup recovery count is invalid")
           PY
-          rm -f "$LIVE18_RAILWAY_IDENTITY_ATTEMPTED_PATH"
+          rm -f "$LIVE18_RAILWAY_IDENTITY_ATTEMPTED_PATH" \
+            "$LIVE18_RAILWAY_PRE_DEMO_RECOVERY_ATTEMPTED_PATH"
       - name: Always remove the run-scoped Railway SSH key
         if: always() && env.LIVE18_PROVIDER == 'railway'
         env:
@@ -2055,7 +2063,7 @@ jobs:
           exit "$cleanup_failed"
       - name: Always remove external reviewed choices and compiled fixture
         if: always()
-        run: rm -f "$LIVE18_FIXTURE_PATH" "$LIVE18_REVIEWED_SCALARS_INPUT_PATH" "$LIVE18_REVIEWED_SCALARS_PATH" "$LIVE18_EXPENSE_RECEIPT_PATH" "$LIVE18_RAILWAY_IDENTITY_RESPONSE_PATH" "$LIVE18_RAILWAY_IDENTITY_ATTEMPTED_PATH" "$RUNNER_TEMP/live18-railway-demo-request.json" "$RUNNER_TEMP/live18-railway-identity-request.json" "$RUNNER_TEMP/live18-railway-evidence-request.json" "$RUNNER_TEMP/live18-railway-cleanup-request.json" "$RUNNER_TEMP/live18-railway-cleanup-response.json"
+        run: rm -f "$LIVE18_FIXTURE_PATH" "$LIVE18_REVIEWED_SCALARS_INPUT_PATH" "$LIVE18_REVIEWED_SCALARS_PATH" "$LIVE18_EXPENSE_RECEIPT_PATH" "$LIVE18_RAILWAY_IDENTITY_RESPONSE_PATH" "$LIVE18_RAILWAY_IDENTITY_ATTEMPTED_PATH" "$LIVE18_RAILWAY_PRE_DEMO_RECOVERY_ATTEMPTED_PATH" "$RUNNER_TEMP/live18-railway-demo-request.json" "$RUNNER_TEMP/live18-railway-identity-request.json" "$RUNNER_TEMP/live18-railway-evidence-request.json" "$RUNNER_TEMP/live18-railway-cleanup-request.json" "$RUNNER_TEMP/live18-railway-cleanup-response.json"
       - name: Build scrubbed allowlisted live18 evidence manifest
         if: always() && env.LIVE18_DEPLOYMENT_BOUND == 'true'
         env:

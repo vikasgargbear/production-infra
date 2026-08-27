@@ -95,6 +95,51 @@ def test_official_pdf_bytes_must_attest_both_transition_boundaries(
         module.fetch_gstr1_reporting_source(tmp_path)
 
 
+def test_official_source_fetch_retries_only_transient_transport_failures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_script()
+    attempts = []
+    sleeps = []
+
+    def fetch(*_args, **_kwargs):
+        attempts.append(True)
+        if len(attempts) == 1:
+            response = SimpleNamespace(status_code=503)
+            raise module.requests.HTTPError("temporary", response=response)
+        return SimpleNamespace(content=b"reviewed", raise_for_status=lambda: None)
+
+    monkeypatch.setattr(module.requests, "get", fetch)
+    monkeypatch.setattr(module.time, "sleep", sleeps.append)
+
+    assert module.fetch_official_document("https://authority.example/source.pdf") == b"reviewed"
+    assert len(attempts) == 2
+    assert sleeps == [1]
+
+
+def test_official_source_fetch_does_not_retry_permanent_http_failures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_script()
+    attempts = []
+
+    def fetch(*_args, **_kwargs):
+        attempts.append(True)
+        response = SimpleNamespace(status_code=404)
+        raise module.requests.HTTPError("missing", response=response)
+
+    monkeypatch.setattr(module.requests, "get", fetch)
+    monkeypatch.setattr(
+        module.time,
+        "sleep",
+        lambda _delay: pytest.fail("permanent errors must not be retried"),
+    )
+
+    with pytest.raises(module.requests.HTTPError, match="missing"):
+        module.fetch_official_document("https://authority.example/missing.pdf")
+    assert len(attempts) == 1
+
+
 def test_pdf_authority_releases_each_parsed_page(monkeypatch: pytest.MonkeyPatch) -> None:
     module = _load_script()
     closed = []

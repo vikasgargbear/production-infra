@@ -15,6 +15,7 @@ import json
 import os
 import re
 import sys
+import time
 from io import BytesIO
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
@@ -66,6 +67,10 @@ ITC_REVERSAL_SOURCE_URI = "https://cbic-gst.gov.in/pdf/CGST-Act-2017-amended-010
 ITC_REVERSAL_SOURCE_PUBLICATION_DATE = date(2022, 1, 1)
 ITC_REVERSAL_EFFECTIVE_FROM = date(2017, 7, 1)
 ITC_REVERSAL_RULESET_VERSION = "cgst-act-section-17-5-h-2022-01-01"
+OFFICIAL_SOURCE_RETRYABLE_STATUS_CODES = frozenset(
+    {408, 429, 500, 502, 503, 504}
+)
+OFFICIAL_SOURCE_MAX_ATTEMPTS = 4
 CLIENT_ID = os.getenv("MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS", "").strip()
 SCRIPT_DIRECTORY = Path(__file__).resolve().parent
 BACKEND_ROOT = SCRIPT_DIRECTORY.parent
@@ -582,14 +587,34 @@ def attest_pdf_fragments(
     return metadata, tuple(missing.values())
 
 
+def fetch_official_document(uri: str) -> bytes:
+    """Fetch one official artifact with bounded transient-failure retries."""
+
+    for attempt in range(OFFICIAL_SOURCE_MAX_ATTEMPTS):
+        try:
+            response = requests.get(
+                uri,
+                timeout=(10, 60),
+                headers={
+                    "User-Agent": "AasoPharma canonical staging evidence/1.0"
+                },
+            )
+            response.raise_for_status()
+            return response.content
+        except requests.RequestException as exc:
+            status_code = getattr(exc.response, "status_code", None)
+            retryable = (
+                status_code is None
+                or status_code in OFFICIAL_SOURCE_RETRYABLE_STATUS_CODES
+            )
+            if not retryable or attempt + 1 == OFFICIAL_SOURCE_MAX_ATTEMPTS:
+                raise
+            time.sleep(2**attempt)
+    raise AssertionError("official-source retry boundary was exhausted")
+
+
 def fetch_official_source(evidence_dir: Path) -> bytes:
-    response = requests.get(
-        SOURCE_URI,
-        timeout=60,
-        headers={"User-Agent": "AasoPharma canonical staging evidence/1.0"},
-    )
-    response.raise_for_status()
-    source = response.content
+    source = fetch_official_document(SOURCE_URI)
     if not 10_000 <= len(source) <= 100 * 1024 * 1024:
         raise RuntimeError("CBIC rate source has an unexpected size")
     if not source.startswith(b"%PDF"):
@@ -612,13 +637,7 @@ def fetch_official_source(evidence_dir: Path) -> bytes:
 def fetch_adjustment_source(evidence_dir: Path) -> bytes:
     """Fetch the official GST Council return-of-goods and ITC evidence FAQ."""
 
-    response = requests.get(
-        ADJUSTMENT_SOURCE_URI,
-        timeout=60,
-        headers={"User-Agent": "AasoPharma canonical staging evidence/1.0"},
-    )
-    response.raise_for_status()
-    source = response.content
+    source = fetch_official_document(ADJUSTMENT_SOURCE_URI)
     if not 10_000 <= len(source) <= 100 * 1024 * 1024 or not source.startswith(b"%PDF"):
         raise RuntimeError("GST Council return authority has an unexpected envelope")
     required_fragments = (
@@ -637,13 +656,7 @@ def fetch_adjustment_source(evidence_dir: Path) -> bytes:
 def fetch_itc_reversal_source(evidence_dir: Path) -> bytes:
     """Fetch and attest the official CGST Act Section 17(5)(h) source."""
 
-    response = requests.get(
-        ITC_REVERSAL_SOURCE_URI,
-        timeout=60,
-        headers={"User-Agent": "AasoPharma canonical staging evidence/1.0"},
-    )
-    response.raise_for_status()
-    source = response.content
+    source = fetch_official_document(ITC_REVERSAL_SOURCE_URI)
     if not 10_000 <= len(source) <= 100 * 1024 * 1024 or not source.startswith(b"%PDF"):
         raise RuntimeError("CBIC Section 17(5)(h) source has an unexpected envelope")
     required_fragments = (
@@ -661,13 +674,7 @@ def fetch_itc_reversal_source(evidence_dir: Path) -> bytes:
 def fetch_gstr1_reporting_source(evidence_dir: Path) -> bytes:
     """Fetch and attest the official GSTN Returns Offline Tool boundary evidence."""
 
-    response = requests.get(
-        GSTR1_REPORTING_SOURCE_URI,
-        timeout=60,
-        headers={"User-Agent": "AasoPharma canonical staging evidence/1.0"},
-    )
-    response.raise_for_status()
-    source = response.content
+    source = fetch_official_document(GSTR1_REPORTING_SOURCE_URI)
     if (
         not 10_000 <= len(source) <= 100 * 1024 * 1024
         or not source.startswith(b"%PDF")

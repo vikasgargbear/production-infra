@@ -930,7 +930,9 @@ def test_railway_live18_workflow_has_fail_closed_remote_lifecycle():
     assert "live18_railway_database_phase.py provision-identities" in live18
     assert "live18_railway_database_phase.py capture-evidence" in live18
     assert "live18_railway_database_phase.py recover-identities-before-demo" in live18
-    assert "live18_railway_database_phase.py cleanup-identities" in live18
+    assert "cleanup_action=cleanup-identities" in live18
+    assert "cleanup_action=recover-identities-before-demo" in live18
+    assert 'live18_railway_database_phase.py "$cleanup_action"' in live18
     assert "railway ssh keys add" in live18
     assert "railway ssh keys remove" in live18
     assert (
