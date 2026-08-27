@@ -268,7 +268,7 @@ def _live18_authority() -> tuple[
         for action in actions
         if isinstance(action, dict) and action.get("operation_key")
     }
-    if len(published) != 17 or set(by_operation) != published:
+    if len(published) != 17 or not published.issubset(by_operation):
         raise EphemeralIdentityError(
             "Generated operator contract must expose all 17 published prepare commands"
         )

@@ -63,7 +63,15 @@ def test_demo_prepare_authority_matches_generated_operator_contract():
     )
 
     assert module.PREPARE_CAPABILITIES == expected
-    assert len(module.PREPARE_CAPABILITIES) == 17
+    assert len(module.PREPARE_CAPABILITIES) >= 17
+    operations = {operation for operation, _ in module.PREPARE_CAPABILITIES}
+    assert {
+        "finance.customer_cheque_clearance.prepare",
+        "finance.customer_cheque_bounce.prepare",
+        "sales.return.reversal.prepare",
+        "procurement.purchase_return.reversal.prepare",
+        "finance.adjustment_note.reversal.prepare",
+    }.issubset(operations)
     assert (
         "finance.bank_reconciliation.prepare",
         "separate_approver",

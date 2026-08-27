@@ -274,9 +274,9 @@ REQUIRED_PERMISSIONS = (
 def _reviewed_prepare_capabilities() -> tuple[tuple[str, str], ...]:
     contract = json.loads(OPERATOR_CONTRACT_PATH.read_text(encoding="utf-8"))
     actions = contract.get("prepare_actions")
-    if not isinstance(actions, list) or len(actions) != 17:
+    if not isinstance(actions, list) or len(actions) < 17:
         raise RuntimeError(
-            "generated operator contract must contain exactly 17 prepare actions"
+            "generated operator contract must contain the 17 core prepare actions"
         )
     capabilities = tuple(sorted(
         (
@@ -287,8 +287,8 @@ def _reviewed_prepare_capabilities() -> tuple[tuple[str, str], ...]:
         if isinstance(action, dict)
     ))
     if (
-        len(capabilities) != 17
-        or len({operation for operation, _ in capabilities}) != 17
+        len(capabilities) != len(actions)
+        or len({operation for operation, _ in capabilities}) != len(actions)
         or any(
             not operation.endswith(".prepare")
             or approval_policy not in {

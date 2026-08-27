@@ -82,7 +82,7 @@
   },
   "manifest_version": "1.0.0",
   "mapping_file": "baseline-finance-command-enforcements.json",
-  "mapping_sha256": "0b8220687e421722a68b7a23705301dd1b8ce294d2099bfcb146c3f2ac9f150f",
+  "mapping_sha256": "cebc7d6dcd51231bb0bc87e95f9eff297b345a706c0f418e095a1cd7e57010c3",
   "postgresql": "15+",
   "resolved_count": 8,
   "resolved_invariants": [

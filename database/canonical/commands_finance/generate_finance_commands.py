@@ -426,10 +426,10 @@ BEGIN
       END IF;
       advance_account:=erp_commercial_commands.resolve_role_account(
         organization_id,payment.branch_id,'customer_advance','liability','INR',true);
-      IF NOT EXISTS (SELECT 1 FROM finance.journal_lines line WHERE line.org_id=organization_id
+      IF (SELECT count(*) FROM finance.journal_lines line WHERE line.org_id=organization_id
            AND line.journal_entry_id=journal_id AND line.account_id=advance_account
            AND line.branch_id=payment.branch_id AND line.party_id=payment.party_id
-           AND line.transaction_credit=payment.amount AND line.transaction_debit=0) THEN
+           AND line.transaction_credit=payment.amount AND line.transaction_debit=0)<>1 THEN
         RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='customer advance journal must credit canonical customer-advance liability';
       END IF;
     ELSE

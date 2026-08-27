@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from backend.app.infrastructure.operator_actions import customer_cheque, registry
+from app.infrastructure.operator_actions import customer_cheque, registry
 
 
 def test_cheque_actions_have_typed_prepare_and_execute_bindings() -> None:
