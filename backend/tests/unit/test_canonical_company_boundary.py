@@ -74,6 +74,16 @@ def test_company_asset_routes_do_not_restore_the_retired_tenant_session():
 def test_only_canonical_company_surface_is_mounted():
     paths = app.openapi()["paths"]
 
+    for path, method in (
+        ("/api/company/logo", "get"),
+        ("/api/company/logo", "post"),
+        ("/api/company/logo", "delete"),
+        ("/api/company/info", "put"),
+        ("/api/company/settings", "put"),
+        ("/api/company/qr-code", "post"),
+    ):
+        assert paths[path][method]["security"] == [{"HTTPBearer": []}]
+
     assert "/api/company/info" in paths
     assert "/api/company/profile" in paths
     assert "/api/company/logo" in paths

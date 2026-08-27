@@ -3,7 +3,8 @@
 from typing import Any, Dict
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Security
+from fastapi.security import HTTPBearer
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -11,7 +12,10 @@ from ....core.database import get_db
 from ....core.security.permissions import PermissionChecker
 
 
-router = APIRouter(tags=["Company"])
+router = APIRouter(
+    tags=["Company"],
+    dependencies=[Security(HTTPBearer(auto_error=False))],
+)
 
 
 def _activate(db: Session, user: Dict[str, Any]) -> UUID:
