@@ -44,8 +44,17 @@ describe('product mutation contract', () => {
   });
 
   it('rejects legacy aliases instead of dropping them', () => {
-    expect(() => productUpdateSchema.parse({ brand_name: 'Legacy brand' })).toThrow();
+    expect(() => productUpdateSchema.parse({ row_version: 1, brand_name: 'Legacy brand' })).toThrow();
     expect(() => productUpdateSchema.parse({})).toThrow();
+  });
+
+  it('requires the authoritative row version for draft edits', () => {
+    expect(() => productUpdateSchema.parse({ product_name: 'Changed' })).toThrow();
+    expect(() => productUpdateSchema.parse({ row_version: 2 })).toThrow();
+    expect(productUpdateSchema.parse({
+      row_version: 2,
+      product_name: 'Changed',
+    })).toEqual({ row_version: 2, product_name: 'Changed' });
   });
 
   it('rejects inventory policy fields that belong to later commands', () => {

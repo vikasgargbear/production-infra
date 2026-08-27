@@ -72,7 +72,7 @@ const Products: React.FC = () => {
     setDeletingProductId(product.product_id);
     setDeleteError(null);
     try {
-      await productsApi.delete(product.product_id);
+      await productsApi.delete(product.product_id, product.row_version);
       setPendingDelete(null);
       await load();
     } catch (deleteError: any) {

@@ -330,10 +330,19 @@ const AddressForm: React.FC<AddressFormProps> = ({
                 if (addressIdStr.startsWith('temp_addr_')) {
                     throw new Error('This legacy offline address was never accepted by the server. Recreate it.');
                 }
+                const selectedAddress = savedAddresses.find(
+                    address => String(address.address_id) === addressIdStr,
+                );
+                if (!selectedAddress || !Number.isInteger(Number(selectedAddress.row_version))) {
+                    throw new Error('Reload the canonical address before editing it.');
+                }
                 const response = await customersApi.updateAddress(
                     String(customerId),
                     addressIdStr,
-                    addressPayload,
+                    {
+                        ...addressPayload,
+                        row_version: Number(selectedAddress.row_version),
+                    },
                 );
                 if (!response.data?.success) {
                     throw new Error('The server did not confirm the address update.');

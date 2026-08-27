@@ -27,6 +27,7 @@ const products = [
     product_name: 'Mutable draft',
     product_type: 'medicine',
     status: 'draft',
+    row_version: 4,
   },
   {
     product_id: 'd3000000-0000-7000-8000-000000000002',
@@ -34,6 +35,7 @@ const products = [
     product_name: 'Released product',
     product_type: 'consumable',
     status: 'active',
+    row_version: 2,
   },
   {
     product_id: 'd3000000-0000-7000-8000-000000000003',
@@ -41,6 +43,7 @@ const products = [
     product_name: 'Blocked product',
     product_type: 'medical_device',
     status: 'blocked',
+    row_version: 3,
   },
 ];
 
@@ -78,7 +81,10 @@ test('draft deletion requires explicit in-app review and reports canonical API r
 
   fireEvent.click(screen.getByRole('button', { name: /^Delete draft$/ }));
 
-  await waitFor(() => expect(mockDelete).toHaveBeenCalledWith(products[0].product_id));
+  await waitFor(() => expect(mockDelete).toHaveBeenCalledWith(
+    products[0].product_id,
+    products[0].row_version,
+  ));
   expect(await screen.findByText('This draft is already referenced and cannot be deleted')).toBeTruthy();
   expect(screen.getByRole('dialog', { name: 'Delete product draft?' })).toBeTruthy();
 });

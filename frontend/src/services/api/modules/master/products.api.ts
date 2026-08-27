@@ -74,8 +74,10 @@ export const productsApi = {
     return apiHelpers.put(`/products/${productId}`, productUpdateSchema.parse(data));
   },
 
-  delete: (productId: number | string) => {
-    return apiHelpers.delete(`/products/${productId}`);
+  delete: (productId: number | string, rowVersion: number) => {
+    return apiHelpers.delete(`/products/${productId}`, {
+      params: { row_version: rowVersion },
+    });
   },
 
   // Search products

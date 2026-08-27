@@ -68,8 +68,8 @@ describe('canonical master mutation endpoints', () => {
     const customerId = '22222222-2222-7222-8222-222222222222';
     const addressId = '33333333-3333-7333-8333-333333333333';
 
-    productsApi.update(productId, { product_name: 'Renamed draft' });
-    productsApi.delete(productId);
+    productsApi.update(productId, { row_version: 3, product_name: 'Renamed draft' });
+    productsApi.delete(productId, 3);
     (apiHelpers.post as jest.Mock).mockReset().mockResolvedValueOnce({ data: {
       customer_id: customerId,
       party_id: '44444444-4444-7444-8444-444444444444',
@@ -89,12 +89,15 @@ describe('canonical master mutation endpoints', () => {
       address_type: 'billing', is_default: true,
     };
     customersApi.createAddress(customerId, address);
-    customersApi.updateAddress(customerId, addressId, address);
+    customersApi.updateAddress(customerId, addressId, { ...address, row_version: 4 });
 
     expect(apiHelpers.put).toHaveBeenNthCalledWith(1, `/products/${productId}`, {
+      row_version: 3,
       product_name: 'Renamed draft',
     });
-    expect(apiHelpers.delete).toHaveBeenCalledWith(`/products/${productId}`);
+    expect(apiHelpers.delete).toHaveBeenCalledWith(`/products/${productId}`, {
+      params: { row_version: 3 },
+    });
     expect(apiHelpers.post).toHaveBeenNthCalledWith(1, '/customers/', {
       customer_name: 'E2E customer',
       customer_type: 'organization',
@@ -106,7 +109,10 @@ describe('canonical master mutation endpoints', () => {
       2, `/customers/${customerId}/addresses/`, address,
     );
     expect(apiHelpers.put).toHaveBeenNthCalledWith(
-      2, `/customers/${customerId}/addresses/${addressId}`, address,
+      2, `/customers/${customerId}/addresses/${addressId}`, {
+        ...address,
+        row_version: 4,
+      },
     );
   });
 });

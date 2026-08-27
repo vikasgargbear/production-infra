@@ -170,6 +170,7 @@ export interface CanonicalProductRead {
   current_stock: ExactDecimal;
   is_active: boolean;
   status: string;
+  row_version: number;
 }
 
 const decodeCanonicalProductRows = (value: unknown): CanonicalProductRead[] => (
@@ -192,6 +193,7 @@ const decodeCanonicalProductRows = (value: unknown): CanonicalProductRead[] => (
       current_stock: decimal(row.current_stock, `${label} current stock`),
       is_active: boolean(row.is_active, `${label} active state`),
       status: text(row.status, `${label} status`),
+      row_version: integer(row.row_version, `${label} row version`),
     } as CanonicalProductRead;
   })
 );
