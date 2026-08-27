@@ -380,6 +380,98 @@ test('an authorization failure on token refresh clears the ERP session', async (
 });
 
 
+test('a newer successful token exchange is not erased by an older membership denial', async () => {
+    render(<AuthProvider><Probe /></AuthProvider>);
+    await waitFor(() => expect(currentAuth.isLoading).toBe(false));
+
+    let resolveOldExchange;
+    let resolveNewExchange;
+    fetch.mockImplementation((_url, options) => {
+        const authorization = options?.headers?.Authorization;
+        if (authorization === 'Bearer old-access') {
+            return new Promise((resolve) => {
+                resolveOldExchange = resolve;
+            });
+        }
+        if (authorization === 'Bearer provisioned-access') {
+            return new Promise((resolve) => {
+                resolveNewExchange = resolve;
+            });
+        }
+        throw new Error(`Unexpected authorization: ${authorization}`);
+    });
+
+    act(() => {
+        mockAuthStateCallback('SIGNED_IN', { access_token: 'old-access' });
+        mockAuthStateCallback('TOKEN_REFRESHED', { access_token: 'provisioned-access' });
+    });
+
+    await act(async () => {
+        resolveNewExchange({
+            ok: true,
+            status: 200,
+            json: async () => ({ access_token: token() }),
+        });
+        await Promise.resolve();
+    });
+    await waitFor(() => expect(currentAuth.isAuthenticated).toBe(true));
+
+    await act(async () => {
+        resolveOldExchange({
+            ok: false,
+            status: 403,
+            json: async () => ({
+                detail: {
+                    error: 'erp_membership_required',
+                    message: 'Your identity is not linked to an active ERP organization.',
+                },
+            }),
+        });
+        await Promise.resolve();
+    });
+
+    expect(currentAuth.isAuthenticated).toBe(true);
+    expect(currentAuth.sessionExchangeError).toBeNull();
+});
+
+
+test('explicit retry rechecks membership with the same cloud token after provisioning', async () => {
+    mockGetSession.mockResolvedValue({
+        data: { session: { access_token: 'provisioned-in-place-access' } },
+        error: null,
+    });
+    fetch
+        .mockResolvedValueOnce({
+            ok: false,
+            status: 403,
+            json: async () => ({
+                detail: {
+                    error: 'erp_membership_required',
+                    message: 'Your identity is not linked to an active ERP organization.',
+                },
+            }),
+        })
+        .mockResolvedValueOnce({
+            ok: true,
+            status: 200,
+            json: async () => ({ access_token: token() }),
+        });
+
+    render(<AuthProvider><Probe /></AuthProvider>);
+    await waitFor(() => expect(currentAuth.isLoading).toBe(false));
+    expect(currentAuth.isAuthenticated).toBe(false);
+    expect(fetch).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+        await currentAuth.retrySessionExchange();
+    });
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(currentAuth.isAuthenticated).toBe(true);
+    expect(currentAuth.sessionExchangeError).toBeNull();
+});
+
+
 test('offline browsers cannot authenticate from cached credentials', async () => {
     Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: false });
     render(<AuthProvider><Probe /></AuthProvider>);

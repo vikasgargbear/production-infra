@@ -41,6 +41,7 @@ export interface LoginResult {
     user?: User;
     error?: string;
     authorizationFailure?: boolean;
+    superseded?: boolean;
 }
 
 export interface AuthContextValue extends AuthState {
@@ -151,8 +152,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         accessToken: string;
         promise: Promise<LoginResult>;
     } | null>(null);
+    const exchangeGeneration = useRef(0);
 
     const clearErpSession = useCallback(() => {
+        exchangeGeneration.current += 1;
+        pendingExchange.current = null;
         clearErpSessionStorage();
         setHasCloudSession(false);
         setSessionExchangeError(null);
@@ -176,21 +180,36 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             return pendingExchange.current.promise;
         }
 
+        const generation = exchangeGeneration.current + 1;
+        exchangeGeneration.current = generation;
         const promise = (async (): Promise<LoginResult> => {
+            const applyFailure = (result: LoginResult): LoginResult => {
+                if (exchangeGeneration.current !== generation) {
+                    return { success: false, superseded: true };
+                }
+                preserveCloudSessionFailure(result);
+                return result;
+            };
             try {
                 const response = await requestErpSession(accessToken);
                 const data = await response.json().catch(() => ({}));
                 if (!response.ok) {
-                    return {
+                    return applyFailure({
                         success: false,
                         error: errorMessage(data, 'ERP access is not authorized'),
                         authorizationFailure: response.status === 401 || response.status === 403,
-                    };
+                    });
                 }
 
                 const payload = decodeToken(data.access_token);
                 if (!payload) {
-                    return { success: false, error: 'The ERP session response was invalid' };
+                    return applyFailure({
+                        success: false,
+                        error: 'The ERP session response was invalid',
+                    });
+                }
+                if (exchangeGeneration.current !== generation) {
+                    return { success: false, superseded: true };
                 }
                 const primaryBranch = payload.branch_id ?? payload.branch_ids?.[0];
                 const user: User = {
@@ -211,10 +230,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 setState({ user, token: data.access_token, isAuthenticated: true, isLoading: false });
                 return { success: true, user };
             } catch {
-                return {
+                return applyFailure({
                     success: false,
                     error: 'The ERP service is starting. Please try signing in again in a moment.',
-                };
+                });
             }
         })();
 
@@ -223,7 +242,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             if (pendingExchange.current?.promise === promise) pendingExchange.current = null;
         });
         return promise;
-    }, []);
+    }, [preserveCloudSessionFailure]);
 
     const login = useCallback(async (email: string, password: string): Promise<LoginResult> => {
         if (!navigator.onLine) {
@@ -237,13 +256,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             if (error) return { success: false, error: error.message };
             if (!data.session) return { success: false, error: 'Email verification is required' };
             setHasCloudSession(true);
-            const result = await exchangeSupabaseSession(data.session.access_token);
-            if (!result.success) preserveCloudSessionFailure(result);
-            return result;
+            return exchangeSupabaseSession(data.session.access_token);
         } catch (error) {
             return { success: false, error: error instanceof Error ? error.message : 'Login failed' };
         }
-    }, [exchangeSupabaseSession, preserveCloudSessionFailure]);
+    }, [exchangeSupabaseSession]);
 
     const loginWithGoogle = useCallback(async (): Promise<LoginResult | void> => {
         if (!navigator.onLine) {
@@ -288,9 +305,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             setHasCloudSession(true);
             setSessionExchangeError(null);
             setState((previous) => ({ ...previous, isLoading: !previous.isAuthenticated }));
-            const result = await exchangeSupabaseSession(data.session.access_token);
-            if (!result.success) preserveCloudSessionFailure(result);
-            return result;
+            return exchangeSupabaseSession(data.session.access_token);
         } catch (error) {
             const result = {
                 success: false,
@@ -319,8 +334,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 return;
             }
             setHasCloudSession(true);
-            const result = await exchangeSupabaseSession(data.session.access_token);
-            if (active && !result.success) preserveCloudSessionFailure(result);
+            await exchangeSupabaseSession(data.session.access_token);
         }).catch(() => {
             if (active) {
                 const result = { success: false, error: 'Unable to read the cloud session. Please retry.' };
@@ -336,9 +350,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             }
             if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
                 setHasCloudSession(true);
-                void exchangeSupabaseSession(session.access_token).then((result) => {
-                    if (active && !result.success) preserveCloudSessionFailure(result);
-                });
+                void exchangeSupabaseSession(session.access_token);
             }
         });
 
