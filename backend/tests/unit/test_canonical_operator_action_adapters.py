@@ -3961,6 +3961,40 @@ def test_reviewer_reads_exact_preview_without_requester_grant_ownership():
     assert "request.requested_by_membership_id <> actor_id" in PROJECTION_SQL
     assert params["org_id"] == context.organization_id
     assert params["branch_ids"] == [branch_id]
+    authority_params = next(
+        params for sql, params in session.executions
+        if "FROM automation.agent_grants AS grant_row" in sql
+    )
+    assert authority_params["operation_key"] == "automation.command.approve"
+    assert authority_params["approval_policy"] == "actor_confirmation"
+    assert context.membership_id != requester_id
+
+
+def test_reviewer_inactive_authority_fails_before_command_enumeration():
+    session = FakeSession(
+        authority_branch=False,
+        command_row=_command_row(uuid4()),
+    )
+    context = ActionContext(
+        **{
+            **_context(organization_scope=True).__dict__,
+            "operation_key": "automation.command.approve",
+            "permission": "automation.command.approve",
+        }
+    )
+
+    with pytest.raises(OperatorActionError) as error:
+        SqlAlchemyOperatorActionService(lambda: session).review(
+            command_request_id=uuid4(), context=context
+        )
+
+    assert error.value.code is ActionErrorCode.SCOPE_DENIED
+    assert error.value.message == "Canonical operator authority is inactive"
+    assert not any(
+        "erp_automation_reads.reviewable_command" in sql
+        for sql, _params in session.executions
+    )
+    assert session.transaction_entries == session.transaction_exits == 1
 
 
 def test_reviewer_cross_tenant_or_unauthorized_command_is_not_enumerated():

@@ -306,6 +306,12 @@ _SET_COMMAND_CONTEXT_SQL = text(
     "'app.command_request_id', CAST(:command_request_id AS text), true)"
 )
 
+# Shared command transport is consented under the persisted capability
+# vocabulary. The prepared command's own approval_policy remains authoritative
+# for self-versus-independent review and approval inside the typed projections
+# and command functions.
+_SHARED_COMMAND_CAPABILITY_APPROVAL_POLICY = "actor_confirmation"
+
 _EXECUTE_COMMAND_SQL = text(
     """
     SELECT erp_automation_commands.execute_approved_command(
@@ -3951,7 +3957,7 @@ class SqlAlchemyOperatorActionService:
             permission="automation.command.approve",
             risk_class="consequential_write",
             schema_profile="immutable_command_approval",
-            approval_policy="actor_confirmation",
+            approval_policy=_SHARED_COMMAND_CAPABILITY_APPROVAL_POLICY,
             branch_fields=(),
         )
         preview_hash_bytes = _preview_hash_bytes(preview_hash)
@@ -4039,7 +4045,7 @@ class SqlAlchemyOperatorActionService:
             permission="automation.command.execute",
             risk_class="consequential_write",
             schema_profile="immutable_command_execution",
-            approval_policy="actor_confirmation",
+            approval_policy=_SHARED_COMMAND_CAPABILITY_APPROVAL_POLICY,
             branch_fields=(),
         )
         expected_preview_hash = _preview_hash_bytes(preview_hash)
@@ -4175,7 +4181,7 @@ class SqlAlchemyOperatorActionService:
             permission="automation.command.approve",
             risk_class="consequential_write",
             schema_profile="immutable_command_approval",
-            approval_policy="explicit_human",
+            approval_policy=_SHARED_COMMAND_CAPABILITY_APPROVAL_POLICY,
             branch_fields=(),
         )
         with self._session_factory() as session:
