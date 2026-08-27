@@ -420,7 +420,7 @@ def test_consent_proposal_is_subject_and_preregistered_client_bound(monkeypatch)
     grant_id = UUID("44444444-4444-4444-4444-444444444444")
     row = SimpleNamespace(
         _mapping={
-            "org_id": UUID("22222222-2222-2222-2222-222222222222"),
+            "org_id": UUID(ORG_ID),
             "organization_name": "AASO Pharma",
             "membership_id": UUID("33333333-3333-3333-3333-333333333333"),
             "agent_grant_id": grant_id,
@@ -440,25 +440,106 @@ def test_consent_proposal_is_subject_and_preregistered_client_bound(monkeypatch)
         }
     )
     captured = {}
+
+    class Database:
+        def __init__(self):
+            self.calls = []
+
+        def execute(self, statement, params):
+            self.calls.append((str(statement), params))
+
+    database = Database()
     monkeypatch.setenv("MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS", "client-1,client-2")
     monkeypatch.setattr(oauth.supabase_auth, "get_user_from_access_token", verified_identity)
     monkeypatch.setattr(
         oauth,
         "_mcp_consent_proposal_rows",
-        lambda _db, subject, client_id: captured.update(
-            {"subject": subject, "client_id": client_id}
+        lambda _db, subject, organization_id, client_id: captured.update(
+            {
+                "subject": subject,
+                "organization_id": organization_id,
+                "client_id": client_id,
+            }
         ) or [row],
     )
 
     result = _run(
-        oauth.get_mcp_consent_proposal("client-1", _credentials(), db=object())
+        oauth.get_mcp_consent_proposal("client-1", _credentials(), db=database)
     )
 
     assert result.subject == UUID(AUTH_USER_ID)
     assert result.agent_grant_id == grant_id
     assert result.client_display_name == "Reviewed Assistant"
     assert result.capabilities[0].capability_code == "master.products.search"
-    assert captured == {"subject": UUID(AUTH_USER_ID), "client_id": "client-1"}
+    assert captured == {
+        "subject": UUID(AUTH_USER_ID),
+        "organization_id": UUID(ORG_ID),
+        "client_id": "client-1",
+    }
+    assert database.calls == [
+        (
+            "SELECT erp_security.activate_context(:auth_user_id, :org_id)",
+            {"auth_user_id": UUID(AUTH_USER_ID), "org_id": UUID(ORG_ID)},
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    "app_metadata",
+    [
+        {"provider": "google"},
+        {"provider": "google", "organization_id": ORG_ID},
+        {"provider": "google", "org_id": "not-a-uuid"},
+    ],
+)
+def test_consent_proposal_requires_exact_canonical_app_metadata_org_id(
+    monkeypatch, app_metadata
+):
+    async def verified_identity(_token):
+        return _identity(app_metadata=app_metadata)
+
+    monkeypatch.setenv("MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS", "client-1")
+    monkeypatch.setattr(oauth.supabase_auth, "get_user_from_access_token", verified_identity)
+    monkeypatch.setattr(
+        oauth,
+        "_mcp_consent_proposal_rows",
+        lambda *_args: pytest.fail("invalid organization metadata must not reach the database"),
+    )
+
+    with pytest.raises(HTTPException) as denied:
+        _run(oauth.get_mcp_consent_proposal("client-1", _credentials(), db=object()))
+
+    assert denied.value.status_code == 403
+    assert denied.value.detail["error"] == "erp_organization_assignment_required"
+
+
+def test_consent_proposal_query_is_explicitly_organization_bound():
+    captured = {}
+
+    class Result:
+        @staticmethod
+        def fetchall():
+            return []
+
+    class Database:
+        @staticmethod
+        def execute(statement, params):
+            captured.update({"statement": str(statement), "params": params})
+            return Result()
+
+    subject = UUID(AUTH_USER_ID)
+    organization_id = UUID(ORG_ID)
+    rows = oauth._mcp_consent_proposal_rows(
+        Database(), subject, organization_id, "client-1"
+    )
+
+    assert rows == []
+    assert "grant_row.org_id=:organization_id" in captured["statement"]
+    assert captured["params"] == {
+        "subject": subject,
+        "organization_id": organization_id,
+        "client_id": "client-1",
+    }
 
 
 def test_consent_proposal_rejects_wrong_client_before_database_lookup(monkeypatch):
@@ -512,6 +593,8 @@ def test_consent_proposal_sql_requires_live_canonical_authority():
         "automation.agent_grant_capabilities",
         "core.memberships",
         "core.access_grants",
+        "erp_security.activate_context(:auth_user_id, :org_id)",
+        "grant_row.org_id=:organization_id",
         "grant_row.status='active'",
         "grant_row.expires_at>transaction_timestamp()",
         "access_grant.valid_from_at<=transaction_timestamp()",

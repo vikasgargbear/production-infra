@@ -66,7 +66,29 @@ def _configured_mcp_client_ids() -> tuple[str, ...]:
     )
 
 
-def _mcp_consent_proposal_rows(db: Session, subject: UUID, client_id: str):
+def _canonical_organization_assignment(identity: dict[str, Any]) -> UUID:
+    """Resolve the sole supported cloud-to-ERP organization assignment claim."""
+    app_metadata = identity.get("app_metadata")
+    try:
+        if not isinstance(app_metadata, dict):
+            raise TypeError("Supabase app_metadata is not an object")
+        return UUID(str(app_metadata["org_id"]))
+    except (KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "erp_organization_assignment_required",
+                "message": "Your identity is not assigned to an ERP organization.",
+            },
+        ) from exc
+
+
+def _mcp_consent_proposal_rows(
+    db: Session,
+    subject: UUID,
+    organization_id: UUID,
+    client_id: str,
+):
     return db.execute(
         text(
             """
@@ -90,7 +112,8 @@ def _mcp_consent_proposal_rows(db: Session, subject: UUID, client_id: str):
               JOIN core.organizations AS organization ON organization.id=grant_row.org_id
               LEFT JOIN core.branches AS branch
                 ON branch.org_id=grant_row.org_id AND branch.id=grant_row.branch_id
-             WHERE user_row.auth_user_id=:subject
+             WHERE grant_row.org_id=:organization_id
+               AND user_row.auth_user_id=:subject
                AND user_row.status='active'
                AND membership.status='active'
                AND organization.status='active'
@@ -119,7 +142,11 @@ def _mcp_consent_proposal_rows(db: Session, subject: UUID, client_id: str):
              ORDER BY grant_row.id, capability.capability_code
             """
         ),
-        {"subject": subject, "client_id": client_id},
+        {
+            "subject": subject,
+            "organization_id": organization_id,
+            "client_id": client_id,
+        },
     ).fetchall()
 
 
@@ -147,16 +174,7 @@ async def exchange_supabase_session(
 
     require_canonical_session_authority(db)
 
-    try:
-        organization_id = UUID(str(identity.get("app_metadata", {}).get("org_id")))
-    except (TypeError, ValueError) as exc:
-        raise HTTPException(
-            status_code=403,
-            detail={
-                "error": "erp_organization_assignment_required",
-                "message": "Your identity is not assigned to an ERP organization.",
-            },
-        ) from exc
+    organization_id = _canonical_organization_assignment(identity)
 
     try:
         user_data = UserRepository.find_by_auth_user_id(auth_user_id, organization_id, db)
@@ -230,10 +248,21 @@ async def get_mcp_consent_proposal(
     except (KeyError, TypeError, ValueError) as exc:
         raise HTTPException(status_code=401, detail="Invalid Supabase identity") from exc
 
+    organization_id = _canonical_organization_assignment(identity)
+
     require_canonical_session_authority(db)
 
     try:
-        rows = _mcp_consent_proposal_rows(db, subject, client_id)
+        db.execute(
+            text("SELECT erp_security.activate_context(:auth_user_id, :org_id)"),
+            {"auth_user_id": subject, "org_id": organization_id},
+        )
+        rows = _mcp_consent_proposal_rows(
+            db,
+            subject,
+            organization_id,
+            client_id,
+        )
     except SQLAlchemyError as exc:
         logger.error("Canonical MCP consent authority is unavailable: %s", exc)
         raise HTTPException(
