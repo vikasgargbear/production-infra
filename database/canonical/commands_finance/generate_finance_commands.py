@@ -611,7 +611,7 @@ END
             runtime_callable=True,
         ),
         *_function(
-            '"apply_supplier_adjustment_credit"(organization_id uuid, adjustment_note_id uuid, source_open_item_id uuid, target_open_item_id uuid, allocation_id uuid)',
+            '"apply_supplier_adjustment_credit"(organization_id uuid, adjustment_note_id uuid, source_open_item_id uuid, target_open_item_id uuid, allocation_id uuid, application_date date)',
             "numeric",
             f"""
 DECLARE note finance.adjustment_notes%ROWTYPE; source_item finance.open_items%ROWTYPE;
@@ -634,8 +634,10 @@ BEGIN
        OR source_item.currency_code<>'INR' THEN
       RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='supplier adjustment source and payable must share supplier, branch, and INR currency';
     END IF;
+    IF application_date IS NULL OR application_date<note.note_date OR application_date>CURRENT_DATE THEN
+      RAISE EXCEPTION USING ERRCODE='22007', MESSAGE='supplier adjustment application date is invalid'; END IF;
     SELECT coalesce(sum(a.amount),0) INTO source_used FROM finance.allocations a WHERE a.org_id=organization_id
-      AND a.open_item_id=source_item.id AND a.status='posted' AND a.reversal_of_allocation_id IS NULL
+      AND a.source_open_item_id=source_item.id AND a.status='posted' AND a.reversal_of_allocation_id IS NULL
       AND NOT EXISTS(SELECT 1 FROM finance.allocations r WHERE r.org_id=a.org_id AND r.reversal_of_allocation_id=a.id);
     SELECT coalesce(sum(a.amount),0) INTO target_used FROM finance.allocations a WHERE a.org_id=organization_id
       AND a.open_item_id=target_item.id AND a.status='posted' AND a.reversal_of_allocation_id IS NULL
@@ -646,7 +648,7 @@ BEGIN
     END IF;
     INSERT INTO finance.allocations(org_id,id,source_open_item_id,open_item_id,allocation_date,currency_code,
       amount,functional_amount,fx_rate,status,created_by_membership_id)
-    VALUES(organization_id,allocation_id,source_item.id,target_item.id,CURRENT_DATE,'INR',residual,residual,1,'posted',actor);
+    VALUES(organization_id,allocation_id,source_item.id,target_item.id,application_date,'INR',residual,residual,1,'posted',actor);
     PERFORM "{FUNCTION_SCHEMA}"."synchronize_open_item_status"(organization_id,source_item.id);
     PERFORM "{FUNCTION_SCHEMA}"."synchronize_open_item_status"(organization_id,target_item.id);
     RETURN residual;
@@ -736,7 +738,7 @@ BEGIN
         credit_amount:="{FUNCTION_SCHEMA}"."apply_supplier_adjustment_credit"(organization_id,
           (component#>>'{{adjustment_application,adjustment_note_id}}')::uuid,
           (component#>>'{{adjustment_application,source_open_item_id}}')::uuid,target.id,
-          (component#>>'{{adjustment_application,allocation_id}}')::uuid);
+          (component#>>'{{adjustment_application,allocation_id}}')::uuid,payment.payment_date);
       END IF;
     END LOOP;
     IF cash_total<>payment.amount THEN
@@ -1036,13 +1038,12 @@ BEGIN
     INSERT INTO finance.accounting_events(org_id,id,event_type,purchase_order_advance_allocation_id,journal_entry_id,
       occurred_at,source_posted_at,created_by_membership_id)
     VALUES(organization_id,event_id,'supplier_advance_application',advance.id,journal_id,posted_time,invoice.posted_at,actor);
-    INSERT INTO finance.allocations(org_id,id,purchase_order_advance_allocation_id,open_item_id,allocation_date,
+    INSERT INTO finance.allocations(org_id,id,source_open_item_id,open_item_id,allocation_date,
       currency_code,amount,functional_amount,fx_rate,status,created_by_membership_id)
-    VALUES(organization_id,allocation_id,advance.id,invoice_item.id,invoice.invoice_date,'INR',advance.gross_advance_amount,
+    VALUES(organization_id,allocation_id,advance_item.id,invoice_item.id,invoice.invoice_date,'INR',advance.gross_advance_amount,
       advance.functional_gross_advance_amount,1,'posted',actor);
     PERFORM erp_finance_commands.synchronize_open_item_status(organization_id,invoice_item.id);
-    UPDATE finance.open_items SET status='settled',settled_at=posted_time
-     WHERE org_id=organization_id AND id=advance_item.id AND status='open';
+    PERFORM erp_finance_commands.synchronize_open_item_status(organization_id,advance_item.id);
     RETURN advance_allocation_id;
 END
 """,
@@ -1604,7 +1605,7 @@ def generated_artifacts() -> tuple[str, str]:
             "runtime_callable_functions": [
                 "import_bank_statement_lines(uuid,uuid,jsonb)",
                 "apply_supplier_advance(uuid,uuid,uuid,uuid,uuid,uuid,varchar,uuid)",
-                "apply_supplier_adjustment_credit(uuid,uuid,uuid,uuid,uuid)",
+                "apply_supplier_adjustment_credit(uuid,uuid,uuid,uuid,uuid,date)",
                 "parse_portal_document(uuid,uuid,jsonb)",
                 "post_payment(uuid,uuid,uuid,uuid)",
                 "post_customer_receipt(uuid,uuid,uuid,uuid,jsonb,uuid)",

@@ -97,7 +97,7 @@ def test_payment_posting_uses_typed_cash_or_bank_settlement_identity() -> None:
 
     assert "payment.settlement_account_id" in sql
     assert "payment branch permission denied" in sql
-    assert "cash payment cannot reference a bank account" in sql
+    assert "cash or uncleared-cheque payment cannot reference a bank account" in sql
     assert "bank.account_id<>settlement.id" in sql
     assert "line.account_id=payment.settlement_account_id" in sql
     assert "line.branch_id<>payment.branch_id" in sql
@@ -157,11 +157,34 @@ def test_supplier_advance_is_gross_typed_and_applied_once_to_matching_invoice() 
     assert "supplier_advance_application" in sql
     assert "'supplier_prepayment'" in sql
     assert "purchase_order_advance_allocation_id=advance_allocation_id" in sql
+    assert "VALUES(organization_id,allocation_id,advance_item.id,invoice_item.id" in sql
+    assert "synchronize_open_item_status(organization_id,advance_item.id)" in sql
+    assert "UPDATE finance.open_items SET status='settled'" not in sql
 
     catalog = json.loads((REPO_ROOT / "database/canonical/domains/finance.json").read_text())
     allocations = next(table for table in catalog["tables"] if table["name"] == "finance.allocations")
     withholding_uq = next(index for index in allocations["indexes"] if index["name"] == "allocations_withholding_uq")
     assert withholding_uq["where"] == "withholding_id IS NOT NULL AND reversal_of_allocation_id IS NULL"
+
+
+def test_lane_b_payment_commands_are_named_replay_safe_and_subledger_exact() -> None:
+    sql = "\n".join(
+        statement
+        for statements in _load_generator()._definitions().values()
+        for statement in statements
+    )
+
+    assert '"post_customer_receipt"' in sql
+    assert '"post_supplier_payment"' in sql
+    assert '"post_customer_cheque_clearance"' in sql
+    assert '"post_customer_cheque_bounce"' in sql
+    assert "supplier payment replay evidence differs" in sql
+    assert "reversal_allocation_id')::uuid,original.id" in sql
+    assert '"mark_journal_reversed"(organization_id,original_journal_id,journal_id)' in sql
+    assert "INSERT INTO finance.accounting_events(org_id,id,event_type,adjustment_note_id" not in sql
+    assert "supplier_debit_note_receivable" not in sql
+    assert "a.source_open_item_id=source_item.id" in sql
+    assert "application_date<note.note_date" in sql
 
 
 def test_command_fragment_composes_and_resolves_exactly_eight_prior_blockers() -> None:

@@ -6855,17 +6855,19 @@ BEGIN
         CASE original.payment_purpose WHEN 'customer_advance' THEN 'liability' ELSE 'asset' END,'INR',true) FOR SHARE;
     IF original.payment_purpose='commercial_settlement' THEN
       SELECT coalesce(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
-        'original_allocation_id',allocation.id,'open_item_id',allocation.open_item_id,
-        'reversal_allocation_id',ids.value->>'reversal_allocation_id') ORDER BY allocation.id),'[]'::jsonb)
-        INTO compensating FROM finance.allocations allocation
-        JOIN pg_catalog.jsonb_array_elements(request_document->'compensating_allocations') ids(value)
-          ON (ids.value->>'original_allocation_id')::uuid=allocation.id
-       WHERE allocation.org_id=organization_id AND allocation.payment_id=original.id AND allocation.status='posted'
-         AND allocation.reversal_of_allocation_id IS NULL AND NOT EXISTS(SELECT 1 FROM finance.allocations reversal
-           WHERE reversal.org_id=allocation.org_id AND reversal.reversal_of_allocation_id=allocation.id);
+        'original_allocation_id',ordered.id,'open_item_id',ordered.open_item_id,
+        'reversal_allocation_id',ids.value) ORDER BY ordered.id),'[]'::jsonb)
+        INTO compensating FROM (
+          SELECT allocation.id,allocation.open_item_id,row_number() OVER (ORDER BY allocation.id) AS ordinal
+            FROM finance.allocations allocation
+           WHERE allocation.org_id=organization_id AND allocation.payment_id=original.id AND allocation.status='posted'
+             AND allocation.reversal_of_allocation_id IS NULL AND NOT EXISTS(SELECT 1 FROM finance.allocations reversal
+               WHERE reversal.org_id=allocation.org_id AND reversal.reversal_of_allocation_id=allocation.id)
+        ) ordered JOIN pg_catalog.jsonb_array_elements_text(request_document->'compensating_allocation_ids')
+          WITH ORDINALITY ids(value,ordinal) USING (ordinal);
     ELSE
       SELECT pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object('open_item_id',item.id,
-        'allocation_id',request_document#>>'{compensating_allocations,0,allocation_id}')) INTO compensating
+        'allocation_id',request_document#>>'{compensating_allocation_ids,0}')) INTO compensating
        FROM finance.accounting_events event JOIN finance.open_items item
          ON item.org_id=event.org_id AND item.accounting_event_id=event.id
        WHERE event.org_id=organization_id AND event.payment_id=original.id AND item.item_side='payable' FOR UPDATE OF item;

@@ -82,7 +82,7 @@
   },
   "manifest_version": "1.0.0",
   "mapping_file": "baseline-finance-command-enforcements.json",
-  "mapping_sha256": "503a623f428d0e9f48fd072d2d6e61c15b83c58d4de97d91247d8a290a84aa72",
+  "mapping_sha256": "7ebaa4d82ca93b027835742dd010010d6c04c983ef350b0b1aaa9a4f86752b64",
   "postgresql": "15+",
   "resolved_count": 8,
   "resolved_invariants": [
@@ -102,7 +102,7 @@
     "runtime_callable_functions": [
       "import_bank_statement_lines(uuid,uuid,jsonb)",
       "apply_supplier_advance(uuid,uuid,uuid,uuid,uuid,uuid,varchar,uuid)",
-      "apply_supplier_adjustment_credit(uuid,uuid,uuid,uuid,uuid)",
+      "apply_supplier_adjustment_credit(uuid,uuid,uuid,uuid,uuid,date)",
       "parse_portal_document(uuid,uuid,jsonb)",
       "post_payment(uuid,uuid,uuid,uuid)",
       "post_customer_receipt(uuid,uuid,uuid,uuid,jsonb,uuid)",

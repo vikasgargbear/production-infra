@@ -246,6 +246,10 @@ def validate_prepare_payload_semantics(
             raise ValueError("invoice-settlement allocations must exactly equal amount")
         if purpose == "customer_advance" and allocations:
             raise ValueError("customer advance must have zero invoice allocations")
+        if purpose == "customer_advance" and values.get("sales_order_id") is None:
+            raise ValueError("customer advance requires a goods-only sales_order_id")
+        if purpose == "invoice_settlement" and values.get("sales_order_id") is not None:
+            raise ValueError("invoice settlement cannot include customer-advance order lineage")
         if method == "cheque":
             required = (
                 values.get("instrument_number"),

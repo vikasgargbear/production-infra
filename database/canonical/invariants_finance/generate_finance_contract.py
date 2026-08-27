@@ -333,12 +333,24 @@ BEGIN
             ON note.org_id=event.org_id AND note.id=event.adjustment_note_id
          WHERE event.org_id=NEW.org_id AND event.id=source_item.accounting_event_id
            AND event.event_type='adjustment_note' FOR SHARE OF note;
-        IF NOT FOUND OR source_item.status<>'open' OR source_item.id=item.id
+        IF NOT FOUND THEN
+          SELECT po_advance.* INTO advance FROM procurement.purchase_order_advance_allocations po_advance
+            JOIN finance.accounting_events event ON event.org_id=po_advance.org_id
+             AND event.payment_id=po_advance.payment_id AND event.event_type='payment'
+           WHERE po_advance.org_id=NEW.org_id AND po_advance.prepayment_open_item_id=source_item.id
+             AND event.id=source_item.accounting_event_id AND po_advance.status='posted'
+             AND po_advance.reversal_of_allocation_id IS NULL FOR SHARE OF po_advance;
+        END IF;
+        IF (adjustment.id IS NULL AND advance.id IS NULL) OR source_item.status<>'open' OR source_item.id=item.id
            OR source_item.party_id<>item.party_id OR source_item.currency_code<>item.currency_code
-           OR source_item.item_side=item.item_side OR adjustment.status<>'posted'
-           OR adjustment.party_id<>source_item.party_id
-           OR adjustment.counterparty_payable_amount<source_item.principal_amount THEN
-          RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='residual adjustment open item is incompatible with target open item';
+           OR source_item.item_side=item.item_side
+           OR (adjustment.id IS NOT NULL AND (adjustment.status<>'posted'
+             OR adjustment.party_id<>source_item.party_id
+             OR adjustment.counterparty_payable_amount<source_item.principal_amount))
+           OR (advance.id IS NOT NULL AND (advance.gross_advance_amount<>source_item.principal_amount
+             OR NOT EXISTS (SELECT 1 FROM parties.supplier_accounts supplier WHERE supplier.org_id=NEW.org_id
+               AND supplier.id=advance.supplier_account_id AND supplier.party_id=item.party_id))) THEN
+          RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='residual credit open item is incompatible with target open item';
         END IF;
         SELECT coalesce(sum(a.amount),0) INTO source_allocated FROM finance.allocations a
          WHERE a.org_id=NEW.org_id AND a.source_open_item_id=source_item.id AND a.status='posted'
