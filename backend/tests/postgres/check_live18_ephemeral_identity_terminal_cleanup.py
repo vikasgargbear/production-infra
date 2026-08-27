@@ -25,6 +25,7 @@ from psycopg2.extras import register_uuid
 from sqlalchemy.engine import make_url
 
 from scripts import provision_ephemeral_browser_identities as identities
+from scripts import provision_ephemeral_canonical_live as mcp_identities
 
 
 register_uuid()
@@ -113,6 +114,69 @@ def _set_bootstrap_context(cursor, fixture: TenantFixture) -> None:
         cursor.execute("SELECT set_config(%s,%s,true)", (name, str(value)))
     for name in ("app.auth_user_id", "app.user_id", "app.membership_id"):
         cursor.execute("SELECT set_config(%s,'',true)", (name,))
+
+
+def _assert_mcp_audit_context_reaches_the_real_trigger(
+    cursor, fixture: TenantFixture
+) -> None:
+    """Prove the production MCP context survives deferred-trigger evaluation."""
+
+    original = (
+        mcp_identities.DEMO_ORG_ID,
+        mcp_identities.DEMO_REVIEWER_AUTH_USER_ID,
+        mcp_identities.DEMO_REVIEWER_USER_ID,
+        mcp_identities.DEMO_REVIEWER_MEMBERSHIP_ID,
+    )
+    cursor.execute("SAVEPOINT mcp_audit_context")
+    try:
+        mcp_identities.DEMO_ORG_ID = str(fixture.org_id)
+        mcp_identities.DEMO_REVIEWER_AUTH_USER_ID = str(
+            fixture.creator_auth_user_id
+        )
+        mcp_identities.DEMO_REVIEWER_USER_ID = str(fixture.creator_user_id)
+        mcp_identities.DEMO_REVIEWER_MEMBERSHIP_ID = str(
+            fixture.creator_membership_id
+        )
+        cursor.execute("SET CONSTRAINTS ALL DEFERRED")
+        request_id = str(uuid4())
+        mcp_identities._set_mcp_audit_context(cursor, request_id)
+        cursor.execute(
+            """
+            UPDATE automation.agent_grants
+               SET status='suspended',suspended_at=transaction_timestamp(),
+                   updated_at=transaction_timestamp(),row_version=row_version+1
+             WHERE org_id=%s AND id=%s AND status='active'
+            """,
+            (fixture.org_id, fixture.agent_grant_id),
+        )
+        assert cursor.rowcount == 1
+        cursor.execute("SET CONSTRAINTS ALL IMMEDIATE")
+        cursor.execute(
+            """
+            SELECT event.actor_membership_id,event.request_id,event.event_type
+              FROM core.audit_events AS event
+             WHERE event.org_id=%s AND event.request_id=%s
+               AND event.event_type='automation.agent_grants.update'
+            """,
+            (fixture.org_id, request_id),
+        )
+        assert cursor.fetchall() == [
+            (
+                fixture.creator_membership_id,
+                UUID(request_id),
+                "automation.agent_grants.update",
+            )
+        ]
+    finally:
+        (
+            mcp_identities.DEMO_ORG_ID,
+            mcp_identities.DEMO_REVIEWER_AUTH_USER_ID,
+            mcp_identities.DEMO_REVIEWER_USER_ID,
+            mcp_identities.DEMO_REVIEWER_MEMBERSHIP_ID,
+        ) = original
+        cursor.execute("ROLLBACK TO SAVEPOINT mcp_audit_context")
+        cursor.execute("RELEASE SAVEPOINT mcp_audit_context")
+        cursor.execute("SET CONSTRAINTS ALL DEFERRED")
 
 
 def _seed_tenant(cursor, fixture: TenantFixture) -> None:
@@ -650,6 +714,8 @@ def main() -> None:
             _seed_tenant(cursor, unrelated_tenant)
             cursor.execute("SET CONSTRAINTS ALL IMMEDIATE")
             cursor.execute("SET CONSTRAINTS ALL DEFERRED")
+
+            _assert_mcp_audit_context_reaches_the_real_trigger(cursor, target)
 
             assert _active_authority_count(cursor, target) == 6
             assert _active_authority_count(cursor, other_tenant) == 6
