@@ -85,7 +85,10 @@ const ProductFlow: React.FC<ProductFlowProps> = ({
     try {
       let response;
       if (isEditing) {
-        const update = productUpdateSchema.parse(payload) as ProductUpdateInput;
+        const update = productUpdateSchema.parse({
+          ...payload,
+          row_version: product!.row_version,
+        }) as ProductUpdateInput;
         response = await productsApi.update(product!.product_id!, update);
       } else {
         response = await productsApi.create(

@@ -63,6 +63,7 @@ test('shows an existing draft code read-only and never includes it in update pay
   render(<ProductFlow open onClose={jest.fn()} product={{
     product_id: '33333333-3333-7333-8333-333333333333',
     product_code: 'IMMUTABLE-P-1', product_name: 'Original', product_type: 'medicine',
+    row_version: 7,
   }} />);
 
   expect(screen.getByLabelText('Immutable product code')).toHaveTextContent('IMMUTABLE-P-1');
@@ -72,7 +73,7 @@ test('shows an existing draft code read-only and never includes it in update pay
   await waitFor(() => expect(mockUpdate).toHaveBeenCalled());
   expect(mockUpdate).toHaveBeenCalledWith(
     '33333333-3333-7333-8333-333333333333',
-    { product_name: 'Renamed', generic_name: undefined, product_kind: 'medicine' },
+    { row_version: 7, product_name: 'Renamed', generic_name: undefined, product_kind: 'medicine' },
   );
   expect(mockCreate).not.toHaveBeenCalled();
 });

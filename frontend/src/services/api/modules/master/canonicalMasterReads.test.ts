@@ -49,6 +49,7 @@ test('product decoder accepts UUIDv7 and keeps missing GST distinct from zero', 
     current_stock: '0.000000',
     is_active: true,
     status: 'active',
+    row_version: 1,
   };
   expect(decodeCanonicalProductList({ products: [base], total: 1, offset: 0, limit: 20 })
     .products[0].gst_percent).toBeNull();

@@ -16,6 +16,7 @@ export interface Product {
   product_name: string;   // NOT NULL
   product_type: string;   // NOT NULL (was missing!)
   uom_conversion_id?: string;
+  row_version?: number;
 
   // Nullable fields from DB
   generic_name?: string;
@@ -141,6 +142,7 @@ export const productDraftBaseSchema = z.object({
 export const productCreateSchema = productDraftBaseSchema;
 
 export const productUpdateSchema = z.object({
+  row_version: z.number().int().positive(),
   product_name: z.string().trim().min(1).max(255).optional(),
   generic_name: z.string().trim().max(255).optional(),
   brand: z.string().trim().max(100).optional(),
@@ -154,7 +156,7 @@ export const productUpdateSchema = z.object({
   maintain_batch: z.boolean().optional(),
   maintain_expiry: z.boolean().optional(),
 }).strict().superRefine((data, context) => {
-  if (Object.keys(data).length === 0) {
+  if (Object.keys(data).every(key => key === 'row_version')) {
     context.addIssue({ code: z.ZodIssueCode.custom, message: 'At least one product field is required' });
   }
   if (
@@ -178,6 +180,7 @@ export interface ProductMutationResponse {
   product_code: string;
   product_name: string;
   lifecycle_status: 'draft';
+  row_version?: number;
   message: string;
 }
 
