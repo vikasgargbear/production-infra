@@ -604,6 +604,17 @@ def test_live18_acceptance_requires_exact_matrix_and_runtime_reconciliation():
     )
     assert artifact["payload"]["operation_count"] == 17
 
+    pre_browser_failure = json.loads(json.dumps(manifest))
+    pre_browser_failure["run"]["browser_outcome"] = "skipped"
+    pre_browser_failure["deployment"]["status"] = "provenance_only"
+    with pytest.raises(evidence.EvidenceError, match="not a successful exact-run"):
+        evidence.capture_live18_acceptance(
+            manifest=pre_browser_failure, binding=binding,
+            workflow_run_id=123, workflow_run_attempt=1, artifact_id=456,
+            artifact_sha256="f" * 64,
+            artifact_digest="sha256:" + "8" * 64,
+        )
+
     replay_diagnostic = json.loads(json.dumps(manifest))
     next(
         row for row in replay_diagnostic["browser"]

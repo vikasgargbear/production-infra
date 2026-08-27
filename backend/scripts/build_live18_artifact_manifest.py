@@ -319,9 +319,18 @@ def _browser_failure_summary(path: Path) -> dict[str, Any]:
     }
 
 
-def _deployment_summary(path: Path) -> dict[str, Any]:
+def _deployment_summary(
+    path: Path,
+    *,
+    allow_provenance_only: bool = False,
+) -> dict[str, Any]:
     value = _read_json(path)
-    if value.get("schema") != "aasopharma.live18.deployment-evidence.v1":
+    schema = value.get("schema")
+    ready_schema = "aasopharma.live18.deployment-evidence.v1"
+    provenance_schema = "aasopharma.deployment-provenance.v1"
+    if schema != ready_schema and not (
+        allow_provenance_only and schema == provenance_schema
+    ):
         raise ArtifactManifestError("wrong deployment evidence schema")
     provider = value.get("provider")
     services = value.get("services")
@@ -349,21 +358,34 @@ def _deployment_summary(path: Path) -> dict[str, Any]:
     if (
         services["api"].get("health")
         != {"status": "healthy", "git_commit": commit_sha}
-        or services["api"].get("readiness") != {"status": "ready"}
         or services["frontend"].get("health") != "ok"
         or services["frontend"].get("build_metadata")
         != {"service": "aasopharma-erp", "git_commit": commit_sha}
         or services["mcp"].get("health")
         != {"status": "ok", "git_commit": commit_sha}
-        or services["mcp"].get("readiness") != {"status": "ready"}
     ):
         raise ArtifactManifestError(
-            "deployment evidence does not prove exact-SHA public readiness"
+            "deployment evidence does not prove exact-SHA public provenance"
         )
+    if schema == ready_schema:
+        if (
+            services["api"].get("readiness") != {"status": "ready"}
+            or services["mcp"].get("readiness") != {"status": "ready"}
+        ):
+            raise ArtifactManifestError(
+                "deployment evidence does not prove exact-SHA public readiness"
+            )
+        status = "ready"
+    else:
+        if "readiness" in services["api"] or "readiness" in services["mcp"]:
+            raise ArtifactManifestError(
+                "provenance-only evidence must not claim public readiness"
+            )
+        status = "provenance_only"
     return {
         "provider": provider,
         "commit_sha": commit_sha,
-        "status": "ready",
+        "status": status,
         "origins": origins,
         "deployment_ids": deployment_ids if provider == "railway" else None,
         "raw_evidence_sha256": _digest(path),
@@ -648,7 +670,14 @@ def build_manifest(
             raise ArtifactManifestError(
                 "successful browser outcome requires two reviewed screenshots per ready operation"
             )
-    deployment = _deployment_summary(deployed_sha)
+    deployment = _deployment_summary(
+        deployed_sha,
+        # A failed/cancelled/skipped certification may have stopped before
+        # Railway reopened its write fence and emitted readiness evidence.
+        # Preserve exact-SHA provenance in that failure artifact without ever
+        # allowing it to satisfy the successful certification contract.
+        allow_provenance_only=browser_outcome != "success",
+    )
     reconciliation_path = _optional_nonempty_file(reconciliation_evidence)
     if browser_outcome == "success" and reconciliation_path is None:
         raise ArtifactManifestError(

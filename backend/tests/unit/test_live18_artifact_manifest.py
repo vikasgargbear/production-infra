@@ -73,6 +73,15 @@ def _ready_deployment(provider: str) -> dict[str, object]:
     }
 
 
+def _provenance_deployment(provider: str) -> dict[str, object]:
+    value = _ready_deployment(provider)
+    value["schema"] = "aasopharma.deployment-provenance.v1"
+    services = value["services"]
+    del services["api"]["readiness"]
+    del services["mcp"]["readiness"]
+    return value
+
+
 def _screenshots(root: Path, operation_id: str) -> tuple[list[dict[str, object]], Path]:
     directory = root / "screenshots"
     directory.mkdir(mode=0o700, exist_ok=True)
@@ -206,10 +215,25 @@ def _railway_demo_receipt(*, run_id: str, run_attempt: str) -> dict[str, object]
 def test_deployment_summary_requires_exact_ready_sha_and_railway_ids(
     tmp_path: Path,
 ) -> None:
-    provenance_only = _ready_deployment("railway")
-    provenance_only["schema"] = "aasopharma.deployment-provenance.v1"
+    provenance_only = _provenance_deployment("railway")
     with pytest.raises(ArtifactManifestError, match="wrong deployment evidence schema"):
         _deployment_summary(_write(tmp_path / "provenance.json", provenance_only))
+
+    provenance = _deployment_summary(
+        _write(tmp_path / "allowed-provenance.json", provenance_only),
+        allow_provenance_only=True,
+    )
+    assert provenance["status"] == "provenance_only"
+
+    provenance_with_readiness = _provenance_deployment("railway")
+    provenance_with_readiness["services"]["api"]["readiness"] = {
+        "status": "ready",
+    }
+    with pytest.raises(ArtifactManifestError, match="must not claim public readiness"):
+        _deployment_summary(
+            _write(tmp_path / "claiming-provenance.json", provenance_with_readiness),
+            allow_provenance_only=True,
+        )
 
     not_ready = _ready_deployment("railway")
     not_ready["services"]["mcp"]["readiness"] = {"status": "not_ready"}
@@ -218,7 +242,7 @@ def test_deployment_summary_requires_exact_ready_sha_and_railway_ids(
 
     wrong_sha = _ready_deployment("railway")
     wrong_sha["services"]["api"]["health"]["git_commit"] = "b" * 40
-    with pytest.raises(ArtifactManifestError, match="public readiness"):
+    with pytest.raises(ArtifactManifestError, match="public provenance"):
         _deployment_summary(_write(tmp_path / "wrong-sha.json", wrong_sha))
 
     missing_id = _ready_deployment("railway")
@@ -537,7 +561,9 @@ def test_attestation_rejects_operation_matrix_drift(tmp_path: Path) -> None:
 
 
 def test_manifest_treats_empty_optional_demo_evidence_as_absent(tmp_path: Path) -> None:
-    deployed = _write(tmp_path / "deployed.json", _ready_deployment("railway"))
+    provenance = _provenance_deployment("railway")
+    provenance["unreviewed_payload"] = {"token": "must-not-upload"}
+    deployed = _write(tmp_path / "deployed.json", provenance)
     demo = tmp_path / "demo.json"
     demo.touch()
 
@@ -552,6 +578,8 @@ def test_manifest_treats_empty_optional_demo_evidence_as_absent(tmp_path: Path) 
     )
 
     assert manifest["demo"] is None
+    assert manifest["deployment"]["status"] == "provenance_only"
+    assert "must-not-upload" not in json.dumps(manifest)
 
 
 def test_manifest_treats_empty_optional_database_evidence_as_absent(tmp_path: Path) -> None:
