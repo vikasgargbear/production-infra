@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import os
 import json
+import os
+from datetime import date
 from typing import Optional
 from uuid import UUID
 
@@ -73,7 +74,9 @@ def _expect_insufficient_privilege(
         raise AssertionError("erp_runtime retained forbidden raw command-table access")
 
 
-def _seed(session: Session) -> None:
+def _seed(session: Session) -> date:
+    business_date = session.scalar(text("SELECT CURRENT_DATE"))
+    assert isinstance(business_date, date)
     session.execute(text("SET LOCAL session_replication_role=replica"))
     session.execute(text("INSERT INTO auth.users(id) VALUES (:auth)"), {"auth": AUTH})
     session.execute(text('SET LOCAL ROLE "erp_migration_owner"'))
@@ -120,16 +123,17 @@ def _seed(session: Session) -> None:
             """
             INSERT INTO sales.orders(
               org_id,id,branch_id,customer_account_id,order_number,fiscal_year,order_date,
-              status,supply_type,zero_rated_payment_mode,tax_charge_mechanism,
+              requested_delivery_date,status,supply_type,zero_rated_payment_mode,tax_charge_mechanism,
               billing_address_id,shipping_address_id,currency_code,
               calculation_ruleset_version,document_discount_kind,document_discount_basis,
               document_discount_value,rounding_policy,approved_at,approved_by_membership_id,
               created_by_membership_id,updated_by_membership_id)
             VALUES
-              (:org,:order,:branch,:customer,'SO-RLS',2026,CURRENT_DATE,'approved',
+              (:org,:order,:branch,:customer,'SO-RLS',2026,:business_date,:business_date,'approved',
                'intra_state','not_applicable','normal',:address,:address,'INR','test-v1',
                'none','price_value',0,'none',transaction_timestamp(),:member,:member,:member),
-              (:other_org,:other_order,:other_branch,:customer,'SO-OTHER',2026,CURRENT_DATE,
+              (:other_org,:other_order,:other_branch,:customer,'SO-OTHER',2026,
+               :business_date,:business_date,
                'approved','intra_state','not_applicable','normal',:address,:address,'INR',
                'test-v1','none','price_value',0,'none',transaction_timestamp(),:member,:member,:member);
             INSERT INTO sales.invoices(
@@ -158,6 +162,7 @@ def _seed(session: Session) -> None:
             "other_invoice": OTHER_INVOICE, "branch": BRANCH,
             "other_branch": OTHER_BRANCH, "customer": CUSTOMER,
             "address": ADDRESS, "member": MEMBERSHIP,
+            "business_date": business_date,
         },
     )
     for command_id, resource_id, capability, operation, resource_type in (
@@ -248,6 +253,8 @@ def _seed(session: Session) -> None:
                     else {
                         "delivery_address_id": str(ADDRESS),
                         "delivery_address_row_version": "7",
+                        "order_date": business_date.isoformat(),
+                        "requested_delivery_date": business_date.isoformat(),
                     },
                     separators=(",", ":"),
                     sort_keys=True,
@@ -257,6 +264,7 @@ def _seed(session: Session) -> None:
     session.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
     session.execute(text("RESET ROLE"))
     session.execute(text("SET LOCAL session_replication_role=origin"))
+    return business_date
 
 
 def main() -> None:
@@ -266,7 +274,7 @@ def main() -> None:
             transaction = session.begin()
             try:
                 assert int(session.scalar(text("SHOW server_version_num"))) // 10000 == 15
-                _seed(session)
+                business_date = _seed(session)
                 session.execute(text('SET SESSION AUTHORIZATION "erp_runtime"'))
                 session.execute(
                     text("SELECT erp_security.activate_context(:auth,:org)"),
@@ -312,6 +320,8 @@ def main() -> None:
                     ORDER, None, None, _context("sales.orders.get"), session
                 ).document
                 assert order is not None
+                assert order.order_date == business_date
+                assert order.requested_delivery_date == business_date
                 assert order.delivery_address_id == ADDRESS
                 assert order.delivery_address_row_version == 7
 
