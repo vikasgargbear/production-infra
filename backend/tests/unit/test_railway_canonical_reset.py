@@ -458,6 +458,35 @@ def test_workflow_orders_reset_fence_and_exact_deployment() -> None:
     assert "UPLOAD_OK:" in reset_block
     assert "timeout --signal=TERM 60s railway ssh" in reset_block
     assert "after 12 attempts" in reset_block
+    reset_transport = reset_block[
+        reset_block.index("reset_request_sha256=") : reset_block.index(
+            'touch "$RAILWAY_RESET_FENCE_CLOSED"',
+            reset_block.index("reset_request_sha256="),
+        )
+    ]
+    assert "for attempt in $(seq 1 3); do" in reset_transport
+    assert (
+        'attempt_receipt="$RUNNER_TEMP/railway-reset-control-attempt-$attempt.json"'
+        in reset_transport
+    )
+    assert '< "$reset_request" > "$attempt_receipt" || reset_rc=$?' in reset_transport
+    assert 'test "$reset_rc" -eq 255' in reset_transport
+    assert 'verify_reset_receipt "$attempt_receipt"' in reset_transport
+    assert (
+        'mv -f "$attempt_receipt" \\\n                railway-reset-evidence/railway-reset-control.json'
+        in reset_transport
+    )
+    assert 'if test "$reset_rc" -ne 255; then' in reset_transport
+    assert "Railway reset failed with non-transport status" in reset_transport
+    assert "reattest_reset_host" in reset_transport
+    assert '--arg deployment "$RAILWAY_RESET_BOOTSTRAP_DEPLOYMENT_ID"' in reset_transport
+    assert '--arg instance "$RAILWAY_RESET_BOOTSTRAP_INSTANCE_ID"' in reset_transport
+    assert 'test "$observed_host_sha" != "$RAILWAY_RESET_BOOTSTRAP_HOST_SHA"' in reset_transport
+    assert (
+        'test "$(sha256sum "$reset_request" | cut -d\' \' -f1)" = \\\n              "$reset_request_sha256"'
+        in reset_transport
+    )
+    assert ">> \"$attempt_receipt\"" not in reset_transport
     preclose_marker = reset_block.index('touch "$RAILWAY_RESET_FENCE_CLOSED"')
     uncertain_marker = reset_block.index('rm -f "$RAILWAY_RESET_FENCE_CLOSED"')
     reset_call = reset_block.index("railway_reset_control_plane.py reset-boundary")
