@@ -17,6 +17,8 @@ from sqlalchemy.orm import Session
 
 from app.api.routes import canonical_supplier_invoice_reads as reads
 
+from check_supplier_invoice_landed_cost_lifecycle_pg15 import run_lifecycle
+
 
 ORG_ID = UUID("d3000000-0000-7000-8000-000000000001")
 RESOURCE_ID = UUID("d3000000-0000-7000-8000-000000000099")
@@ -117,6 +119,7 @@ def main() -> None:
             assert "::integer" not in source
     finally:
         engine.dispose()
+    run_lifecycle()
 
 
 if __name__ == "__main__":

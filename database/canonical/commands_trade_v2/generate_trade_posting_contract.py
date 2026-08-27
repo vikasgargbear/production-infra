@@ -268,10 +268,10 @@ DECLARE doc inventory.inventory_documents%ROWTYPE;
 BEGIN
     SELECT * INTO STRICT doc FROM inventory.inventory_documents
      WHERE org_id=p_org_id AND id=p_document_id FOR UPDATE;
-    IF doc.status<>'approved' OR doc.document_type<>'cost_adjustment'
+    IF doc.status NOT IN ('approved','posted') OR doc.document_type<>'cost_adjustment'
        OR doc.supplier_invoice_id IS NULL
        OR doc.costing_method_snapshot<>'moving_weighted_average' THEN
-        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='landed-cost command requires an approved typed MWA cost adjustment';
+        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='landed-cost command requires an approved or posted typed MWA cost adjustment';
     END IF;
     SELECT id INTO locked_supplier_invoice_id FROM procurement.supplier_invoices
      WHERE org_id=p_org_id AND id=doc.supplier_invoice_id AND status='posted'
@@ -661,9 +661,10 @@ BEGIN
            AND receipt.id=allocation.goods_receipt_line_id
          WHERE supplier_line.org_id=p_org_id
            AND supplier_line.supplier_invoice_id=p_supplier_invoice_id
-      ) AS target
-        ON target.location_id=balance.location_id
-       AND target.product_id=balance.product_id AND target.batch_id=balance.batch_id
+      ) AS source_target
+        ON source_target.location_id=balance.location_id
+       AND source_target.product_id=balance.product_id
+       AND source_target.batch_id=balance.batch_id
      WHERE balance.org_id=p_org_id
      ORDER BY balance.location_id,balance.product_id,balance.batch_id
      FOR UPDATE OF balance;
@@ -707,10 +708,11 @@ BEGIN
       )
       SELECT count(*),sum(CASE source_line.landed_cost_allocation_method
                WHEN 'value_weighted' THEN balance.inventory_value ELSE balance.on_hand_quantity END)
-        INTO target_count,basis_total FROM targets target
+        INTO target_count,basis_total FROM targets stock_target
         JOIN inventory.stock_balances balance ON balance.org_id=p_org_id
-         AND balance.location_id=target.location_id AND balance.product_id=target.product_id
-         AND balance.batch_id=target.batch_id
+         AND balance.location_id=stock_target.location_id
+         AND balance.product_id=stock_target.product_id
+         AND balance.batch_id=stock_target.batch_id
        WHERE balance.on_hand_quantity>0;
       IF target_count=0 OR basis_total<=0 OR
          (source_line.landed_cost_allocation_method='direct' AND target_count<>1) THEN
@@ -733,12 +735,13 @@ BEGIN
           SELECT location_id,product_id,batch_id,min(uom_code) AS uom_code,sum(allocated_quantity) AS allocated_quantity
             FROM raw_targets GROUP BY location_id,product_id,batch_id
         )
-        SELECT target.*,balance.on_hand_quantity,balance.inventory_value,balance.average_unit_cost
-          FROM targets target JOIN inventory.stock_balances balance ON balance.org_id=p_org_id
-           AND balance.location_id=target.location_id AND balance.product_id=target.product_id
-           AND balance.batch_id=target.batch_id
+        SELECT stock_target.*,balance.on_hand_quantity,balance.inventory_value,balance.average_unit_cost
+          FROM targets stock_target JOIN inventory.stock_balances balance ON balance.org_id=p_org_id
+           AND balance.location_id=stock_target.location_id
+           AND balance.product_id=stock_target.product_id
+           AND balance.batch_id=stock_target.batch_id
          WHERE balance.on_hand_quantity>0
-         ORDER BY target.location_id,target.product_id,target.batch_id
+         ORDER BY stock_target.location_id,stock_target.product_id,stock_target.batch_id
          FOR UPDATE OF balance
       LOOP
         target_position:=target_position+1;

@@ -91,7 +91,7 @@ def main() -> None:
             assert "account-role mapping is ambiguous" in role_resolver
             assert "account-role UUID setting is missing" in role_resolver
             assert "finance.account_roles" in role_resolver
-            assert "value_text::uuid" in role_resolver
+            assert "setting_value::uuid" in role_resolver
     finally:
         engine.dispose()
 

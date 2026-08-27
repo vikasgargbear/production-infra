@@ -51,3 +51,13 @@ def test_migration_owns_explicit_once_only_variance_authority():
     assert "INSERT INTO inventory.stock_ledger_entries" not in migration
     assert "INSERT INTO inventory.stock_balances" not in migration
     assert 'FROM PUBLIC, "erp_app", "erp_runtime"' in migration
+    assert (
+        'GRANT EXECUTE ON FUNCTION "erp_automation_commands".'
+        '"execute_approved_command"(organization_id uuid, command_request_id uuid) '
+        'TO "erp_runtime"'
+    ) in migration
+    assert (
+        'GRANT EXECUTE ON FUNCTION "erp_automation_commands".'
+        '"persist_supplier_invoice_prepare"'
+    ) in migration
+    assert 'TO "erp_calculator"' in migration

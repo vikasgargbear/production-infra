@@ -24,7 +24,7 @@ SQL_PATH = (
     / "sql"
     / "20260827_0034_supplier_invoice_landed_cost_authority.sql"
 )
-EXPECTED_SQL_SHA256 = "51e4efd4e2f10edafbf921efe45f114e39c8d2f6f0c51e3996a959b56d1d58a4"
+EXPECTED_SQL_SHA256 = "309a7e7b7a9ed81e877461ecba6cd15ceec1f788183183b03d7027258ad575ac"
 
 
 def _reviewed_sql() -> str:

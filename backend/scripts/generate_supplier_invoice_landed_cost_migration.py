@@ -9,7 +9,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 OUTPUT = REPO / "backend/alembic/sql/20260827_0034_supplier_invoice_landed_cost_authority.sql"
-EXPECTED_SQL_SHA256 = "51e4efd4e2f10edafbf921efe45f114e39c8d2f6f0c51e3996a959b56d1d58a4"
+EXPECTED_SQL_SHA256 = "309a7e7b7a9ed81e877461ecba6cd15ceec1f788183183b03d7027258ad575ac"
 FUNCTIONS = (
     ("erp_trade_commands_v2", "total_landed_cost_pool"),
     ("erp_trade_commands_v2", "eligible_landed_cost_pool"),
