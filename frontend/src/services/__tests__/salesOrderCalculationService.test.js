@@ -3,7 +3,10 @@ jest.mock('../api/modules/sales/calculations.api', () => ({
   salesOrderCalculationsApi: { preview: jest.fn() }
 }));
 
-import { calculateSalesOrderPreview } from '../calculations/salesOrderCalculationService';
+import {
+  calculateSalesOrderPreview,
+  isSalesOrderPreviewReady,
+} from '../calculations/salesOrderCalculationService';
 import { salesOrderCalculationsApi } from '../api/modules/sales/calculations.api';
 import { exactInvoiceResponse, exactSalesLine } from './exactCalculationFixtures';
 
@@ -41,6 +44,23 @@ test('preserves UUIDs, six-place quantities and >2^53 rates into exact API strin
 test('rejects blank customer sentinel before transport', async () => {
   await expect(calculateSalesOrderPreview({ ...order, customer_id: 0 }, true)).rejects.toThrow(/canonical UUID/);
   expect(salesOrderCalculationsApi.preview).not.toHaveBeenCalled();
+});
+
+test('keeps zero billed-quantity drafts out of the calculation transport', async () => {
+  const zeroQuantityOrder = {
+    ...order,
+    items: [{ ...order.items[0], quantity: '0.000000', free_quantity: '0.000000' }],
+  };
+
+  expect(isSalesOrderPreviewReady(zeroQuantityOrder)).toBe(false);
+  await expect(calculateSalesOrderPreview(zeroQuantityOrder, true)).rejects.toThrow(
+    'Sales order calculation items[0].quantity must be greater than zero.',
+  );
+  expect(salesOrderCalculationsApi.preview).not.toHaveBeenCalled();
+});
+
+test('recognizes a complete positive sales-order draft as preview-ready', () => {
+  expect(isSalesOrderPreviewReady(order)).toBe(true);
 });
 
 test('rejects numeric authoritative response decimals', async () => {

@@ -6,7 +6,10 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { toast } from 'react-toastify';
 import { apiClient } from '../../../../services/api';
-import { calculateSalesOrderPreview } from '../../../../services/calculations/salesOrderCalculationService';
+import {
+    calculateSalesOrderPreview,
+    isSalesOrderPreviewReady,
+} from '../../../../services/calculations/salesOrderCalculationService';
 import { useNetworkStatus } from '../../../../hooks/useNetworkStatus';
 import { useSalesOrderSave } from './useSalesOrderSave';
 import { useCompany } from '../../../../contexts/CompanyContext';
@@ -206,23 +209,36 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
         sourceOrder: Order = order,
     ): Promise<void> => {
         const requestId = ++calculationRequestRef.current;
-        if (!items || items.length === 0) {
+        const orderData = {
+            ...sourceOrder,
+            items,
+        };
+        if (!items || items.length === 0 || !isSalesOrderPreviewReady(orderData)) {
             setOrder(prev => ({
                 ...prev,
+                items: items.map(item => ({
+                    ...item,
+                    subtotal: 0,
+                    discount_amount: 0,
+                    tax_amount: 0,
+                    total: 0,
+                    calculated_total: 0,
+                    taxable_amount: 0,
+                })),
                 total_quantity: 0,
                 subtotal_amount: 0,
                 tax_amount: 0,
                 total_amount: 0,
-                final_amount: 0
+                final_amount: 0,
+                cgst_amount: 0,
+                sgst_amount: 0,
+                igst_amount: 0,
+                calculatedLineItems: [],
             }));
             return;
         }
 
         try {
-            const orderData = {
-                ...sourceOrder,
-                items,
-            };
             const result = await calculateSalesOrderPreview(orderData, true);
 
             if (requestId !== calculationRequestRef.current) {

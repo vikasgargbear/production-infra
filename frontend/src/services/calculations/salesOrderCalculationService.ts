@@ -8,12 +8,15 @@ import {
 import type { Order } from '../../types/models';
 import { normalizeInvoicePreview } from './invoiceCalculationService';
 import {
+    calculationQuantityOptions,
     inputMoney,
     inputPercent,
     inputQuantity,
     inputRate,
 } from './exactCalculationPreview';
 import { isCanonicalUuid } from '../../utils/canonicalUuid';
+import { compareExactDecimals } from '../../utils/exactDecimal';
+import { requireCalendarDate } from '../../utils/calendarDate';
 
 const required = <T>(value: T | null | undefined | '', label: string): T => {
     if (value === undefined || value === null || value === '') {
@@ -36,6 +39,19 @@ const requiredFreeSupplyTreatment = (
 ): 'excluded_from_taxable_value' | 'included_at_unit_rate' => {
     if (value === 'excluded_from_taxable_value' || value === 'included_at_unit_rate') return value;
     throw new Error(`${label} is missing its explicit value.`);
+};
+
+const requiredPositiveQuantity = (value: unknown, label: string): string => {
+    const normalized = inputQuantity(value, label);
+    if (compareExactDecimals(
+        normalized,
+        '0',
+        label,
+        calculationQuantityOptions,
+    ) <= 0) {
+        throw new Error(`${label} must be greater than zero.`);
+    }
+    return normalized;
 };
 
 export interface SalesOrderPreviewLine extends Record<string, unknown> {
@@ -79,8 +95,16 @@ function toRequest(order: Order): SalesOrderCalculationRequest {
     return {
         branch_id: branchId,
         customer_id: requiredCanonicalUuid(order.customer_id, 'Customer'),
-        order_date: required(order.order_date, 'Sales order date'),
-        delivery_date: order.expected_delivery_date || order.delivery_date,
+        order_date: requireCalendarDate(
+            required(order.order_date, 'Sales order date'),
+            'Sales order date',
+        ),
+        delivery_date: order.expected_delivery_date || order.delivery_date
+            ? requireCalendarDate(
+                order.expected_delivery_date || order.delivery_date,
+                'Sales order delivery date',
+            )
+            : undefined,
         items: order.items.map((item, index) => {
             const label = `Sales order calculation items[${index}]`;
             return {
@@ -89,7 +113,7 @@ function toRequest(order: Order): SalesOrderCalculationRequest {
                     ? undefined
                     : requiredCanonicalUuid(item.batch_id, `${label}.batch_id`),
                 batch_number: item.batch_number,
-                quantity: inputQuantity(item.quantity, `${label}.quantity`),
+                quantity: requiredPositiveQuantity(item.quantity, `${label}.quantity`),
                 free_quantity: inputQuantity(required(item.free_quantity, `${label}.free_quantity`), `${label}.free_quantity`),
                 free_supply_tax_treatment: requiredFreeSupplyTreatment(item.free_supply_tax_treatment, `${label}.free_supply_tax_treatment`),
                 unit_price: inputRate(item.unit_price, `${label}.unit_price`),
@@ -103,6 +127,23 @@ function toRequest(order: Order): SalesOrderCalculationRequest {
         other_charges: inputMoney(order.other_charges, 'Sales order other charges'),
         discount_amount: inputMoney(order.discount_amount, 'Sales order discount amount'),
     };
+}
+
+/**
+ * Whether the current editable draft can produce an authoritative preview.
+ *
+ * Invalid and incomplete form states are normal while an operator edits a
+ * line. They must remain local instead of being submitted as known-invalid
+ * calculation requests. The final command builder still owns user-facing
+ * submission validation.
+ */
+export function isSalesOrderPreviewReady(order: Order): boolean {
+    try {
+        toRequest(order);
+        return true;
+    } catch {
+        return false;
+    }
 }
 
 export function normalizeSalesOrderPreview(
