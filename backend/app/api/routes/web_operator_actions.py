@@ -20,6 +20,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from ...core.database import get_db
+from ...core.operator_action_diagnostics import record_operator_action
 from ...core.security.permissions import PermissionChecker
 from ...domain.operator_actions import (
     ACTION_POLICIES,
@@ -349,7 +350,30 @@ def _detail(code: ActionErrorCode, message: str, metadata: Optional[dict] = None
     }
 
 
-def _raise_action(error: OperatorActionError) -> None:
+def _diagnostic_org_id(context: ActionContext | None) -> UUID | None:
+    """Read only the canonical organization ID from an action context."""
+
+    value = getattr(context, "organization_id", None)
+    return value if isinstance(value, UUID) else None
+
+
+def _raise_action(
+    error: OperatorActionError,
+    *,
+    operation: str | None = None,
+    context: ActionContext | None = None,
+    command_request_id: UUID | None = None,
+) -> None:
+    if operation is not None:
+        sqlstate = error.metadata.get("sqlstate")
+        record_operator_action(
+            operation=operation,
+            outcome="rejected",
+            organization_id=_diagnostic_org_id(context),
+            command_request_id=command_request_id,
+            error_code=error.code.value,
+            sqlstate=sqlstate if isinstance(sqlstate, str) else None,
+        )
     status_by_code = {
         ActionErrorCode.AUTH_REQUIRED: 401,
         ActionErrorCode.SCOPE_DENIED: 403,
@@ -1076,15 +1100,29 @@ def expense_claim_readback(
 ) -> ExpenseClaimReadback:
     """Reconcile the posted claim, verified receipts, balanced journal, and event."""
 
-    context = _command_context(db, user, "automation.command.execute", command_request_id)
+    operation = "automation.command.execute"
+    context = _command_context(db, user, operation, command_request_id)
     try:
         row = service.get_expense_claim_readback(
             command_request_id=command_request_id,
             context=context,
         )
     except OperatorActionError as exc:
-        _raise_action(exc)
-    return ExpenseClaimReadback(**dict(row))
+        _raise_action(
+            exc,
+            operation=operation,
+            context=context,
+            command_request_id=command_request_id,
+        )
+    response = ExpenseClaimReadback(**dict(row))
+    record_operator_action(
+        operation=operation,
+        outcome="accepted",
+        organization_id=_diagnostic_org_id(context),
+        command_request_id=command_request_id,
+        command_status="readback",
+    )
+    return response
 
 
 @router.get(
@@ -1366,8 +1404,21 @@ def bank_reconciliation_readback(
             context=context,
         )
     except OperatorActionError as exc:
-        _raise_action(exc)
-    return BankReconciliationReadback(**row)
+        _raise_action(
+            exc,
+            operation=operation,
+            context=context,
+            command_request_id=command_request_id,
+        )
+    response = BankReconciliationReadback(**row)
+    record_operator_action(
+        operation=operation,
+        outcome="accepted",
+        organization_id=_diagnostic_org_id(context),
+        command_request_id=command_request_id,
+        command_status="readback",
+    )
+    return response
 
 
 @router.post("/{command_type}/prepare", response_model=PreparedResponse)
@@ -1386,6 +1437,11 @@ def prepare_action(
         validate_prepare_payload_semantics(operation_key, payload)
     except (ValidationError, ValueError) as exc:
         errors = exc.errors(include_url=False) if isinstance(exc, ValidationError) else []
+        record_operator_action(
+            operation=operation_key,
+            outcome="rejected",
+            error_code=ActionErrorCode.VALIDATION_FAILED.value,
+        )
         raise HTTPException(
             status_code=422,
             detail=_detail(
@@ -1406,8 +1462,8 @@ def prepare_action(
             context=context,
         )
     except OperatorActionError as exc:
-        _raise_action(exc)
-    return PreparedResponse(
+        _raise_action(exc, operation=operation_key, context=context)
+    response = PreparedResponse(
         command_request_id=command.command_request_id,
         command_type=command.command_type,
         preview_hash=command.preview_hash,
@@ -1421,6 +1477,14 @@ def prepare_action(
         policy_warnings=[dict(item) for item in command.policy_warnings],
         required_approvals=[dict(item) for item in command.required_approvals],
     )
+    record_operator_action(
+        operation=operation_key,
+        outcome="accepted",
+        organization_id=_diagnostic_org_id(context),
+        command_request_id=command.command_request_id,
+        command_status="prepared",
+    )
+    return response
 
 
 def _command_context(db: Session, user: dict, operation: str, command_id: UUID):
@@ -1468,8 +1532,21 @@ def command_review(
             context=context,
         )
     except OperatorActionError as exc:
-        _raise_action(exc)
-    return _review_response(review)
+        _raise_action(
+            exc,
+            operation=operation,
+            context=context,
+            command_request_id=command_request_id,
+        )
+    response = _review_response(review)
+    record_operator_action(
+        operation=operation,
+        outcome="accepted",
+        organization_id=_diagnostic_org_id(context),
+        command_request_id=command_request_id,
+        command_status=review.status,
+    )
+    return response
 
 
 # Kept as a direct callable for existing first-party tests and imports; the
@@ -1496,8 +1573,22 @@ def approve_command(
             context=context,
         )
     except OperatorActionError as exc:
-        _raise_action(exc)
-    return ExecutionResponse(**result.__dict__)
+        _raise_action(
+            exc,
+            operation=operation,
+            context=context,
+            command_request_id=command_request_id,
+        )
+    response = ExecutionResponse(**result.__dict__)
+    record_operator_action(
+        operation=operation,
+        outcome="accepted",
+        organization_id=_diagnostic_org_id(context),
+        command_request_id=command_request_id,
+        command_status=result.status,
+        idempotency_replayed=result.idempotency_replayed,
+    )
+    return response
 
 
 @router.post("/commands/{command_request_id}/execute", response_model=ExecutionResponse)
@@ -1519,8 +1610,22 @@ def execute_command(
             context=context,
         )
     except OperatorActionError as exc:
-        _raise_action(exc)
-    return ExecutionResponse(**result.__dict__)
+        _raise_action(
+            exc,
+            operation=operation,
+            context=context,
+            command_request_id=command_request_id,
+        )
+    response = ExecutionResponse(**result.__dict__)
+    record_operator_action(
+        operation=operation,
+        outcome="accepted",
+        organization_id=_diagnostic_org_id(context),
+        command_request_id=command_request_id,
+        command_status=result.status,
+        idempotency_replayed=result.idempotency_replayed,
+    )
+    return response
 
 
 @router.get("/commands/{command_request_id}", response_model=ExecutionResponse)
@@ -1541,5 +1646,18 @@ def get_command_status(
             context=context,
         )
     except OperatorActionError as exc:
-        _raise_action(exc)
-    return ExecutionResponse(**result.__dict__)
+        _raise_action(
+            exc,
+            operation=operation,
+            context=context,
+            command_request_id=command_request_id,
+        )
+    response = ExecutionResponse(**result.__dict__)
+    record_operator_action(
+        operation=operation,
+        outcome="accepted",
+        organization_id=_diagnostic_org_id(context),
+        command_request_id=command_request_id,
+        command_status=result.status,
+    )
+    return response
