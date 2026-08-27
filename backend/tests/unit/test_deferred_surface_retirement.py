@@ -217,7 +217,10 @@ def test_retired_audit_and_settings_routes_are_absent() -> None:
 
 def test_unreachable_legacy_sql_operators_and_docs_stay_retired() -> None:
     retired_paths = (
+        "TODO.md",
+        "backend/migrate_to_secure_auth.py",
         "backend/scripts/repair_finance_denormalized_drift.py",
+        "backend/scripts/extract_schema_docs.py",
         "backend/scripts/schema_audit.py",
         "database/schema-docs/CURRENT_SCHEMA_STATE.txt",
         "database/schema-docs/README.md",
@@ -226,6 +229,8 @@ def test_unreachable_legacy_sql_operators_and_docs_stay_retired() -> None:
         "database/schema-docs/validate_schemas.py",
         "docs/SECURITY_AUDIT.md",
         "docs/backend/database/finance-gst-hardening-audit.md",
+        "docs/quality-improvements-install.md",
+        "scripts/pre-commit-hook.sh",
     )
 
     assert [
