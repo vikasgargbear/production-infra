@@ -74,6 +74,7 @@ EVIDENCE_BUCKET = "canonical-evidence-private-v1"
 SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 RESET_LOCK_KEY = 8_260_827_1
+OWNER_DELEGATION_LOCK_KEY = 8_260_827_2
 CONTROL_TRANSPORT_GITHUB_IPV4 = "github_direct_ipv4"
 CONTROL_TRANSPORT_RAILWAY_IPV6 = "railway_ssh_direct_ipv6"
 
@@ -166,6 +167,7 @@ def _admin_database_url(
     password: str,
     application_name: str,
     control_transport: str = CONTROL_TRANSPORT_GITHUB_IPV4,
+    recover_stale_owner_delegation: bool = False,
 ) -> tuple[str, Mapping[str, Any]]:
     """Resolve and attest the provider-owned database control transport.
 
@@ -226,6 +228,7 @@ def _admin_database_url(
             "Railway has no caller-visible public direct IPv6 database resolution"
         )
     selected_ipv6_address = sorted(public_ipv6, key=ipaddress.ip_address)[0]
+    recovered_direct_owner_delegation = False
     # Keep the reviewed hostname for TLS/SNI, but pin every later libpq
     # connection to the exact public IPv6 address attested here.
     pinned_dsn = f"{dsn}&hostaddr={quote(selected_ipv6_address, safe='')}"
@@ -274,10 +277,35 @@ def _admin_database_url(
                     connection, project_ref=contract.project_ref
                 )
             except Exception as error:
-                raise RailwayCanonicalResetError(
-                    "railway_ipv6_role_cleanup_attestation_failed:"
-                    f"{_role_cleanup_failure_code(error)}"
-                ) from None
+                failure_code = _role_cleanup_failure_code(error)
+                if (
+                    recover_stale_owner_delegation
+                    and failure_code == "migration_owner_delegation_present"
+                ):
+                    try:
+                        _normalize_stale_owner_delegation(
+                            pinned_dsn, project_ref=contract.project_ref
+                        )
+                    except Exception as normalization_error:
+                        raise RailwayCanonicalResetError(
+                            "railway_ipv6_role_cleanup_recovery_failed:"
+                            f"{_role_cleanup_failure_code(normalization_error)}"
+                        ) from None
+                    recovered_direct_owner_delegation = True
+                    try:
+                        role_cleanup = verify_post_cleanup_role_state(
+                            connection, project_ref=contract.project_ref
+                        )
+                    except Exception as recovery_error:
+                        raise RailwayCanonicalResetError(
+                            "railway_ipv6_role_cleanup_recovery_failed:"
+                            f"{_role_cleanup_failure_code(recovery_error)}"
+                        ) from None
+                else:
+                    raise RailwayCanonicalResetError(
+                        "railway_ipv6_role_cleanup_attestation_failed:"
+                        f"{failure_code}"
+                    ) from None
     except RailwayCanonicalResetError:
         raise
     except Exception as error:
@@ -330,6 +358,7 @@ def _admin_database_url(
         "migration_owner_member": bool(row[4]),
         "migration_owner_set": False,
         "migration_owner_usage": False,
+        "recovered_direct_owner_delegation": recovered_direct_owner_delegation,
     }
 
 
@@ -363,15 +392,50 @@ def _set_owner_delegation(database_url: str, *, enabled: bool) -> None:
 
 
 @contextlib.contextmanager
+def _owner_delegation_lock(database_url: str) -> Iterator[None]:
+    """Serialize the cluster-global temporary migration-owner authority."""
+
+    with contextlib.closing(psycopg2.connect(database_url)) as connection:
+        connection.autocommit = True
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT pg_catalog.pg_advisory_lock(%s)",
+                (OWNER_DELEGATION_LOCK_KEY,),
+            )
+        try:
+            yield
+        finally:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT pg_catalog.pg_advisory_unlock(%s)",
+                    (OWNER_DELEGATION_LOCK_KEY,),
+                )
+
+
+def _normalize_stale_owner_delegation(
+    database_url: str, *, project_ref: str
+) -> dict[str, object]:
+    """Close only the reviewed current-principal grant, then prove no path."""
+
+    with _owner_delegation_lock(database_url):
+        _set_owner_delegation(database_url, enabled=False)
+        with contextlib.closing(psycopg2.connect(database_url)) as connection:
+            return verify_post_cleanup_role_state(
+                connection, project_ref=project_ref
+            )
+
+
+@contextlib.contextmanager
 def _temporary_owner_delegation(
     database_url: str, *, project_ref: str
 ) -> Iterator[None]:
-    _set_owner_delegation(database_url, enabled=True)
-    try:
-        yield
-    finally:
-        _set_owner_delegation(database_url, enabled=False)
-        _verify_owner_cleanup(database_url, project_ref=project_ref)
+    with _owner_delegation_lock(database_url):
+        _set_owner_delegation(database_url, enabled=True)
+        try:
+            yield
+        finally:
+            _set_owner_delegation(database_url, enabled=False)
+            _verify_owner_cleanup(database_url, project_ref=project_ref)
 
 
 def _verify_owner_cleanup(
@@ -593,6 +657,7 @@ def prepare_reset_boundary(
         password=_required(password, "Supabase database password"),
         application_name="canonical_railway_reset_prepare",
         control_transport=control_transport,
+        recover_stale_owner_delegation=True,
     )
     authority = load_reset_authority()
     with _temporary_owner_delegation(database_url, project_ref=project_ref):
@@ -637,6 +702,7 @@ def reset_disposable_staging(
         password=_required(password, "Supabase database password"),
         application_name="canonical_railway_reset",
         control_transport=control_transport,
+        recover_stale_owner_delegation=True,
     )
     authority = load_reset_authority()
     fence_receipt: dict[str, Any]
@@ -708,6 +774,7 @@ def _set_fence_after_deploy(
         password=_required(password, "Supabase database password"),
         application_name=f"canonical_railway_fence_{action}",
         control_transport=control_transport,
+        recover_stale_owner_delegation=True,
     )
     try:
         with _temporary_owner_delegation(database_url, project_ref=project_ref):

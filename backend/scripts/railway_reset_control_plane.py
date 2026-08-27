@@ -244,6 +244,7 @@ def _evidence_cleanup(
         password=secrets["SUPABASE_DB_PASSWORD"],
         application_name="canonical_railway_evidence_cleanup",
         control_transport=CONTROL_TRANSPORT_RAILWAY_IPV6,
+        recover_stale_owner_delegation=True,
     )
     with contextlib.closing(
         psycopg2.connect(database_url, connect_timeout=20)
@@ -364,6 +365,7 @@ def _fence(request: Mapping[str, Any], *, action: str) -> dict[str, Any]:
             password=secrets["SUPABASE_DB_PASSWORD"],
             application_name="canonical_railway_evidence_fence",
             control_transport=CONTROL_TRANSPORT_RAILWAY_IPV6,
+            recover_stale_owner_delegation=True,
         )
         with contextlib.closing(psycopg2.connect(database_url)) as connection:
             evidence_closure = close_writer_authority(connection)
@@ -387,6 +389,7 @@ def _fence(request: Mapping[str, Any], *, action: str) -> dict[str, Any]:
                 password=secrets["SUPABASE_DB_PASSWORD"],
                 application_name="canonical_railway_evidence_fence",
                 control_transport=CONTROL_TRANSPORT_RAILWAY_IPV6,
+                recover_stale_owner_delegation=True,
             )
             with contextlib.closing(psycopg2.connect(database_url)) as connection:
                 evidence_closure = close_writer_authority(connection)

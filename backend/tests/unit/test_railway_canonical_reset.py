@@ -524,6 +524,22 @@ def test_railway_reset_reuses_version_safe_role_cleanup_authority() -> None:
     assert "_verify_owner_cleanup(database_url, project_ref=project_ref)" in source
 
 
+def test_owner_delegation_recovery_is_serialized_and_explicit() -> None:
+    source = (ROOT / "backend/scripts/railway_canonical_reset.py").read_text(
+        encoding="utf-8"
+    )
+    control = (ROOT / "backend/scripts/railway_reset_control_plane.py").read_text(
+        encoding="utf-8"
+    )
+    assert "OWNER_DELEGATION_LOCK_KEY" in source
+    assert "pg_catalog.pg_advisory_lock(%s)" in source
+    assert "pg_catalog.pg_advisory_unlock(%s)" in source
+    assert "with _owner_delegation_lock(database_url):" in source
+    assert source.count("recover_stale_owner_delegation=True") == 3
+    assert control.count("recover_stale_owner_delegation=True") == 3
+    assert 'WITH INHERIT FALSE, SET FALSE' in source
+
+
 def test_database_failure_codes_are_stage_bound_without_error_text() -> None:
     class InjectedDatabaseError(Exception):
         pgcode = "42501"
@@ -594,6 +610,16 @@ def test_temporary_owner_delegation_does_not_reenter_verifier_connection(
     )
     monkeypatch.setattr(RESET.psycopg2, "connect", lambda _url: connection)
 
+    @contextmanager
+    def owner_lock(_database_url: str):
+        calls.append("lock")
+        try:
+            yield
+        finally:
+            calls.append("unlock")
+
+    monkeypatch.setattr(RESET, "_owner_delegation_lock", owner_lock)
+
     def verify(candidate, *, project_ref):
         assert candidate is connection
         assert project_ref == PROJECT_REF
@@ -607,5 +633,5 @@ def test_temporary_owner_delegation_does_not_reenter_verifier_connection(
     ):
         calls.append("body")
 
-    assert calls == ["delegate", "body", "revoke", "verify"]
+    assert calls == ["lock", "delegate", "body", "revoke", "verify", "unlock"]
     assert connection.closed is True

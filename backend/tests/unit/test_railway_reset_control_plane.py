@@ -712,9 +712,115 @@ def test_ipv6_admin_transport_attests_the_connected_server_and_hides_address(
     assert evidence["migration_owner_member"] is True
     assert evidence["migration_owner_set"] is False
     assert evidence["migration_owner_usage"] is False
+    assert evidence["recovered_direct_owner_delegation"] is False
     assert address not in json.dumps(evidence)
     assert DB_PASSWORD not in json.dumps(evidence)
     assert all("inet_server_addr" not in statement for statement in connection.statements)
+
+
+def test_ipv6_admin_transport_recovers_only_stale_direct_owner_delegation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    address = "2606:4700:4700::1111"
+    connection = _Connection(
+        ("postgres", "postgres", "on", True, True, False, True, True)
+    )
+    calls: list[tuple[str, str]] = []
+    observations = iter(
+        [
+            RESET.ResetAuthorityError(
+                "postgres retains temporary migration-owner delegation"
+            ),
+            {
+                "project_ref": PROJECT_REF,
+                "postgres_migration_owner_set": False,
+                "postgres_migration_owner_usage": False,
+                "verification_principal_superuser": False,
+            },
+        ]
+    )
+
+    def verify(_connection, *, project_ref):
+        assert project_ref == PROJECT_REF
+        observed = next(observations)
+        if isinstance(observed, Exception):
+            raise observed
+        return observed
+
+    monkeypatch.setattr(RESET, "load_direct_database_contract", lambda: _Contract())
+    monkeypatch.setattr(RESET, "build_direct_dsn", lambda **_kwargs: "postgresql://redacted")
+    monkeypatch.setattr(
+        RESET.socket,
+        "getaddrinfo",
+        lambda *_args, **_kwargs: [
+            (socket.AF_INET6, socket.SOCK_STREAM, 6, "", (address, 5432, 0, 0))
+        ],
+    )
+    monkeypatch.setattr(RESET.psycopg2, "connect", lambda _dsn: connection)
+    monkeypatch.setattr(RESET, "verify_post_cleanup_role_state", verify)
+    monkeypatch.setattr(
+        RESET,
+        "_normalize_stale_owner_delegation",
+        lambda dsn, *, project_ref: calls.append((dsn, project_ref)),
+    )
+
+    dsn, evidence = RESET._admin_database_url(
+        password=DB_PASSWORD,
+        application_name="canonical_test",
+        control_transport=RESET.CONTROL_TRANSPORT_RAILWAY_IPV6,
+        recover_stale_owner_delegation=True,
+    )
+
+    assert calls == [(dsn, PROJECT_REF)]
+    assert evidence["recovered_direct_owner_delegation"] is True
+    assert evidence["migration_owner_set"] is False
+    assert evidence["migration_owner_usage"] is False
+
+
+def test_ipv6_admin_transport_fails_closed_when_owner_recovery_stays_effective(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    address = "2606:4700:4700::1111"
+    connection = _Connection(
+        ("postgres", "postgres", "on", True, True, False, True, True)
+    )
+    stale = RESET.ResetAuthorityError(
+        "postgres retains temporary migration-owner delegation"
+    )
+    monkeypatch.setattr(RESET, "load_direct_database_contract", lambda: _Contract())
+    monkeypatch.setattr(RESET, "build_direct_dsn", lambda **_kwargs: "postgresql://redacted")
+    monkeypatch.setattr(
+        RESET.socket,
+        "getaddrinfo",
+        lambda *_args, **_kwargs: [
+            (socket.AF_INET6, socket.SOCK_STREAM, 6, "", (address, 5432, 0, 0))
+        ],
+    )
+    monkeypatch.setattr(RESET.psycopg2, "connect", lambda _dsn: connection)
+    monkeypatch.setattr(
+        RESET,
+        "verify_post_cleanup_role_state",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(stale),
+    )
+    monkeypatch.setattr(
+        RESET,
+        "_normalize_stale_owner_delegation",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(stale),
+    )
+
+    with pytest.raises(
+        RESET.RailwayCanonicalResetError,
+        match=(
+            "railway_ipv6_role_cleanup_recovery_failed:"
+            "migration_owner_delegation_present"
+        ),
+    ):
+        RESET._admin_database_url(
+            password=DB_PASSWORD,
+            application_name="canonical_test",
+            control_transport=RESET.CONTROL_TRANSPORT_RAILWAY_IPV6,
+            recover_stale_owner_delegation=True,
+        )
 
 
 def test_ipv6_admin_transport_fails_before_connect_without_ipv6(
