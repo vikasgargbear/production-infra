@@ -94,7 +94,11 @@ def customer_receipt_context(
     db: Session = Depends(get_db),
 ) -> CustomerReceiptContext:
     org_id = _activate(db, user)
-    business_date = db.execute(text("SELECT CURRENT_DATE")).scalar_one()
+    business_date = db.execute(
+        text(
+            'SELECT "erp_core_commands"."current_organization_business_date"()'
+        )
+    ).scalar_one()
     accounts = [
         dict(row._mapping)
         for row in db.execute(

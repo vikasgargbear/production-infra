@@ -64,6 +64,25 @@ def test_uuid_only_supplier_advance_context_and_readback_are_registered():
     assert "api.include_router(canonical_supplier_advance_reads.router)" in main_source
 
 
+def test_organization_business_date_uses_the_shared_canonical_clock(monkeypatch):
+    organization_id = uuid4()
+    captured = {}
+
+    def fake_rows(_db, sql, params):
+        captured["sql"] = sql
+        captured["params"] = params
+        return [{"business_date": reads.date(2026, 8, 28)}]
+
+    monkeypatch.setattr(reads, "_rows", fake_rows)
+
+    assert reads._organization_business_date(object(), organization_id) == reads.date(
+        2026, 8, 28
+    )
+    assert "current_organization_business_date" in captured["sql"]
+    assert "CURRENT_DATE" not in captured["sql"]
+    assert captured["params"] == {}
+
+
 def test_context_requires_exact_reconciled_po_line_remainder():
     branch_id = uuid4()
     response = reads.SupplierAdvanceContextResponse(

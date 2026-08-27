@@ -109,6 +109,8 @@ test "$(psql -X -Atqc "
 
 PYTHONPATH=backend \
   python backend/tests/postgres/check_canonical_write_fence.py
+PYTHONPATH=backend \
+  python backend/tests/postgres/check_finance_business_date_authority.py
 
 fixture_count=0
 while IFS= read -r fixture; do

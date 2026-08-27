@@ -27,7 +27,7 @@ class _Database:
     def execute(self, statement, params=None):
         sql = str(statement)
         self.statements.append((sql, params))
-        if "SELECT CURRENT_DATE" in sql:
+        if "current_organization_business_date" in sql:
             return _Result(scalar=self.business_date)
         if "FROM finance.bank_accounts" in sql:
             return _Result(rows=[SimpleNamespace(_mapping=self.account)])
@@ -57,6 +57,8 @@ def test_context_uses_command_schema_business_date_and_settlement_uuid():
         account["bank_account_id"]
     )
     assert "erp_security.activate_context" in database.statements[0][0]
+    assert "current_organization_business_date" in database.statements[1][0]
+    assert "CURRENT_DATE" not in database.statements[1][0]
     assert "finance.bank_accounts" in database.statements[2][0]
     assert "master." not in database.statements[2][0]
 

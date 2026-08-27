@@ -88,6 +88,8 @@
     "backend/alembic/sql/20260827_0032_session_authority.sql",
     "backend/alembic/versions/20260827_0033_requester_command_status.py",
     "backend/alembic/sql/20260827_0033_requester_command_status.sql",
+    "backend/alembic/versions/20260828_0034_organization_business_date_authority.py",
+    "backend/alembic/sql/20260828_0034_organization_business_date_authority.sql",
     "database/canonical/operations/automation/requester_command_status.sql",
     "backend/scripts/generate_requester_command_status_migration.py",
     "database/canonical/session_authority/generate_session_authority.py",

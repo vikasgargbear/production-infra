@@ -3792,6 +3792,33 @@ def test_expense_claim_self_approval_is_translated_and_rolls_back():
     assert session.transaction_failures == 1
 
 
+def test_finance_business_date_rejection_is_a_typed_validation_error():
+    from app.infrastructure.operator_actions.service import _database_action_error
+
+    database_error = IntegrityError(
+        "SELECT canonical finance resolver",
+        {},
+        _PostgresPolicyFailure(
+            "22007",
+            "finance command date exceeds the organization business date",
+        ),
+    )
+
+    translated = _database_action_error(
+        database_error,
+        "finance.supplier_advance.prepare",
+    )
+
+    assert translated is not None
+    assert translated.code is ActionErrorCode.VALIDATION_FAILED
+    assert str(translated) == "Canonical command date is invalid"
+    assert translated.metadata == {
+        "operation_key": "finance.supplier_advance.prepare",
+        "reason": "CANONICAL_DATABASE_POLICY_REJECTED",
+        "sqlstate": "22007",
+    }
+
+
 def test_command_context_casts_uuid_to_postgres_text_setting():
     from app.infrastructure.operator_actions.service import _SET_COMMAND_CONTEXT_SQL
 

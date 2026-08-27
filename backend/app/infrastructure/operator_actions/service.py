@@ -425,6 +425,11 @@ _DATABASE_ACTION_FAILURES: dict[str, tuple[ActionErrorCode, str, bool]] = {
         "Canonical command input is invalid",
         False,
     ),
+    "22007": (
+        ActionErrorCode.VALIDATION_FAILED,
+        "Canonical command date is invalid",
+        False,
+    ),
     "22P02": (
         ActionErrorCode.VALIDATION_FAILED,
         "Canonical command input is invalid",

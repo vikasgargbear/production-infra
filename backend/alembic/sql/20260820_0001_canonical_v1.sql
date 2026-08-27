@@ -10419,7 +10419,7 @@ BEGIN
      OR pg_catalog.jsonb_typeof(request_document->'allocations')<>'array'
      OR pg_catalog.jsonb_array_length(request_document->'allocations') NOT BETWEEN 1 AND 500 THEN
     RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='customer-receipt noncash INR pilot input is incomplete'; END IF;
-  IF payment_date>CURRENT_DATE THEN
+  IF payment_date>"erp_core_commands"."current_organization_business_date"() THEN
     RAISE EXCEPTION USING ERRCODE='22007', MESSAGE='customer receipt date cannot be in the future'; END IF;
   IF (SELECT count(DISTINCT value->>'open_item_id') FROM pg_catalog.jsonb_array_elements(request_document->'allocations'))
        <>pg_catalog.jsonb_array_length(request_document->'allocations') THEN
@@ -10687,7 +10687,7 @@ BEGIN
      OR pg_catalog.jsonb_typeof(request_document->'allocations')<>'array'
      OR pg_catalog.jsonb_array_length(request_document->'allocations') NOT BETWEEN 1 AND 500 THEN
     RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='supplier-payment INR bank pilot input is incomplete'; END IF;
-  IF payment_date>CURRENT_DATE THEN
+  IF payment_date>"erp_core_commands"."current_organization_business_date"() THEN
     RAISE EXCEPTION USING ERRCODE='22007', MESSAGE='supplier payment date cannot be in the future'; END IF;
   IF (SELECT count(DISTINCT value->>'open_item_id') FROM pg_catalog.jsonb_array_elements(request_document->'allocations'))
        <>pg_catalog.jsonb_array_length(request_document->'allocations') THEN
@@ -11049,7 +11049,7 @@ BEGIN
      OR pg_catalog.jsonb_typeof(request_document->'allocations')<>'array'
      OR pg_catalog.jsonb_array_length(request_document->'allocations')<>1 THEN
     RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='supplier-advance INR bank pilot requires exactly one complete allocation'; END IF;
-  IF payment_date>CURRENT_DATE THEN
+  IF payment_date>"erp_core_commands"."current_organization_business_date"() THEN
     RAISE EXCEPTION USING ERRCODE='22007', MESSAGE='supplier advance date cannot be in the future'; END IF;
   requested:=request_document->'allocations'->0;
   IF NULLIF(requested->>'purchase_order_line_id','')::uuid IS NULL

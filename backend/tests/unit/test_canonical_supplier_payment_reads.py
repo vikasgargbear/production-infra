@@ -67,7 +67,7 @@ def test_uuid_only_context_and_readback_routes_are_registered():
     )
 
 
-def test_organization_business_date_uses_the_authenticated_organization_timezone(monkeypatch):
+def test_organization_business_date_uses_the_shared_canonical_clock(monkeypatch):
     organization_id = uuid4()
     captured = {}
 
@@ -79,8 +79,9 @@ def test_organization_business_date_uses_the_authenticated_organization_timezone
     monkeypatch.setattr(reads, "_rows", fake_rows)
 
     assert reads._organization_business_date(object(), organization_id) == date(2026, 8, 25)
-    assert "AT TIME ZONE organization.timezone" in captured["sql"]
-    assert captured["params"] == {"org_id": organization_id}
+    assert "current_organization_business_date" in captured["sql"]
+    assert "CURRENT_DATE" not in captured["sql"]
+    assert captured["params"] == {}
 
 
 @pytest.mark.parametrize("rows", [[], [{"business_date": "2026-08-25"}]])

@@ -64,11 +64,9 @@ def _rows(db: Session, sql: str, params: dict[str, Any]) -> list[dict[str, Any]]
 
 def _organization_business_date(db: Session, org_id: UUID) -> date:
     rows = _rows(db, """
-        SELECT (transaction_timestamp() AT TIME ZONE organization.timezone)::date
+        SELECT "erp_core_commands"."current_organization_business_date"()
                  AS business_date
-          FROM core.organizations organization
-         WHERE organization.id=:org_id AND organization.status='active'
-    """, {"org_id": org_id})
+    """, {})
     if len(rows) != 1 or not isinstance(rows[0].get("business_date"), date):
         raise HTTPException(
             status_code=503,

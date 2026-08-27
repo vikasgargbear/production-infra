@@ -191,6 +191,17 @@ def test_customer_receipt_prepare_and_execute_reauthorize_exact_non_cash_allocat
         assert fragment in mapping
 
 
+def test_finance_payment_dates_use_one_organization_timezone_authority() -> None:
+    mapping = _sql()
+    business_clock = (
+        'payment_date>"erp_core_commands".'
+        '"current_organization_business_date"()'
+    )
+
+    assert mapping.count(business_clock) == 3
+    assert "payment_date>CURRENT_DATE" not in mapping
+
+
 def test_supplier_advance_prepare_and_execute_reauthorize_bounded_goods_pilot() -> None:
     mapping = _sql()
     for fragment in (
