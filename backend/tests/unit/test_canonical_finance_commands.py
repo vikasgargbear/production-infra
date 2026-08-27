@@ -103,6 +103,22 @@ def test_payment_posting_uses_typed_cash_or_bank_settlement_identity() -> None:
     assert "line.branch_id<>payment.branch_id" in sql
 
 
+def test_open_item_state_is_explicitly_owned_by_named_commands() -> None:
+    sql = "\n".join(
+        statement
+        for statements in _load_generator()._definitions().values()
+        for statement in statements
+    )
+
+    assert '"synchronize_open_item_status"' in sql
+    assert "FROM finance.allocations allocation" in sql
+    assert "reversal.reversal_of_allocation_id=allocation.id" in sql
+    assert "reversed open item cannot be settled or reopened" in sql
+    assert "open item is overallocated" in sql
+    assert "SET status=CASE WHEN active_total=item.principal_amount" in sql
+    assert 'GRANT EXECUTE ON FUNCTION "erp_finance_commands"."synchronize_open_item_status"' not in sql
+
+
 def test_supplier_advance_is_gross_typed_and_applied_once_to_matching_invoice() -> None:
     sql = "\n".join(statement for statements in _load_generator()._definitions().values() for statement in statements)
 

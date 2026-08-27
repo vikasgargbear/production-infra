@@ -104,6 +104,35 @@ BEGIN
 END
 """,
         ),
+        *_function(
+            '"synchronize_open_item_status"(organization_id uuid, open_item_id uuid)',
+            "void",
+            """
+DECLARE item finance.open_items%ROWTYPE; active_total numeric(20,2);
+BEGIN
+    SELECT * INTO STRICT item FROM finance.open_items
+     WHERE org_id=organization_id AND id=open_item_id FOR UPDATE;
+    IF item.status='reversed' THEN
+      RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='reversed open item cannot be settled or reopened';
+    END IF;
+    SELECT coalesce(sum(allocation.amount),0) INTO active_total
+      FROM finance.allocations allocation
+     WHERE allocation.org_id=organization_id AND allocation.open_item_id=open_item_id
+       AND allocation.status='posted'
+       AND NOT EXISTS (SELECT 1 FROM finance.allocations reversal
+         WHERE reversal.org_id=allocation.org_id
+           AND reversal.reversal_of_allocation_id=allocation.id);
+    IF active_total>item.principal_amount THEN
+      RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='open item is overallocated';
+    END IF;
+    UPDATE finance.open_items
+       SET status=CASE WHEN active_total=item.principal_amount THEN 'settled' ELSE 'open' END,
+           settled_at=CASE WHEN active_total=item.principal_amount
+             THEN coalesce(item.settled_at,pg_catalog.transaction_timestamp()) ELSE NULL END
+     WHERE org_id=organization_id AND id=open_item_id;
+END
+""",
+        ),
     ]
 
 
@@ -413,7 +442,7 @@ END
             "uuid",
             f"""
 DECLARE original finance.payments%ROWTYPE; original_journal finance.journal_entries%ROWTYPE;
-        actor uuid; reversed_time timestamptz; existing uuid; advance record;
+        actor uuid; reversed_time timestamptz; existing uuid; advance record; allocation_item record;
         reversal_withholding_id uuid; reversal_open_item_id uuid;
 BEGIN
     IF organization_id IS DISTINCT FROM erp_security.current_org_id()
@@ -493,6 +522,12 @@ BEGIN
        AND allocation.status='posted'
        AND NOT EXISTS (SELECT 1 FROM finance.allocations reversal
                         WHERE reversal.org_id=allocation.org_id AND reversal.reversal_of_allocation_id=allocation.id);
+    FOR allocation_item IN SELECT DISTINCT allocation.open_item_id
+      FROM finance.allocations allocation
+     WHERE allocation.org_id=organization_id AND allocation.payment_id=original_payment_id LOOP
+      PERFORM erp_finance_commands.synchronize_open_item_status(
+        organization_id,allocation_item.open_item_id);
+    END LOOP;
     FOR advance IN SELECT * FROM procurement.purchase_order_advance_allocations a
       WHERE a.org_id=organization_id AND a.payment_id=original_payment_id AND a.status='posted' FOR UPDATE LOOP
       PERFORM erp_compliance_commands.assert_advance_withholding_reversible(organization_id,advance.id);
@@ -607,6 +642,7 @@ BEGIN
       currency_code,amount,functional_amount,fx_rate,status,created_by_membership_id)
     VALUES(organization_id,allocation_id,advance.id,invoice_item.id,invoice.invoice_date,'INR',advance.gross_advance_amount,
       advance.functional_gross_advance_amount,1,'posted',actor);
+    PERFORM erp_finance_commands.synchronize_open_item_status(organization_id,invoice_item.id);
     UPDATE finance.open_items SET status='settled',settled_at=posted_time
      WHERE org_id=organization_id AND id=advance_item.id AND status='open';
     RETURN advance_allocation_id;

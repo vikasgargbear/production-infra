@@ -1922,7 +1922,7 @@ BEGIN
     IF invoiced THEN
       applied:=least(header.grand_total,outstanding); residual:=header.grand_total-applied;
       IF applied>0 THEN INSERT INTO finance.allocations(org_id,id,adjustment_note_id,open_item_id,allocation_date,currency_code,amount,functional_amount,status,created_by_membership_id) VALUES(organization_id,allocation_id,adjustment_note_id,original_open.id,header.{return_date},original_open.currency_code,applied,applied,'posted',actor_id); END IF;
-      IF applied=outstanding AND outstanding>0 THEN UPDATE finance.open_items SET status='settled',settled_at=posted_time WHERE org_id=organization_id AND id=original_open.id; END IF;
+      IF applied>0 THEN PERFORM erp_finance_commands.synchronize_open_item_status(organization_id,original_open.id); END IF;
       IF residual>0 THEN INSERT INTO finance.open_items(org_id,id,accounting_event_id,party_id,item_side,document_number,document_date,due_date,currency_code,principal_amount,functional_principal_amount,status,created_by_membership_id) VALUES(organization_id,residual_open_item_id,event_id,party_id,'{'payable' if sales else 'receivable'}',adjustment_note_number,header.{return_date},header.{return_date},original_open.currency_code,residual,residual,'open',actor_id); END IF;
     END IF;
     PERFORM erp_trade_commands.finish_claim(organization_id,claim_id,'{header_table}',resource_id);
@@ -2333,6 +2333,7 @@ BEGIN
         IF allocation_id IS NULL THEN RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='decrease allocation identity is required'; END IF;
         INSERT INTO finance.allocations(org_id,id,adjustment_note_id,open_item_id,allocation_date,currency_code,amount,functional_amount,status,created_by_membership_id)
         VALUES(organization_id,allocation_id,resource_id,original_open.id,note.note_date,note.currency_code,applied,applied,'posted',actor_id);
+        PERFORM erp_finance_commands.synchronize_open_item_status(organization_id,original_open.id);
       END IF;
       IF residual>0 THEN INSERT INTO finance.open_items(org_id,id,accounting_event_id,party_id,item_side,document_number,document_date,due_date,currency_code,principal_amount,functional_principal_amount,status,created_by_membership_id)
         VALUES(organization_id,new_open_item_id,event_id,note.party_id,CASE WHEN note.side='sales' THEN 'payable' ELSE 'receivable' END,note.note_number,note.note_date,note.note_date,note.currency_code,residual,residual,'open',actor_id); END IF;

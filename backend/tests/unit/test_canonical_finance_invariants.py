@@ -106,6 +106,20 @@ def test_after_insert_aggregate_guards_count_the_new_row_once() -> None:
     assert "line_matched+NEW.matched_amount" not in sql
 
 
+def test_allocation_trigger_is_deferred_and_assertion_only() -> None:
+    sql = "\n".join(
+        statement for statements in _load_generator()._definitions().values() for statement in statements
+    )
+
+    assert '"allocations_guard_ct"' in sql
+    assert "DEFERRABLE INITIALLY DEFERRED" in sql
+    allocation_guard = "\n".join(
+        _load_generator()._definitions()["finance.allocations:allocations_cross_row_guard"]
+    )
+    assert "UPDATE finance.open_items" not in allocation_guard
+    assert "allocated>item.principal_amount" in allocation_guard
+
+
 def test_finance_fragment_composes_and_resolves_exactly_its_reviewed_keys() -> None:
     catalog = baseline.load_and_validate_catalog(REPO_ROOT / "database" / "canonical" / "domains")
     mapping_paths = [

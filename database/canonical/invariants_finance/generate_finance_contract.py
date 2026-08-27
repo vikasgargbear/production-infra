@@ -332,20 +332,13 @@ BEGIN
     IF NEW.reversal_of_allocation_id IS NULL AND allocated>item.principal_amount THEN
         RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='open item over-allocation';
     END IF;
-    UPDATE finance.open_items SET status=CASE WHEN (SELECT coalesce(sum(a.amount),0) FROM finance.allocations a
-       WHERE a.org_id=NEW.org_id AND a.open_item_id=NEW.open_item_id AND a.status='posted'
-       AND NOT EXISTS (SELECT 1 FROM finance.allocations r WHERE r.org_id=a.org_id AND r.reversal_of_allocation_id=a.id))=principal_amount
-       THEN 'settled' ELSE 'open' END,
-       settled_at=CASE WHEN (SELECT coalesce(sum(a.amount),0) FROM finance.allocations a
-       WHERE a.org_id=NEW.org_id AND a.open_item_id=NEW.open_item_id AND a.status='posted'
-       AND NOT EXISTS (SELECT 1 FROM finance.allocations r WHERE r.org_id=a.org_id AND r.reversal_of_allocation_id=a.id))=principal_amount
-       THEN pg_catalog.transaction_timestamp() ELSE NULL END
-     WHERE org_id=NEW.org_id AND id=NEW.open_item_id;
     RETURN NEW;
 END
 """,
         ),
-        _trigger("allocations_guard_ct", "INSERT OR UPDATE OR DELETE", "finance.allocations", "guard_allocation"),
+        'CREATE CONSTRAINT TRIGGER "allocations_guard_ct" AFTER INSERT OR UPDATE OR DELETE ON '
+        '"finance"."allocations" DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION '
+        '"erp_finance_invariants"."guard_allocation"()',
     ]
 
     definitions["finance.bank_statements:bank_statements_cross_row_guard"] = [

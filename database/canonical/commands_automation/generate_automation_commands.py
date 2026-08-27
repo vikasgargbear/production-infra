@@ -7601,6 +7601,8 @@ BEGIN
           VALUES(organization_id,(resolved_allocation->>'allocation_id')::uuid,request_row.target_resource_id,
             (resolved_allocation->>'open_item_id')::uuid,payment.payment_date,'INR',
             (resolved_allocation->>'amount')::numeric,(resolved_allocation->>'amount')::numeric,1,'posted',actor_id);
+          PERFORM erp_finance_commands.synchronize_open_item_status(
+            organization_id,(resolved_allocation->>'open_item_id')::uuid);
         END LOOP;
         SELECT count(*),coalesce(sum(allocation.amount),0) INTO posted_allocation_count,posted_allocation_total
           FROM finance.allocations allocation WHERE allocation.org_id=organization_id
