@@ -57,3 +57,17 @@ def test_customer_advance_is_zero_allocation_and_goods_order_bound() -> None:
     invalid = PREPARE_PAYLOAD_MODELS[operation].model_validate(value)
     with pytest.raises(ValueError, match="zero invoice allocations"):
         validate_prepare_payload_semantics(operation, invalid)
+
+
+def test_receipt_and_supplier_payment_inputs_expose_no_gst_rate_authority() -> None:
+    forbidden = {"gst_rate", "tax_rate", "cgst_rate", "sgst_rate", "igst_rate"}
+
+    for operation in (
+        "finance.customer_receipt.prepare",
+        "finance.supplier_payment.prepare",
+    ):
+        model = PREPARE_PAYLOAD_MODELS[operation]
+        assert forbidden.isdisjoint(model.model_fields)
+        allocations = model.model_fields["allocations"].annotation
+        assert "gst_rate" not in str(allocations).lower()
+        assert "tax_rate" not in str(allocations).lower()

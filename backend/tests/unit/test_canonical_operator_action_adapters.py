@@ -1155,13 +1155,14 @@ class FakeSupplierPaymentSession:
                 invoice_id = str(uuid4())
                 allocations.append({
                     "allocation_id": item["allocation_id"],
+                    "cash_allocation_id": item["allocation_id"],
                     "open_item_id": item["open_item_id"],
                     "supplier_invoice_id": invoice_id,
                     "document_number": f"SUP-INV-{index}",
                     "principal_amount": "1000.00",
-                    "prior_cash_allocated_amount": "100.00",
-                    "amount": item["amount"],
-                    "residual_after": str(900 - float(item["amount"])),
+                    "prior_allocated_amount": "100.00",
+                    "cash_amount": item["cash_amount"],
+                    "residual_after": str(900 - float(item["cash_amount"])),
                 })
                 sources.extend((
                     {
@@ -1189,15 +1190,16 @@ class FakeSupplierPaymentSession:
                 "supplier_account_id": request["supplier_account_id"],
                 "supplier_party_id": supplier_party_id,
                 "bank_account_id": request["bank_account_id"],
-                "settlement_account_id": request["settlement_account_id"],
+                "settlement_account_id": str(uuid4()),
                 "accounts_payable_account_id": payable_account_id,
                 "payment_method": request["payment_method"],
                 "external_reference": request["external_reference"].upper(),
-                "gross_amount": request["gross_amount"],
-                "cash_amount": request["gross_amount"],
+                "gross_amount": request["expected_gross_amount"],
+                "cash_amount": request["expected_gross_amount"],
                 "withheld_amount": "0.00",
                 "currency_code": "INR",
                 "allocations": allocations,
+                "settlement_components": allocations,
                 "legal_scope": {
                     "country_code": "IN",
                     "currency_code": "INR",
@@ -3070,13 +3072,12 @@ def _supplier_payment_service_payload():
         "branch_id": uuid4(),
         "payment_date": datetime(2026, 8, 20, tzinfo=timezone.utc).date(),
         "supplier_account_id": uuid4(),
-        "settlement_account_id": uuid4(),
         "bank_account_id": uuid4(),
         "payment_method": "upi",
-        "gross_amount": "900.00",
+        "expected_gross_amount": "900.00",
         "allocations": [
-            {"open_item_id": uuid4(), "amount": "400.00"},
-            {"open_item_id": uuid4(), "amount": "500.00"},
+            {"open_item_id": uuid4(), "cash_amount": "400.00"},
+            {"open_item_id": uuid4(), "cash_amount": "500.00"},
         ],
         "external_reference": "upi-supplier-0001",
     }
@@ -3112,7 +3113,7 @@ def test_supplier_payment_prepare_is_one_runtime_transaction_with_exact_multi_in
     assert prepared.financial_impact[0]["cash_disbursed_amount"] == "900.00"
     assert prepared.financial_impact[0]["withheld_amount"] == "0.00"
     assert [
-        item["allocated_amount"]
+        item["cash_allocated_amount"]
         for item in prepared.financial_impact[0]["allocations"]
     ] == ["400.00", "500.00"]
     assert session.transaction_entries == session.transaction_exits == 1

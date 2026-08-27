@@ -240,7 +240,7 @@ def test_supplier_payment_prepare_and_execute_reauthorize_exact_inr_payables() -
         "existing.reversal_of_payment_id IS NULL",
         "supplier payment bank reference was already consumed",
         "supplier payment allocation exceeds live payable balance",
-        "supplier payment allocations must exactly equal gross liability and bank cash",
+        "supplier payment components must exactly equal expected gross liability",
         '"assert_supplier_payment_draft"',
         "supplier payment exact two-line journal changed",
         "request_row.operation='finance.payment.post' AND request_row.capability_code='finance.supplier_payment.prepare'",

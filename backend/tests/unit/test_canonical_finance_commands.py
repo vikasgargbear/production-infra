@@ -187,6 +187,26 @@ def test_lane_b_payment_commands_are_named_replay_safe_and_subledger_exact() -> 
     assert "application_date<note.note_date" in sql
 
 
+def test_supplier_invoice_withholding_uses_existing_credit_time_authority() -> None:
+    sql = "\n".join(
+        statement
+        for statements in _load_generator()._definitions().values()
+        for statement in statements
+    )
+    supplier_payment = sql[
+        sql.index('"post_supplier_payment"') : sql.index(
+            '"post_supplier_advance_payment"'
+        )
+    ]
+
+    assert (
+        "supplier invoice withholding must be exact pre-existing credit-time authority"
+        in supplier_payment
+    )
+    assert "withholding.deduction_trigger='credit'" in supplier_payment
+    assert "erp_compliance_commands.post_withholding" not in supplier_payment
+
+
 def test_command_fragment_composes_and_resolves_exactly_eight_prior_blockers() -> None:
     catalog = baseline.load_and_validate_catalog(REPO_ROOT / "database" / "canonical" / "domains")
     prior_paths = [

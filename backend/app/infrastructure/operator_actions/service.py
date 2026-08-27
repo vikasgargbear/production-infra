@@ -2887,10 +2887,10 @@ class SqlAlchemyOperatorActionService:
                     {
                         "open_item_id": item["open_item_id"],
                         "supplier_invoice_id": item["supplier_invoice_id"],
-                        "allocated_amount": item["amount"],
+                        "cash_allocated_amount": item["cash_amount"],
                         "residual_after": item["residual_after"],
                     }
-                    for item in resolution["allocations"]
+                    for item in resolution["settlement_components"]
                 ]
                 financial_impact = (
                     {

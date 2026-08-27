@@ -5839,8 +5839,8 @@ DECLARE branch_id uuid:=NULLIF(request_document->>'branch_id','')::uuid;
         payment_date date:=NULLIF(request_document->>'payment_date','')::date;
         supplier_id uuid:=NULLIF(request_document->>'supplier_account_id','')::uuid;
         bank_id uuid:=NULLIF(request_document->>'bank_account_id','')::uuid;
-        settlement_id uuid:=NULLIF(request_document->>'settlement_account_id','')::uuid;
-        gross numeric(20,2):=NULLIF(request_document->>'gross_amount','')::numeric;
+        settlement_id uuid;
+        gross numeric(20,2):=NULLIF(request_document->>'expected_gross_amount','')::numeric;
         method text:=request_document->>'payment_method';
         reference text:=upper(NULLIF(pg_catalog.btrim(request_document->>'external_reference'),''));
         branch core.branches%ROWTYPE; supplier parties.supplier_accounts%ROWTYPE; party parties.parties%ROWTYPE;
@@ -5855,7 +5855,7 @@ DECLARE branch_id uuid:=NULLIF(request_document->>'branch_id','')::uuid;
 BEGIN
   IF organization_id IS NULL OR membership_id IS NULL OR auth_user_id IS NULL OR application_user_id IS NULL
      OR grant_id IS NULL OR payment_id IS NULL OR branch_id IS NULL OR payment_date IS NULL OR supplier_id IS NULL
-     OR bank_id IS NULL OR settlement_id IS NULL OR gross<=0 OR method NOT IN ('bank_transfer','upi')
+     OR bank_id IS NULL OR gross<=0 OR method NOT IN ('bank_transfer','upi')
      OR reference IS NULL OR pg_catalog.length(reference)>256
      OR pg_catalog.jsonb_typeof(request_document->'allocations')<>'array'
      OR pg_catalog.jsonb_array_length(request_document->'allocations') NOT BETWEEN 1 AND 500 THEN
@@ -5907,8 +5907,9 @@ BEGIN
     RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='supplier default payable does not match canonical branch account role'; END IF;
   SELECT * INTO STRICT bank FROM finance.bank_accounts WHERE org_id=organization_id AND id=bank_id
     AND status='active' AND currency_code='INR' FOR SHARE;
+  settlement_id:=bank.account_id;
   SELECT * INTO STRICT settlement FROM finance.accounts WHERE org_id=organization_id AND id=settlement_id
-    AND id=bank.account_id AND status='active' AND account_type='asset' AND currency_code='INR'
+    AND status='active' AND account_type='asset' AND currency_code='INR'
     AND allows_bank_reconciliation FOR SHARE;
   PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
     organization_id::text||':supplier-payment-reference:'||bank.id::text||':'||reference,672011));
@@ -5923,8 +5924,8 @@ BEGIN
    WHERE candidate.org_id=organization_id ORDER BY candidate.id FOR UPDATE OF candidate;
   FOR requested IN SELECT value FROM pg_catalog.jsonb_array_elements(request_document->'allocations') LOOP
     IF NULLIF(requested->>'allocation_id','')::uuid IS NULL OR NULLIF(requested->>'open_item_id','')::uuid IS NULL
-       OR NULLIF(requested->>'amount','')::numeric<=0 THEN
-      RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='supplier payment allocation identity and positive amount are required'; END IF;
+       OR coalesce(NULLIF(requested->>'cash_amount','')::numeric,0)<0 THEN
+      RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='supplier payment allocation identity and nonnegative cash amount are required'; END IF;
     SELECT * INTO STRICT item FROM finance.open_items WHERE org_id=organization_id
       AND id=(requested->>'open_item_id')::uuid AND item_side='payable' AND party_id=party.id
       AND currency_code='INR' AND status='open' AND document_date<=payment_date FOR UPDATE;
@@ -6010,14 +6011,15 @@ BEGIN
         ORDER BY prior.id),'[]'::jsonb)::text,'UTF8'),'sha256'),'hex') INTO allocation_state_hash
       FROM finance.allocations prior WHERE prior.org_id=organization_id AND prior.open_item_id=item.id
         AND prior.payment_id IS DISTINCT FROM payment_id;
-    IF prior_allocated+(requested->>'amount')::numeric>item.principal_amount THEN
+    IF prior_allocated+coalesce((requested->>'cash_amount')::numeric,0)>item.principal_amount THEN
       RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='supplier payment allocation exceeds live payable balance'; END IF;
-    requested_total:=requested_total+(requested->>'amount')::numeric;
+    requested_total:=requested_total+coalesce((requested->>'cash_amount')::numeric,0);
     resolved_allocations:=resolved_allocations||pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
       'allocation_id',requested->>'allocation_id','open_item_id',item.id,'supplier_invoice_id',invoice.id,
       'document_number',item.document_number,'principal_amount',item.principal_amount::text,
-      'prior_cash_allocated_amount',prior_allocated::text,'amount',(requested->>'amount')::numeric::text,
-      'residual_after',(item.principal_amount-prior_allocated-(requested->>'amount')::numeric)::text));
+      'prior_allocated_amount',prior_allocated::text,'cash_allocation_id',requested->>'allocation_id',
+      'cash_amount',coalesce((requested->>'cash_amount')::numeric,0)::text,
+      'residual_after',(item.principal_amount-prior_allocated-coalesce((requested->>'cash_amount')::numeric,0))::text));
     source_versions:=source_versions||pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
       'resource_type','payable_allocation_state','id',item.id,'supplier_invoice_id',invoice.id,'invoice_row_version',invoice.row_version,
       'principal_amount',item.principal_amount::text,'status',item.status,'allocation_count',allocation_count,
@@ -6032,7 +6034,7 @@ BEGIN
         'evidence_sha256',pg_catalog.encode(credit_fiscal_evidence.sha256,'hex')));
   END LOOP;
   IF requested_total<>gross THEN
-    RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='supplier payment allocations must exactly equal gross liability and bank cash'; END IF;
+    RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='supplier payment components must exactly equal expected gross liability'; END IF;
   source_versions:=pg_catalog.jsonb_build_array(
     pg_catalog.jsonb_build_object('resource_type','branch','id',branch.id,'row_version',branch.row_version),
     pg_catalog.jsonb_build_object('resource_type','supplier_account','id',supplier.id,'row_version',supplier.row_version),
@@ -6054,12 +6056,12 @@ BEGIN
     'supplier_account_id',supplier.id,'supplier_party_id',party.id,'bank_account_id',bank.id,
     'settlement_account_id',settlement.id,'accounts_payable_account_id',payable.id,'payment_method',method,
     'external_reference',reference,'gross_amount',gross::text,'cash_amount',gross::text,'withheld_amount','0.00',
-    'currency_code','INR','allocations',resolved_allocations,
+    'currency_code','INR','allocations',resolved_allocations,'settlement_components',resolved_allocations,
     'legal_scope',pg_catalog.jsonb_build_object('country_code','IN','currency_code','INR','settlement','posted_supplier_invoice_payables_only',
       'supported_payment_methods',pg_catalog.jsonb_build_array('bank_transfer','upi'),
       'income_tax_withholding','not_applicable_verified_prior_fy_turnover_at_or_below_inr_10_crore',
       'gst_tds','not_applicable_verified_notified_deductor_false',
-      'gross_liability_equals_bank_cash',true,'advance_withholding_adjustment_or_supplier_credit_netting','unavailable',
+      'gross_liability_equals_bank_cash',true,'advance_withholding_adjustment_or_supplier_credit_netting','not_selected',
       'payment_reversal','unavailable_operator_action'),
     'source_versions',source_versions);
 END
@@ -6090,8 +6092,8 @@ BEGIN
   IF line_count<>2 OR NOT EXISTS (SELECT 1 FROM finance.journal_lines WHERE org_id=organization_id
        AND journal_entry_id=journal_id AND line_number=1 AND account_id=(resolution->>'accounts_payable_account_id')::uuid
        AND branch_id=(resolution->>'branch_id')::uuid AND party_id=(resolution->>'supplier_party_id')::uuid
-       AND transaction_debit=(resolution->>'gross_amount')::numeric AND transaction_credit=0
-       AND functional_debit=(resolution->>'gross_amount')::numeric AND functional_credit=0)
+       AND transaction_debit=(resolution->>'cash_amount')::numeric AND transaction_credit=0
+       AND functional_debit=(resolution->>'cash_amount')::numeric AND functional_credit=0)
      OR NOT EXISTS (SELECT 1 FROM finance.journal_lines WHERE org_id=organization_id
        AND journal_entry_id=journal_id AND line_number=2 AND account_id=(resolution->>'settlement_account_id')::uuid
        AND branch_id=(resolution->>'branch_id')::uuid AND party_id IS NULL
@@ -6168,7 +6170,7 @@ BEGIN
   VALUES
    (organization_id,pg_catalog.gen_random_uuid(),journal_id,1,(resolved_document->>'accounts_payable_account_id')::uuid,
     (resolved_document->>'branch_id')::uuid,(resolved_document->>'supplier_party_id')::uuid,'Supplier payable settlement',
-    (resolved_document->>'gross_amount')::numeric,0,(resolved_document->>'gross_amount')::numeric,0),
+    (resolved_document->>'cash_amount')::numeric,0,(resolved_document->>'cash_amount')::numeric,0),
    (organization_id,pg_catalog.gen_random_uuid(),journal_id,2,(resolved_document->>'settlement_account_id')::uuid,
     (resolved_document->>'branch_id')::uuid,NULL,'Supplier payment bank settlement',0,
     (resolved_document->>'cash_amount')::numeric,0,(resolved_document->>'cash_amount')::numeric);

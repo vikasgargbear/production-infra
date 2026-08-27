@@ -679,7 +679,11 @@ BEGIN
               AND actual.amount=(expected.value->>'cash_amount')::numeric AND actual.status='posted'))
             OR (expected.value ? 'withholding' AND NOT EXISTS (
              SELECT 1 FROM tax.withholdings actual WHERE actual.org_id=organization_id
-              AND actual.id=(expected.value#>>'{{withholding,withholding_id}}')::uuid))
+              AND actual.id=(expected.value#>>'{{withholding,withholding_id}}')::uuid
+              AND actual.open_item_id=(expected.value->>'open_item_id')::uuid
+              AND actual.status='deducted'
+              AND actual.withheld_amount=(expected.value#>>'{{withholding,amount}}')::numeric
+              AND actual.deduction_trigger='credit'))
             OR (expected.value ? 'advance_application' AND NOT EXISTS (
              SELECT 1 FROM finance.accounting_events actual WHERE actual.org_id=organization_id
               AND actual.purchase_order_advance_allocation_id=(expected.value#>>'{{advance_application,advance_allocation_id}}')::uuid
@@ -717,13 +721,21 @@ BEGIN
         cash_total:=cash_total+(component->>'cash_amount')::numeric;
       END IF;
       IF component ? 'withholding' THEN
-        PERFORM erp_compliance_commands.post_withholding(organization_id,
-          (component#>>'{{withholding,withholding_id}}')::uuid,actor,target.id,NULL::uuid,
-          (component#>>'{{withholding,journal_id}}')::uuid,(component#>>'{{withholding,event_id}}')::uuid,
-          (component#>>'{{withholding,allocation_id}}')::uuid,component#>'{{withholding,basis_rows}}',
-          pg_catalog.decode(component#>>'{{withholding,key_hash}}','hex'),
-          pg_catalog.decode(component#>>'{{withholding,request_hash}}','hex'),
-          (component#>>'{{withholding,expires_at}}')::timestamptz);
+        PERFORM 1 FROM tax.withholdings withholding
+         JOIN finance.allocations allocation ON allocation.org_id=withholding.org_id
+          AND allocation.withholding_id=withholding.id AND allocation.open_item_id=target.id
+          AND allocation.status='posted' AND allocation.reversal_of_allocation_id IS NULL
+         WHERE withholding.org_id=organization_id
+          AND withholding.id=(component#>>'{{withholding,withholding_id}}')::uuid
+          AND withholding.open_item_id=target.id AND withholding.status='deducted'
+          AND withholding.deduction_trigger='credit'
+          AND withholding.withheld_amount=(component#>>'{{withholding,amount}}')::numeric
+          AND NOT EXISTS(SELECT 1 FROM tax.withholdings reversal
+            WHERE reversal.org_id=withholding.org_id
+             AND reversal.reversal_of_withholding_id=withholding.id);
+        IF NOT FOUND THEN
+          RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='supplier invoice withholding must be exact pre-existing credit-time authority';
+        END IF;
       END IF;
       IF component ? 'advance_application' THEN
         PERFORM "{FUNCTION_SCHEMA}"."apply_supplier_advance"(organization_id,
