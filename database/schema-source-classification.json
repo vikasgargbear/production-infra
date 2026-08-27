@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "readiness_state": "migrating",
   "allowed_classifications": [
     "retain",
@@ -7,12 +7,13 @@
     "retire",
     "pending-live-baseline"
   ],
+  "reset_strategy": {
+    "mode": "reset-only",
+    "conversion_allowed": false,
+    "legacy_runtime_allowed": false,
+    "dual_read_write_allowed": false
+  },
   "canonical_sources": [
-    {
-      "path": "database/02-tables",
-      "classification": "retain",
-      "role": "legacy-bootstrap-only"
-    },
     {
       "path": "backend/alembic",
       "classification": "retain",
@@ -25,23 +26,13 @@
       "backend/alembic"
     ],
     "unreachable_sources": [
-      "database/02-tables",
       "database/09-deployment/01_deploy_to_supabase.sql",
       "database/canonical/commands_tax_provider/tax-provider-commands.sql",
       "database/canonical/ci/bootstrap_supabase_auth.sql",
       "database/canonical/platform/trigger-foundations.sql",
       "backend/migrations/add_gstr2b_tables.sql",
       "backend/migrations/payroll_schema.sql",
-      "database/04-triggers/10_pricing_triggers.sql",
-      "database/05-functions/04_procurement_functions.sql",
-      "database/05-functions/05_gst_functions.sql",
-      "database/05-functions/06_compliance_functions.sql",
-      "database/05-functions/08_system_functions.sql",
-      "database/MASTER_DATABASE_FIXES.sql",
-      "database/migrations/add_payment_allocations.sql",
       "database/migrations/create_number_sequences.sql",
-      "database/migrations/migrate_credit_debit_notes_to_financial.sql",
-      "database/tables/credit_debit_notes.sql",
       "backend/migrations/versions/20260108_critical_indexes.py",
       "backend/migrations/versions/20260108_p2_indexes.py"
     ],
@@ -51,224 +42,61 @@
     "path": "database/09-deployment/01_deploy_to_supabase.sql",
     "classification": "retire",
     "execution_state": "fail-closed-pending-live-baseline",
-    "reason": "The prior plan mixed bootstrap and production mutations and referenced 37 absent files."
+    "reason": "The retired project is disposable and reset-only canonical Alembic supersedes this guarded mixed-SQL plan."
   },
-  "competing_authority_count": 16,
+  "competing_authority_count": 6,
   "competing_authorities": [
     {
-      "id": "canonical-tax-provider-command-scope",
-      "paths": ["database/canonical/commands_tax_provider/tax-provider-commands.sql"],
-      "classification": "migrate",
-      "reason": "Generated provider-neutral command SQL includes a private transaction-scope table; it may enter the canonical Alembic baseline only with the complete reviewed provider command boundary."
-    },
-    {
       "id": "canonical-ci-auth-fixture",
-      "paths": ["database/canonical/ci/bootstrap_supabase_auth.sql"],
+      "paths": [
+        "database/canonical/ci/bootstrap_supabase_auth.sql"
+      ],
       "classification": "retain",
-      "reason": "Disposable PostgreSQL 15 CI fixture only; local-host and database-name guards prohibit it from acting as a Supabase or production authority."
+      "reason": "Disposable PostgreSQL 15 fixture with local-host and database-name guards; no Alembic or deployment import exists."
     },
     {
-      "id": "canonical-trigger-foundations",
-      "paths": ["database/canonical/platform/trigger-foundations.sql"],
-      "classification": "migrate",
-      "reason": "Generated helper foundations are reviewed but resolve no trigger blocker; only fully bound controls may be incorporated into the canonical Alembic baseline."
+      "id": "canonical-generated-contract-inputs",
+      "paths": [
+        "database/canonical/commands_tax_provider/tax-provider-commands.sql",
+        "database/canonical/platform/trigger-foundations.sql"
+      ],
+      "classification": "retain",
+      "reason": "Reviewed generator and contract-test inputs outside the executable migration chain; canonical Alembic does not import them."
     },
     {
-      "id": "gstr2b-standalone-ddl",
-      "paths": ["backend/migrations/add_gstr2b_tables.sql"],
-      "classification": "pending-live-baseline",
-      "reason": "Application routes use these tables, but checked-in history cannot prove whether this standalone SQL was applied live."
-    },
-    {
-      "id": "payroll-standalone-ddl",
-      "paths": ["backend/migrations/payroll_schema.sql"],
-      "classification": "pending-live-baseline",
-      "reason": "Payroll services depend on these tables, but live existence and revision history must be established before migration."
-    },
-    {
-      "id": "pricing-trigger-embedded-tables",
-      "paths": ["database/04-triggers/10_pricing_triggers.sql"],
-      "classification": "migrate",
-      "reason": "Four inventory table definitions are embedded in a trigger bundle and must become reviewed canonical migrations after baseline."
-    },
-    {
-      "id": "procurement-function-embedded-tables",
-      "paths": ["database/05-functions/04_procurement_functions.sql"],
-      "classification": "migrate",
-      "reason": "Procurement and analytics table definitions are embedded in a function bundle."
-    },
-    {
-      "id": "gst-function-embedded-tables",
-      "paths": ["database/05-functions/05_gst_functions.sql"],
-      "classification": "migrate",
-      "reason": "GST filing and reconciliation table definitions are embedded in a function bundle."
-    },
-    {
-      "id": "compliance-function-embedded-tables",
-      "paths": ["database/05-functions/06_compliance_functions.sql"],
-      "classification": "migrate",
-      "reason": "Compliance table definitions are embedded in a function bundle."
-    },
-    {
-      "id": "system-function-embedded-tables",
-      "paths": ["database/05-functions/08_system_functions.sql"],
-      "classification": "migrate",
-      "reason": "System configuration and audit table definitions are embedded in a function bundle."
-    },
-    {
-      "id": "monolithic-master-fixes",
-      "paths": ["database/MASTER_DATABASE_FIXES.sql"],
+      "id": "packaged-unmounted-gstr2b-history",
+      "paths": [
+        "backend/migrations/add_gstr2b_tables.sql"
+      ],
       "classification": "retire",
-      "reason": "This manual patch aggregate is retained as history only and must never act as a deploy or migration authority."
+      "reason": "No mounted callable or Alembic consumer exists; the only remaining consumer is the obsolete PyInstaller packaging glob."
     },
     {
-      "id": "legacy-payment-allocation-ddl",
-      "paths": ["database/migrations/add_payment_allocations.sql"],
-      "classification": "pending-live-baseline",
-      "reason": "The application uses financial.allocations while bootstrap SQL and this migration describe payment_allocations; live state decides the reconciliation path."
-    },
-    {
-      "id": "document-number-sequence-ddl",
-      "paths": ["database/migrations/create_number_sequences.sql"],
-      "classification": "pending-live-baseline",
-      "reason": "The active service depends on this table, but its live shape and idempotency history are not baselined."
-    },
-    {
-      "id": "financial-note-consolidation",
-      "paths": ["database/migrations/migrate_credit_debit_notes_to_financial.sql"],
-      "classification": "pending-live-baseline",
-      "reason": "The application targets financial notes; whether the data-moving migration ran must be established from live history."
-    },
-    {
-      "id": "legacy-sales-note-tables",
-      "paths": ["database/tables/credit_debit_notes.sql"],
+      "id": "packaged-unmounted-payroll-history",
+      "paths": [
+        "backend/migrations/payroll_schema.sql"
+      ],
       "classification": "retire",
-      "reason": "The sales-schema note authority conflicts with current financial-schema application queries."
+      "reason": "No mounted callable or Alembic consumer exists; the only remaining consumer is the obsolete PyInstaller packaging glob."
     },
     {
-      "id": "legacy-alembic-index-chain",
+      "id": "retired-public-document-sequence-history",
+      "paths": [
+        "database/migrations/create_number_sequences.sql"
+      ],
+      "classification": "retire",
+      "reason": "The public integer sequence table is superseded by canonical core.document_sequences and has no runtime or migration consumer."
+    },
+    {
+      "id": "packaged-obsolete-alembic-history",
       "paths": [
         "backend/migrations/versions/20260108_critical_indexes.py",
         "backend/migrations/versions/20260108_p2_indexes.py"
       ],
-      "classification": "pending-live-baseline",
-      "reason": "The linked revision chain is outside the declared Alembic root; applied revision state must be checked live before relocation or retirement."
+      "classification": "retire",
+      "reason": "These revisions are outside the configured Alembic root and have no runtime import; only the obsolete PyInstaller packaging glob retains them."
     }
   ],
-  "broken_deployment_include_groups": [
-    {
-      "id": "superseded-schema-fragments",
-      "classification": "migrate",
-      "replacement": "database/01-schemas/01_create_all_schemas.sql",
-      "includes": [
-        "../01-schemas/01_master_schema.sql",
-        "../01-schemas/02_inventory_schema.sql",
-        "../01-schemas/03_parties_schema.sql",
-        "../01-schemas/04_sales_schema.sql",
-        "../01-schemas/05_procurement_schema.sql",
-        "../01-schemas/06_financial_schema.sql",
-        "../01-schemas/07_gst_schema.sql",
-        "../01-schemas/08_compliance_schema.sql",
-        "../01-schemas/09_analytics_schema.sql",
-        "../01-schemas/10_system_config_schema.sql"
-      ]
-    },
-    {
-      "id": "compatibility-view-relocation",
-      "classification": "migrate",
-      "replacement": "database/08-api-compatibility/01_compatibility_views.sql",
-      "includes": ["../02-views/01_api_compatibility_views.sql"]
-    },
-    {
-      "id": "absent-compatibility-functions",
-      "classification": "retire",
-      "includes": ["../03-functions/01_api_compatibility_functions.sql"]
-    },
-    {
-      "id": "absent-trigger-bundles",
-      "classification": "retire",
-      "includes": [
-        "../04-triggers/01_validation_triggers.sql",
-        "../04-triggers/02_audit_triggers.sql",
-        "../04-triggers/09_notification_triggers.sql"
-      ]
-    },
-    {
-      "id": "renamed-trigger-bundles",
-      "classification": "migrate",
-      "replacements": {
-        "../04-triggers/03_inventory_triggers.sql": "database/04-triggers/02_inventory_triggers.sql",
-        "../04-triggers/04_financial_triggers.sql": "database/04-triggers/01_financial_triggers.sql",
-        "../04-triggers/05_sales_triggers.sql": "database/04-triggers/03_sales_triggers.sql",
-        "../04-triggers/06_procurement_triggers.sql": "database/04-triggers/04_procurement_triggers.sql",
-        "../04-triggers/07_gst_triggers.sql": "database/04-triggers/06_gst_triggers.sql",
-        "../04-triggers/08_compliance_triggers.sql": "database/04-triggers/07_compliance_triggers.sql",
-        "../04-triggers/10_analytics_triggers.sql": "database/04-triggers/08_analytics_triggers.sql",
-        "../04-triggers/11_system_triggers.sql": "database/04-triggers/09_system_triggers.sql"
-      },
-      "includes": [
-        "../04-triggers/03_inventory_triggers.sql",
-        "../04-triggers/04_financial_triggers.sql",
-        "../04-triggers/05_sales_triggers.sql",
-        "../04-triggers/06_procurement_triggers.sql",
-        "../04-triggers/07_gst_triggers.sql",
-        "../04-triggers/08_compliance_triggers.sql",
-        "../04-triggers/10_analytics_triggers.sql",
-        "../04-triggers/11_system_triggers.sql"
-      ]
-    },
-    {
-      "id": "renamed-function-bundles",
-      "classification": "migrate",
-      "replacements": {
-        "../05-functions/01_inventory_functions.sql": "database/05-functions/02_inventory_functions.sql",
-        "../05-functions/02_sales_functions.sql": "database/05-functions/03_sales_functions.sql",
-        "../05-functions/03_procurement_functions.sql": "database/05-functions/04_procurement_functions.sql",
-        "../05-functions/04_financial_functions.sql": "database/05-functions/01_financial_functions.sql"
-      },
-      "includes": [
-        "../05-functions/01_inventory_functions.sql",
-        "../05-functions/02_sales_functions.sql",
-        "../05-functions/03_procurement_functions.sql",
-        "../05-functions/04_financial_functions.sql"
-      ]
-    },
-    {
-      "id": "relocated-initial-data",
-      "classification": "migrate",
-      "replacements": {
-        "../07-initial-data/01_master_data.sql": "database/08-initial-data/01_master_data.sql",
-        "../07-initial-data/02_sample_products.sql": "database/08-initial-data/02_sample_products.sql"
-      },
-      "includes": [
-        "../07-initial-data/01_master_data.sql",
-        "../07-initial-data/02_sample_products.sql"
-      ]
-    },
-    {
-      "id": "relocated-api-bundles",
-      "classification": "migrate",
-      "replacements": {
-        "../08-api/01_master_apis.sql": "database/07-api/01_master_apis.sql",
-        "../08-api/02_inventory_apis.sql": "database/07-api/02_inventory_apis.sql",
-        "../08-api/03_sales_apis.sql": "database/07-api/03_sales_apis.sql",
-        "../08-api/04_procurement_apis.sql": "database/07-api/04_procurement_apis.sql",
-        "../08-api/05_financial_apis.sql": "database/07-api/05_financial_apis.sql",
-        "../08-api/06_gst_compliance_apis.sql": "database/07-api/06_gst_compliance_apis.sql",
-        "../08-api/07_analytics_apis.sql": "database/07-api/07_analytics_apis.sql",
-        "../08-api/08_system_utility_apis.sql": "database/07-api/08_system_utility_apis.sql"
-      },
-      "includes": [
-        "../08-api/01_master_apis.sql",
-        "../08-api/02_inventory_apis.sql",
-        "../08-api/03_sales_apis.sql",
-        "../08-api/04_procurement_apis.sql",
-        "../08-api/05_financial_apis.sql",
-        "../08-api/06_gst_compliance_apis.sql",
-        "../08-api/07_analytics_apis.sql",
-        "../08-api/08_system_utility_apis.sql"
-      ]
-    }
-  ],
-  "broken_deployment_include_count": 37
+  "broken_deployment_include_groups": [],
+  "broken_deployment_include_count": 0
 }

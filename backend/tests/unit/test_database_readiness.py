@@ -60,20 +60,20 @@ def test_repository_source_classification_is_exhaustive_and_machine_readable():
     classification = schema_readiness.load_source_classification(authority, REPO_ROOT)
 
     assert classification["readiness_state"] == "migrating"
-    assert classification["competing_authority_count"] == 16
-    assert len(classification["competing_authorities"]) == 16
+    assert classification["competing_authority_count"] == 6
+    assert len(classification["competing_authorities"]) == 6
     assert sum(
         len(group["paths"]) for group in classification["competing_authorities"]
-    ) == 17
-    assert classification["broken_deployment_include_count"] == 37
+    ) == 8
+    assert classification["broken_deployment_include_count"] == 0
     assert sum(
         len(group["includes"])
         for group in classification["broken_deployment_include_groups"]
-    ) == 37
+    ) == 0
     reachability = classification["source_reachability"]
     assert reachability["current_sources"] == ["backend/alembic"]
     assert reachability["reachable_competing_source_count"] == 0
-    assert len(reachability["unreachable_sources"]) == 19
+    assert len(reachability["unreachable_sources"]) == 9
     assert not schema_readiness.check_source_classification(authority, REPO_ROOT)
 
 
@@ -88,7 +88,7 @@ def test_repository_reset_authority_contract_has_no_canonical_rls_gap():
     assert canonical_sources["backend/alembic"]["role"] == (
         "hash-bound-canonical-production-migration-authority"
     )
-    assert canonical_sources["database/02-tables"]["role"] == "legacy-bootstrap-only"
+    assert set(canonical_sources) == {"backend/alembic"}
     assert not schema_readiness.audit_authority_contract(REPO_ROOT)
 
 
