@@ -76,9 +76,11 @@ describe('deferred production surfaces', () => {
 
   test('zero-consumer compatibility clients and unreachable shells stay retired', () => {
     [
+      'hooks/useValidation.ts',
       'components/global/pdf/GlobalPDFGenerator.ts',
       'components/global/GlobalDocumentSummary.tsx',
       'components/global/auth/PermissionGate.tsx',
+      'components/global/ui/StandardComponents.tsx',
       'components/global/ui/KeyboardNavigationGuide.tsx',
       'components/global/ui/feedback/EmptyState.tsx',
       'components/global/ui/feedback/LoadingState.tsx',
@@ -93,6 +95,7 @@ describe('deferred production surfaces', () => {
       'services/api/modules/purchase/supplierInvoices.api.ts',
       'services/api/modules/settings/setup.api.ts',
       'services/api/modules/settings/utils.api.ts',
+      'tests/api/test-sales-apis.ts',
     ].forEach(relativePath => {
       expect(fs.existsSync(path.join(srcRoot, relativePath))).toBe(false);
     });
@@ -113,6 +116,9 @@ describe('deferred production surfaces', () => {
     const masterUtils = read('components/master/utils/index.ts');
     expect(masterHub).not.toMatch(/DataValidationEngine|BulkOperations/);
     expect(masterUtils).not.toMatch(/DataValidationEngine|BulkOperations/);
+
+    const globalIndex = read('components/global/index.ts');
+    expect(globalIndex).not.toContain("./ui/StandardComponents");
   });
 
   test('retirement preserves canonical invoice PDF and cloud-session authority', () => {

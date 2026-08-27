@@ -117,9 +117,6 @@ export {
 // ============== FILTER COMPONENTS ==============
 export { default as InlineFilterPanel } from './ui/InlineFilterPanel';
 
-// ============== STANDARD COMPONENTS ==============
-export { StandardFormInput, StandardSelect, DocumentSummaryTop } from './ui/StandardComponents';
-
 // ============== NAVIGATION COMPONENTS ==============
 export * from './navigation';
 export { ModuleHub } from './navigation';
