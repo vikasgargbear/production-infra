@@ -82,6 +82,7 @@ EPHEMERAL_SCOPE_RELATIONS = (
     "erp_automation_commands.execution_scopes",
     "erp_automation_commands.write_scopes",
     "erp_compliance_commands.command_scopes",
+    "erp_commercial_commands.reversal_scopes",
     "erp_core_commands.command_scopes",
     "erp_finance_commands.command_scopes",
     "erp_regulatory_commands.command_scopes",

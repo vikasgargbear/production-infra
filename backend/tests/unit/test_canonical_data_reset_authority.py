@@ -91,8 +91,8 @@ def test_reset_authority_classifies_exact_head_relation_sets() -> None:
     assert authority.ephemeral_scope_relations == tuple(
         sorted(EPHEMERAL_SCOPE_RELATIONS)
     )
-    assert len(authority.ephemeral_scope_relations) == 7
-    assert len(authority.truncate_relations) == 121
+    assert len(authority.ephemeral_scope_relations) == 8
+    assert len(authority.truncate_relations) == 122
     assert set(authority.reset_relations).isdisjoint(
         authority.preserved_seed_relations
     )
@@ -195,7 +195,7 @@ def test_source_classification_rejects_duplicate_unclassified_and_count_drift() 
     with pytest.raises(ResetAuthorityError, match="canonical relation count drifted"):
         classify_relations(
             alembic_head=authority.alembic_head,
-            created_relations=created[:-8],
+            created_relations=created[:-9],
             created_schemas=authority.alembic_schemas,
         )
 
@@ -304,11 +304,11 @@ def test_transactional_reset_emits_safe_exact_catalog_facts(monkeypatch) -> None
     assert connection.rolled_back is False
     assert receipt["canonical_relation_count"] == 119
     assert receipt["alembic_schema_count"] == 30
-    assert receipt["ephemeral_scope_relation_count"] == 7
-    assert receipt["catalog_relation_count"] == 126
+    assert receipt["ephemeral_scope_relation_count"] == 8
+    assert receipt["catalog_relation_count"] == 127
     assert receipt["preserved_seed_relation_count"] == 5
     assert receipt["reset_relation_count"] == 114
-    assert receipt["truncate_relation_count"] == 121
+    assert receipt["truncate_relation_count"] == 122
     assert receipt["disposable_row_count_after_reset"] == 0
     assert receipt["evidence_storage_object_count_after_reset"] == 0
     assert receipt["isolated_role_catalog_preserved"] is True
