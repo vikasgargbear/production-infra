@@ -356,23 +356,12 @@ def test_workflow_uploads_fresh_source_and_polls_exact_deployment_ids() -> None:
     assert "frontend_pid" not in workflow
 
     assert "upload_failure_kind()" in workflow
-    assert "structured_upload_error()" in workflow
-    assert 'def safe_code:' in workflow
-    assert 'else "UNCLASSIFIED" end' in workflow
-    for safe_code in (
-        "UPLOAD_FAILED",
-        "RATELIMITED",
-        "FETCH_ERROR",
-        "UNAUTHORIZED",
-        "INVALID_TOKEN",
-        "GRAPHQL_ERROR",
-    ):
-        assert f'. == "{safe_code}"' in workflow
-    assert '^Failed to upload code with status code ' in workflow
-    assert '[[ "$http_status" =~ ^5[0-9]{2}$ ]]' in workflow
+    assert "upload_diagnostic()" in workflow
+    assert '"$GITHUB_WORKSPACE/backend/scripts/railway_upload_diagnostic.py"' in workflow
+    assert "structured_upload_error()" not in workflow
+    assert "earliest_retry_utc=$earliest_retry_utc" in workflow
     assert "empty_cli_response" in workflow
     assert "transient_transport" in workflow
-    assert "non_retryable" in workflow
     assert "invalid_success_payload" in workflow
     assert "max_attempts=2" in workflow
     assert "for recovery_attempt in $(seq 1 6)" in workflow
@@ -388,7 +377,8 @@ def test_workflow_uploads_fresh_source_and_polls_exact_deployment_ids() -> None:
     assert "deployment_id_from_payload()" in workflow
     assert "expected exactly one Railway deployment UUID document" in workflow
     assert 'test("^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")' in workflow
-    assert "service=$label attempt=$attempt exit_code=$exit_code kind=$failure_kind" in workflow
+    assert "service=$label attempt=$attempt exit_code=$exit_code code=$diagnostic_code" in workflow
+    assert "kind=$failure_kind classifier_kind=$diagnosed_kind" in workflow
     assert "provider_code=$provider_code http_status=$http_status" in workflow
     assert "stdout_bytes=$stdout_bytes stdout_sha256=$stdout_sha256 stdout_shape=$stdout_shape" in workflow
     assert "stderr_bytes=$stderr_bytes stderr_sha256=$stderr_sha256" in workflow
@@ -491,6 +481,10 @@ if test "$command" = up; then
     printf '%s\n' '{"code":"UPLOAD_FAILED","error":"ERROR_SECRET_SHOULD_NOT_APPEAR","hint":"HINT_SECRET_SHOULD_NOT_APPEAR"}'
     exit 1
   fi
+  if test "$FAKE_RAILWAY_SCENARIO" = peak_window_api && test "$service" = api-service; then
+    printf '%s\n' '{"code":"UPLOAD_FAILED","error":"Free-tier deploys to asia-southeast1-eqsg3a are not available during peak hours (8 AM – 8 PM Asia/Singapore). Please try again later or upgrade your plan.","hint":"HINT_SECRET_SHOULD_NOT_APPEAR"}'
+    exit 1
+  fi
   if test "$FAKE_RAILWAY_SCENARIO" = multidoc_api && test "$service" = api-service; then
     printf '%s\\n%s\\n' '{"deploymentId":"11111111-1111-4111-8111-111111111111"}' '{"deploymentId":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"}'
     exit 0
@@ -560,6 +554,7 @@ exit 45
             "RAILWAY_ENVIRONMENT_ID": "environment-id",
             "RAILWAY_PROJECT_ID": "project-id",
             "GITHUB_OUTPUT": str(output_path),
+            "GITHUB_WORKSPACE": str(ROOT),
             "FAKE_RAILWAY_STATE": str(state_dir),
             "FAKE_RAILWAY_SCENARIO": name,
         }
@@ -619,6 +614,19 @@ exit 45
     assert "provider_code=UPLOAD_FAILED http_status=NONE" in unmatched.stdout
     assert "SECRET_SHOULD_NOT_APPEAR" not in unmatched.stdout
     assert "SECRET_SHOULD_NOT_APPEAR" not in unmatched.stderr
+
+    peak_window, peak_window_calls = run_scenario("peak_window_api")
+    assert peak_window.returncode != 0
+    assert peak_window_calls == ["up api-service"]
+    assert "code=free_tier_peak_window" in peak_window.stdout
+    assert "kind=scheduled_provider_window" in peak_window.stdout
+    assert "region=asia-southeast1-eqsg3a" in peak_window.stdout
+    assert "earliest_retry_utc=" in peak_window.stdout
+    assert "earliest_retry_utc=NONE" not in peak_window.stdout
+    assert "list api-service" not in peak_window_calls
+    assert not any(call.startswith("sleep ") for call in peak_window_calls)
+    assert "SECRET_SHOULD_NOT_APPEAR" not in peak_window.stdout
+    assert "SECRET_SHOULD_NOT_APPEAR" not in peak_window.stderr
 
     for failing_name in (
         "nonretry_api",
