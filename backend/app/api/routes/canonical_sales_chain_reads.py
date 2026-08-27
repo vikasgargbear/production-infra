@@ -167,7 +167,7 @@ def _sales_dispatch_valuation_acceptance_readback(
     org_id = _activate(db, user)
     rows = _rows(db, """
         SELECT dispatch.id AS dispatch_id, dispatch.dispatch_number AS challan_number,
-               dispatch.sales_order_id, dispatch.status, party.legal_name AS customer_name,
+               lines.sales_order_id, dispatch.status, party.legal_name AS customer_name,
                inventory_document.id AS inventory_document_id,
                to_char(inventory_document.total_abs_base_quantity, 'FM999999999999999990.000000') AS inventory_base_quantity,
                to_char(inventory_document.total_value, 'FM999999999999999990.00') AS inventory_value,
@@ -179,7 +179,8 @@ def _sales_dispatch_valuation_acceptance_readback(
             ON inventory_document.org_id=dispatch.org_id AND inventory_document.sales_dispatch_id=dispatch.id
            AND inventory_document.status='posted'
           JOIN LATERAL (
-              SELECT jsonb_agg(jsonb_build_object(
+              SELECT min(order_line.order_id) AS sales_order_id,
+                     jsonb_agg(jsonb_build_object(
                          'dispatch_line_id', line.id, 'sales_order_line_id', line.order_line_id,
                          'product_id', line.product_id, 'batch_id', line.batch_id,
                          'from_location_id', line.from_location_id,
@@ -192,12 +193,15 @@ def _sales_dispatch_valuation_acceptance_readback(
                          'ledger_value', to_char(abs(ledger.value_delta), 'FM999999999999999990.00')
                      ) ORDER BY line.line_number, line.id) AS items
                 FROM sales.dispatch_lines line
+                JOIN sales.order_lines order_line
+                  ON order_line.org_id=line.org_id AND order_line.id=line.order_line_id
                 JOIN inventory.inventory_document_lines inventory_line
                   ON inventory_line.org_id=line.org_id AND inventory_line.sales_dispatch_line_id=line.id
                  AND inventory_line.inventory_document_id=inventory_document.id
                 JOIN inventory.stock_ledger_entries ledger
                   ON ledger.org_id=inventory_line.org_id AND ledger.inventory_document_line_id=inventory_line.id
                WHERE line.org_id=dispatch.org_id AND line.dispatch_id=dispatch.id
+              HAVING count(DISTINCT order_line.order_id)=1
           ) lines ON true
          WHERE dispatch.org_id=:org_id AND dispatch.id=:dispatch_id AND dispatch.status='posted'
     """, {"org_id": org_id, "dispatch_id": dispatch_id})

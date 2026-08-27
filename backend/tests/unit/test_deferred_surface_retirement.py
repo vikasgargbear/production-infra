@@ -258,6 +258,11 @@ def test_reset_only_strategy_has_no_retired_project_conversion_tools() -> None:
         "backend/scripts/sql/capture_supabase_schema.sql",
         "backend/tests/unit/test_supabase_schema_capture.py",
         "docs/operations/supabase-live-schema-capture.md",
+        "docs/architecture/query-schema-conflicts.json",
+        "docs/backend/database/MASTER_SCHEMA_INDEX.md",
+        "docs/backend/database/README.md",
+        "docs/backend/database/schemas/master.md",
+        "docs/backend/database/schemas/sales.md",
     )
 
     assert [

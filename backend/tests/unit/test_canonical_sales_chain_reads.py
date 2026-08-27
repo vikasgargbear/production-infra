@@ -350,6 +350,9 @@ def test_dispatch_readback_uses_canonical_stock_ledger_columns(monkeypatch):
     assert "ledger.quantity_delta" in captured["sql"]
     assert "ledger.value_delta" in captured["sql"]
     assert "ledger.quantity)" not in captured["sql"]
+    assert "dispatch.sales_order_id" not in captured["sql"]
+    assert "JOIN sales.order_lines order_line" in captured["sql"]
+    assert "HAVING count(DISTINCT order_line.order_id)=1" in captured["sql"]
     assert captured["params"] == {"org_id": org_id, "dispatch_id": dispatch_id}
     assert "inventory_value" not in result.model_dump()
     assert "ledger_value" not in result.lines[0].model_dump()
