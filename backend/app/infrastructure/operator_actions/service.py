@@ -3735,6 +3735,10 @@ class SqlAlchemyOperatorActionService:
                     "capability_code": "inventory.destruction.prepare",
                     "command_request_id": str(identifiers["command_request_id"]),
                     "destination_branch_id": None,
+                    "destruction_reason": {
+                        "code": resolution["reason_code"],
+                        "detail": resolution["reason"],
+                    },
                     "financial_impact": list(financial_impact),
                     "inventory_impact": list(inventory_impact),
                     "legal_scope": resolution["legal_scope"],

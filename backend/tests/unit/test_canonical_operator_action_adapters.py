@@ -1432,6 +1432,8 @@ class FakeInventoryDestructionSession:
             return FakeResult(({"resolution": {
                 "branch_id": request["branch_id"],
                 "location_id": request["location_id"],
+                "reason_code": request["reason_code"],
+                "reason": request["reason"],
                 "inventory_asset_account_id": inventory_asset,
                 "inventory_destruction_loss_account_id": destruction_loss,
                 "inventory_itc_reversal_expense_account_id": reversal_expense,
@@ -3355,6 +3357,10 @@ def test_inventory_destruction_prepare_is_one_runtime_transaction_with_exact_los
     ]
     preview = json.loads(session.executions[2][1]["preview_bytes"])
     assert preview["operation"] == "compliance.destruction.post"
+    assert preview["destruction_reason"] == {
+        "code": payload["reason_code"],
+        "detail": payload["reason"],
+    }
     assert preview["legal_scope"]["supported_quantity"] == (
         "full_batch_location_balance_only"
     )
