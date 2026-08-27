@@ -57,6 +57,19 @@ EXPECTED = {
     "journal_total": Decimal("5800.00"),
 }
 
+TRANSFER_EXPECTED = {
+    "transferred_quantity": Decimal("21.000000"),
+    "transferred_value": Decimal("1800.00"),
+    "source_quantity": Decimal("31.500000"),
+    "source_value_before_invoice": Decimal("2700.00"),
+    "destination_quantity": Decimal("21.000000"),
+    "destination_value_before_invoice": Decimal("1800.00"),
+    "source_value_after_invoice": Decimal("3000.00"),
+    "destination_value_after_invoice": Decimal("2000.00"),
+    "source_adjustment": Decimal("300.00"),
+    "destination_adjustment": Decimal("200.00"),
+}
+
 
 def _admin_dsn(database_url: str) -> str:
     url = make_url(database_url)
@@ -167,8 +180,8 @@ def _approve_and_execute(
     return executed
 
 
-def _purchase_order_payload() -> dict[str, Any]:
-    payload = fixture.purchase_order_payload()
+def _purchase_order_payload(*, business_date: date) -> dict[str, Any]:
+    payload = fixture.purchase_order_payload(business_date=business_date)
     product = dict(payload["lines"][0])
     product.update({
         "billed_quantity": "50",
@@ -180,9 +193,11 @@ def _purchase_order_payload() -> dict[str, Any]:
     return payload
 
 
-def _goods_receipt_payload(purchase_order_id: UUID, purchase_order_line_id: UUID) -> dict[str, Any]:
+def _goods_receipt_payload(
+    purchase_order_id: UUID, purchase_order_line_id: UUID, *, business_date: date
+) -> dict[str, Any]:
     payload = fixture.goods_receipt_payload(
-        str(purchase_order_id), str(purchase_order_line_id)
+        str(purchase_order_id), str(purchase_order_line_id), business_date=business_date
     )
     batch = payload["lines"][0]["batches"][0]
     batch.update({
@@ -198,13 +213,38 @@ def _supplier_invoice_payload(
     goods_receipt_id: UUID,
     goods_receipt_line_id: UUID,
     portal_evidence: dict[str, str],
+    *,
+    business_date: date,
 ) -> dict[str, Any]:
     payload = fixture.supplier_invoice_payload(
-        str(goods_receipt_id), str(goods_receipt_line_id), portal_evidence
+        str(goods_receipt_id), str(goods_receipt_line_id), portal_evidence,
+        business_date=business_date,
     )
     payload["idempotency_key"] = f"pg15-supplier-invoice-{uuid4()}"
     payload["lines"][0]["landed_cost_allocation_method"] = "direct"
     return payload
+
+
+def _inventory_transfer_payload(
+    *, batch_id: UUID, business_date: date
+) -> dict[str, Any]:
+    return {
+        "idempotency_key": f"pg15-landed-cost-transfer-{uuid4()}",
+        "source_branch_id": fixture.IDS["branch"],
+        "destination_branch_id": fixture.IDS["transfer_destination_branch"],
+        "source_location_id": fixture.IDS["saleable_location"],
+        "destination_location_id": fixture.IDS["transfer_destination_location"],
+        "transfer_date": business_date.isoformat(),
+        "lines": [{
+            "product_id": fixture.IDS["product"],
+            "uom_conversion_id": fixture.IDS["uom_conversion"],
+            "batch_allocations": [{
+                "batch_id": str(batch_id),
+                "entered_quantity": str(TRANSFER_EXPECTED["transferred_quantity"]),
+            }],
+        }],
+        "logistics": {"transport_mode": "in_person", "distance_km": "0.00"},
+    }
 
 
 def _source_rows(admin_dsn: str, goods_receipt_id: UUID) -> tuple[UUID, UUID, UUID, str]:
@@ -314,6 +354,38 @@ def _set_balance_version(admin_dsn: str, batch_id: UUID, delta: int) -> None:
             (
                 delta, fixture.IDS["org"], fixture.IDS["saleable_location"],
                 fixture.IDS["product"], batch_id,
+            ),
+        )
+        assert cursor.rowcount == 1
+
+
+def _release_disposable_receipt_batch(admin_dsn: str, batch_id: UUID) -> None:
+    """Satisfy the transfer command's reviewed released-batch prerequisite."""
+
+    with psycopg2.connect(admin_dsn) as connection, connection.cursor() as cursor:
+        cursor.execute('SET LOCAL ROLE "erp_migration_owner"')
+        cursor.execute(
+            """
+            SELECT set_config('app.org_id',%s,true),
+                   set_config('app.membership_id',%s,true),
+                   set_config('app.request_id',%s,true)
+            """,
+            (
+                fixture.IDS["org"], fixture.IDS["operator_membership"], str(uuid4()),
+            ),
+        )
+        cursor.execute(
+            """
+            UPDATE inventory.batches
+               SET status='released',released_at=transaction_timestamp(),
+                   released_by_membership_id=%s,updated_at=transaction_timestamp(),
+                   updated_by_membership_id=%s,row_version=row_version+1
+             WHERE org_id=%s AND id=%s AND status='quarantined'
+            """,
+            (
+                fixture.IDS["operator_membership"],
+                fixture.IDS["operator_membership"],
+                fixture.IDS["org"], batch_id,
             ),
         )
         assert cursor.rowcount == 1
@@ -513,6 +585,216 @@ def _assert_posted_readback(
         )
 
 
+def _run_transferred_stock_lifecycle(
+    admin_dsn: str,
+    runtime_url: str,
+    calculator_url: str,
+    runtime_dsn: str,
+) -> UUID:
+    """Prove that transferred receipt stock remains capitalizable lineage."""
+
+    shared_reference_ids = {
+        key: fixture.IDS[key] for key in ("tax_release", "tax_version")
+    }
+    organization_pan = _configure_fixture_ids()
+    fixture.IDS.update(shared_reference_ids)
+    with psycopg2.connect(admin_dsn) as connection:
+        fixture.bootstrap_identity(connection, organization_pan=organization_pan)
+    with psycopg2.connect(runtime_dsn) as connection:
+        business_date = fixture.organization_business_date(connection)
+    with psycopg2.connect(admin_dsn) as connection:
+        fixture.seed_business_master(connection, business_date=business_date)
+        fixture.seed_end_to_end_master(connection, business_date=business_date)
+    with psycopg2.connect(runtime_dsn) as connection:
+        fixture.activate_demo_product(connection)
+    with psycopg2.connect(admin_dsn) as connection:
+        portal_evidence = fixture.seed_supplier_invoice_portal_evidence(
+            connection, business_date=business_date
+        )
+
+    with _service(runtime_url, calculator_url) as service:
+        purchase = _approve_and_execute(service, _prepare(
+            service, "procurement.purchase_order.prepare",
+            _purchase_order_payload(business_date=business_date),
+        ))
+        assert purchase.resource_id is not None
+        with psycopg2.connect(admin_dsn) as connection, connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT id FROM procurement.purchase_order_lines WHERE org_id=%s AND purchase_order_id=%s",
+                (fixture.IDS["org"], purchase.resource_id),
+            )
+            purchase_order_line_id = UUID(str(cursor.fetchone()[0]))
+        receipt = _approve_and_execute(service, _prepare(
+            service, "procurement.goods_receipt.prepare",
+            _goods_receipt_payload(
+                purchase.resource_id, purchase_order_line_id,
+                business_date=business_date,
+            ),
+        ))
+        assert receipt.resource_id is not None
+        goods_receipt_line_id, batch_id, _, _ = _source_rows(
+            admin_dsn, receipt.resource_id
+        )
+        _release_disposable_receipt_batch(admin_dsn, batch_id)
+
+        transfer = _approve_and_execute(service, _prepare(
+            service, "inventory.transfer.prepare",
+            _inventory_transfer_payload(batch_id=batch_id, business_date=business_date),
+        ))
+        assert transfer.resource_id is not None
+        with psycopg2.connect(runtime_dsn) as connection, connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT erp_security.activate_context(%s,%s)",
+                (fixture.IDS["operator_auth_user"], fixture.IDS["org"]),
+            )
+            cursor.execute(
+                """
+                SELECT location_id,on_hand_quantity,inventory_value
+                  FROM inventory.stock_balances
+                 WHERE org_id=%s AND product_id=%s AND batch_id=%s
+                 ORDER BY location_id
+                """,
+                (fixture.IDS["org"], fixture.IDS["product"], batch_id),
+            )
+            balances = {UUID(str(row[0])): row[1:] for row in cursor.fetchall()}
+            assert balances == {
+                UUID(fixture.IDS["saleable_location"]): (
+                    TRANSFER_EXPECTED["source_quantity"],
+                    TRANSFER_EXPECTED["source_value_before_invoice"],
+                ),
+                UUID(fixture.IDS["transfer_destination_location"]): (
+                    TRANSFER_EXPECTED["destination_quantity"],
+                    TRANSFER_EXPECTED["destination_value_before_invoice"],
+                ),
+            }
+
+        prepared = _prepare(
+            service,
+            "procurement.supplier_invoice.prepare",
+            _supplier_invoice_payload(
+                receipt.resource_id, goods_receipt_line_id, portal_evidence,
+                business_date=business_date,
+            ),
+        )
+        command_id = prepared.command_request_id
+        with psycopg2.connect(admin_dsn) as connection, connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT request.target_resource_id,line.id
+                  FROM automation.command_requests AS request
+                  JOIN procurement.supplier_invoice_lines AS line
+                    ON line.org_id=request.org_id
+                   AND line.supplier_invoice_id=request.target_resource_id
+                 WHERE request.org_id=%s AND request.id=%s
+                """,
+                (fixture.IDS["org"], command_id),
+            )
+            supplier_invoice_id, supplier_invoice_line_id = cursor.fetchone()
+        approval = service.approve(
+            command_request_id=command_id,
+            preview_hash=prepared.preview_hash,
+            idempotency_key=f"approve-{command_id}",
+            context=_context("automation.command.approve", "automation.command.approve"),
+        )
+        assert approval.status == "approved"
+
+        with psycopg2.connect(admin_dsn) as connection, connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT erp_trade_commands_v2.landed_cost_lineage_state(%s,%s)",
+                (fixture.IDS["org"], supplier_invoice_line_id),
+            )
+            lineage = cursor.fetchone()[0]
+        assert lineage["contract_version"] == "supplier_invoice_landed_cost_lineage_v1"
+        assert lineage["source_identity_count"] == 1
+        assert lineage["target_identity_count"] == 2
+        assert Decimal(lineage["source_quantity_basis"]) == EXPECTED["receipt_quantity"]
+        assert Decimal(lineage["remaining_quantity_basis"]) == EXPECTED["receipt_quantity"]
+        assert lineage["goods_receipt_line_ids"] == [str(goods_receipt_line_id)]
+        assert len(lineage["transfer_line_ids"]) == 1
+        assert {
+            UUID(target["location_id"]): (
+                Decimal(target["on_hand_quantity"]),
+                Decimal(target["inventory_value"]),
+                int(target["stock_row_version"]),
+            )
+            for target in lineage["targets"]
+        } == {
+            UUID(fixture.IDS["saleable_location"]): (
+                TRANSFER_EXPECTED["source_quantity"],
+                TRANSFER_EXPECTED["source_value_before_invoice"],
+                2,
+            ),
+            UUID(fixture.IDS["transfer_destination_location"]): (
+                TRANSFER_EXPECTED["destination_quantity"],
+                TRANSFER_EXPECTED["destination_value_before_invoice"],
+                1,
+            ),
+        }
+
+        executed = service.execute(
+            command_request_id=command_id,
+            preview_hash=prepared.preview_hash,
+            idempotency_key=f"execute-{command_id}",
+            context=_context("automation.command.execute", "automation.command.execute"),
+        )
+        assert executed.status == "succeeded"
+        assert executed.resource_id == UUID(str(supplier_invoice_id))
+
+    with psycopg2.connect(runtime_dsn) as connection, connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT erp_security.activate_context(%s,%s)",
+            (fixture.IDS["operator_auth_user"], fixture.IDS["org"]),
+        )
+        cursor.execute(
+            """
+            SELECT adjustment.from_location_id,adjustment.extended_cost,
+                   balance.on_hand_quantity,balance.inventory_value
+              FROM inventory.inventory_document_lines AS adjustment
+              JOIN inventory.inventory_documents AS document
+                ON document.org_id=adjustment.org_id
+               AND document.id=adjustment.inventory_document_id
+              JOIN inventory.stock_balances AS balance
+                ON balance.org_id=adjustment.org_id
+               AND balance.location_id=adjustment.from_location_id
+               AND balance.product_id=adjustment.product_id
+               AND balance.batch_id=adjustment.batch_id
+             WHERE adjustment.org_id=%s
+               AND document.supplier_invoice_id=%s
+               AND document.document_type='cost_adjustment'
+             ORDER BY adjustment.from_location_id
+            """,
+            (fixture.IDS["org"], supplier_invoice_id),
+        )
+        adjustments = {
+            UUID(str(row[0])): row[1:] for row in cursor.fetchall()
+        }
+        assert adjustments == {
+            UUID(fixture.IDS["saleable_location"]): (
+                TRANSFER_EXPECTED["source_adjustment"],
+                TRANSFER_EXPECTED["source_quantity"],
+                TRANSFER_EXPECTED["source_value_after_invoice"],
+            ),
+            UUID(fixture.IDS["transfer_destination_location"]): (
+                TRANSFER_EXPECTED["destination_adjustment"],
+                TRANSFER_EXPECTED["destination_quantity"],
+                TRANSFER_EXPECTED["destination_value_after_invoice"],
+            ),
+        }
+        cursor.execute(
+            """
+            SELECT count(*),COALESCE(sum(line.transaction_debit-line.transaction_credit),0)
+              FROM finance.journal_lines AS line
+              JOIN finance.accounting_events AS event
+                ON event.org_id=line.org_id AND event.journal_entry_id=line.journal_entry_id
+             WHERE line.org_id=%s AND event.supplier_invoice_id=%s
+               AND line.description='Consumed supplier price or landed-cost variance'
+            """,
+            (fixture.IDS["org"], supplier_invoice_id),
+        )
+        assert cursor.fetchone() == (0, Decimal("0"))
+    return UUID(str(supplier_invoice_id))
+
+
 def run_lifecycle() -> None:
     register_adapter(UUID, lambda value: AsIs(f"'{value}'::uuid"))
     admin_url = os.environ["DATABASE_URL"]
@@ -533,16 +815,22 @@ def run_lifecycle() -> None:
         fixture.bootstrap_identity(connection, organization_pan=organization_pan)
     with psycopg2.connect(admin_dsn) as connection:
         _seed_reference_authority(connection)
-        fixture.seed_business_master(connection)
-        fixture.seed_end_to_end_master(connection)
+    with psycopg2.connect(runtime_dsn) as connection:
+        business_date = fixture.organization_business_date(connection)
+    with psycopg2.connect(admin_dsn) as connection:
+        fixture.seed_business_master(connection, business_date=business_date)
+        fixture.seed_end_to_end_master(connection, business_date=business_date)
     with psycopg2.connect(runtime_dsn) as connection:
         fixture.activate_demo_product(connection)
     with psycopg2.connect(admin_dsn) as connection:
-        portal_evidence = fixture.seed_supplier_invoice_portal_evidence(connection)
+        portal_evidence = fixture.seed_supplier_invoice_portal_evidence(
+            connection, business_date=business_date
+        )
 
     with _service(runtime_url, calculator_url) as service:
         purchase = _approve_and_execute(service, _prepare(
-            service, "procurement.purchase_order.prepare", _purchase_order_payload()
+            service, "procurement.purchase_order.prepare",
+            _purchase_order_payload(business_date=business_date),
         ))
         purchase_order_id = purchase.resource_id
         assert purchase_order_id is not None
@@ -555,7 +843,9 @@ def run_lifecycle() -> None:
         receipt = _approve_and_execute(service, _prepare(
             service,
             "procurement.goods_receipt.prepare",
-            _goods_receipt_payload(purchase_order_id, purchase_order_line_id),
+            _goods_receipt_payload(
+                purchase_order_id, purchase_order_line_id, business_date=business_date
+            ),
         ))
         goods_receipt_id = receipt.resource_id
         assert goods_receipt_id is not None
@@ -567,7 +857,8 @@ def run_lifecycle() -> None:
         _post_consumption(runtime_dsn, batch_id=batch_id, uom_code=uom_code)
         _assert_upstream_has_no_payable_or_tax(runtime_dsn)
         payload = _supplier_invoice_payload(
-            goods_receipt_id, goods_receipt_line_id, portal_evidence
+            goods_receipt_id, goods_receipt_line_id, portal_evidence,
+            business_date=business_date,
         )
 
         policy = ACTION_POLICIES["procurement.supplier_invoice.prepare"]
@@ -681,9 +972,14 @@ def run_lifecycle() -> None:
     _assert_posted_readback(
         runtime_url, runtime_dsn, supplier_invoice_id, goods_receipt_id, batch_id
     )
+    transferred_supplier_invoice_id = _run_transferred_stock_lifecycle(
+        admin_dsn, runtime_url, calculator_url, runtime_dsn
+    )
     print(
         "supplier-invoice landed-cost PostgreSQL 15 lifecycle passed: "
-        f"invoice={supplier_invoice_id} inventory_delta=300.00 consumed_variance=200.00"
+        f"invoice={supplier_invoice_id} inventory_delta=300.00 consumed_variance=200.00; "
+        f"transferred_invoice={transferred_supplier_invoice_id} "
+        "inventory_delta=500.00 consumed_variance=0.00"
     )
 
 

@@ -89,8 +89,27 @@ def test_landed_cost_uses_persisted_pools_and_deterministic_residuals() -> None:
     assert "balance.on_hand_quantity<=0" in text
     assert "balance.inventory_value+line.extended_cost<0" in text
     assert "fully_allocated_receipt" in text
-    assert "entry.quantity_delta>0" in text
-    assert "receipt stock is partial or co-mingled" in text
+    assert "landed_cost_lineage_state" in text
+    assert "landed_cost_receipt_lineage_state" in text
+    assert "landed_cost_lineage_from_receipts" in text
+    assert "allocated_billed_quantity=receipt_billed_quantity" in text
+    assert "allocated_free_quantity=receipt_free_quantity" in text
+    assert "lineage_transfers" in text
+    assert "supplier_invoice_landed_cost_lineage_v1" in text
+    assert "'stock_row_version',target.stock_row_version" in text
+    assert "'last_ledger_entry_id',target.last_ledger_entry_id" in text
+    assert "'transfer_line_ids'" in text
+    assert "'goods_receipt_line_ids'" in text
+    assert "entry.entry_kind='transfer_in'" in text
+    assert "entry.entry_kind='transfer_out'" in text
+    assert "transfer.ledger_count=2" in text
+    assert "foreign_positive_count" in text
+    assert "origin_collision_count" in text
+    assert "running_quantity<0" in text
+    assert "receipt lineage is co-mingled" in text
+    assert "transfer lineage is unbalanced, malformed, or unlinked" in text
+    assert "landed_cost_lineage_state(line.org_id,supplier_line.id)->'targets'" in text
+    assert "WHEN 'direct' THEN balance.on_hand_quantity" in text
     assert "FOR UPDATE OF balance" in text
 
 

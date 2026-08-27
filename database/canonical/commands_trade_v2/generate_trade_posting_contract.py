@@ -109,6 +109,357 @@ $function$""",
 def _landed_pool_function() -> list[str]:
     return [
         *_function(
+            "landed_cost_lineage_from_receipts(p_org_id uuid, p_receipt_allocations jsonb)",
+            "jsonb",
+            """
+DECLARE state jsonb;
+        seed_bad_count bigint; malformed_transfer_count bigint;
+        foreign_positive_count bigint; unlinked_transfer_count bigint;
+        origin_collision_count bigint; balance_bad_count bigint;
+        negative_prefix_count bigint; origin_quantity_bad_count bigint;
+BEGIN
+    IF p_org_id IS NULL OR pg_catalog.jsonb_typeof(p_receipt_allocations)<>'array'
+       OR pg_catalog.jsonb_array_length(p_receipt_allocations)=0
+       OR EXISTS (
+         SELECT 1 FROM pg_catalog.jsonb_array_elements(p_receipt_allocations) AS allocation(value)
+          WHERE NULLIF(allocation.value->>'goods_receipt_line_id','')::uuid IS NULL
+             OR NULLIF(allocation.value->>'allocated_base_billed_quantity','')::numeric IS NULL
+             OR NULLIF(allocation.value->>'allocated_base_free_quantity','')::numeric IS NULL
+             OR NULLIF(allocation.value->>'allocated_base_billed_quantity','')::numeric<0
+             OR NULLIF(allocation.value->>'allocated_base_free_quantity','')::numeric<0
+             OR COALESCE((allocation.value->>'allocated_base_billed_quantity')::numeric,0)
+                +COALESCE((allocation.value->>'allocated_base_free_quantity')::numeric,0)<=0
+       ) OR (SELECT count(*) FROM pg_catalog.jsonb_array_elements(p_receipt_allocations))
+              <>(SELECT count(DISTINCT value->>'goods_receipt_line_id')
+                  FROM pg_catalog.jsonb_array_elements(p_receipt_allocations)) THEN
+        RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='landed-cost receipt lineage input is incomplete or duplicated';
+    END IF;
+
+    WITH RECURSIVE raw_seeds AS (
+      SELECT receipt.id AS goods_receipt_line_id,
+             receipt.goods_receipt_id,receipt.location_id,receipt.product_id,receipt.batch_id,
+             receipt.uom_code,
+             (requested.value->>'allocated_base_billed_quantity')::numeric AS allocated_billed_quantity,
+             (requested.value->>'allocated_base_free_quantity')::numeric AS allocated_free_quantity,
+             receipt.base_accepted_quantity AS receipt_billed_quantity,
+             receipt.base_free_quantity AS receipt_free_quantity,
+             (requested.value->>'allocated_base_billed_quantity')::numeric
+               +(requested.value->>'allocated_base_free_quantity')::numeric AS allocated_quantity,
+             receipt.base_accepted_quantity+receipt.base_free_quantity AS receipt_quantity,
+             pg_catalog.round(
+               ((requested.value->>'allocated_base_billed_quantity')::numeric
+                 +(requested.value->>'allocated_base_free_quantity')::numeric)
+               * receipt.unit_cost,2
+             ) AS allocated_value
+        FROM pg_catalog.jsonb_array_elements(p_receipt_allocations) AS requested(value)
+        JOIN procurement.goods_receipt_lines AS receipt
+          ON receipt.org_id=p_org_id
+         AND receipt.id=(requested.value->>'goods_receipt_line_id')::uuid
+    ), receipt_evidence AS (
+      SELECT seed.*,evidence.evidence_count,evidence.exact_count,evidence.receipt_posted_at
+        FROM raw_seeds AS seed
+        LEFT JOIN LATERAL (
+          SELECT count(*) AS evidence_count,
+                 count(*) FILTER (WHERE document.status='posted'
+                    AND document.document_type='purchase_receipt'
+                    AND document.goods_receipt_id=seed.goods_receipt_id
+                    AND document_line.movement_kind='receipt'
+                    AND document_line.product_id=seed.product_id
+                    AND document_line.batch_id=seed.batch_id
+                    AND document_line.to_location_id=seed.location_id
+                    AND document_line.from_location_id IS NULL
+                    AND document_line.base_quantity=seed.receipt_quantity
+                    AND entry.entry_kind='receipt'
+                    AND entry.location_id=seed.location_id
+                    AND entry.product_id=seed.product_id
+                    AND entry.batch_id=seed.batch_id
+                    AND entry.quantity_delta=seed.receipt_quantity
+                    AND entry.value_delta=document_line.extended_cost) AS exact_count,
+                 max(entry.posted_at) AS receipt_posted_at
+            FROM inventory.inventory_document_lines AS document_line
+            JOIN inventory.inventory_documents AS document
+              ON document.org_id=document_line.org_id AND document.id=document_line.inventory_document_id
+            JOIN inventory.stock_ledger_entries AS entry
+              ON entry.org_id=document_line.org_id AND entry.inventory_document_line_id=document_line.id
+           WHERE document_line.org_id=p_org_id
+             AND document_line.goods_receipt_line_id=seed.goods_receipt_line_id
+        ) AS evidence ON true
+    ), seed_groups AS (
+      SELECT location_id AS origin_location_id,product_id AS origin_product_id,batch_id AS origin_batch_id,
+             min(uom_code) AS uom_code,sum(allocated_quantity) AS allocated_quantity,
+             sum(allocated_value) AS allocated_value,
+             bool_and(allocated_billed_quantity=receipt_billed_quantity
+               AND allocated_free_quantity=receipt_free_quantity
+               AND allocated_quantity=receipt_quantity) AS fully_allocated_receipt,
+             bool_and(evidence_count=1 AND exact_count=1 AND receipt_posted_at IS NOT NULL) AS exact_receipt_evidence,
+             max(receipt_posted_at) AS arrived_at,
+             array_agg(goods_receipt_line_id ORDER BY goods_receipt_line_id) AS goods_receipt_line_ids
+        FROM receipt_evidence
+       GROUP BY location_id,product_id,batch_id
+    ), transfer_pairs AS (
+      SELECT line.id AS transfer_line_id,line.from_location_id,line.to_location_id,
+             line.product_id,line.batch_id,line.base_quantity,line.extended_cost,
+             max(entry.posted_at) AS posted_at,
+             count(entry.id) AS ledger_count,
+             count(entry.id) FILTER (WHERE entry.entry_kind='transfer_out') AS transfer_out_count,
+             count(entry.id) FILTER (WHERE entry.entry_kind='transfer_in') AS transfer_in_count,
+             COALESCE(bool_and(
+               entry.product_id=line.product_id AND entry.batch_id=line.batch_id
+               AND ((entry.entry_kind='transfer_out' AND entry.location_id=line.from_location_id
+                     AND entry.quantity_delta=-line.base_quantity AND entry.value_delta=-line.extended_cost)
+                 OR (entry.entry_kind='transfer_in' AND entry.location_id=line.to_location_id
+                     AND entry.quantity_delta=line.base_quantity AND entry.value_delta=line.extended_cost))
+             ),false) AS entries_exact,
+             COALESCE(sum(entry.quantity_delta),0) AS quantity_net,
+             COALESCE(sum(entry.value_delta),0) AS value_net
+        FROM inventory.inventory_document_lines AS line
+        JOIN inventory.inventory_documents AS document
+          ON document.org_id=line.org_id AND document.id=line.inventory_document_id
+        LEFT JOIN inventory.stock_ledger_entries AS entry
+          ON entry.org_id=line.org_id AND entry.inventory_document_line_id=line.id
+       WHERE line.org_id=p_org_id AND line.movement_kind='transfer'
+         AND document.document_type='transfer' AND document.status='posted'
+       GROUP BY line.id,line.from_location_id,line.to_location_id,
+                line.product_id,line.batch_id,line.base_quantity,line.extended_cost
+    ), exact_transfers AS (
+      SELECT pair.* FROM transfer_pairs AS pair
+       WHERE pair.from_location_id IS NOT NULL AND pair.to_location_id IS NOT NULL
+         AND pair.from_location_id<>pair.to_location_id
+         AND pair.base_quantity>0 AND pair.extended_cost>=0
+         AND pair.ledger_count=2 AND pair.transfer_out_count=1 AND pair.transfer_in_count=1
+         AND pair.entries_exact AND pair.quantity_net=0 AND pair.value_net=0
+         AND pair.posted_at IS NOT NULL
+    ), arrivals(
+      origin_location_id,origin_product_id,origin_batch_id,location_id,product_id,batch_id,arrived_at
+    ) AS (
+      SELECT origin_location_id,origin_product_id,origin_batch_id,
+             origin_location_id,origin_product_id,origin_batch_id,arrived_at
+        FROM seed_groups
+       WHERE fully_allocated_receipt AND exact_receipt_evidence
+      UNION
+      SELECT arrival.origin_location_id,arrival.origin_product_id,arrival.origin_batch_id,
+             transfer.to_location_id,transfer.product_id,transfer.batch_id,transfer.posted_at
+        FROM arrivals AS arrival
+        JOIN exact_transfers AS transfer
+          ON transfer.from_location_id=arrival.location_id
+         AND transfer.product_id=arrival.product_id AND transfer.batch_id=arrival.batch_id
+         AND transfer.posted_at>=arrival.arrived_at
+    ), lineage_transfers AS (
+      SELECT DISTINCT transfer.transfer_line_id
+        FROM exact_transfers AS transfer
+        JOIN arrivals AS arrival
+          ON transfer.from_location_id=arrival.location_id
+         AND transfer.product_id=arrival.product_id AND transfer.batch_id=arrival.batch_id
+         AND transfer.posted_at>=arrival.arrived_at
+    ), origin_targets AS (
+      SELECT DISTINCT origin_location_id,origin_product_id,origin_batch_id,
+             location_id,product_id,batch_id
+        FROM arrivals
+    ), targets AS (
+      SELECT target.location_id,target.product_id,target.batch_id,
+             count(*) AS origin_count,
+             (array_agg(target.origin_location_id ORDER BY target.origin_location_id,
+                        target.origin_product_id,target.origin_batch_id))[1] AS origin_location_id,
+             (array_agg(target.origin_product_id ORDER BY target.origin_location_id,
+                        target.origin_product_id,target.origin_batch_id))[1] AS origin_product_id,
+             (array_agg(target.origin_batch_id ORDER BY target.origin_location_id,
+                        target.origin_product_id,target.origin_batch_id))[1] AS origin_batch_id
+        FROM origin_targets AS target
+       GROUP BY target.location_id,target.product_id,target.batch_id
+    ), allowed_receipt_entries AS (
+      SELECT DISTINCT entry.id
+        FROM receipt_evidence AS seed
+        JOIN inventory.inventory_document_lines AS line
+          ON line.org_id=p_org_id AND line.goods_receipt_line_id=seed.goods_receipt_line_id
+        JOIN inventory.stock_ledger_entries AS entry
+          ON entry.org_id=line.org_id AND entry.inventory_document_line_id=line.id
+       WHERE seed.evidence_count=1 AND seed.exact_count=1 AND entry.entry_kind='receipt'
+    ), reachable_events AS (
+      SELECT entry.*,
+             sum(entry.quantity_delta) OVER (
+               PARTITION BY entry.location_id,entry.product_id,entry.batch_id
+               ORDER BY entry.posted_at,entry.created_at,entry.id
+               ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+             ) AS running_quantity
+        FROM inventory.stock_ledger_entries AS entry
+        JOIN targets AS target
+          ON target.location_id=entry.location_id AND target.product_id=entry.product_id
+         AND target.batch_id=entry.batch_id
+       WHERE entry.org_id=p_org_id
+    ), origin_remaining AS (
+      SELECT target.origin_location_id,target.origin_product_id,target.origin_batch_id,
+             sum(COALESCE(balance.on_hand_quantity,0)) AS remaining_quantity
+        FROM targets AS target
+        LEFT JOIN inventory.stock_balances AS balance
+          ON balance.org_id=p_org_id AND balance.location_id=target.location_id
+         AND balance.product_id=target.product_id AND balance.batch_id=target.batch_id
+       WHERE target.origin_count=1
+       GROUP BY target.origin_location_id,target.origin_product_id,target.origin_batch_id
+    ), target_rows AS (
+      SELECT target.location_id,balance.branch_id,target.product_id,target.batch_id,seed.uom_code,
+             balance.on_hand_quantity,balance.inventory_value,balance.average_unit_cost,
+             balance.row_version AS stock_row_version,balance.last_ledger_entry_id,
+             target.origin_location_id,target.origin_product_id,target.origin_batch_id,
+             seed.allocated_quantity AS origin_allocated_quantity,
+             seed.allocated_value AS origin_allocated_value
+        FROM targets AS target
+        JOIN seed_groups AS seed
+          ON seed.origin_location_id=target.origin_location_id
+         AND seed.origin_product_id=target.origin_product_id
+         AND seed.origin_batch_id=target.origin_batch_id
+        JOIN inventory.stock_balances AS balance
+          ON balance.org_id=p_org_id AND balance.location_id=target.location_id
+         AND balance.product_id=target.product_id AND balance.batch_id=target.batch_id
+       WHERE target.origin_count=1 AND balance.on_hand_quantity>0
+    )
+    SELECT
+      (SELECT count(*) FROM seed_groups
+        WHERE fully_allocated_receipt IS DISTINCT FROM true OR exact_receipt_evidence IS DISTINCT FROM true),
+      (SELECT count(*) FROM transfer_pairs AS transfer
+        JOIN arrivals AS arrival ON transfer.from_location_id=arrival.location_id
+         AND transfer.product_id=arrival.product_id AND transfer.batch_id=arrival.batch_id
+         AND transfer.posted_at>=arrival.arrived_at
+       WHERE NOT (transfer.ledger_count=2 AND transfer.transfer_out_count=1 AND transfer.transfer_in_count=1
+         AND transfer.entries_exact AND transfer.quantity_net=0 AND transfer.value_net=0)),
+      (SELECT count(*) FROM reachable_events AS event
+       WHERE event.quantity_delta>0
+         AND NOT EXISTS (SELECT 1 FROM allowed_receipt_entries allowed WHERE allowed.id=event.id)
+         AND NOT (event.entry_kind='transfer_in' AND EXISTS (
+           SELECT 1 FROM lineage_transfers linked WHERE linked.transfer_line_id=event.inventory_document_line_id))),
+      (SELECT count(*) FROM reachable_events AS event
+       WHERE event.entry_kind='transfer_out' AND NOT EXISTS (
+         SELECT 1 FROM lineage_transfers linked WHERE linked.transfer_line_id=event.inventory_document_line_id)),
+      (SELECT count(*) FROM targets WHERE origin_count<>1),
+      (SELECT count(*) FROM targets AS target
+        LEFT JOIN inventory.stock_balances AS balance
+          ON balance.org_id=p_org_id AND balance.location_id=target.location_id
+         AND balance.product_id=target.product_id AND balance.batch_id=target.batch_id
+       WHERE balance.location_id IS NULL OR balance.on_hand_quantity<0 OR balance.inventory_value<0
+          OR balance.on_hand_quantity IS DISTINCT FROM (
+            SELECT COALESCE(sum(entry.quantity_delta),0) FROM inventory.stock_ledger_entries AS entry
+             WHERE entry.org_id=p_org_id AND entry.location_id=target.location_id
+               AND entry.product_id=target.product_id AND entry.batch_id=target.batch_id)
+          OR balance.inventory_value IS DISTINCT FROM (
+            SELECT COALESCE(sum(entry.value_delta),0) FROM inventory.stock_ledger_entries AS entry
+             WHERE entry.org_id=p_org_id AND entry.location_id=target.location_id
+               AND entry.product_id=target.product_id AND entry.batch_id=target.batch_id)),
+      (SELECT count(*) FROM reachable_events WHERE running_quantity<0),
+      (SELECT count(*) FROM origin_remaining AS remaining
+        JOIN seed_groups AS seed ON seed.origin_location_id=remaining.origin_location_id
+         AND seed.origin_product_id=remaining.origin_product_id
+         AND seed.origin_batch_id=remaining.origin_batch_id
+       WHERE remaining.remaining_quantity<0 OR remaining.remaining_quantity>seed.allocated_quantity),
+      pg_catalog.jsonb_build_object(
+        'contract_version','supplier_invoice_landed_cost_lineage_v1',
+        'source_identity_count',(SELECT count(*) FROM seed_groups),
+        'target_identity_count',(SELECT count(*) FROM target_rows),
+        'source_quantity_basis',COALESCE((SELECT sum(allocated_quantity) FROM seed_groups),0)::text,
+        'source_value_basis',COALESCE((SELECT sum(allocated_value) FROM seed_groups),0)::text,
+        'remaining_quantity_basis',COALESCE((SELECT sum(remaining_quantity) FROM origin_remaining),0)::text,
+        'remaining_value_basis',COALESCE((
+          SELECT sum(pg_catalog.round(
+            remaining.remaining_quantity*seed.allocated_value/seed.allocated_quantity,2))
+            FROM origin_remaining AS remaining
+            JOIN seed_groups AS seed ON seed.origin_location_id=remaining.origin_location_id
+             AND seed.origin_product_id=remaining.origin_product_id
+             AND seed.origin_batch_id=remaining.origin_batch_id
+        ),0)::text,
+        'goods_receipt_line_ids',COALESCE((
+          SELECT pg_catalog.jsonb_agg(seed.goods_receipt_line_id ORDER BY seed.goods_receipt_line_id)
+            FROM (SELECT DISTINCT goods_receipt_line_id FROM receipt_evidence) AS seed
+        ),'[]'::jsonb),
+        'transfer_line_ids',COALESCE((
+          SELECT pg_catalog.jsonb_agg(transfer.transfer_line_id ORDER BY transfer.transfer_line_id)
+            FROM lineage_transfers AS transfer
+        ),'[]'::jsonb),
+        'targets',COALESCE((SELECT pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+          'location_id',target.location_id,'branch_id',target.branch_id,
+          'product_id',target.product_id,'batch_id',target.batch_id,'uom_code',target.uom_code,
+          'on_hand_quantity',target.on_hand_quantity::text,'inventory_value',target.inventory_value::text,
+          'average_unit_cost',target.average_unit_cost::text,
+          'stock_row_version',target.stock_row_version,
+          'last_ledger_entry_id',target.last_ledger_entry_id,
+          'origin_location_id',target.origin_location_id,
+          'origin_product_id',target.origin_product_id,'origin_batch_id',target.origin_batch_id,
+          'origin_allocated_quantity',target.origin_allocated_quantity::text,
+          'origin_allocated_value',target.origin_allocated_value::text
+        ) ORDER BY target.location_id,target.product_id,target.batch_id) FROM target_rows AS target),'[]'::jsonb)
+      )
+      INTO seed_bad_count,malformed_transfer_count,foreign_positive_count,unlinked_transfer_count,
+           origin_collision_count,balance_bad_count,negative_prefix_count,origin_quantity_bad_count,state;
+
+    IF state IS NULL OR (state->>'source_identity_count')::bigint=0
+       OR (state->>'source_quantity_basis')::numeric<=0 THEN
+        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='capitalized supplier line has no exact receipt allocation basis';
+    END IF;
+    IF seed_bad_count<>0 THEN
+        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='landed-cost receipt lineage is incomplete, partial, or lacks exact posted ledger evidence';
+    END IF;
+    IF malformed_transfer_count<>0 OR unlinked_transfer_count<>0 THEN
+        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='landed-cost transfer lineage is unbalanced, malformed, or unlinked';
+    END IF;
+    IF foreign_positive_count<>0 OR origin_collision_count<>0 THEN
+        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='landed-cost remaining stock is ambiguous because receipt lineage is co-mingled';
+    END IF;
+    IF balance_bad_count<>0 OR negative_prefix_count<>0 OR origin_quantity_bad_count<>0 THEN
+        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='landed-cost transfer lineage does not reconcile to authoritative stock balances';
+    END IF;
+    RETURN state;
+END
+""",
+        ),
+        *_function(
+            "landed_cost_receipt_lineage_state(p_org_id uuid, p_goods_receipt_line_id uuid, p_allocated_base_billed_quantity numeric, p_allocated_base_free_quantity numeric)",
+            "jsonb",
+            """
+BEGIN
+    RETURN erp_trade_commands_v2.landed_cost_lineage_from_receipts(
+      p_org_id,
+      pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
+        'goods_receipt_line_id',p_goods_receipt_line_id,
+        'allocated_base_billed_quantity',p_allocated_base_billed_quantity::text,
+        'allocated_base_free_quantity',p_allocated_base_free_quantity::text
+      ))
+    );
+END
+""",
+        ),
+        *_function(
+            "landed_cost_lineage_state(p_org_id uuid, p_supplier_invoice_line_id uuid)",
+            "jsonb",
+            """
+DECLARE source procurement.supplier_invoice_lines%ROWTYPE;
+        receipt_allocations jsonb;
+BEGIN
+    SELECT line.* INTO source
+      FROM procurement.supplier_invoice_lines AS line
+      JOIN procurement.supplier_invoices AS invoice
+        ON invoice.org_id=line.org_id AND invoice.id=line.supplier_invoice_id
+     WHERE line.org_id=p_org_id AND line.id=p_supplier_invoice_line_id
+       AND invoice.status IN ('approved','posted')
+     FOR SHARE OF line,invoice;
+    IF source.id IS NULL THEN
+        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='landed-cost lineage requires an approved or posted supplier invoice line';
+    END IF;
+    SELECT pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+             'goods_receipt_line_id',allocation.goods_receipt_line_id,
+             'allocated_base_billed_quantity',allocation.allocated_base_billed_quantity::text,
+             'allocated_base_free_quantity',allocation.allocated_base_free_quantity::text
+           ) ORDER BY allocation.goods_receipt_line_id)
+      INTO receipt_allocations
+      FROM procurement.supplier_invoice_receipt_allocations AS allocation
+      JOIN procurement.supplier_invoice_lines AS product_line
+        ON product_line.org_id=allocation.org_id AND product_line.id=allocation.supplier_invoice_line_id
+     WHERE allocation.org_id=p_org_id
+       AND product_line.supplier_invoice_id=source.supplier_invoice_id
+       AND (source.line_kind='charge' OR product_line.id=source.id);
+    RETURN erp_trade_commands_v2.landed_cost_lineage_from_receipts(
+      p_org_id,receipt_allocations
+    );
+END
+""",
+        ),
+        *_function(
             "total_landed_cost_pool(p_org_id uuid, p_supplier_invoice_line_id uuid)",
             "numeric",
             """
@@ -163,7 +514,7 @@ END
             """
 DECLARE source procurement.supplier_invoice_lines%ROWTYPE;
         total_pool numeric(20,2); source_basis numeric; remaining_basis numeric;
-        target_count bigint; exact_source_provenance boolean;
+        lineage jsonb;
 BEGIN
     SELECT * INTO STRICT source FROM procurement.supplier_invoice_lines
      WHERE org_id=p_org_id AND id=p_supplier_invoice_line_id FOR SHARE;
@@ -173,63 +524,19 @@ BEGIN
         RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='capitalized supplier line lacks a reviewed landed-cost allocation method';
     END IF;
 
-    WITH raw_targets AS (
-      SELECT receipt.location_id,receipt.product_id,receipt.batch_id,
-             receipt.id AS goods_receipt_line_id,
-             allocation.allocated_base_billed_quantity+allocation.allocated_base_free_quantity AS allocated_quantity,
-             receipt.base_accepted_quantity+receipt.base_free_quantity AS receipt_quantity,
-             pg_catalog.round((allocation.allocated_base_billed_quantity+allocation.allocated_base_free_quantity)*receipt.unit_cost,2) AS allocated_value
-        FROM procurement.supplier_invoice_receipt_allocations allocation
-        JOIN procurement.supplier_invoice_lines product_line
-          ON product_line.org_id=allocation.org_id AND product_line.id=allocation.supplier_invoice_line_id
-        JOIN procurement.goods_receipt_lines receipt
-          ON receipt.org_id=allocation.org_id AND receipt.id=allocation.goods_receipt_line_id
-       WHERE allocation.org_id=p_org_id
-         AND product_line.supplier_invoice_id=source.supplier_invoice_id
-         AND (source.line_kind='charge' OR product_line.id=source.id)
-    ), targets AS (
-      SELECT location_id,product_id,batch_id,sum(allocated_quantity) AS allocated_quantity,
-             sum(allocated_value) AS allocated_value,
-             bool_and(allocated_quantity=receipt_quantity) AS fully_allocated_receipt,
-             array_agg(goods_receipt_line_id) AS goods_receipt_line_ids
-        FROM raw_targets GROUP BY location_id,product_id,batch_id
-    )
-    SELECT count(*),bool_and(target.fully_allocated_receipt AND NOT EXISTS (
-             SELECT 1
-               FROM inventory.stock_ledger_entries AS entry
-               JOIN inventory.inventory_document_lines AS document_line
-                 ON document_line.org_id=entry.org_id
-                AND document_line.id=entry.inventory_document_line_id
-              WHERE entry.org_id=p_org_id
-                AND entry.location_id=target.location_id
-                AND entry.product_id=target.product_id
-                AND entry.batch_id=target.batch_id
-                AND entry.quantity_delta>0
-                AND NOT (document_line.goods_receipt_line_id=ANY(target.goods_receipt_line_ids))
-           )),
-           CASE source.landed_cost_allocation_method
-             WHEN 'value_weighted' THEN sum(target.allocated_value)
-             ELSE sum(target.allocated_quantity)
-           END,
-           CASE source.landed_cost_allocation_method
-             WHEN 'value_weighted' THEN sum(pg_catalog.round(
-               LEAST(target.allocated_quantity,COALESCE(balance.on_hand_quantity,0))
-               * target.allocated_value/target.allocated_quantity,2))
-             ELSE sum(LEAST(target.allocated_quantity,COALESCE(balance.on_hand_quantity,0)))
-           END
-      INTO target_count,exact_source_provenance,source_basis,remaining_basis
-      FROM targets target
-      LEFT JOIN inventory.stock_balances balance
-        ON balance.org_id=p_org_id AND balance.location_id=target.location_id
-       AND balance.product_id=target.product_id AND balance.batch_id=target.batch_id;
-    IF target_count=0 OR source_basis<=0 THEN
-        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='capitalized supplier line has no exact receipt allocation basis';
-    END IF;
-    IF exact_source_provenance IS DISTINCT FROM true THEN
-        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='landed-cost remaining stock is ambiguous because receipt stock is partial or co-mingled';
-    END IF;
-    IF source.landed_cost_allocation_method='direct' AND target_count<>1 THEN
+    lineage:=erp_trade_commands_v2.landed_cost_lineage_state(p_org_id,p_supplier_invoice_line_id);
+    IF source.landed_cost_allocation_method='direct'
+       AND (lineage->>'source_identity_count')::bigint<>1 THEN
         RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='direct landed-cost allocation requires exactly one receipt stock identity';
+    END IF;
+    source_basis:=CASE source.landed_cost_allocation_method
+      WHEN 'value_weighted' THEN (lineage->>'source_value_basis')::numeric
+      ELSE (lineage->>'source_quantity_basis')::numeric END;
+    remaining_basis:=CASE source.landed_cost_allocation_method
+      WHEN 'value_weighted' THEN (lineage->>'remaining_value_basis')::numeric
+      ELSE (lineage->>'remaining_quantity_basis')::numeric END;
+    IF source_basis<=0 THEN
+        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='capitalized supplier line has no exact receipt allocation basis';
     END IF;
     IF remaining_basis<=0 THEN RETURN 0; END IF;
     RETURN pg_catalog.round(total_pool*remaining_basis/source_basis,2);
@@ -323,8 +630,9 @@ BEGIN
        AND (line.movement_kind<>'value_adjustment'
          OR supplier_line.supplier_invoice_id IS DISTINCT FROM doc.supplier_invoice_id
          OR supplier_line.inventory_cost_treatment<>'capitalize'
+         OR line.cost_allocation_method IS DISTINCT FROM supplier_line.landed_cost_allocation_method
          OR batch.product_id IS DISTINCT FROM line.product_id
-         OR location.branch_id IS DISTINCT FROM doc.branch_id
+         OR balance.branch_id IS DISTINCT FROM location.branch_id
          OR balance.on_hand_quantity IS NULL OR balance.on_hand_quantity<=0
          OR balance.inventory_value+line.extended_cost<0
          OR (line.cost_allocation_method='quantity_weighted'
@@ -339,18 +647,12 @@ BEGIN
                ),0))
          OR NOT EXISTS (
              SELECT 1
-               FROM procurement.supplier_invoice_receipt_allocations AS allocation
-               JOIN procurement.goods_receipt_lines AS receipt
-                 ON receipt.org_id=allocation.org_id AND receipt.id=allocation.goods_receipt_line_id
-               JOIN procurement.supplier_invoice_lines AS allocated_line
-                 ON allocated_line.org_id=allocation.org_id AND allocated_line.id=allocation.supplier_invoice_line_id
-              WHERE allocation.org_id=line.org_id
-                AND allocated_line.supplier_invoice_id=doc.supplier_invoice_id
-                AND receipt.product_id=line.product_id
-                AND receipt.batch_id=line.batch_id
-                AND receipt.location_id=line.from_location_id
-                AND (supplier_line.line_kind='charge'
-                     OR allocated_line.id=supplier_line.id)
+               FROM pg_catalog.jsonb_array_elements(
+                 erp_trade_commands_v2.landed_cost_lineage_state(line.org_id,supplier_line.id)->'targets'
+               ) AS target(value)
+              WHERE (target.value->>'location_id')::uuid=line.from_location_id
+                AND (target.value->>'product_id')::uuid=line.product_id
+                AND (target.value->>'batch_id')::uuid=line.batch_id
          ));
     IF bad_count<>0 THEN
         RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='landed-cost target is not positive on-hand stock from the supplier invoice receipt lineage';
@@ -373,8 +675,7 @@ BEGIN
     LOOP
         pool := erp_trade_commands_v2.eligible_landed_cost_pool(p_org_id,source_line.id);
         IF pool=0 OR source_line.allocation_method IS DISTINCT FROM source_line.max_allocation_method
-           OR source_line.weight_total IS DISTINCT FROM 1
-           OR (source_line.allocation_method='direct' AND source_line.allocation_count<>1) THEN
+           OR source_line.weight_total IS DISTINCT FROM 1 THEN
             RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='landed-cost source pool, method, or exact weight total is invalid';
         END IF;
 
@@ -383,40 +684,47 @@ BEGIN
             SELECT line.id,line.line_number,line.extended_cost,line.cost_allocation_method,
                    line.cost_allocation_weight,
                    CASE line.cost_allocation_method
+                     WHEN 'direct' THEN balance.on_hand_quantity
                      WHEN 'quantity_weighted' THEN line.cost_allocation_basis_quantity
                      WHEN 'value_weighted' THEN line.cost_allocation_basis_value
-                     ELSE 1
                    END AS basis,
                    sum(CASE line.cost_allocation_method
+                         WHEN 'direct' THEN balance.on_hand_quantity
                          WHEN 'quantity_weighted' THEN line.cost_allocation_basis_quantity
                          WHEN 'value_weighted' THEN line.cost_allocation_basis_value
-                         ELSE 1
                        END) OVER () AS basis_total,
                    row_number() OVER (ORDER BY line.line_number,line.id) AS allocation_position,
                    count(*) OVER () AS allocation_total
               FROM inventory.inventory_document_lines AS line
+              JOIN inventory.stock_balances AS balance
+                ON balance.org_id=line.org_id AND balance.location_id=line.from_location_id
+               AND balance.product_id=line.product_id AND balance.batch_id=line.batch_id
              WHERE line.org_id=p_org_id AND line.inventory_document_id=p_document_id
                AND line.supplier_invoice_line_id=source_line.id
           ) AS allocation
          WHERE allocation.cost_allocation_weight IS DISTINCT FROM
-                 CASE WHEN allocation.cost_allocation_method='direct' THEN 1
-                      WHEN allocation.allocation_position<allocation.allocation_total
+                 CASE WHEN allocation.allocation_position<allocation.allocation_total
                       THEN pg_catalog.round(allocation.basis/allocation.basis_total,12)
                       ELSE 1-COALESCE((
                           SELECT sum(pg_catalog.round(prior.basis/prior.basis_total,12))
                             FROM (
                               SELECT CASE earlier.cost_allocation_method
+                                       WHEN 'direct' THEN earlier_balance.on_hand_quantity
                                        WHEN 'quantity_weighted' THEN earlier.cost_allocation_basis_quantity
                                        WHEN 'value_weighted' THEN earlier.cost_allocation_basis_value
-                                       ELSE 1
                                      END AS basis,
                                      sum(CASE earlier.cost_allocation_method
+                                           WHEN 'direct' THEN earlier_balance.on_hand_quantity
                                            WHEN 'quantity_weighted' THEN earlier.cost_allocation_basis_quantity
                                            WHEN 'value_weighted' THEN earlier.cost_allocation_basis_value
-                                           ELSE 1
                                          END) OVER () AS basis_total,
                                      row_number() OVER (ORDER BY earlier.line_number,earlier.id) AS position
                                 FROM inventory.inventory_document_lines AS earlier
+                                JOIN inventory.stock_balances AS earlier_balance
+                                  ON earlier_balance.org_id=earlier.org_id
+                                 AND earlier_balance.location_id=earlier.from_location_id
+                                 AND earlier_balance.product_id=earlier.product_id
+                                 AND earlier_balance.batch_id=earlier.batch_id
                                WHERE earlier.org_id=p_org_id
                                  AND earlier.inventory_document_id=p_document_id
                                  AND earlier.supplier_invoice_line_id=source_line.id
@@ -632,6 +940,7 @@ def _landed_document_definitions() -> list[str]:
             """
 DECLARE invoice procurement.supplier_invoices%ROWTYPE;
         source_line procurement.supplier_invoice_lines%ROWTYPE; target record;
+        lineage jsonb;
         pool numeric(20,2); basis numeric; basis_total numeric;
         weight numeric(20,12); allocated_weight numeric(20,12):=0;
         allocated_value numeric(20,2):=0; line_value numeric(20,2);
@@ -649,23 +958,19 @@ BEGIN
       RAISE EXCEPTION USING ERRCODE='23505', MESSAGE='supplier invoice landed-cost document identity already exists';
     END IF;
     PERFORM balance.location_id
-      FROM inventory.stock_balances AS balance
-      JOIN (
-        SELECT DISTINCT receipt.location_id,receipt.product_id,receipt.batch_id
-          FROM procurement.supplier_invoice_receipt_allocations AS allocation
-          JOIN procurement.supplier_invoice_lines AS supplier_line
-            ON supplier_line.org_id=allocation.org_id
-           AND supplier_line.id=allocation.supplier_invoice_line_id
-          JOIN procurement.goods_receipt_lines AS receipt
-            ON receipt.org_id=allocation.org_id
-           AND receipt.id=allocation.goods_receipt_line_id
-         WHERE supplier_line.org_id=p_org_id
-           AND supplier_line.supplier_invoice_id=p_supplier_invoice_id
-      ) AS source_target
-        ON source_target.location_id=balance.location_id
-       AND source_target.product_id=balance.product_id
-       AND source_target.batch_id=balance.batch_id
+      FROM procurement.supplier_invoice_lines AS supplier_line
+      CROSS JOIN LATERAL pg_catalog.jsonb_array_elements(
+        erp_trade_commands_v2.landed_cost_lineage_state(p_org_id,supplier_line.id)->'targets'
+      ) AS source_target(value)
+      JOIN inventory.stock_balances AS balance
+        ON balance.org_id=p_org_id
+       AND balance.location_id=(source_target.value->>'location_id')::uuid
+       AND balance.product_id=(source_target.value->>'product_id')::uuid
+       AND balance.batch_id=(source_target.value->>'batch_id')::uuid
      WHERE balance.org_id=p_org_id
+       AND supplier_line.org_id=p_org_id
+       AND supplier_line.supplier_invoice_id=p_supplier_invoice_id
+       AND supplier_line.inventory_cost_treatment='capitalize'
      ORDER BY balance.location_id,balance.product_id,balance.batch_id
      FOR UPDATE OF balance;
     SELECT COALESCE(sum(pg_catalog.abs(erp_trade_commands_v2.eligible_landed_cost_pool(p_org_id,line.id))),0)
@@ -691,64 +996,35 @@ BEGIN
     LOOP
       pool:=erp_trade_commands_v2.eligible_landed_cost_pool(p_org_id,source_line.id);
       IF pool=0 THEN CONTINUE; END IF;
+      lineage:=erp_trade_commands_v2.landed_cost_lineage_state(p_org_id,source_line.id);
       allocated_weight:=0; allocated_value:=0;
-      WITH raw_targets AS (
-        SELECT receipt.location_id,receipt.product_id,receipt.batch_id,receipt.uom_code,
-               allocation.allocated_base_billed_quantity+allocation.allocated_base_free_quantity AS allocated_quantity
-          FROM procurement.supplier_invoice_receipt_allocations allocation
-          JOIN procurement.supplier_invoice_lines product_line
-            ON product_line.org_id=allocation.org_id AND product_line.id=allocation.supplier_invoice_line_id
-          JOIN procurement.goods_receipt_lines receipt
-            ON receipt.org_id=allocation.org_id AND receipt.id=allocation.goods_receipt_line_id
-         WHERE allocation.org_id=p_org_id AND product_line.supplier_invoice_id=p_supplier_invoice_id
-           AND (source_line.line_kind='charge' OR product_line.id=source_line.id)
-      ), targets AS (
-        SELECT location_id,product_id,batch_id,min(uom_code) AS uom_code,sum(allocated_quantity) AS allocated_quantity
-          FROM raw_targets GROUP BY location_id,product_id,batch_id
-      )
       SELECT count(*),sum(CASE source_line.landed_cost_allocation_method
-               WHEN 'value_weighted' THEN balance.inventory_value ELSE balance.on_hand_quantity END)
-        INTO target_count,basis_total FROM targets stock_target
-        JOIN inventory.stock_balances balance ON balance.org_id=p_org_id
-         AND balance.location_id=stock_target.location_id
-         AND balance.product_id=stock_target.product_id
-         AND balance.batch_id=stock_target.batch_id
-       WHERE balance.on_hand_quantity>0;
-      IF target_count=0 OR basis_total<=0 OR
-         (source_line.landed_cost_allocation_method='direct' AND target_count<>1) THEN
+               WHEN 'value_weighted' THEN (stock_target.value->>'inventory_value')::numeric
+               ELSE (stock_target.value->>'on_hand_quantity')::numeric END)
+        INTO target_count,basis_total
+        FROM pg_catalog.jsonb_array_elements(lineage->'targets') AS stock_target(value);
+      IF target_count=0 OR basis_total<=0 THEN
         RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='landed-cost source has no exact positive reviewed allocation basis';
       END IF;
 
       target_position:=0;
       FOR target IN
-        WITH raw_targets AS (
-          SELECT receipt.location_id,receipt.product_id,receipt.batch_id,receipt.uom_code,
-                 allocation.allocated_base_billed_quantity+allocation.allocated_base_free_quantity AS allocated_quantity
-            FROM procurement.supplier_invoice_receipt_allocations allocation
-            JOIN procurement.supplier_invoice_lines product_line
-              ON product_line.org_id=allocation.org_id AND product_line.id=allocation.supplier_invoice_line_id
-            JOIN procurement.goods_receipt_lines receipt
-              ON receipt.org_id=allocation.org_id AND receipt.id=allocation.goods_receipt_line_id
-           WHERE allocation.org_id=p_org_id AND product_line.supplier_invoice_id=p_supplier_invoice_id
-             AND (source_line.line_kind='charge' OR product_line.id=source_line.id)
-        ), targets AS (
-          SELECT location_id,product_id,batch_id,min(uom_code) AS uom_code,sum(allocated_quantity) AS allocated_quantity
-            FROM raw_targets GROUP BY location_id,product_id,batch_id
-        )
-        SELECT stock_target.*,balance.on_hand_quantity,balance.inventory_value,balance.average_unit_cost
-          FROM targets stock_target JOIN inventory.stock_balances balance ON balance.org_id=p_org_id
-           AND balance.location_id=stock_target.location_id
-           AND balance.product_id=stock_target.product_id
-           AND balance.batch_id=stock_target.batch_id
-         WHERE balance.on_hand_quantity>0
-         ORDER BY stock_target.location_id,stock_target.product_id,stock_target.batch_id
-         FOR UPDATE OF balance
+        SELECT (stock_target.value->>'location_id')::uuid AS location_id,
+               (stock_target.value->>'product_id')::uuid AS product_id,
+               (stock_target.value->>'batch_id')::uuid AS batch_id,
+               stock_target.value->>'uom_code' AS uom_code,
+               (stock_target.value->>'on_hand_quantity')::numeric AS on_hand_quantity,
+               (stock_target.value->>'inventory_value')::numeric AS inventory_value,
+               (stock_target.value->>'average_unit_cost')::numeric AS average_unit_cost
+          FROM pg_catalog.jsonb_array_elements(lineage->'targets') AS stock_target(value)
+         ORDER BY (stock_target.value->>'location_id')::uuid,
+                  (stock_target.value->>'product_id')::uuid,
+                  (stock_target.value->>'batch_id')::uuid
       LOOP
         target_position:=target_position+1;
         basis:=CASE source_line.landed_cost_allocation_method
           WHEN 'value_weighted' THEN target.inventory_value ELSE target.on_hand_quantity END;
-        weight:=CASE WHEN source_line.landed_cost_allocation_method='direct' THEN 1
-          WHEN target_position<target_count THEN pg_catalog.round(basis/basis_total,12)
+        weight:=CASE WHEN target_position<target_count THEN pg_catalog.round(basis/basis_total,12)
           ELSE 1-allocated_weight END;
         line_value:=CASE WHEN target_position<target_count THEN pg_catalog.round(pool*weight,2)
           ELSE pool-allocated_value END;

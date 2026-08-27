@@ -8,6 +8,9 @@ from sqlalchemy import create_engine, text
 
 
 PRIVATE_FUNCTIONS = (
+    "erp_trade_commands_v2.landed_cost_lineage_from_receipts(uuid,jsonb)",
+    "erp_trade_commands_v2.landed_cost_receipt_lineage_state(uuid,uuid,numeric,numeric)",
+    "erp_trade_commands_v2.landed_cost_lineage_state(uuid,uuid)",
     "erp_trade_commands_v2.total_landed_cost_pool(uuid,uuid)",
     "erp_trade_commands_v2.eligible_landed_cost_pool(uuid,uuid)",
     "erp_trade_commands_v2.consumed_landed_cost_pool(uuid,uuid)",
@@ -57,9 +60,37 @@ def main() -> None:
                 "SELECT prosrc FROM pg_catalog.pg_proc WHERE oid="
                 "'erp_trade_commands_v2.eligible_landed_cost_pool(uuid,uuid)'::regprocedure"
             ))
-            assert "fully_allocated_receipt" in eligible
-            assert "entry.quantity_delta>0" in eligible
-            assert "partial or co-mingled" in eligible
+            assert "landed_cost_lineage_state" in eligible
+            assert "source_identity_count" in eligible
+            assert "remaining_quantity_basis" in eligible
+
+            lineage = connection.scalar(text(
+                "SELECT prosrc FROM pg_catalog.pg_proc WHERE oid="
+                "'erp_trade_commands_v2.landed_cost_lineage_from_receipts(uuid,jsonb)'::regprocedure"
+            ))
+            for token in (
+                "supplier_invoice_landed_cost_lineage_v1",
+                "transfer_line_ids", "goods_receipt_line_ids",
+                "stock_row_version", "last_ledger_entry_id",
+                "lineage_transfers", "running_quantity<0",
+                "transfer lineage is unbalanced, malformed, or unlinked",
+            ):
+                assert token in lineage
+
+            persisted_lineage = connection.scalar(text(
+                "SELECT prosrc FROM pg_catalog.pg_proc WHERE oid="
+                "'erp_trade_commands_v2.landed_cost_lineage_state(uuid,uuid)'::regprocedure"
+            ))
+            assert "supplier_invoice_receipt_allocations" in persisted_lineage
+            assert "landed_cost_lineage_from_receipts" in persisted_lineage
+
+            receipt_lineage = connection.scalar(text(
+                "SELECT prosrc FROM pg_catalog.pg_proc WHERE oid="
+                "'erp_trade_commands_v2.landed_cost_receipt_lineage_state(uuid,uuid,numeric,numeric)'::regprocedure"
+            ))
+            assert "landed_cost_lineage_from_receipts" in receipt_lineage
+            assert "allocated_base_billed_quantity" in receipt_lineage
+            assert "allocated_base_free_quantity" in receipt_lineage
 
             commercial = connection.scalar(text(
                 "SELECT prosrc FROM pg_catalog.pg_proc WHERE oid="

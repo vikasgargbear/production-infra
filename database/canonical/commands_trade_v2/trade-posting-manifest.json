@@ -33,7 +33,7 @@
   "catalog_sha256": "6c88d9a0f93158f126abc8d87057b8fcebb287ba332ef36fd37b802cadc29c31",
   "manifest_version": "1.0.0",
   "mapping_file": "baseline-trade-posting-enforcements.json",
-  "mapping_sha256": "7d123847a02f91dbe2a4827ef548cc7f9f35cbf377f028a329a5f17b5ecf6855",
+  "mapping_sha256": "de7198bbedf153371bc999ee4474fc061ba9151b5e67dd8020047a0870e051a3",
   "ownership": {
     "composed_ledger_writer": "erp_trade_commands.emit_entry",
     "composed_projector": "erp_trade_commands.project_entry",
