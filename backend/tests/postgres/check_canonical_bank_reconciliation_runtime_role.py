@@ -238,6 +238,68 @@ def _set_bank_row_version(engine, row_version: int) -> None:
         connection.exec_driver_sql("RESET ROLE")
 
 
+def _fault_inject_approval_evidence(engine, command_id: UUID, mutation: str) -> None:
+    """Inject one bounded impossible approval state under migration authority."""
+
+    assignments = {
+        "expired": (
+            "decided_at=transaction_timestamp()-interval '2 hours',"
+            "valid_until_at=transaction_timestamp()-interval '1 hour'"
+        ),
+        "rejected": "decision='rejected',reason='runtime projection rejection probe'",
+        "stale_aggregate": "aggregate_version_hash=decode(repeat('00',32),'hex')",
+    }
+    with engine.begin() as connection:
+        connection.exec_driver_sql('SET LOCAL ROLE "erp_migration_owner"')
+        connection.exec_driver_sql(
+            "ALTER TABLE automation.command_approvals DISABLE TRIGGER USER"
+        )
+        connection.execute(
+            text(
+                "UPDATE automation.command_approvals SET "
+                + assignments[mutation]
+                + " WHERE org_id=:org AND command_request_id=:command"
+            ),
+            {"org": ORG, "command": command_id},
+        )
+        connection.exec_driver_sql(
+            "ALTER TABLE automation.command_approvals ENABLE TRIGGER USER"
+        )
+        connection.exec_driver_sql("RESET ROLE")
+
+
+def _restore_approval_evidence(
+    engine,
+    command_id: UUID,
+    *,
+    decided_at,
+    valid_until_at,
+    aggregate_version_hash: bytes,
+) -> None:
+    with engine.begin() as connection:
+        connection.exec_driver_sql('SET LOCAL ROLE "erp_migration_owner"')
+        connection.exec_driver_sql(
+            "ALTER TABLE automation.command_approvals DISABLE TRIGGER USER"
+        )
+        connection.execute(text("""
+            UPDATE automation.command_approvals
+               SET decision='approved',reason=NULL,decided_at=:decided_at,
+                   valid_until_at=:valid_until_at,
+                   aggregate_version_hash=:aggregate_version_hash
+             WHERE org_id=:org AND command_request_id=:command
+        """), {
+            "org": ORG,
+            "command": command_id,
+            "decided_at": decided_at,
+            "valid_until_at": valid_until_at,
+            "aggregate_version_hash": aggregate_version_hash,
+        })
+        connection.exec_driver_sql(
+            "ALTER TABLE automation.command_approvals ENABLE TRIGGER USER"
+        )
+        connection.exec_driver_sql("RESET ROLE")
+
+
 def main() -> None:
     engine = create_engine(os.environ["DATABASE_URL"], pool_pre_ping=True)
     try:
@@ -290,11 +352,51 @@ def main() -> None:
                 command_request_id=prepared.command_request_id,
                 context=_context(),
             )
-            # Approval is immutable side evidence; the command remains prepared
-            # until the independent requester executes it.
-            assert approved_status.status == "prepared"
+            # The request row remains immutable/prepared, while the requester
+            # projection derives its executable state from the exact, current
+            # independent approval evidence.
+            assert approved_status.status == "approved"
             assert approved_status.preview_hash == prepared.preview_hash
             assert approved_status.approved_at == approved.approved_at
+            with engine.connect() as authority_connection:
+                evidence = authority_connection.execute(text("""
+                    SELECT decided_at,valid_until_at,aggregate_version_hash
+                      FROM automation.command_approvals
+                     WHERE org_id=:org AND command_request_id=:command
+                """), {"org": ORG, "command": prepared.command_request_id}).one()
+                raw_status = authority_connection.scalar(text("""
+                    SELECT status FROM automation.command_requests
+                     WHERE org_id=:org AND id=:command
+                """), {"org": ORG, "command": prepared.command_request_id})
+            assert raw_status == "prepared"
+
+            for mutation, expected_status in (
+                ("expired", "prepared"),
+                ("stale_aggregate", "prepared"),
+                ("rejected", "rejected"),
+            ):
+                _fault_inject_approval_evidence(
+                    engine, prepared.command_request_id, mutation
+                )
+                projected = maker_service.get_status(
+                    command_request_id=prepared.command_request_id,
+                    context=_context(),
+                )
+                assert projected.status == expected_status
+                assert projected.approved_at is None
+                _restore_approval_evidence(
+                    engine,
+                    prepared.command_request_id,
+                    decided_at=evidence.decided_at,
+                    valid_until_at=evidence.valid_until_at,
+                    aggregate_version_hash=bytes(evidence.aggregate_version_hash),
+                )
+
+            restored_status = maker_service.get_status(
+                command_request_id=prepared.command_request_id,
+                context=_context(),
+            )
+            assert restored_status.status == "approved"
         finally:
             _close_runtime_connection(maker_connection)
             _close_runtime_connection(checker_connection)
