@@ -1291,6 +1291,7 @@ def test_purchase_return_template_targets_prior_supplier_invoice_and_split_revie
     facts = {
         "identity": {
             "supplier_account_id": "d3000000-0000-7000-8000-000000000041",
+            "supplier_destination_address_id": "d3000000-0000-7000-8000-000000000042",
         },
         "display": {
             "supplier_code": "DEMO-SUPPLIER",
@@ -1310,6 +1311,16 @@ def test_purchase_return_template_targets_prior_supplier_invoice_and_split_revie
     assert operation["prepare_steps"][3]["locator"]["name"] == (
         "select-supplier-invoice-{{resource_supplier_invoice}}"
     )
+    assert operation["prepare_steps"][11] == {
+        "actor": "requester",
+        "action": "select",
+        "locator": {
+            "kind": "label",
+            "name": "Supplier destination",
+            "exact": True,
+        },
+        "value": facts["identity"]["supplier_destination_address_id"],
+    }
     assert operation["approval_steps"][2]["locator"]["name"] == (
         "review-return-{{command_request_id}}"
     )

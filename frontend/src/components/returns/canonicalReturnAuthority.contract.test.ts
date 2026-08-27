@@ -69,6 +69,9 @@ describe('canonical desktop return authority boundary', () => {
 
   it('leaves return policy choices explicit instead of inferring them in initial state', () => {
     expect(purchaseFlow).toMatch(/transport_mode:\s*'',\s*\n\s*distance_km:\s*''/);
+    expect(purchaseFlow).toContain("supplier_destination_address_id: ''");
+    expect(purchaseFlow).not.toContain('supplier_destinations[0]');
+    expect(purchaseFlow).not.toContain('logistics_modes[0]');
     expect(salesFlow).toMatch(/return_condition:\s*'',\s*\n\s*to_location_id:\s*''/);
     expect(activeSources).not.toMatch(/packages_per_box\s*(?:\|\||\?\?)\s*1/);
     expect(activeSources).not.toMatch(/units_per_pack\s*(?:\|\||\?\?)\s*1/);
@@ -103,6 +106,15 @@ describe('canonical desktop return authority boundary', () => {
     expect(activeSources).not.toMatch(/selected:\s*true/);
     expect(salesFlow).toContain('isCanonicalUuid(invoiceId)');
     expect(purchaseFlow).toContain('isCanonicalUuid(invoiceId)');
+  });
+
+  it('ignores stale canonical source responses when the selected invoice or supplier changes', () => {
+    expect(salesFlow).toContain('invoiceContextRequestSequence');
+    expect(salesFlow).toMatch(/requestSequence !== invoiceContextRequestSequence\.current/);
+    expect(purchaseFlow).toContain('invoiceContextRequestSequence');
+    expect(purchaseFlow).toContain('supplierInvoicesRequestSequence');
+    expect(purchaseFlow).toMatch(/requestSequence !== invoiceContextRequestSequence\.current/);
+    expect(purchaseFlow).toMatch(/requestSequence !== supplierInvoicesRequestSequence\.current/);
   });
 
   it('does not alias GST identities or manufacture evidence timestamps', () => {

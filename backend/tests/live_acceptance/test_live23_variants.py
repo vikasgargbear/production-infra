@@ -66,6 +66,7 @@ def _facts() -> dict[str, object]:
         "identity": {
             "customer_account_id": "d3000000-0000-7000-8000-000000000011",
             "supplier_account_id": "d3000000-0000-7000-8000-000000000012",
+            "supplier_destination_address_id": "d3000000-0000-7000-8000-00000000001a",
             "quarantine_location_id": "d3000000-0000-7000-8000-000000000013",
             "interstate_customer_account_id": "d3000000-0000-7000-8000-000000000014",
             "interstate_delivery_address_id": "d3000000-0000-7000-8000-000000000015",

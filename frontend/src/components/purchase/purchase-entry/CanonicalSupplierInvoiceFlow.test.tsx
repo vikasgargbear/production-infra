@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import CanonicalSupplierInvoiceFlow from './CanonicalSupplierInvoiceFlow';
 import { canonicalBusinessContextApi } from '../../../services/api/modules/org/canonicalBusinessContext.api';
@@ -64,5 +64,47 @@ describe('CanonicalSupplierInvoiceFlow organization dates', () => {
     expect((screen.getByLabelText('Supplier invoice date') as HTMLInputElement).value).toBe('');
     expect((screen.getByLabelText('Supplier invoice received date') as HTMLInputElement).value).toBe('');
     expect((screen.getByRole('button', { name: 'Load canonical evidence' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('discards canonical context that resolves after its source invoice changes', async () => {
+    (canonicalBusinessContextApi.get as jest.Mock).mockResolvedValue({
+      organization_id: 'd3000000-0000-7000-8000-000000000002',
+      timezone: 'Asia/Kolkata',
+      business_date: '2026-08-25',
+    });
+    (canonicalSupplierInvoicesApi.eligibleReceipts as jest.Mock).mockResolvedValue({
+      data: { receipts: [{
+        goods_receipt_id: 'd3000000-0000-7000-8000-000000000010',
+        goods_receipt_number: 'GRN-10', supplier_name: 'Exact Supplier',
+        remaining_capitalized_value: '168.00', purchase_order_number: 'PO-10',
+        remaining_line_count: 1,
+      }] },
+    });
+    let resolveContext!: (value: any) => void;
+    (canonicalSupplierInvoicesApi.context as jest.Mock).mockReturnValue(
+      new Promise(resolve => { resolveContext = resolve; }),
+    );
+
+    render(<CanonicalSupplierInvoiceFlow />);
+    await waitFor(() => expect(
+      (screen.getByLabelText('Supplier invoice date') as HTMLInputElement).value,
+    ).toBe('2026-08-25'));
+    fireEvent.change(screen.getByLabelText('Posted GRN'), {
+      target: { value: 'd3000000-0000-7000-8000-000000000010' },
+    });
+    fireEvent.change(screen.getByLabelText('Supplier invoice number'), {
+      target: { value: 'SUP-A' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Load canonical evidence' }));
+    fireEvent.change(screen.getByLabelText('Supplier invoice number'), {
+      target: { value: 'SUP-B' },
+    });
+    await act(async () => resolveContext({ data: {
+      ready: true, blocking_reasons: [], lines: [], expense_charge_lines: [],
+      portal_evidence: null,
+    } }));
+
+    await waitFor(() => expect(canonicalSupplierInvoicesApi.context).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText('2. Verify exact quantities, values, and ITC basis')).toBeNull();
   });
 });

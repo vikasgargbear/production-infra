@@ -79,6 +79,7 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
   const invoiceSearchRef = useRef<any>(null);
   const returnDataRef = useRef(returnData);
   returnDataRef.current = returnData;
+  const invoiceContextRequestSequence = useRef(0);
   const { canPrepare, unavailableReason } = getSalesReturnSubmissionBoundary(returnData as any);
 
   useEffect(() => {
@@ -138,6 +139,7 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
 
   // Handle invoice selection
   const handleInvoiceSelect = useCallback(async (invoice: Invoice | null) => {
+    const requestSequence = ++invoiceContextRequestSequence.current;
     if (!invoice) {
       dispatch({ type: 'SET_SELECTED_INVOICE', invoice: null });
       return;
@@ -177,6 +179,7 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
         invoiceId,
         returnDataRef.current.return_date,
       );
+      if (requestSequence !== invoiceContextRequestSequence.current) return;
       const context = response.data;
       const items = context.lines || [];
 
@@ -255,6 +258,7 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
       // Hide invoice section after selection
       dispatch({ type: 'SET_SHOW_INVOICE_SECTION', show: false });
     } catch (error) {
+      if (requestSequence !== invoiceContextRequestSequence.current) return;
       console.error('Failed to load invoice items:', error);
       toast.error('Failed to load invoice items');
       dispatch({ type: 'SET_SELECTED_INVOICE', invoice: null });
@@ -278,6 +282,7 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
   const handleCustomerSelect = useCallback(async (
     customer: Customer | CanonicalCustomerCreateResponse | null,
   ) => {
+    invoiceContextRequestSequence.current += 1;
     if (!customer) {
       dispatch({ type: 'SET_SELECTED_CUSTOMER', customer: null });
       dispatch({ type: 'SET_SELECTED_INVOICE', invoice: null });

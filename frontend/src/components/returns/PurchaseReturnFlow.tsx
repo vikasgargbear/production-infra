@@ -144,6 +144,8 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
 
   const returnDataRef = useRef(returnData);
   returnDataRef.current = returnData;
+  const invoiceContextRequestSequence = useRef(0);
+  const supplierInvoicesRequestSequence = useRef(0);
   const hasPositiveReturnLine = returnData.items.some(item => item.selected && (
     isPositiveDecimalText(item.return_paid_qty)
     || isPositiveDecimalText(item.return_free_qty)
@@ -218,10 +220,15 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
 
   // Handle invoice selection
   const handleInvoiceSelect = async (invoice) => {
-    if (!invoice) return;
+    const requestSequence = ++invoiceContextRequestSequence.current;
+    if (!invoice) {
+      setLoading(false);
+      return;
+    }
 
     const invoiceId = String(invoice.supplier_invoice_id ?? invoice.invoice_id ?? '');
     if (!isCanonicalUuid(invoiceId)) {
+      setLoading(false);
       toast.error('This supplier invoice is missing its canonical UUID and cannot be returned.');
       return;
     }
@@ -255,6 +262,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
         invoiceId,
         returnDataRef.current.return_date,
       );
+      if (requestSequence !== invoiceContextRequestSequence.current) return;
       const context = response.data;
 
       if (context.lines.length) {
@@ -303,18 +311,14 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
           return_reason: '',
           return_reason_choices: context.return_reason_choices,
           supplier_destinations: context.supplier_destinations,
-          supplier_destination_address_id: context.supplier_destinations.length === 1
-            ? context.supplier_destinations[0].id
-            : '',
+          supplier_destination_address_id: '',
           statutory_gstr2b_credit_notes: context.statutory_gstr2b_credit_notes,
           supplier_credit_note_portal_line_id: '',
           gst_tax_treatment: '',
           logistics_modes: context.logistics_modes,
           transporter_choices: context.transporter_choices,
           transport_details: {
-            transport_mode: context.logistics_modes.length === 1
-              ? context.logistics_modes[0].transport_mode
-              : '',
+            transport_mode: '',
             distance_km: '',
           },
         }));
@@ -324,6 +328,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
         })));
       }
     } catch (error) {
+      if (requestSequence !== invoiceContextRequestSequence.current) return;
       toast.error('Failed to load invoice items');
       setSelectedInvoice(null);
       setShowInvoiceSection(true);
@@ -339,13 +344,16 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
         transport_details: { transport_mode: '', distance_km: '' },
       }));
     } finally {
-      setLoading(false);
+      if (requestSequence === invoiceContextRequestSequence.current) setLoading(false);
     }
   };
 
   // Handle supplier selection
   const handleSupplierSelect = async (supplier) => {
+    invoiceContextRequestSequence.current += 1;
+    const requestSequence = ++supplierInvoicesRequestSequence.current;
     if (!supplier) {
+      setLoading(false);
       setSelectedSupplier(null);
       setSelectedInvoice(null);
       setShowInvoiceSection(true);
@@ -407,11 +415,13 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
       const response = await purchasesApi.getReturnableInvoices({
         supplier_id: supplierId
       });
+      if (requestSequence !== supplierInvoicesRequestSequence.current) return;
       setReturnableInvoices(response.data?.invoices || []);
     } catch (error) {
+      if (requestSequence !== supplierInvoicesRequestSequence.current) return;
       toast.error('Failed to fetch supplier invoices');
     } finally {
-      setLoading(false);
+      if (requestSequence === supplierInvoicesRequestSequence.current) setLoading(false);
     }
   };
 
@@ -724,31 +734,17 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
                     options={returnData.supplier_destinations.map(address => ({ value: address.id, label: `${address.address_kind}: ${address.line1}, ${address.city}` }))}
                     placeholder="Choose verified address"
                   />
-                  {returnData.logistics_modes.length === 1 ? (
-                    <label className="text-sm font-medium text-gray-700">
-                      Transport mode
-                      <input
-                        readOnly
-                        value={returnData.logistics_modes[0].display_name}
-                        className="mt-1 min-h-11 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 text-gray-700"
-                      />
-                      <span className="mt-1 block text-xs text-gray-500">
-                        Set by the canonical return policy.
-                      </span>
-                    </label>
-                  ) : (
-                    <Select
-                      label="Transport mode"
-                      required
-                      value={returnData.transport_details.transport_mode}
-                      onChange={(value) => updateTransportMode(String(value))}
-                      options={returnData.logistics_modes.map(policy => ({
-                        value: policy.transport_mode,
-                        label: policy.display_name,
-                      }))}
-                      placeholder="Choose transport mode"
-                    />
-                  )}
+                  <Select
+                    label="Transport mode"
+                    required
+                    value={returnData.transport_details.transport_mode}
+                    onChange={(value) => updateTransportMode(String(value))}
+                    options={returnData.logistics_modes.map(policy => ({
+                      value: policy.transport_mode,
+                      label: policy.display_name,
+                    }))}
+                    placeholder="Choose transport mode"
+                  />
                   {selectedLogisticsMode?.distance_required && (
                     <label className="text-sm font-medium text-gray-700">
                       Distance (km) <span className="text-red-500">*</span>

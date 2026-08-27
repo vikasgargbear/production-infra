@@ -21,6 +21,7 @@
       {"actor":"requester","action":"click","locator":{"kind":"role","role":"option","name":"{{scalar.purchase_return_reason_label}}","exact":true}},
       {"actor":"requester","action":"click","locator":{"kind":"role","role":"combobox","name":"GST treatment","exact":true}},
       {"actor":"requester","action":"click","locator":{"kind":"role","role":"option","name":"{{scalar.purchase_return_gst_treatment_label}}","exact":true}},
+      {"actor":"requester","action":"select","locator":{"kind":"label","name":"Supplier destination","exact":true},"value":"{{fact.identity.supplier_destination_address_id}}"},
       {"actor":"requester","action":"click","locator":{"kind":"role","role":"combobox","name":"Transport mode","exact":true}},
       {"actor":"requester","action":"click","locator":{"kind":"role","role":"option","name":"{{scalar.purchase_return_transport_mode_label}}","exact":true}},
       {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Distance (km)","exact":true},"value":"{{scalar.purchase_return_distance_km}}"},

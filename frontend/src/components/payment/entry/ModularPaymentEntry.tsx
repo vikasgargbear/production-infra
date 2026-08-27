@@ -91,6 +91,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
     allocations: ReceiptAllocation[];
     invoiceByOpenItem: Map<string, { invoice_id: string; due: string | number }>;
   } | null>(null);
+  const outstandingRequestSequence = React.useRef(0);
 
   // Auto-apply allocation when amount changes ONLY if user explicitly selected an auto method
   React.useEffect(() => {
@@ -377,6 +378,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
   };
 
   const handleCustomerSelect = async (customer: any): Promise<void> => {
+    const requestSequence = ++outstandingRequestSequence.current;
     setCustomer(customer);
 
     // Clear manual selections when customer changes
@@ -393,6 +395,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
     if (!customer) {
       setOutstandingInvoices([]);
       setHasLoadedOutstanding(false);
+      setIsLoading(false);
       return;
     }
 
@@ -403,14 +406,16 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
       setError(null);
       setHasLoadedOutstanding(false);
       const response = await paymentAllocationApi.getUnpaidInvoices(customerId);
+      if (requestSequence !== outstandingRequestSequence.current) return;
       setOutstandingInvoices(projectPaymentOutstandingInvoices(response.data));
       setHasLoadedOutstanding(true);
     } catch (error: any) {
+      if (requestSequence !== outstandingRequestSequence.current) return;
       setOutstandingInvoices([]);
       setHasLoadedOutstanding(false);
       setError('Unable to load authoritative outstanding invoices. No advance allocation was assumed.');
     } finally {
-      setIsLoading(false);
+      if (requestSequence === outstandingRequestSequence.current) setIsLoading(false);
     }
   };
 

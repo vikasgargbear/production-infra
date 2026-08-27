@@ -291,6 +291,7 @@ def resolve_authoritative_facts(
              delivery_address.id::text,delivery_address.row_version,
              direct_issue_batch.id::text,direct_issue_batch.batch_number,
              direct_issue_batch.available_base_quantity,uom.multiplier,
+             supplier_destination.id::text,
              to_char((transaction_timestamp() AT TIME ZONE organization.timezone)::date,'YYYY-MM-DD'),
              to_char(transaction_timestamp() AT TIME ZONE organization.timezone,'YYYY-MM-DD"T"HH24:MI')
         FROM core.branches branch
@@ -308,6 +309,18 @@ def resolve_authoritative_facts(
         ) delivery_address ON true
         JOIN parties.supplier_accounts supplier ON supplier.org_id=branch.org_id AND supplier.id=%s
         JOIN parties.parties supplier_party ON supplier_party.org_id=supplier.org_id AND supplier_party.id=supplier.party_id
+        JOIN LATERAL (
+            SELECT address.id
+              FROM parties.addresses address
+             WHERE address.org_id=supplier.org_id
+               AND address.party_id=supplier.party_id
+               AND address.address_kind IN ('registered','shipping','warehouse')
+               AND address.status='active'
+               AND address.valid_from<=(transaction_timestamp() AT TIME ZONE organization.timezone)::date
+               AND (address.valid_until IS NULL OR address.valid_until>=(transaction_timestamp() AT TIME ZONE organization.timezone)::date)
+             ORDER BY address.is_primary DESC,address.address_kind,address.id
+             LIMIT 2
+        ) supplier_destination ON true
         JOIN catalog.products product ON product.org_id=branch.org_id AND product.id=%s
         JOIN catalog.uom_conversions uom ON uom.org_id=product.org_id AND uom.id=%s AND uom.product_id=product.id
         JOIN catalog.uom_conversions count_uom ON count_uom.org_id=product.org_id AND count_uom.id=%s AND count_uom.product_id=product.id
@@ -955,6 +968,7 @@ def resolve_authoritative_facts(
         "delivery_address_id", "delivery_address_row_version",
         "direct_issue_batch_id", "direct_issue_batch_number",
         "direct_issue_available_base_quantity", "sales_uom_multiplier",
+        "supplier_destination_address_id",
     )
     if len(supplier_invoice_rows) != 1:
         raise FixtureCompileError(
@@ -1071,6 +1085,9 @@ def resolve_authoritative_facts(
             "delivery_address_id": resolved.pop("delivery_address_id"),
             "delivery_address_row_version": resolved.pop("delivery_address_row_version"),
             "direct_issue_batch_id": resolved.pop("direct_issue_batch_id"),
+            "supplier_destination_address_id": resolved.pop(
+                "supplier_destination_address_id"
+            ),
             **({
                 "interstate_delivery_address_row_version": (
                     variant_customers["interstate"][4]

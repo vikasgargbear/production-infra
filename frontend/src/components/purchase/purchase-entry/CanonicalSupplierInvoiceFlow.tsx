@@ -47,6 +47,7 @@ const CanonicalSupplierInvoiceFlow: React.FC<{ onClose?: () => void }> = ({ onCl
   const executedResourceId = useRef<string | null>(null);
   const prepareId = useRef(clientUuid());
   const lifecycleId = useRef(clientUuid());
+  const contextRequestSequence = useRef(0);
 
   const selectedReceipt = useMemo(
     () => receipts.find((receipt) => receipt.goods_receipt_id === selectedReceiptId),
@@ -95,11 +96,20 @@ const CanonicalSupplierInvoiceFlow: React.FC<{ onClose?: () => void }> = ({ onCl
     lifecycleId.current = clientUuid();
   };
 
+  const invalidateContext = () => {
+    contextRequestSequence.current += 1;
+    setLoading(false);
+    setContext(null);
+    setRates({});
+    resetReview();
+  };
+
   const loadContext = async () => {
     if (!selectedReceiptId || !invoiceNumber.trim() || !invoiceDate || !receivedDate) {
       toast.error('Select a posted GRN and enter the exact supplier invoice and received dates.');
       return;
     }
+    const requestSequence = ++contextRequestSequence.current;
     setLoading(true);
     resetReview();
     try {
@@ -108,6 +118,7 @@ const CanonicalSupplierInvoiceFlow: React.FC<{ onClose?: () => void }> = ({ onCl
         supplierInvoiceNumber: invoiceNumber.trim(),
         invoiceDate,
       });
+      if (requestSequence !== contextRequestSequence.current) return;
       setContext(response.data);
       setRates(Object.fromEntries(response.data.lines.map((line) => [
         line.goods_receipt_line_id,
@@ -115,11 +126,12 @@ const CanonicalSupplierInvoiceFlow: React.FC<{ onClose?: () => void }> = ({ onCl
       ])));
       if (!response.data.ready) toast.error(response.data.blocking_reasons[0]);
     } catch (error) {
+      if (requestSequence !== contextRequestSequence.current) return;
       setContext(null);
       setRates({});
       toast.error(errorMessage(error));
     } finally {
-      setLoading(false);
+      if (requestSequence === contextRequestSequence.current) setLoading(false);
     }
   };
 
@@ -218,16 +230,16 @@ const CanonicalSupplierInvoiceFlow: React.FC<{ onClose?: () => void }> = ({ onCl
               </p>
               <div className="mt-4 grid gap-4 md:grid-cols-4">
                 <label className="text-sm md:col-span-2">Posted GRN
-                  <select value={selectedReceiptId} onChange={(event) => { setSelectedReceiptId(event.target.value); setContext(null); resetReview(); }} className="mt-1 min-h-11 w-full rounded-md border border-slate-300 bg-white px-3">
+                  <select value={selectedReceiptId} onChange={(event) => { setSelectedReceiptId(event.target.value); invalidateContext(); }} className="mt-1 min-h-11 w-full rounded-md border border-slate-300 bg-white px-3">
                     <option value="">Select receipt</option>
                     {receipts.map((receipt) => <option key={receipt.goods_receipt_id} value={receipt.goods_receipt_id}>{receipt.goods_receipt_number} · {receipt.supplier_name} · ₹{receipt.remaining_capitalized_value}</option>)}
                   </select>
                 </label>
                 <label className="text-sm">Supplier invoice number
-                  <input value={invoiceNumber} onChange={(event) => { setInvoiceNumber(event.target.value); setContext(null); resetReview(); }} className="mt-1 min-h-11 w-full rounded-md border border-slate-300 px-3" maxLength={64} />
+                  <input value={invoiceNumber} onChange={(event) => { setInvoiceNumber(event.target.value); invalidateContext(); }} className="mt-1 min-h-11 w-full rounded-md border border-slate-300 px-3" maxLength={64} />
                 </label>
                 <label className="text-sm">Invoice date
-                  <input aria-label="Supplier invoice date" type="date" value={invoiceDate} onChange={(event) => { setInvoiceDate(event.target.value); setContext(null); resetReview(); }} className="mt-1 min-h-11 w-full rounded-md border border-slate-300 px-3" />
+                  <input aria-label="Supplier invoice date" type="date" value={invoiceDate} onChange={(event) => { setInvoiceDate(event.target.value); invalidateContext(); }} className="mt-1 min-h-11 w-full rounded-md border border-slate-300 px-3" />
                 </label>
                 <label className="text-sm">Received date
                   <input aria-label="Supplier invoice received date" type="date" value={receivedDate} min={invoiceDate} onChange={(event) => { setReceivedDate(event.target.value); resetReview(); }} className="mt-1 min-h-11 w-full rounded-md border border-slate-300 px-3" />

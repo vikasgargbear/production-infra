@@ -142,4 +142,40 @@ describe('ModularPaymentEntry canonical retry boundary', () => {
     expect(reconcileCustomerReceipt).not.toHaveBeenCalled();
     expect(window.confirm).not.toHaveBeenCalled();
   });
+
+  it('keeps outstanding invoices bound to the most recently selected customer', async () => {
+    let resolveFirst!: (value: any) => void;
+    let resolveSecond!: (value: any) => void;
+    (paymentAllocationApi.getUnpaidInvoices as jest.Mock)
+      .mockReturnValueOnce(new Promise(resolve => { resolveFirst = resolve; }))
+      .mockReturnValueOnce(new Promise(resolve => { resolveSecond = resolve; }));
+    render(<ModularPaymentEntry onClose={jest.fn()} />);
+
+    act(() => {
+      globalThis.dispatchEvent(new CustomEvent('customerSelected', { detail: {
+        customer_id: '0198ea37-2b1d-7c8d-9123-123456789ab1', customer_name: 'Customer A',
+      } }));
+      globalThis.dispatchEvent(new CustomEvent('customerSelected', { detail: {
+        customer_id: '0198ea37-2b1d-7c8d-9123-123456789ab2', customer_name: 'Customer B',
+      } }));
+    });
+    await act(async () => resolveSecond({ data: { invoice_count: 1, invoices: [{
+      invoice_id: '0198ea37-2b22-7c8d-9123-123456789ab2',
+      open_item_id: '0198ea37-2b23-7c8d-9123-123456789ab2',
+      branch_id: '0198ea37-2b1e-7c8d-9123-123456789abc',
+      invoice_number: 'B-INVOICE', invoice_date: '2026-08-24',
+      total_amount: '50.00', allocated: '0.00', due: '50.00', payment_status: 'pending',
+    }] } }));
+    expect(await screen.findByText('B-INVOICE')).toBeInTheDocument();
+
+    await act(async () => resolveFirst({ data: { invoice_count: 1, invoices: [{
+      invoice_id: '0198ea37-2b22-7c8d-9123-123456789ab1',
+      open_item_id: '0198ea37-2b23-7c8d-9123-123456789ab1',
+      branch_id: '0198ea37-2b1e-7c8d-9123-123456789abc',
+      invoice_number: 'A-INVOICE', invoice_date: '2026-08-24',
+      total_amount: '75.00', allocated: '0.00', due: '75.00', payment_status: 'pending',
+    }] } }));
+    expect(screen.queryByText('A-INVOICE')).toBeNull();
+    expect(screen.getByText('B-INVOICE')).toBeInTheDocument();
+  });
 });
