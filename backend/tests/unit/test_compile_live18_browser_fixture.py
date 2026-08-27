@@ -816,6 +816,8 @@ def test_sales_order_template_compiles_reviewed_commercial_choices() -> None:
             "clock": {"business_date": "2026-08-25"},
             "identity": {
                 "customer_account_id": "d3000000-0000-7000-8000-000000000041",
+                "delivery_address_id": "d3000000-0000-7000-8000-000000000044",
+                "delivery_address_row_version": "7",
                 "product_id": "d3000000-0000-7000-8000-000000000042",
                 "direct_issue_batch_id": "d3000000-0000-7000-8000-000000000043",
             },
@@ -838,13 +840,22 @@ def test_sales_order_template_compiles_reviewed_commercial_choices() -> None:
     _validate_compiled_steps("sales_order", operation, "actor_confirmation")
     assert used == set(scalars)
     assert operation["prepare_steps"][1]["value"] == "2026-08-27"
-    assert operation["prepare_steps"][6]["action"] == "click"
-    assert operation["prepare_steps"][6]["locator"] == {
+    assert operation["prepare_steps"][4] == {
+        "actor": "requester",
+        "action": "expectText",
+        "locator": {
+            "kind": "testId",
+            "name": "sales-order-delivery-address-d3000000-0000-7000-8000-000000000044-v7",
+        },
+        "value": "Delivery address ready",
+    }
+    assert operation["prepare_steps"][7]["action"] == "click"
+    assert operation["prepare_steps"][7]["locator"] == {
         "kind": "testId",
         "name": "select-batch-d3000000-0000-7000-8000-000000000043",
     }
-    assert operation["prepare_steps"][7]["value"] == "1.125000"
-    assert operation["prepare_steps"][8]["value"] == "84.1250"
+    assert operation["prepare_steps"][8]["value"] == "1.125000"
+    assert operation["prepare_steps"][9]["value"] == "84.1250"
 
 
 def test_live18_templates_use_only_canonical_hash_routes() -> None:

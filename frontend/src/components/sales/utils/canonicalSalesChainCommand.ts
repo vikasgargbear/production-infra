@@ -58,6 +58,16 @@ function deliveryAddress(value: Order['shipping_address_data']): { id: string; r
     return { id, rowVersion };
 }
 
+export function resolvedSalesOrderDeliveryAddress(
+    value: Order['shipping_address_data'],
+): { id: string; rowVersion: string } | null {
+    try {
+        return deliveryAddress(value);
+    } catch {
+        return null;
+    }
+}
+
 export function buildCanonicalSalesOrderCommand(
     order: Order,
     idempotencyKey: string,

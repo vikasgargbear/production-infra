@@ -21,6 +21,7 @@ import OrderReviewStep from './steps/OrderReviewStep';
 import type { Customer } from '../../../types/models';
 import CanonicalSalesCommandReview from '../CanonicalSalesCommandReview';
 import { toast } from 'react-toastify';
+import { resolvedSalesOrderDeliveryAddress } from '../utils/canonicalSalesChainCommand';
 
 // ==================== TYPE DEFINITIONS ====================
 
@@ -140,6 +141,10 @@ const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose })
 
     if (!open) return null;
 
+    const deliveryAddressReady = Boolean(
+        resolvedSalesOrderDeliveryAddress(order.shipping_address_data),
+    );
+
     return (
         <>
             {/* Step 1: Create Order */}
@@ -187,7 +192,7 @@ const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose })
                             onContinue={() => setCurrentStep(2)}
                             cancelLabel="Cancel"
                             continueLabel="Continue"
-                            continueDisabled={!order.customer_id || order.items.length === 0 || !order.order_date || !order.expected_delivery_date}
+                            continueDisabled={!order.customer_id || !deliveryAddressReady || order.items.length === 0 || !order.order_date || !order.expected_delivery_date}
                             continueButtonColor="blue"
                         />
                     </div>

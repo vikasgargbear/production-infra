@@ -1,4 +1,8 @@
-import { buildCanonicalSalesDispatchCommand, buildCanonicalSalesOrderCommand } from './canonicalSalesChainCommand';
+import {
+  buildCanonicalSalesDispatchCommand,
+  buildCanonicalSalesOrderCommand,
+  resolvedSalesOrderDeliveryAddress,
+} from './canonicalSalesChainCommand';
 import type { CanonicalDocumentPolicy } from '../../../services/api/modules/org/canonicalBusinessContext.api';
 
 const policy: CanonicalDocumentPolicy = {
@@ -22,6 +26,15 @@ const ids = {
   line: 'd3900000-0000-7000-8000-000000000002',
   address: 'd3900000-0000-7000-8000-000000000003',
 };
+
+test('sales-order address readiness requires the exact canonical identity and row version', () => {
+  expect(resolvedSalesOrderDeliveryAddress(null)).toBeNull();
+  expect(resolvedSalesOrderDeliveryAddress({ address_id: ids.address } as any)).toBeNull();
+  expect(resolvedSalesOrderDeliveryAddress({
+    address_id: ids.address,
+    row_version: '4',
+  } as any)).toEqual({ id: ids.address, rowVersion: '4' });
+});
 
 beforeAll(() => {
   Object.defineProperty(globalThis, 'crypto', { value: { randomUUID: () => 'd3900000-0000-7000-8000-000000000099' } });

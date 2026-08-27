@@ -3,6 +3,7 @@ import {
     canonicalInvoiceValidationError,
     companyInvoiceValidationError,
     freeSupplyTreatmentAfterQuantityEdit,
+    invoiceBatchAllocationValidationError,
     invoicePreviewValidationError,
 } from './canonicalInvoiceCommand';
 import type { Invoice } from '../hooks/useInvoiceLogic';
@@ -444,6 +445,21 @@ describe('canonical invoice command', () => {
             .toBe('excluded_from_taxable_value');
         expect(freeSupplyTreatmentAfterQuantityEdit('1.250000')).toBeUndefined();
         expect(freeSupplyTreatmentAfterQuantityEdit('not-a-quantity')).toBeUndefined();
+    });
+
+    it('fails the item-step boundary before calculation when positive free supply has no reviewed treatment', () => {
+        const missingTreatment = {
+            ...invoice,
+            items: [{
+                ...invoice.items[0],
+                free_quantity: '1.000000',
+                free_supply_tax_treatment: undefined,
+            }],
+        } as Invoice;
+
+        expect(invoiceBatchAllocationValidationError(missingTreatment)).toBe(
+            'Invoice free-supply tax treatment is missing or invalid',
+        );
     });
 
     it.each([

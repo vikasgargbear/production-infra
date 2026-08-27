@@ -237,9 +237,18 @@ export function invoiceBatchAllocationValidationError(invoice: Invoice): string 
             return `Item ${index + 1} selected batch availability is missing. Refresh the batch selection before continuing.`;
         }
         try {
+            const freeQuantity = requiredQuantity(
+                item.free_quantity,
+                `Item ${index + 1} free quantity`,
+            );
+            reviewedFreeSupplyTaxTreatment(
+                item.free_supply_tax_treatment,
+                freeQuantity,
+                `Item ${index + 1}`,
+            );
             const requestedQuantity = addExactDecimals([
                 requiredQuantity(item.quantity, `Item ${index + 1} billed quantity`),
-                requiredQuantity(item.free_quantity, `Item ${index + 1} free quantity`),
+                freeQuantity,
             ], `Item ${index + 1} requested quantity`, { scale: 6 });
             if (compareExactDecimals(requestedQuantity, availableQuantity, `Item ${index + 1} availability`, { scale: 6 }) > 0) {
                 return `Item ${index + 1} needs ${requestedQuantity} units but the selected batch has ${availableQuantity}. Multi-batch allocation is not available yet; reduce the quantity or stop and refresh stock.`;

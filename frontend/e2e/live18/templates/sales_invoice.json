@@ -15,12 +15,8 @@
       {"actor":"requester","action":"fill","locator":{"kind":"label","name":"{{fact.display.product_name}} discount percent","exact":true},"value":"{{scalar.sales_invoice_discount_percent}}"},
       {"actor":"requester","action":"fill","locator":{"kind":"label","name":"{{fact.display.product_name}} free quantity","exact":true},"value":"{{scalar.sales_invoice_free_quantity}}"},
       {"actor":"requester","action":"press","locator":{"kind":"label","name":"{{fact.display.product_name}} free quantity","exact":true},"value":"Tab"},
-      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Continue","exact":true}},
-      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Change","exact":true}},
-      {"actor":"requester","action":"click","locator":{"kind":"testId","name":"select-address-{{fact.identity.delivery_address_id}}-v{{fact.identity.delivery_address_row_version}}"}},
-      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Exact Distance (km)","exact":true},"value":"{{scalar.sales_invoice_distance_km}}"},
-      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Continue to Preview","exact":true}},
-      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Invoice free-supply tax treatment is missing or invalid","exact":true},"value":"Invoice free-supply tax treatment is missing or invalid"}
+      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Invoice free-supply tax treatment is missing or invalid","exact":true},"value":"Invoice free-supply tax treatment is missing or invalid"},
+      {"actor":"requester","action":"expectDisabled","locator":{"kind":"role","role":"button","name":"Continue","exact":true}}
     ],
     "prepare_steps": [
       {"actor":"requester","action":"goto","value":"/#/sales/invoice"},

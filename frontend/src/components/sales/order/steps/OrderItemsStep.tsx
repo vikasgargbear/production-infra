@@ -13,9 +13,10 @@ import {
     ItemsTableKeyboard,
     StandardDatePicker
 } from '../../../global';
-import type { Order, OrderItem } from '../../../../types/models';
+import type { Order } from '../../../../types/models';
 import type { Customer } from '../../../../types/models';
 import type { ProductSearchRef } from '../../../global/search/ProductSearch';
+import { resolvedSalesOrderDeliveryAddress } from '../../utils/canonicalSalesChainCommand';
 
 // Using canonical types from /types/models - no local duplicates
 
@@ -52,6 +53,7 @@ const OrderItemsStep: React.FC<OrderItemsStepProps> = ({
 }) => {
     const productSearchRef = useRef<ProductSearchRef>(null);
     const itemsTableRef = useRef<HTMLDivElement>(null);
+    const deliveryAddress = resolvedSalesOrderDeliveryAddress(order.shipping_address_data);
     return (
         <div className="max-w-6xl mx-auto px-6 py-6">
             {/* Message Display */}
@@ -116,6 +118,15 @@ const OrderItemsStep: React.FC<OrderItemsStepProps> = ({
                         tabIndex={1}
                         nextFocusRef={productSearchRef as any}
                     />
+                    {selectedCustomer && deliveryAddress && (
+                        <p
+                            className="mt-3 flex items-center gap-2 text-sm text-green-700"
+                            data-testid={`sales-order-delivery-address-${deliveryAddress.id}-v${deliveryAddress.rowVersion}`}
+                        >
+                            <CheckCircle className="h-4 w-4" aria-hidden="true" />
+                            Delivery address ready
+                        </p>
+                    )}
                 </div>
             </div>
 
