@@ -933,7 +933,11 @@ jobs:
       - name: Require each exact upload to become the active deployment
         run: |
           set -euo pipefail
-          deployment_poll_deadline=$((SECONDS + 900))
+          # Railway may finish building an image before regional compute assigns
+          # an instance. Keep this bound above the longest observed healthy
+          # Singapore activation (about 19 minutes), while remaining below the
+          # job-level timeout and preserving failure compensation.
+          deployment_poll_deadline=$((SECONDS + 1800))
 
           deployment_list_json() {
             local service=$1
@@ -1049,7 +1053,7 @@ jobs:
           mcp_deployment_message=$(<mcp-deployment-message)
           frontend_deployment_message=$(<frontend-deployment-message)
 
-          for attempt in $(seq 1 90); do
+          for attempt in $(seq 1 180); do
             api_status=$(deployment_status "$RAILWAY_API_SERVICE" "$api_deployment_id")
             mcp_status=$(deployment_status "$RAILWAY_MCP_SERVICE" "$mcp_deployment_id")
             frontend_status=$(deployment_status "$RAILWAY_FRONTEND_SERVICE" "$frontend_deployment_id")
@@ -1062,11 +1066,15 @@ jobs:
             fail_on_terminal_status mcp "$mcp_deployment_id" "$mcp_status"
             fail_on_terminal_status frontend "$frontend_deployment_id" "$frontend_status"
 
-            if test "$attempt" = 90 || test "$SECONDS" -ge "$deployment_poll_deadline"; then
-              echo "Exact Railway uploads did not reach SUCCESS before timeout" >&2
+            if test "$attempt" = 180 || test "$SECONDS" -ge "$deployment_poll_deadline"; then
+              echo "Exact Railway uploads did not reach SUCCESS before timeout: " \
+                "api=$api_deployment_id:$api_status " \
+                "mcp=$mcp_deployment_id:$mcp_status " \
+                "frontend=$frontend_deployment_id:$frontend_status" >&2
               exit 1
             fi
-            echo "Waiting for exact Railway uploads (attempt $attempt/90)"
+            echo "Waiting for exact Railway uploads (attempt $attempt/180): " \
+              "api=$api_status mcp=$mcp_status frontend=$frontend_status"
             sleep 10
           done
 

@@ -413,7 +413,12 @@ def test_workflow_uploads_fresh_source_and_polls_exact_deployment_ids() -> None:
     assert "deployment_id_from_payload frontend-deploy.json > frontend-deployment-id" in workflow
     assert "deployment_status()" in workflow
     assert "deployment_list_json()" in workflow
-    assert 'deployment_poll_deadline=$((SECONDS + 900))' in workflow
+    assert 'deployment_poll_deadline=$((SECONDS + 1800))' in workflow
+    assert "for attempt in $(seq 1 180)" in workflow
+    assert 'test "$attempt" = 180' in workflow
+    assert 'api=$api_deployment_id:$api_status' in workflow
+    assert 'mcp=$mcp_deployment_id:$mcp_status' in workflow
+    assert 'frontend=$frontend_deployment_id:$frontend_status' in workflow
     assert 'timeout --signal=TERM "${query_timeout}s" railway deployment list' in workflow
     assert 'jq -e \'type == "array"\'' in workflow
     assert "after bounded attempts" in workflow
