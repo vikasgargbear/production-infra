@@ -188,7 +188,7 @@ jobs:
                 "_temp/railway-oauth-evidence/canonical-staging-oauth-client.json production-infra/production-infra/railway-pilot-evidence.json production-infra/production-infra/railway-supabase-auth-redirect.json "
               unzip -p "$deployment_zip" \
                 production-infra/production-infra/railway-pilot-evidence.json \
-                > staging-evidence/deployment.json
+                > staging-evidence/deployment-maintenance.json
               ;;
             render)
               test "$(unzip -Z1 "$deployment_zip" | grep -Fxc render-pilot-evidence.json)" = 1
@@ -199,6 +199,22 @@ jobs:
           esac
           unzip -p "$live18_zip" live18-evidence-manifest.json \
             > staging-evidence/live18-evidence-manifest.json
+          live18_sha256=$(sha256sum staging-evidence/live18-evidence-manifest.json | cut -d' ' -f1)
+          if test "$deployment_provider" = railway; then
+            python3 backend/scripts/audit/application_promotion_evidence.py \
+              reconcile-railway-deployment \
+              --maintenance-evidence staging-evidence/deployment-maintenance.json \
+              --deployment-artifact-id "$deployment_id" \
+              --deployment-artifact-digest "$deployment_digest" \
+              --live18-manifest staging-evidence/live18-evidence-manifest.json \
+              --workflow-run-id "$DEPLOYMENT_WORKFLOW_RUN_ID" \
+              --workflow-run-attempt "$run_attempt" \
+              --live18-artifact-id "$live18_id" \
+              --live18-artifact-sha256 "$live18_sha256" \
+              --live18-artifact-digest "$live18_digest" \
+              --expected-sha "$REVIEWED_SHA" \
+              --output staging-evidence/deployment.json
+          fi
           test -s staging-evidence/deployment.json
           test -s staging-evidence/live18-evidence-manifest.json
           {
@@ -207,7 +223,7 @@ jobs:
             echo "DEPLOYMENT_ARTIFACT_DIGEST=$deployment_digest"
             echo "LIVE18_ARTIFACT_ID=$live18_id"
             echo "LIVE18_ARTIFACT_DIGEST=$live18_digest"
-            echo "LIVE18_ARTIFACT_SHA256=$(sha256sum staging-evidence/live18-evidence-manifest.json | cut -d' ' -f1)"
+            echo "LIVE18_ARTIFACT_SHA256=$live18_sha256"
           } >> "$GITHUB_ENV"
           rm -f -- "$deployment_zip" "$live18_zip"
 

@@ -337,6 +337,7 @@ def _deployment_summary(path: Path) -> dict[str, Any]:
     return {
         "provider": provider,
         "commit_sha": _required_text(value, "commit_sha", SHA),
+        "status": "ready",
         "origins": origins,
         "raw_evidence_sha256": _digest(path),
     }
@@ -480,12 +481,16 @@ def _demo_summary(
             raise ArtifactManifestError("Render demo receipt differs from this exact run")
         summary_sha256 = value["summary_sha256"]
     else:
+        write_fence = value.get("write_fence")
         if (
             value.get("schema")
             != "aasopharma.live18.railway-database-response.v1"
             or value.get("expected_sha") != deployment["commit_sha"]
             or value.get("run_id") != run_id
             or value.get("run_attempt") != run_attempt
+            or not isinstance(write_fence, dict)
+            or write_fence.get("state") != "open"
+            or write_fence.get("commit_sha") != deployment["commit_sha"]
         ):
             raise ArtifactManifestError("Railway demo receipt differs from this exact run")
         summary_sha256 = None
@@ -497,6 +502,7 @@ def _demo_summary(
         "run": {"id": run_id, "attempt": run_attempt},
         "summary_sha256": summary_sha256,
         "content_sha256": value.get("content_sha256"),
+        "write_fence": "open" if provider == "railway" else None,
         "raw_evidence_sha256": _digest(path),
     }
 

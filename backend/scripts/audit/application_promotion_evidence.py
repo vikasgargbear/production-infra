@@ -515,6 +515,114 @@ def _verify_railway_evidence(
     return normalized
 
 
+def reconcile_railway_deferred_deployment(
+    *,
+    maintenance_evidence: Mapping[str, Any],
+    maintenance_evidence_sha256: str,
+    deployment_artifact_id: int,
+    deployment_artifact_digest: str,
+    live18_manifest: Mapping[str, Any],
+    workflow_run_id: int,
+    workflow_run_attempt: int,
+    live18_artifact_id: int,
+    live18_artifact_sha256: str,
+    live18_artifact_digest: str,
+    expected_sha: str,
+) -> dict[str, Any]:
+    """Reconcile truthful Railway maintenance proof with same-run readiness."""
+
+    expected_sha = _exact_sha(expected_sha, "Railway transition expected_sha")
+    if (
+        SHA256.fullmatch(maintenance_evidence_sha256) is None
+        or deployment_artifact_id <= 0
+        or ARTIFACT_DIGEST.fullmatch(deployment_artifact_digest) is None
+        or workflow_run_id <= 0
+        or workflow_run_attempt <= 0
+        or live18_artifact_id <= 0
+        or SHA256.fullmatch(live18_artifact_sha256) is None
+        or ARTIFACT_DIGEST.fullmatch(live18_artifact_digest) is None
+    ):
+        raise EvidenceError("Railway lifecycle artifact identity is invalid")
+    if (
+        maintenance_evidence.get("provider") != "railway"
+        or maintenance_evidence.get("git_commit") != expected_sha
+        or maintenance_evidence.get("status") != "maintenance"
+        or maintenance_evidence.get("write_fence") != "closed"
+    ):
+        raise EvidenceError("Railway deployment is not exact-SHA closed maintenance evidence")
+    services = maintenance_evidence.get("services")
+    if not isinstance(services, dict) or set(services) != RAILWAY_SERVICE_NAMES:
+        raise EvidenceError("Railway maintenance evidence has the wrong service set")
+    expected_health = {"api": "healthy", "frontend": "ok", "mcp": "ok"}
+    origins: dict[str, str] = {}
+    for name in sorted(RAILWAY_SERVICE_NAMES):
+        row = services.get(name)
+        if not isinstance(row, dict):
+            raise EvidenceError(f"Railway maintenance service {name} is invalid")
+        if (
+            not isinstance(row.get("deployment_id"), str)
+            or UUID.fullmatch(row["deployment_id"]) is None
+            or row.get("health") != expected_health[name]
+        ):
+            raise EvidenceError(f"Railway maintenance service {name} lacks exact healthy identity")
+        origins[name] = _https_origin(row.get("url"), f"Railway maintenance {name}")
+    if len(set(origins.values())) != 3:
+        raise EvidenceError("Railway maintenance service origins must be distinct")
+    if (
+        services["api"].get("readiness") != "ready"
+        or services["mcp"].get("readiness") != "not_ready"
+    ):
+        raise EvidenceError("Railway maintenance readiness does not prove a closed fence")
+
+    run = live18_manifest.get("run")
+    deployment = live18_manifest.get("deployment")
+    demo = live18_manifest.get("demo")
+    if (
+        live18_manifest.get("schema") != "aasopharma.live18.upload-manifest.v1"
+        or run != {
+            "id": str(workflow_run_id),
+            "attempt": str(workflow_run_attempt),
+            "browser_outcome": "success",
+        }
+        or not isinstance(deployment, dict)
+        or deployment.get("provider") != "railway"
+        or deployment.get("commit_sha") != expected_sha
+        or deployment.get("status") != "ready"
+        or deployment.get("origins") != origins
+        or SHA256.fullmatch(str(deployment.get("raw_evidence_sha256", ""))) is None
+        or not isinstance(demo, dict)
+        or demo.get("action") != "provision-demo"
+        or demo.get("provider") != "railway"
+        or demo.get("commit_sha") != expected_sha
+        or demo.get("run") != {
+            "id": str(workflow_run_id),
+            "attempt": str(workflow_run_attempt),
+        }
+        or demo.get("write_fence") != "open"
+    ):
+        raise EvidenceError("Railway Live18 readiness does not match the deferred deployment")
+
+    reconciled = json.loads(json.dumps(maintenance_evidence))
+    reconciled["status"] = "live"
+    reconciled["write_fence"] = "open"
+    reconciled["services"]["mcp"]["readiness"] = "ready"
+    reconciled["lifecycle_transition"] = {
+        "from": "maintenance",
+        "to": "live",
+        "workflow_run_id": workflow_run_id,
+        "workflow_run_attempt": workflow_run_attempt,
+        "deployment_artifact_id": deployment_artifact_id,
+        "deployment_artifact_digest": deployment_artifact_digest,
+        "maintenance_evidence_sha256": maintenance_evidence_sha256,
+        "live18_artifact_id": live18_artifact_id,
+        "live18_artifact_sha256": live18_artifact_sha256,
+        "live18_artifact_digest": live18_artifact_digest,
+        "live18_deployment_evidence_sha256": deployment["raw_evidence_sha256"],
+    }
+    _verify_railway_evidence(reconciled, expected_sha)
+    return reconciled
+
+
 def _verify_deployment_evidence(
     deployment_evidence: Mapping[str, Any], expected_sha: str
 ) -> tuple[str, dict[str, Any]]:
@@ -1774,6 +1882,7 @@ def capture_live18_acceptance(
             "run",
             "summary_sha256",
             "content_sha256",
+            "write_fence",
             "raw_evidence_sha256",
         }
         or demo.get("action") != "provision-demo"
@@ -1787,6 +1896,8 @@ def capture_live18_acceptance(
             and SHA256.fullmatch(str(demo.get("summary_sha256", ""))) is None
         )
         or (provider == "railway" and demo.get("summary_sha256") is not None)
+        or (provider == "railway" and demo.get("write_fence") != "open")
+        or (provider == "render" and demo.get("write_fence") is not None)
         or not SHA256.fullmatch(str(demo.get("content_sha256", "")))
         or not SHA256.fullmatch(str(demo.get("raw_evidence_sha256", "")))
     ):
@@ -2190,6 +2301,19 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
 
+    railway_transition = subparsers.add_parser("reconcile-railway-deployment")
+    railway_transition.add_argument("--maintenance-evidence", required=True)
+    railway_transition.add_argument("--deployment-artifact-id", required=True, type=int)
+    railway_transition.add_argument("--deployment-artifact-digest", required=True)
+    railway_transition.add_argument("--live18-manifest", required=True)
+    railway_transition.add_argument("--workflow-run-id", required=True, type=int)
+    railway_transition.add_argument("--workflow-run-attempt", required=True, type=int)
+    railway_transition.add_argument("--live18-artifact-id", required=True, type=int)
+    railway_transition.add_argument("--live18-artifact-sha256", required=True)
+    railway_transition.add_argument("--live18-artifact-digest", required=True)
+    railway_transition.add_argument("--expected-sha", required=True)
+    railway_transition.add_argument("--output", required=True)
+
     reset = subparsers.add_parser("reset-attestation")
     reset.add_argument("--project-ref", required=True)
     reset.add_argument("--git-commit", required=True)
@@ -2289,6 +2413,24 @@ def main() -> int:
             if errors:
                 raise EvidenceError("; ".join(errors))
             print(f"validated exact-SHA promotion manifest {args.manifest}")
+            return 0
+        if args.command == "reconcile-railway-deployment":
+            maintenance_path = Path(args.maintenance_evidence)
+            value = reconcile_railway_deferred_deployment(
+                maintenance_evidence=_load_json(maintenance_path),
+                maintenance_evidence_sha256=_sha256(maintenance_path),
+                deployment_artifact_id=args.deployment_artifact_id,
+                deployment_artifact_digest=args.deployment_artifact_digest,
+                live18_manifest=_load_json(Path(args.live18_manifest)),
+                workflow_run_id=args.workflow_run_id,
+                workflow_run_attempt=args.workflow_run_attempt,
+                live18_artifact_id=args.live18_artifact_id,
+                live18_artifact_sha256=args.live18_artifact_sha256,
+                live18_artifact_digest=args.live18_artifact_digest,
+                expected_sha=args.expected_sha,
+            )
+            _write_json(Path(args.output), value)
+            print(f"wrote reconciled Railway deployment evidence to {args.output}")
             return 0
         if args.command == "retired-project-pause-receipt":
             value = build_retired_project_pause_receipt(

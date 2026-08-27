@@ -98,6 +98,14 @@ def _railway(git_commit: str) -> dict:
     }
 
 
+def _railway_maintenance(git_commit: str) -> dict:
+    value = _railway(git_commit)
+    value["status"] = "maintenance"
+    value["write_fence"] = "closed"
+    value["services"]["mcp"]["readiness"] = "not_ready"
+    return value
+
+
 def _binding(git_commit: str, deployment: dict | None = None) -> dict:
     deployment = deployment or _render(git_commit)
     return evidence.build_binding(
@@ -277,6 +285,7 @@ def _live18_manifest(git_commit: str, binding: dict) -> dict:
         "deployment": {
             "provider": binding["deployment_provider"],
             "commit_sha": git_commit,
+            "status": "ready",
             "origins": {
                 name: row["url"] for name, row in binding["deployment_services"].items()
             },
@@ -313,6 +322,7 @@ def _live18_manifest(git_commit: str, binding: dict) -> dict:
             "run": {"id": "123", "attempt": "1"},
             "summary_sha256": "a" * 64 if provider == "render" else None,
             "content_sha256": "c" * 64,
+            "write_fence": "open" if provider == "railway" else None,
             "raw_evidence_sha256": "d" * 64,
         },
         "reconciliation": {
@@ -485,6 +495,83 @@ def test_railway_binding_requires_exact_healthy_three_service_deployment():
     swapped_health_contract["services"]["api"]["health"] = "ok"
     with pytest.raises(evidence.EvidenceError, match="not healthy"):
         _binding(git_commit, swapped_health_contract)
+
+
+def test_railway_maintenance_reconciles_only_same_run_live18_readiness():
+    git_commit = "a" * 40
+    maintenance = _railway_maintenance(git_commit)
+    provisional_binding = {
+        "deployment_provider": "railway",
+        "git_commit": git_commit,
+        "deployment_services": {
+            name: {
+                "url": row["url"],
+            }
+            for name, row in maintenance["services"].items()
+        },
+    }
+    manifest = _live18_manifest(git_commit, provisional_binding)
+    common = {
+        "maintenance_evidence": maintenance,
+        "maintenance_evidence_sha256": "1" * 64,
+        "deployment_artifact_id": 123,
+        "deployment_artifact_digest": "sha256:" + "2" * 64,
+        "live18_manifest": manifest,
+        "workflow_run_id": 123,
+        "workflow_run_attempt": 1,
+        "live18_artifact_id": 456,
+        "live18_artifact_sha256": "3" * 64,
+        "live18_artifact_digest": "sha256:" + "4" * 64,
+        "expected_sha": git_commit,
+    }
+
+    reconciled = evidence.reconcile_railway_deferred_deployment(**common)
+
+    assert reconciled["status"] == "live"
+    assert reconciled["write_fence"] == "open"
+    assert reconciled["services"]["mcp"]["readiness"] == "ready"
+    assert reconciled["lifecycle_transition"] == {
+        "from": "maintenance",
+        "to": "live",
+        "workflow_run_id": 123,
+        "workflow_run_attempt": 1,
+        "deployment_artifact_id": 123,
+        "deployment_artifact_digest": "sha256:" + "2" * 64,
+        "maintenance_evidence_sha256": "1" * 64,
+        "live18_artifact_id": 456,
+        "live18_artifact_sha256": "3" * 64,
+        "live18_artifact_digest": "sha256:" + "4" * 64,
+        "live18_deployment_evidence_sha256": "e" * 64,
+    }
+    binding = _binding(git_commit, reconciled)
+    evidence.capture_live18_acceptance(
+        manifest=manifest,
+        binding=binding,
+        workflow_run_id=123,
+        workflow_run_attempt=1,
+        artifact_id=456,
+        artifact_sha256="3" * 64,
+        artifact_digest="sha256:" + "4" * 64,
+    )
+
+    wrong_run = json.loads(json.dumps(manifest))
+    wrong_run["run"]["attempt"] = "2"
+    with pytest.raises(evidence.EvidenceError, match="does not match"):
+        evidence.reconcile_railway_deferred_deployment(
+            **{**common, "live18_manifest": wrong_run}
+        )
+
+    wrong_origin = json.loads(json.dumps(manifest))
+    wrong_origin["deployment"]["origins"]["api"] = "https://other.up.railway.app"
+    with pytest.raises(evidence.EvidenceError, match="does not match"):
+        evidence.reconcile_railway_deferred_deployment(
+            **{**common, "live18_manifest": wrong_origin}
+        )
+
+    with pytest.raises(evidence.EvidenceError, match="artifact identity"):
+        evidence.reconcile_railway_deferred_deployment(
+            **{**common, "live18_artifact_digest": "sha256:wrong"}
+        )
 
 
 def test_live18_acceptance_requires_exact_matrix_and_runtime_reconciliation():
@@ -1158,6 +1245,12 @@ def test_workflow_is_read_only_and_never_changes_readiness():
     assert "canonical-free-staging / baseline" in workflow
     assert 'test "$((railway_success + render_success))" = 1' in workflow
     assert 'deployment_name="railway-canonical-staging-$REVIEWED_SHA"' in workflow
+    assert "reconcile-railway-deployment" in workflow
+    assert "deployment-maintenance.json" in workflow
+    assert '--workflow-run-id "$DEPLOYMENT_WORKFLOW_RUN_ID"' in workflow
+    assert '--workflow-run-attempt "$run_attempt"' in workflow
+    assert '--live18-artifact-id "$live18_id"' in workflow
+    assert '--live18-artifact-digest "$live18_digest"' in workflow
     assert (
         'deployment_name="canonical-staging-baseline-$DEPLOYMENT_WORKFLOW_RUN_ID"'
         in workflow

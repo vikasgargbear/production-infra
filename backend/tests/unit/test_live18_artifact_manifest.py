@@ -157,6 +157,7 @@ def _railway_demo_receipt(*, run_id: str, run_attempt: str) -> dict[str, object]
         "project_ref": "rgihahbmkrmhitjdjvev",
         "run_id": run_id,
         "run_attempt": run_attempt,
+        "write_fence": {"state": "open", "commit_sha": SHA},
     }
     value["content_sha256"] = hashlib.sha256(
         json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
