@@ -51,7 +51,8 @@ const validOrder = (): Order => ({
     expected_delivery_date: '2026-08-29',
     customer_id: ids.customer,
     shipping_address_data: { address_id: ids.address, row_version: '7' },
-    discount_amount: '0.00',
+    document_discount_amount: '0.00',
+    discount_amount: '17.25',
     delivery_charges: '0.00',
     other_charges: '0.00',
     items: [{
@@ -128,6 +129,43 @@ describe('sales-order visible prepare action', () => {
         const alert = await screen.findByRole('alert');
         expect(alert.textContent).toBe('Item 1 billed quantity must be greater than zero');
         expect(alert.getAttribute('data-message-type')).toBe('error');
+        expect(ordersApi.prepareCanonical).not.toHaveBeenCalled();
+    });
+
+    it('does not mistake the calculated line-discount total for a document discount', async () => {
+        const order = validOrder();
+        order.items[0].discount_percent = '10.000000';
+        order.discount_amount = '17.25';
+        render(<PrepareHarness order={order} />);
+
+        await userEvent.click(screen.getByRole('button', { name: 'Generate Order' }));
+
+        await waitFor(() => expect(ordersApi.prepareCanonical).toHaveBeenCalledTimes(1));
+        expect(ordersApi.prepareCanonical).toHaveBeenCalledWith(expect.objectContaining({
+            document_discount: expect.objectContaining({
+                document_discount_kind: 'none',
+                document_discount_value: '0',
+            }),
+            lines: [expect.objectContaining({
+                line_discount: {
+                    line_discount_kind: 'percent',
+                    line_discount_basis: 'taxable_value',
+                    line_discount_value: '10.000000',
+                },
+            })],
+        }));
+    });
+
+    it('fails closed if an unsupported document discount is explicitly introduced', async () => {
+        const order = validOrder();
+        order.document_discount_amount = '1.00';
+        render(<PrepareHarness order={order} />);
+
+        await userEvent.click(screen.getByRole('button', { name: 'Generate Order' }));
+
+        expect((await screen.findByRole('alert')).textContent).toBe(
+            'Order document discount is not supported by canonical sales-order posting',
+        );
         expect(ordersApi.prepareCanonical).not.toHaveBeenCalled();
     });
 });

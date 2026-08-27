@@ -75,7 +75,7 @@ export function buildCanonicalSalesOrderCommand(
 ): Record<string, unknown> {
     if (!policy) throw new Error('Canonical commercial document policy is unavailable');
     if (!order.items.length) throw new Error('Add at least one product before preparing the order');
-    requireZero(order.discount_amount, 'Order document discount', 2);
+    requireZero(order.document_discount_amount, 'Order document discount', 2, true);
     requireZero(order.delivery_charges, 'Order delivery charges', 2, true);
     requireZero(order.other_charges, 'Order other charges', 2);
     const branchId = uuid(order.items[0].branch_id, 'Order branch');

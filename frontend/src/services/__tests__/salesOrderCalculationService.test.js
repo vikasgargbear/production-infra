@@ -16,7 +16,8 @@ const order = {
   gst_type: 'CGST/SGST',
   delivery_charges: 0,
   other_charges: 0,
-  discount_amount: 0,
+  document_discount_amount: '0.00',
+  discount_amount: '17.25',
   items: [{
     product_id: '10000000-0000-7000-8000-000000000002',
     branch_id: '10000000-0000-7000-8000-000000000003',
@@ -35,6 +36,7 @@ test('preserves UUIDs, six-place quantities and >2^53 rates into exact API strin
   expect(salesOrderCalculationsApi.preview).toHaveBeenCalledWith(expect.objectContaining({
     branch_id: order.items[0].branch_id,
     customer_id: order.customer_id,
+    discount_amount: '0.00',
     items: [expect.objectContaining({ quantity: '0.123456', unit_price: '9007199254740993.000000' })],
   }));
   expect(salesOrderCalculationsApi.preview.mock.calls[0][0].items[0]).not.toHaveProperty('tax_percent');

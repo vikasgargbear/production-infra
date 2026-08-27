@@ -126,6 +126,9 @@ export interface Order {
 
     // Financial (all nullable in DB)
     subtotal_amount: EditableDecimalValue;
+    /** Explicit editable document-level discount. Line discounts are not stored here. */
+    document_discount_amount?: EditableDecimalValue;
+    /** Authoritative aggregate of line and document discounts for display. */
     discount_amount: EditableDecimalValue;
     tax_amount: EditableDecimalValue;
     cgst_amount: EditableDecimalValue;

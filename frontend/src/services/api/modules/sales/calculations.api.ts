@@ -154,7 +154,11 @@ export const salesOrderCalculationsApi = {
     preview: (
         data: SalesOrderCalculationRequest
     ): Promise<AxiosResponse<InvoiceCalculationResponse>> => {
-        return apiHelpers.post<InvoiceCalculationResponse>('/calculations/sales-order', data);
+        return apiHelpers.post<InvoiceCalculationResponse>(
+            '/calculations/sales-order',
+            data,
+            { preserveExactDecimals: true },
+        );
     }
 };
 

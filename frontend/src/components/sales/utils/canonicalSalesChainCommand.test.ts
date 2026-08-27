@@ -175,9 +175,9 @@ test('sales order derives the immaterial zero-free treatment but requires it for
 });
 
 test.each([
-  ['document discount', { discount_amount: '1.00', other_charges: '0.00' }],
-  ['delivery charge', { discount_amount: '0.00', other_charges: '0.00', delivery_charges: '1.00' }],
-  ['other charge', { discount_amount: '0.00', other_charges: '1.00' }],
+  ['document discount', { document_discount_amount: '1.00', other_charges: '0.00' }],
+  ['delivery charge', { document_discount_amount: '0.00', other_charges: '0.00', delivery_charges: '1.00' }],
+  ['other charge', { document_discount_amount: '0.00', other_charges: '1.00' }],
 ])('sales order rejects unsupported nonzero %s', (_label, documentOverride) => {
   expect(() => buildCanonicalSalesOrderCommand({
     order_date: '2026-08-25', customer_id: ids.customer, ...documentOverride,

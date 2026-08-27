@@ -125,7 +125,10 @@ function toRequest(order: Order): SalesOrderCalculationRequest {
         }),
         delivery_charges: inputMoney(order.delivery_charges, 'Sales order delivery charges'),
         other_charges: inputMoney(order.other_charges, 'Sales order other charges'),
-        discount_amount: inputMoney(order.discount_amount, 'Sales order discount amount'),
+        discount_amount: inputMoney(
+            required(order.document_discount_amount, 'Sales order document discount amount'),
+            'Sales order document discount amount',
+        ),
     };
 }
 
