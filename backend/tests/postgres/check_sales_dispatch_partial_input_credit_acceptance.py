@@ -11,7 +11,12 @@ from uuid import UUID, uuid4
 
 import psycopg2
 from psycopg2.extensions import AsIs, register_adapter
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
 
+from app.api.routes.canonical_sales_chain_reads import (
+    _sales_dispatch_valuation_acceptance_readback,
+)
 from app.domain.operator_actions.contract import ACTION_POLICIES, PREPARE_PAYLOAD_MODELS
 from app.domain.operator_actions.models import ActionErrorCode, OperatorActionError
 from scripts import provision_canonical_demo as fixture
@@ -376,6 +381,24 @@ def main() -> None:
         assert replayed.resource_id == executed.resource_id
 
     _reconcile(runtime_dsn, dispatch_id, batch_id, lot_id)
+    runtime_engine = create_engine(runtime_url)
+    try:
+        with Session(runtime_engine) as session:
+            readback = _sales_dispatch_valuation_acceptance_readback(
+                dispatch_id,
+                {
+                    "org_id": fixture.IDS["org"],
+                    "auth_user_id": fixture.IDS["operator_auth_user"],
+                },
+                session,
+            )
+        assert readback.dispatch_id == dispatch_id
+        assert readback.sales_order_id == order_id
+        assert readback.status == "posted"
+        assert len(readback.lines) == 1
+        assert readback.lines[0].sales_order_line_id == order_line_id
+    finally:
+        runtime_engine.dispose()
     with psycopg2.connect(admin_dsn) as connection, connection.cursor() as cursor:
         cursor.execute("SELECT remaining_base_quantity,remaining_cgst_amount,remaining_sgst_amount,row_version "
                        "FROM tax.input_credit_lots WHERE org_id=%s AND id=%s",

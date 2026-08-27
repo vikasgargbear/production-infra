@@ -350,9 +350,33 @@ def test_dispatch_readback_uses_canonical_stock_ledger_columns(monkeypatch):
     assert "ledger.quantity_delta" in captured["sql"]
     assert "ledger.value_delta" in captured["sql"]
     assert "ledger.quantity)" not in captured["sql"]
+    assert "dispatch.sales_order_id" not in captured["sql"]
+    assert "JOIN sales.order_lines order_line" in captured["sql"]
+    assert "GROUP BY order_line.order_id" in captured["sql"]
+    assert "min(order_line.order_id)" not in captured["sql"]
     assert captured["params"] == {"org_id": org_id, "dispatch_id": dispatch_id}
     assert "inventory_value" not in result.model_dump()
     assert "ledger_value" not in result.lines[0].model_dump()
+
+
+def test_dispatch_readback_fails_closed_when_lines_span_sales_orders(monkeypatch):
+    first = valid_dispatch_valuation_row()
+    second = valid_dispatch_valuation_row()
+    second.update(
+        dispatch_id=first["dispatch_id"],
+        challan_number=first["challan_number"],
+        inventory_document_id=first["inventory_document_id"],
+    )
+    monkeypatch.setattr(reads, "_activate", lambda db, user: uuid4())
+    monkeypatch.setattr(reads, "_rows", lambda db, sql, params: [first, second])
+
+    with pytest.raises(reads.HTTPException) as failure:
+        reads._sales_dispatch_valuation_acceptance_readback(
+            first["dispatch_id"], {"org_id": str(uuid4())}, object()
+        )
+
+    assert failure.value.status_code == 404
+    assert failure.value.detail == "Posted canonical sales dispatch readback not found"
 
 
 def test_dispatch_valuation_readback_remains_internal_and_exact(monkeypatch):
