@@ -1,6 +1,7 @@
 import {
   canonicalBusinessDateInputMax,
   canonicalBusinessTimestampInputMax,
+  canonicalSourceTimestampInputMin,
   requireCanonicalPostingDate,
   requireCanonicalPostingTimestamp,
 } from './canonicalPostingDate';
@@ -23,17 +24,25 @@ describe('canonical posting date authority', () => {
   });
 
   it('validates organization-local posting timestamps without using the browser clock', () => {
-    expect(requireCanonicalPostingTimestamp('2026-08-28T23:59', '2026-08-28', 'Receipt time'))
-      .toBe('2026-08-28T23:59');
-    expect(() => requireCanonicalPostingTimestamp('2026-08-29T00:00', '2026-08-28', 'Receipt time'))
-      .toThrow('Receipt time cannot be later than the authoritative organization date.');
-    expect(() => requireCanonicalPostingTimestamp('2026-08-28T25:90', '2026-08-28', 'Receipt time'))
+    expect(requireCanonicalPostingTimestamp(
+      '2026-08-28T10:29', '2026-08-28T10:30:00.123456', 'Receipt time', '2026-08-27',
+    )).toBe('2026-08-28T10:29');
+    expect(() => requireCanonicalPostingTimestamp(
+      '2026-08-28T10:31', '2026-08-28T10:30:00.123456', 'Receipt time',
+    )).toThrow('Receipt time cannot be later than the authoritative organization time.');
+    expect(() => requireCanonicalPostingTimestamp(
+      '2026-08-26T23:59', '2026-08-28T10:30:00.123456', 'Receipt time', '2026-08-27',
+    )).toThrow('Receipt time cannot precede its source document date.');
+    expect(() => requireCanonicalPostingTimestamp('2026-08-28T25:90', '2026-08-28T10:30:00', 'Receipt time'))
       .toThrow('Receipt time must include an exact local date and time.');
   });
 
   it('publishes HTML maxima only for valid server dates', () => {
     expect(canonicalBusinessDateInputMax('2026-08-28')).toBe('2026-08-28');
-    expect(canonicalBusinessTimestampInputMax('2026-08-28')).toBe('2026-08-28T23:59:59');
+    expect(canonicalBusinessTimestampInputMax('2026-08-28T10:30:00.123456'))
+      .toBe('2026-08-28T10:30:00.123456');
+    expect(canonicalSourceTimestampInputMin('2026-08-27')).toBe('2026-08-27T00:00');
+    expect(canonicalBusinessTimestampInputMax('2026-08-28')).toBeUndefined();
     expect(canonicalBusinessDateInputMax('28-08-2026')).toBeUndefined();
   });
 });

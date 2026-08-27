@@ -22,6 +22,7 @@ import { toast } from 'react-toastify';
 import { ReturnInvoiceSelector } from './components/ReturnInvoiceSelector';
 import { ReturnItemsTable } from './components/ReturnItemsTable';
 import { ReturnReviewPanel } from './components/ReturnReviewPanel';
+import ReturnBusinessDateGate from './components/ReturnBusinessDateGate';
 
 // Import hooks and types
 import { useSalesReturnState } from './hooks/useSalesReturnState';
@@ -38,7 +39,7 @@ import { formatCalendarDate } from '../../utils/calendarDate';
 import { returnFlowOwnsEscape } from './utils/returnKeyboardBoundary';
 import { formatCanonicalReasonCode } from './utils/canonicalReturnCommand';
 import { addExactDecimals, compareExactDecimals, exactDecimalUnits } from '../../utils/exactDecimal';
-import { canonicalBusinessContextApi } from '../../services/api/modules/org/canonicalBusinessContext.api';
+import { useCanonicalBusinessDate } from '../../hooks/useCanonicalBusinessDate';
 import { isCanonicalUuid } from '../../utils/canonicalUuid';
 import {
   authoritativeReturnQuantity,
@@ -59,7 +60,12 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
   const [showDetailsExpanded, setShowDetailsExpanded] = useState(true);
   const [preparing, setPreparing] = useState(false);
   const [preparedApproval, setPreparedApproval] = useState<AwaitingIndependentApproval | null>(null);
-  const [authoritativeBusinessDate, setAuthoritativeBusinessDate] = useState('');
+  const {
+    businessDate: authoritativeBusinessDate,
+    loading: businessDateLoading,
+    error: businessDateError,
+    retry: retryBusinessDate,
+  } = useCanonicalBusinessDate();
   const prepareKeyRef = useRef(`erp-web-sales-return-prepare:${clientUuid()}`);
 
   // Determine if all required header fields are filled (for compact mode)
@@ -85,21 +91,11 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
   const { canPrepare, unavailableReason } = getSalesReturnSubmissionBoundary(returnData as any);
 
   useEffect(() => {
-    let active = true;
-    void canonicalBusinessContextApi.get().then(context => {
-      if (!active) return;
-      setAuthoritativeBusinessDate(context.business_date);
-      if (!returnDataRef.current.return_date) dispatch({
+    if (authoritativeBusinessDate && !returnDataRef.current.return_date) dispatch({
           type: 'SET_RETURN_DATA',
-          data: { return_date: context.business_date },
+          data: { return_date: authoritativeBusinessDate },
         });
-    }).catch(error => {
-      if (active) toast.error(
-        error instanceof Error ? error.message : 'Unable to load the organization business date.',
-      );
-    });
-    return () => { active = false; };
-  }, [dispatch]);
+  }, [authoritativeBusinessDate, dispatch]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -644,33 +640,35 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
                 </>
               )}
 
-              {authoritativeBusinessDate && returnData.return_date ? <ReturnInvoiceSelector
-                selectedCustomer={selectedCustomer}
-                selectedInvoice={selectedInvoice}
-                onInvoiceSelect={handleInvoiceSelect}
-                onChangeInvoice={() => {
-                  dispatch({ type: 'SET_SELECTED_INVOICE', invoice: null });
-                  dispatch({ type: 'SET_RETURN_REASONS', reasons: [] });
-                  dispatch({
-                    type: 'SET_RETURN_DATA',
-                    data: {
-                      invoice_id: '', invoice_number: '', invoice_date: '', original_invoice: null,
-                      items: [], subtotal_amount: '', tax_amount: '', total_amount: '',
-                      return_reason: '', return_reason_choices: [], branch_id: '', gst_tax_treatment: '',
-                      statutory_itc_reversal_evidence: [],
-                      recipient_itc_reversal_evidence_attachment_id: '',
-                      recipient_itc_reversal_confirmed_at: '',
-                    },
-                  });
-                  dispatch({ type: 'SET_SHOW_INVOICE_SECTION', show: true });
-                }}
-                showInvoiceSection={ui.showInvoiceSection}
-                invoiceSearchRef={invoiceSearchRef}
-              /> : (
-                <p role="status" className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
-                  Loading the authoritative organization date before invoice selection…
-                </p>
-              )}
+              <ReturnBusinessDateGate
+                loading={businessDateLoading || (!businessDateError && (!authoritativeBusinessDate || !returnData.return_date))}
+                error={businessDateError}
+                onRetry={retryBusinessDate}
+              >
+                <ReturnInvoiceSelector
+                  selectedCustomer={selectedCustomer}
+                  selectedInvoice={selectedInvoice}
+                  onInvoiceSelect={handleInvoiceSelect}
+                  onChangeInvoice={() => {
+                    dispatch({ type: 'SET_SELECTED_INVOICE', invoice: null });
+                    dispatch({ type: 'SET_RETURN_REASONS', reasons: [] });
+                    dispatch({
+                      type: 'SET_RETURN_DATA',
+                      data: {
+                        invoice_id: '', invoice_number: '', invoice_date: '', original_invoice: null,
+                        items: [], subtotal_amount: '', tax_amount: '', total_amount: '',
+                        return_reason: '', return_reason_choices: [], branch_id: '', gst_tax_treatment: '',
+                        statutory_itc_reversal_evidence: [],
+                        recipient_itc_reversal_evidence_attachment_id: '',
+                        recipient_itc_reversal_confirmed_at: '',
+                      },
+                    });
+                    dispatch({ type: 'SET_SHOW_INVOICE_SECTION', show: true });
+                  }}
+                  showInvoiceSection={ui.showInvoiceSection}
+                  invoiceSearchRef={invoiceSearchRef}
+                />
+              </ReturnBusinessDateGate>
 
               {selectedInvoice && (
                 <div className="mb-4 grid gap-4 rounded-lg border border-gray-300 bg-white p-4 shadow-sm md:grid-cols-2">

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { canonicalBusinessContextApi } from '../services/api/modules/org/canonicalBusinessContext.api';
 import type { CanonicalDocumentPolicy } from '../services/api/modules/org/canonicalBusinessContext.api';
 import type { CalendarDate } from '../utils/calendarDate';
@@ -9,9 +9,10 @@ interface CanonicalBusinessDateState {
   documentPolicy: CanonicalDocumentPolicy | null;
   loading: boolean;
   error: string;
+  retry: () => void;
 }
 
-const initialState: CanonicalBusinessDateState = {
+const initialState: Omit<CanonicalBusinessDateState, 'retry'> = {
   businessDate: '',
   organizationTimezone: '',
   documentPolicy: null,
@@ -20,10 +21,13 @@ const initialState: CanonicalBusinessDateState = {
 };
 
 export function useCanonicalBusinessDate(): CanonicalBusinessDateState {
-  const [state, setState] = useState<CanonicalBusinessDateState>(initialState);
+  const [state, setState] = useState(initialState);
+  const [requestVersion, setRequestVersion] = useState(0);
+  const retry = useCallback(() => setRequestVersion(version => version + 1), []);
 
   useEffect(() => {
     let active = true;
+    setState({ ...initialState, loading: true });
     void canonicalBusinessContextApi.get().then(context => {
       if (!active) return;
       setState({
@@ -44,7 +48,7 @@ export function useCanonicalBusinessDate(): CanonicalBusinessDateState {
       });
     });
     return () => { active = false; };
-  }, []);
+  }, [requestVersion]);
 
-  return state;
+  return { ...state, retry };
 }

@@ -24,6 +24,7 @@ const context: CanonicalReceiptContext = {
   supplier_account_id: '10000000-0000-7000-8000-000000000003',
   supplier_name: 'Canonical Supplier',
   organization_timezone: 'Asia/Kolkata',
+  business_as_of: '2026-08-28T18:00:00.123456',
   status: 'approved',
   lines: [{
     purchase_order_line_id: '10000000-0000-7000-8000-000000000004',
@@ -58,7 +59,7 @@ function draft() {
     context,
     'CODEX-E2E-PUR-RET-20260825:receipt:retry-0001',
   );
-  value.receivedAt = '2026-08-24T12:00:00Z';
+  value.receivedAt = '2026-08-28T12:00:00+05:30';
   value.lines[0].included = true;
   value.lines[0].batches[0].manufacturerBatchNumber = 'CODEX-E2E-BATCH-RETRY-0001';
   value.lines[0].batches[0].expiresOn = '2027-08-25';

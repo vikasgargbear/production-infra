@@ -12,7 +12,9 @@ describe('canonical goods-receipt read transport', () => {
   beforeEach(() => jest.clearAllMocks());
 
   it('uses the UUID-only purchase-order receipt context', async () => {
-    (apiHelpers.get as jest.Mock).mockResolvedValueOnce({ data: { lines: [] } });
+    (apiHelpers.get as jest.Mock).mockResolvedValueOnce({
+      data: { business_as_of: '2026-08-28T10:30:00.123456', lines: [] },
+    });
     await canonicalGoodsReceiptsApi.getPurchaseOrderContext(PO_ID);
     expect(apiHelpers.get).toHaveBeenCalledWith(
       `/canonical/goods-receipts/purchase-orders/${PO_ID}/context`,
@@ -21,12 +23,22 @@ describe('canonical goods-receipt read transport', () => {
   });
 
   it('reads detail by canonical goods-receipt UUID', async () => {
-    (apiHelpers.get as jest.Mock).mockResolvedValueOnce({ data: { lines: [] } });
+    (apiHelpers.get as jest.Mock).mockResolvedValueOnce({
+      data: { business_as_of: '2026-08-28T10:30:00.123456', lines: [] },
+    });
     await canonicalGoodsReceiptsApi.getDetail(GRN_ID);
     expect(apiHelpers.get).toHaveBeenCalledWith(
       `/canonical/goods-receipts/${GRN_ID}`,
       { preserveExactDecimals: true },
     );
+  });
+
+  it.each([
+    ['context', () => canonicalGoodsReceiptsApi.getPurchaseOrderContext(PO_ID)],
+    ['detail', () => canonicalGoodsReceiptsApi.getDetail(GRN_ID)],
+  ])('fails closed when canonical %s omits the server organization time', async (_label, request) => {
+    (apiHelpers.get as jest.Mock).mockResolvedValueOnce({ data: { lines: [] } });
+    await expect(request()).rejects.toThrow(/missing the server organization time/i);
   });
 
   it.each(['4', 'legacy-id', ''])('fails closed before a legacy identity request (%s)', id => {

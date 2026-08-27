@@ -7,14 +7,14 @@ command and the immutable inventory evidence produced after execution.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Dict, Literal, Optional
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Security
 from fastapi.security import HTTPBearer
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -112,10 +112,18 @@ class ReceiptContextResponse(BaseModel):
     supplier_account_id: UUID
     supplier_name: str
     organization_timezone: str
+    business_as_of: datetime
     status: Literal["approved", "partially_received"]
     lines: list[ReceiptContextLine]
 
     model_config = ConfigDict(extra="forbid")
+
+    @field_validator("business_as_of")
+    @classmethod
+    def require_organization_local_clock(cls, value: datetime) -> datetime:
+        if value.tzinfo is not None:
+            raise ValueError("receipt business_as_of must be organization-local")
+        return value
 
     @model_validator(mode="after")
     def require_receivable_lines(self):
@@ -198,6 +206,7 @@ class ReceiptDetailResponse(BaseModel):
     supplier_account_id: UUID
     supplier_name: str
     organization_timezone: str
+    business_as_of: datetime
     purchase_order_id: UUID
     purchase_order_number: str
     received_at: str
@@ -217,6 +226,13 @@ class ReceiptDetailResponse(BaseModel):
     lines: list[ReceiptDetailLine]
 
     model_config = ConfigDict(extra="forbid")
+
+    @field_validator("business_as_of")
+    @classmethod
+    def require_organization_local_clock(cls, value: datetime) -> datetime:
+        if value.tzinfo is not None:
+            raise ValueError("receipt business_as_of must be organization-local")
+        return value
 
     @model_validator(mode="after")
     def reconcile_document_totals(self):
@@ -267,6 +283,8 @@ def _canonical_purchase_order_receipt_context(
                purchase_order.supplier_account_id,
                party.legal_name AS supplier_name,
                organization.timezone AS organization_timezone,
+               transaction_timestamp() AT TIME ZONE organization.timezone
+                 AS business_as_of,
                purchase_order.status
           FROM procurement.purchase_orders purchase_order
           JOIN core.organizations organization
@@ -393,6 +411,8 @@ def _canonical_goods_receipt_detail(
                receipt.supplier_account_id,
                party.legal_name AS supplier_name,
                organization.timezone AS organization_timezone,
+               transaction_timestamp() AT TIME ZONE organization.timezone
+                 AS business_as_of,
                source.purchase_order_id,
                source.purchase_order_number,
                receipt.received_at::text AS received_at,

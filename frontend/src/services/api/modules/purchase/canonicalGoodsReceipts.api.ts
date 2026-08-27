@@ -1,6 +1,7 @@
 import type { AxiosResponse } from 'axios';
 
 import { isCanonicalUuid } from '../../../../utils/canonicalUuid';
+import { canonicalBusinessTimestampInputMax } from '../../../../utils/canonicalPostingDate';
 import { apiHelpers } from '../../apiClient';
 
 
@@ -44,6 +45,7 @@ export interface CanonicalReceiptContext {
   supplier_account_id: string;
   supplier_name: string;
   organization_timezone: string;
+  business_as_of: string;
   status: 'approved' | 'partially_received';
   lines: CanonicalReceiptContextLine[];
 }
@@ -102,6 +104,7 @@ export interface CanonicalReceiptDetail {
   supplier_account_id: string;
   supplier_name: string;
   organization_timezone: string;
+  business_as_of: string;
   purchase_order_id: string;
   purchase_order_number: string;
   received_at: string;
@@ -128,22 +131,36 @@ function requireUuid(value: string, label: string): string {
   return value;
 }
 
+function requireBusinessAsOf(value: unknown): string {
+  const timestamp = canonicalBusinessTimestampInputMax(value);
+  if (!timestamp || timestamp !== value) {
+    throw new Error('Canonical goods-receipt data is missing the server organization time.');
+  }
+  return timestamp;
+}
+
 export const canonicalGoodsReceiptsApi = {
   getPurchaseOrderContext(
     purchaseOrderId: string,
   ): Promise<AxiosResponse<CanonicalReceiptContext>> {
     const id = requireUuid(purchaseOrderId, 'Purchase order identity');
-    return apiHelpers.get(
+    return apiHelpers.get<CanonicalReceiptContext>(
       `/canonical/goods-receipts/purchase-orders/${id}/context`,
       { preserveExactDecimals: true },
-    );
+    ).then(response => {
+      requireBusinessAsOf(response.data?.business_as_of);
+      return response;
+    });
   },
 
   getDetail(goodsReceiptId: string): Promise<AxiosResponse<CanonicalReceiptDetail>> {
     const id = requireUuid(goodsReceiptId, 'Goods receipt identity');
-    return apiHelpers.get(
+    return apiHelpers.get<CanonicalReceiptDetail>(
       `/canonical/goods-receipts/${id}`,
       { preserveExactDecimals: true },
-    );
+    ).then(response => {
+      requireBusinessAsOf(response.data?.business_as_of);
+      return response;
+    });
   },
 };

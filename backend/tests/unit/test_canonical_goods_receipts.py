@@ -28,6 +28,7 @@ def _detail_payload():
         "supplier_account_id": "10000000-0000-7000-8000-000000000004",
         "supplier_name": "Canonical Supplier",
         "organization_timezone": "Asia/Kolkata",
+        "business_as_of": "2026-08-28T10:31:00.123456",
         "purchase_order_id": "10000000-0000-7000-8000-000000000005",
         "purchase_order_number": "CODEX-E2E-PO-0001",
         "received_at": "2026-08-25 10:30:00+05:30",
@@ -98,6 +99,7 @@ def _context_payload():
         "supplier_account_id": "10000000-0000-7000-8000-000000000004",
         "supplier_name": "Canonical Supplier",
         "organization_timezone": "Asia/Kolkata",
+        "business_as_of": "2026-08-28T10:30:00.123456",
         "status": "approved",
         "lines": [{
             "purchase_order_line_id": "10000000-0000-7000-8000-000000000008",
@@ -168,7 +170,7 @@ def test_openapi_publishes_bearer_auth_and_uuid_path_contracts():
         "scheme": "bearer",
     }
     context_schema = schema["components"]["schemas"]["ReceiptContextResponse"]
-    assert {"order_date", "total_amount"} <= set(context_schema["required"])
+    assert {"order_date", "total_amount", "business_as_of"} <= set(context_schema["required"])
 
 
 def test_purchase_permission_rejects_missing_bearer_token():
@@ -233,6 +235,19 @@ def test_context_requires_at_least_one_receivable_line():
         canonical_goods_receipts.ReceiptContextResponse.model_validate(payload)
 
 
+@pytest.mark.parametrize("payload_factory", [_context_payload, _detail_payload])
+def test_receipt_clock_rejects_a_nonlocal_timestamp(payload_factory):
+    payload = payload_factory()
+    payload["business_as_of"] = "2026-08-28T10:30:00+05:30"
+    model = (
+        canonical_goods_receipts.ReceiptContextResponse
+        if payload_factory is _context_payload
+        else canonical_goods_receipts.ReceiptDetailResponse
+    )
+    with pytest.raises(ValidationError, match="organization-local"):
+        model.model_validate(payload)
+
+
 def test_receipt_wire_decimals_remain_exact_strings():
     context_wire = canonical_goods_receipts.ReceiptContextResponse.model_validate(
         _context_payload()
@@ -247,3 +262,23 @@ def test_receipt_wire_decimals_remain_exact_strings():
     assert detail_wire["total_inventory_value"] == "120.00"
     assert detail_wire["lines"][0]["mrp"] == "20.00"
     assert detail_wire["lines"][0]["inventory"]["current_average_unit_cost"] == "10.0000"
+
+
+def test_context_and_readback_publish_the_postgres_organization_local_clock(monkeypatch):
+    context_payload = _context_payload()
+    context_lines = context_payload.pop("lines")
+    captured_sql: list[str] = []
+
+    def context_one(_db, sql, _params):
+        captured_sql.append(sql)
+        return context_payload
+
+    monkeypatch.setattr(canonical_goods_receipts, "_one", context_one)
+    monkeypatch.setattr(canonical_goods_receipts, "_rows", lambda *_args: context_lines)
+    response = canonical_goods_receipts._canonical_purchase_order_receipt_context(
+        object(), ORG_ID, UUID(str(context_payload["purchase_order_id"]))
+    )
+
+    assert response.business_as_of.isoformat() == "2026-08-28T10:30:00.123456"
+    assert "transaction_timestamp() AT TIME ZONE organization.timezone" in captured_sql[0]
+    assert "CURRENT_TIMESTAMP" not in captured_sql[0]

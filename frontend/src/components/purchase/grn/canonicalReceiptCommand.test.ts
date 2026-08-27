@@ -16,6 +16,7 @@ const context: CanonicalReceiptContext = {
   supplier_account_id: '10000000-0000-7000-8000-000000000003',
   supplier_name: 'Canonical Supplier',
   organization_timezone: 'Asia/Kolkata',
+  business_as_of: '2026-08-28T18:00:00.123456',
   status: 'approved',
   lines: [{
     purchase_order_line_id: '10000000-0000-7000-8000-000000000004',
@@ -50,7 +51,7 @@ function validDraft() {
     context,
     'CODEX-E2E-PUR-RET-20260825:receipt:0001',
   );
-  draft.receivedAt = '2026-08-25T17:29';
+  draft.receivedAt = '2026-08-28T17:29';
   draft.lines[0].included = true;
   draft.lines[0].batches[0].manufacturerBatchNumber = 'CODEX-E2E-BATCH-0001';
   draft.lines[0].batches[0].manufacturedOn = '2026-07-01';
@@ -64,7 +65,7 @@ function validDraft() {
   draft.lines[0].batches[0].qcStatus = 'accepted';
   draft.lines[0].batches[0].toLocationId = context.lines[0].eligible_locations[0].id;
   draft.supplierChallanNumber = 'CODEX-E2E-CH-0001';
-  draft.supplierChallanDate = '2026-08-25';
+  draft.supplierChallanDate = '2026-08-28';
   return draft;
 }
 
@@ -86,7 +87,7 @@ describe('canonical goods-receipt command contract', () => {
       branch_id: context.branch_id,
       supplier_account_id: context.supplier_account_id,
       supplier_challan_number: 'CODEX-E2E-CH-0001',
-      supplier_challan_date: '2026-08-25',
+      supplier_challan_date: '2026-08-28',
       lines: [{
         purchase_order_line_id: context.lines[0].purchase_order_line_id,
         batches: [{
@@ -105,9 +106,9 @@ describe('canonical goods-receipt command contract', () => {
 
   it('serializes the organization-local receipt time with its explicit offset', () => {
     const draft = validDraft();
-    draft.receivedAt = '2026-08-25T17:30';
+    draft.receivedAt = '2026-08-28T17:30';
     const payload = buildCanonicalReceiptPayload(context, draft) as any;
-    expect(payload.received_at).toBe('2026-08-25T17:30:00+05:30');
+    expect(payload.received_at).toBe('2026-08-28T17:30:00+05:30');
   });
 
   it('compares six-place quantities without floating-point tolerance', () => {
