@@ -60,6 +60,7 @@ def main() -> None:
                     "status": "posted" if kind not in {"sales_order", "purchase_order"} else "approved",
                     "date_from": date(2026, 8, 1),
                     "date_to": date(2026, 8, 31),
+                    "document_id": None,
                     "search": "runtime-role-no-match",
                     "limit": 25,
                     "offset": 0,
