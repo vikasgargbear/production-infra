@@ -1,12 +1,5 @@
 #!/usr/bin/env python3
-"""Fail closed until the canonical reset-and-baseline release can be promoted.
-
-Legacy bootstrap SQL and legacy application services remain useful diagnostic
-inputs, but they are not the production migration authority after the reset.
-This audit therefore evaluates only checked-in promotion facts for the
-canonical Alembic baseline, canonical application contract, and operator-action
-boundary. External tax-provider evidence remains a separate release gate.
-"""
+"""Fail closed until the canonical reset-only release can be promoted."""
 
 from __future__ import annotations
 
@@ -145,8 +138,6 @@ def _canonical_authority_issues(
         if isinstance(source, dict)
     }
     migration = canonical_sources.get("backend/alembic", {})
-    legacy = canonical_sources.get("database/02-tables", {})
-    deployment = classification.get("legacy_deployment_plan", {})
     if (
         authority.get("canonical_migration_root") != "backend/alembic"
         or migration.get("classification") != "retain"
@@ -157,29 +148,25 @@ def _canonical_authority_issues(
             "CANONICAL_MIGRATION_AUTHORITY_INVALID",
             "backend/alembic is not the sole retained hash-bound production migration authority",
         ))
-    if (
-        authority.get("bootstrap_ddl_root") != "database/02-tables"
-        or legacy.get("classification") != "retain"
-        or legacy.get("role") != "legacy-bootstrap-only"
-    ):
+    if set(canonical_sources) != {"backend/alembic"}:
         issues.append(PromotionIssue(
-            "LEGACY_BOOTSTRAP_ROLE_INVALID",
-            "database/02-tables must remain classified only as legacy bootstrap history",
+            "MULTIPLE_SCHEMA_AUTHORITIES",
+            "backend/alembic must be the only retained schema authority",
         ))
-    if (
-        deployment.get("path") != authority.get("deployment_entrypoint")
-        or deployment.get("classification") != "retire"
-        or deployment.get("execution_state")
-        != "fail-closed-pending-live-baseline"
-    ):
+    if classification.get("reset_strategy") != {
+        "mode": "reset-only",
+        "conversion_allowed": False,
+        "legacy_runtime_allowed": False,
+        "dual_read_write_allowed": False,
+    }:
         issues.append(PromotionIssue(
-            "LEGACY_DEPLOYMENT_ENTRYPOINT_NOT_RETIRED",
-            "the legacy mixed-SQL deployment entrypoint is not retired and fail-closed",
+            "RESET_ONLY_STRATEGY_INVALID",
+            "schema promotion must prohibit conversion and every legacy compatibility mode",
         ))
     if authority.get("readiness_state") != "production_ready":
         issues.append(PromotionIssue(
             "CANONICAL_LIVE_BASELINE_UNVERIFIED",
-            "schema authority remains non-production until isolated Supabase deployment, runtime cutover, and live evidence are reviewed",
+            "schema authority remains non-production until exact-SHA canonical staging evidence is reviewed",
         ))
     return issues
 

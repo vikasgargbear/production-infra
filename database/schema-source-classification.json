@@ -26,25 +26,13 @@
       "backend/alembic"
     ],
     "unreachable_sources": [
-      "database/09-deployment/01_deploy_to_supabase.sql",
       "database/canonical/commands_tax_provider/tax-provider-commands.sql",
       "database/canonical/ci/bootstrap_supabase_auth.sql",
-      "database/canonical/platform/trigger-foundations.sql",
-      "backend/migrations/add_gstr2b_tables.sql",
-      "backend/migrations/payroll_schema.sql",
-      "database/migrations/create_number_sequences.sql",
-      "backend/migrations/versions/20260108_critical_indexes.py",
-      "backend/migrations/versions/20260108_p2_indexes.py"
+      "database/canonical/platform/trigger-foundations.sql"
     ],
     "reachable_competing_source_count": 0
   },
-  "legacy_deployment_plan": {
-    "path": "database/09-deployment/01_deploy_to_supabase.sql",
-    "classification": "retire",
-    "execution_state": "fail-closed-pending-live-baseline",
-    "reason": "The retired project is disposable and reset-only canonical Alembic supersedes this guarded mixed-SQL plan."
-  },
-  "competing_authority_count": 6,
+  "competing_authority_count": 2,
   "competing_authorities": [
     {
       "id": "canonical-ci-auth-fixture",
@@ -62,41 +50,6 @@
       ],
       "classification": "retain",
       "reason": "Reviewed generator and contract-test inputs outside the executable migration chain; canonical Alembic does not import them."
-    },
-    {
-      "id": "packaged-unmounted-gstr2b-history",
-      "paths": [
-        "backend/migrations/add_gstr2b_tables.sql"
-      ],
-      "classification": "retire",
-      "reason": "No mounted callable or Alembic consumer exists; the only remaining consumer is the obsolete PyInstaller packaging glob."
-    },
-    {
-      "id": "packaged-unmounted-payroll-history",
-      "paths": [
-        "backend/migrations/payroll_schema.sql"
-      ],
-      "classification": "retire",
-      "reason": "No mounted callable or Alembic consumer exists; the only remaining consumer is the obsolete PyInstaller packaging glob."
-    },
-    {
-      "id": "retired-public-document-sequence-history",
-      "paths": [
-        "database/migrations/create_number_sequences.sql"
-      ],
-      "classification": "retire",
-      "reason": "The public integer sequence table is superseded by canonical core.document_sequences and has no runtime or migration consumer."
-    },
-    {
-      "id": "packaged-obsolete-alembic-history",
-      "paths": [
-        "backend/migrations/versions/20260108_critical_indexes.py",
-        "backend/migrations/versions/20260108_p2_indexes.py"
-      ],
-      "classification": "retire",
-      "reason": "These revisions are outside the configured Alembic root and have no runtime import; only the obsolete PyInstaller packaging glob retains them."
     }
-  ],
-  "broken_deployment_include_groups": [],
-  "broken_deployment_include_count": 0
+  ]
 }

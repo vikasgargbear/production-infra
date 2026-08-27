@@ -276,3 +276,47 @@ def test_reset_only_strategy_has_no_retired_project_conversion_tools() -> None:
     assert "canonical-conversion-preflight" not in production_workflow
     assert "compile_legacy_conversion_plan" not in production_workflow
     assert "Require executable canonical constraints and RLS before reset baseline" in production_workflow
+
+
+def test_canonical_alembic_has_no_legacy_packaging_or_schema_history() -> None:
+    retired_files = (
+        "backend/pharma-backend.spec",
+        "database/09-deployment/01_deploy_to_supabase.sql",
+        "database/live-row-count-evidence.json",
+        "database/live-schema-evidence.json",
+    )
+    retired_roots = (
+        "backend/migrations",
+        "database/02-tables",
+        "database/04-triggers",
+        "database/migrations",
+    )
+
+    assert [
+        path for path in retired_files if (REPOSITORY_ROOT / path).exists()
+    ] == []
+    assert [
+        path
+        for path in retired_roots
+        if any(candidate.is_file() for candidate in (REPOSITORY_ROOT / path).rglob("*"))
+    ] == []
+
+    authority = json.loads(
+        (REPOSITORY_ROOT / "database/schema-authority.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    classification = json.loads(
+        (REPOSITORY_ROOT / authority["source_classification_file"]).read_text(
+            encoding="utf-8"
+        )
+    )
+    assert authority["canonical_migration_root"] == "backend/alembic"
+    assert "bootstrap_ddl_root" not in authority
+    assert "deployment_entrypoint" not in authority
+    assert classification["reset_strategy"] == {
+        "mode": "reset-only",
+        "conversion_allowed": False,
+        "legacy_runtime_allowed": False,
+        "dual_read_write_allowed": False,
+    }

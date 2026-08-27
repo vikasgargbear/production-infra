@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Fail-closed database schema and migration readiness audit.
 
-This tool is deliberately read-only. It does not connect to a database or infer
-that legacy bootstrap SQL matches production. It evaluates the effective mounted
+This tool is deliberately read-only. It does not connect to a database. It
+evaluates the effective mounted
 callable graph, the canonical Alembic/model authority, and hash-bound external
 evidence. A repository may claim
 ``production_ready`` only after every blocker reported here is removed.
@@ -113,14 +113,11 @@ def load_authority(repo_root: Path) -> dict:
     authority = json.loads(path.read_text(encoding="utf-8"))
     required = {
         "readiness_state",
-        "bootstrap_ddl_root",
         "canonical_migration_root",
         "canonical_model_file",
         "canonical_model_sha256",
         "canonical_model_catalog_sha256",
         "canonical_transaction_integrity_evidence",
-        "rls_policy_file",
-        "deployment_entrypoint",
         "source_classification_file",
     }
     missing = sorted(required - authority.keys())
@@ -144,11 +141,9 @@ def load_source_classification(authority: Mapping, root: Path) -> dict:
         "readiness_state",
         "canonical_sources",
         "source_reachability",
-        "legacy_deployment_plan",
         "competing_authorities",
         "competing_authority_count",
-        "broken_deployment_include_groups",
-        "broken_deployment_include_count",
+        "reset_strategy",
     }
     missing = sorted(required - classification.keys())
     if missing:
@@ -277,7 +272,6 @@ def check_migration_infrastructure(authority: Mapping, root: Path) -> list[Issue
 
 
 def check_competing_ddl(authority: Mapping, root: Path) -> list[Issue]:
-    bootstrap_root = (root / authority["bootstrap_ddl_root"]).resolve()
     migration_root = (root / authority["canonical_migration_root"]).resolve()
     offenders: list[tuple[Path, int]] = []
     create_pattern = re.compile(r"(?im)^\s*CREATE\s+TABLE\b")
@@ -303,7 +297,7 @@ def check_competing_ddl(authority: Mapping, root: Path) -> list[Issue]:
         if is_excluded_repository_path(path):
             continue
         resolved = path.resolve()
-        if resolved.is_relative_to(bootstrap_root) or resolved.is_relative_to(migration_root):
+        if resolved.is_relative_to(migration_root):
             continue
         text = path.read_text(encoding="utf-8", errors="replace")
         match = create_pattern.search(text)
@@ -433,7 +427,6 @@ def check_source_reachability(
         str(source.get("path", ""))
         for source in classification.get("canonical_sources", [])
     }
-    declared_sources.add(str(classification.get("legacy_deployment_plan", {}).get("path", "")))
     for group in classification.get("competing_authorities", []):
         declared_sources.update(str(path) for path in group.get("paths", []))
     declared_sources.discard("")
@@ -464,7 +457,6 @@ def check_source_reachability(
         if group.get("classification") == "retire"
         for path in group.get("paths", [])
     }
-    retired_paths.add(classification.get("legacy_deployment_plan", {}).get("path", ""))
     for path in sorted(retired_paths - unreachable_set):
         issues.append(Issue(
             code="retired_schema_source_is_reachable",
@@ -571,17 +563,18 @@ def check_source_classification(
                 path=source.get("path", classification_path),
             ))
 
-    deployment_plan = classification["legacy_deployment_plan"]
-    if (
-        deployment_plan.get("path") != authority["deployment_entrypoint"]
-        or deployment_plan.get("classification") != "retire"
-        or deployment_plan.get("execution_state") != "fail-closed-pending-live-baseline"
-    ):
+    reset = classification["reset_strategy"]
+    if reset != {
+        "mode": "reset-only",
+        "conversion_allowed": False,
+        "legacy_runtime_allowed": False,
+        "dual_read_write_allowed": False,
+    }:
         issues.append(Issue(
-            code="invalid_legacy_deployment_classification",
+            code="invalid_reset_strategy",
             message=(
-                "Legacy deployment plan must match the declared entrypoint and remain "
-                "retired/fail-closed pending the live baseline."
+                "Schema authority requires reset-only with every legacy "
+                "compatibility mode disabled."
             ),
             path=classification_path,
         ))
@@ -646,225 +639,12 @@ def check_source_classification(
             path=relative_path,
         ))
 
-    include_groups = classification["broken_deployment_include_groups"]
-    classified_includes: list[str] = []
-    include_group_ids: list[str] = []
-    for group in include_groups:
-        include_group_ids.append(group.get("id", ""))
-        disposition = group.get("classification")
-        if disposition not in VALID_CLASSIFICATIONS:
-            issues.append(Issue(
-                code="invalid_deploy_include_classification",
-                message=f"Unknown deployment include classification: {disposition!r}.",
-                path=classification_path,
-            ))
-        includes = group.get("includes", [])
-        classified_includes.extend(includes)
-        replacements = group.get("replacements", {})
-        replacement = group.get("replacement")
-        if disposition == "migrate" and not (replacement or replacements):
-            issues.append(Issue(
-                code="migration_classification_missing_replacement",
-                message="Migrating deployment includes must name reviewed replacement candidates.",
-                path=classification_path,
-            ))
-        replacement_paths = ([replacement] if replacement else []) + list(replacements.values())
-        for replacement_path in replacement_paths:
-            if not (root / replacement_path).is_file():
-                issues.append(Issue(
-                    code="classified_replacement_missing",
-                    message="Classified replacement candidate does not exist.",
-                    path=replacement_path,
-                ))
-        if replacements and set(replacements) != set(includes):
-            issues.append(Issue(
-                code="replacement_mapping_incomplete",
-                message="Per-include replacement mapping must cover its full include group.",
-                path=classification_path,
-            ))
-
-    if len(include_group_ids) != len(set(include_group_ids)) or "" in include_group_ids:
-        issues.append(Issue(
-            code="duplicate_deploy_include_group_id",
-            message="Deployment include group IDs must be unique and non-empty.",
-            path=classification_path,
-        ))
-    if len(classified_includes) != len(set(classified_includes)):
-        issues.append(Issue(
-            code="duplicate_classified_deploy_include",
-            message="A broken deployment include is classified more than once.",
-            path=classification_path,
-        ))
-    if len(classified_includes) != classification["broken_deployment_include_count"]:
-        issues.append(Issue(
-            code="classification_deploy_include_count_mismatch",
-            message="Declared broken include count does not match classified includes.",
-            path=classification_path,
-        ))
-
     issues.extend(check_source_reachability(
         authority,
         classification,
         root,
         reachable_relations=reachable_relations,
     ))
-    return issues
-
-
-def check_deployment_includes(authority: Mapping, root: Path) -> list[Issue]:
-    entrypoint = root / authority["deployment_entrypoint"]
-    if not entrypoint.is_file():
-        return [
-            Issue(
-                code="missing_deployment_entrypoint",
-                message="Declared database deployment entrypoint is missing.",
-                path=_relative(entrypoint, root),
-            )
-        ]
-
-    text = entrypoint.read_text(encoding="utf-8", errors="replace")
-    guard_marker = authority.get("deployment_guard_marker")
-    if guard_marker and guard_marker in text:
-        return [
-            Issue(
-                code="deployment_blocked_pending_live_baseline",
-                message=(
-                    "Deployment entrypoint is deliberately fail-closed until the live baseline "
-                    "and canonical migration chain are reviewed."
-                ),
-                path=_relative(entrypoint, root),
-            )
-        ]
-
-    include_pattern = re.compile(r"(?m)^\s*\\i(?:r)?\s+['\"]?([^'\"\s]+)['\"]?\s*$")
-    issues: list[Issue] = []
-    for match in include_pattern.finditer(text):
-        include = match.group(1)
-        target = (entrypoint.parent / include).resolve()
-        if not target.is_file():
-            issues.append(
-                Issue(
-                    code="missing_deploy_include",
-                    message=f"Deployment include does not resolve: {include}",
-                    path=_relative(entrypoint, root),
-                    line=_line_number(text, match.start()),
-                )
-            )
-    if not include_pattern.search(text):
-        issues.append(
-            Issue(
-                code="deployment_has_no_includes",
-                message="Deployment entrypoint does not include any schema or migration files.",
-                path=_relative(entrypoint, root),
-            )
-        )
-    return issues
-
-
-def check_rls_coverage(authority: Mapping, root: Path) -> list[Issue]:
-    bootstrap = root / authority["bootstrap_ddl_root"]
-    definitions = parse_table_definitions(bootstrap.glob("*.sql"))
-    by_name = {definition.name: definition for definition in definitions}
-    global_tables = {name.lower() for name in authority.get("global_tables", [])}
-    tenant_tables = {definition.name for definition in definitions if definition.has_org_id}
-
-    policy_path = root / authority["rls_policy_file"]
-    if not policy_path.is_file():
-        return [
-            Issue(
-                code="missing_rls_policy_file",
-                message="Declared canonical RLS policy file is missing.",
-                path=_relative(policy_path, root),
-            )
-        ]
-
-    policy_text = policy_path.read_text(encoding="utf-8", errors="replace")
-    enabled = {
-        name.lower()
-        for name in re.findall(
-            r"(?i)ALTER\s+TABLE\s+([a-z_]\w*\.[a-z_]\w*)\s+ENABLE\s+ROW\s+LEVEL\s+SECURITY",
-            policy_text,
-        )
-    }
-    forced = {
-        name.lower()
-        for name in re.findall(
-            r"(?i)ALTER\s+TABLE\s+([a-z_]\w*\.[a-z_]\w*)\s+FORCE\s+ROW\s+LEVEL\s+SECURITY",
-            policy_text,
-        )
-    }
-
-    issues: list[Issue] = []
-    for name in sorted(tenant_tables - global_tables):
-        definition = by_name[name]
-        if name not in enabled:
-            issues.append(
-                Issue(
-                    code="tenant_table_missing_rls",
-                    message=f"Tenant-owned table has org_id but RLS is not enabled: {name}",
-                    path=_relative(definition.path, root),
-                    line=definition.line,
-                )
-            )
-        elif name not in forced:
-            issues.append(
-                Issue(
-                    code="tenant_table_missing_force_rls",
-                    message=f"Tenant-owned table does not FORCE RLS for owner-role safety: {name}",
-                    path=_relative(policy_path, root),
-                )
-            )
-
-    for name in sorted(enabled - by_name.keys()):
-        match = re.search(
-            rf"(?i)ALTER\s+TABLE\s+{re.escape(name)}\s+ENABLE\s+ROW\s+LEVEL\s+SECURITY",
-            policy_text,
-        )
-        issues.append(
-            Issue(
-                code="rls_targets_unknown_table",
-                message=f"RLS policy targets a table absent from bootstrap DDL: {name}",
-                path=_relative(policy_path, root),
-                line=_line_number(policy_text, match.start()) if match else None,
-            )
-        )
-
-    for definition in definitions:
-        if definition.name in global_tables or definition.has_org_id:
-            continue
-        if definition.references & tenant_tables and definition.name not in enabled:
-            issues.append(
-                Issue(
-                    code="tenant_child_missing_scope",
-                    message=(
-                        f"Child table references tenant-owned data but has neither org_id nor RLS: "
-                        f"{definition.name}"
-                    ),
-                    path=_relative(definition.path, root),
-                    line=definition.line,
-                )
-            )
-
-    expected_setting = authority.get("expected_tenant_setting")
-    if expected_setting:
-        for sql_path in root.rglob("*.sql"):
-            sql_text = sql_path.read_text(encoding="utf-8", errors="replace")
-            for match in re.finditer(r"current_setting\(\s*'([^']+)'", sql_text, re.IGNORECASE):
-                actual = match.group(1)
-                # PostgreSQL settings serve many unrelated purposes. Only org
-                # context aliases compete with the declared tenant boundary.
-                if actual != expected_setting and "org_id" in actual.lower():
-                    issues.append(
-                        Issue(
-                            code="conflicting_tenant_setting",
-                            message=(
-                                f"RLS/session SQL reads {actual!r}; authority requires "
-                                f"{expected_setting!r}."
-                            ),
-                            path=_relative(sql_path, root),
-                            line=_line_number(sql_text, match.start()),
-                        )
-                    )
     return issues
 
 
@@ -1196,22 +976,6 @@ def check_transaction_integrity_evidence(
     return issues
 
 
-def check_legacy_deployment_guard(authority: Mapping, root: Path) -> list[Issue]:
-    deployment_issues = check_deployment_includes(authority, root)
-    if [issue.code for issue in deployment_issues] == [
-        "deployment_blocked_pending_live_baseline"
-    ]:
-        return []
-    return deployment_issues + [Issue(
-        code="legacy_deployment_guard_missing",
-        message=(
-            "The retired mixed-SQL deployment entrypoint must remain fail-closed; "
-            "canonical Alembic is the only production migration authority."
-        ),
-        path=authority["deployment_entrypoint"],
-    )]
-
-
 def audit_repository(repo_root: Path) -> ReadinessReport:
     root = repo_root.resolve()
     authority = load_authority(root)
@@ -1219,7 +983,6 @@ def audit_repository(repo_root: Path) -> ReadinessReport:
     issues.extend(check_authority_state(authority, root))
     issues.extend(check_migration_infrastructure(authority, root))
     issues.extend(check_source_classification(authority, root))
-    issues.extend(check_legacy_deployment_guard(authority, root))
     issues.extend(check_canonical_model_authority(authority, root))
     issues.extend(check_transaction_integrity_evidence(authority, root, required=True))
     issues.sort(key=lambda issue: (issue.code, issue.path, issue.line or 0))
@@ -1227,19 +990,12 @@ def audit_repository(repo_root: Path) -> ReadinessReport:
 
 
 def audit_authority_contract(repo_root: Path) -> tuple[Issue, ...]:
-    """Validate the declared authority without treating retired DDL as the target.
-
-    The full repository audit remains available as a legacy cleanup diagnostic.
-    Reset-and-baseline promotion instead needs proof that every competing source
-    is classified, canonical Alembic infrastructure is complete, and the mixed
-    legacy deploy script stays guarded until cutover.
-    """
+    """Validate reset-only canonical Alembic and all classified source inputs."""
     root = repo_root.resolve()
     authority = load_authority(root)
     issues: list[Issue] = []
     issues.extend(check_migration_infrastructure(authority, root))
     issues.extend(check_source_classification(authority, root))
-    issues.extend(check_legacy_deployment_guard(authority, root))
     issues.extend(check_canonical_model_authority(authority, root))
     issues.extend(check_transaction_integrity_evidence(authority, root, required=False))
     issues.sort(key=lambda issue: (issue.code, issue.path, issue.line or 0))

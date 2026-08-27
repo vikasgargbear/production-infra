@@ -1,11 +1,8 @@
 #!/usr/bin/env python3
 """Fail-closed release audit for the canonical transaction database boundary.
 
-The checked-in ``database/live-schema-evidence.json`` describes the retired
-legacy Supabase source project. It remains migration evidence, but it must not
-be interpreted as evidence about the isolated canonical staging project. This
-audit therefore separates the hash-bound Alembic contract from a fresh,
-external exact-SHA capture from canonical staging.
+Static facts come only from the canonical Alembic chain. Promotion additionally
+requires a fresh, external exact-SHA capture from canonical staging.
 """
 
 from __future__ import annotations
@@ -22,6 +19,7 @@ from typing import Any, Mapping
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 CANONICAL_STAGING_PROJECT_REF = "rgihahbmkrmhitjdjvev"
+# Negative-test sentinel only; this project is never queried or treated as evidence.
 RETIRED_SOURCE_PROJECT_REF = "jfrairkkzxwkhbtqejnz"
 EVIDENCE_SCHEMA_VERSION = "1.0.0"
 
@@ -92,13 +90,6 @@ def _static_canonical_issues(root: Path) -> list[IntegrityIssue]:
         issues.append(IntegrityIssue(
             "CANONICAL_MIGRATION_AUTHORITY_INVALID",
             "backend/alembic must be the canonical production migration authority",
-        ))
-
-    legacy_capture = _json(root, "database/live-schema-evidence.json")
-    if legacy_capture.get("project_ref") != RETIRED_SOURCE_PROJECT_REF:
-        issues.append(IntegrityIssue(
-            "RETIRED_SOURCE_EVIDENCE_IDENTITY_INVALID",
-            "the checked-in historical schema capture no longer identifies the retired source project",
         ))
 
     baseline = _read(root, "backend/alembic/sql/20260820_0001_canonical_v1.sql")
