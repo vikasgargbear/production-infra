@@ -243,3 +243,27 @@ def test_unreachable_legacy_sql_operators_and_docs_stay_retired() -> None:
     assert "set_org_context" not in core_sources
     assert "verify_user_org_access" not in core_sources
     assert "master.org_users" not in core_sources
+
+
+def test_reset_only_strategy_has_no_retired_project_conversion_tools() -> None:
+    retired_paths = (
+        ".github/workflows/canonical-conversion-preflight.yml",
+        "backend/scripts/compile_legacy_conversion_plan.py",
+        "backend/scripts/sql/canonical_conversion_preflight.sql",
+        "backend/tests/unit/test_canonical_conversion_preflight.py",
+        "backend/tests/unit/test_legacy_conversion_plan.py",
+        "database/live-conversion-preflight-evidence.json",
+        "database/live-source-relation-inventory.json",
+    )
+
+    assert [
+        path for path in retired_paths if (REPOSITORY_ROOT / path).exists()
+    ] == []
+
+    production_workflow = (
+        REPOSITORY_ROOT / ".github/workflows/production-readiness.yml"
+    ).read_text(encoding="utf-8")
+    assert "run_conversion_preflight" not in production_workflow
+    assert "canonical-conversion-preflight" not in production_workflow
+    assert "compile_legacy_conversion_plan" not in production_workflow
+    assert "Require executable canonical constraints and RLS before reset baseline" in production_workflow

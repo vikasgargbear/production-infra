@@ -198,3 +198,37 @@ def test_promotion_manifest_is_hash_bound(tmp_path):
     ).hexdigest()
     _, errors = gate.validate_promotion_evidence(contract, root=tmp_path)
     assert errors == []
+
+
+def test_promotion_manifest_rejects_conversion_strategy(tmp_path):
+    artifact = tmp_path / "source.json"
+    artifact.write_text('{"strategy":"conversion"}\n', encoding="utf-8")
+    artifact_sha = hashlib.sha256(artifact.read_bytes()).hexdigest()
+    manifest = tmp_path / "promotion.json"
+    manifest_value = {
+        "schema_version": 2,
+        "evidence_state": "incomplete",
+        **{
+            section: {"state": "missing"}
+            for section in gate.PROMOTION_EVIDENCE_SECTIONS
+        },
+        "source_disposition": {
+            "state": "verified",
+            "strategy": "conversion",
+            "source_identifier": "retired-project",
+            "artifact": "source.json",
+            "artifact_sha256": artifact_sha,
+        },
+    }
+    manifest.write_text(json.dumps(manifest_value), encoding="utf-8")
+    contract = {
+        "decision_status": "proposed_app_contract_v1",
+        "promotion_evidence": {
+            "manifest": "promotion.json",
+            "manifest_sha256": hashlib.sha256(manifest.read_bytes()).hexdigest(),
+        },
+    }
+
+    _, errors = gate.validate_promotion_evidence(contract, root=tmp_path)
+
+    assert "promotion evidence source_disposition.strategy must be reset" in errors
