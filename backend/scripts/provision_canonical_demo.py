@@ -195,7 +195,7 @@ IDS["cycle_count_evidence"] = str(
         f"canonical-staging-cycle-count:{IDS['org']}:{DEMO_RUN_ID}:{INDIA_BUSINESS_DATE.isoformat()}",
     )
 )
-for resource_key in ("expense_receipt_evidence",):
+for resource_key in ("expense_receipt_evidence", "customer_receipt_evidence"):
     IDS[resource_key] = str(
         uuid5(
             NAMESPACE_URL,
@@ -2282,6 +2282,13 @@ def seed_end_to_end_master(
                 SOURCE_RETRIEVED_ON,
                 "recipient_itc_reversal",
             ),
+            (
+                IDS["customer_receipt_evidence"],
+                "customer_receipt_evidence",
+                f"customer-receipt-evidence-{DEMO_RUN_ID}.json",
+                SOURCE_RETRIEVED_ON,
+                f"customer_receipt_evidence:{DEMO_RUN_ID}:{DEMO_RUN_ATTEMPT}",
+            ),
         )
         cursor.executemany(
             """
@@ -3430,7 +3437,6 @@ def supplier_advance_payload(purchase_order_id: str, purchase_order_line_id: str
         "payment_date": SOURCE_RETRIEVED_ON.isoformat(),
         "supplier_account_id": IDS["supplier_account"],
         "purchase_order_id": purchase_order_id,
-        "settlement_account_id": IDS["bank_ledger"],
         "bank_account_id": IDS["bank_account"],
         "payment_method": "upi",
         "gross_amount": "500.00",
@@ -3974,6 +3980,7 @@ def supplier_invoice_payload(
                 "allocated_base_billed_quantity": "50",
                 "allocated_base_free_quantity": "2.5",
                 "product_inventory_cost_treatment": "capitalize",
+                "landed_cost_allocation_method": "direct",
                 "itc_eligibility": "eligible",
                 "itc_eligibility_basis": "taxable_resale_not_blocked_under_section_17",
             }
@@ -4403,11 +4410,10 @@ def supplier_payment_payload(open_item_id: str) -> dict[str, Any]:
         "branch_id": IDS["branch"],
         "payment_date": SOURCE_RETRIEVED_ON.isoformat(),
         "supplier_account_id": IDS["supplier_account"],
-        "settlement_account_id": IDS["bank_ledger"],
         "bank_account_id": IDS["bank_account"],
         "payment_method": "bank_transfer",
-        "gross_amount": "2000.00",
-        "allocations": [{"open_item_id": open_item_id, "amount": "2000.00"}],
+        "expected_gross_amount": "2000.00",
+        "allocations": [{"open_item_id": open_item_id, "cash_amount": "2000.00"}],
         "external_reference": f"DEMO-NEFT-PAY-{os.getenv('GITHUB_RUN_ID', 'local')}",
     }
 
@@ -5238,12 +5244,13 @@ def customer_receipt_payload(open_item_id: str) -> dict[str, Any]:
         "branch_id": IDS["branch"],
         "payment_date": SOURCE_RETRIEVED_ON.isoformat(),
         "customer_account_id": IDS["customer_account"],
-        "settlement_account_id": IDS["bank_ledger"],
         "bank_account_id": IDS["bank_account"],
         "payment_method": "upi",
+        "receipt_purpose": "invoice_settlement",
         "amount": "500.00",
         "allocations": [{"open_item_id": open_item_id, "amount": "500.00"}],
         "external_reference": f"DEMO-UPI-RECEIPT-{os.getenv('GITHUB_RUN_ID', 'local')}",
+        "evidence_attachment_id": IDS["customer_receipt_evidence"],
     }
 
 
@@ -5458,7 +5465,11 @@ def reconcile_purchase_return(
         return result
 
 
-def inventory_adjustment_payload(batch_id: str, counted_base_quantity: str) -> dict[str, Any]:
+def inventory_adjustment_payload(
+    batch_id: str,
+    counted_base_quantity: str,
+    stock_balance_row_version: int,
+) -> dict[str, Any]:
     counted_instant = datetime.now(timezone.utc)
     counted_at = counted_instant.isoformat()
     adjustment_date = counted_instant.astimezone(ZoneInfo("Asia/Kolkata")).date()
@@ -5481,7 +5492,11 @@ def inventory_adjustment_payload(batch_id: str, counted_base_quantity: str) -> d
                 "product_id": IDS["product"],
                 "uom_conversion_id": IDS["count_uom_conversion"],
                 "batch_counts": [
-                    {"batch_id": batch_id, "counted_quantity": counted_packs}
+                    {
+                        "batch_id": batch_id,
+                        "counted_quantity": counted_packs,
+                        "stock_balance_row_version": stock_balance_row_version,
+                    }
                 ],
             }
         ],
@@ -5530,7 +5545,7 @@ def reconcile_inventory_adjustment(connection, resource_id: str) -> dict[str, An
         }
 
 
-def current_saleable_quantity(connection, batch_id: str) -> str:
+def current_saleable_balance(connection, batch_id: str) -> tuple[str, int]:
     with connection.cursor() as cursor:
         cursor.execute(
             "SELECT erp_security.activate_context(%s, %s)",
@@ -5538,7 +5553,7 @@ def current_saleable_quantity(connection, batch_id: str) -> str:
         )
         cursor.execute(
             """
-            SELECT on_hand_quantity
+            SELECT on_hand_quantity,row_version
               FROM inventory.stock_balances
              WHERE org_id=%s AND branch_id=%s AND location_id=%s
                AND product_id=%s AND batch_id=%s
@@ -5551,7 +5566,7 @@ def current_saleable_quantity(connection, batch_id: str) -> str:
         row = cursor.fetchone()
         if row is None or row[0] <= 0:
             raise RuntimeError("demo saleable batch balance is unavailable")
-        return str(row[0])
+        return str(row[0]), int(row[1])
 
 
 def seed_live18_cycle_count_evidence(connection) -> dict[str, str]:
@@ -6128,7 +6143,7 @@ def main() -> int:
             runtime,
             supplier_payment_journey["executed"]["resource_id"],
             "disbursement",
-            supplier_payment_request["gross_amount"],
+            supplier_payment_request["expected_gross_amount"],
         )
 
     with database_connection("ERP_RUNTIME_DATABASE_URL") as runtime:
@@ -6253,12 +6268,14 @@ def main() -> int:
             purchase_return_journey["executed"]["resource_id"],
             purchase_return_journey["prepared"]["command_request_id"],
         )
-        saleable_quantity = current_saleable_quantity(
+        saleable_quantity, stock_balance_row_version = current_saleable_balance(
             runtime, receipt_reconciliation["batch_id"]
         )
 
     adjustment_request = inventory_adjustment_payload(
-        receipt_reconciliation["batch_id"], saleable_quantity
+        receipt_reconciliation["batch_id"],
+        saleable_quantity,
+        stock_balance_row_version,
     )
     preflight_action("inventory.adjustment.prepare", adjustment_request)
     adjustment_journey = exercise_action(

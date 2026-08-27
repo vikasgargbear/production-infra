@@ -10,6 +10,8 @@
     "published_prepare_operations": [
       "finance.adjustment_note.prepare",
       "finance.adjustment_note.reversal.prepare",
+      "finance.customer_cheque_bounce.prepare",
+      "finance.customer_cheque_clearance.prepare",
       "finance.customer_receipt.prepare",
       "finance.bank_reconciliation.prepare",
       "finance.expense_claim.prepare",
@@ -282,6 +284,26 @@
       "description": "Prepare an inbound customer receipt with exact amount, method, external reference and receivable allocations."
     },
     {
+      "tool": "erp_customer_cheque_clearance_prepare",
+      "operation_key": "finance.customer_cheque_clearance.prepare",
+      "resource": "payments",
+      "permission": "finance.customer_receipt.create",
+      "risk": "consequential_write",
+      "approval_policy": "separate_approver",
+      "schema_profile": "cheque_instrument_clearance",
+      "description": "Prepare the separately reviewed clearance of one posted account-payee customer cheque into an explicitly selected canonical bank account."
+    },
+    {
+      "tool": "erp_customer_cheque_bounce_prepare",
+      "operation_key": "finance.customer_cheque_bounce.prepare",
+      "resource": "payments",
+      "permission": "finance.customer_receipt.create",
+      "risk": "consequential_write",
+      "approval_policy": "separate_approver",
+      "schema_profile": "cheque_instrument_bounce",
+      "description": "Prepare the separately reviewed compensating bounce of one posted uncleared customer cheque, reopening its exact allocations and reversing its journal."
+    },
+    {
       "tool": "erp_supplier_payment_prepare",
       "operation_key": "finance.supplier_payment.prepare",
       "resource": "payments",
@@ -457,6 +479,24 @@
     },
     {
       "tool": "erp_customer_receipt_readback",
+      "operation_key": "automation.command.status.get",
+      "resource": "payments",
+      "mode": "read",
+      "risk": "read_only",
+      "permission": "automation.command.view",
+      "allowed_fields": ["command_request_id"]
+    },
+    {
+      "tool": "erp_customer_cheque_clearance_readback",
+      "operation_key": "automation.command.status.get",
+      "resource": "payments",
+      "mode": "read",
+      "risk": "read_only",
+      "permission": "automation.command.view",
+      "allowed_fields": ["command_request_id"]
+    },
+    {
+      "tool": "erp_customer_cheque_bounce_readback",
       "operation_key": "automation.command.status.get",
       "resource": "payments",
       "mode": "read",

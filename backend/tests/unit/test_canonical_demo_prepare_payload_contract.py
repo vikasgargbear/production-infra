@@ -187,7 +187,7 @@ def _cases() -> list[tuple[str, str, dict[str, Any], dict[str, Any]]]:
         (
             "inventory_adjustment",
             "inventory.adjustment.prepare",
-            module.inventory_adjustment_payload(UUID_A, "100"),
+            module.inventory_adjustment_payload(UUID_A, "100", 1),
             {"lines.0.batch_counts.0.batch_id": UUID_A},
         ),
     ]

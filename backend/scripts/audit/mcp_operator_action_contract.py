@@ -34,6 +34,8 @@ EXPECTED_PREPARE_TOOLS = {
     "erp_supplier_invoice_prepare",
     "erp_purchase_return_prepare",
     "erp_customer_receipt_prepare",
+    "erp_customer_cheque_clearance_prepare",
+    "erp_customer_cheque_bounce_prepare",
     "erp_supplier_payment_prepare",
     "erp_supplier_advance_prepare",
     "erp_adjustment_note_prepare",
@@ -56,6 +58,8 @@ EXPECTED_SHARED_TOOLS = {
     "erp_sales_return_readback",
     "erp_purchase_return_readback",
     "erp_customer_receipt_readback",
+    "erp_customer_cheque_clearance_readback",
+    "erp_customer_cheque_bounce_readback",
     "erp_supplier_payment_readback",
     "erp_supplier_advance_readback",
     "erp_inventory_transfer_readback",
@@ -148,9 +152,8 @@ BASE_UOM_QUANTITY_FIELDS = {
     "allocated_base_free_quantity",
 }
 
-# These five names are intentionally polymorphic only in the listed, fully
-# qualified contexts. Every other repeated name must retain one recursive JSON
-# shape everywhere it is used.
+# These names are intentionally polymorphic only in the listed, fully qualified
+# contexts. Every other repeated name must retain one recursive JSON shape.
 EXPLICIT_CONTEXT_QUALIFIED_REUSE = {
     "allocations": {
         "erp_customer_receipt_prepare.allocations",
@@ -185,6 +188,7 @@ EXPLICIT_CONTEXT_QUALIFIED_REUSE = {
     },
     "reason_code": {
         "erp_adjustment_note_prepare.reason_code",
+        "erp_customer_cheque_bounce_prepare.reason_code",
         "erp_sales_return_prepare.reason_code",
         "erp_purchase_return_prepare.reason_code",
         "erp_inventory_adjustment_prepare.reason_code",
@@ -193,12 +197,26 @@ EXPLICIT_CONTEXT_QUALIFIED_REUSE = {
     "amount": {
         "erp_customer_receipt_prepare.amount",
         "erp_customer_receipt_prepare.allocations[].amount",
-        "erp_supplier_payment_prepare.allocations[].amount",
+    },
+    "open_item_id": {
+        "erp_customer_receipt_prepare.allocations[].open_item_id",
+        "erp_supplier_payment_prepare.allocations[].open_item_id",
     },
     "bank_account_id": {
         "erp_customer_receipt_prepare.bank_account_id",
+        "erp_customer_cheque_clearance_prepare.bank_account_id",
         "erp_supplier_payment_prepare.bank_account_id",
         "erp_supplier_advance_prepare.bank_account_id",
+    },
+    "evidence_attachment_id": {
+        "erp_customer_receipt_prepare.evidence_attachment_id",
+        "erp_customer_cheque_clearance_prepare.evidence_attachment_id",
+        "erp_customer_cheque_bounce_prepare.evidence_attachment_id",
+        "erp_inventory_adjustment_prepare.evidence_attachment_id",
+    },
+    "sales_order_id": {
+        "erp_customer_receipt_prepare.sales_order_id",
+        "erp_sales_dispatch_prepare.sales_order_id",
     },
     "billed_quantity": {
         "erp_adjustment_note_prepare.lines[].billed_quantity",
@@ -224,6 +242,8 @@ EXPLICIT_CONTEXT_QUALIFIED_REUSE = {
         "erp_sales_return_readback.command_request_id",
         "erp_purchase_return_readback.command_request_id",
         "erp_customer_receipt_readback.command_request_id",
+        "erp_customer_cheque_clearance_readback.command_request_id",
+        "erp_customer_cheque_bounce_readback.command_request_id",
         "erp_supplier_payment_readback.command_request_id",
         "erp_supplier_advance_readback.command_request_id",
         "erp_inventory_transfer_readback.command_request_id",
@@ -289,7 +309,6 @@ EXPLICIT_CONTEXT_QUALIFIED_REUSE = {
         "erp_purchase_return_prepare.lines[].from_location_id",
     },
     "gross_amount": {
-        "erp_supplier_payment_prepare.gross_amount",
         "erp_supplier_advance_prepare.gross_amount",
         "erp_supplier_advance_prepare.allocations[].gross_amount",
     },
@@ -386,6 +405,8 @@ EXPECTED_APPROVAL_POLICIES = {
     "erp_supplier_invoice_prepare": "actor_confirmation",
     "erp_purchase_return_prepare": "separate_approver",
     "erp_customer_receipt_prepare": "actor_confirmation",
+    "erp_customer_cheque_clearance_prepare": "separate_approver",
+    "erp_customer_cheque_bounce_prepare": "separate_approver",
     "erp_supplier_payment_prepare": "actor_confirmation",
     "erp_supplier_advance_prepare": "separate_approver",
     "erp_adjustment_note_prepare": "separate_approver",
@@ -557,7 +578,7 @@ def _validate_workflow_semantics(
             issues.append(f"{tool}: source-derived line lacks {source_id}")
 
     payment_tools = {
-        "erp_customer_receipt_prepare": False,
+        "erp_customer_receipt_prepare": True,
         "erp_supplier_payment_prepare": False,
         "erp_supplier_advance_prepare": False,
     }
@@ -568,15 +589,14 @@ def _validate_workflow_semantics(
         schema = action.input_schema
         properties = schema.get("properties", {})
         required = set(schema.get("required", ()))
-        expected = {
-            "settlement_account_id", "bank_account_id", "payment_method",
-            "external_reference",
-        }
+        expected = {"bank_account_id", "payment_method", "external_reference"}
         if not isinstance(properties, Mapping) or not expected <= set(properties):
             issues.append(f"{tool}: payment settlement conditional fields are incomplete")
             continue
-        if "settlement_account_id" not in required or "payment_method" not in required:
-            issues.append(f"{tool}: payment settlement identity or method is optional")
+        if "settlement_account_id" in properties:
+            issues.append(f"{tool}: settlement ledger must be derived from configuration")
+        if "payment_method" not in required:
+            issues.append(f"{tool}: payment method is optional")
         if "bank_account_id" in required or "external_reference" in required:
             issues.append(f"{tool}: conditional payment fields must remain schema-optional")
         methods = set(properties["payment_method"].get("enum", ()))
@@ -687,7 +707,9 @@ def _validate_schema(schema: Mapping[str, Any], path: str) -> list[str]:
                 continue
             issues.extend(_validate_schema(child, f"{path}.{name}"))
     elif schema_type == "array":
-        if schema.get("minItems", 0) < 1 or schema.get("maxItems", 0) < 1:
+        permits_unapplied_advance = path == "erp_customer_receipt_prepare.allocations"
+        minimum_is_valid = schema.get("minItems", 0) >= (0 if permits_unapplied_advance else 1)
+        if not minimum_is_valid or schema.get("maxItems", 0) < 1:
             issues.append(f"{path}: business arrays must be explicitly bounded and non-empty")
         items = schema.get("items")
         if not isinstance(items, dict):
@@ -919,6 +941,8 @@ def validate(
             if tool in {
                 "erp_adjustment_note_prepare",
                 "erp_bank_reconciliation_prepare",
+                "erp_customer_cheque_clearance_prepare",
+                "erp_customer_cheque_bounce_prepare",
                 "erp_sales_return_reversal_prepare",
                 "erp_purchase_return_reversal_prepare",
                 "erp_adjustment_note_reversal_prepare",
@@ -930,6 +954,8 @@ def validate(
             if tool in {
                 "erp_adjustment_note_prepare",
                 "erp_bank_reconciliation_prepare",
+                "erp_customer_cheque_clearance_prepare",
+                "erp_customer_cheque_bounce_prepare",
                 "erp_sales_return_reversal_prepare",
                 "erp_purchase_return_reversal_prepare",
                 "erp_adjustment_note_reversal_prepare",
