@@ -138,10 +138,24 @@ def test_legacy_live_erp_harness_stays_retired() -> None:
         BACKEND_ROOT / "scripts/audit/test_implementation_audit.py"
     ).read_text(encoding="utf-8")
 
-    assert [path for path in legacy_root.rglob("*") if path.is_file()] == []
+    assert [
+        path
+        for path in legacy_root.rglob("*")
+        if path.is_file() and "__pycache__" not in path.parts
+    ] == []
     assert 'ROOT / "backend/tests/live_canonical"' in implementation_audit
     assert 'ROOT / "backend/tests/live_acceptance"' in implementation_audit
     assert 'ROOT / "backend/tests/live_erp"' not in implementation_audit
+
+    stale_doc_references = []
+    docs_root = BACKEND_ROOT.parent / "docs"
+    allowed_negative_evidence = docs_root / "architecture/legacy-retirement.md"
+    for path in docs_root.rglob("*.md"):
+        if path == allowed_negative_evidence:
+            continue
+        if "tests/live_erp" in path.read_text(encoding="utf-8"):
+            stale_doc_references.append(path.relative_to(BACKEND_ROOT.parent).as_posix())
+    assert stale_doc_references == []
 
 
 def test_stale_developer_guides_stay_retired() -> None:

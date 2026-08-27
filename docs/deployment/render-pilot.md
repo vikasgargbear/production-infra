@@ -129,9 +129,10 @@ curl --fail --silent --show-error https://your-frontend.onrender.com/
 ```
 
 Then perform authenticated tenant-scoped API reads with a short-lived pilot-user
-token. Do not run the mutating `tests/live_erp` suite against a real organization.
-The read-only finance/GST audit is the only existing live suite suitable for a
-non-destructive pilot check.
+token. Treat these as diagnostics, not release evidence. The supported mutating
+acceptance path is the protected exact-SHA Live18 job in
+`.github/workflows/production-readiness.yml`, using only its disposable staging
+organization and users. Never run that matrix against a real organization.
 
 When `/mcp` is eventually mounted, verify it on the backend origin. Until then,
 a missing `/mcp` is expected and remains a release blocker, not a reason to add

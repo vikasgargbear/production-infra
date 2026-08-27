@@ -170,44 +170,17 @@ Check the static frontend separately:
 curl --fail --silent --show-error https://your-frontend.onrender.com/
 ```
 
-Then run only the read-only finance/GST audit:
+These public checks prove process availability only. Production certification
+uses the exact-SHA workflow in `.github/workflows/production-readiness.yml`.
+That workflow provisions a disposable organization and two users, compiles the
+reviewed Live18 fixture, drives all 18 operations through the browser, and
+reconciles UI, REST, MCP, and PostgreSQL evidence. The executable contracts are
+documented in `docs/testing/canonical-live18-acceptance.md`.
 
-```bash
-cd backend
-PHARMA_LIVE_API_BASE_URL="https://your-backend.onrender.com" \
-PHARMA_LIVE_DATABASE_URL="postgresql://..." \
-PHARMA_LIVE_DATABASE_READ_ONLY=true \
-PHARMA_LIVE_ACCESS_TOKEN="short-lived-erp-access-token" \
-PHARMA_LIVE_TEST_ORG_ID="dedicated-test-org-uuid" \
-PHARMA_LIVE_TEST_BRANCH_ID="dedicated-test-branch-id" \
-./venv/bin/pytest -q tests/live_erp/test_live_finance_gst_audit.py
-```
-
-The read-only flag configures the established connection with psycopg's
-`set_session(readonly=True, autocommit=True)`, verifies PostgreSQL reports
-`transaction_read_only=on`, and makes the database reject data-changing
-statements even if a future audit test is edited incorrectly. The verification
-fails closed when a database pooler does not preserve the requested setting.
-
-`PHARMA_LIVE_ACCESS_TOKEN` is the short-lived ERP bearer returned after the
-Supabase session exchange. It is not the `sbp_` management token, the Supabase
-anon key, or the service-role key.
-
-## Mutating Live Verification
-
-The rest of `tests/live_erp` creates, cancels, allocates, adjusts, and reverses
-business records. It uses compensating cleanup rather than a transaction-wide
-rollback. Run it only against a dedicated disposable organization and branch in
-a staging Supabase project or an explicitly isolated test tenant. Never run it
-against the real operating organization.
-
-No fixed pass count is documented because the collected matrix changes with
-the application. Verify collection and the exact target before every run:
-
-```bash
-cd backend
-./venv/bin/pytest --collect-only -q tests/live_erp
-```
+Do not run mutating acceptance commands manually against a real operating
+organization. Live18 must run through the protected workflow against the
+dedicated canonical staging project so its exact SHA, identities, write fence,
+evidence, and cleanup remain bound to one run.
 
 Render free services are suitable for this internal pilot, with accepted cold
 starts. They are not the final production hosting tier for real ERP traffic.
