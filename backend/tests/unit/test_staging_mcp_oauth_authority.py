@@ -261,6 +261,27 @@ def test_web_auth_organization_reconciliation_preserves_existing_metadata(
     ]
 
 
+def test_disposable_mcp_identity_uses_the_canonical_auth_org_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user_id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+    calls: list[tuple[str, str, dict | None]] = []
+
+    def request(_authority, method, path, *, payload=None, params=None):
+        calls.append((method, path, payload))
+        if method == "GET":
+            return {"users": []}
+        return {"id": user_id}
+
+    monkeypatch.setattr(provision, "_auth_admin_json", request)
+
+    assert provision._reconcile_test_user(_auth_admin(), "password") == user_id
+    payload = calls[-1][2]
+    assert payload is not None
+    assert payload["app_metadata"]["org_id"] == provision.DEMO_ORG_ID
+    assert "organization_id" not in payload["app_metadata"]
+
+
 def test_web_auth_organization_reconciliation_is_idempotent(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

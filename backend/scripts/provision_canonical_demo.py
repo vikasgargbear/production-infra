@@ -1149,6 +1149,209 @@ def bootstrap_identity(
         )
 
 
+def reviewed_web_operator_ids(auth_user_id: str) -> dict[str, str]:
+    """Derive stable staging-only database identities for one reviewed Auth user."""
+
+    canonical_auth_user_id = str(UUID(auth_user_id))
+    if canonical_auth_user_id in {
+        IDS["reviewer_auth_user"],
+        IDS["operator_auth_user"],
+    }:
+        raise RuntimeError("reviewed web Auth user must be distinct from demo fixtures")
+    return {
+        "auth_user_id": canonical_auth_user_id,
+        "user_id": str(
+            uuid5(
+                NAMESPACE_URL,
+                f"canonical-staging-web-user:{IDS['org']}:{canonical_auth_user_id}",
+            )
+        ),
+        "membership_id": str(
+            uuid5(
+                NAMESPACE_URL,
+                f"canonical-staging-web-membership:{IDS['org']}:{canonical_auth_user_id}",
+            )
+        ),
+        "access_grant_id": str(
+            uuid5(
+                NAMESPACE_URL,
+                f"canonical-staging-web-access:{IDS['org']}:{canonical_auth_user_id}",
+            )
+        ),
+    }
+
+
+def bind_reviewed_web_operator(connection, auth_user_id: str) -> dict[str, str]:
+    """Restore the reviewed human staging operator after a disposable reset."""
+
+    authority = reviewed_web_operator_ids(auth_user_id)
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT count(*) FROM auth.users WHERE id=%s",
+            (authority["auth_user_id"],),
+        )
+        if cursor.fetchone() != (1,):
+            raise RuntimeError("reviewed web Auth user does not exist exactly once")
+        cursor.execute('SET LOCAL ROLE "erp_migration_owner"')
+        cursor.execute("SET CONSTRAINTS ALL DEFERRED")
+        for name, value in (
+            ("app.org_id", IDS["org"]),
+            ("app.auth_user_id", IDS["reviewer_auth_user"]),
+            ("app.membership_id", IDS["reviewer_membership"]),
+            ("app.request_id", demo_run_uuid("reviewed-web-operator-binding")),
+        ):
+            cursor.execute("SELECT set_config(%s,%s,true)", (name, value))
+
+        cursor.execute(
+            """
+            SELECT id::text FROM core.users
+             WHERE auth_user_id=%s
+             ORDER BY id
+             LIMIT 2
+            """,
+            (authority["auth_user_id"],),
+        )
+        users = cursor.fetchall()
+        if len(users) > 1:
+            raise RuntimeError("reviewed web Auth user has multiple canonical users")
+        if users:
+            authority["user_id"] = users[0][0]
+            cursor.execute(
+                """
+                UPDATE core.users
+                   SET status='active', updated_at=transaction_timestamp(),
+                       row_version=row_version+1
+                 WHERE id=%s AND status<>'active'
+                """,
+                (authority["user_id"],),
+            )
+        else:
+            cursor.execute(
+                """
+                INSERT INTO core.users (id,auth_user_id,display_name,status)
+                VALUES (%s,%s,'Reviewed staging web operator','active')
+                """,
+                (authority["user_id"], authority["auth_user_id"]),
+            )
+
+        cursor.execute(
+            """
+            SELECT id::text FROM core.memberships
+             WHERE org_id=%s AND user_id=%s
+             ORDER BY id
+             LIMIT 2
+            """,
+            (IDS["org"], authority["user_id"]),
+        )
+        memberships = cursor.fetchall()
+        if len(memberships) > 1:
+            raise RuntimeError("reviewed web Auth user has multiple demo memberships")
+        if memberships:
+            authority["membership_id"] = memberships[0][0]
+            cursor.execute(
+                """
+                UPDATE core.memberships
+                   SET status='active', revoked_at=NULL, revocation_reason=NULL,
+                       updated_by_membership_id=%s,
+                       updated_at=transaction_timestamp(),
+                       row_version=row_version+1
+                 WHERE org_id=%s AND id=%s AND status<>'active'
+                """,
+                (
+                    IDS["reviewer_membership"],
+                    IDS["org"],
+                    authority["membership_id"],
+                ),
+            )
+        else:
+            cursor.execute(
+                """
+                INSERT INTO core.memberships (
+                    org_id,id,user_id,status,joined_at,
+                    created_by_membership_id,updated_by_membership_id
+                ) VALUES (%s,%s,%s,'active',transaction_timestamp(),%s,%s)
+                """,
+                (
+                    IDS["org"],
+                    authority["membership_id"],
+                    authority["user_id"],
+                    IDS["reviewer_membership"],
+                    IDS["reviewer_membership"],
+                ),
+            )
+
+        cursor.execute(
+            """
+            UPDATE core.access_grants
+               SET status='expired', row_version=row_version+1
+             WHERE org_id=%s AND membership_id=%s AND role_id=%s
+               AND status='active' AND expires_at IS NOT NULL
+               AND expires_at<=transaction_timestamp()
+            """,
+            (IDS["org"], authority["membership_id"], IDS["role"]),
+        )
+        cursor.execute(
+            """
+            INSERT INTO core.access_grants (
+                org_id,id,membership_id,role_id,scope_kind,branch_id,
+                valid_from_at,expires_at,status,created_by_membership_id
+            ) SELECT
+                %s,%s,%s,%s,'organization',NULL,transaction_timestamp(),
+                transaction_timestamp()+interval '30 days','active',%s
+             WHERE NOT EXISTS (
+                SELECT 1 FROM core.access_grants
+                 WHERE org_id=%s AND membership_id=%s AND role_id=%s
+                   AND status='active'
+             )
+            ON CONFLICT (org_id,id) DO UPDATE SET
+                valid_from_at=excluded.valid_from_at,
+                expires_at=excluded.expires_at,
+                status='active', row_version=access_grants.row_version+1
+            """,
+            (
+                IDS["org"],
+                authority["access_grant_id"],
+                authority["membership_id"],
+                IDS["role"],
+                IDS["reviewer_membership"],
+                IDS["org"],
+                authority["membership_id"],
+                IDS["role"],
+            ),
+        )
+        cursor.execute(
+            """
+            SELECT user_row.id::text,membership.id::text,access_grant.id::text
+              FROM core.users AS user_row
+              JOIN core.memberships AS membership
+                ON membership.user_id=user_row.id AND membership.org_id=%s
+              JOIN core.access_grants AS access_grant
+                ON access_grant.org_id=membership.org_id
+               AND access_grant.membership_id=membership.id
+               AND access_grant.role_id=%s
+             WHERE user_row.auth_user_id=%s
+               AND user_row.status='active'
+               AND membership.status='active'
+               AND access_grant.status='active'
+               AND access_grant.valid_from_at<=transaction_timestamp()
+               AND (access_grant.expires_at IS NULL
+                    OR access_grant.expires_at>transaction_timestamp())
+             ORDER BY access_grant.id
+             LIMIT 2
+            """,
+            (IDS["org"], IDS["role"], authority["auth_user_id"]),
+        )
+        readback = cursor.fetchall()
+        if len(readback) != 1:
+            raise RuntimeError(
+                "reviewed web Auth user did not resolve to one active ERP authority"
+            )
+        authority["user_id"], authority["membership_id"], authority["access_grant_id"] = (
+            readback[0]
+        )
+    return authority
+
+
 def canonical_dataset_bytes(connection) -> bytes:
     dataset = [
         {
@@ -5531,6 +5734,14 @@ def main() -> int:
 
     with database_connection("PSYCOPG_DATABASE_URL") as bootstrap:
         bootstrap_identity(bootstrap)
+        reviewed_web_auth_user_id = os.getenv(
+            "CANONICAL_STAGING_WEB_TEST_AUTH_USER_ID", ""
+        ).strip()
+        reviewed_web_operator = (
+            bind_reviewed_web_operator(bootstrap, reviewed_web_auth_user_id)
+            if reviewed_web_auth_user_id
+            else None
+        )
         release_exists = demo_tax_release_exists(bootstrap)
         adjustment_release_exists = demo_adjustment_release_exists(bootstrap)
         gstr1_reporting_release_exists = demo_gstr1_reporting_release_exists(bootstrap)
@@ -5874,6 +6085,7 @@ def main() -> int:
         "organization_id": IDS["org"],
         "rls_denial_organization_id": IDS["denial_org"],
         "organization_classification": "disposable_synthetic_demo",
+        "reviewed_web_operator": reviewed_web_operator,
         "official_source_uri": SOURCE_URI,
         "official_source_sha256": hashlib.sha256(source).hexdigest(),
         "dataset_sha256": hashlib.sha256(

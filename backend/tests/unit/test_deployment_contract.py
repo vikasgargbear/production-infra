@@ -1310,7 +1310,8 @@ def test_canonical_staging_oauth_workflow_is_pinned_and_fail_closed() -> None:
     assert "if TEST_CALLBACK in (client.get(\"redirect_uris\") or ())" in provisioner
     assert 'client.get("name")' not in provisioner
     assert '"app_metadata": {' in provisioner
-    assert '"organization_id": DEMO_ORG_ID' in provisioner
+    assert '"org_id": DEMO_ORG_ID' in provisioner
+    assert '"organization_id": DEMO_ORG_ID' not in provisioner
     assert "canonical-staging-mcp-access:" in provisioner
     assert "canonical-staging-mcp-agent:" in provisioner
     assert "SET status='suspended', row_version=row_version+1" in provisioner

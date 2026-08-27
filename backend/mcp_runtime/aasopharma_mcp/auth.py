@@ -69,7 +69,10 @@ class SupabaseTokenVerifier:
             app_metadata = claims.get("app_metadata")
             if not isinstance(app_metadata, dict):
                 return None
-            organization_id = str(UUID(str(app_metadata.get("organization_id"))))
+            # Supabase Auth metadata uses the same canonical tenant key as the
+            # web/API session boundary.  Keep the gateway-facing claim name
+            # descriptive, but do not accept a second metadata alias.
+            organization_id = str(UUID(str(app_metadata.get("org_id"))))
             client_id = claims["client_id"]
             scope_claim = claims.get("scope", "")
             if not isinstance(client_id, str) or not client_id.strip():

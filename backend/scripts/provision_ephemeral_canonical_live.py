@@ -35,6 +35,7 @@ from exercise_staging_mcp_oauth import (  # noqa: E402
     _exercise_mcp,
     _pkce,
     _start_authorization,
+    _validate_oauth_access_token_claims,
 )
 from provision_ephemeral_browser_identities import (  # noqa: E402
     DEMO_OPERATOR_AUTH_USER_ID,
@@ -269,6 +270,11 @@ def _oauth_token(email: str, password: str, anon_key: str, client_id: str) -> st
     access_token = token.get("access_token")
     if not isinstance(access_token, str) or not access_token:
         raise CanonicalLiveIdentityError("PKCE exchange omitted MCP access_token")
+    _validate_oauth_access_token_claims(
+        access_token,
+        client_id=client_id,
+        organization_id=DEMO_ORG_ID,
+    )
     return access_token
 
 

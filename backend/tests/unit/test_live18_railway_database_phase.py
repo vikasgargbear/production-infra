@@ -97,6 +97,27 @@ def test_remote_demo_rejects_missing_or_oversized_scalar_authority() -> None:
         phase._reviewed_scalar_environment_value({"reviewed_scalars": pack})
 
 
+def test_railway_live18_demo_restores_the_reviewed_web_operator() -> None:
+    workflow = (
+        phase.BACKEND_DIRECTORY.parent
+        / ".github"
+        / "workflows"
+        / "production-readiness.yml"
+    ).read_text(encoding="utf-8")
+    live18 = workflow.split("\n  live18-acceptance:", 1)[1]
+
+    assert (
+        "CANONICAL_STAGING_WEB_TEST_AUTH_USER_ID: "
+        "${{ vars.CANONICAL_STAGING_WEB_TEST_AUTH_USER_ID }}" in live18
+    )
+    assert '"reviewed_web_auth_user_id": os.environ[' in live18
+    source = phase.BACKEND_DIRECTORY.joinpath(
+        "scripts", "provision_canonical_demo.py"
+    ).read_text(encoding="utf-8")
+    assert "bind_reviewed_web_operator(bootstrap, reviewed_web_auth_user_id)" in source
+    assert '"reviewed_web_operator": reviewed_web_operator' in source
+
+
 def test_captured_database_evidence_replaces_the_runner_database_secret():
     values = _live_env()
     values["PHARMA_CANONICAL_LIVE_DATABASE_EVIDENCE_PATH"] = "/tmp/db-evidence.json"

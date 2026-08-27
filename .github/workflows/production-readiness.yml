@@ -1133,6 +1133,7 @@ jobs:
       REVIEWED_DEPLOY_SHA: ${{ inputs.canonical_staging_deploy_sha }}
       LIVE18_PROVIDER: ${{ inputs.live18_provider }}
       CANONICAL_STAGING_PROJECT_REF: ${{ vars.CANONICAL_STAGING_PROJECT_REF }}
+      CANONICAL_STAGING_WEB_TEST_AUTH_USER_ID: ${{ vars.CANONICAL_STAGING_WEB_TEST_AUTH_USER_ID }}
       CANONICAL_EPHEMERAL_DATABASE_TRANSPORT: direct_ipv4
       SUPABASE_URL: ${{ vars.SUPABASE_URL }}
       PHARMA_CANONICAL_LIVE_WRITE_ACK: "true"
@@ -1602,6 +1603,7 @@ jobs:
               "deployment_instance_id": os.environ["RAILWAY_API_DEPLOYMENT_INSTANCE_ID"],
               "api_origin": os.environ["LIVE18_API_ORIGIN"],
               "production_project_refs": os.environ["PHARMA_CANONICAL_PRODUCTION_PROJECT_REFS"],
+              "reviewed_web_auth_user_id": os.environ["CANONICAL_STAGING_WEB_TEST_AUTH_USER_ID"],
               "expense_receipt_sha256": __import__("hashlib").sha256(
                   receipt_path.read_bytes()
               ).hexdigest(),

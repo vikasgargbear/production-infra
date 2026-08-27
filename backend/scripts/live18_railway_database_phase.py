@@ -567,6 +567,14 @@ def _demo_provision(request: dict[str, Any]) -> dict[str, Any]:
     run_attempt = _required_text(request, "run_attempt")
     if not run_id.isdigit() or not run_attempt.isdigit():
         raise RailwayDatabasePhaseError("Workflow run identity must be numeric")
+    try:
+        reviewed_web_auth_user_id = str(
+            UUID(_required_text(request, "reviewed_web_auth_user_id"))
+        )
+    except ValueError as exc:
+        raise RailwayDatabasePhaseError(
+            "Reviewed staging web Auth user must be one canonical UUID"
+        ) from exc
     receipt_sha256 = _required_text(request, "expense_receipt_sha256").lower()
     if not re.fullmatch(r"[0-9a-f]{64}", receipt_sha256):
         raise RailwayDatabasePhaseError("Reviewed expense receipt hash is invalid")
@@ -624,6 +632,7 @@ def _demo_provision(request: dict[str, Any]) -> dict[str, Any]:
             "ERP_REGULATORY_IMPORTER_DATABASE_URL": importer_url,
             "GITHUB_RUN_ID": run_id,
             "GITHUB_RUN_ATTEMPT": run_attempt,
+            "CANONICAL_STAGING_WEB_TEST_AUTH_USER_ID": reviewed_web_auth_user_id,
             "PGOPTIONS": (
                 "-c statement_timeout=120000 -c lock_timeout=15000 "
                 "-c idle_in_transaction_session_timeout=180000"
@@ -652,6 +661,7 @@ def _demo_provision(request: dict[str, Any]) -> dict[str, Any]:
         **_response_boundary(request),
         "migration": migration,
         "demo_summary": summary,
+        "reviewed_web_auth_user_id": reviewed_web_auth_user_id,
         "evidence_sha256": evidence_hashes,
         "transport": "supabase_direct_ipv6_from_railway",
         "temporary_owner_delegation_removed": True,

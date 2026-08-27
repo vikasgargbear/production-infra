@@ -255,7 +255,7 @@ def _reconcile_test_user(
         "email_confirm": True,
         "app_metadata": {
             "purpose": "canonical-staging-mcp-e2e",
-            "organization_id": DEMO_ORG_ID,
+            "org_id": DEMO_ORG_ID,
         },
     }
     if matches:

@@ -230,6 +230,40 @@ def _exchange_token(
     return token
 
 
+def _validate_oauth_access_token_claims(
+    access_token: str, *, client_id: str, organization_id: str
+) -> dict[str, Any]:
+    """Validate the public claim contract before contacting the MCP server.
+
+    Signature validation remains the resource server's responsibility.  This
+    preflight exists to report claim-shape drift precisely instead of reducing
+    it to a generic HTTP 401 at the first MCP request.
+    """
+
+    claims = jwt.decode(access_token, options={"verify_signature": False})
+    if claims.get("iss") != ISSUER or claims.get("client_id") != client_id:
+        raise ExerciseError("OAuth access token issuer or client_id drifted")
+    if claims.get("aud") != "authenticated":
+        raise ExerciseError("Staging OAuth access token audience drifted")
+    scopes = set(str(claims.get("scope", "")).split())
+    if not {"openid", "offline_access"}.issubset(scopes):
+        raise ExerciseError("OAuth access token omitted required scopes")
+    app_metadata = claims.get("app_metadata")
+    try:
+        token_organization_id = str(
+            UUID(str(app_metadata.get("org_id")))
+            if isinstance(app_metadata, dict)
+            else UUID("")
+        )
+    except (TypeError, ValueError) as exc:
+        raise ExerciseError(
+            "OAuth access token omitted canonical app_metadata.org_id"
+        ) from exc
+    if token_organization_id != str(UUID(organization_id)):
+        raise ExerciseError("OAuth access token organization drifted")
+    return claims
+
+
 def _jsonrpc_response(response: requests.Response) -> dict[str, Any]:
     if not response.ok:
         raise _http_error("MCP request", response)
@@ -699,14 +733,11 @@ def main() -> int:
         verifier=verifier,
         redirect_url=approved_redirect,
     )
-    claims = jwt.decode(token["access_token"], options={"verify_signature": False})
-    if claims.get("iss") != ISSUER or claims.get("client_id") != client_id:
-        raise ExerciseError("OAuth access token issuer or client_id drifted")
-    if claims.get("aud") != "authenticated":
-        raise ExerciseError("Staging OAuth access token audience drifted")
-    scopes = set(str(claims.get("scope", "")).split())
-    if not {"openid", "offline_access"}.issubset(scopes):
-        raise ExerciseError("OAuth access token omitted required scopes")
+    _validate_oauth_access_token_claims(
+        token["access_token"],
+        client_id=client_id,
+        organization_id=DEMO_ORG_ID,
+    )
 
     _wait_for_mcp_readiness()
     tool_names, workflow = _exercise_mcp(

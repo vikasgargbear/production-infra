@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 from contextlib import contextmanager
 from pathlib import Path
+from uuid import UUID
 
 import pytest
 
@@ -65,6 +66,35 @@ def test_sales_order_uses_exact_database_address_identity_and_version() -> None:
     assert invoice_payload["delivery_address_id"] == module.IDS["customer_address"]
     assert invoice_payload["delivery_address_row_version"] == "7"
     assert "place_of_supply_state_code" not in invoice_payload
+
+
+def test_reviewed_web_operator_ids_are_stable_and_separate_from_demo_users() -> None:
+    module = _module()
+    auth_user_id = "a4c0f185-77ee-4dbb-8288-6ae5d4526593"
+
+    first = module.reviewed_web_operator_ids(auth_user_id)
+    second = module.reviewed_web_operator_ids(auth_user_id)
+
+    assert first == second
+    assert first["auth_user_id"] == auth_user_id
+    assert len({UUID(value) for value in first.values()}) == 4
+    assert first["user_id"] not in {
+        module.IDS["reviewer_user"],
+        module.IDS["operator_user"],
+    }
+
+
+@pytest.mark.parametrize(
+    "auth_user_id",
+    ["not-a-uuid", "d3000000-0000-7000-8000-000000000002", "d3000000-0000-7000-8000-000000000022"],
+)
+def test_reviewed_web_operator_ids_reject_invalid_or_fixture_authority(
+    auth_user_id: str,
+) -> None:
+    module = _module()
+
+    with pytest.raises((ValueError, RuntimeError)):
+        module.reviewed_web_operator_ids(auth_user_id)
 
 
 def test_existing_itc_authority_reuses_content_identity_across_ui_runs() -> None:

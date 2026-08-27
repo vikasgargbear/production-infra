@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import importlib.util
+import base64
+import json
 from pathlib import Path
 from uuid import uuid4
 
@@ -14,6 +16,54 @@ SPEC = importlib.util.spec_from_file_location("exercise_staging_mcp_oauth", SCRI
 assert SPEC and SPEC.loader
 exercise = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(exercise)
+
+
+def _unsigned_token(claims: dict) -> str:
+    def part(value: dict) -> str:
+        return base64.urlsafe_b64encode(json.dumps(value).encode()).decode().rstrip("=")
+
+    return f"{part({'alg': 'ES256', 'kid': 'test'})}.{part(claims)}.{part({'signature': 'test'})}"
+
+
+def _oauth_claims(**overrides) -> dict:
+    claims = {
+        "iss": exercise.ISSUER,
+        "aud": "authenticated",
+        "client_id": "reviewed-client",
+        "scope": "openid offline_access",
+        "app_metadata": {"org_id": exercise.DEMO_ORG_ID},
+    }
+    claims.update(overrides)
+    return claims
+
+
+def test_oauth_claim_preflight_accepts_canonical_web_metadata_shape() -> None:
+    claims = _oauth_claims()
+
+    assert exercise._validate_oauth_access_token_claims(
+        _unsigned_token(claims),
+        client_id="reviewed-client",
+        organization_id=exercise.DEMO_ORG_ID,
+    ) == claims
+
+
+@pytest.mark.parametrize(
+    "app_metadata",
+    [
+        {},
+        {"org_id": "not-a-uuid"},
+        {"organization_id": exercise.DEMO_ORG_ID},
+    ],
+)
+def test_oauth_claim_preflight_rejects_missing_invalid_or_retired_org_key(
+    app_metadata: dict,
+) -> None:
+    with pytest.raises(exercise.ExerciseError, match="app_metadata.org_id"):
+        exercise._validate_oauth_access_token_claims(
+            _unsigned_token(_oauth_claims(app_metadata=app_metadata)),
+            client_id="reviewed-client",
+            organization_id=exercise.DEMO_ORG_ID,
+        )
 
 
 def test_http_and_provider_failures_never_echo_response_bodies() -> None:

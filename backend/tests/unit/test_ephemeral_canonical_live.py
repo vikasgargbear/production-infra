@@ -143,10 +143,25 @@ def test_pkce_token_comes_from_real_authorization_code_exchange(monkeypatch):
             "refresh_token": "oauth-refresh",
         },
     )
+    validated = []
+    monkeypatch.setattr(
+        MODULE,
+        "_validate_oauth_access_token_claims",
+        lambda token, **kwargs: validated.append((token, kwargs)),
+    )
 
     assert MODULE._oauth_token("user@example", "password", "anon", "client") == (
         "oauth-access"
     )
+    assert validated == [
+        (
+            "oauth-access",
+            {
+                "client_id": "client",
+                "organization_id": MODULE.DEMO_ORG_ID,
+            },
+        )
+    ]
 
 
 FIXTURE_RUN_TOKEN = "33038267646-1"
