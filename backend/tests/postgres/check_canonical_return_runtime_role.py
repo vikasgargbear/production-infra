@@ -113,11 +113,15 @@ def main() -> None:
             constraints = session.execute(
                 text(
                     """
-                    SELECT constraint_name
-                      FROM information_schema.table_constraints
-                     WHERE constraint_schema='finance'
-                       AND table_name='journal_entries'
-                       AND constraint_type='CHECK'
+                    SELECT candidate_constraint.conname AS constraint_name
+                      FROM pg_catalog.pg_constraint AS candidate_constraint
+                      JOIN pg_catalog.pg_class AS relation
+                        ON relation.oid=candidate_constraint.conrelid
+                      JOIN pg_catalog.pg_namespace AS namespace
+                        ON namespace.oid=relation.relnamespace
+                     WHERE namespace.nspname='finance'
+                       AND relation.relname='journal_entries'
+                       AND candidate_constraint.contype='c'
                     """
                 )
             ).scalars().all()
