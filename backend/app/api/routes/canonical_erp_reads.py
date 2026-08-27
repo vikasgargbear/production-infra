@@ -579,37 +579,15 @@ def delete_product_draft(
     user: dict = Depends(PermissionChecker("master", "delete")),
     db: Session = Depends(get_db),
 ):
-    """Delete only an unused draft; active catalog records are immutable here."""
+    """Fail closed until product deletion has a canonical command owner."""
 
-    org_id = _activate(db, user)
-    try:
-        deleted = db.execute(text("""
-            DELETE FROM catalog.products
-             WHERE org_id=:org_id AND id=:product_id AND status='draft'
-         RETURNING id, sku, name
-        """), {"org_id": org_id, "product_id": product_id}).first()
-        if deleted is None:
-            db.rollback()
-            raise HTTPException(
-                status_code=409,
-                detail="Only an existing unused product draft can be deleted",
-            )
-        db.commit()
-    except HTTPException:
-        raise
-    except IntegrityError as exc:
-        db.rollback()
-        raise HTTPException(
-            status_code=409,
-            detail="This draft is already referenced and cannot be deleted",
-        ) from exc
-    return {
-        "success": True,
-        "product_id": deleted.id,
-        "product_code": deleted.sku,
-        "product_name": deleted.name,
-        "message": "Product draft deleted",
-    }
+    raise HTTPException(
+        status_code=503,
+        detail=(
+            "Product draft deletion is unavailable until its canonical "
+            "command is installed"
+        ),
+    )
 
 
 @router.get("/products/all-with-batches")
