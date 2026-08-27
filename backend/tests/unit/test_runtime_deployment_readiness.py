@@ -84,7 +84,7 @@ class _Session:
 def test_expected_runtime_head_is_the_exact_checked_in_migration_head() -> None:
     contract = load_contract()
 
-    assert contract.head == EXPECTED_CANONICAL_ALEMBIC_HEAD == "20260828_0034"
+    assert contract.head == EXPECTED_CANONICAL_ALEMBIC_HEAD == "20260828_0035"
     assert contract.canonical_table_count == 119
 
 

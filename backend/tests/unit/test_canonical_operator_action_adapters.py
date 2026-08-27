@@ -1009,7 +1009,8 @@ class FailingDispatchSession(FakeDispatchSession):
 
 
 class FakeCustomerReceiptSession:
-    def __init__(self, *, fail_persist=False):
+    def __init__(self, *, authority_branch=None, fail_persist=False):
+        self.authority_branch = authority_branch
         self.fail_persist = fail_persist
         self.executions = []
         self.transaction_entries = 0
@@ -1036,6 +1037,10 @@ class FakeCustomerReceiptSession:
                 "rolsuper": False,
                 "rolbypassrls": False,
             },))
+        if "erp_security.activate_context" in sql:
+            return FakeResult()
+        if "FROM automation.agent_grants AS grant_row" in sql:
+            return FakeResult(({"branch_id": self.authority_branch},))
         if "resolve_customer_receipt_prepare" in sql:
             request = json.loads(params["request_json"])
             return FakeResult(({"resolution": {
@@ -1090,7 +1095,8 @@ class FakeCustomerReceiptSession:
 
 
 class FakeSupplierPaymentSession:
-    def __init__(self, *, fail_persist=False):
+    def __init__(self, *, authority_branch=None, fail_persist=False):
+        self.authority_branch = authority_branch
         self.fail_persist = fail_persist
         self.executions = []
         self.transaction_entries = 0
@@ -1117,6 +1123,10 @@ class FakeSupplierPaymentSession:
                 "rolsuper": False,
                 "rolbypassrls": False,
             },))
+        if "erp_security.activate_context" in sql:
+            return FakeResult()
+        if "FROM automation.agent_grants AS grant_row" in sql:
+            return FakeResult(({"branch_id": self.authority_branch},))
         if "resolve_supplier_payment_prepare" in sql:
             request = json.loads(params["request_json"])
             supplier_party_id = str(uuid4())
@@ -1473,7 +1483,8 @@ class FakeInventoryDestructionSession:
 
 
 class FakeSupplierAdvanceSession:
-    def __init__(self, *, fail_persist=False):
+    def __init__(self, *, authority_branch=None, fail_persist=False):
+        self.authority_branch = authority_branch
         self.fail_persist = fail_persist
         self.executions = []
         self.transaction_entries = 0
@@ -1500,6 +1511,10 @@ class FakeSupplierAdvanceSession:
                 "rolsuper": False,
                 "rolbypassrls": False,
             },))
+        if "erp_security.activate_context" in sql:
+            return FakeResult()
+        if "FROM automation.agent_grants AS grant_row" in sql:
+            return FakeResult(({"branch_id": self.authority_branch},))
         if "resolve_supplier_advance_prepare" in sql:
             request = json.loads(params["request_json"])
             allocation = request["allocations"][0]
@@ -2981,8 +2996,8 @@ def _customer_receipt_service_payload():
 
 
 def test_customer_receipt_prepare_is_one_runtime_transaction_with_exact_allocation():
-    session = FakeCustomerReceiptSession()
     payload = _customer_receipt_service_payload()
+    session = FakeCustomerReceiptSession(authority_branch=payload["branch_id"])
     context = ActionContext(
         **{
             **_context(branch_ids=(payload["branch_id"],)).__dict__,
@@ -3009,18 +3024,28 @@ def test_customer_receipt_prepare_is_one_runtime_transaction_with_exact_allocati
     assert prepared.financial_impact[0]["receipt_amount"] == "118.00"
     assert prepared.financial_impact[0]["allocations"][0]["allocated_amount"] == "118.00"
     assert session.transaction_entries == session.transaction_exits == 1
-    assert len(session.executions) == 3
-    request = json.loads(session.executions[1][1]["request_json"])
+    assert "erp_security.activate_context" in session.executions[1][0]
+    resolve_execution = next(
+        execution for execution in session.executions
+        if "resolve_customer_receipt_prepare" in execution[0]
+    )
+    persist_execution = next(
+        execution for execution in session.executions
+        if "persist_customer_receipt_prepare" in execution[0]
+    )
+    request = json.loads(resolve_execution[1]["request_json"])
     assert request["payment_method"] == "upi"
     assert request["allocations"][0]["allocation_id"]
-    preview = json.loads(session.executions[2][1]["preview_bytes"])
+    preview = json.loads(persist_execution[1]["preview_bytes"])
     assert preview["operation"] == "finance.payment.post"
     assert preview["legal_scope"]["settlement"] == "fully_allocated_non_cash"
 
 
 def test_customer_receipt_prepare_failure_rolls_back_the_only_transaction():
-    session = FakeCustomerReceiptSession(fail_persist=True)
     payload = _customer_receipt_service_payload()
+    session = FakeCustomerReceiptSession(
+        authority_branch=payload["branch_id"], fail_persist=True
+    )
     context = ActionContext(
         **{
             **_context(branch_ids=(payload["branch_id"],)).__dict__,
@@ -3063,8 +3088,8 @@ def _supplier_payment_service_payload():
 
 
 def test_supplier_payment_prepare_is_one_runtime_transaction_with_exact_multi_invoice_cash():
-    session = FakeSupplierPaymentSession()
     payload = _supplier_payment_service_payload()
+    session = FakeSupplierPaymentSession(authority_branch=payload["branch_id"])
     context = ActionContext(
         **{
             **_context(branch_ids=(payload["branch_id"],)).__dict__,
@@ -3096,11 +3121,19 @@ def test_supplier_payment_prepare_is_one_runtime_transaction_with_exact_multi_in
         for item in prepared.financial_impact[0]["allocations"]
     ] == ["400.00", "500.00"]
     assert session.transaction_entries == session.transaction_exits == 1
-    assert len(session.executions) == 3
-    request = json.loads(session.executions[1][1]["request_json"])
+    assert "erp_security.activate_context" in session.executions[1][0]
+    resolve_execution = next(
+        execution for execution in session.executions
+        if "resolve_supplier_payment_prepare" in execution[0]
+    )
+    persist_execution = next(
+        execution for execution in session.executions
+        if "persist_supplier_payment_prepare" in execution[0]
+    )
+    request = json.loads(resolve_execution[1]["request_json"])
     assert request["payment_method"] == "upi"
     assert all(item["allocation_id"] for item in request["allocations"])
-    preview = json.loads(session.executions[2][1]["preview_bytes"])
+    preview = json.loads(persist_execution[1]["preview_bytes"])
     assert preview["operation"] == "finance.payment.post"
     assert {
         source["resource_type"] for source in preview["source_versions"]
@@ -3112,8 +3145,10 @@ def test_supplier_payment_prepare_is_one_runtime_transaction_with_exact_multi_in
 
 
 def test_supplier_payment_prepare_failure_rolls_back_the_only_transaction():
-    session = FakeSupplierPaymentSession(fail_persist=True)
     payload = _supplier_payment_service_payload()
+    session = FakeSupplierPaymentSession(
+        authority_branch=payload["branch_id"], fail_persist=True
+    )
     context = ActionContext(
         **{
             **_context(branch_ids=(payload["branch_id"],)).__dict__,
@@ -3408,8 +3443,8 @@ def _supplier_advance_service_payload():
 
 
 def test_supplier_advance_prepare_is_one_runtime_transaction_and_exact_gross_cash():
-    session = FakeSupplierAdvanceSession()
     payload = _supplier_advance_service_payload()
+    session = FakeSupplierAdvanceSession(authority_branch=payload["branch_id"])
     context = ActionContext(
         **{
             **_context(branch_ids=(payload["branch_id"],)).__dict__,
@@ -3437,18 +3472,28 @@ def test_supplier_advance_prepare_is_one_runtime_transaction_and_exact_gross_cas
     assert prepared.financial_impact[0]["cash_disbursed_amount"] == "50000.00"
     assert prepared.financial_impact[0]["withheld_amount"] == "0.00"
     assert session.transaction_entries == session.transaction_exits == 1
-    assert len(session.executions) == 3
-    request = json.loads(session.executions[1][1]["request_json"])
+    assert "erp_security.activate_context" in session.executions[1][0]
+    resolve_execution = next(
+        execution for execution in session.executions
+        if "resolve_supplier_advance_prepare" in execution[0]
+    )
+    persist_execution = next(
+        execution for execution in session.executions
+        if "persist_supplier_advance_prepare" in execution[0]
+    )
+    request = json.loads(resolve_execution[1]["request_json"])
     assert request["allocations"][0]["advance_allocation_id"]
     assert request["allocations"][0]["prepayment_open_item_id"]
-    preview = json.loads(session.executions[2][1]["preview_bytes"])
+    preview = json.loads(persist_execution[1]["preview_bytes"])
     assert preview["operation"] == "finance.supplier_advance.post"
     assert preview["tax_impact"] == []
 
 
 def test_supplier_advance_prepare_failure_rolls_back_the_only_transaction():
-    session = FakeSupplierAdvanceSession(fail_persist=True)
     payload = _supplier_advance_service_payload()
+    session = FakeSupplierAdvanceSession(
+        authority_branch=payload["branch_id"], fail_persist=True
+    )
     context = ActionContext(
         **{
             **_context(branch_ids=(payload["branch_id"],)).__dict__,

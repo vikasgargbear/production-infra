@@ -36,10 +36,14 @@ def main() -> int:
             assert len(rows) == len(RESOLVERS), rows
             for signature, definition in rows:
                 assert "payment_date>CURRENT_DATE" not in definition, signature
-                assert (
+                business_clock = (
                     'payment_date>"erp_core_commands".'
-                    '"current_organization_business_date"()' in definition
-                ), signature
+                    '"current_organization_business_date"()'
+                )
+                assert business_clock in definition, signature
+                assert definition.index(
+                    "PERFORM erp_security.activate_context(auth_user_id,organization_id);"
+                ) < definition.index(business_clock), signature
 
             cursor.execute(
                 """

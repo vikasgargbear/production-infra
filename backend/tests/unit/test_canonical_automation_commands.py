@@ -200,6 +200,20 @@ def test_finance_payment_dates_use_one_organization_timezone_authority() -> None
 
     assert mapping.count(business_clock) == 3
     assert "payment_date>CURRENT_DATE" not in mapping
+    for function_name in (
+        "resolve_customer_receipt_prepare",
+        "resolve_supplier_advance_prepare",
+        "resolve_supplier_payment_prepare",
+    ):
+        start = mapping.index(
+            f'CREATE FUNCTION "erp_automation_commands"."{function_name}"('
+        )
+        body_start = mapping.index("$function$", start) + len("$function$")
+        end = mapping.index("$function$", body_start)
+        definition = mapping[start:end]
+        assert definition.index(
+            "PERFORM erp_security.activate_context(auth_user_id,organization_id);"
+        ) < definition.index(business_clock)
 
 
 def test_supplier_advance_prepare_and_execute_reauthorize_bounded_goods_pilot() -> None:

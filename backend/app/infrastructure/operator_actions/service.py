@@ -2538,7 +2538,7 @@ class SqlAlchemyOperatorActionService:
         }
         with self._session_factory() as session:
             with session.begin():
-                assert_runtime_principal(session)
+                self._authorize(session, context, policy)
                 _lock_prepare_idempotency(
                     session, params, "finance.customer_receipt.prepare"
                 )
@@ -2699,7 +2699,7 @@ class SqlAlchemyOperatorActionService:
         }
         with self._session_factory() as session:
             with session.begin():
-                assert_runtime_principal(session)
+                self._authorize(session, context, policy)
                 _lock_prepare_idempotency(
                     session, params, "finance.supplier_payment.prepare"
                 )
@@ -2882,7 +2882,7 @@ class SqlAlchemyOperatorActionService:
         }
         with self._session_factory() as session:
             with session.begin():
-                assert_runtime_principal(session)
+                self._authorize(session, context, policy)
                 _lock_prepare_idempotency(
                     session, params, "finance.supplier_advance.prepare"
                 )

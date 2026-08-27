@@ -10419,11 +10419,6 @@ BEGIN
      OR pg_catalog.jsonb_typeof(request_document->'allocations')<>'array'
      OR pg_catalog.jsonb_array_length(request_document->'allocations') NOT BETWEEN 1 AND 500 THEN
     RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='customer-receipt noncash INR pilot input is incomplete'; END IF;
-  IF payment_date>"erp_core_commands"."current_organization_business_date"() THEN
-    RAISE EXCEPTION USING ERRCODE='22007', MESSAGE='customer receipt date cannot be in the future'; END IF;
-  IF (SELECT count(DISTINCT value->>'open_item_id') FROM pg_catalog.jsonb_array_elements(request_document->'allocations'))
-       <>pg_catalog.jsonb_array_length(request_document->'allocations') THEN
-    RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='customer receipt requires unique receivable allocations'; END IF;
   PERFORM 1 FROM core.memberships membership JOIN core.users user_row ON user_row.id=membership.user_id
     JOIN core.organizations organization_row ON organization_row.id=membership.org_id
     JOIN automation.agent_grants grant_row ON grant_row.org_id=membership.org_id AND grant_row.subject_membership_id=membership.id
@@ -10442,6 +10437,11 @@ BEGIN
      OR erp_security.has_permission('finance.journal.post',branch_id) IS DISTINCT FROM true
      OR erp_security.has_permission('automation.command.execute',branch_id) IS DISTINCT FROM true THEN
     RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='customer-receipt verified context or cross-domain permission is inactive'; END IF;
+  IF payment_date>"erp_core_commands"."current_organization_business_date"() THEN
+    RAISE EXCEPTION USING ERRCODE='22007', MESSAGE='customer receipt date cannot be in the future'; END IF;
+  IF (SELECT count(DISTINCT value->>'open_item_id') FROM pg_catalog.jsonb_array_elements(request_document->'allocations'))
+       <>pg_catalog.jsonb_array_length(request_document->'allocations') THEN
+    RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='customer receipt requires unique receivable allocations'; END IF;
   SELECT * INTO STRICT branch FROM core.branches WHERE org_id=organization_id AND id=branch_id AND status='active' FOR SHARE;
   SELECT * INTO STRICT customer FROM parties.customer_accounts WHERE org_id=organization_id AND id=customer_id AND status='active' FOR SHARE;
   SELECT * INTO STRICT party FROM parties.parties WHERE org_id=organization_id AND id=customer.party_id AND status='active' FOR SHARE;
@@ -10687,11 +10687,6 @@ BEGIN
      OR pg_catalog.jsonb_typeof(request_document->'allocations')<>'array'
      OR pg_catalog.jsonb_array_length(request_document->'allocations') NOT BETWEEN 1 AND 500 THEN
     RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='supplier-payment INR bank pilot input is incomplete'; END IF;
-  IF payment_date>"erp_core_commands"."current_organization_business_date"() THEN
-    RAISE EXCEPTION USING ERRCODE='22007', MESSAGE='supplier payment date cannot be in the future'; END IF;
-  IF (SELECT count(DISTINCT value->>'open_item_id') FROM pg_catalog.jsonb_array_elements(request_document->'allocations'))
-       <>pg_catalog.jsonb_array_length(request_document->'allocations') THEN
-    RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='supplier payment requires unique payable allocations'; END IF;
   PERFORM 1 FROM core.memberships membership JOIN core.users user_row ON user_row.id=membership.user_id
     JOIN core.organizations organization_row ON organization_row.id=membership.org_id
     JOIN automation.agent_grants grant_row ON grant_row.org_id=membership.org_id AND grant_row.subject_membership_id=membership.id
@@ -10710,6 +10705,11 @@ BEGIN
      OR erp_security.has_permission('finance.journal.post',branch_id) IS DISTINCT FROM true
      OR erp_security.has_permission('automation.command.execute',branch_id) IS DISTINCT FROM true THEN
     RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='supplier-payment verified context or cross-domain permission is inactive'; END IF;
+  IF payment_date>"erp_core_commands"."current_organization_business_date"() THEN
+    RAISE EXCEPTION USING ERRCODE='22007', MESSAGE='supplier payment date cannot be in the future'; END IF;
+  IF (SELECT count(DISTINCT value->>'open_item_id') FROM pg_catalog.jsonb_array_elements(request_document->'allocations'))
+       <>pg_catalog.jsonb_array_length(request_document->'allocations') THEN
+    RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='supplier payment requires unique payable allocations'; END IF;
   SELECT * INTO STRICT branch FROM core.branches WHERE org_id=organization_id AND id=branch_id AND status='active' FOR SHARE;
   SELECT * INTO STRICT supplier FROM parties.supplier_accounts WHERE org_id=organization_id AND id=supplier_id AND status='active' FOR SHARE;
   SELECT * INTO STRICT party FROM parties.parties WHERE org_id=organization_id AND id=supplier.party_id AND status='active'
@@ -11049,17 +11049,6 @@ BEGIN
      OR pg_catalog.jsonb_typeof(request_document->'allocations')<>'array'
      OR pg_catalog.jsonb_array_length(request_document->'allocations')<>1 THEN
     RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='supplier-advance INR bank pilot requires exactly one complete allocation'; END IF;
-  IF payment_date>"erp_core_commands"."current_organization_business_date"() THEN
-    RAISE EXCEPTION USING ERRCODE='22007', MESSAGE='supplier advance date cannot be in the future'; END IF;
-  requested:=request_document->'allocations'->0;
-  IF NULLIF(requested->>'purchase_order_line_id','')::uuid IS NULL
-     OR NULLIF(requested->>'advance_allocation_id','')::uuid IS NULL
-     OR NULLIF(requested->>'prepayment_open_item_id','')::uuid IS NULL
-     OR NULLIF(requested->>'gross_amount','')::numeric<=0
-     OR (requested->>'gross_amount')::numeric IS DISTINCT FROM gross THEN
-    RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='supplier advance allocation must be positive and exactly equal gross amount'; END IF;
-  PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
-    organization_id::text||':supplier-advance-line:'||(requested->>'purchase_order_line_id'),672004));
   PERFORM 1 FROM core.memberships membership JOIN core.users user_row ON user_row.id=membership.user_id
     JOIN core.organizations organization_row ON organization_row.id=membership.org_id
     JOIN automation.agent_grants grant_row ON grant_row.org_id=membership.org_id AND grant_row.subject_membership_id=membership.id
@@ -11078,6 +11067,17 @@ BEGIN
      OR erp_security.has_permission('procurement.order.manage',branch_id) IS DISTINCT FROM true
      OR erp_security.has_permission('automation.command.execute',branch_id) IS DISTINCT FROM true THEN
     RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='supplier-advance verified context or cross-domain permission is inactive'; END IF;
+  IF payment_date>"erp_core_commands"."current_organization_business_date"() THEN
+    RAISE EXCEPTION USING ERRCODE='22007', MESSAGE='supplier advance date cannot be in the future'; END IF;
+  requested:=request_document->'allocations'->0;
+  IF NULLIF(requested->>'purchase_order_line_id','')::uuid IS NULL
+     OR NULLIF(requested->>'advance_allocation_id','')::uuid IS NULL
+     OR NULLIF(requested->>'prepayment_open_item_id','')::uuid IS NULL
+     OR NULLIF(requested->>'gross_amount','')::numeric<=0
+     OR (requested->>'gross_amount')::numeric IS DISTINCT FROM gross THEN
+    RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='supplier advance allocation must be positive and exactly equal gross amount'; END IF;
+  PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
+    organization_id::text||':supplier-advance-line:'||(requested->>'purchase_order_line_id'),672004));
   SELECT * INTO STRICT branch FROM core.branches WHERE org_id=organization_id AND id=branch_id AND status='active' FOR SHARE;
   SELECT * INTO STRICT supplier FROM parties.supplier_accounts WHERE org_id=organization_id AND id=supplier_id AND status='active' FOR SHARE;
   SELECT * INTO STRICT party FROM parties.parties WHERE org_id=organization_id AND id=supplier.party_id AND status='active'
