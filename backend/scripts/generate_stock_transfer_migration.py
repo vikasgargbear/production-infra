@@ -1,9 +1,10 @@
-"""Build the hash-bound incremental migration from reviewed command artifacts."""
+"""Verify the immutable stock-transfer migration against its reviewed source."""
 
 from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path
 
 
@@ -11,82 +12,97 @@ ROOT = Path(__file__).resolve().parents[2]
 MAPPING = ROOT / "database/canonical/commands_automation/baseline-automation-command-enforcements.json"
 SQL_PATH = ROOT / "backend/alembic/sql/20260825_0005_inventory_transfer_command.sql"
 VERSION_PATH = ROOT / "backend/alembic/versions/20260825_0005_inventory_transfer_command.py"
+FUNCTION_NAMES = (
+    "resolve_inventory_transfer_prepare",
+    "assert_inventory_transfer_draft",
+    "persist_inventory_transfer_prepare",
+    "execute_approved_command",
+)
+
+
+class StockTransferMigrationDrift(RuntimeError):
+    """The immutable migration no longer matches its reviewed source artifact."""
+
+
+def _display_path(path: Path) -> Path:
+    try:
+        return path.relative_to(ROOT)
+    except ValueError:
+        return path
+
+
+def generate_sql() -> str:
+    """Render the reviewed SQL in its deterministic migration order."""
+
+    document = json.loads(MAPPING.read_text(encoding="utf-8"))
+    selected: dict[str, list[str]] = {name: [] for name in FUNCTION_NAMES}
+    for enforcement in document["enforcements"]:
+        for statement in enforcement["statements"]:
+            declaration = statement.splitlines()[0]
+            for function_name in FUNCTION_NAMES:
+                qualified_name = (
+                    f'"erp_automation_commands"."{function_name}"('
+                )
+                if qualified_name not in declaration:
+                    continue
+                if statement.startswith(
+                    'CREATE FUNCTION "erp_automation_commands".'
+                ):
+                    statement = statement.replace(
+                        "CREATE FUNCTION", "CREATE OR REPLACE FUNCTION", 1
+                    )
+                selected[function_name].append(statement.rstrip(";") + ";")
+                break
+
+    expected_statement_counts = {
+        "resolve_inventory_transfer_prepare": 4,
+        "assert_inventory_transfer_draft": 3,
+        "persist_inventory_transfer_prepare": 4,
+        "execute_approved_command": 4,
+    }
+    if {
+        name: len(statements) for name, statements in selected.items()
+    } != expected_statement_counts:
+        raise StockTransferMigrationDrift(
+            "reviewed automation artifact does not contain the exact function, "
+            "ownership, revoke, and runtime grant sources expected by migration 0005"
+        )
+
+    statements = [
+        statement
+        for function_name in FUNCTION_NAMES
+        for statement in selected[function_name]
+    ]
+    return (
+        "SET LOCAL ROLE erp_migration_owner;\n\n"
+        + "\n\n".join(statements)
+        + "\n\nRESET ROLE;\n"
+    )
+
+
+def check_reviewed_migration() -> str:
+    """Return the verified SHA-256 or fail without changing repository files."""
+
+    generated_sql = generate_sql()
+    checked_in_sql = SQL_PATH.read_text(encoding="utf-8")
+    if checked_in_sql != generated_sql:
+        raise StockTransferMigrationDrift(
+            f"{_display_path(SQL_PATH)} differs from the reviewed automation artifact"
+        )
+
+    digest = hashlib.sha256(checked_in_sql.encode("utf-8")).hexdigest()
+    version = VERSION_PATH.read_text(encoding="utf-8")
+    match = re.search(r'^EXPECTED_SQL_SHA256 = "([0-9a-f]{64})"$', version, re.MULTILINE)
+    if match is None or match.group(1) != digest:
+        raise StockTransferMigrationDrift(
+            f"{_display_path(VERSION_PATH)} does not bind the reviewed SQL SHA-256"
+        )
+    return digest
 
 
 def main() -> None:
-    document = json.loads(MAPPING.read_text(encoding="utf-8"))
-    selected: list[str] = []
-    needles = (
-        '"resolve_inventory_transfer_prepare"',
-        '"assert_inventory_transfer_draft"',
-        '"persist_inventory_transfer_prepare"',
-        '"execute_approved_command"',
-    )
-    for enforcement in document["enforcements"]:
-        for statement in enforcement["statements"]:
-            if any(needle in statement for needle in needles):
-                if statement.startswith('CREATE FUNCTION "erp_automation_commands".'):
-                    statement = statement.replace("CREATE FUNCTION", "CREATE OR REPLACE FUNCTION", 1)
-                selected.append(statement.rstrip(";") + ";")
-    def order(statement: str) -> int:
-        declaration = statement.splitlines()[0]
-        if '"resolve_inventory_transfer_prepare"' in declaration:
-            return 0
-        if '"assert_inventory_transfer_draft"' in declaration:
-            return 1
-        if '"persist_inventory_transfer_prepare"' in declaration:
-            return 2
-        return 3
-
-    sql = "\n\n".join(sorted(selected, key=order)) + "\n"
-    SQL_PATH.write_text(sql, encoding="utf-8")
-    digest = hashlib.sha256(sql.encode("utf-8")).hexdigest()
-    version = f'''"""Add reviewed canonical inter-branch inventory transfer command.
-
-Revision ID: 20260825_0005
-Revises: 20260825_0004
-"""
-
-from __future__ import annotations
-
-import hashlib
-from pathlib import Path
-
-from alembic import context, op
-
-from migration_support.canonical_baseline import CanonicalBaselineError
-
-
-revision = "20260825_0005"
-down_revision = "20260825_0004"
-branch_labels = None
-depends_on = None
-
-SQL_PATH = Path(__file__).resolve().parents[1] / "sql" / "20260825_0005_inventory_transfer_command.sql"
-EXPECTED_SQL_SHA256 = "{digest}"
-
-
-def _reviewed_sql() -> str:
-    sql = SQL_PATH.read_text(encoding="utf-8")
-    if hashlib.sha256(sql.encode("utf-8")).hexdigest() != EXPECTED_SQL_SHA256:
-        raise CanonicalBaselineError("inventory transfer migration source hash mismatch")
-    return sql
-
-
-def upgrade() -> None:
-    if context.is_offline_mode():
-        raise CanonicalBaselineError("inventory transfer migration requires an online reviewed principal")
-    cursor = op.get_bind().connection.cursor()
-    try:
-        cursor.execute(_reviewed_sql())
-    finally:
-        cursor.close()
-
-
-def downgrade() -> None:
-    raise CanonicalBaselineError("inventory transfer command downgrade is intentionally unavailable")
-'''
-    VERSION_PATH.write_text(version, encoding="utf-8")
+    digest = check_reviewed_migration()
+    print(f"stock-transfer migration source verified: sha256={digest}")
 
 
 if __name__ == "__main__":
