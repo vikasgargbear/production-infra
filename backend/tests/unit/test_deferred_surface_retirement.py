@@ -186,6 +186,17 @@ def test_stale_developer_guides_stay_retired() -> None:
         assert "master.org_users" not in source
         assert "system_config.audit_logs" not in source
 
+    frontend_docs = {
+        path.relative_to(REPOSITORY_ROOT).as_posix()
+        for path in (REPOSITORY_ROOT / "frontend/docs").rglob("*")
+        if path.is_file()
+    }
+    assert frontend_docs == {
+        "frontend/docs/README.md",
+        "frontend/docs/05-api-integration/README.md",
+        "frontend/docs/08-security/README.md",
+    }
+
 
 def test_retired_audit_and_settings_routes_are_absent() -> None:
     api_routes = [
