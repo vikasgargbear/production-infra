@@ -65,6 +65,7 @@ from provision_staging_mcp_oauth import (  # noqa: E402
     _auth_admin_authority,
     _reconcile_client,
 )
+from canonical_demo_ids import canonical_demo_authority_ids  # noqa: E402
 from supabase_auth_admin import mask_auth_admin_secret  # noqa: E402
 
 
@@ -72,10 +73,6 @@ STATE_VERSION = 1
 PURPOSE = "canonical-staging-rest-mcp-live-e2e"
 LOCK_KEY = "canonical-staging-live-browser-identities"
 MCP_TEMPORARY_CONSENT_VERSION = "canonical-live-e2e-v1"
-BASELINE_GRANTS = {
-    "requester": "d3000000-0000-7000-8000-000000000021",
-    "reviewer": "d3000000-0000-7000-8000-000000000020",
-}
 BASELINE_AUTHORITY = {
     "requester": {
         "membership_id": DEMO_OPERATOR_MEMBERSHIP_ID,
@@ -161,6 +158,21 @@ def _validated_fixture_run_token(value: str) -> str:
             "Canonical live fixture run token is invalid"
         )
     return value
+
+
+def _baseline_grants(fixture_run_token: str) -> dict[str, str]:
+    """Derive the same-run MCP baselines from the shared demo ID authority."""
+
+    run_id, run_attempt = _validated_fixture_run_token(fixture_run_token).split(
+        "-", 1
+    )
+    authority_ids = canonical_demo_authority_ids(
+        DEMO_ORG_ID, run_id, run_attempt
+    )
+    return {
+        "requester": authority_ids["agent_grant"],
+        "reviewer": authority_ids["legacy_approver_agent_grant"],
+    }
 
 
 def _mask(value: str) -> None:
@@ -463,7 +475,10 @@ def _resolve_bound_live18_run_token(cursor, records: dict[str, tuple[str, str]])
 
 
 def _mcp_authority_snapshot(
-    cursor, client_id: str, run_token: str | None
+    cursor,
+    client_id: str,
+    browser_run_token: str | None,
+    fixture_run_token: str,
 ) -> tuple[dict[str, int], list[str]]:
     """Validate exact durable baselines and optional two-hour MCP pair."""
 
@@ -476,8 +491,13 @@ def _mcp_authority_snapshot(
         or any(character.isspace() for character in client_id)
     ):
         raise CanonicalLiveIdentityError("Reviewed MCP OAuth client ID is invalid")
+    baseline_grants = _baseline_grants(fixture_run_token)
     temporary_hashes = {
-        role: f"{PURPOSE}:{run_token}:{role}" if run_token else "missing-anchor"
+        role: (
+            f"{PURPOSE}:{browser_run_token}:{role}"
+            if browser_run_token
+            else "missing-anchor"
+        )
         for role in ("requester", "reviewer")
     }
     cursor.execute(
@@ -526,9 +546,9 @@ def _mcp_authority_snapshot(
          FOR UPDATE OF grant_row
         """,
         (
-            BASELINE_GRANTS["requester"],
+            baseline_grants["requester"],
             BASELINE_AUTHORITY["requester"]["consent_text"],
-            BASELINE_GRANTS["reviewer"],
+            baseline_grants["reviewer"],
             BASELINE_AUTHORITY["reviewer"]["consent_text"],
             MCP_TEMPORARY_CONSENT_VERSION,
             DEMO_OPERATOR_MEMBERSHIP_ID,
@@ -536,14 +556,14 @@ def _mcp_authority_snapshot(
             MCP_TEMPORARY_CONSENT_VERSION,
             DEMO_REVIEWER_MEMBERSHIP_ID,
             temporary_hashes["reviewer"],
-            BASELINE_GRANTS["requester"],
-            BASELINE_GRANTS["reviewer"],
+            baseline_grants["requester"],
+            baseline_grants["reviewer"],
             client_id,
             DEMO_OPERATOR_MEMBERSHIP_ID,
             DEMO_REVIEWER_MEMBERSHIP_ID,
             DEMO_ORG_ID,
-            BASELINE_GRANTS["requester"],
-            BASELINE_GRANTS["reviewer"],
+            baseline_grants["requester"],
+            baseline_grants["reviewer"],
         ),
     )
     rows = cursor.fetchall()
@@ -573,7 +593,7 @@ def _mcp_authority_snapshot(
     temporary_ids: list[str] = []
     temporary_roles: set[str] = set()
     baseline_statuses: set[str] = set()
-    baseline_by_id = {value: role for role, value in BASELINE_GRANTS.items()}
+    baseline_by_id = {value: role for role, value in baseline_grants.items()}
     role_by_membership = {
         DEMO_OPERATOR_MEMBERSHIP_ID: "requester",
         DEMO_REVIEWER_MEMBERSHIP_ID: "reviewer",
@@ -647,10 +667,14 @@ def _mcp_authority_snapshot(
         temporary_ids.append(str(UUID(grant_id)))
         temporary_roles.add(role)
 
-    if set(baseline_versions) != set(BASELINE_GRANTS.values()):
+    if set(baseline_versions) != set(baseline_grants.values()):
         raise CanonicalLiveIdentityError("Canonical MCP baseline pair is incomplete")
     if temporary_ids:
-        if run_token is None or len(temporary_ids) != 2 or temporary_roles != {"requester", "reviewer"}:
+        if (
+            browser_run_token is None
+            or len(temporary_ids) != 2
+            or temporary_roles != {"requester", "reviewer"}
+        ):
             raise CanonicalLiveIdentityError(
                 "Temporary MCP authority has no exact same-run Auth anchor"
             )
@@ -664,11 +688,12 @@ def _mcp_authority_snapshot(
 
 
 def recover_lost_live18_mcp_state(
-    management_token: str, client_id: str
+    management_token: str, client_id: str, fixture_run_token: str
 ) -> dict[str, int]:
     """Recover MCP grants even when both local and transported state were lost."""
 
     auth_records = _live18_auth_records(management_token)
+    baseline_grants = _baseline_grants(fixture_run_token)
     recovered_count = 0
     with _database_connection(management_token) as connection:
         with connection.cursor() as cursor:
@@ -678,7 +703,7 @@ def recover_lost_live18_mcp_state(
             membership_options = _enter_migration_owner(cursor)
             run_token = _resolve_bound_live18_run_token(cursor, auth_records)
             _baseline_versions, temporary_ids = _mcp_authority_snapshot(
-                cursor, client_id, run_token
+                cursor, client_id, run_token, fixture_run_token
             )
             if temporary_ids:
                 cursor.execute(
@@ -704,14 +729,20 @@ def recover_lost_live18_mcp_state(
                        AND id=ANY(CAST(%s AS uuid[])) AND status='suspended'
                        AND expires_at>transaction_timestamp()
                     """,
-                    (DEMO_ORG_ID, client_id, list(BASELINE_GRANTS.values())),
+                    (
+                        DEMO_ORG_ID,
+                        client_id,
+                        list(baseline_grants.values()),
+                    ),
                 )
                 if cursor.rowcount != 2:
                     raise CanonicalLiveIdentityError(
                         "Canonical MCP baselines changed during recovery"
                     )
                 recovered_count = len(temporary_ids)
-            _mcp_authority_snapshot(cursor, client_id, None)
+            _mcp_authority_snapshot(
+                cursor, client_id, None, fixture_run_token
+            )
             _leave_migration_owner(cursor, membership_options)
     return {
         "recovered_active_mcp_grant_count": recovered_count,
@@ -736,6 +767,7 @@ def _provision_database(
         raise CanonicalLiveIdentityError(
             "Two-user browser state omitted requester or reviewer Auth identity"
         )
+    baseline_grants = _baseline_grants(fixture_run_token)
     membership_by_role = {
         "requester": DEMO_OPERATOR_MEMBERSHIP_ID,
         "reviewer": DEMO_REVIEWER_MEMBERSHIP_ID,
@@ -816,7 +848,10 @@ def _provision_database(
                 cursor, fixture_run_token
             )
             baseline_versions, temporary_ids = _mcp_authority_snapshot(
-                cursor, client_id, str(UUID(browser_state["run_token"]))
+                cursor,
+                client_id,
+                str(UUID(browser_state["run_token"])),
+                fixture_run_token,
             )
             if temporary_ids:
                 raise CanonicalLiveIdentityError(
@@ -824,9 +859,9 @@ def _provision_database(
                 )
             state["prior_active_grants"] = [
                 {
-                    "grant_id": BASELINE_GRANTS[role],
+                    "grant_id": baseline_grants[role],
                     "membership_id": membership_by_role[role],
-                    "row_version": baseline_versions[BASELINE_GRANTS[role]],
+                    "row_version": baseline_versions[baseline_grants[role]],
                 }
                 for role in ("requester", "reviewer")
             ]
@@ -840,7 +875,11 @@ def _provision_database(
                    AND id=ANY(CAST(%s AS uuid[]))
                    AND status='active'
                 """,
-                (DEMO_ORG_ID, client_id, list(BASELINE_GRANTS.values())),
+                (
+                    DEMO_ORG_ID,
+                    client_id,
+                    list(baseline_grants.values()),
+                ),
             )
             if cursor.rowcount != 2:
                 raise CanonicalLiveIdentityError(

@@ -149,8 +149,11 @@ def test_pkce_token_comes_from_real_authorization_code_exchange(monkeypatch):
     )
 
 
-def _authority_rows(*, temporary: bool, run_token: str = "1" * 8 + "-1111-4111-8111-" + "1" * 12):
-    del run_token
+FIXTURE_RUN_TOKEN = "33038267646-1"
+
+
+def _authority_rows(*, temporary: bool):
+    baseline_grants = MODULE._baseline_grants(FIXTURE_RUN_TOKEN)
     rows = []
     for role in ("requester", "reviewer"):
         membership_id = (
@@ -164,7 +167,7 @@ def _authority_rows(*, temporary: bool, run_token: str = "1" * 8 + "-1111-4111-8
             rows.append(
                 (
                     MODULE.DEMO_ORG_ID,
-                    MODULE.BASELINE_GRANTS[role],
+                    baseline_grants[role],
                     membership_id,
                     "reviewed-client",
                     authority["display_name"],
@@ -243,15 +246,17 @@ class _AuthorityCursor:
 def test_mcp_authority_snapshot_accepts_only_exact_baseline_or_same_run_pair():
     baseline_cursor = _AuthorityCursor(_authority_rows(temporary=False))
     baseline_versions, temporary_ids = MODULE._mcp_authority_snapshot(
-        baseline_cursor, "reviewed-client", None
+        baseline_cursor, "reviewed-client", None, FIXTURE_RUN_TOKEN
     )
-    assert set(baseline_versions) == set(MODULE.BASELINE_GRANTS.values())
+    assert set(baseline_versions) == set(
+        MODULE._baseline_grants(FIXTURE_RUN_TOKEN).values()
+    )
     assert temporary_ids == []
 
     run_token = "11111111-1111-4111-8111-111111111111"
     temporary_cursor = _AuthorityCursor(_authority_rows(temporary=True))
     _baseline_versions, temporary_ids = MODULE._mcp_authority_snapshot(
-        temporary_cursor, "reviewed-client", run_token
+        temporary_cursor, "reviewed-client", run_token, FIXTURE_RUN_TOKEN
     )
     assert len(temporary_ids) == 2
 
@@ -260,6 +265,7 @@ def test_mcp_authority_snapshot_accepts_only_exact_baseline_or_same_run_pair():
             _AuthorityCursor(_authority_rows(temporary=True)),
             "reviewed-client",
             None,
+            FIXTURE_RUN_TOKEN,
         )
 
 
@@ -274,7 +280,18 @@ def test_mcp_authority_snapshot_rejects_capability_drift():
             _AuthorityCursor(rows),
             "reviewed-client",
             "11111111-1111-4111-8111-111111111111",
+            FIXTURE_RUN_TOKEN,
         )
+
+
+def test_mcp_baseline_ids_share_the_demo_run_scoped_authority():
+    assert MODULE._baseline_grants(FIXTURE_RUN_TOKEN) == {
+        "requester": "601d4ff7-08c0-5501-a2e0-51347f6501f5",
+        "reviewer": "bf1b35d0-eecd-5d5e-be1a-397a3a22da0e",
+    }
+    assert MODULE._baseline_grants("33038267647-1") != MODULE._baseline_grants(
+        FIXTURE_RUN_TOKEN
+    )
 
 
 def test_live18_auth_records_require_exact_same_project_metadata(monkeypatch):

@@ -34,12 +34,14 @@ try:
         supplier_invoice_chain_choices,
         validate_reviewed_scalar_pack,
     )
+    from scripts.canonical_demo_ids import canonical_demo_authority_ids
 except ModuleNotFoundError:  # Direct execution places this script directory on sys.path.
     from compile_live18_browser_fixture import (  # type: ignore[no-redef]
         FixtureCompileError,
         supplier_invoice_chain_choices,
         validate_reviewed_scalar_pack,
     )
+    from canonical_demo_ids import canonical_demo_authority_ids  # type: ignore[no-redef]
 
 
 PROJECT_REF = "rgihahbmkrmhitjdjvev"
@@ -162,21 +164,9 @@ DEMO_RUN_ID = os.getenv("GITHUB_RUN_ID", "local")
 DEMO_RUN_ATTEMPT = os.getenv("GITHUB_RUN_ATTEMPT", "1")
 DEMO_UI_FIXTURE_ID = f"{DEMO_RUN_ID}-{DEMO_RUN_ATTEMPT}"
 LIVE23_VARIANTS_REQUIRED = os.getenv("LIVE23_VARIANTS_REQUIRED") == "true"
-for grant_key in (
-    "reviewer_access_grant",
-    "operator_access_grant",
-    "agent_grant",
-    "legacy_approver_agent_grant",
-):
-    IDS[grant_key] = str(
-        uuid5(
-            NAMESPACE_URL,
-            (
-                f"canonical-staging:{grant_key}:{IDS['org']}:"
-                f"{DEMO_RUN_ID}:{DEMO_RUN_ATTEMPT}"
-            ),
-        )
-    )
+IDS.update(
+    canonical_demo_authority_ids(IDS["org"], DEMO_RUN_ID, DEMO_RUN_ATTEMPT)
+)
 IDS["cycle_count_evidence"] = str(
     uuid5(
         NAMESPACE_URL,

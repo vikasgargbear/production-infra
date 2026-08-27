@@ -823,7 +823,9 @@ def _identity_provision(request: dict[str, Any]) -> dict[str, Any]:
                         )
                 try:
                     mcp_reconciliation = recover_lost_live18_mcp_state(
-                        environment["SUPABASE_ACCESS_TOKEN"], deployed_client_id
+                        environment["SUPABASE_ACCESS_TOKEN"],
+                        deployed_client_id,
+                        f"{request['run_id']}-{request['run_attempt']}",
                     )
                     if mcp_reconciliation.get("remaining_active_mcp_grant_count") == 0:
                         mcp_cleanup_errors.clear()
@@ -931,6 +933,7 @@ def _identity_cleanup(
                     mcp_reconciliation = recover_lost_live18_mcp_state(
                         environment["SUPABASE_ACCESS_TOKEN"],
                         _deployed_oauth_client_id(),
+                        f"{request['run_id']}-{request['run_attempt']}",
                     )
                 except BaseException as exc:
                     reconciliation_errors.append(

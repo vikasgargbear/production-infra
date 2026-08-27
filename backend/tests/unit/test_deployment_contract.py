@@ -789,8 +789,11 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
         "legacy_approver_agent_grant",
     ):
         assert f'"{grant_key}"' in provisioner
-    assert 'f"canonical-staging:{grant_key}:{IDS[\'org\']}:"' in provisioner
-    assert 'f"{DEMO_RUN_ID}:{DEMO_RUN_ATTEMPT}"' in provisioner
+    assert "canonical_demo_authority_ids" in provisioner
+    assert (
+        'canonical_demo_authority_ids(IDS["org"], DEMO_RUN_ID, DEMO_RUN_ATTEMPT)'
+        in provisioner
+    )
     assert "SET status='suspended', row_version=row_version+1" in provisioner
     assert "status='active', row_version=agent_grants.row_version+1" in provisioner
     assert "erp_finance_commands.parse_portal_document" in provisioner
