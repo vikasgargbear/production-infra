@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import subprocess
+import sys
 from types import SimpleNamespace
 
 import pytest
@@ -38,6 +40,42 @@ def test_close_is_idempotent_when_open_was_never_attempted(tmp_path, monkeypatch
 
     assert close.close_authority(_environment(tmp_path / "absent")) is False
     assert close.close_authority({}) is False
+
+
+def test_preflight_cleanup_needs_no_postgres_dependency(tmp_path):
+    script = Path(close.__file__).resolve()
+    program = """
+import builtins
+import runpy
+import sys
+
+original_import = builtins.__import__
+def reject_postgres(name, *args, **kwargs):
+    if name == "psycopg2" or name.startswith("psycopg2."):
+        raise ModuleNotFoundError(name)
+    return original_import(name, *args, **kwargs)
+
+builtins.__import__ = reject_postgres
+runpy.run_path(sys.argv[1], run_name="__main__")
+"""
+    environment = {
+        "PATH": "/usr/bin:/bin",
+        "PYTHONPATH": str(script.parents[1]),
+    }
+
+    completed = subprocess.run(
+        [sys.executable, "-c", program, str(script)],
+        cwd=tmp_path,
+        env=environment,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=10,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stdout.strip() == "Canonical authority opening was never attempted."
 
 
 def test_close_attests_exact_instance_and_removes_marker(tmp_path, monkeypatch):

@@ -9,9 +9,6 @@ from pathlib import Path
 import subprocess
 from typing import Mapping
 
-from scripts.live18_railway_database_phase import _verify_response
-
-
 REQUIRED_ENVIRONMENT = (
     "CANONICAL_STAGING_PROJECT_REF",
     "GITHUB_RUN_ATTEMPT",
@@ -31,6 +28,22 @@ REQUIRED_ENVIRONMENT = (
 
 class AuthorityCloseError(RuntimeError):
     """Canonical authority could not be attested closed."""
+
+
+def _verify_response(request: Mapping[str, object]) -> None:
+    """Load the database-phase verifier only after authority may have opened.
+
+    Early workflow preflight failures happen before the pinned live acceptance
+    dependencies are installed.  They also happen before the authority marker
+    exists, so importing the PostgreSQL-backed database phase at module import
+    time makes otherwise unnecessary failure compensation fail.  Keep the
+    cheap marker check dependency-free and load the verifier only for a real
+    close operation.
+    """
+
+    from scripts.live18_railway_database_phase import _verify_response as verify
+
+    verify(request)
 
 
 def _required_environment(environment: Mapping[str, str]) -> dict[str, str]:
