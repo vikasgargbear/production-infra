@@ -66,7 +66,10 @@ from provision_staging_mcp_oauth import (  # noqa: E402
     _auth_admin_authority,
     _reconcile_client,
 )
-from canonical_demo_ids import canonical_demo_authority_ids  # noqa: E402
+from canonical_demo_ids import (  # noqa: E402
+    canonical_demo_authority_ids,
+    canonical_live18_cycle_count_authority,
+)
 from supabase_auth_admin import mask_auth_admin_secret  # noqa: E402
 
 
@@ -286,6 +289,10 @@ def _capabilities(role: str, *, live18: bool = False):
 
 def _resolve_fixture_identities(cursor, run_token: str) -> dict[str, str]:
     run_token = _validated_fixture_run_token(run_token)
+    run_id, run_attempt = run_token.split("-", 1)
+    cycle_count_authority = canonical_live18_cycle_count_authority(
+        DEMO_ORG_ID, run_id, run_attempt
+    )
     cursor.execute(
         """
         SELECT branch.id::text,customer.id::text,supplier.id::text,
@@ -293,6 +300,7 @@ def _resolve_fixture_identities(cursor, run_token: str) -> dict[str, str]:
                saleable.id::text,quarantine.id::text,
                destination_branch.id::text,destination_location.id::text,
                bank.id::text,bank_ledger.id::text,
+               cycle_count_evidence.id::text,
                interstate.id::text,interstate_address.id::text,
                interstate_registration.id::text,
                sez.id::text,sez_address.id::text,sez_registration.id::text
@@ -331,6 +339,20 @@ def _resolve_fixture_identities(cursor, run_token: str) -> dict[str, str]:
           JOIN finance.accounts AS bank_ledger
             ON bank_ledger.org_id=branch.org_id AND bank_ledger.id=%s
            AND bank_ledger.status='active'
+          JOIN core.attachments AS cycle_count_evidence
+            ON cycle_count_evidence.org_id=branch.org_id
+           AND cycle_count_evidence.id=%s
+           AND cycle_count_evidence.storage_bucket='canonical-demo-evidence'
+           AND cycle_count_evidence.storage_object_path=%s
+           AND cycle_count_evidence.sha256=%s
+           AND cycle_count_evidence.evidence_kind='inventory_cycle_count_sheet'
+           AND cycle_count_evidence.status='retained'
+           AND cycle_count_evidence.verified_at IS NOT NULL
+           AND cycle_count_evidence.sha256 IS NOT NULL
+           AND NOT erp_automation_reads.active_command_evidence_in_use(
+               cycle_count_evidence.org_id,'inventory.adjustment.prepare',
+               'evidence_attachment_id',cycle_count_evidence.id
+           )
           LEFT JOIN parties.customer_accounts AS interstate
             ON interstate.org_id=branch.org_id AND interstate.customer_code=%s
            AND interstate.status='active'
@@ -375,6 +397,9 @@ def _resolve_fixture_identities(cursor, run_token: str) -> dict[str, str]:
             TRANSFER_DESTINATION_LOCATION_ID,
             BANK_ACCOUNT_ID,
             BANK_LEDGER_ID,
+            cycle_count_authority.attachment_id,
+            cycle_count_authority.storage_object_path,
+            psycopg2.Binary(cycle_count_authority.sha256),
             f"LIVE23-INTER-{run_token}",
             f"LIVE23-SEZ-{run_token}",
             DEMO_ORG_ID,
@@ -399,6 +424,7 @@ def _resolve_fixture_identities(cursor, run_token: str) -> dict[str, str]:
         "transfer_destination_location_id",
         "bank_account_id",
         "bank_ledger_id",
+        "cycle_count_evidence_attachment_id",
         "interstate_customer_account_id",
         "interstate_delivery_address_id",
         "interstate_customer_gstin_id",
@@ -407,14 +433,14 @@ def _resolve_fixture_identities(cursor, run_token: str) -> dict[str, str]:
         "sez_customer_gstin_id",
     )
     resolved = dict(zip(keys, rows[0]))
-    variant_keys = keys[12:]
+    variant_keys = keys[13:]
     if os.getenv("LIVE23_VARIANTS_REQUIRED") == "true":
         if any(resolved[key] is None for key in variant_keys):
             raise CanonicalLiveIdentityError(
                 "Required Live23 customer fixture authority is incomplete"
             )
         return resolved
-    return {key: resolved[key] for key in keys[:12]}
+    return {key: resolved[key] for key in keys[:13]}
 
 
 def _live18_auth_records(management_token: str) -> dict[str, tuple[str, str]]:

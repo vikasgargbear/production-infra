@@ -20,6 +20,13 @@ from typing import Any
 
 import psycopg2
 
+try:
+    from scripts.canonical_demo_ids import canonical_live18_cycle_count_authority
+except ModuleNotFoundError:  # Direct execution places this script directory on sys.path.
+    from canonical_demo_ids import (  # type: ignore[no-redef]
+        canonical_live18_cycle_count_authority,
+    )
+
 
 FIXTURE_SCHEMA = "aasopharma.live18.fixture.v1"
 SCALAR_SCHEMA = "aasopharma.live18.reviewed-scalars.v1"
@@ -258,6 +265,7 @@ def resolve_authoritative_facts(
         "uom_conversion_id", "count_uom_conversion_id", "saleable_location_id",
         "quarantine_location_id", "transfer_destination_branch_id",
         "transfer_destination_location_id", "bank_account_id", "bank_ledger_id",
+        "cycle_count_evidence_attachment_id",
     }
     live23_identities = {
         "interstate_customer_account_id", "interstate_delivery_address_id",
@@ -341,6 +349,10 @@ def resolve_authoritative_facts(
     )
     if not re.fullmatch(r"[1-9][0-9]*-[1-9][0-9]*", run_token):
         raise FixtureCompileError("live18 run token must be GitHub run-id and attempt")
+    run_id, run_attempt = run_token.split("-", 1)
+    cycle_count_authority = canonical_live18_cycle_count_authority(
+        org_id, run_id, run_attempt
+    )
     supplier_invoice_number = f"DEMO-UI-SUP-{run_token}"
     bank_statement_reference = f"DEMO-UI-BANK-{run_token}"
     supplier_invoice_sql = """
@@ -563,8 +575,12 @@ def resolve_authoritative_facts(
         JOIN LATERAL (
             SELECT candidate.id,candidate.verified_at,candidate.status,
                    candidate.document_date
-              FROM core.attachments candidate
+             FROM core.attachments candidate
              WHERE candidate.org_id=membership.org_id
+               AND candidate.id=%s
+               AND candidate.storage_bucket='canonical-demo-evidence'
+               AND candidate.storage_object_path=%s
+               AND candidate.sha256=%s
                AND candidate.evidence_kind='inventory_cycle_count_sheet'
                AND candidate.status IN ('verified','retained')
                AND candidate.verified_at IS NOT NULL
@@ -858,7 +874,11 @@ def resolve_authoritative_facts(
                         auth_user_id,
                         identities["branch_id"], identities["saleable_location_id"],
                         rows[0][24], identities["product_id"],
-                        identities["count_uom_conversion_id"], org_id,
+                        identities["count_uom_conversion_id"],
+                        identities["cycle_count_evidence_attachment_id"],
+                        cycle_count_authority.storage_object_path,
+                        psycopg2.Binary(cycle_count_authority.sha256),
+                        org_id,
                     ),
                 )
                 cycle_count_rows = cursor.fetchall()

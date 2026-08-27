@@ -101,17 +101,43 @@ def test_live23_fixture_resolution_uses_the_same_run_demo_namespace() -> None:
 
         @staticmethod
         def fetchall():
-            return [tuple(f"id-{index}" for index in range(18))]
+            return [tuple(f"id-{index}" for index in range(19))]
 
     cursor = Cursor()
 
     resolved = MODULE._resolve_fixture_identities(cursor, "33019161460-1")
 
+    cycle_count_authority = MODULE.canonical_live18_cycle_count_authority(
+        MODULE.DEMO_ORG_ID, "33019161460", "1"
+    )
     assert cursor.parameters[11:13] == (
+        cycle_count_authority.attachment_id,
+        cycle_count_authority.storage_object_path,
+    )
+    assert cursor.parameters[13].adapted == cycle_count_authority.sha256
+    assert cursor.parameters[14:16] == (
         "LIVE23-INTER-33019161460-1",
         "LIVE23-SEZ-33019161460-1",
     )
     assert resolved["branch_id"] == "id-0"
+    assert resolved["cycle_count_evidence_attachment_id"] == "id-12"
+
+
+def test_live18_cycle_count_authority_is_attempt_scoped() -> None:
+    first = MODULE.canonical_live18_cycle_count_authority(
+        MODULE.DEMO_ORG_ID, "1234", "1"
+    )
+    replay = MODULE.canonical_live18_cycle_count_authority(
+        MODULE.DEMO_ORG_ID, "1234", "1"
+    )
+    retry = MODULE.canonical_live18_cycle_count_authority(
+        MODULE.DEMO_ORG_ID, "1234", "2"
+    )
+
+    assert first == replay
+    assert first.attachment_id != retry.attachment_id
+    assert first.storage_object_path != retry.storage_object_path
+    assert first.sha256 != retry.sha256
 
 
 def test_pkce_token_comes_from_real_authorization_code_exchange(monkeypatch):

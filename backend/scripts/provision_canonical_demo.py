@@ -35,14 +35,20 @@ try:
         supplier_invoice_chain_choices,
         validate_reviewed_scalar_pack,
     )
-    from scripts.canonical_demo_ids import canonical_demo_authority_ids
+    from scripts.canonical_demo_ids import (
+        canonical_demo_authority_ids,
+        canonical_live18_cycle_count_authority,
+    )
 except ModuleNotFoundError:  # Direct execution places this script directory on sys.path.
     from compile_live18_browser_fixture import (  # type: ignore[no-redef]
         FixtureCompileError,
         supplier_invoice_chain_choices,
         validate_reviewed_scalar_pack,
     )
-    from canonical_demo_ids import canonical_demo_authority_ids  # type: ignore[no-redef]
+    from canonical_demo_ids import (  # type: ignore[no-redef]
+        canonical_demo_authority_ids,
+        canonical_live18_cycle_count_authority,
+    )
 
 
 PROJECT_REF = "rgihahbmkrmhitjdjvev"
@@ -171,6 +177,12 @@ DEMO_UI_FIXTURE_ID = f"{DEMO_RUN_ID}-{DEMO_RUN_ATTEMPT}"
 LIVE23_VARIANTS_REQUIRED = os.getenv("LIVE23_VARIANTS_REQUIRED") == "true"
 IDS.update(
     canonical_demo_authority_ids(IDS["org"], DEMO_RUN_ID, DEMO_RUN_ATTEMPT)
+)
+LIVE18_CYCLE_COUNT_AUTHORITY = canonical_live18_cycle_count_authority(
+    IDS["org"], DEMO_RUN_ID, DEMO_RUN_ATTEMPT
+)
+IDS["live18_cycle_count_evidence"] = (
+    LIVE18_CYCLE_COUNT_AUTHORITY.attachment_id
 )
 IDS["cycle_count_evidence"] = str(
     uuid5(
@@ -5407,6 +5419,82 @@ def current_saleable_quantity(connection, batch_id: str) -> str:
         return str(row[0])
 
 
+def seed_live18_cycle_count_evidence(connection) -> dict[str, str]:
+    """Create the unused, run-bound cycle-count sheet for browser acceptance."""
+
+    current_business_date = datetime.now(timezone.utc).astimezone(
+        ZoneInfo("Asia/Kolkata")
+    ).date()
+    if current_business_date != INDIA_BUSINESS_DATE:
+        raise RuntimeError(
+            "India-local business date changed before Live18 evidence seeding"
+        )
+    attachment_id = LIVE18_CYCLE_COUNT_AUTHORITY.attachment_id
+    storage_object_path = LIVE18_CYCLE_COUNT_AUTHORITY.storage_object_path
+    original_filename = LIVE18_CYCLE_COUNT_AUTHORITY.original_filename
+    digest_input = LIVE18_CYCLE_COUNT_AUTHORITY.digest_input
+    with connection.cursor() as cursor:
+        cursor.execute('SET LOCAL ROLE "erp_migration_owner"')
+        for setting, value in (
+            ("app.org_id", IDS["org"]),
+            ("app.membership_id", IDS["reviewer_membership"]),
+            ("app.user_id", IDS["reviewer_user"]),
+            ("app.auth_user_id", IDS["reviewer_auth_user"]),
+            ("app.request_id", IDS["request"]),
+        ):
+            cursor.execute("SELECT set_config(%s, %s, true)", (setting, value))
+        cursor.execute(
+            """
+            INSERT INTO core.attachments (
+                org_id,id,storage_bucket,storage_object_path,original_filename,
+                media_type,byte_size,sha256,evidence_kind,document_date,
+                retention_until,status,verified_at,created_by_membership_id
+            ) VALUES (
+                %s,%s,'canonical-demo-evidence',%s,%s,'application/json',128,
+                extensions.digest(%s,'sha256'),'inventory_cycle_count_sheet',
+                %s,%s,'retained',transaction_timestamp(),%s
+            ) ON CONFLICT (org_id,id) DO NOTHING
+            """,
+            (
+                IDS["org"], attachment_id, storage_object_path,
+                original_filename, digest_input, INDIA_BUSINESS_DATE,
+                INDIA_BUSINESS_DATE + timedelta(days=3650),
+                IDS["reviewer_membership"],
+            ),
+        )
+        cursor.execute(
+            """
+            SELECT id::text
+              FROM core.attachments
+             WHERE org_id=%s AND id=%s AND storage_bucket='canonical-demo-evidence'
+               AND storage_object_path=%s AND original_filename=%s
+               AND evidence_kind='inventory_cycle_count_sheet'
+               AND document_date=%s AND status='retained'
+               AND verified_at IS NOT NULL
+               AND sha256=extensions.digest(%s,'sha256')
+               AND retention_until>=%s
+               AND NOT erp_automation_reads.active_command_evidence_in_use(
+                   org_id,'inventory.adjustment.prepare',
+                   'evidence_attachment_id',id
+               )
+            """,
+            (
+                IDS["org"], attachment_id, storage_object_path,
+                original_filename, INDIA_BUSINESS_DATE, digest_input,
+                INDIA_BUSINESS_DATE,
+            ),
+        )
+        row = cursor.fetchone()
+        if row != (attachment_id,):
+            raise RuntimeError(
+                "run-bound Live18 cycle-count evidence did not remain unused"
+            )
+    return {
+        "attachment_id": attachment_id,
+        "storage_object_path": storage_object_path,
+    }
+
+
 def reconcile_party_master(connection) -> dict[str, Any]:
     """Prove customer and supplier contact facts through the runtime RLS path."""
     expected = {
@@ -6065,6 +6153,8 @@ def main() -> int:
         adjustment_reconciliation = reconcile_inventory_adjustment(
             runtime, adjustment_journey["executed"]["resource_id"]
         )
+    with database_connection("PSYCOPG_DATABASE_URL") as bootstrap:
+        live18_cycle_count_fixture = seed_live18_cycle_count_evidence(bootstrap)
     with staging_owner_audit_connection() as owner:
         cross_table_reconciliation = reconcile_cross_table_invariants(
             owner,
@@ -6125,6 +6215,7 @@ def main() -> int:
         "inventory_destruction_ui_fixture": inventory_destruction_ui_fixture,
         "purchase_return_reconciliation": purchase_return_reconciliation,
         "inventory_adjustment_reconciliation": adjustment_reconciliation,
+        "live18_cycle_count_fixture": live18_cycle_count_fixture,
         "cross_table_reconciliation": cross_table_reconciliation,
         "available_prepare_operation_count": len(PREPARE_CAPABILITIES),
         "challan_evidence": {

@@ -766,6 +766,14 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     assert 'canonical-staging-cycle-count:' in provisioner
     assert 'f"cycle-count-sheet-{DEMO_RUN_ID}.json"' in provisioner
     assert 'f"inventory_cycle_count_sheet:{DEMO_RUN_ID}"' in provisioner
+    assert 'def seed_live18_cycle_count_evidence(connection)' in provisioner
+    assert 'IDS["live18_cycle_count_evidence"]' in provisioner
+    assert "canonical_live18_cycle_count_authority" in provisioner
+    assert "LIVE18_CYCLE_COUNT_AUTHORITY.storage_object_path" in provisioner
+    assert "India-local business date changed before Live18 evidence seeding" in provisioner
+    assert provisioner.index("adjustment_reconciliation = reconcile_inventory_adjustment") < provisioner.index(
+        "live18_cycle_count_fixture = seed_live18_cycle_count_evidence"
+    )
     assert '"allocated_base_billed_quantity": line["base_billed_quantity"]' in provisioner
     assert '"1000000.00", "INR"' in provisioner
     assert "maximum_amount, currency_code" in provisioner

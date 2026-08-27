@@ -80,6 +80,7 @@ def _fixture_identities() -> dict[str, str]:
         "transfer_destination_location_id",
         "bank_account_id",
         "bank_ledger_id",
+        "cycle_count_evidence_attachment_id",
     )
     return {
         key: f"00000000-0000-4000-8000-{index:012d}"
