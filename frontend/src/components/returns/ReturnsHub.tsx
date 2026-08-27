@@ -1,11 +1,12 @@
 import React from 'react';
-import { RotateCcw, ShoppingCart, Package, List, ShieldCheck, Send } from 'lucide-react';
+import { RotateCcw, ShoppingCart, Package, List, ShieldCheck, Send, Undo2 } from 'lucide-react';
 import { ModuleHub } from '../global';
 import SalesReturnFlow from './SalesReturnFlow';
 import PurchaseReturnFlow from './PurchaseReturnFlow';
 import ReturnsListHistory from './ReturnsListHistory';
 import ReturnApprovalInbox from './ReturnApprovalInbox';
 import ReturnRequesterInbox from './ReturnRequesterInbox';
+import CommercialReversalFlow from './CommercialReversalFlow';
 import { RETURN_SUBPAGE_IDS, ReturnSubpage } from './returnsNavigation';
 
 export { RETURN_SUBPAGE_IDS } from './returnsNavigation';
@@ -56,6 +57,15 @@ const ReturnsHub: React.FC<ReturnsHubProps> = ({
       icon: Package,
       color: 'orange',
       component: PurchaseReturnFlow
+    },
+    {
+      id: 'commercial-reversal',
+      label: 'Correct Posted',
+      fullLabel: 'Compensating Return / Note Reversal',
+      description: 'Correct an erroneous posted return or note',
+      icon: Undo2,
+      color: 'amber',
+      component: CommercialReversalFlow
     },
     {
       id: 'returns-history',

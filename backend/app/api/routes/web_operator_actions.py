@@ -213,6 +213,18 @@ class CommercialReversalReadback(StrictDTO):
     stock_entries: list[CommercialReversalStockEntry]
 
 
+class CommercialReversalSource(StrictDTO):
+    reversal_kind: Literal["sales_return", "purchase_return", "adjustment_note"]
+    original_resource_id: UUID
+    expected_row_version: int
+    branch_id: UUID
+    original_adjustment_note_id: UUID
+    original_note_date: date
+    reported: bool
+    amendment_evidence_required: bool
+    inventory_document_id: Optional[UUID]
+
+
 class ExpenseClaimReadbackLine(StrictDTO):
     expense_claim_line_id: UUID
     line_number: int
@@ -743,6 +755,96 @@ def inventory_adjustment_eligibility(
             for row in rows
         ],
         evidence=[InventoryAdjustmentEvidence(**dict(row._mapping)) for row in evidence_rows],
+    )
+
+
+@router.get(
+    "/commercial-reversal/source",
+    response_model=CommercialReversalSource,
+)
+def commercial_reversal_source(
+    reversal_kind: Literal["sales_return", "purchase_return", "adjustment_note"],
+    original_resource_id: UUID,
+    user: dict = Depends(_web_user),
+    db: Session = Depends(get_db),
+) -> CommercialReversalSource:
+    """Resolve one exact posted source; the browser never guesses its row version."""
+
+    org_id = _uuid(user.get("org_id"), "organization")
+    auth_user_id = _uuid(user.get("auth_user_id"), "identity")
+    db.execute(
+        text("SELECT erp_security.activate_context(:auth_user_id, :org_id)"),
+        {"auth_user_id": auth_user_id, "org_id": org_id},
+    )
+    operation_key = {
+        "sales_return": "sales.return.reversal.prepare",
+        "purchase_return": "procurement.purchase_return.reversal.prepare",
+        "adjustment_note": "finance.adjustment_note.reversal.prepare",
+    }[reversal_kind]
+    source_sql = {
+        "sales_return": """
+          SELECT source.id AS original_resource_id, source.row_version AS expected_row_version,
+                 source.branch_id, note.id AS original_adjustment_note_id, note.note_date AS original_note_date,
+                 document.id AS inventory_document_id
+            FROM sales.returns source
+            JOIN finance.adjustment_notes note ON note.org_id=source.org_id
+             AND note.sales_return_id=source.id AND note.status='posted'
+            JOIN inventory.inventory_documents document ON document.org_id=source.org_id
+             AND document.sales_return_id=source.id AND document.document_type='sales_return_receipt'
+             AND document.status='posted'
+           WHERE source.org_id=:org_id AND source.id=:source_id AND source.status='posted'
+        """,
+        "purchase_return": """
+          SELECT source.id AS original_resource_id, source.row_version AS expected_row_version,
+                 source.branch_id, note.id AS original_adjustment_note_id, note.note_date AS original_note_date,
+                 document.id AS inventory_document_id
+            FROM procurement.purchase_returns source
+            JOIN finance.adjustment_notes note ON note.org_id=source.org_id
+             AND note.purchase_return_id=source.id AND note.status='posted'
+            JOIN inventory.inventory_documents document ON document.org_id=source.org_id
+             AND document.purchase_return_id=source.id AND document.document_type='purchase_return_issue'
+             AND document.status='posted'
+           WHERE source.org_id=:org_id AND source.id=:source_id AND source.status='posted'
+        """,
+        "adjustment_note": """
+          SELECT source.id AS original_resource_id, source.row_version AS expected_row_version,
+                 coalesce(invoice.branch_id,supplier.branch_id) AS branch_id,
+                 source.id AS original_adjustment_note_id, source.note_date AS original_note_date,
+                 NULL::uuid AS inventory_document_id
+            FROM finance.adjustment_notes source
+            LEFT JOIN sales.invoices invoice ON invoice.org_id=source.org_id AND invoice.id=source.sales_invoice_id
+            LEFT JOIN procurement.supplier_invoices supplier ON supplier.org_id=source.org_id AND supplier.id=source.supplier_invoice_id
+           WHERE source.org_id=:org_id AND source.id=:source_id AND source.status='posted'
+             AND source.sales_return_id IS NULL AND source.purchase_return_id IS NULL
+        """,
+    }[reversal_kind]
+    params = {"org_id": org_id, "source_id": original_resource_id}
+    source = db.execute(text(source_sql), params).mappings().one_or_none()
+    if source is None or source["branch_id"] is None:
+        raise HTTPException(status_code=404, detail="Exact posted commercial source is unavailable")
+    context = _resolve_context(
+        db, user, operation_key, branch_ids=(source["branch_id"],)
+    )
+    reported = bool(db.execute(
+        text(
+            """
+            SELECT EXISTS(
+              SELECT 1 FROM tax.documents document
+              JOIN tax.return_documents membership
+                ON membership.org_id=document.org_id
+               AND membership.tax_document_id=document.id
+             WHERE document.org_id=:org_id
+               AND document.adjustment_note_id=:note_id
+            )
+            """
+        ),
+        {"org_id": context.organization_id, "note_id": source["original_adjustment_note_id"]},
+    ).scalar_one())
+    return CommercialReversalSource(
+        reversal_kind=reversal_kind,
+        **dict(source),
+        reported=reported,
+        amendment_evidence_required=reported,
     )
 
 

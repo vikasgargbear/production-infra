@@ -392,3 +392,10 @@ def test_commercial_reversals_are_named_compensating_authorities_with_exact_line
         mapping.index('CREATE FUNCTION "erp_commercial_commands"."post_commercial_reversal"'):
         mapping.index('CREATE FUNCTION "erp_commercial_commands"."post_sales_return_reversal"')
     ]
+    post_body = mapping[
+        mapping.index('CREATE FUNCTION "erp_commercial_commands"."post_commercial_reversal"'):
+        mapping.index('CREATE FUNCTION "erp_commercial_commands"."post_sales_return_reversal"')
+    ]
+    assert post_body.index("erp_trade_commands.claim") < post_body.index(
+        "resolve_commercial_reversal_prepare"
+    )

@@ -1,0 +1,35 @@
+{
+  "template_schema": "aasopharma.live18.ui-template.v1",
+  "operation_id": "purchase_return_reversal",
+  "lifecycle_mode": "split",
+  "steps": {
+    "missing_required_steps": [
+      {"actor":"requester","action":"goto","value":"/#/returns/commercial-reversal"},
+      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Correct an erroneous posted return or note","exact":true},"value":"Correct an erroneous posted return or note"},
+      {"actor":"requester","action":"expectDisabled","locator":{"kind":"role","role":"button","name":"Prepare immutable review","exact":true}}
+    ],
+    "prepare_steps": [
+      {"actor":"requester","action":"goto","value":"/#/returns/commercial-reversal"},
+      {"actor":"requester","action":"select","locator":{"kind":"label","name":"Posted source type","exact":true},"value":"purchase_return"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Exact source UUID","exact":true},"value":"{{resource_purchase_return}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Resolve exact posted source","exact":true}},
+      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Exact unreported source resolved. The command will create a direct counter-document.","exact":true},"value":"Exact unreported source resolved"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Why was the posted source erroneous?","exact":true},"value":"Erroneous duplicate purchase-return posting"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Prepare immutable review","exact":true}}
+    ],
+    "approval_steps": [
+      {"actor":"reviewer","action":"goto","value":"/#/returns/commercial-reversal"},
+      {"actor":"reviewer","action":"fill","locator":{"kind":"label","name":"Command UUID","exact":true},"value":"{{command_request_id}}"},
+      {"actor":"reviewer","action":"click","locator":{"kind":"role","role":"button","name":"Load exact review","exact":true}},
+      {"actor":"reviewer","action":"expectText","locator":{"kind":"testId","name":"canonical-immutable-preview"},"value":"procurement.purchase_return.reversal.post"},
+      {"actor":"reviewer","action":"click","locator":{"kind":"role","role":"button","name":"Approve as distinct reviewer","exact":true}}
+    ],
+    "execute_steps": [
+      {"actor":"requester","action":"goto","value":"/#/returns/commercial-reversal"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Command UUID","exact":true},"value":"{{command_request_id}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Load exact review","exact":true}},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Execute as requester","exact":true}},
+      {"actor":"requester","action":"expectText","locator":{"kind":"testId","name":"commercial-reversal-readback"},"value":"Authoritative compensating readback"}
+    ]
+  }
+}

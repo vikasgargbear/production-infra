@@ -2478,14 +2478,14 @@ DECLARE preview jsonb; note finance.adjustment_notes%ROWTYPE; original_event fin
         original_tax tax.documents%ROWTYPE; claim_id uuid; replay_id uuid; actor uuid:=erp_security.current_membership_id();
         posted_time timestamptz:=pg_catalog.transaction_timestamp(); allocation record; residual record;
 BEGIN
-  preview:=erp_commercial_commands.resolve_commercial_reversal_prepare(organization_id,reversal_kind,
-    original_resource_id,expected_row_version,reversal_date,reason,amendment_evidence_attachment_id);
   SELECT p_claim_id,p_replay_resource_id INTO claim_id,replay_id FROM erp_trade_commands.claim(
     organization_id,actor,reversal_kind||'.reversal.post',key_hash,request_hash,expires_at);
   IF replay_id IS NOT NULL THEN
     IF replay_id IS DISTINCT FROM reversal_adjustment_note_id THEN RAISE EXCEPTION USING ERRCODE='23505', MESSAGE='commercial reversal replay differs'; END IF;
     RETURN replay_id;
   END IF;
+  preview:=erp_commercial_commands.resolve_commercial_reversal_prepare(organization_id,reversal_kind,
+    original_resource_id,expected_row_version,reversal_date,reason,amendment_evidence_attachment_id);
   SELECT * INTO STRICT note FROM finance.adjustment_notes
    WHERE org_id=organization_id AND id=(preview->>'original_adjustment_note_id')::uuid FOR UPDATE;
   SELECT event.* INTO STRICT original_event FROM finance.accounting_events event

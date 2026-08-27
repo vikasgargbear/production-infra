@@ -917,7 +917,8 @@ def test_live18_templates_use_only_canonical_hash_routes() -> None:
         "/#/returns/sales-return",
         "/#/returns/purchase-return",
         "/#/returns/approval-inbox",
-        "/#/returns/resume-post",
+            "/#/returns/resume-post",
+            "/#/returns/commercial-reversal",
         "/#/stock-management/stock-adjustment",
         "/#/stock-management/stock-transfer",
         "/#/stock-management/inventory-destruction",
@@ -1417,3 +1418,32 @@ def test_sales_return_template_targets_prior_sales_invoice_and_split_review() ->
     assert operation["execute_steps"][2]["locator"]["name"] == (
         "open-return-{{command_request_id}}"
     )
+
+
+@pytest.mark.parametrize(
+    ("operation_id", "source_operation"),
+    (
+        ("sales_return_reversal", "sales_return"),
+        ("purchase_return_reversal", "purchase_return"),
+        ("adjustment_note_reversal", "customer_credit_note"),
+    ),
+)
+def test_commercial_reversal_templates_use_exact_prior_resources_and_split_lifecycle(
+    operation_id: str,
+    source_operation: str,
+) -> None:
+    root = Path(__file__).resolve().parents[3]
+    template = json.loads(
+        (root / f"frontend/e2e/live18/templates/{operation_id}.json").read_text()
+    )
+    assert template["template_schema"] == TEMPLATE_SCHEMA
+    assert template["operation_id"] == operation_id
+    rendered = json.dumps(template, sort_keys=True)
+    assert f"{{{{resource_{source_operation}}}}}" in rendered
+    assert "row_version}}" not in rendered
+    assert "intercept" not in rendered.lower()
+    operation = {
+        "lifecycle_mode": template["lifecycle_mode"],
+        **template["steps"],
+    }
+    _validate_compiled_steps(operation_id, operation, "separate_approver")
