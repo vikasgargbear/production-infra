@@ -2,18 +2,13 @@
   "version": 1,
   "readiness_state": "migrating",
   "expected_tenant_setting": "app.org_id",
-  "bootstrap_ddl_root": "database/02-tables",
   "canonical_migration_root": "backend/alembic",
   "canonical_model_file": "docs/architecture/canonical-field-dictionary.json",
   "canonical_model_sha256": "de9a40da6e6cf5aa33b30f3794e8d389e456201279365411013d78667be7eba4",
   "canonical_model_catalog_sha256": "24a8dd369d56658b1e9fd630dfcc5de45985f489d3dd543a9e10be711d1730fd",
-  "rls_policy_file": "backend/migrations/enable_rls.sql",
-  "deployment_entrypoint": "database/09-deployment/01_deploy_to_supabase.sql",
   "source_classification_file": "database/schema-source-classification.json",
-  "latest_live_capture_evidence": "database/live-schema-evidence.json",
   "canonical_staging_project_ref": "rgihahbmkrmhitjdjvev",
   "canonical_transaction_integrity_evidence": null,
-  "deployment_guard_marker": "SCHEMA_BASELINE_REQUIRED",
   "required_migration_files": [
     "backend/alembic.ini",
     "backend/alembic/env.py",
@@ -108,9 +103,9 @@
     "system_config.system_health_metrics"
   ],
   "notes": [
-    "migrating means the reviewed first revision is packaged and CI-gated but has not been applied to live Supabase",
+    "migrating means the canonical chain is packaged and CI-gated but exact-SHA promotion evidence remains incomplete",
     "the first baseline requires its exact approved source SQL hash and a bootstrap principal with CREATEROLE; runtime principals are rejected",
-    "database/02-tables is legacy bootstrap DDL, not proof of the current production schema",
-    "only backend/alembic may contain new production migrations; live reset and application cutover remain separate approval gates"
+    "backend/alembic is the sole database creation authority under the approved reset-only strategy",
+    "conversion, backfill, compatibility, fallback, and dual read/write are prohibited"
   ]
 }

@@ -94,11 +94,6 @@ on:
         required: false
         default: docs/architecture/promotion-evidence/decommission-plan.template.json
         type: string
-      run_conversion_preflight:
-        description: Run aggregate-only read-only diagnostics against the production legacy source
-        required: true
-        default: false
-        type: boolean
       diagnose_render_pilot:
         description: Read sanitized status and startup logs for the free Render pilot
         required: true
@@ -120,13 +115,6 @@ permissions:
   actions: read
 
 jobs:
-  canonical-conversion-preflight:
-    if: >-
-      github.event_name == 'workflow_dispatch' &&
-      inputs.run_conversion_preflight
-    uses: ./.github/workflows/canonical-conversion-preflight.yml
-    secrets: inherit
-
   canonical-free-staging:
     if: >-
       github.event_name == 'workflow_dispatch' &&
@@ -641,12 +629,6 @@ jobs:
           python backend/scripts/audit/app_data_contract_gate.py --contract-only
           python backend/scripts/audit/mcp_operator_action_contract.py
           python backend/scripts/audit/runtime_environment_contract.py
-      - name: Require complete read-only legacy conversion plan
-        if: always()
-        run: >-
-          python backend/scripts/compile_legacy_conversion_plan.py
-          --target-project-ref rgihahbmkrmhitjdjvev
-          --output /tmp/canonical-conversion-plan.json
       - name: Require executable canonical constraints and RLS before reset baseline
         if: always()
         run: >-

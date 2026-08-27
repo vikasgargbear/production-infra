@@ -83,27 +83,21 @@ def _fixture_root(
     authority = {
         "readiness_state": state,
         "canonical_migration_root": "backend/alembic",
-        "bootstrap_ddl_root": "database/02-tables",
-        "deployment_entrypoint": "database/09-deployment/01_deploy_to_supabase.sql",
         "source_classification_file": "database/schema-source-classification.json",
     }
     classification = {
         "canonical_sources": [
-            {
-                "path": "database/02-tables",
-                "classification": "retain",
-                "role": "legacy-bootstrap-only",
-            },
             {
                 "path": "backend/alembic",
                 "classification": "retain",
                 "role": "hash-bound-canonical-production-migration-authority",
             },
         ],
-        "legacy_deployment_plan": {
-            "path": authority["deployment_entrypoint"],
-            "classification": "retire",
-            "execution_state": "fail-closed-pending-live-baseline",
+        "reset_strategy": {
+            "mode": "reset-only",
+            "conversion_allowed": False,
+            "legacy_runtime_allowed": False,
+            "dual_read_write_allowed": False,
         },
     }
     gates = {name: gates_ready for name in readiness.EXPECTED_RELEASE_GATES}
@@ -457,16 +451,20 @@ def test_partial_evidence_cannot_publish_operator_writes(tmp_path: Path):
     assert "MCP_RELEASE_GATE_UNVERIFIED" in codes
 
 
-def test_legacy_bootstrap_cannot_be_promoted_to_migration_authority(tmp_path: Path):
+def test_second_schema_authority_cannot_be_promoted(tmp_path: Path):
     root = _fixture_root(tmp_path)
     path = root / "database/schema-source-classification.json"
     classification = json.loads(path.read_text(encoding="utf-8"))
-    classification["canonical_sources"][0]["role"] = "production-authority"
+    classification["canonical_sources"].append({
+        "path": "database/legacy",
+        "classification": "retain",
+        "role": "production-authority",
+    })
     path.write_text(json.dumps(classification), encoding="utf-8")
 
     codes = {issue.code for issue in readiness.collect_issues(root)}
 
-    assert "LEGACY_BOOTSTRAP_ROLE_INVALID" in codes
+    assert "MULTIPLE_SCHEMA_AUTHORITIES" in codes
 
 
 def test_repository_stays_fail_closed_until_live_and_external_evidence_exists():

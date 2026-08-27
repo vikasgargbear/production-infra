@@ -217,8 +217,8 @@ def validate_promotion_evidence(
             continue
         errors.extend(_artifact_errors(root, section, label=section_name))
         if section_name == "source_disposition":
-            if section.get("strategy") not in {"reset", "conversion"}:
-                errors.append("promotion evidence source_disposition.strategy must be reset or conversion")
+            if section.get("strategy") != "reset":
+                errors.append("promotion evidence source_disposition.strategy must be reset")
             if not isinstance(section.get("source_identifier"), str) or not section["source_identifier"].strip():
                 errors.append("promotion evidence source_disposition.source_identifier is required")
         elif section_name == "route_graph":

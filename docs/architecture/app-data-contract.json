@@ -4,15 +4,15 @@
   "data_authority": {
     "manifest": "docs/architecture/canonical-data-model.json",
     "post_baseline_manifests": ["database/canonical/master_codes/master-code-authority.json"],
-    "expected_version": "1.1.0-wholesale-draft",
+    "expected_version": "1.2.0-canonical-authority",
     "expected_table_count": 111,
     "rule": "This contract does not define tables. Every relation named here must exist in the canonical manifest."
   },
   "source_inventory": {
     "backend_root": "backend/app",
     "frontend_api_root": "frontend/src/services/api/modules",
-    "live_capture": "artifacts/live-schema-captures/supabase-jfrairkkzxwkhbtqejnz-20260819T143728Z.json",
-    "capture_time": "2026-08-19T14:37:28.293638+00:00"
+    "classification": "database/schema-source-classification.json",
+    "runtime_rule": "Only mounted routes, reachable callables, exported clients, current CI and deployment consumers classify application authority; retired relation names remain negative sentinels, not conversion inputs."
   },
   "promotion_evidence": {
     "manifest": "docs/architecture/canonical-application-promotion-evidence.json",

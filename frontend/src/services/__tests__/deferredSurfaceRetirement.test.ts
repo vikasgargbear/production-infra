@@ -74,6 +74,22 @@ describe('deferred production surfaces', () => {
     ].forEach(retiredGuide => expect(fs.existsSync(retiredGuide)).toBe(false));
   });
 
+  test('fabricated help-center and schema snapshots stay retired', () => {
+    [
+      path.resolve(srcRoot, '../docs/user-guides/README.md'),
+      path.resolve(srcRoot, '../docs/UI_AUDIT_INVOICE_MODULE.md'),
+      path.resolve(srcRoot, '../docs/VARIABLE_NAMING_DICTIONARY.html'),
+      path.resolve(srcRoot, '../jest.config.js'),
+    ].forEach(retiredPath => expect(fs.existsSync(retiredPath)).toBe(false));
+
+    const docsIndex = fs.readFileSync(
+      path.resolve(srcRoot, '../docs/README.md'),
+      'utf8',
+    );
+    expect(docsIndex).not.toMatch(/support@yourapp|XXXXX|1800-XXX/);
+    expect(docsIndex).not.toContain('Status: ✅ Complete');
+  });
+
   test('zero-consumer compatibility clients and unreachable shells stay retired', () => {
     [
       'hooks/useValidation.ts',

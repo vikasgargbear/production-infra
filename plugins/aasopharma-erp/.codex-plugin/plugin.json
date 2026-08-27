@@ -1,0 +1,34 @@
+{
+  "name": "aasopharma-erp",
+  "version": "0.1.0",
+  "description": "Use the authenticated canonical AASOPharma ERP from ChatGPT and Codex.",
+  "author": {
+    "name": "AASOPharma",
+    "url": "https://github.com/vikasgargbear/production-infra"
+  },
+  "homepage": "https://github.com/vikasgargbear/production-infra",
+  "repository": "https://github.com/vikasgargbear/production-infra",
+  "keywords": [
+    "erp",
+    "pharma",
+    "inventory",
+    "accounting",
+    "gst"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "AASOPharma ERP",
+    "shortDescription": "Work with your canonical pharma ERP",
+    "longDescription": "Search ERP records, review canonical business operations, and execute authorized actions through the existing authenticated AASOPharma MCP service.",
+    "developerName": "AASOPharma",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Show current ERP records without changing anything",
+      "Prepare an ERP operation for my review"
+    ]
+  }
+}

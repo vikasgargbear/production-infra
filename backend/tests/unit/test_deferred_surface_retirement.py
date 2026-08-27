@@ -186,6 +186,17 @@ def test_stale_developer_guides_stay_retired() -> None:
         assert "master.org_users" not in source
         assert "system_config.audit_logs" not in source
 
+    frontend_docs = {
+        path.relative_to(REPOSITORY_ROOT).as_posix()
+        for path in (REPOSITORY_ROOT / "frontend/docs").rglob("*")
+        if path.is_file()
+    }
+    assert frontend_docs == {
+        "frontend/docs/README.md",
+        "frontend/docs/05-api-integration/README.md",
+        "frontend/docs/08-security/README.md",
+    }
+
 
 def test_retired_audit_and_settings_routes_are_absent() -> None:
     api_routes = [
@@ -217,7 +228,13 @@ def test_retired_audit_and_settings_routes_are_absent() -> None:
 
 def test_unreachable_legacy_sql_operators_and_docs_stay_retired() -> None:
     retired_paths = (
+        "TODO.md",
+        "backend/migrate_to_secure_auth.py",
+        "backend/scripts/audit_sales_schema.py",
+        "backend/scripts/audit/comprehensive_schema_audit.py",
+        "backend/scripts/audit/validate_constants.py",
         "backend/scripts/repair_finance_denormalized_drift.py",
+        "backend/scripts/extract_schema_docs.py",
         "backend/scripts/schema_audit.py",
         "database/schema-docs/CURRENT_SCHEMA_STATE.txt",
         "database/schema-docs/README.md",
@@ -225,7 +242,12 @@ def test_unreachable_legacy_sql_operators_and_docs_stay_retired() -> None:
         "database/schema-docs/generate_schema_docs.sh",
         "database/schema-docs/validate_schemas.py",
         "docs/SECURITY_AUDIT.md",
+        "docs/architecture/hosting-options-2026-08.md",
         "docs/backend/database/finance-gst-hardening-audit.md",
+        "docs/deployment/google-cloud-run-cloudflare-pages.md",
+        "docs/quality-improvements-install.md",
+        "deploy/cloud-run/service.template.yaml",
+        "scripts/pre-commit-hook.sh",
     )
 
     assert [
@@ -243,3 +265,80 @@ def test_unreachable_legacy_sql_operators_and_docs_stay_retired() -> None:
     assert "set_org_context" not in core_sources
     assert "verify_user_org_access" not in core_sources
     assert "master.org_users" not in core_sources
+
+
+def test_reset_only_strategy_has_no_retired_project_conversion_tools() -> None:
+    retired_paths = (
+        ".github/workflows/canonical-conversion-preflight.yml",
+        "backend/scripts/compile_legacy_conversion_plan.py",
+        "backend/scripts/sql/canonical_conversion_preflight.sql",
+        "backend/tests/unit/test_canonical_conversion_preflight.py",
+        "backend/tests/unit/test_legacy_conversion_plan.py",
+        "database/live-conversion-preflight-evidence.json",
+        "database/live-source-relation-inventory.json",
+        "backend/scripts/capture_supabase_schema.py",
+        "backend/scripts/sql/capture_supabase_schema.sql",
+        "backend/tests/unit/test_supabase_schema_capture.py",
+        "docs/operations/supabase-live-schema-capture.md",
+        "docs/architecture/query-schema-conflicts.json",
+        "docs/backend/database/MASTER_SCHEMA_INDEX.md",
+        "docs/backend/database/README.md",
+        "docs/backend/database/schemas/master.md",
+        "docs/backend/database/schemas/sales.md",
+    )
+
+    assert [
+        path for path in retired_paths if (REPOSITORY_ROOT / path).exists()
+    ] == []
+
+    production_workflow = (
+        REPOSITORY_ROOT / ".github/workflows/production-readiness.yml"
+    ).read_text(encoding="utf-8")
+    assert "run_conversion_preflight" not in production_workflow
+    assert "canonical-conversion-preflight" not in production_workflow
+    assert "compile_legacy_conversion_plan" not in production_workflow
+    assert "Require executable canonical constraints and RLS before reset baseline" in production_workflow
+
+
+def test_canonical_alembic_has_no_legacy_packaging_or_schema_history() -> None:
+    retired_files = (
+        "backend/pharma-backend.spec",
+        "database/09-deployment/01_deploy_to_supabase.sql",
+        "database/live-row-count-evidence.json",
+        "database/live-schema-evidence.json",
+    )
+    retired_roots = (
+        "backend/migrations",
+        "database/02-tables",
+        "database/04-triggers",
+        "database/migrations",
+    )
+
+    assert [
+        path for path in retired_files if (REPOSITORY_ROOT / path).exists()
+    ] == []
+    assert [
+        path
+        for path in retired_roots
+        if any(candidate.is_file() for candidate in (REPOSITORY_ROOT / path).rglob("*"))
+    ] == []
+
+    authority = json.loads(
+        (REPOSITORY_ROOT / "database/schema-authority.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    classification = json.loads(
+        (REPOSITORY_ROOT / authority["source_classification_file"]).read_text(
+            encoding="utf-8"
+        )
+    )
+    assert authority["canonical_migration_root"] == "backend/alembic"
+    assert "bootstrap_ddl_root" not in authority
+    assert "deployment_entrypoint" not in authority
+    assert classification["reset_strategy"] == {
+        "mode": "reset-only",
+        "conversion_allowed": False,
+        "legacy_runtime_allowed": False,
+        "dual_read_write_allowed": False,
+    }

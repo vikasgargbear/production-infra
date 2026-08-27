@@ -1,139 +1,88 @@
-import json
-from collections import Counter
 from pathlib import Path
 
 import pytest
 
 from app.core.utils import schema_validator
+from scripts import audit_schema
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
-def test_checked_in_schema_docs_produce_usable_tables():
+def test_canonical_catalog_is_the_only_query_schema_authority() -> None:
     schema_validator._SCHEMA_CACHE = None
 
-    schema = schema_validator.parse_schema_doc(required=True)
+    catalog = schema_validator.parse_schema_catalog(required=True)
 
-    assert len(schema) > 0
-    assert "sales.invoices" in schema
-    assert "invoice_id" in schema["sales.invoices"]
+    assert len(catalog) == 119
+    assert "sales.invoices" in catalog
+    assert "id" in catalog["sales.invoices"]
+    assert "invoice_id" not in catalog["sales.invoices"]
+    assert "tax.input_credit_reversal_events" in catalog
+    assert "physical_destruction_confirmed_at" in catalog["compliance.destructions"]
 
 
-def test_required_schema_parse_fails_closed_when_docs_are_missing(monkeypatch):
+def test_required_catalog_parse_fails_closed_when_domains_are_missing(monkeypatch) -> None:
     schema_validator._SCHEMA_CACHE = None
-    monkeypatch.setattr(schema_validator, "_default_schema_doc_paths", lambda: [])
+    monkeypatch.setattr(schema_validator, "_default_canonical_domain_paths", lambda: [])
 
-    with pytest.raises(FileNotFoundError, match="No schema documentation found"):
-        schema_validator.parse_schema_doc(required=True)
-
-
-def test_markdown_parser_rejects_docs_without_column_definitions(tmp_path: Path):
-    schema_doc = tmp_path / "empty.md"
-    schema_doc.write_text("# Schema\n\n### sales.invoices\n", encoding="utf-8")
-
-    assert schema_validator._parse_schema_docs([schema_doc]) == {}
+    with pytest.raises(FileNotFoundError, match="No canonical domain catalogs"):
+        schema_validator.parse_schema_catalog(required=True)
 
 
-def test_live_verified_query_contract_clears_historical_failures_only():
-    inventory_path = REPO_ROOT / "docs/architecture/query-schema-conflicts.json"
-    inventory = json.loads(inventory_path.read_text(encoding="utf-8"))
-    historical = Counter(
-        (query["file"], query["line"], query["query_sha256"])
-        for classification in inventory["classifications"]
-        for query in classification["queries"]
-    )
-
-    actual = Counter()
-    app_root = REPO_ROOT / "backend/app"
-    for module_path in app_root.rglob("*.py"):
-        if any(
-            skipped in str(module_path)
-            for skipped in ("migrations", "__pycache__", "venv", ".venv", "test_")
-        ):
-            continue
-
-        result = schema_validator.validate_module(module_path)
-        relative_file = module_path.relative_to(REPO_ROOT).as_posix()
-        actual.update(
-            (relative_file, error["line"], error["query_sha256"])
-            for error in result["errors"]
-        )
-
-    assert inventory["readiness_state"] == "live-verified-query-contracts"
-    assert inventory["expected_failure_count"] == 0
-    assert inventory["historical_failure_count"] == 36
-    assert sum(historical.values()) == inventory["historical_failure_count"]
-    assert actual == Counter()
-
-
-def test_split_canonical_routers_use_canonical_domain_catalogs(tmp_path, monkeypatch):
-    canonical_router = tmp_path / "canonical_adjustment_note_reads.py"
-    canonical_router.write_text(
-        'CANONICAL_SCHEMA_CATALOGS = True\n'
-        'QUERY = """SELECT invoice.id, invoice.rounding_policy '
-        'FROM sales.invoices invoice"""\n',
+def test_post_baseline_alembic_addition_targets_known_table(tmp_path: Path) -> None:
+    sql = tmp_path / "addition.sql"
+    sql.write_text(
+        "ALTER TABLE core.missing ADD COLUMN fact_id uuid;\n",
         encoding="utf-8",
     )
-    monkeypatch.setattr(
-        schema_validator,
-        "_default_canonical_domain_paths",
-        lambda: [REPO_ROOT / "database/canonical/domains/sales.json"],
+
+    with pytest.raises(ValueError, match="ADD COLUMN targets unknown table"):
+        schema_validator._parse_alembic_schema_additions(
+            [sql], {"core.known": {"id"}}
+        )
+
+
+def test_f_string_sql_is_validated_as_one_query(tmp_path: Path) -> None:
+    module = tmp_path / "dynamic_read.py"
+    module.write_text(
+        'field = "id"\nQUERY = f"""SELECT invoice.id FROM sales.invoices invoice '
+        'WHERE invoice.id = {field}"""\n',
+        encoding="utf-8",
     )
 
-    result = schema_validator.validate_module(canonical_router)
+    result = schema_validator.validate_module(module)
 
     assert result["total_queries"] == 1
     assert result["valid_queries"] == 1
     assert result["errors"] == []
 
 
-def test_live_schema_evidence_is_narrow_and_does_not_claim_baseline():
-    evidence = json.loads(
-        (REPO_ROOT / "database/live-schema-evidence.json").read_text(encoding="utf-8")
-    )
-    authority = json.loads(
-        (REPO_ROOT / "database/schema-authority.json").read_text(encoding="utf-8")
-    )
-
-    verified = evidence["query_contract_verification"]["verified_columns"]
-    assert evidence["evidence_state"] == "captured_not_baselined"
-    assert evidence["migration_history_available"] is False
-    assert evidence["query_contract_verification"]["historical_failure_count"] == 36
-    assert evidence["query_contract_verification"]["current_failure_count"] == 0
-    assert set(verified) == {
-        "sales.delivery_challans",
-        "sales.invoice_items",
-        "sales.invoices",
-        "sales.order_items",
-        "sales.orders",
-        "sales.sales_return_items",
-        "sales.sales_returns",
-    }
-    assert evidence["pilot_readiness"]["status"] == "blocked"
-    assert evidence["pilot_readiness"]["allows_live_writes"] is False
-    assert (
-        evidence["pilot_readiness"]["surface_assessment"]["business_reads"]
-        == "blocked_pending_deployed_role_and_cross_tenant_proof"
-    )
-    assert evidence["tenant_isolation"]["force_rls_enabled"] == 0
-    assert authority["readiness_state"] == "migrating"
-    assert authority["latest_live_capture_evidence"] == "database/live-schema-evidence.json"
+def test_query_validation_rejects_retired_integer_id_column() -> None:
+    with pytest.raises(ValueError, match="invoice_id"):
+        schema_validator.validate_query(
+            "SELECT invoice.invoice_id FROM sales.invoices AS invoice"
+        )
 
 
-def test_live_schema_evidence_loader_fails_closed_on_an_unreviewed_state(tmp_path: Path):
-    evidence_path = tmp_path / "evidence.json"
-    evidence_path.write_text(
-        json.dumps(
-            {
-                "evidence_state": "baselined",
-                "artifact_sha256": "a" * 64,
-                "capture_sql_sha256": "b" * 64,
-                "query_contract_verification": {"verified_columns": {}},
-            }
-        ),
+def test_current_backend_queries_match_canonical_catalogs() -> None:
+    schema_validator._SCHEMA_CACHE = None
+
+    results = audit_schema.scan_directory(REPO_ROOT / "backend/app")
+
+    assert results == []
+
+
+def test_canonical_router_query_is_validated(tmp_path: Path) -> None:
+    module = tmp_path / "canonical_read.py"
+    module.write_text(
+        'QUERY = """SELECT invoice.id, invoice.rounding_policy '
+        'FROM sales.invoices AS invoice"""\n',
         encoding="utf-8",
     )
 
-    with pytest.raises(ValueError, match="captured_not_baselined"):
-        schema_validator._load_live_verified_columns(evidence_path)
+    result = schema_validator.validate_module(module)
+
+    assert result["total_queries"] == 1
+    assert result["valid_queries"] == 1
+    assert result["errors"] == []
