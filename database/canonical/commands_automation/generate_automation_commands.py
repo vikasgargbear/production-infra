@@ -6193,7 +6193,7 @@ DECLARE branch_id uuid:=NULLIF(request_document->>'branch_id','')::uuid;
         supplier_id uuid:=NULLIF(request_document->>'supplier_account_id','')::uuid;
         purchase_order_id uuid:=NULLIF(request_document->>'purchase_order_id','')::uuid;
         bank_id uuid:=NULLIF(request_document->>'bank_account_id','')::uuid;
-        settlement_id uuid:=NULLIF(request_document->>'settlement_account_id','')::uuid;
+        settlement_id uuid;
         gross numeric(20,2):=NULLIF(request_document->>'gross_amount','')::numeric;
         method text:=request_document->>'payment_method';
         reference text:=upper(NULLIF(pg_catalog.btrim(request_document->>'external_reference'),''));
@@ -6207,7 +6207,7 @@ DECLARE branch_id uuid:=NULLIF(request_document->>'branch_id','')::uuid;
 BEGIN
   IF organization_id IS NULL OR membership_id IS NULL OR auth_user_id IS NULL OR application_user_id IS NULL
      OR grant_id IS NULL OR payment_id IS NULL OR branch_id IS NULL OR payment_date IS NULL OR supplier_id IS NULL
-     OR purchase_order_id IS NULL OR bank_id IS NULL OR settlement_id IS NULL OR gross<=0
+     OR purchase_order_id IS NULL OR bank_id IS NULL OR gross<=0
      OR method NOT IN ('bank_transfer','upi') OR reference IS NULL OR pg_catalog.length(reference)>256
      OR pg_catalog.jsonb_typeof(request_document->'allocations')<>'array'
      OR pg_catalog.jsonb_array_length(request_document->'allocations')<>1 THEN
@@ -6270,8 +6270,8 @@ BEGIN
     AND status='active' AND account_type='asset' AND currency_code='INR' AND allows_party_posting FOR SHARE;
   SELECT * INTO STRICT bank FROM finance.bank_accounts WHERE org_id=organization_id AND id=bank_id
     AND status='active' AND currency_code='INR' FOR SHARE;
-  SELECT * INTO STRICT settlement FROM finance.accounts WHERE org_id=organization_id AND id=settlement_id
-    AND id=bank.account_id AND status='active' AND account_type='asset' AND currency_code='INR'
+  SELECT * INTO STRICT settlement FROM finance.accounts WHERE org_id=organization_id AND id=bank.account_id
+    AND status='active' AND account_type='asset' AND currency_code='INR'
     AND allows_bank_reconciliation FOR SHARE;
   PERFORM 1 FROM procurement.purchase_order_advance_allocations prior WHERE prior.org_id=organization_id
     AND prior.purchase_order_line_id=line.id AND prior.payment_id<>payment_id ORDER BY prior.id FOR UPDATE OF prior;
@@ -8158,42 +8158,52 @@ def generated_artifacts() -> tuple[str, str]:
             "executable_prepare_capabilities": [
                 "finance.adjustment_note.prepare",
                 "finance.bank_reconciliation.prepare",
+                "finance.customer_cheque_bounce.prepare",
+                "finance.customer_cheque_clearance.prepare",
                 "finance.customer_receipt.prepare",
                 "finance.expense_claim.prepare",
                 "finance.supplier_advance.prepare",
                 "finance.supplier_payment.prepare",
+                "finance.adjustment_note.reversal.prepare",
                 "inventory.adjustment.prepare",
                 "inventory.destruction.prepare",
                 "inventory.transfer.prepare",
                 "procurement.goods_receipt.prepare",
                 "procurement.purchase_order.prepare",
                 "procurement.purchase_return.prepare",
+                "procurement.purchase_return.reversal.prepare",
                 "procurement.supplier_invoice.prepare",
                 "sales.dispatch.prepare",
                 "sales.invoice.prepare",
                 "sales.order.prepare",
                 "sales.return.prepare",
+                "sales.return.reversal.prepare",
             ],
             "blocked_prepare_capabilities": sorted(
                 set(OPERATOR_COMMANDS)
                 - {
                     "finance.adjustment_note.prepare",
                     "finance.bank_reconciliation.prepare",
+                    "finance.customer_cheque_bounce.prepare",
+                    "finance.customer_cheque_clearance.prepare",
                     "finance.customer_receipt.prepare",
                     "finance.expense_claim.prepare",
                     "finance.supplier_advance.prepare",
                     "finance.supplier_payment.prepare",
+                    "finance.adjustment_note.reversal.prepare",
                     "inventory.adjustment.prepare",
                     "inventory.destruction.prepare",
                     "inventory.transfer.prepare",
                     "procurement.goods_receipt.prepare",
                     "procurement.purchase_order.prepare",
                     "procurement.purchase_return.prepare",
+                    "procurement.purchase_return.reversal.prepare",
                     "procurement.supplier_invoice.prepare",
                     "sales.dispatch.prepare",
                     "sales.invoice.prepare",
                     "sales.order.prepare",
                     "sales.return.prepare",
+                    "sales.return.reversal.prepare",
                 }
             ),
             "capability_operation_map": {
@@ -8205,6 +8215,9 @@ def generated_artifacts() -> tuple[str, str]:
                 "compliance.destruction.post",
                 "finance.adjustment_note.post",
                 "finance.bank_reconciliation.match",
+                "finance.customer_cheque_bounce.post",
+                "finance.customer_cheque_clearance.post",
+                "finance.adjustment_note.reversal.post",
                 "finance.expense_claim.post",
                 "finance.payment.post",
                 "finance.supplier_advance.post",
@@ -8212,11 +8225,13 @@ def generated_artifacts() -> tuple[str, str]:
                 "procurement.purchase_order.approve",
                 "procurement.receipt.post",
                 "procurement.purchase_return.post",
+                "procurement.purchase_return.reversal.post",
                 "procurement.supplier_invoice.post",
                 "sales.dispatch.post",
                 "sales.invoice.post",
                 "sales.order.approve",
                 "sales.return.post",
+                "sales.return.reversal.post",
             ],
             "adjustment_note_pilot_scope": {
                 "supported_pairs": ["sales_credit", "purchase_debit"],

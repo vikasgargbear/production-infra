@@ -1111,10 +1111,10 @@ def load_commercial_reversal_readback(
                  AND reversal_journal.reversal_of_journal_entry_id=original_journal.id
                 LEFT JOIN sales.returns sales_return
                   ON sales_return.org_id=original.org_id
-                 AND sales_return.adjustment_note_id=original.id
+                 AND sales_return.id=original.sales_return_id
                 LEFT JOIN procurement.purchase_returns purchase_return
                   ON purchase_return.org_id=original.org_id
-                 AND purchase_return.adjustment_note_id=original.id
+                 AND purchase_return.id=original.purchase_return_id
                 LEFT JOIN tax.documents original_tax
                   ON original_tax.org_id=original.org_id
                  AND original_tax.adjustment_note_id=original.id

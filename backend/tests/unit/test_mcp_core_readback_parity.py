@@ -224,6 +224,21 @@ def test_core_readback_contracts_are_one_exact_reviewed_mapping():
             "inventory.document.post",
             "inventory_document",
         ),
+        "sales_return_reversal": (
+            "sales.return.reversal.prepare",
+            "sales.return.reversal.post",
+            "adjustment_note_reversal",
+        ),
+        "purchase_return_reversal": (
+            "procurement.purchase_return.reversal.prepare",
+            "procurement.purchase_return.reversal.post",
+            "adjustment_note_reversal",
+        ),
+        "adjustment_note_reversal": (
+            "finance.adjustment_note.reversal.prepare",
+            "finance.adjustment_note.reversal.post",
+            "adjustment_note_reversal",
+        ),
     }
 
 

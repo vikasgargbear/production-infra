@@ -2920,10 +2920,59 @@ ALTER FUNCTION "erp_finance_invariants"."guard_allocation"() OWNER TO "erp_migra
 
 REVOKE ALL ON FUNCTION "erp_finance_invariants"."guard_allocation"() FROM PUBLIC, "erp_app", "erp_runtime";
 
+ALTER FUNCTION "erp_automation_commands"."resolve_supplier_advance_prepare"(uuid,uuid,uuid,uuid,uuid,varchar,uuid,jsonb)
+  RENAME TO "resolve_supplier_advance_prepare_with_settlement_identity";
+
+REVOKE ALL ON FUNCTION "erp_automation_commands"."resolve_supplier_advance_prepare_with_settlement_identity"(uuid,uuid,uuid,uuid,uuid,varchar,uuid,jsonb)
+  FROM PUBLIC, "erp_app", "erp_runtime";
+
+CREATE FUNCTION "erp_automation_commands"."resolve_supplier_advance_prepare"(
+  organization_id uuid,
+  membership_id uuid,
+  auth_user_id uuid,
+  application_user_id uuid,
+  grant_id uuid,
+  caller_client_id varchar,
+  payment_id uuid,
+  request_document jsonb
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $function$
+DECLARE
+  bank_id uuid := NULLIF(request_document->>'bank_account_id','')::uuid;
+  settlement_id uuid;
+BEGIN
+  IF bank_id IS NULL OR request_document ? 'settlement_account_id' THEN
+    RAISE EXCEPTION USING ERRCODE='22023',
+      MESSAGE='supplier advance requires one canonical bank identity and forbids caller settlement accounts';
+  END IF;
+  SELECT bank.account_id INTO STRICT settlement_id
+    FROM finance.bank_accounts AS bank
+   WHERE bank.org_id=organization_id AND bank.id=bank_id
+     AND bank.status='active' AND bank.currency_code='INR'
+   FOR SHARE;
+  RETURN "erp_automation_commands"."resolve_supplier_advance_prepare_with_settlement_identity"(
+    organization_id,membership_id,auth_user_id,application_user_id,grant_id,
+    caller_client_id,payment_id,
+    request_document || pg_catalog.jsonb_build_object('settlement_account_id',settlement_id)
+  );
+END
+$function$;
+
+ALTER FUNCTION "erp_automation_commands"."resolve_supplier_advance_prepare"(uuid,uuid,uuid,uuid,uuid,varchar,uuid,jsonb)
+  OWNER TO "erp_migration_owner";
+
+REVOKE ALL ON FUNCTION "erp_automation_commands"."resolve_supplier_advance_prepare"(uuid,uuid,uuid,uuid,uuid,varchar,uuid,jsonb)
+  FROM PUBLIC, "erp_app", "erp_runtime";
+
 GRANT EXECUTE ON FUNCTION "erp_automation_commands"."execute_approved_command"(organization_id uuid, command_request_id uuid) TO "erp_runtime";
 GRANT EXECUTE ON FUNCTION "erp_automation_commands"."resolve_customer_receipt_prepare"(organization_id uuid, membership_id uuid, auth_user_id uuid, application_user_id uuid, grant_id uuid, caller_client_id varchar, payment_id uuid, request_document jsonb) TO "erp_runtime";
 GRANT EXECUTE ON FUNCTION "erp_automation_commands"."persist_customer_receipt_prepare"(organization_id uuid, membership_id uuid, auth_user_id uuid, application_user_id uuid, grant_id uuid, caller_client_id varchar, payment_id uuid, command_id uuid, journal_id uuid, event_id uuid, key_hash bytea, payment_sequence_key_hash bytea, journal_sequence_key_hash bytea, request_bytes bytea, resolved_bytes bytea, preview_bytes bytea, expires_at timestamptz) TO "erp_runtime";
 GRANT EXECUTE ON FUNCTION "erp_automation_commands"."resolve_supplier_payment_prepare"(organization_id uuid, membership_id uuid, auth_user_id uuid, application_user_id uuid, grant_id uuid, caller_client_id varchar, payment_id uuid, request_document jsonb) TO "erp_runtime";
+GRANT EXECUTE ON FUNCTION "erp_automation_commands"."resolve_supplier_advance_prepare"(uuid,uuid,uuid,uuid,uuid,varchar,uuid,jsonb) TO "erp_runtime";
 GRANT EXECUTE ON FUNCTION "erp_automation_commands"."persist_supplier_payment_prepare"(organization_id uuid, membership_id uuid, auth_user_id uuid, application_user_id uuid, grant_id uuid, caller_client_id varchar, payment_id uuid, command_id uuid, journal_id uuid, event_id uuid, key_hash bytea, payment_sequence_key_hash bytea, journal_sequence_key_hash bytea, request_bytes bytea, resolved_bytes bytea, preview_bytes bytea, expires_at timestamptz) TO "erp_runtime";
 GRANT EXECUTE ON FUNCTION "erp_automation_commands"."resolve_customer_cheque_clearance_prepare"(organization_id uuid, membership_id uuid, auth_user_id uuid, application_user_id uuid, grant_id uuid, caller_client_id varchar, payment_id uuid, request_document jsonb) TO "erp_runtime";
 GRANT EXECUTE ON FUNCTION "erp_automation_commands"."resolve_customer_cheque_bounce_prepare"(organization_id uuid, membership_id uuid, auth_user_id uuid, application_user_id uuid, grant_id uuid, caller_client_id varchar, payment_id uuid, request_document jsonb) TO "erp_runtime";

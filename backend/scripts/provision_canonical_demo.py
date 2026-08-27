@@ -6388,8 +6388,17 @@ _SAFE_FAILURE_ERROR_CODES = frozenset({
     "APPROVAL_REQUIRED", "IDEMPOTENCY_CONFLICT", "PERIOD_CLOSED",
     "INSUFFICIENT_STOCK", "BATCH_BLOCKED", "POLICY_BLOCKED",
 })
+_SEPARATELY_FIXTURED_PREPARE_OPERATIONS = frozenset({
+    "finance.customer_cheque_bounce.prepare",
+    "finance.customer_cheque_clearance.prepare",
+    "finance.adjustment_note.reversal.prepare",
+    "procurement.purchase_return.reversal.prepare",
+    "sales.return.reversal.prepare",
+})
 _SAFE_FAILURE_OPERATIONS = frozenset(
-    operation for operation, _approval_policy in PREPARE_CAPABILITIES
+    operation
+    for operation, _approval_policy in PREPARE_CAPABILITIES
+    if operation not in _SEPARATELY_FIXTURED_PREPARE_OPERATIONS
 ) | frozenset({
     "automation.command.approve",
     "automation.command.execute",

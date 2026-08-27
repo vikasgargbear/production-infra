@@ -1928,7 +1928,7 @@ def _command_row(command_request_id):
 
 def test_registry_covers_every_contract_action_and_stays_fail_closed():
     prepare_keys = {action.operation_key for action in PREPARE_ACTIONS.values()}
-    assert len(prepare_keys) == 20
+    assert len(prepare_keys) == 22
     assert set(ACTION_ADAPTER_BINDINGS) == set(ACTION_POLICIES)
     assert ACTION_ADAPTER_BINDINGS["sales.order.prepare"].available is True
     assert ACTION_ADAPTER_BINDINGS["sales.dispatch.prepare"].available is True
@@ -1939,6 +1939,8 @@ def test_registry_covers_every_contract_action_and_stays_fail_closed():
     assert ACTION_ADAPTER_BINDINGS["sales.return.prepare"].available is True
     assert ACTION_ADAPTER_BINDINGS["procurement.purchase_return.prepare"].available is True
     assert ACTION_ADAPTER_BINDINGS["finance.customer_receipt.prepare"].available is True
+    assert ACTION_ADAPTER_BINDINGS["finance.customer_cheque_clearance.prepare"].available is True
+    assert ACTION_ADAPTER_BINDINGS["finance.customer_cheque_bounce.prepare"].available is True
     assert ACTION_ADAPTER_BINDINGS["finance.supplier_advance.prepare"].available is True
     assert ACTION_ADAPTER_BINDINGS["finance.supplier_payment.prepare"].available is True
     assert ACTION_ADAPTER_BINDINGS["finance.adjustment_note.prepare"].available is True
@@ -1962,7 +1964,9 @@ def test_registry_covers_every_contract_action_and_stays_fail_closed():
             "procurement.supplier_invoice.prepare",
             "sales.return.prepare",
             "procurement.purchase_return.prepare",
-            "finance.customer_receipt.prepare",
+                "finance.customer_receipt.prepare",
+                "finance.customer_cheque_clearance.prepare",
+                "finance.customer_cheque_bounce.prepare",
             "finance.supplier_advance.prepare",
             "finance.supplier_payment.prepare",
             "finance.adjustment_note.prepare",
@@ -1990,6 +1994,8 @@ def test_registry_covers_every_contract_action_and_stays_fail_closed():
             "sales.return.prepare",
             "procurement.purchase_return.prepare",
             "finance.customer_receipt.prepare",
+            "finance.customer_cheque_clearance.prepare",
+            "finance.customer_cheque_bounce.prepare",
             "finance.supplier_advance.prepare",
             "finance.supplier_payment.prepare",
             "finance.adjustment_note.prepare",
@@ -2033,6 +2039,12 @@ def test_registry_covers_every_contract_action_and_stays_fail_closed():
     assert ACTION_ADAPTER_BINDINGS[
         "finance.adjustment_note.prepare"
     ].prepare_function == "erp_automation_commands.persist_adjustment_note_prepare"
+    assert ACTION_ADAPTER_BINDINGS[
+        "finance.customer_cheque_clearance.prepare"
+    ].prepare_function == "erp_automation_commands.persist_customer_cheque_clearance_prepare"
+    assert ACTION_ADAPTER_BINDINGS[
+        "finance.customer_cheque_bounce.prepare"
+    ].prepare_function == "erp_automation_commands.persist_customer_cheque_bounce_prepare"
     assert ACTION_ADAPTER_BINDINGS["automation.command.approve"].available is True
     assert ACTION_ADAPTER_BINDINGS["automation.command.execute"].available is True
     assert ACTION_ADAPTER_BINDINGS["automation.command.status.get"].available is True
@@ -4054,7 +4066,7 @@ def test_infrastructure_adapter_has_no_legacy_service_or_table_dependency():
     assert "execute(text(" not in source
     assert "erp_automation_commands.execute_approved_command" in source
     assert "pg_advisory_xact_lock" in source
-    assert source.count("_lock_prepare_idempotency(") == 19
+    assert source.count("_lock_prepare_idempotency(") == 20
 
 
 def test_calculator_database_requires_the_isolated_principal(monkeypatch):

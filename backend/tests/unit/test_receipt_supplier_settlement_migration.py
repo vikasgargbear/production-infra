@@ -41,6 +41,7 @@ def test_receipt_settlement_migration_owns_instruments_and_named_commands():
         "post_customer_receipt", "post_customer_cheque_clearance",
         "post_customer_cheque_bounce", "post_supplier_payment",
         "apply_supplier_adjustment_credit", "resolve_supplier_payment_prepare",
+        "resolve_supplier_advance_prepare_with_settlement_identity",
     ):
         assert name in migration
     assert "pre-existing credit-time authority" in migration
@@ -48,3 +49,5 @@ def test_receipt_settlement_migration_owns_instruments_and_named_commands():
     assert "payments_cash_evidence_ck" in migration
     assert "NOT VALID" in migration
     assert 'TO "erp_runtime"' in migration
+    assert "forbids caller settlement accounts" in migration
+    assert "request_document || pg_catalog.jsonb_build_object('settlement_account_id',settlement_id)" in migration

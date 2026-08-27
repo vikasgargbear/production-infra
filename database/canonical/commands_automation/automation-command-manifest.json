@@ -47,13 +47,7 @@
         "automatic_tolerance"
       ]
     },
-    "blocked_prepare_capabilities": [
-      "finance.adjustment_note.reversal.prepare",
-      "finance.customer_cheque_bounce.prepare",
-      "finance.customer_cheque_clearance.prepare",
-      "procurement.purchase_return.reversal.prepare",
-      "sales.return.reversal.prepare"
-    ],
+    "blocked_prepare_capabilities": [],
     "capability_operation_map": {
       "finance.adjustment_note.prepare": "finance.adjustment_note.post",
       "finance.adjustment_note.reversal.prepare": "finance.adjustment_note.reversal.post",
@@ -106,27 +100,35 @@
     "executable_prepare_capabilities": [
       "finance.adjustment_note.prepare",
       "finance.bank_reconciliation.prepare",
+      "finance.customer_cheque_bounce.prepare",
+      "finance.customer_cheque_clearance.prepare",
       "finance.customer_receipt.prepare",
       "finance.expense_claim.prepare",
       "finance.supplier_advance.prepare",
       "finance.supplier_payment.prepare",
+      "finance.adjustment_note.reversal.prepare",
       "inventory.adjustment.prepare",
       "inventory.destruction.prepare",
       "inventory.transfer.prepare",
       "procurement.goods_receipt.prepare",
       "procurement.purchase_order.prepare",
       "procurement.purchase_return.prepare",
+      "procurement.purchase_return.reversal.prepare",
       "procurement.supplier_invoice.prepare",
       "sales.dispatch.prepare",
       "sales.invoice.prepare",
       "sales.order.prepare",
-      "sales.return.prepare"
+      "sales.return.prepare",
+      "sales.return.reversal.prepare"
     ],
     "execution_operations": [
       "automation.agent_grant.revoke",
       "compliance.destruction.post",
       "finance.adjustment_note.post",
       "finance.bank_reconciliation.match",
+      "finance.customer_cheque_bounce.post",
+      "finance.customer_cheque_clearance.post",
+      "finance.adjustment_note.reversal.post",
       "finance.expense_claim.post",
       "finance.payment.post",
       "finance.supplier_advance.post",
@@ -134,11 +136,13 @@
       "procurement.purchase_order.approve",
       "procurement.receipt.post",
       "procurement.purchase_return.post",
+      "procurement.purchase_return.reversal.post",
       "procurement.supplier_invoice.post",
       "sales.dispatch.post",
       "sales.invoice.post",
       "sales.order.approve",
-      "sales.return.post"
+      "sales.return.post",
+      "sales.return.reversal.post"
     ],
     "expense_claim_pilot_scope": {
       "approval_policy": "separate_approver",
@@ -491,7 +495,7 @@
   },
   "manifest_version": "1.0.0",
   "mapping_file": "baseline-automation-command-enforcements.json",
-  "mapping_sha256": "56a1e6cc186573bea59a6283a22238a9bcc6eaba0872f870a4637e980e9ed58b",
+  "mapping_sha256": "f2341b4098d48e9b819975c02f790ebb538fc3b40de57b1a8ab2707b4d873bb9",
   "postgresql": "15+",
   "resolved_count": 3,
   "resolved_invariants": [

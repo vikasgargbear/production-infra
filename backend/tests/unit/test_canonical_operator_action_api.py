@@ -606,13 +606,14 @@ def test_customer_receipt_requires_reviewed_non_cash_bank_identity(enabled_bound
         "branch_id": str(BRANCH_ID),
         "payment_date": "2026-08-20",
         "customer_account_id": str(uuid4()),
-        "settlement_account_id": str(uuid4()),
         "payment_method": "upi",
+        "receipt_purpose": "invoice_settlement",
         "amount": "118.00",
         "allocations": [
             {"open_item_id": str(uuid4()), "amount": "118.00"}
         ],
         "external_reference": "UPI-TEST-0001",
+        "evidence_attachment_id": str(uuid4()),
     }
 
     response = client.post(
@@ -659,15 +660,16 @@ def test_customer_receipt_rejects_duplicate_partial_or_unapplied_allocations(ena
         "branch_id": str(BRANCH_ID),
         "payment_date": "2026-08-20",
         "customer_account_id": str(uuid4()),
-        "settlement_account_id": str(uuid4()),
         "bank_account_id": str(uuid4()),
         "payment_method": "bank_transfer",
+        "receipt_purpose": "invoice_settlement",
         "amount": "118.00",
         "allocations": [
             {"open_item_id": open_item_id, "amount": "50.00"},
             {"open_item_id": open_item_id, "amount": "50.00"},
         ],
         "external_reference": "BANK-RECEIPT-0001",
+        "evidence_attachment_id": str(uuid4()),
     }
     response = client.post(
         "/api/internal/mcp/actions/finance.customer_receipt.prepare/prepare",
@@ -684,7 +686,7 @@ def test_customer_receipt_rejects_duplicate_partial_or_unapplied_allocations(ena
     )
     assert response.status_code == 422
     assert response.json()["detail"]["message"] == (
-        "customer receipt allocations must exactly equal amount"
+        "invoice-settlement allocations must exactly equal amount"
     )
 
 
@@ -699,7 +701,6 @@ def test_supplier_advance_requires_one_exact_non_cheque_goods_allocation(enabled
         "payment_date": "2026-08-20",
         "supplier_account_id": str(uuid4()),
         "purchase_order_id": str(uuid4()),
-        "settlement_account_id": str(uuid4()),
         "bank_account_id": str(uuid4()),
         "payment_method": "bank_transfer",
         "gross_amount": "50000.00",
@@ -1553,7 +1554,7 @@ def test_routes_are_hidden_from_public_openapi_and_keep_auth_dependency():
         if path.startswith("/api/internal/mcp/")
         for route in routes
     ]
-    assert len(action_routes) == 19
+    assert len(action_routes) == 21
     assert all(route.include_in_schema is False for route in action_routes)
     assert all(
         mcp_actions.get_action_context

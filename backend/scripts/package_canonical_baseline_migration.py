@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import subprocess
 import sys
 from pathlib import Path
 from typing import Sequence
@@ -29,28 +28,11 @@ def _digest(value: str) -> str:
 
 
 def generate_source() -> str:
-    command = (
-        sys.executable,
-        str(GENERATOR_PATH),
-        "--enforcement-root",
-        str(ENFORCEMENT_ROOT),
-    )
-    try:
-        completed = subprocess.run(
-            command,
-            cwd=REPO_ROOT,
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-    except OSError as exc:
-        raise package.CanonicalBaselineError(
-            f"cannot execute canonical baseline generator: {exc}"
-        ) from exc
-    if completed.returncode != 0:
-        detail = completed.stderr.strip() or f"exit {completed.returncode}"
-        raise package.CanonicalBaselineError(f"baseline generator refused package: {detail}")
-    return completed.stdout
+    """Return the immutable bootstrap package, never mutable current catalogs."""
+
+    source = package.BASELINE_SQL_PATH.read_text(encoding="utf-8")
+    package.unwrap_generator_transaction(source)
+    return source
 
 
 def render_manifest(source: str) -> str:

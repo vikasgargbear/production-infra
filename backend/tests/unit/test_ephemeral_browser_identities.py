@@ -1196,6 +1196,10 @@ def test_live18_profile_derives_every_prepare_permission_from_generated_contract
         row["command_operation"] for row in matrix["operations"]
         if row["id"] not in deferred
     }
+    published_operations = {
+        row["command_operation"] for row in matrix["operations"]
+        if row.get("publish_prepare", True)
+    }
     actions = {
         row["operation_key"]: row for row in contract["prepare_actions"]
     }
@@ -1215,7 +1219,7 @@ def test_live18_profile_derives_every_prepare_permission_from_generated_contract
     assert matrix["operation_count"] == 18
     assert matrix["required_operation_count"] == 17
     assert len(operations) == 16
-    assert set(published_capabilities) == set(actions)
+    assert set(published_capabilities) == published_operations
     assert set(capabilities) == operations
     assert operations < set(actions)
     assert "finance.expense_claim.prepare" in actions

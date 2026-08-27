@@ -1,7 +1,7 @@
 {
-  "catalog_sha256": "24a8dd369d56658b1e9fd630dfcc5de45985f489d3dd543a9e10be711d1730fd",
+  "catalog_sha256": "99bf41de899c25b964f64adb62628d94e06a8157ea776abef0208de5a3d78c8d",
   "contract_version": "1.0.0",
-  "field_count": 2327,
+  "field_count": 2336,
   "naming_contract": {
     "ambiguous_shared_names": {
       "approval_policy": [
@@ -15859,15 +15859,15 @@
       "tenant_class": "tenant_direct"
     },
     {
-      "definition": "Canonical Immutable settlement or reversal amount from one payment to one open item facts in the finance domain.",
-      "fact_owner": "Immutable settlement or reversal amount from one payment to one open item",
+      "definition": "Canonical Immutable settlement or reversal amount from one typed source to one open item facts in the finance domain.",
+      "fact_owner": "Immutable settlement or reversal amount from one typed source to one open item",
       "fields": [
         {
           "allowed_values": [],
           "check_constraints": [],
           "data_classification": "internal",
           "default": null,
-          "definition": "Tenant organization that owns this Immutable settlement or reversal amount from one payment to one open item fact and forms its RLS boundary.",
+          "definition": "Tenant organization that owns this Immutable settlement or reversal amount from one typed source to one open item fact and forms its RLS boundary.",
           "definition_source": "structural_rule",
           "do_not_confuse_with": null,
           "foreign_key": {
@@ -15889,7 +15889,7 @@
           "check_constraints": [],
           "data_classification": "internal",
           "default": "gen_random_uuid()",
-          "definition": "Stable relational identifier for one Immutable settlement or reversal amount from one payment to one open item fact, unique within the owning organization; application-generated UUIDv7 is preferred.",
+          "definition": "Stable relational identifier for one Immutable settlement or reversal amount from one typed source to one open item fact, unique within the owning organization; application-generated UUIDv7 is preferred.",
           "definition_source": "structural_rule",
           "do_not_confuse_with": null,
           "foreign_key": null,
@@ -15906,7 +15906,7 @@
           ],
           "data_classification": "internal",
           "default": null,
-          "definition": "Foreign-key component selecting finance.payments (org_id, id) for this Immutable settlement or reversal amount from one payment to one open item; declared cardinality M:0..1.",
+          "definition": "Foreign-key component selecting finance.payments (org_id, id) for this Immutable settlement or reversal amount from one typed source to one open item; declared cardinality M:0..1.",
           "definition_source": "structural_rule",
           "do_not_confuse_with": null,
           "foreign_key": {
@@ -15931,7 +15931,7 @@
           ],
           "data_classification": "internal",
           "default": null,
-          "definition": "Foreign-key component selecting tax.withholdings (org_id, id) for this Immutable settlement or reversal amount from one payment to one open item; declared cardinality 1:0..1.",
+          "definition": "Foreign-key component selecting tax.withholdings (org_id, id) for this Immutable settlement or reversal amount from one typed source to one open item; declared cardinality 1:0..1.",
           "definition_source": "structural_rule",
           "do_not_confuse_with": null,
           "foreign_key": {
@@ -15956,7 +15956,7 @@
           ],
           "data_classification": "internal",
           "default": null,
-          "definition": "Foreign-key component selecting finance.adjustment_notes (org_id, id) for this Immutable settlement or reversal amount from one payment to one open item; declared cardinality 1:0..1.",
+          "definition": "Foreign-key component selecting finance.adjustment_notes (org_id, id) for this Immutable settlement or reversal amount from one typed source to one open item; declared cardinality 1:0..1.",
           "definition_source": "structural_rule",
           "do_not_confuse_with": null,
           "foreign_key": {
@@ -15981,7 +15981,7 @@
           ],
           "data_classification": "internal",
           "default": null,
-          "definition": "Foreign-key component selecting procurement.purchase_order_advance_allocations (org_id, id) for this Immutable settlement or reversal amount from one payment to one open item; declared cardinality M:0..1.",
+          "definition": "Foreign-key component selecting procurement.purchase_order_advance_allocations (org_id, id) for this Immutable settlement or reversal amount from one typed source to one open item; declared cardinality M:0..1.",
           "definition_source": "structural_rule",
           "do_not_confuse_with": null,
           "foreign_key": {
@@ -16001,10 +16001,35 @@
         },
         {
           "allowed_values": [],
+          "check_constraints": [
+            "allocations_exact_source_ck"
+          ],
+          "data_classification": "internal",
+          "default": null,
+          "definition": "Foreign-key component selecting finance.open_items (org_id, id) for this Immutable settlement or reversal amount from one typed source to one open item; declared cardinality M:0..1.",
+          "definition_source": "structural_rule",
+          "do_not_confuse_with": null,
+          "foreign_key": {
+            "cardinality": "M:0..1",
+            "on_delete": "RESTRICT",
+            "target": "finance.open_items",
+            "target_columns": [
+              "org_id",
+              "id"
+            ]
+          },
+          "name": "source_open_item_id",
+          "nullable": true,
+          "qualified_name": "finance.allocations.source_open_item_id",
+          "semantic_id": "reference.finance.open_items.source_open_item_id",
+          "sql_type": "uuid"
+        },
+        {
+          "allowed_values": [],
           "check_constraints": [],
           "data_classification": "internal",
           "default": null,
-          "definition": "Foreign-key component selecting finance.open_items (org_id, id) for this Immutable settlement or reversal amount from one payment to one open item; declared cardinality M:1.",
+          "definition": "Foreign-key component selecting finance.open_items (org_id, id) for this Immutable settlement or reversal amount from one typed source to one open item; declared cardinality M:1.",
           "definition_source": "structural_rule",
           "do_not_confuse_with": null,
           "foreign_key": {
@@ -16059,7 +16084,7 @@
           ],
           "data_classification": "internal",
           "default": null,
-          "definition": "Persisted amount for this Immutable settlement or reversal amount from one payment to one open item, stored in the row's declared currency at 2 decimal places; never calculate it with binary floating point.",
+          "definition": "Persisted amount for this Immutable settlement or reversal amount from one typed source to one open item, stored in the row's declared currency at 2 decimal places; never calculate it with binary floating point.",
           "definition_source": "numeric_rule",
           "do_not_confuse_with": null,
           "foreign_key": null,
@@ -16076,7 +16101,7 @@
           ],
           "data_classification": "internal",
           "default": null,
-          "definition": "Persisted functional amount for this Immutable settlement or reversal amount from one payment to one open item, stored in the row's declared currency at 2 decimal places; never calculate it with binary floating point.",
+          "definition": "Persisted functional amount for this Immutable settlement or reversal amount from one typed source to one open item, stored in the row's declared currency at 2 decimal places; never calculate it with binary floating point.",
           "definition_source": "numeric_rule",
           "do_not_confuse_with": null,
           "foreign_key": null,
@@ -16093,7 +16118,7 @@
           ],
           "data_classification": "internal",
           "default": "1.000000",
-          "definition": "Persisted fx rate for this Immutable settlement or reversal amount from one payment to one open item, stored in functional-currency units per transaction-currency unit at 6 decimal places; never calculate it with binary floating point.",
+          "definition": "Persisted fx rate for this Immutable settlement or reversal amount from one typed source to one open item, stored in functional-currency units per transaction-currency unit at 6 decimal places; never calculate it with binary floating point.",
           "definition_source": "numeric_rule",
           "do_not_confuse_with": null,
           "foreign_key": null,
@@ -16110,7 +16135,7 @@
           ],
           "data_classification": "internal",
           "default": null,
-          "definition": "Foreign-key component selecting finance.allocations (org_id, id) for this Immutable settlement or reversal amount from one payment to one open item; declared cardinality 1:0..1.",
+          "definition": "Foreign-key component selecting finance.allocations (org_id, id) for this Immutable settlement or reversal amount from one typed source to one open item; declared cardinality 1:0..1.",
           "definition_source": "structural_rule",
           "do_not_confuse_with": null,
           "foreign_key": {
@@ -16135,7 +16160,7 @@
           ],
           "data_classification": "internal",
           "default": null,
-          "definition": "Retained human-readable reason supporting the related Immutable settlement or reversal amount from one payment to one open item decision or reversal.",
+          "definition": "Retained human-readable reason supporting the related Immutable settlement or reversal amount from one typed source to one open item decision or reversal.",
           "definition_source": "evidence_rule",
           "do_not_confuse_with": null,
           "foreign_key": null,
@@ -16157,7 +16182,7 @@
           ],
           "data_classification": "internal",
           "default": "'posted'::text",
-          "definition": "Lifecycle state of this Immutable settlement or reversal amount from one payment to one open item; allowed states are posted, reversed. Allowed values: posted, reversed.",
+          "definition": "Lifecycle state of this Immutable settlement or reversal amount from one typed source to one open item; allowed states are posted, reversed. Allowed values: posted, reversed.",
           "definition_source": "structural_rule",
           "do_not_confuse_with": "Status is the lifecycle state of this exact aggregate, not payment, tax, or inventory state from another table.",
           "foreign_key": null,
@@ -16191,7 +16216,7 @@
           ],
           "data_classification": "personal",
           "default": null,
-          "definition": "Foreign-key component selecting core.memberships (org_id, id) for this Immutable settlement or reversal amount from one payment to one open item; declared cardinality M:0..1.",
+          "definition": "Foreign-key component selecting core.memberships (org_id, id) for this Immutable settlement or reversal amount from one typed source to one open item; declared cardinality M:0..1.",
           "definition_source": "structural_rule",
           "do_not_confuse_with": null,
           "foreign_key": {
@@ -16229,7 +16254,7 @@
           "check_constraints": [],
           "data_classification": "personal",
           "default": "current_setting('app.membership_id')::uuid",
-          "definition": "Foreign-key component selecting core.memberships (org_id, id) for this Immutable settlement or reversal amount from one payment to one open item; declared cardinality M:1.",
+          "definition": "Foreign-key component selecting core.memberships (org_id, id) for this Immutable settlement or reversal amount from one typed source to one open item; declared cardinality M:1.",
           "definition_source": "structural_rule",
           "do_not_confuse_with": null,
           "foreign_key": {
@@ -19373,6 +19398,8 @@
             "upi"
           ],
           "check_constraints": [
+            "payments_cash_evidence_ck",
+            "payments_instrument_evidence_ck",
             "payments_method_ck",
             "payments_settlement_identity_ck"
           ],
@@ -19390,16 +19417,23 @@
         },
         {
           "allowed_values": [
+            "cheque_bounce",
+            "cheque_clearance",
             "commercial_settlement",
+            "customer_advance",
             "supplier_advance",
             "withholding_deposit"
           ],
           "check_constraints": [
-            "payments_purpose_ck"
+            "payments_customer_advance_order_ck",
+            "payments_instrument_evidence_ck",
+            "payments_purpose_ck",
+            "payments_related_purpose_ck",
+            "payments_settlement_identity_ck"
           ],
           "data_classification": "regulated",
           "default": "'commercial_settlement'::text",
-          "definition": "Controlled payment purpose classification for this Approved receipt or disbursement aggregate posted exactly once; agents must send the exact canonical value rather than a synonym. Allowed values: commercial_settlement, supplier_advance, withholding_deposit.",
+          "definition": "Controlled payment purpose classification for this Approved receipt or disbursement aggregate posted exactly once; agents must send the exact canonical value rather than a synonym. Allowed values: cheque_bounce, cheque_clearance, commercial_settlement, customer_advance, supplier_advance, withholding_deposit.",
           "definition_source": "controlled_vocabulary_rule",
           "do_not_confuse_with": null,
           "foreign_key": null,
@@ -19494,6 +19528,150 @@
           "qualified_name": "finance.payments.external_reference",
           "semantic_id": "common.external_reference",
           "sql_type": "text"
+        },
+        {
+          "allowed_values": [],
+          "check_constraints": [
+            "payments_related_purpose_ck"
+          ],
+          "data_classification": "internal",
+          "default": null,
+          "definition": "Foreign-key component selecting finance.payments (org_id, id) for this Approved receipt or disbursement aggregate posted exactly once; declared cardinality M:0..1.",
+          "definition_source": "structural_rule",
+          "do_not_confuse_with": null,
+          "foreign_key": {
+            "cardinality": "M:0..1",
+            "on_delete": "RESTRICT",
+            "target": "finance.payments",
+            "target_columns": [
+              "org_id",
+              "id"
+            ]
+          },
+          "name": "related_payment_id",
+          "nullable": true,
+          "qualified_name": "finance.payments.related_payment_id",
+          "semantic_id": "reference.finance.payments.related_payment_id",
+          "sql_type": "uuid"
+        },
+        {
+          "allowed_values": [],
+          "check_constraints": [
+            "payments_customer_advance_order_ck"
+          ],
+          "data_classification": "internal",
+          "default": null,
+          "definition": "Foreign-key component selecting sales.orders (org_id, id) for this Approved receipt or disbursement aggregate posted exactly once; declared cardinality M:0..1.",
+          "definition_source": "structural_rule",
+          "do_not_confuse_with": null,
+          "foreign_key": {
+            "cardinality": "M:0..1",
+            "on_delete": "RESTRICT",
+            "target": "sales.orders",
+            "target_columns": [
+              "org_id",
+              "id"
+            ]
+          },
+          "name": "sales_order_id",
+          "nullable": true,
+          "qualified_name": "finance.payments.sales_order_id",
+          "semantic_id": "reference.sales.orders.sales_order_id",
+          "sql_type": "uuid"
+        },
+        {
+          "allowed_values": [],
+          "check_constraints": [
+            "payments_cash_evidence_ck",
+            "payments_instrument_evidence_ck"
+          ],
+          "data_classification": "regulated",
+          "default": null,
+          "definition": "Foreign-key component selecting core.attachments (org_id, id) for this Approved receipt or disbursement aggregate posted exactly once; declared cardinality M:0..1.",
+          "definition_source": "structural_rule",
+          "do_not_confuse_with": null,
+          "foreign_key": {
+            "cardinality": "M:0..1",
+            "on_delete": "RESTRICT",
+            "target": "core.attachments",
+            "target_columns": [
+              "org_id",
+              "id"
+            ]
+          },
+          "name": "evidence_attachment_id",
+          "nullable": true,
+          "qualified_name": "finance.payments.evidence_attachment_id",
+          "semantic_id": "reference.core.attachments.evidence_attachment_id",
+          "sql_type": "uuid"
+        },
+        {
+          "allowed_values": [],
+          "check_constraints": [
+            "payments_instrument_evidence_ck"
+          ],
+          "data_classification": "regulated",
+          "default": null,
+          "definition": "Human or statutory instrument number for this Approved receipt or disbursement aggregate posted exactly once; it is not the relational primary key.",
+          "definition_source": "identifier_rule",
+          "do_not_confuse_with": null,
+          "foreign_key": null,
+          "name": "instrument_number",
+          "nullable": true,
+          "qualified_name": "finance.payments.instrument_number",
+          "semantic_id": "common.instrument_number",
+          "sql_type": "varchar(64)"
+        },
+        {
+          "allowed_values": [],
+          "check_constraints": [
+            "payments_instrument_evidence_ck"
+          ],
+          "data_classification": "regulated",
+          "default": null,
+          "definition": "Civil calendar date on which instrument applies, without time-zone conversion.",
+          "definition_source": "temporal_rule",
+          "do_not_confuse_with": null,
+          "foreign_key": null,
+          "name": "instrument_date",
+          "nullable": true,
+          "qualified_name": "finance.payments.instrument_date",
+          "semantic_id": "common.instrument_date",
+          "sql_type": "date"
+        },
+        {
+          "allowed_values": [],
+          "check_constraints": [
+            "payments_instrument_evidence_ck"
+          ],
+          "data_classification": "regulated",
+          "default": null,
+          "definition": "Exact drawee bank name recorded for this Approved receipt or disbursement aggregate posted exactly once; preserve the source spelling and do not resolve it from a newer master record.",
+          "definition_source": "recorded_text_rule",
+          "do_not_confuse_with": null,
+          "foreign_key": null,
+          "name": "drawee_bank_name",
+          "nullable": true,
+          "qualified_name": "finance.payments.drawee_bank_name",
+          "semantic_id": "common.drawee_bank_name",
+          "sql_type": "varchar(256)"
+        },
+        {
+          "allowed_values": [],
+          "check_constraints": [
+            "payments_instrument_evidence_ck"
+          ],
+          "data_classification": "regulated",
+          "default": null,
+          "definition": "Whether account payee confirmed applies to this Approved receipt or disbursement aggregate posted exactly once; absence is not inferred from another field.",
+          "definition_source": "boolean_rule",
+          "do_not_confuse_with": null,
+          "foreign_key": null,
+          "name": "account_payee_confirmed",
+          "nullable": true,
+          "qualified_name": "finance.payments.account_payee_confirmed",
+          "semantic_id": "common.account_payee_confirmed",
+          "sql_type": "boolean"
         },
         {
           "allowed_values": [],
@@ -31185,7 +31363,8 @@
             "expense"
           ],
           "check_constraints": [
-            "ck_supplier_invoice_lines_inventory_cost_treatment"
+            "ck_supplier_invoice_lines_inventory_cost_treatment",
+            "ck_supplier_invoice_lines_landed_cost_allocation_method"
           ],
           "data_classification": "regulated",
           "default": null,
@@ -31197,6 +31376,27 @@
           "nullable": false,
           "qualified_name": "procurement.supplier_invoice_lines.inventory_cost_treatment",
           "semantic_id": "vocabulary.inventory_cost_treatment",
+          "sql_type": "text"
+        },
+        {
+          "allowed_values": [
+            "direct",
+            "quantity_weighted",
+            "value_weighted"
+          ],
+          "check_constraints": [
+            "ck_supplier_invoice_lines_landed_cost_allocation_method"
+          ],
+          "data_classification": "regulated",
+          "default": null,
+          "definition": "Controlled landed cost allocation method classification for this Inward billed/free quantity, price, allocated charge and immutable GST/ITC snapshot.; agents must send the exact canonical value rather than a synonym. Allowed values: direct, quantity_weighted, value_weighted.",
+          "definition_source": "controlled_vocabulary_rule",
+          "do_not_confuse_with": null,
+          "foreign_key": null,
+          "name": "landed_cost_allocation_method",
+          "nullable": true,
+          "qualified_name": "procurement.supplier_invoice_lines.landed_cost_allocation_method",
+          "semantic_id": "vocabulary.landed_cost_allocation_method",
           "sql_type": "text"
         },
         {

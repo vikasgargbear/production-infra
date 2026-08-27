@@ -19,7 +19,7 @@ down_revision = "20260827_0036"
 branch_labels = None
 depends_on = None
 SQL_PATH = Path(__file__).resolve().parents[1] / "sql" / "20260827_0037_receipt_supplier_settlement.sql"
-EXPECTED_SQL_SHA256 = "85c05528b1c6b12cdac35497033e04bcae9b371308e3fcee1443327149437681"
+EXPECTED_SQL_SHA256 = "24d33521372d5bf988093b215c37d8f8b9c43c78cc2e25cef80ea3794e50e7c2"
 
 
 def _reviewed_sql() -> str:

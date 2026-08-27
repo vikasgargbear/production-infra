@@ -502,9 +502,8 @@ def test_scenario_matrix_matches_adapter_readiness_and_bounded_pilot_scopes():
         for key, binding in ACTION_ADAPTER_BINDINGS.items()
         if key.endswith(".prepare") and not binding.available
     }
-    assert supported == available == set(
-        matrix["readiness_contract"]["supported_prepare_operations"]
-    )
+    assert supported == set(matrix["readiness_contract"]["supported_prepare_operations"])
+    assert supported <= available
     assert unavailable == set(
         matrix["readiness_contract"]["unavailable_prepare_operations"]
     )
