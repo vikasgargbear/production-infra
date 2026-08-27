@@ -351,6 +351,14 @@ def main() -> None:
         receipt_payload = fixture.goods_receipt_payload(
             str(purchase_id), str(purchase_line_id), business_date=business_date
         )
+        receipt_batch = receipt_payload["lines"][0]["batches"][0]
+        receipt_batch.update(
+            {
+                "received_quantity": "50",
+                "accepted_quantity": "50",
+                "free_quantity": "2.5",
+            }
+        )
         invalid_receipt = deepcopy(receipt_payload)
         invalid_receipt["received_at"] = datetime.combine(
             previous_date, time(12), tzinfo=timezone.utc
@@ -371,8 +379,8 @@ def main() -> None:
             receipt_readback = fixture.reconcile_goods_receipt(
                 connection,
                 str(receipt_id),
-                expected_accepted_quantity="100",
-                expected_free_quantity="5",
+                expected_accepted_quantity="50",
+                expected_free_quantity="2.5",
             )
             fixture.release_received_batch(
                 connection, str(receipt_id), receipt_readback["batch_id"]
