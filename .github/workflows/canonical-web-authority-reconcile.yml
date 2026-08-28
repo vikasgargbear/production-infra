@@ -1,4 +1,4 @@
-name: Canonical staging web authority reconcile
+name: Canonical staging user authority reconcile
 
 on:
   workflow_dispatch:
@@ -7,8 +7,20 @@ on:
         description: Exact deployed Railway API SHA to bind to the authority receipt
         required: true
         type: string
+      authority_scope:
+        description: Reconcile the reviewed first-party web or ChatGPT MCP authority
+        required: true
+        default: web
+        type: choice
+        options:
+          - web
+          - mcp
+      mcp_client_id:
+        description: Exact deployed public OAuth client ID (required for MCP only)
+        required: false
+        type: string
       confirmation:
-        description: Type RECONCILE_CANONICAL_STAGING_WEB_AUTHORITY
+        description: Type the exact RECONCILE_CANONICAL_STAGING_{WEB|MCP}_AUTHORITY phrase
         required: true
         type: string
 
@@ -32,6 +44,8 @@ jobs:
       RAILWAY_ENVIRONMENT_ID: ${{ vars.RAILWAY_ENVIRONMENT_ID }}
       RAILWAY_API_SERVICE: ${{ vars.RAILWAY_API_SERVICE }}
       REVIEWED_SHA: ${{ inputs.reviewed_sha }}
+      AUTHORITY_SCOPE: ${{ inputs.authority_scope }}
+      MCP_CLIENT_ID: ${{ inputs.mcp_client_id }}
       AUTHORITY_CONFIRMATION: ${{ inputs.confirmation }}
     steps:
       - uses: actions/checkout@v4
@@ -53,7 +67,17 @@ jobs:
           test "$(git rev-parse HEAD)" = "$REVIEWED_SHA"
           git fetch origin main
           git merge-base --is-ancestor "$REVIEWED_SHA" origin/main
-          test "$AUTHORITY_CONFIRMATION" = RECONCILE_CANONICAL_STAGING_WEB_AUTHORITY
+          case "$AUTHORITY_SCOPE" in
+            web)
+              test "$AUTHORITY_CONFIRMATION" = RECONCILE_CANONICAL_STAGING_WEB_AUTHORITY
+              test -z "$MCP_CLIENT_ID"
+              ;;
+            mcp)
+              test "$AUTHORITY_CONFIRMATION" = RECONCILE_CANONICAL_STAGING_MCP_AUTHORITY
+              [[ "$MCP_CLIENT_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]]
+              ;;
+            *) exit 2 ;;
+          esac
           test "$CANONICAL_STAGING_PROJECT_REF" = rgihahbmkrmhitjdjvev
           case ",$CANONICAL_PRODUCTION_PROJECT_REFS," in
             *",$CANONICAL_STAGING_PROJECT_REF,"*)
@@ -167,9 +191,12 @@ jobs:
             --arg production_refs "$CANONICAL_PRODUCTION_PROJECT_REFS" \
             --arg password "$SUPABASE_DB_PASSWORD" \
             --arg auth_user_id "$CANONICAL_STAGING_WEB_TEST_AUTH_USER_ID" \
+            --arg authority_scope "$AUTHORITY_SCOPE" \
+            --arg mcp_client_id "$MCP_CLIENT_ID" \
             '{expected_sha:$expected_sha,project_ref:$project_ref,
               production_project_refs:$production_refs,password:$password,
-              auth_user_id:$auth_user_id}' > "$request"
+              auth_user_id:$auth_user_id,authority_scope:$authority_scope,
+              mcp_client_id:$mcp_client_id}' > "$request"
           remote_code=$(python3 - <<'PY'
           print(r'''
           import json
@@ -184,12 +211,16 @@ jobs:
           sys.path.insert(0, "/app/backend")
           from app.domain.operator_actions.contract import ACTION_POLICIES
           from scripts.provision_staging_mcp_oauth import (
+              CLIENT_NAME,
               DEMO_ORG_ID,
+              READ_CAPABILITIES,
               REVIEWER_AUTH_USER_ID,
               REVIEWER_MEMBERSHIP_ID,
+              STATUS_CAPABILITY,
               TEST_REQUEST_ID,
               WEB_CLIENT_ID,
               WEB_CLIENT_NAME,
+              WRITE_CAPABILITIES,
               _attest_reviewed_database,
               _enter_migration_owner,
               _leave_migration_owner,
@@ -207,8 +238,32 @@ jobs:
           if os.environ.get("RAILWAY_GIT_COMMIT_SHA") != value["expected_sha"]:
               raise SystemExit("active deployment differs from reviewed SHA")
           auth_user_id = str(UUID(value["auth_user_id"]))
+          authority_scope = value["authority_scope"]
+          if authority_scope == "web":
+              if value["mcp_client_id"]:
+                  raise SystemExit("web authority must not accept an MCP client")
+              target_client_id = WEB_CLIENT_ID
+              target_client_name = WEB_CLIENT_NAME
+              consent_version = "staging-web-manual-v1"
+              consent_text = "canonical staging bounded manual web command consent"
+          elif authority_scope == "mcp":
+              target_client_id = str(UUID(value["mcp_client_id"]))
+              configured_clients = {
+                  item.strip()
+                  for item in os.environ.get(
+                      "MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS", ""
+                  ).split(",")
+                  if item.strip()
+              }
+              if configured_clients != {target_client_id}:
+                  raise SystemExit("MCP client differs from the exact deployed authority")
+              target_client_name = CLIENT_NAME
+              consent_version = "staging-chatgpt-mcp-manual-v1"
+              consent_text = "canonical staging bounded ChatGPT MCP command consent"
+          else:
+              raise SystemExit("authority scope is invalid")
 
-          prepare_operations = (
+          web_prepare_operations = (
               "sales.order.prepare",
               "sales.dispatch.prepare",
               "sales.invoice.prepare",
@@ -218,38 +273,76 @@ jobs:
               "sales.return.prepare",
               "finance.adjustment_note.prepare",
           )
-          if any(operation not in ACTION_POLICIES for operation in prepare_operations):
+          requested_write_operations = (
+              web_prepare_operations
+              if authority_scope == "web"
+              else tuple(operation for operation, _ in WRITE_CAPABILITIES)
+          )
+          policy_operations = tuple(
+              operation
+              for operation in requested_write_operations
+              if operation not in {
+                  "automation.command.approve",
+                  "automation.command.execute",
+              }
+          )
+          if any(operation not in ACTION_POLICIES for operation in policy_operations):
               raise SystemExit("deployed API omits a requested sales lifecycle policy")
-          capability_rows = [
-              (
-                  operation,
-                  "write",
-                  ACTION_POLICIES[operation].risk_class,
-                  ACTION_POLICIES[operation].approval_policy,
-                  "1000000.00",
-                  "INR",
+          if authority_scope == "web":
+              capability_rows = [
+                  (
+                      operation,
+                      "write",
+                      ACTION_POLICIES[operation].risk_class,
+                      ACTION_POLICIES[operation].approval_policy,
+                      "1000000.00",
+                      "INR",
+                      False,
+                  )
+                  for operation in web_prepare_operations
+              ]
+              capability_rows.extend((
+                  ("automation.command.approve", "write", "consequential_write", "actor_confirmation", None, None, False),
+                  ("automation.command.execute", "write", "consequential_write", "actor_confirmation", None, None, False),
+                  (STATUS_CAPABILITY, "read", "read_only", "none", None, None, False),
+              ))
+          else:
+              capability_rows = [
+                  (capability, "read", "read_only", "none", None, None, allow_sensitive)
+                  for capability, allow_sensitive in READ_CAPABILITIES
+              ]
+              capability_rows.extend(
+                  (
+                      operation,
+                      "write",
+                      "consequential_write",
+                      approval,
+                      "1000000.00",
+                      "INR",
+                      False,
+                  )
+                  for operation, approval in WRITE_CAPABILITIES
               )
-              for operation in prepare_operations
-          ]
-          capability_rows.extend((
-              ("automation.command.approve", "write", "consequential_write", "actor_confirmation", None, None),
-              ("automation.command.execute", "write", "consequential_write", "actor_confirmation", None, None),
-              ("automation.command.status.get", "read", "read_only", "none", None, None),
-          ))
+              capability_rows.append(
+                  (STATUS_CAPABILITY, "read", "read_only", "none", None, None, False)
+              )
           capability_codes = tuple(row[0] for row in capability_rows)
           if len(capability_codes) != len(set(capability_codes)):
-              raise SystemExit("web authority capability envelope is ambiguous")
+              raise SystemExit("user authority capability envelope is ambiguous")
 
           database_url = (
               "postgresql://postgres:" + quote(value["password"], safe="")
               + "@db." + value["project_ref"]
               + ".supabase.co:5432/postgres?sslmode=require&gssencmode=disable"
-              + "&connect_timeout=15&application_name=canonical_web_authority_reconcile"
+              + "&connect_timeout=15&application_name=canonical_user_authority_reconcile"
           )
-          grant_id = str(uuid5(
-              NAMESPACE_URL,
-              f"canonical-staging-reviewed-web-agent:{DEMO_ORG_ID}:{auth_user_id}",
-          ))
+          grant_namespace = (
+              f"canonical-staging-reviewed-web-agent:{DEMO_ORG_ID}:{auth_user_id}"
+              if authority_scope == "web"
+              else f"canonical-staging-reviewed-mcp-agent:"
+              f"{DEMO_ORG_ID}:{auth_user_id}:{target_client_id}"
+          )
+          grant_id = str(uuid5(NAMESPACE_URL, grant_namespace))
           with psycopg2.connect(database_url) as connection:
               with connection.cursor() as cursor:
                   _attest_reviewed_database(cursor)
@@ -293,7 +386,7 @@ jobs:
                       bindings = cursor.fetchall()
                       if len(bindings) != 1:
                           raise SystemExit(
-                              "reviewed web identity lacks one active canonical membership authority"
+                              "reviewed user identity lacks one active canonical membership authority"
                           )
                       _, membership_id = bindings[0]
                       cursor.execute(
@@ -304,7 +397,7 @@ jobs:
                            WHERE org_id=%s AND subject_membership_id=%s
                              AND client_id=%s AND status='active'
                           """,
-                          (REVIEWER_MEMBERSHIP_ID, DEMO_ORG_ID, membership_id, WEB_CLIENT_ID),
+                          (REVIEWER_MEMBERSHIP_ID, DEMO_ORG_ID, membership_id, target_client_id),
                       )
                       cursor.execute(
                           """
@@ -315,8 +408,8 @@ jobs:
                               granted_at,expires_at,status,created_by_membership_id,
                               updated_by_membership_id
                           ) VALUES (
-                              %s,%s,%s,%s,%s,NULL,'self_consent','staging-web-manual-v1',
-                              extensions.digest('canonical staging bounded manual web command consent','sha256'),
+                              %s,%s,%s,%s,%s,NULL,'self_consent',%s,
+                              extensions.digest(%s,'sha256'),
                               %s,transaction_timestamp(),%s,transaction_timestamp(),
                               transaction_timestamp()+interval '30 days','active',%s,%s
                           ) ON CONFLICT (org_id,id) DO UPDATE SET
@@ -337,7 +430,8 @@ jobs:
                               row_version=agent_grants.row_version+1
                           """,
                           (
-                              DEMO_ORG_ID,grant_id,membership_id,WEB_CLIENT_ID,WEB_CLIENT_NAME,
+                              DEMO_ORG_ID,grant_id,membership_id,target_client_id,target_client_name,
+                              consent_version,consent_text,
                               membership_id,REVIEWER_MEMBERSHIP_ID,
                               REVIEWER_MEMBERSHIP_ID,REVIEWER_MEMBERSHIP_ID,
                           ),
@@ -358,22 +452,24 @@ jobs:
                               org_id,agent_grant_id,capability_code,operation_mode,
                               risk_class,approval_policy,maximum_amount,currency_code,
                               allow_sensitive_read,status,created_by_membership_id
-                          ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,false,'active',%s)
+                          ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,'active',%s)
                           ON CONFLICT (org_id,agent_grant_id,capability_code) DO UPDATE SET
                               operation_mode=excluded.operation_mode,
                               risk_class=excluded.risk_class,
                               approval_policy=excluded.approval_policy,
                               maximum_amount=excluded.maximum_amount,
                               currency_code=excluded.currency_code,
-                              allow_sensitive_read=false,
+                              allow_sensitive_read=excluded.allow_sensitive_read,
                               status='active',revoked_at=NULL,revoked_by_membership_id=NULL
                           """,
                           [
                               (
                                   DEMO_ORG_ID,grant_id,capability,mode,risk,approval,
-                                  maximum_amount,currency,REVIEWER_MEMBERSHIP_ID,
+                                  maximum_amount,currency,allow_sensitive,
+                                  REVIEWER_MEMBERSHIP_ID,
                               )
-                              for capability,mode,risk,approval,maximum_amount,currency
+                              for capability,mode,risk,approval,maximum_amount,currency,
+                                  allow_sensitive
                               in capability_rows
                           ],
                       )
@@ -382,7 +478,8 @@ jobs:
                           SELECT grant_row.id::text,capability.capability_code,
                                  capability.operation_mode,capability.risk_class,
                                  capability.approval_policy,
-                                 capability.maximum_amount::text,capability.currency_code
+                                 capability.maximum_amount::text,capability.currency_code,
+                                 capability.allow_sensitive_read
                             FROM automation.agent_grants AS grant_row
                             JOIN automation.agent_grant_capabilities AS capability
                               ON capability.org_id=grant_row.org_id
@@ -396,19 +493,20 @@ jobs:
                              AND capability.status='active'
                            ORDER BY capability.capability_code
                           """,
-                          (DEMO_ORG_ID, membership_id, WEB_CLIENT_ID, membership_id),
+                          (DEMO_ORG_ID, membership_id, target_client_id, membership_id),
                       )
                       readback = cursor.fetchall()
                       expected = sorted(
                           (
                               grant_id,capability,mode,risk,approval,
-                              maximum_amount,currency,
+                              maximum_amount,currency,allow_sensitive,
                           )
-                          for capability,mode,risk,approval,maximum_amount,currency
+                          for capability,mode,risk,approval,maximum_amount,currency,
+                              allow_sensitive
                           in capability_rows
                       )
                       if readback != expected:
-                          raise SystemExit("reviewed web authority did not reconcile exactly")
+                          raise SystemExit("reviewed user authority did not reconcile exactly")
                   except BaseException:
                       # Roll back grant changes and temporary role membership before
                       # propagating the root error; cleanup SQL cannot run in an
@@ -420,7 +518,8 @@ jobs:
           print(json.dumps({
               "status": "ready",
               "commit_sha": value["expected_sha"],
-              "client_id": WEB_CLIENT_ID,
+              "authority_scope": authority_scope,
+              "client_id": target_client_id,
               "grant_id": grant_id,
               "capability_count": len(capability_rows),
               "expires_in_days": 30,
@@ -437,8 +536,14 @@ jobs:
             -- python -c "$remote_code" < "$request" > "$response"
           test "$(jq -r .status "$response")" = ready
           test "$(jq -r .commit_sha "$response")" = "$REVIEWED_SHA"
-          test "$(jq -r .client_id "$response")" = aasopharma-erp-web
-          test "$(jq -r .capability_count "$response")" = 11
+          test "$(jq -r .authority_scope "$response")" = "$AUTHORITY_SCOPE"
+          if test "$AUTHORITY_SCOPE" = mcp; then
+            test "$(jq -r .client_id "$response")" = "$MCP_CLIENT_ID"
+            test "$(jq -r .capability_count "$response")" = 28
+          else
+            test "$(jq -r .client_id "$response")" = aasopharma-erp-web
+            test "$(jq -r .capability_count "$response")" = 11
+          fi
 
       - name: Always remove the run-scoped Railway SSH key
         if: always()
