@@ -969,6 +969,7 @@ jobs:
           echo "RAILWAY_BROWSER_REQUEST_NONCE=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
           echo "RAILWAY_BROWSER_IDENTITY_RESPONSE=$RUNNER_TEMP/railway-browser-identity-response.json" >> "$GITHUB_ENV"
           test -n "$RAILWAY_API_TOKEN"
+          railway whoami >/dev/null
           umask 077
           mkdir -p "$HOME/.ssh" "$HOME/.railway"
           chmod 700 "$HOME/.ssh" "$HOME/.railway"
@@ -986,7 +987,15 @@ jobs:
           fingerprint=$(ssh-keygen -E sha256 -lf "$key_path.pub" | awk '{print $2}')
           case "$fingerprint" in SHA256:*) ;; *) exit 2 ;; esac
           printf '%s\n' "$fingerprint" > "$RUNNER_TEMP/railway-browser-ssh-fingerprint"
+          eval "$(ssh-agent -s)"
+          {
+            printf 'SSH_AUTH_SOCK=%s\n' "$SSH_AUTH_SOCK"
+            printf 'SSH_AGENT_PID=%s\n' "$SSH_AGENT_PID"
+          } >> "$GITHUB_ENV"
+          ssh-add "$key_path" >/dev/null
           railway ssh keys add --key "$fingerprint" --name "railway-browser-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >/dev/null
+          railway ssh keys list > "$RUNNER_TEMP/railway-browser-ssh-keys.txt"
+          grep -F -- "$fingerprint" "$RUNNER_TEMP/railway-browser-ssh-keys.txt" >/dev/null
       - name: Resolve the exact active Railway API instance
         if: inputs.live18_provider == 'railway'
         working-directory: ${{ github.workspace }}
@@ -1192,6 +1201,8 @@ jobs:
           if test -n "${RAILWAY_BROWSER_SSH_PRIVATE_KEY:-}"; then
             rm -f "$RAILWAY_BROWSER_SSH_PRIVATE_KEY" "$RAILWAY_BROWSER_SSH_PRIVATE_KEY.pub"
           fi
+          ssh-add -D >/dev/null 2>&1 || true
+          if test -n "${SSH_AGENT_PID:-}"; then ssh-agent -k >/dev/null 2>&1 || true; fi
       - name: Upload live browser traces, screenshots, videos, and reports
         if: always()
         uses: actions/upload-artifact@v4
