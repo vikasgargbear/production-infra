@@ -116,36 +116,41 @@ jobs:
         run: |
           set -euo pipefail
           status="$RUNNER_TEMP/canonical-manual-railway-status.json"
-          railway status \
-            --project "$RAILWAY_PROJECT_ID" \
-            --environment "$RAILWAY_ENVIRONMENT_ID" \
-            --json > "$status"
-          mapfile -t candidate_instance_ids < <(jq -r \
-            --arg environment "$RAILWAY_ENVIRONMENT_ID" \
-            --arg service "$RAILWAY_API_SERVICE" '
-              [.environments.edges[].node
-               | select(.id == $environment)
-               | .serviceInstances.edges[].node
-               | select(.serviceName == $service)
-               | .activeDeployments[]
-               | .instances[]
-               | select(.status == "RUNNING")
-               | .id]
-              | unique[]
-            ' "$status")
-          test "${#candidate_instance_ids[@]}" -ge 1
           matching_instance_ids=()
-          for candidate in "${candidate_instance_ids[@]}"; do
-            observed_sha=$(railway ssh \
+          for attempt in $(seq 1 12); do
+            railway status \
               --project "$RAILWAY_PROJECT_ID" \
               --environment "$RAILWAY_ENVIRONMENT_ID" \
-              --service "$RAILWAY_API_SERVICE" \
-              --deployment-instance "$candidate" \
-              --identity-file "$SSH_PRIVATE_KEY" \
-              -- printenv RAILWAY_GIT_COMMIT_SHA 2>/dev/null || true)
-            if test "$observed_sha" = "$REVIEWED_SHA"; then
-              matching_instance_ids+=("$candidate")
-            fi
+              --json > "$status"
+            mapfile -t candidate_instance_ids < <(jq -r \
+              --arg environment "$RAILWAY_ENVIRONMENT_ID" \
+              --arg service "$RAILWAY_API_SERVICE" '
+                [.environments.edges[].node
+                 | select(.id == $environment)
+                 | .serviceInstances.edges[].node
+                 | select(.serviceName == $service)
+                 | .activeDeployments[]
+                 | .instances[]
+                 | select(.status == "RUNNING")
+                 | .id]
+                | unique[]
+              ' "$status")
+            matching_instance_ids=()
+            for candidate in "${candidate_instance_ids[@]}"; do
+              observed_sha=$(timeout --signal=TERM 20s railway ssh \
+                --project "$RAILWAY_PROJECT_ID" \
+                --environment "$RAILWAY_ENVIRONMENT_ID" \
+                --service "$RAILWAY_API_SERVICE" \
+                --deployment-instance "$candidate" \
+                --identity-file "$SSH_PRIVATE_KEY" \
+                -- printenv RAILWAY_GIT_COMMIT_SHA 2>/dev/null || true)
+              if test "$observed_sha" = "$REVIEWED_SHA"; then
+                matching_instance_ids+=("$candidate")
+              fi
+            done
+            test "${#matching_instance_ids[@]}" -ne 1 || break
+            echo "Waiting for the exact API instance and SSH key (attempt $attempt/12)" >&2
+            sleep 5
           done
           test "${#matching_instance_ids[@]}" -eq 1
           instance_id=${matching_instance_ids[0]}
