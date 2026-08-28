@@ -371,6 +371,7 @@ def resolve_authoritative_facts(
                AND balance.location_id=source.id
                AND balance.on_hand_quantity>0
              WHERE batch.org_id=product.org_id AND batch.product_id=product.id
+               AND batch.batch_number=%s
                AND batch.status='released' AND batch.released_at IS NOT NULL
                AND batch.expires_on>(transaction_timestamp() AT TIME ZONE organization.timezone)::date
              ORDER BY batch.expires_on,batch.id
@@ -432,17 +433,18 @@ def resolve_authoritative_facts(
          AND attachment.status IN ('verified','retained')
          AND attachment.verified_at IS NOT NULL
     """
+    if not re.fullmatch(r"[1-9][0-9]*-[1-9][0-9]*", run_token):
+        raise FixtureCompileError("live18 run token must be GitHub run-id and attempt")
+    run_id, run_attempt = run_token.split("-", 1)
     params = (
         identities["customer_account_id"], identities["supplier_account_id"],
         identities["product_id"], identities["uom_conversion_id"],
         identities["count_uom_conversion_id"], identities["saleable_location_id"],
+        f"DEMO-BATCH-{run_id}",
         identities["quarantine_location_id"], identities["transfer_destination_branch_id"],
         identities["transfer_destination_location_id"], identities["bank_account_id"],
         identities["bank_ledger_id"], org_id, identities["branch_id"],
     )
-    if not re.fullmatch(r"[1-9][0-9]*-[1-9][0-9]*", run_token):
-        raise FixtureCompileError("live18 run token must be GitHub run-id and attempt")
-    run_id, run_attempt = run_token.split("-", 1)
     cycle_count_authority = canonical_live18_cycle_count_authority(
         org_id, run_id, run_attempt
     )
