@@ -49,6 +49,16 @@ Do not create a ChatGPT connection if any check fails.
    callback before contacting Supabase. It updates only the reviewed public
    OAuth client; it does not create an Auth user, bind an ERP grant, access the
    database, or generate a client secret.
+
+   After this workflow has been merged to the default branch, the same bounded
+   operation is available under **Actions → Register ChatGPT MCP OAuth client
+   callback → Run workflow**. Select the exact branch/commit to provision and
+   enter `REGISTER_CHATGPT_STATIC_OAUTH_CLIENT`. The workflow uses that selected
+   commit as `REVIEWED_SHA`, the existing `SUPABASE_ACCESS_TOKEN` repository
+   secret, the pinned callback above, and runner-temporary environment/evidence
+   files. It has `contents: read` permission, calls only
+   `--mode chatgpt-client-authority-only`, uploads a seven-day secret-free
+   receipt, and has no database, user/grant, Railway, or deployment authority.
 5. Review `canonical-staging-oauth-client.json`. Copy its `client_id` into the
    ChatGPT predefined-client field, select token endpoint authentication method
    `none`, and leave the client secret empty. Confirm that the evidence contains
