@@ -45,6 +45,29 @@ def test_deferred_expense_claim_does_not_block_ready_fact_resolution() -> None:
     assert "LIVE18-EXPENSE-" not in source
 
 
+def test_destruction_fact_resolution_binds_one_exact_run_authority() -> None:
+    source = inspect.getsource(resolve_authoritative_facts)
+
+    for predicate in (
+        "registration.id=%s",
+        "period.id=%s",
+        "filing.id=%s",
+        "rule.id=%s",
+        "certificate.id=%s",
+        "reversal.id=%s",
+    ):
+        assert predicate in source
+    for authority_field in (
+        "gst_registration_id",
+        "return_period_id",
+        "gstr3b_return_id",
+        "itc_reversal_rule_id",
+        "certificate_attachment_id",
+        "itc_reversal_attachment_id",
+    ):
+        assert f"destruction_authority.{authority_field}" in source
+
+
 def test_authoritative_fact_evidence_is_bound_to_exact_identity_and_run(
     tmp_path: Path,
 ) -> None:
