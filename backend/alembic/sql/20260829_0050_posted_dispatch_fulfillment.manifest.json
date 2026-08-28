@@ -1,0 +1,10 @@
+{
+  "format_version": 1,
+  "revision": "20260829_0050",
+  "source_sql_sha256": "165c4791ebd8cea79c80149368cad4310f0d1acd4d0f4fdeb7e805d35429f52b",
+  "authority_change": "posted_dispatch_fulfillment_v1",
+  "target_regprocedures": [
+    "erp_automation_commands.resolve_sales_dispatch_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)",
+    "erp_trade_invariants.guard_dispatch_line()"
+  ]
+}
