@@ -56,19 +56,32 @@ const OrderItemsStep: React.FC<OrderItemsStepProps> = ({
     const productSearchRef = useRef<ProductSearchRef>(null);
     const itemsTableRef = useRef<HTMLDivElement>(null);
     const deliveryAddress = resolvedSalesOrderDeliveryAddress(order.shipping_address_data);
+    const canRetryCustomerAddress = messageType === 'error'
+        && Boolean(selectedCustomer)
+        && !deliveryAddress
+        && /address/i.test(message);
     return (
-        <div className="max-w-6xl mx-auto px-6 py-6">
+        <div className="mx-auto max-w-[1600px] px-4 py-4 sm:px-6 sm:py-6">
             {/* Message Display */}
             {message && (
-                <div className={`mb-4 p-3 rounded flex items-center ${messageType === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                <div role="alert" className={`mb-4 flex flex-wrap items-center gap-2 rounded p-3 ${messageType === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                     }`}>
                     {messageType === 'success' ? <CheckCircle className="w-4 h-4 mr-2" /> : <AlertCircle className="w-4 h-4 mr-2" />}
-                    {message}
+                    <span className="min-w-0 flex-1">{message}</span>
+                    {canRetryCustomerAddress && selectedCustomer && (
+                        <button
+                            type="button"
+                            onClick={() => { void onCustomerSelect(selectedCustomer); }}
+                            className="min-h-11 rounded border border-red-300 bg-white px-3 text-sm font-medium text-red-800 hover:bg-red-50"
+                        >
+                            Retry address
+                        </button>
+                    )}
                 </div>
             )}
 
             {/* Top Section - Dates and Import */}
-            <div className="grid grid-cols-3 gap-4 mb-6">
+            <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 <StandardDatePicker
                     label="Order Date"
                     value={order.order_date}
@@ -87,7 +100,7 @@ const OrderItemsStep: React.FC<OrderItemsStepProps> = ({
                     <label className="block text-sm font-medium text-gray-700 mb-2">Import Data</label>
                     <button
                         onClick={onShowImportModal}
-                        className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg hover:bg-blue-50 transition-colors flex items-center justify-center gap-2"
+                        className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-gray-300 px-3 text-sm transition-colors hover:bg-blue-50"
                     >
                         <FileInput className="w-4 h-4 text-gray-400" />
                         <span>Import from Invoice/Challan</span>
@@ -104,7 +117,7 @@ const OrderItemsStep: React.FC<OrderItemsStepProps> = ({
                     </h3>
                     <button
                         onClick={onShowCustomerModal}
-                        className="min-w-[140px] px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
+                        className="min-h-11 min-w-[140px] rounded-lg bg-blue-600 px-4 text-sm font-medium text-white transition-colors hover:bg-blue-700"
                     >
                         Create Customer
                     </button>
@@ -142,7 +155,7 @@ const OrderItemsStep: React.FC<OrderItemsStepProps> = ({
                     </h3>
                     <button
                         onClick={onShowProductModal}
-                        className="min-w-[140px] px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
+                        className="min-h-11 min-w-[140px] rounded-lg bg-blue-600 px-4 text-sm font-medium text-white transition-colors hover:bg-blue-700"
                     >
                         Create Product
                     </button>

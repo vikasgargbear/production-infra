@@ -38,6 +38,14 @@ interface CompanyInfo {
     city?: string;
 }
 
+const customerAddressErrorMessage = (error: unknown): string => {
+    const raw = error instanceof Error ? error.message.trim() : '';
+    if (!raw || /network error|failed to fetch|load failed/i.test(raw)) {
+        return 'Could not load this customer’s saved addresses. Check your connection and select the customer again.';
+    }
+    return raw;
+};
+
 // Using canonical Product type from /types/models - extended with UI fields
 type ProductInput = Omit<Product, 'mrp' | 'sale_price' | 'gst_percent'> & {
     branch_id?: string;
@@ -294,6 +302,8 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
     // Handle customer selection
     const handleCustomerSelect = useCallback(async (customer: Customer | null): Promise<void> => {
         setSelectedCustomer(customer);
+        setMessage('');
+        setMessageType('');
 
         if (!customer) {
             setOrder(prev => ({
@@ -361,10 +371,10 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
             shippingAddressData = shipping ? toAddress(shipping) : billingAddressData;
             billingAddress = display(billingAddressData);
             shippingAddress = display(shippingAddressData);
+            setMessage('');
+            setMessageType('');
         } catch (addressError) {
-            const reason = addressError instanceof Error
-                ? addressError.message
-                : 'Canonical customer addresses are unavailable.';
+            const reason = customerAddressErrorMessage(addressError);
             setMessage(reason);
             setMessageType('error');
             toast.error(reason);

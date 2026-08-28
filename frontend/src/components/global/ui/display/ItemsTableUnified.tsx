@@ -221,14 +221,17 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
     ) => {
         const productName = item.product_name || item.name || `Item ${index + 1}`;
         const positiveFreeQuantity = hasPositiveFreeQuantity(item);
+        if (!positiveFreeQuantity) return null;
         return (
             <label className="block text-xs font-medium text-gray-600">
-                <span className="sr-only">{productName} free supply tax treatment</span>
+                <span className={surface === 'mobile' ? 'mb-1 block' : 'sr-only'}>
+                    Free units value
+                </span>
                 <select
                     data-testid={`${surface}-free-supply-treatment-${item.batch_id || index}`}
-                    aria-label={`${productName} free supply tax treatment`}
-                    value={positiveFreeQuantity ? (item.free_supply_tax_treatment || '') : 'excluded_from_taxable_value'}
-                    disabled={readOnly || !positiveFreeQuantity}
+                    aria-label={`${productName} free units value`}
+                    value={item.free_supply_tax_treatment || ''}
+                    disabled={readOnly}
                     onChange={(event) => onUpdateItem?.(
                         index,
                         'free_supply_tax_treatment',
@@ -236,10 +239,15 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                     )}
                     className="min-h-11 w-full rounded border border-gray-300 bg-white px-2 text-sm text-gray-900 disabled:bg-gray-100 disabled:text-gray-600"
                 >
-                    {positiveFreeQuantity && <option value="">Choose treatment</option>}
-                    <option value="excluded_from_taxable_value">Exclude from taxable value</option>
-                    <option value="included_at_unit_rate">Include at unit rate</option>
+                    <option value="">Choose how free units are valued</option>
+                    <option value="excluded_from_taxable_value">₹0 — exclude free units</option>
+                    <option value="included_at_unit_rate">Item rate — include free units</option>
                 </select>
+                {surface === 'mobile' && (
+                    <span className="mt-1 block font-normal text-gray-500">
+                        Controls whether free quantity contributes to the line and taxable value.
+                    </span>
+                )}
             </label>
         );
     };
@@ -247,7 +255,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
     useEffect(() => {
         const desktopLayout = typeof window === 'undefined'
             || typeof window.matchMedia !== 'function'
-            || window.matchMedia('(min-width: 768px)').matches;
+            || window.matchMedia('(min-width: 1280px)').matches;
         if (desktopLayout && items.length > 0 && !readOnly) {
             const lastItem = items[items.length - 1];
             if (lastItem.quantity === 1 || lastItem.quantity === 0) {
@@ -263,7 +271,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
 
     return (
         <div className={className}>
-            <div className="space-y-3 md:hidden">
+            <div className="space-y-3 xl:hidden">
                 {items.length === 0 ? (
                     <div className="border border-gray-200 bg-white px-4 py-8 text-center">
                         <p className="text-sm text-gray-600">No items added yet</p>
@@ -319,27 +327,23 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                 ))}
             </div>
 
-            <div className="hidden overflow-x-auto md:block">
-            <table className="w-full border-collapse">
+            <div className="hidden overflow-x-auto rounded-lg border border-gray-200 bg-white xl:block">
+            <table className="min-w-[1080px] w-full border-collapse">
                 <thead>
                     <tr className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b-2 border-blue-200">
                         <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">#</th>
-                        <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Product</th>
-                        <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Pack</th>
-                        <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Expiry</th>
+                        <th className="min-w-72 px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Product / batch</th>
                         <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">
                             Qty
                             <div className="text-[10px] font-normal text-gray-500">Enter/Tab →</div>
                         </th>
-                        <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">MRP</th>
                         <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Rate</th>
-                        <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Disc %</th>
-                        <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Free</th>
-                        {showFreeSupplyTaxTreatment && (
-                            <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Free tax treatment</th>
-                        )}
-                        <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Tax %</th>
-                        <th className="px-3 py-3 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">Total</th>
+                        <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Discount %</th>
+                        <th className="min-w-64 px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                            {showFreeSupplyTaxTreatment ? 'Free qty / value' : 'Free qty'}
+                        </th>
+                        <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">GST %</th>
+                        <th className="px-3 py-3 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">Line total</th>
                         {!readOnly && (
                             <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Action</th>
                         )}
@@ -348,7 +352,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                 <tbody>
                     {items.length === 0 ? (
                         <tr>
-                            <td colSpan={(readOnly ? 11 : 12) + (showFreeSupplyTaxTreatment ? 1 : 0)} className="px-3 py-8 text-center text-gray-500">
+                            <td colSpan={readOnly ? 8 : 9} className="px-3 py-8 text-center text-gray-500">
                                 <div className="flex flex-col items-center">
                                     <p className="text-sm">No items added yet</p>
                                     <p className="text-xs text-gray-400 mt-1">Search and select products to add</p>
@@ -362,21 +366,14 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                                 className="border-b border-gray-200 hover:bg-gray-50 transition-colors"
                             >
                                 <td className="px-3 py-2 text-sm text-gray-600">{index + 1}</td>
-                                <td className="px-3 py-2">
-                                    <div className="text-sm font-medium text-gray-900">{item.product_name || item.name}</div>
-                                    <div className="text-xs text-gray-500">{item.batch_number || item.batch_number || 'No Batch'}</div>
-                                </td>
-                                <td className="px-3 py-2 text-center">
-                                    <div className="text-sm text-gray-700">{item.packages_per_box || 1}*{item.units_per_pack || 1}</div>
-                                </td>
-                                <td className="px-3 py-2 text-center">
-                                    {item.expiry_date ? (
-                                        <div className="text-xs text-gray-600">
-                                            {new Date(item.expiry_date).toLocaleDateString('en-IN', { month: 'short', year: '2-digit' })}
-                                        </div>
-                                    ) : (
-                                        <div className="text-xs text-gray-400">-</div>
-                                    )}
+                                <td className="min-w-72 px-3 py-2">
+                                    <div className="text-sm font-medium leading-5 text-gray-900">{item.product_name || item.name}</div>
+                                    <div className="mt-1 break-all text-xs text-gray-500">Batch: {item.batch_number || 'No batch'}</div>
+                                    <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-500">
+                                        <span>Pack {item.packages_per_box || 1}×{item.units_per_pack || 1}</span>
+                                        <span>Expiry {item.expiry_date ? new Date(item.expiry_date).toLocaleDateString('en-IN', { month: 'short', year: '2-digit' }) : '—'}</span>
+                                        <span>MRP {formatCurrency(item.mrp || 0)}</span>
+                                    </div>
                                 </td>
                                 <td className="px-3 py-2">
                                     <EditableCell
@@ -396,9 +393,6 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                                         preserveDecimalString={preserveExactDecimals}
                                         ariaLabel={`${item.product_name || item.name || `Item ${index + 1}`} quantity`}
                                     />
-                                </td>
-                                <td className="px-3 py-2 text-center">
-                                    <div className="text-sm text-gray-900 font-medium">{formatCurrency(item.mrp || 0)}</div>
                                 </td>
                                 <td className="px-3 py-2 text-center">
                                     <EditableCell
@@ -437,7 +431,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                                         ariaLabel={`${item.product_name || item.name || `Item ${index + 1}`} discount percent`}
                                     />
                                 </td>
-                                <td className="px-3 py-2 text-center">
+                                <td className="min-w-64 px-3 py-2">
                                     <EditableCell
                                         ref={(el) => setFieldRef(index, 'free', el)}
                                         value={item.free_quantity || item.free || 0}
@@ -455,12 +449,12 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                                         preserveDecimalString={preserveExactDecimals}
                                         ariaLabel={`${item.product_name || item.name || `Item ${index + 1}`} free quantity`}
                                     />
+                                    {showFreeSupplyTaxTreatment && (
+                                        <div className="mt-2">
+                                            {freeSupplyTreatmentSelect(item, index, 'desktop')}
+                                        </div>
+                                    )}
                                 </td>
-                                {showFreeSupplyTaxTreatment && (
-                                    <td className="min-w-52 px-3 py-2">
-                                        {freeSupplyTreatmentSelect(item, index, 'desktop')}
-                                    </td>
-                                )}
                                 <td className="px-3 py-2 text-center">
                                     <span className="text-sm text-gray-900 font-medium" title="Tax percentage from product master data (read-only)">
                                         {item.gst_percent || item.tax_rate || 0}%
@@ -473,8 +467,9 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                                     <td className="px-3 py-2 text-center">
                                         <button
                                             onClick={() => onRemoveItem?.(index)}
-                                            className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+                                            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded text-red-600 transition-colors hover:bg-red-50"
                                             title="Remove item"
+                                            aria-label={`Remove ${item.product_name || item.name || 'item'}`}
                                         >
                                             <Trash2 className="w-4 h-4" />
                                         </button>
@@ -488,7 +483,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
             </div>
 
             {!readOnly && enableKeyboardNav && items.length > 0 && (
-                <div className="mt-2 hidden border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-gray-600 md:block">
+                <div className="mt-2 hidden border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-gray-600 xl:block">
                     <strong className="text-blue-700">Keyboard Navigation:</strong>
                     <kbd className="mx-1 px-1.5 py-0.5 bg-white border border-gray-300 rounded text-[10px]">Tab</kbd> Next field •
                     <kbd className="mx-1 px-1.5 py-0.5 bg-white border border-gray-300 rounded text-[10px]">Enter</kbd> Save & next •
