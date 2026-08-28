@@ -1518,7 +1518,8 @@ def test_live18_is_opt_in_exact_sha_external_fixture_and_always_cleaned():
     assert "screenshot: 'off'" in playwright_config
     assert "video: 'off'" in playwright_config
     assert "completed-resources.json" in browser_spec
-    assert "persistCompletedResource(contract.id, resourceId)" in browser_spec
+    assert "persistCompletedResource(contract.id, resourceId, readback)" in browser_spec
+    assert "resource_purchase_order_line" in browser_spec
     assert "...loadCompletedResources()" in browser_spec
     assert live18.index("provision_ephemeral_canonical_live.py cleanup") < live18.index(
         "provision_ephemeral_browser_identities.py cleanup"

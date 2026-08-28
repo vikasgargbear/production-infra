@@ -10,7 +10,7 @@
       {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Record canonical receipt for purchase order {{resource_purchase_order}}","exact":true}},
       {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Required: select at least one PO line and record physical receipt time, batch, expiry, quantities, MRP unit, destination, and QC disposition.","exact":true},"value":"Required: select at least one PO line and record physical receipt time, batch, expiry, quantities, MRP unit, destination, and QC disposition."},
       {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Review stock impact","exact":true}},
-      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Receipt date and time is required","exact":true},"value":"Receipt date and time is required"}
+      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Physical receipt time must include an exact local date and time.","exact":true},"value":"Physical receipt time must include an exact local date and time."}
     ],
     "prepare_steps": [
       {"actor":"requester","action":"goto","value":"/#/purchase/purchase-history"},
