@@ -39,6 +39,12 @@ def _control_manifest() -> dict:
     )
 
 
+def test_active_railway_mcp_origin_is_the_reviewed_public_service() -> None:
+    assert _control_manifest()["providers"]["railway"]["services"]["mcp"][
+        "origin"
+    ] == "https://aasopharma-mcp-pilot-production.up.railway.app"
+
+
 def _workflow_run_script(step_name: str, next_step_name: str) -> str:
     workflow = _workflow()
     section = workflow.split(f"- name: {step_name}", 1)[1].split(
