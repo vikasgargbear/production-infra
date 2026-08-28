@@ -25,8 +25,8 @@ CREATE INDEX products_search_document_idx
   ON catalog.products USING gin (
     pg_catalog.to_tsvector(
       'simple'::pg_catalog.regconfig,
-      pg_catalog.coalesce(sku,'')||' '||pg_catalog.coalesce(name,'')||' '||
-      pg_catalog.coalesce(generic_name,'')||' '||pg_catalog.coalesce(gtin,'')
+      COALESCE(sku,'')||' '||COALESCE(name,'')||' '||
+      COALESCE(generic_name,'')||' '||COALESCE(gtin,'')
     )
   ) WHERE status IN ('draft','active','blocked');
 CREATE INDEX parties_search_name_lower_idx
@@ -36,7 +36,7 @@ CREATE INDEX parties_search_document_idx
   ON parties.parties USING gin (
     pg_catalog.to_tsvector(
       'simple'::pg_catalog.regconfig,
-      pg_catalog.coalesce(legal_name,'')||' '||pg_catalog.coalesce(trade_name,'')
+      COALESCE(legal_name,'')||' '||COALESCE(trade_name,'')
     )
   ) WHERE status IN ('active','blocked');
 CREATE INDEX tax_code_versions_search_description_idx

@@ -24,7 +24,7 @@ SQL_PATH = (
     / "sql"
     / "20260828_0049_canonical_product_setup.sql"
 )
-EXPECTED_SQL_SHA256 = "a4c6243bebb6009aae940e6dd316ab5b3ea1cc0bd486af35b7dac9106ee34de8"
+EXPECTED_SQL_SHA256 = "9004b9acd898ede1ff594e2cd9eeeae39b9157595399b224e3582668a8b26bb5"
 
 
 def _reviewed_sql() -> str:
