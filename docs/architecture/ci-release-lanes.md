@@ -24,6 +24,10 @@ the release lane instead of partially updating the pilot.
 The pilot uses the `canonical-staging` GitHub environment and remains the place
 for persistent manual test organizations and browser testing.
 
+The frontend container performs only the production bundle build. Typecheck,
+lint, unit tests, and browser tests run against the same immutable source in PR
+and release CI and are not duplicated inside Railway's image builder.
+
 ## Release certification
 
 `production-readiness.yml` is manually dispatched with
