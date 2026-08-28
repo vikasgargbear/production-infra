@@ -166,7 +166,9 @@ UUID produced earlier, then uses only its dispatch allocation, batch, and
 server-published quarantine locations. The return remains intentionally
 dependent on the sales-invoice operation; no older invoice fallback is used.
 Stock adjustment reviews only `stock_adjustment_loss_quantity`, expressed in
-the exact canonical count UOM. The compiler resolves the requester membership,
+the exact canonical count UOM. CI supplies that choice through the dedicated
+`LIVE18_REVIEWED_STOCK_ADJUSTMENT_LOSS_QUANTITY` secret and rejects any
+disagreement with the compact scalar pack. The compiler resolves the requester membership,
 the exact run-and-attempt-bound unused retained cycle-count evidence, eligible
 released batch, UOM multiplier,
 evidence verification instant, and pre-run base stock from canonical staging.

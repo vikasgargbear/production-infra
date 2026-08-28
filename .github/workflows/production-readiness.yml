@@ -1462,16 +1462,37 @@ jobs:
       - name: Write compact externally reviewed scalar choices outside the repository
         env:
           LIVE18_REVIEWED_SCALARS_JSON: ${{ secrets.LIVE18_REVIEWED_SCALARS_JSON }}
+          LIVE18_REVIEWED_STOCK_ADJUSTMENT_LOSS_QUANTITY: ${{ secrets.LIVE18_REVIEWED_STOCK_ADJUSTMENT_LOSS_QUANTITY }}
           CANONICAL_DEMO_EXPENSE_RECEIPT_BASE64: ${{ secrets.CANONICAL_DEMO_EXPENSE_RECEIPT_BASE64 }}
           CANONICAL_DEMO_EXPENSE_RECEIPT_SHA256: ${{ secrets.CANONICAL_DEMO_EXPENSE_RECEIPT_SHA256 }}
         run: |
           set -euo pipefail
           test -n "$LIVE18_REVIEWED_SCALARS_JSON"
+          [[ "$LIVE18_REVIEWED_STOCK_ADJUSTMENT_LOSS_QUANTITY" =~ ^[1-9][0-9]{0,13}(\.[0-9]{1,6})?$|^0\.[0-9]*[1-9][0-9]{0,5}$ ]]
           test -n "$CANONICAL_DEMO_EXPENSE_RECEIPT_BASE64"
           [[ "$CANONICAL_DEMO_EXPENSE_RECEIPT_SHA256" =~ ^[0-9a-f]{64}$ ]]
           umask 077
           printf '%s' "$LIVE18_REVIEWED_SCALARS_JSON" > "$LIVE18_REVIEWED_SCALARS_INPUT_PATH"
           python3 -m json.tool "$LIVE18_REVIEWED_SCALARS_INPUT_PATH" >/dev/null
+          python3 - "$LIVE18_REVIEWED_SCALARS_INPUT_PATH" <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          import sys
+
+          path = Path(sys.argv[1])
+          payload = json.loads(path.read_text(encoding="utf-8"))
+          values = payload.get("values")
+          if not isinstance(values, dict):
+              raise SystemExit("reviewed scalar transport must contain a values object")
+          key = "stock_adjustment_loss_quantity"
+          reviewed = os.environ["LIVE18_REVIEWED_STOCK_ADJUSTMENT_LOSS_QUANTITY"]
+          existing = values.get(key)
+          if existing is not None and str(existing) != reviewed:
+              raise SystemExit("reviewed stock-adjustment choices disagree")
+          values[key] = reviewed
+          path.write_text(json.dumps(payload, separators=(",", ":")), encoding="utf-8")
+          PY
           test "$(jq -r 'has("values") and (.values|type=="object") and (.values|has("expense_receipt_pdf_path")|not)' "$LIVE18_REVIEWED_SCALARS_INPUT_PATH")" = true
           printf '%s' "$CANONICAL_DEMO_EXPENSE_RECEIPT_BASE64" | base64 --decode > "$LIVE18_EXPENSE_RECEIPT_PATH"
           test -s "$LIVE18_EXPENSE_RECEIPT_PATH"

@@ -1430,9 +1430,13 @@ def test_live18_is_opt_in_exact_sha_external_fixture_and_always_cleaned():
     assert '} >> "$GITHUB_ENV"' in render_database_step
     assert "if: env.LIVE18_PROVIDER == 'render'" in render_database_step
     assert "secrets.LIVE18_REVIEWED_SCALARS_JSON" in live18
+    assert "secrets.LIVE18_REVIEWED_STOCK_ADJUSTMENT_LOSS_QUANTITY" in live18
     assert "secrets.CANONICAL_DEMO_EXPENSE_RECEIPT_BASE64" in live18
     assert "secrets.CANONICAL_DEMO_EXPENSE_RECEIPT_SHA256" in live18
     assert 'printf \'%s\' "$LIVE18_REVIEWED_SCALARS_JSON" > "$LIVE18_REVIEWED_SCALARS_INPUT_PATH"' in live18
+    assert 'key = "stock_adjustment_loss_quantity"' in live18
+    assert 'values[key] = reviewed' in live18
+    assert 'reviewed stock-adjustment choices disagree' in live18
     assert ".values.expense_receipt_pdf_path=$path" in live18
     assert "has(\"expense_receipt_pdf_path\")|not" in live18
     assert 'sha256sum "$LIVE18_EXPENSE_RECEIPT_PATH"' in live18
