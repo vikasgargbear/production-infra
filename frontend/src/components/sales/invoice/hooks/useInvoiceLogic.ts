@@ -77,6 +77,7 @@ export interface Invoice {
     invoice_date: string;
     due_date: string;
     items: InvoiceItem[];
+    customer_name: string;
     customer_details: Customer | null;
     billing_address: string;
     shipping_address: string;
@@ -184,6 +185,7 @@ export const createInitialInvoice = (businessDate = ''): Invoice => ({
     invoice_date: businessDate,
     due_date: '',
     items: [],
+    customer_name: '',
     customer_details: null,
     billing_address: '',
     shipping_address: '',
@@ -419,6 +421,7 @@ export const useInvoiceLogic = (
             setSelectedCustomer(null);
             setInvoice(prev => ({
                 ...prev,
+                customer_name: '',
                 customer_details: null,
                 billing_address: '',
                 shipping_address: '',
@@ -435,6 +438,7 @@ export const useInvoiceLogic = (
         // loads the reviewed UUID-scoped address projection after selection.
         setInvoice(prev => ({
             ...prev,
+            customer_name: customer.customer_name,
             customer_details: customer,
             billing_address: '',
             billing_address_data: undefined,
@@ -558,7 +562,10 @@ export const useInvoiceLogic = (
                 }));
             }
 
-            toast.success(`Imported ${importData.items?.length ?? 0} items from ${importData.source}`);
+            const sourceType = String(importData.source_type ?? '').trim();
+            toast.success(
+                `Imported ${importData.items?.length ?? 0} items from ${sourceType || 'canonical document'}`,
+            );
         } catch (error) {
             console.error('Import error:', error);
             toast.error('Failed to import data');

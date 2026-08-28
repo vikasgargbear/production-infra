@@ -1,4 +1,5 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
+import { toast } from 'react-toastify';
 import { calculateInvoicePreview } from '../../../../services/calculations/invoiceCalculationService';
 import { employeesApi } from '../../../../services/api';
 import type { Customer } from '../../../../types/models/customer';
@@ -222,7 +223,7 @@ describe('useInvoiceLogic selected quantity boundary', () => {
 
         await act(async () => {
             await result.current.handleImport({
-                source: 'delivery_challan', customer,
+                source_type: 'challan', customer,
                 items: [{
                     product_id: ids.product, product_name: 'Fractional Carton',
                     batch_id: ids.batch, batch_number: 'BATCH-1',
@@ -245,5 +246,7 @@ describe('useInvoiceLogic selected quantity boundary', () => {
             base_free_quantity: '2.500000', source_billed_quantity: '1.125000',
             source_free_quantity: '0.250000',
         })));
+        expect(result.current.invoice.customer_name).toBe('Canonical Customer');
+        expect(toast.success).toHaveBeenCalledWith('Imported 1 items from challan');
     });
 });
