@@ -38,6 +38,7 @@ try:
     from scripts.canonical_demo_ids import (
         canonical_demo_authority_ids,
         canonical_live18_cycle_count_authority,
+        canonical_live18_destruction_authority,
     )
 except ModuleNotFoundError:  # Direct execution places this script directory on sys.path.
     from compile_live18_browser_fixture import (  # type: ignore[no-redef]
@@ -48,6 +49,7 @@ except ModuleNotFoundError:  # Direct execution places this script directory on 
     from canonical_demo_ids import (  # type: ignore[no-redef]
         canonical_demo_authority_ids,
         canonical_live18_cycle_count_authority,
+        canonical_live18_destruction_authority,
     )
 
 
@@ -545,6 +547,13 @@ for resource_key in (
     "sez_customer_gstin",
 ):
     IDS[resource_key] = demo_ui_fixture_uuid(resource_key)
+LIVE18_DESTRUCTION_AUTHORITY = canonical_live18_destruction_authority(
+    IDS["org"],
+    DEMO_RUN_ID,
+    DEMO_RUN_ATTEMPT,
+    gst_registration_id=IDS["org_gst_registration"],
+    itc_reversal_rule_version=ITC_REVERSAL_RULESET_VERSION,
+)
 
 INTERSTATE_CUSTOMER_GSTIN = demo_ui_fixture_gstin("29", "interstate-customer")
 SEZ_CUSTOMER_GSTIN = demo_ui_fixture_gstin("29", "sez-customer")
@@ -558,6 +567,18 @@ for resource_key in (
     "destruction_gstr3b_return",
 ):
     IDS[resource_key] = demo_ui_fixture_uuid(resource_key)
+for resource_key, authority_value in (
+    (
+        "destruction_certificate_evidence",
+        LIVE18_DESTRUCTION_AUTHORITY.certificate_attachment_id,
+    ),
+    (
+        "destruction_itc_reversal_evidence",
+        LIVE18_DESTRUCTION_AUTHORITY.itc_reversal_attachment_id,
+    ),
+):
+    if IDS[resource_key] != authority_value:
+        raise RuntimeError(f"shared destruction authority drifted: {resource_key}")
 IDS["destruction_itc_rule_release"] = str(
     uuid5(
         NAMESPACE_URL,
@@ -576,6 +597,11 @@ IDS["destruction_itc_rule_version"] = str(
         ),
     )
 )
+if (
+    IDS["destruction_itc_rule_version"]
+    != LIVE18_DESTRUCTION_AUTHORITY.itc_reversal_rule_id
+):
+    raise RuntimeError("shared destruction ITC rule authority drifted")
 
 
 def assert_target() -> None:
