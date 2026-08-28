@@ -180,6 +180,8 @@ def test_canonical_router_covers_reads_and_bounded_master_writes() -> None:
         ("/products/{product_id}", {"DELETE"}),
         ("/customers/", {"POST"}),
         ("/suppliers/", {"POST"}),
+        ("/customers/{customer_id:uuid}", {"PATCH"}),
+        ("/suppliers/{supplier_id:uuid}", {"PATCH"}),
         ("/customers/{customer_id:uuid}/addresses/", {"POST"}),
         ("/customers/{customer_id:uuid}/addresses/{address_id:uuid}", {"PUT"}),
     ]

@@ -14,6 +14,7 @@ jest.mock('../api/apiClient', () => ({
     get: jest.fn(),
     post: jest.fn(),
     put: jest.fn(),
+    patch: jest.fn(),
     delete: jest.fn(),
   },
 }));
@@ -177,18 +178,34 @@ describe('canonical party creation contracts', () => {
     );
   });
 
-  it('fails closed instead of calling retired customer and supplier mutation routes', async () => {
-    await expect(customersApi.update('customer-uuid', { customer_name: 'Changed' }))
-      .rejects.toMatchObject({ code: 'CANONICAL_WRITE_UNAVAILABLE' });
+  it('uses canonical PATCH routes and keeps destructive party writes unavailable', async () => {
+    await customersApi.update(
+      'd3000000-0000-7000-8000-000000000011',
+      { account_row_version: 2, party_row_version: 3, customer_name: 'Changed' },
+      'erp-web-master-customer-update:d3000000-0000-7000-8000-000000000031',
+    );
     await expect(customersApi.delete('customer-uuid'))
       .rejects.toMatchObject({ code: 'CANONICAL_WRITE_UNAVAILABLE' });
     expect(customersApi).not.toHaveProperty('updateCreditLimit');
     expect(customersApi).not.toHaveProperty('sendSMS');
-    await expect(suppliersApi.update('supplier-uuid', { supplier_name: 'Changed' }))
-      .rejects.toMatchObject({ code: 'CANONICAL_WRITE_UNAVAILABLE' });
+    await suppliersApi.update(
+      'd3000000-0000-7000-8000-000000000012',
+      { account_row_version: 4, party_row_version: 5, supplier_name: 'Changed' },
+      'erp-web-master-supplier-update:d3000000-0000-7000-8000-000000000032',
+    );
     await expect(suppliersApi.delete('supplier-uuid'))
       .rejects.toMatchObject({ code: 'CANONICAL_WRITE_UNAVAILABLE' });
 
+    expect(apiHelpers.patch).toHaveBeenNthCalledWith(1,
+      '/customers/d3000000-0000-7000-8000-000000000011',
+      { account_row_version: 2, party_row_version: 3, customer_name: 'Changed' },
+      { headers: { 'X-Idempotency-Key': 'erp-web-master-customer-update:d3000000-0000-7000-8000-000000000031' } },
+    );
+    expect(apiHelpers.patch).toHaveBeenNthCalledWith(2,
+      '/suppliers/d3000000-0000-7000-8000-000000000012',
+      { account_row_version: 4, party_row_version: 5, supplier_name: 'Changed' },
+      { headers: { 'X-Idempotency-Key': 'erp-web-master-supplier-update:d3000000-0000-7000-8000-000000000032' } },
+    );
     expect(apiHelpers.put).not.toHaveBeenCalled();
     expect(apiHelpers.delete).not.toHaveBeenCalled();
     expect(apiHelpers.post).not.toHaveBeenCalled();

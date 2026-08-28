@@ -137,6 +137,8 @@ CANONICAL_MASTER_WRITES = {
     ("POST", "/api/products/{product_id}/activate"): "activate_product_setup",
     ("POST", "/api/customers/"): "create_customer",
     ("POST", "/api/suppliers/"): "create_supplier",
+    ("PATCH", "/api/customers/{customer_id:uuid}"): "update_customer",
+    ("PATCH", "/api/suppliers/{supplier_id:uuid}"): "update_supplier",
     ("POST", "/api/customers/{customer_id:uuid}/addresses/"): "create_customer_address",
     ("PUT", "/api/customers/{customer_id:uuid}/addresses/{address_id:uuid}"): "update_customer_address",
 }
@@ -155,7 +157,9 @@ ALLOWED_EFFECTIVE_MUTATIONS = {
     ("POST", "/api/internal/mcp/agent-grants/authorize-action"),
     ("POST", "/api/internal/mcp/master/products"),
     ("POST", "/api/internal/mcp/master/customers"),
+    ("POST", "/api/internal/mcp/master/customers/update"),
     ("POST", "/api/internal/mcp/master/suppliers"),
+    ("POST", "/api/internal/mcp/master/suppliers/update"),
     ("POST", "/api/internal/mcp/actions/{command_type}/prepare"),
     ("POST", "/api/internal/mcp/commands/{command_request_id}/approve"),
     ("POST", "/api/internal/mcp/commands/{command_request_id}/execute"),
