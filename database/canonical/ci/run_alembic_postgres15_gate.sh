@@ -139,6 +139,8 @@ PYTHONPATH=backend \
 PYTHONPATH=backend \
   python backend/tests/postgres/check_canonical_supplier_invoice_reads_runtime_role.py
 PYTHONPATH=backend \
+  python backend/tests/postgres/check_purchase_bill_mapping_lifecycle_pg15.py
+PYTHONPATH=backend \
   python backend/tests/postgres/check_canonical_return_runtime_role.py
 PYTHONPATH=backend \
   python backend/tests/postgres/check_canonical_supplier_payment_reads_runtime_role.py
