@@ -1,21 +1,33 @@
 name: Version Management
 
 on:
-  pull_request:
-    types: [closed]
-    branches: [main]
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: Exact certified main commit to tag and release
+        required: true
+        type: string
 
 permissions:
   contents: write
 
 jobs:
   version-bump:
-    if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ inputs.release_sha }}
+
+      - name: Verify the certified immutable source
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
+          git merge-base --is-ancestor "$RELEASE_SHA" origin/main
           
       - name: Bump version
         id: version
