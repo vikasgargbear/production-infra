@@ -310,7 +310,7 @@ BEGIN
 END
 $function$;
 
-CREATE FUNCTION erp_master_commands.activate_configured_product(
+CREATE OR REPLACE FUNCTION erp_master_commands.activate_configured_product(
   organization_id uuid,
   product_identifier uuid,
   expected_row_version bigint,
@@ -328,6 +328,7 @@ SET search_path=''
 AS $function$
 #variable_conflict use_variable
 DECLARE missing text[]; was_replayed boolean;
+        organization_timezone text; prior_timezone text;
 BEGIN
   missing:=erp_master_commands.product_setup_missing_fields(
     organization_id,product_identifier,
@@ -337,6 +338,9 @@ BEGIN
     RAISE EXCEPTION USING ERRCODE='23514',
       MESSAGE='product setup is incomplete: '||pg_catalog.array_to_string(missing,', ');
   END IF;
+  SELECT organization.timezone INTO STRICT organization_timezone
+    FROM core.organizations organization
+   WHERE organization.id=organization_id AND organization.status='active';
   SELECT EXISTS(
     SELECT 1 FROM core.idempotency_keys claim
      WHERE claim.org_id=organization_id
@@ -346,10 +350,22 @@ BEGIN
        AND claim.resource_type='catalog.products'
        AND claim.resource_id=product_identifier
   ) INTO was_replayed;
-  PERFORM erp_regulatory_commands.activate_product(
-    organization_id,product_identifier,expected_row_version,
-    manufacturer_traceability_code,idempotency_key_hash,expires_at
-  );
+  prior_timezone:=pg_catalog.current_setting('TimeZone');
+  BEGIN
+    -- The inherited regulatory command evaluates effective-dated reference
+    -- facts with CURRENT_DATE. Pin that date to the organization clock for the
+    -- duration of the only runtime activation boundary, then restore the
+    -- caller's session setting on success or error.
+    PERFORM pg_catalog.set_config('TimeZone',organization_timezone,true);
+    PERFORM erp_regulatory_commands.activate_product(
+      organization_id,product_identifier,expected_row_version,
+      manufacturer_traceability_code,idempotency_key_hash,expires_at
+    );
+    PERFORM pg_catalog.set_config('TimeZone',prior_timezone,true);
+  EXCEPTION WHEN OTHERS THEN
+    PERFORM pg_catalog.set_config('TimeZone',prior_timezone,true);
+    RAISE;
+  END;
   RETURN QUERY SELECT product.id,product.sku,product.name,product.row_version,was_replayed
     FROM catalog.products product
    WHERE product.org_id=organization_id AND product.id=product_identifier
