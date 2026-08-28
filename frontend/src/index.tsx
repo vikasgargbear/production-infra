@@ -3,6 +3,9 @@ import ReactDOM from 'react-dom/client';
 import './index.css';
 import './styles/numberInputFix.css';
 import App from './App';
+import { installAndroidNativeBridge } from './services/mobile/androidNativeBridge';
+
+installAndroidNativeBridge();
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {

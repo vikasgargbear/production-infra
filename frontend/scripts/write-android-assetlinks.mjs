@@ -1,13 +1,17 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const fingerprint = (process.env.AASOPHARMA_ANDROID_SHA256 || '')
-    .trim()
-    .toUpperCase();
+const fingerprints = (process.env.AASOPHARMA_ANDROID_SHA256 || '')
+    .split(',')
+    .map(value => value.trim().toUpperCase())
+    .filter(Boolean);
 
-if (!/^([0-9A-F]{2}:){31}[0-9A-F]{2}$/.test(fingerprint)) {
+if (
+    fingerprints.length === 0 ||
+    fingerprints.some(value => !/^([0-9A-F]{2}:){31}[0-9A-F]{2}$/.test(value))
+) {
     console.error(
-        'Set AASOPHARMA_ANDROID_SHA256 to the signing certificate SHA-256 fingerprint.',
+        'Set AASOPHARMA_ANDROID_SHA256 to one or more comma-separated signing certificate SHA-256 fingerprints.',
     );
     process.exit(1);
 }
@@ -18,7 +22,7 @@ const assetLinks = [
         target: {
             namespace: 'android_app',
             package_name: 'com.aasopharma.erp',
-            sha256_cert_fingerprints: [fingerprint],
+            sha256_cert_fingerprints: [...new Set(fingerprints)].sort(),
         },
     },
 ];

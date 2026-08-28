@@ -18,8 +18,10 @@ import com.getcapacitor.BridgeActivity;
 public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        registerPlugin(PrivateFileDownloadPlugin.class);
         super.onCreate(savedInstanceState);
 
+        bridge.getWebView().setWebViewClient(new SystemBrowserOAuthWebViewClient(bridge, this));
         configureBackNavigation();
         configureDownloads();
         openVerifiedAppLink(getIntent());
@@ -96,11 +98,18 @@ public class MainActivity extends BridgeActivity {
         if (uri == null) {
             return;
         }
-        if (!isTrustedAppLink(uri.getScheme(), uri.getHost())) {
+        if (!isTrustedAppLink(uri)) {
             return;
         }
 
         bridge.getWebView().loadUrl(uri.toString());
+    }
+
+    static boolean isTrustedAppLink(Uri uri) {
+        return uri != null &&
+            isTrustedAppLink(uri.getScheme(), uri.getHost()) &&
+            uri.getUserInfo() == null &&
+            (uri.getPort() == -1 || uri.getPort() == 443);
     }
 
     static boolean isTrustedAppLink(String scheme, String host) {
