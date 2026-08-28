@@ -1,4 +1,4 @@
-import { validateSupplierMandatoryFields } from './supplierValidation';
+import { validateSupplierFields, validateSupplierMandatoryFields } from './supplierValidation';
 
 const validSupplier = {
     supplier_name: 'Canonical Supplier',
@@ -60,5 +60,20 @@ describe('supplier creation client contract', () => {
             'Email address is invalid',
             'Payment days must be a whole number from 0 to 180',
         ]);
+    });
+
+    it('binds phone, email, GSTIN, and PAN errors to their exact fields', () => {
+        expect(validateSupplierFields({
+            ...validSupplier,
+            phone: '123',
+            email: 'not-an-email',
+            gst_number: '27BADGST',
+            pan_number: 'BADPAN',
+        })).toMatchObject({
+            phone: 'Phone number must be a valid 10-digit Indian mobile number',
+            email: 'Email address is invalid',
+            gst_number: 'Invalid GSTIN format',
+            pan_number: 'Invalid PAN format',
+        });
     });
 });
