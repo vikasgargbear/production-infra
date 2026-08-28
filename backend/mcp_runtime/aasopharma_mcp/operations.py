@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
+from pathlib import Path
 import time
 from typing import Any, Callable, Mapping
 
@@ -14,7 +16,6 @@ from .config import Settings
 from .operator_actions import (
     DECIMAL_PATTERN,
     IDEMPOTENCY_KEY_PATTERN,
-    MONEY_PATTERN,
     PREPARE_ACTIONS,
     PUBLISHED_PREPARE_TOOL_NAMES,
     SHARED_ACTION_SCHEMAS,
@@ -97,6 +98,14 @@ OPERATIONS = {
     "erp_supplier_search": Operation(
         "master.suppliers.search", "erp_supplier_search", "/api/internal/mcp/reads/suppliers",
         "parties.supplier.manage", 200, records_field="suppliers",
+    ),
+    "erp_customer_get": Operation(
+        "parties.customers.get", "erp_customer_get",
+        "/api/internal/mcp/reads/customer", "parties.customer.manage", 1,
+    ),
+    "erp_supplier_get": Operation(
+        "parties.suppliers.get", "erp_supplier_get",
+        "/api/internal/mcp/reads/supplier", "parties.supplier.manage", 1,
     ),
     "erp_gst_settings_get": Operation(
         "gst.settings.get", "erp_gst_settings_get", "/api/internal/mcp/reads/gst-settings",
@@ -215,6 +224,11 @@ def _master_create_schema(
     }
 
 
+PARTY_CREATE_SCHEMAS: Mapping[str, Mapping[str, Any]] = json.loads(
+    Path(__file__).with_name("party_create_contracts.json").read_text(encoding="utf-8")
+)
+
+
 MASTER_CREATE_SCHEMAS: Mapping[str, Mapping[str, Any]] = {
     "erp_product_create": _master_create_schema(
         {
@@ -227,42 +241,7 @@ MASTER_CREATE_SCHEMAS: Mapping[str, Mapping[str, Any]] = {
         },
         ("product_name", "product_kind"),
     ),
-    "erp_customer_create": _master_create_schema(
-        {
-            "customer_name": {"type": "string", "minLength": 1, "maxLength": 200},
-            "customer_type": {"type": "string", "enum": ["individual", "organization"]},
-            "primary_phone": {"type": "string", "pattern": r"^[0-9]{10}$"},
-            "primary_email": {"type": "string", "format": "email", "maxLength": 320},
-            "contact_person_name": {"type": "string", "maxLength": 100},
-            "address_line1": {"type": "string", "maxLength": 255},
-            "address_line2": {"type": "string", "maxLength": 255},
-            "city": {"type": "string", "maxLength": 100},
-            "state_code": {"type": "string", "pattern": r"^[0-9]{2}$"},
-            "pincode": {"type": "string", "pattern": r"^[0-9]{6}$"},
-            "gst_number": {"type": "string", "pattern": r"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$"},
-            "pan_number": {"type": "string", "pattern": r"^[A-Z]{5}[0-9]{4}[A-Z]$"},
-            "credit_limit": {"type": "string", "pattern": MONEY_PATTERN},
-            "credit_days": {"type": "integer", "minimum": 0, "maximum": 365},
-        },
-        ("customer_name", "customer_type", "primary_phone", "credit_limit", "credit_days"),
-    ),
-    "erp_supplier_create": _master_create_schema(
-        {
-            "supplier_name": {"type": "string", "minLength": 1, "maxLength": 200},
-            "primary_phone": {"type": "string", "pattern": r"^[0-9]{10}$"},
-            "primary_email": {"type": "string", "format": "email", "maxLength": 320},
-            "contact_person": {"type": "string", "maxLength": 100},
-            "address_line1": {"type": "string", "maxLength": 255},
-            "address_line2": {"type": "string", "maxLength": 255},
-            "city": {"type": "string", "maxLength": 100},
-            "state_code": {"type": "string", "pattern": r"^[0-9]{2}$"},
-            "pincode": {"type": "string", "pattern": r"^[0-9]{6}$"},
-            "gst_number": {"type": "string", "pattern": r"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$"},
-            "pan_number": {"type": "string", "pattern": r"^[A-Z]{5}[0-9]{4}[A-Z]$"},
-            "payment_days": {"type": "integer", "minimum": 0, "maximum": 180},
-        },
-        ("supplier_name", "payment_days"),
-    ),
+    **PARTY_CREATE_SCHEMAS,
 }
 
 

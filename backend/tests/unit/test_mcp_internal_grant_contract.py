@@ -161,6 +161,8 @@ def test_exact_canonical_read_allowlist_has_no_write_or_generic_route():
         "master.product_hsn.search",
         "master.product_setup.get",
         "master.suppliers.search",
+        "parties.customers.get",
+        "parties.suppliers.get",
         "gst.settings.get",
     }
     assert all(policy.path.startswith("/internal/mcp/reads/") for policy in CANONICAL_READ_POLICIES.values())
@@ -182,6 +184,8 @@ def test_exact_canonical_read_allowlist_has_no_write_or_generic_route():
         "/internal/mcp/reads/product-hsn",
         "/internal/mcp/reads/product-setup",
         "/internal/mcp/reads/suppliers",
+        "/internal/mcp/reads/customer",
+        "/internal/mcp/reads/supplier",
         "/internal/mcp/reads/gst-settings",
     }
     assert all(route.include_in_schema is False for route in mcp_canonical_reads.router.routes)
@@ -227,7 +231,7 @@ def test_isolated_gateway_registry_matches_canonical_backend_contract():
         assert isinstance(tool_node, ast.Constant) and isinstance(operation_node, ast.Call)
         gateway[tool_node.value] = tuple(ast.literal_eval(argument) for argument in operation_node.args)
 
-    assert len(gateway) == 25
+    assert len(gateway) == 26
     assert {values[0] for values in gateway.values()} == set(
         ALL_CANONICAL_READ_POLICIES
     )

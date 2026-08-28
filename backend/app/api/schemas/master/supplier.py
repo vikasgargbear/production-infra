@@ -171,8 +171,20 @@ class CanonicalSupplierCreate(BaseModel):
     city: Optional[str] = Field(default=None, max_length=100)
     state_code: Optional[str] = Field(default=None, pattern=r"^[0-9]{2}$")
     pincode: Optional[str] = Field(default=None, pattern=r"^\d{6}$")
-    gst_number: Optional[str] = Field(default=None, min_length=15, max_length=15)
-    pan_number: Optional[str] = Field(default=None, min_length=10, max_length=10)
+    gst_number: Optional[str] = Field(
+        default=None,
+        min_length=15,
+        max_length=15,
+        json_schema_extra={
+            "pattern": r"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$"
+        },
+    )
+    pan_number: Optional[str] = Field(
+        default=None,
+        min_length=10,
+        max_length=10,
+        json_schema_extra={"pattern": r"^[A-Z]{5}[0-9]{4}[A-Z]$"},
+    )
     payment_days: int = Field(ge=0, le=180)
 
     @field_validator("gst_number")

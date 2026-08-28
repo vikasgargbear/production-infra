@@ -109,6 +109,22 @@ CANONICAL_READ_POLICIES = {
         200,
         sensitive_read=True,
     ),
+    "parties.customers.get": CanonicalReadPolicy(
+        "parties.customers.get",
+        "parties.customers.get",
+        "parties.customer.manage",
+        "/internal/mcp/reads/customer",
+        1,
+        sensitive_read=True,
+    ),
+    "parties.suppliers.get": CanonicalReadPolicy(
+        "parties.suppliers.get",
+        "parties.suppliers.get",
+        "parties.supplier.manage",
+        "/internal/mcp/reads/supplier",
+        1,
+        sensitive_read=True,
+    ),
     "gst.settings.get": CanonicalReadPolicy(
         "gst.settings.get",
         "gst.settings.get",
