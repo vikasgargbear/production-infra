@@ -76,7 +76,9 @@ export const invoicesApi = {
 
     /** Get invoice by ID */
     getById: (id: number | string) => {
-        return apiHelpers.get<CanonicalInvoiceDetail>(`/canonical/invoices/${id}`);
+        return apiHelpers.get<CanonicalInvoiceDetail>(`/canonical/invoices/${id}`, {
+            preserveExactDecimals: true,
+        });
     },
 
     /** Create new invoice */
@@ -96,7 +98,9 @@ export const invoicesApi = {
         const completed = canonicalExecutionCompleted(executed.data);
         const resourceId = executed?.data?.resource_id;
         const canonicalInvoice = completed && resourceId
-            ? await apiHelpers.get<CanonicalInvoiceDetail>(`/canonical/invoices/${resourceId}`)
+            ? await apiHelpers.get<CanonicalInvoiceDetail>(`/canonical/invoices/${resourceId}`, {
+                preserveExactDecimals: true,
+            })
             : null;
         return {
             ...executed,

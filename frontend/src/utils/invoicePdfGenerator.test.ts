@@ -160,9 +160,24 @@ test('uses the pre-tax reduction for printable discount and preserves header dis
   };
 
   const printable = printableCanonicalInvoice(detail);
+  const html = generateInvoiceHTML(printable);
   expect(detail.discount_amount).toBe('11.20');
   expect(printable.discount_amount).toBe('10.00');
-  expect(generateInvoiceHTML(printable)).toContain('<span>Discount</span><span>-₹10.00</span>');
+  expect(printable.cgst_amount).toBe('11.40');
+  expect(printable.sgst_amount).toBe('11.40');
+  expect(printable.total_amount).toBe('212.80');
+  expect(printable.items[0]).toEqual(expect.objectContaining({
+    taxable_amount: '190.00',
+    cgst_amount: '11.40',
+    sgst_amount: '11.40',
+    igst_amount: '0.00',
+    line_total: '212.80',
+  }));
+  expect(html).toContain('<span>Discount</span><span>-₹10.00</span>');
+  expect(html).toContain('<strong>GST total:</strong> ₹22.80');
+  expect(html).toContain('<span>CGST</span><span>₹11.40</span>');
+  expect(html).toContain('<span>SGST</span><span>₹11.40</span>');
+  expect(html).toContain('<span>Grand Total</span><span>₹212.80</span>');
 });
 
 test('fails closed instead of falling back when archival evidence is unavailable or contradictory', () => {
