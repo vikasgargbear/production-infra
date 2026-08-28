@@ -71,6 +71,7 @@ EXPECTED_SHARED_TOOLS = {
 }
 EXPECTED_BASE_READ_TOOLS = {
     "erp_customer_activity_get",
+    "erp_customer_get",
     "erp_party_aging_get",
     "erp_party_statement_get",
     "erp_product_search",
@@ -80,6 +81,7 @@ EXPECTED_BASE_READ_TOOLS = {
     "erp_product_setup_get",
     "erp_profit_loss_get",
     "erp_supplier_search",
+    "erp_supplier_get",
     "erp_gst_settings_get",
     "erp_trial_balance_get",
 }

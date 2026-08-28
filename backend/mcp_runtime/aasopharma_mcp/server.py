@@ -187,6 +187,24 @@ def create_app(
         )
 
     @server.tool()
+    async def erp_customer_get(
+        customer_account_id: Annotated[str, Field(description="Exact canonical customer-account UUID returned by customer creation or search.")],
+    ) -> Any:
+        """Read one exact current customer account after creation or selection."""
+        return await operation_gateway.execute(
+            OPERATIONS["erp_customer_get"], _access_token(), locals(),
+        )
+
+    @server.tool()
+    async def erp_supplier_get(
+        supplier_account_id: Annotated[str, Field(description="Exact canonical supplier-account UUID returned by supplier creation or search.")],
+    ) -> Any:
+        """Read one exact current supplier account after creation or selection."""
+        return await operation_gateway.execute(
+            OPERATIONS["erp_supplier_get"], _access_token(), locals(),
+        )
+
+    @server.tool()
     async def erp_gst_settings_get() -> Any:
         """Return the current organization's GST settings."""
         return await operation_gateway.execute(

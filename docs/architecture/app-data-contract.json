@@ -167,6 +167,8 @@
     {"tool":"erp_product_hsn_search","resource":"catalog","mode":"read","risk":"read_only","idempotency":"not_applicable","approval":"none"},
     {"tool":"erp_product_setup_get","resource":"catalog","mode":"read","risk":"read_only","idempotency":"not_applicable","approval":"none"},
     {"tool":"erp_supplier_search","resource":"parties","mode":"read","risk":"read_only","idempotency":"not_applicable","approval":"none"},
+    {"tool":"erp_customer_get","resource":"parties","mode":"read","risk":"read_only","idempotency":"not_applicable","approval":"none"},
+    {"tool":"erp_supplier_get","resource":"parties","mode":"read","risk":"read_only","idempotency":"not_applicable","approval":"none"},
     {"tool":"erp_gst_settings_get","resource":"tax","mode":"read","risk":"read_only","idempotency":"not_applicable","approval":"none"},
     {"tool":"erp_party_aging_get","resource":"payments","mode":"read","risk":"read_only","idempotency":"not_applicable","approval":"none"},
     {"tool":"erp_party_statement_get","resource":"accounting","mode":"read","risk":"read_only","idempotency":"not_applicable","approval":"none"},

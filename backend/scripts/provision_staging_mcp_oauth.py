@@ -82,6 +82,8 @@ REVIEWER_MEMBERSHIP_ID = "d3000000-0000-7000-8000-000000000004"
 READ_CAPABILITIES = (
     ("master.products.search", False),
     ("master.suppliers.search", True),
+    ("parties.customers.get", True),
+    ("parties.suppliers.get", True),
     ("gst.settings.get", False),
     ("parties.customers.search", True),
     ("inventory.locations.search", False),

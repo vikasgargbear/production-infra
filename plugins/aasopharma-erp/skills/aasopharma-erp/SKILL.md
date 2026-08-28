@@ -21,7 +21,7 @@ automation for a missing canonical tool.
 
 ## Writes
 
-1. Use the operation-specific prepare tool for transactional commands. Preparation is not completion. Product create/setup tools are reversible master-data writes and require the user's explicit confirmation before each reviewed batch of new products.
+1. Use the operation-specific prepare tool for transactional commands. Preparation is not completion. Product, customer, and supplier master-data writes are reversible and require the user's explicit confirmation before each reviewed batch.
 2. Show the immutable review result, command UUID, affected documents, exact
    quantities, money, tax, stock, allocations, and accounting effects.
 3. Do not approve or execute until the user explicitly confirms the reviewed
@@ -30,6 +30,28 @@ automation for a missing canonical tool.
    an arbitrary pending command or silently rebuild a stale preview.
 5. Read the result back through the operation-specific canonical tool and report
    any reconciliation or authorization failure instead of implying success.
+
+## Customer or supplier creation
+
+1. Search for the party first by legal name, code, GSTIN, and phone. If matches
+   are ambiguous, ask the user to select one; never create a likely duplicate.
+2. Build the proposal from the canonical create fields. For a customer, require
+   legal name, individual/organization type, primary phone, credit limit, and
+   credit days. For a supplier, require legal name and payment days. Do not
+   infer GSTIN, PAN, phone, email, credit terms, or payment terms.
+3. Address line 1, city, two-digit state code, and pincode are one atomic group.
+   Ask one consolidated follow-up containing every missing or ambiguous party
+   fact. A GSTIN must agree with the supplied state code.
+4. If the user explicitly permits optional facts to be skipped, omit them or
+   preserve them as unresolved. Required canonical fields cannot be skipped;
+   stop before creation if they remain unavailable.
+5. Show the exact proposed customer or supplier records and obtain explicit
+   confirmation for that reviewed batch before calling `erp_customer_create`
+   or `erp_supplier_create`.
+6. Read each created record back with `erp_customer_get` or `erp_supplier_get`.
+   Report its canonical account UUID and code plus every unresolved field; do
+   not imply that licences, banking, secondary contacts, or other unsupported
+   master data was created.
 
 ## Purchase bill or invoice image intake
 

@@ -44,6 +44,10 @@ account on another ChatGPT surface.
 - Reversible product create/setup tools share the browser's canonical setup
   contract, require explicit user confirmation, and never add/release a product
   for transactions; final **Add product** remains a UI review action.
+- Customer and supplier creates are generated from the browser/API canonical
+  contracts, require one reviewed confirmation, and are verified with exact
+  post-create readback. Missing optional facts remain explicit and required
+  facts are never guessed or silently skipped.
 - Cross-tenant, stale, duplicate, and unauthorized requests fail closed.
 - No WhatsApp, email, SMS, or telephone action is sent by this plugin.
 

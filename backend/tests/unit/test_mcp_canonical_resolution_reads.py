@@ -97,6 +97,8 @@ def test_resolution_policies_match_operator_contract_and_are_published():
         "master.product_hsn.search",
         "master.product_setup.get",
         "master.suppliers.search",
+        "parties.customers.get",
+        "parties.suppliers.get",
     }
     service = json.loads(
         (ROOT / "backend/mcp_runtime/service-contract.json").read_text(encoding="utf-8")

@@ -44,7 +44,7 @@ class Gateway:
 
 def test_exact_reviewed_tools_are_unique_and_streamable_http_routes_exist() -> None:
     names = registered_tool_names()
-    assert len(names) == len(set(names)) == 69
+    assert len(names) == len(set(names)) == 71
     assert set(names) == set(OPERATIONS) | set(OPERATOR_OPERATIONS)
     app = create_app(settings(), Verifier(), Gateway())
     route_paths = {route.path for route in app.routes if isinstance(route, Route)}
