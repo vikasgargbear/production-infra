@@ -534,13 +534,13 @@ def _assert_tenant_and_write_boundaries(
                 "UPDATE parties.customer_accounts SET customer_code='FORGED' "
                 "WHERE org_id=%s AND id=%s",
                 (ORG, customer[0]),
-                "23514",
+                "42501",
             ),
             (
                 "UPDATE parties.supplier_accounts SET supplier_code='FORGED' "
                 "WHERE org_id=%s AND id=%s",
                 (ORG, supplier[0]),
-                "23514",
+                "42501",
             ),
             (
                 "INSERT INTO catalog.products("
