@@ -1454,6 +1454,8 @@ def test_sales_invoice_detail_projects_executed_batch_allocations() -> None:
         for route in detail_routes
     )
     item_schema = canonical_erp_reads.CanonicalInvoiceDetailItem.model_json_schema()
+    assert item_schema["properties"]["source_document_kind"]["const"] == "sales_order"
+    assert "source_document_kind" in item_schema["required"]
     assert "batch_allocations" in item_schema["properties"]
     assert "batch_allocations" in item_schema["required"]
     allocation_schema = (
@@ -1532,7 +1534,8 @@ def test_sales_invoice_detail_response_validates_zero_one_and_many_allocations()
                 value["evidenced_allocation_count"] = len(allocations)
         singular = allocations[0] if len(allocations) == 1 else None
         return {
-            "id": line_id, "product_id": uuid4(), "product_name": "Product",
+            "id": line_id, "source_document_kind": "sales_order",
+            "product_id": uuid4(), "product_name": "Product",
             "product_code": "SKU", "hsn_code": "481910", "uom_code": "EA",
             "unit": "EA", "quantity": len(allocations) or 1,
             "free_quantity": 0, "base_billed_quantity": len(allocations) or 1,
@@ -1580,6 +1583,7 @@ def test_sales_invoice_detail_response_validates_zero_one_and_many_allocations()
     }
 
     response = canonical_erp_reads.CanonicalInvoiceDetailResponse.model_validate(payload)
+    assert response.items[0].source_document_kind == "sales_order"
     assert response.items[0].batch_allocations == []
     assert response.items[1].batch_allocations[0].expiry_date is None
     assert response.items[1].batch_id == direct["batch_id"]
@@ -1673,6 +1677,10 @@ def test_sales_invoice_detail_response_validates_zero_one_and_many_allocations()
     ][0]["invoice_line_id"]
     with pytest.raises(ValidationError, match="invoice line identity"):
         canonical_erp_reads.CanonicalInvoiceDetailItem.model_validate(identity_mismatch)
+    with pytest.raises(ValidationError, match="sales_order"):
+        canonical_erp_reads.CanonicalInvoiceDetailItem.model_validate({
+            **item([direct]), "source_document_kind": "delivery_challan",
+        })
 
 
 def test_supplier_invoice_reads_project_tax_totals_and_filter_invoice_dates() -> None:

@@ -55,6 +55,7 @@ export interface CanonicalSalesDocumentLine {
 }
 
 export interface CanonicalInvoiceDetailLine extends CanonicalSalesDocumentLine {
+  source_document_kind: 'sales_order';
   base_billed_quantity: ExactDecimalString;
   base_free_quantity: ExactDecimalString;
   cess_amount: ExactDecimalString;
