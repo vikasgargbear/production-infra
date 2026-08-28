@@ -66,9 +66,7 @@ test('retired compatibility mappers cannot infer canonical product or batch fact
     'frontend/src/config/fieldAliases.ts',
   ].forEach(relative => expect(fs.existsSync(path.join(root, relative))).toBe(false));
 
-  const configIndex = read('frontend/src/config/index.ts');
-  expect(configIndex).not.toContain('FIELD_ALIASES');
-  expect(configIndex).not.toContain('fieldAliases');
+  expect(fs.existsSync(path.join(root, 'frontend/src/config/index.ts'))).toBe(false);
 });
 
 test('core command inputs never invent zero, aliases, or browser-local evidence time', () => {

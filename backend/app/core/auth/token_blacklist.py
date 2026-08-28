@@ -1,7 +1,6 @@
 """
 Token Blacklist Service
-Simple in-memory token blacklist with TTL for invalidated tokens.
-For production, use Redis for distributed deployments.
+In-memory token blacklist with TTL for the configured single-instance service.
 """
 import time
 import threading
@@ -16,13 +15,8 @@ class TokenBlacklist:
     """
     In-memory token blacklist with automatic expiry cleanup.
     
-    For production deployments with multiple servers, replace with Redis:
-    - REDIS_URL environment variable
-    - Use redis.setex() for automatic TTL
-    
-    Current implementation works for:
-    - Single server deployments
-    - Railway (single instance)
+    A multi-instance deployment requires a shared TTL store and its client
+    dependency before increasing the replica count.
     """
     
     def __init__(self, cleanup_interval: int = 3600):

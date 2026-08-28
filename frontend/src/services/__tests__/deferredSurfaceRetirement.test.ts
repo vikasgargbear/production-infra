@@ -102,6 +102,14 @@ describe('deferred production surfaces', () => {
       'components/global/ui/feedback/LoadingState.tsx',
       'components/master/utils/DataValidationEngine.tsx',
       'components/master/utils/BulkOperations.tsx',
+      'components/master/utils/index.ts',
+      'components/purchase/PDFVerificationFlow.tsx',
+      'components/purchase/modals/ProductVerificationModal.tsx',
+      'components/purchase/modals/SupplierVerificationModal.tsx',
+      'components/purchase/ui/PurchaseItemEditModal.tsx',
+      'components/purchase/utils/productItemTransform.ts',
+      'components/global/modals/CancelDocumentModal.tsx',
+      'components/sales/modals/CancelInvoiceModal.tsx',
       'components/payment/entry/PaymentReceived.tsx',
       'services/api/modules/audit/audit.api.ts',
       'services/api/modules/auth/auth.api.ts',
@@ -129,9 +137,7 @@ describe('deferred production surfaces', () => {
     ].forEach(retiredExport => expect(apiIndex).not.toContain(retiredExport));
 
     const masterHub = read('components/master/MasterHub.tsx');
-    const masterUtils = read('components/master/utils/index.ts');
     expect(masterHub).not.toMatch(/DataValidationEngine|BulkOperations/);
-    expect(masterUtils).not.toMatch(/DataValidationEngine|BulkOperations/);
 
     const globalIndex = read('components/global/index.ts');
     expect(globalIndex).not.toContain("./ui/StandardComponents");
@@ -159,7 +165,7 @@ describe('deferred production surfaces', () => {
       'utils/runtimeId.ts',
       'contexts/EscapeKeyContext.tsx',
       'components/global/ui/feedback/Toast.tsx',
-      'components/purchase/utils/productItemTransform.ts',
+      'components/purchase/purchase-order/utils/canonicalPurchaseOrderCommand.ts',
     ]) {
       expect(read(relativePath)).not.toContain('Math.random');
     }

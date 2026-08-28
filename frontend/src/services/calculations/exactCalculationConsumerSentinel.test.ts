@@ -4,8 +4,6 @@ import path from 'path';
 const calculationConsumers = [
   'invoiceCalculationService.ts',
   'salesOrderCalculationService.ts',
-  'purchaseOrderCalculationService.ts',
-  'noteCalculationService.ts',
 ];
 
 describe('exact calculation consumer boundaries', () => {
@@ -18,12 +16,34 @@ describe('exact calculation consumer boundaries', () => {
   it('types every calculation response decimal as a JSON string', () => {
     const modules = [
       '../api/modules/sales/calculations.api.ts',
-      '../api/modules/purchase/calculations.api.ts',
-      '../api/modules/finance/noteCalculations.api.ts',
     ].map(relative => fs.readFileSync(path.join(__dirname, relative), 'utf8')).join('\n');
     expect(modules).not.toMatch(/totals:\s*Record<string,\s*number>/);
     expect(modules).not.toMatch(/(?:line_total|taxable_amount|total_amount)\??:\s*number/);
     expect(modules).toContain('CalculationDecimalString');
+  });
+
+  it('keeps retired purchase-order and adjustment-note browser preview clients absent', () => {
+    for (const relativePath of [
+      'purchaseOrderCalculationService.ts',
+      'noteCalculationService.ts',
+      '../api/modules/purchase/calculations.api.ts',
+      '../api/modules/finance/noteCalculations.api.ts',
+    ]) {
+      expect(fs.existsSync(path.join(__dirname, relativePath))).toBe(false);
+    }
+
+    const purchaseSave = fs.readFileSync(
+      path.join(__dirname, '../../components/purchase/purchase-order/hooks/usePurchaseOrderSave.ts'),
+      'utf8',
+    );
+    const adjustmentNoteFlow = fs.readFileSync(
+      path.join(__dirname, '../../components/payment/flows/CreditDebitFlow.tsx'),
+      'utf8',
+    );
+    expect(purchaseSave).toContain('canonicalPurchaseOrdersApi.prepare(payload)');
+    expect(purchaseSave).toContain('canonicalPurchaseOrdersApi.executePrepared');
+    expect(adjustmentNoteFlow).toContain('prepareAdjustmentNote');
+    expect(adjustmentNoteFlow).toContain('executeApprovedAdjustmentNote');
   });
 
   it('does not disguise exact calculation strings as runtime number fields', () => {

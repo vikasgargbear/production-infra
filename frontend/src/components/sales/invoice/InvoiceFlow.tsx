@@ -275,11 +275,8 @@ ${companyInfo.name}`;
         // CRITICAL FIX: Handle if event object passed instead of number
         const stepNumber = typeof targetStep === 'number' ? targetStep : 2;
 
-        console.log('🔙 [NAVIGATION] Going back from step 3 to step:', stepNumber);
-
         try {
             setCurrentStep(stepNumber);
-            console.log('✅ [NAVIGATION] setCurrentStep completed');
         } catch (navError) {
             console.error('❌ [NAVIGATION ERROR] during setCurrentStep:', navError);
             toast.error('Unable to return to invoice items: ' + (navError as Error).message);

@@ -6,7 +6,6 @@
  * - Main landmark is present on Home
  * - All sidebar navigation buttons in ModuleHub have accessible names
  * - GenericSuccessModal has role="dialog", aria-modal, and aria-labelledby
- * - CancelDocumentModal has aria-modal and aria-labelledby
  * - Icon-only action buttons have aria-label
  */
 
@@ -38,14 +37,6 @@ jest.mock('../contexts/SidebarContext', () => ({
     setIsHovering: jest.fn(),
     toggleLockExpanded: jest.fn(),
   }),
-}));
-
-// CanonicalWriteNotice used inside CancelDocumentModal
-jest.mock('../components/global/ui/CanonicalWriteNotice', () => ({
-  __esModule: true,
-  default: function CanonicalWriteNoticeStub() {
-    return null;
-  },
 }));
 
 // ─── Login Page ──────────────────────────────────────────────────────────────
@@ -154,43 +145,6 @@ describe('ModuleHub accessibility', () => {
     // The sidebar "Back to Home" button in the desktop sidebar
     const homeButtons = screen.getAllByRole('button', { name: /back to home/i });
     expect(homeButtons.length).toBeGreaterThanOrEqual(1);
-  });
-});
-
-// ─── CancelDocumentModal ─────────────────────────────────────────────────────
-
-describe('CancelDocumentModal accessibility', () => {
-  it('has role="dialog", aria-modal="true", and aria-labelledby', () => {
-    const { default: CancelDocumentModal } = require('../components/global/modals/CancelDocumentModal');
-    const doc = { id: 1, document_number: 'ORD-001' };
-    render(
-      React.createElement(CancelDocumentModal, {
-        isOpen: true,
-        onClose: jest.fn(),
-        documentType: 'order',
-        document: doc,
-      })
-    );
-    const dialog = screen.getByRole('dialog');
-    expect(dialog).toHaveAttribute('aria-modal', 'true');
-    const labelId = dialog.getAttribute('aria-labelledby');
-    expect(labelId).toBeTruthy();
-    expect(document.getElementById(labelId as string)).toBeInTheDocument();
-  });
-
-  it('close button has an accessible name', () => {
-    const { default: CancelDocumentModal } = require('../components/global/modals/CancelDocumentModal');
-    const doc = { id: 1, document_number: 'ORD-001' };
-    render(
-      React.createElement(CancelDocumentModal, {
-        isOpen: true,
-        onClose: jest.fn(),
-        documentType: 'order',
-        document: doc,
-      })
-    );
-    // The X icon button has aria-label="Close cancellation notice"
-    expect(screen.getByRole('button', { name: /close cancellation notice/i })).toBeInTheDocument();
   });
 });
 

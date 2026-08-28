@@ -7,7 +7,6 @@ import {
   suppliersApi,
   toCanonicalSupplierCreate,
 } from '../api/modules/master/suppliers.api';
-import { apiErrorMessage, apiErrorMessages } from '../api/utils/apiError';
 
 jest.mock('../api/apiClient', () => ({
   apiHelpers: {
@@ -154,27 +153,6 @@ describe('canonical party creation contracts', () => {
       address_line1: 'Test Lane', city: 'Mumbai', state_code: '27', pincode: '400001',
       address_type: 'billing', is_default: true,
     });
-  });
-
-  it('turns FastAPI validation arrays into render-safe strings', () => {
-    const error = {
-      response: {
-        data: {
-          detail: [
-            { loc: ['body', 'primary_phone'], msg: 'String should match pattern' },
-            { loc: ['body', 'pincode'], msg: 'Field required' },
-          ],
-        },
-      },
-    };
-
-    expect(apiErrorMessages(error, 'fallback')).toEqual([
-      'body.primary_phone: String should match pattern',
-      'body.pincode: Field required',
-    ]);
-    expect(apiErrorMessage(error, 'fallback')).toBe(
-      'body.primary_phone: String should match pattern; body.pincode: Field required',
-    );
   });
 
   it('fails closed instead of calling retired customer and supplier mutation routes', async () => {

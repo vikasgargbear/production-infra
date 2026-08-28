@@ -1,3 +1,0 @@
-/**
- * Returns Hooks - Barrel Export
- */

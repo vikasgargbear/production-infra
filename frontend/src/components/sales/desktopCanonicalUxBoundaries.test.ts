@@ -20,11 +20,7 @@ describe('desktop canonical sales and purchase UX boundaries', () => {
   });
 
   it('keeps direct legacy order conversion unreachable', () => {
-    const source = read('ui/ConvertToInvoiceButton.tsx');
-    expect(source).not.toContain('ordersApi');
-    expect(source).not.toContain('convertToInvoice');
-    expect(source).toContain('disabled');
-    expect(source).toContain('canonical batch and dispatch review');
+    expect(fs.existsSync(path.join(__dirname, 'ui/ConvertToInvoiceButton.tsx'))).toBe(false);
   });
 
   it('keeps canonical product and batch decimals out of IEEE-754 transforms', () => {
@@ -32,7 +28,6 @@ describe('desktop canonical sales and purchase UX boundaries', () => {
       '../global/search/ProductSearch.tsx',
       '../global/selector/BatchSelector.tsx',
       '../global/selector/batchEligibility.ts',
-      'utils/productItemTransform.ts',
     ].map(read).join('\n');
 
     expect(sources).not.toMatch(/\bNumber\s*\(/);

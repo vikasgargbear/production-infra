@@ -510,16 +510,12 @@ export const useInvoiceLogic = (
     }, []);
 
     const handleUpdateItem = useCallback((index: number, field: string, value: unknown) => {
-        console.log(`🔄 [UPDATE ITEM] Index: ${index}, Field: ${field}, Value: ${value}`);
-
         setInvoice(prev => {
             const updatedItems = [...prev.items];
             updatedItems[index] = {
                 ...updatedItems[index],
                 [field]: value
             };
-
-            console.log('🔄 [UPDATE ITEM] Updated item:', updatedItems[index]);
 
             return { ...prev, items: updatedItems };
         });

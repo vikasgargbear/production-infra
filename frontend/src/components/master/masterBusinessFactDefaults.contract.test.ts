@@ -11,7 +11,6 @@ const MASTER_FACT_SURFACES = [
   'masters/SupplierMaster.tsx',
   'customers/CustomerFlow.tsx',
   'suppliers/SupplierFlow.tsx',
-  '../purchase/modals/SupplierCreationForm.tsx',
   '../../services/api/modules/master/customers.api.ts',
   '../../services/api/modules/master/suppliers.api.ts',
 ];

@@ -83,9 +83,6 @@ from .infrastructure.operator_actions.calculator_database import (
     dispose_calculator_engine,
 )
 from .infrastructure.tax_provider import dispose_tax_provider_engine
-# from .api.routes import conversions  # REMOVED: File deleted
-# from .api.routes import api_wrapper  # REMOVED: File deleted  
-# from .api.routes import enterprise_api_complete  # REMOVED: File deleted
 
 # =============================================================================
 # APPLICATION SETUP
@@ -187,10 +184,6 @@ app.add_middleware(RequestLoggerMiddleware)
 # Disable redirect_slashes to prevent 307 redirects that break CORS
 # 307 redirects during preflight OPTIONS requests fail CORS validation
 app.router.redirect_slashes = False
-
-# REMOVED: Custom OPTIONS handler - let CORS middleware handle it
-# The custom handler was returning JSON without CORS headers, causing CORS failures
-# FastAPI's CORSMiddleware automatically handles OPTIONS requests properly
 
 def _deployed_git_commit() -> Optional[str]:
     """Return the immutable build identity supplied by a supported platform."""
@@ -447,15 +440,11 @@ include_explicit_non_persistent_post_utilities(
         "/calculations/sales-order": calculations.preview_sales_order_totals,
     },
 )
-# api.include_router(conversions.router, tags=["Document Conversions"])  # DISABLED: Module removed
 api.include_router(schema_router.router, tags=["Schema Documentation"])  # Live database schema
 
 if not is_production():
     from .api.routes import test_routes  # TEST MODE verification
     api.include_router(test_routes.router, tags=["Testing"])
-# api.include_router(enterprise_api_complete.router, tags=["Enterprise ERP Complete"])  # DISABLED: Module removed
-# api.include_router(api_wrapper.router, prefix="/pg", tags=["PostgreSQL Functions"])  # DISABLED: Module removed
-
 app.include_router(api)
 
 # Attach the reviewed external-operation allowlist after all routes are mounted.

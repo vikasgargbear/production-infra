@@ -29,7 +29,6 @@ describe('inline product draft boundary', () => {
       ['customers/CustomerFlow.tsx', 'Internal customer code is generated automatically after saving.'],
       ['suppliers/SupplierFlow.tsx', 'Internal supplier code is generated automatically after saving.'],
       ['products/ProductFlow.tsx', 'Internal product code is generated automatically after saving.'],
-      ['../purchase/modals/SupplierCreationForm.tsx', 'Internal supplier code is generated automatically after saving.'],
     ]) {
       const text = source(file);
       expect(text).not.toContain('will not be generated');
@@ -42,7 +41,6 @@ describe('inline product draft boundary', () => {
     for (const file of [
       'customers/CustomerFlow.tsx',
       'suppliers/SupplierFlow.tsx',
-      '../purchase/modals/SupplierCreationForm.tsx',
     ]) {
       const text = source(file);
       for (const unsupportedField of [
@@ -55,7 +53,7 @@ describe('inline product draft boundary', () => {
       }
     }
 
-    const inlineSupplier = source('../purchase/modals/SupplierCreationForm.tsx');
+    const supplier = source('suppliers/SupplierFlow.tsx');
     const customer = source('customers/CustomerFlow.tsx');
     for (const unsupportedField of [
       'website',
@@ -69,7 +67,7 @@ describe('inline product draft boundary', () => {
       'notes',
       'is_active',
     ]) {
-      expect(inlineSupplier).not.toContain(unsupportedField);
+      expect(supplier).not.toContain(unsupportedField);
     }
     expect(customer).not.toContain('country');
     expect(customer).not.toContain('Landmark');
@@ -94,7 +92,12 @@ describe('inline product draft boundary', () => {
       'pan_number',
       'payment_days',
     ]) {
-      expect(inlineSupplier).toContain(canonicalField);
+      expect(supplier).toContain(canonicalField);
     }
+
+    expect(fs.existsSync(path.resolve(
+      __dirname,
+      '../purchase/modals/SupplierCreationForm.tsx',
+    ))).toBe(false);
   });
 });
