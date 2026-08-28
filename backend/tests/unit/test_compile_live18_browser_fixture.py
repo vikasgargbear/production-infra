@@ -1,4 +1,5 @@
 import hashlib
+import inspect
 import json
 from pathlib import Path
 
@@ -19,6 +20,7 @@ from scripts.compile_live18_browser_fixture import (
     _authoritative_selector_row,
     _validate_compiled_steps,
     _operation_facts,
+    resolve_authoritative_facts,
 )
 
 
@@ -33,6 +35,14 @@ def test_authoritative_selector_uses_named_batch_identity_after_account_fields()
     assert resolved["cash_on_hand_account_name"] == "value-24"
     assert resolved["direct_issue_batch_id"] == "value-33"
     assert resolved["direct_issue_batch_id"] != resolved["cash_on_hand_account_name"]
+
+
+def test_deferred_expense_claim_does_not_block_ready_fact_resolution() -> None:
+    source = inspect.getsource(resolve_authoritative_facts)
+
+    assert "expense_claim_sql" not in source
+    assert "expense_claim_rows" not in source
+    assert "LIVE18-EXPENSE-" not in source
 
 
 def test_authoritative_fact_evidence_is_bound_to_exact_identity_and_run(
