@@ -30,6 +30,13 @@ def test_oauth_callback_derives_from_sole_active_provider() -> None:
         "/oauth/staging-callback"
     )
     assert all("onrender.com" not in uri for uri in provision.REDIRECT_URIS)
+    assert provision.PERSISTENT_REDIRECT_URIS == (
+        *provision.REDIRECT_URIS,
+        provision.REVIEWED_CHATGPT_CALLBACK,
+    )
+    assert provision._redirect_uris_for_mode("client-authority-only") == (
+        provision.PERSISTENT_REDIRECT_URIS
+    )
 
 
 @pytest.mark.parametrize(
@@ -144,7 +151,7 @@ def test_chatgpt_authority_reconciles_exact_predefined_public_client_only(
     )
 
     assert provision.main(["--mode", "chatgpt-client-authority-only"]) == 0
-    expected_redirects = (*provision.REDIRECT_URIS, callback_uri)
+    expected_redirects = provision.PERSISTENT_REDIRECT_URIS
     assert reconciled_redirects == [expected_redirects]
     assert github_env.read_text(encoding="utf-8") == (
         "MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS=chatgpt-predefined-public-client\n"
@@ -361,7 +368,7 @@ def test_client_authority_only_does_not_create_identity_or_bind_database(
         "dynamic_client_registration": False,
         "project_ref": provision.PROJECT_REF,
         "provisioning_mode": "client-authority-only",
-        "redirect_uris": list(provision.REDIRECT_URIS),
+        "redirect_uris": list(provision.PERSISTENT_REDIRECT_URIS),
         "reviewed_sha": "a" * 40,
         "token_endpoint_auth_method": "none",
         "test_identity_reconciled": False,
