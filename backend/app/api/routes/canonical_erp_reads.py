@@ -3993,7 +3993,7 @@ def canonical_sales_order_compatibility_detail(
                 JOIN sales.dispatches candidate_dispatch
                   ON candidate_dispatch.org_id=candidate_line.org_id
                  AND candidate_dispatch.id=candidate_line.dispatch_id
-                 AND candidate_dispatch.status<>'cancelled'
+                 AND candidate_dispatch.status='posted'
                WHERE candidate_line.org_id=line.org_id
                  AND candidate_line.order_line_id=line.id
           ) dispatched ON true

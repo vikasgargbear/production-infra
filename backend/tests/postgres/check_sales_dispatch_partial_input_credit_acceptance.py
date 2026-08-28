@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from decimal import Decimal
 import hashlib
 import os
@@ -167,6 +168,50 @@ def _resource_id(admin_dsn: str, org_id: str, command_id: UUID) -> UUID:
             (org_id, command_id),
         )
         return UUID(str(cursor.fetchone()[0]))
+
+
+def _cancel_prepared_dispatch(runtime_dsn: str, dispatch_id: UUID) -> None:
+    """Cancel only the disposable draft; it must never consume order quantity."""
+
+    with psycopg2.connect(runtime_dsn) as connection, connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT erp_security.activate_context(%s,%s)",
+            (fixture.IDS["operator_auth_user"], fixture.IDS["org"]),
+        )
+        cursor.execute(
+            "SELECT set_config('app.request_id',%s,true)",
+            (str(uuid4()),),
+        )
+        cursor.execute(
+            """
+            UPDATE sales.dispatches
+               SET status='cancelled', updated_at=transaction_timestamp(),
+                   updated_by_membership_id=%s, row_version=row_version+1
+             WHERE org_id=%s AND id=%s AND status='draft'
+            """,
+            (fixture.IDS["operator_membership"], fixture.IDS["org"], dispatch_id),
+        )
+        assert cursor.rowcount == 1
+
+
+def _expect_separate_quantity_ceiling(service, payload: dict[str, Any]) -> None:
+    over_ceiling = deepcopy(payload)
+    over_ceiling["lines"][0]["batch_allocations"][0][
+        "billed_quantity"
+    ] = "12.000001"
+    over_ceiling["lines"][0]["billed_quantity"] = "12.000001"
+    try:
+        _prepare(
+            service,
+            "sales.dispatch.prepare",
+            over_ceiling,
+            f"pg15-dispatch-over-ceiling-{uuid4()}",
+        )
+    except OperatorActionError as error:
+        assert error.code is ActionErrorCode.VALIDATION_FAILED
+        assert error.metadata["sqlstate"] == "23514"
+    else:
+        raise AssertionError("dispatch accepted billed quantity above 12.000000")
 
 
 def _assert_rollback(runtime_dsn: str, dispatch_id: UUID, batch_id: UUID, lot_id: UUID) -> None:
@@ -369,11 +414,39 @@ def main() -> None:
             raise AssertionError("cross-tenant sales dispatch was not denied")
 
         dispatch_key = f"pg15-partial-dispatch-{uuid4()}"
+
+        # An abandoned/cancelled prepare and a concurrent draft are evidence,
+        # not fulfillment.  Each exact 12 billed + 2 free draft must prepare
+        # independently while the separate approved ceilings remain strict.
+        cancelled = _prepare(
+            service,
+            "sales.dispatch.prepare",
+            dispatch_payload,
+            f"pg15-cancelled-dispatch-{uuid4()}",
+        )
+        cancelled_id = _resource_id(
+            admin_dsn, fixture.IDS["org"], cancelled.command_request_id
+        )
+        _cancel_prepared_dispatch(runtime_dsn, cancelled_id)
+
         dispatch = _prepare(service, "sales.dispatch.prepare", dispatch_payload, dispatch_key)
         replay = _prepare(service, "sales.dispatch.prepare", dispatch_payload, dispatch_key)
         assert replay.command_request_id == dispatch.command_request_id
         assert replay.preview_hash == dispatch.preview_hash
         dispatch_id = _resource_id(admin_dsn, fixture.IDS["org"], dispatch.command_request_id)
+
+        parallel_draft = _prepare(
+            service,
+            "sales.dispatch.prepare",
+            dispatch_payload,
+            f"pg15-parallel-draft-dispatch-{uuid4()}",
+        )
+        parallel_draft_id = _resource_id(
+            admin_dsn, fixture.IDS["org"], parallel_draft.command_request_id
+        )
+        _cancel_prepared_dispatch(runtime_dsn, parallel_draft_id)
+        _expect_separate_quantity_ceiling(service, dispatch_payload)
+
         assert _approve(service, dispatch).status == "approved"
         _install_failure(admin_dsn)
         try:

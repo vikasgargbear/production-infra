@@ -191,6 +191,15 @@ def test_sales_order_import_projects_its_true_source_kind() -> None:
     assert "'delivery_challan'::text AS source_document_kind" not in source
 
 
+def test_sales_order_import_counts_only_posted_dispatches_as_fulfillment() -> None:
+    source = inspect.getsource(
+        canonical_erp_reads.canonical_sales_order_compatibility_detail
+    )
+
+    assert "candidate_dispatch.status='posted'" in source
+    assert "candidate_dispatch.status<>'cancelled'" not in source
+
+
 def test_canonical_routes_precede_legacy_compatibility_routes() -> None:
     # FastAPI 0.137+ preserves included routers instead of flattening copies of
     # their APIRoutes.  Its effective route contexts expose the fully-prefixed
