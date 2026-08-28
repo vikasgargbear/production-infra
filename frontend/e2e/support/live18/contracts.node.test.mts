@@ -12,7 +12,7 @@ import {
   Live18BrowserHealth, rejectedPrepareOccurrences,
 } from './browserHealth.ts';
 import { buildOperationFailureEvidence } from './failureEvidence.ts';
-import { isExpectedSessionExchange } from './session.ts';
+import { isExpectedSessionExchange, supabaseSessionStorageKey } from './session.ts';
 import { runUiStep } from './uiDriver.ts';
 
 test('goto reloads an identical hash route so certification phases cannot share form state', async () => {
@@ -74,6 +74,33 @@ test('session bootstrap accepts only the exact reviewed API origin', () => {
     'GET',
     'https://api.railway.example',
   ), false);
+});
+
+test('Google-only UI certification bootstraps the exact Supabase project without login locators', () => {
+  assert.equal(
+    supabaseSessionStorageKey('https://rgihahbmkrmhitjdjvev.supabase.co'),
+    'sb-rgihahbmkrmhitjdjvev-auth-token',
+  );
+  assert.throws(
+    () => supabaseSessionStorageKey('https://rgihahbmkrmhitjdjvev.supabase.co/auth/v1'),
+    /project origin/,
+  );
+  assert.throws(
+    () => supabaseSessionStorageKey('https://rgihahbmkrmhitjdjvev.example.com'),
+    /project origin/,
+  );
+  assert.throws(
+    () => supabaseSessionStorageKey('https://user:password@rgihahbmkrmhitjdjvev.supabase.co'),
+    /project origin/,
+  );
+  const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..');
+  const sessionSource = fs.readFileSync(path.join(
+    repositoryRoot, 'frontend/e2e/support/live18/session.ts',
+  ), 'utf8');
+  assert.match(sessionSource, /signInWithPassword\(credentials\)/);
+  assert.match(sessionSource, /page\.goto\(config\.appOrigin\)/);
+  assert.doesNotMatch(sessionSource, /locator\('input\[type="(?:email|password)"\]'/);
+  assert.doesNotMatch(sessionSource, /getByRole\('button', \{ name: 'Sign In'/);
 });
 
 test('live18 discovery names all 17 ready operations and preserves one explicit deferral', () => {

@@ -273,12 +273,12 @@ async function runOperation(
 
   try {
     const requesterSession = await loginAndCaptureSession(
-      requesterPage, config.appOrigin, config.apiOrigin, config.requester,
+      requesterPage, config, config.requester,
     );
     beginStage(progress, 'reviewer_login');
     progress.actor = 'reviewer';
     const reviewerSession = await loginAndCaptureSession(
-      reviewerPage, config.appOrigin, config.apiOrigin, config.reviewer,
+      reviewerPage, config, config.reviewer,
     );
     beginStage(progress, 'identity_assertion');
     assertSessionIsolation(config, requesterSession, reviewerSession);

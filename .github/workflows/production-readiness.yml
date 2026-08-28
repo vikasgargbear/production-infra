@@ -1876,6 +1876,8 @@ jobs:
       - name: Run the exact-SHA live18 desktop browser certification
         id: live18_browser
         working-directory: frontend
+        env:
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: >-
           npx playwright test --config e2e/live18/playwright.config.ts
           --grep ': UI to REST readback emits canonical UUID evidence'

@@ -1,5 +1,7 @@
 import { expect } from '@playwright/test';
 import type { Page, Response } from '@playwright/test';
+import { createClient } from '@supabase/supabase-js';
+import type { Session } from '@supabase/supabase-js';
 
 import type { Live18BrowserConfig } from './config';
 
@@ -45,21 +47,85 @@ export function isExpectedSessionExchange(
     && response.pathname === '/api/auth/oauth/supabase/session';
 }
 
+export function supabaseSessionStorageKey(supabaseOrigin: string): string {
+  const origin = new URL(supabaseOrigin);
+  if (origin.protocol !== 'https:' || origin.username || origin.password
+    || origin.pathname !== '/' || origin.search || origin.hash
+    || !origin.hostname.endsWith('.supabase.co')) {
+    throw new Error('Supabase session bootstrap requires one credential-free HTTPS project origin.');
+  }
+  const projectRef = origin.hostname.slice(0, -'.supabase.co'.length);
+  if (!/^[a-z0-9]{20}$/.test(projectRef)) {
+    throw new Error('Supabase session bootstrap requires one canonical project reference.');
+  }
+  return `sb-${projectRef}-auth-token`;
+}
+
+async function disposableSupabaseSession(
+  config: Live18BrowserConfig,
+  credentials: { email: string; password: string },
+): Promise<Session> {
+  const supabase = createClient(config.supabaseOrigin, config.supabaseAnonKey, {
+    auth: {
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+      persistSession: false,
+    },
+  });
+  const { data, error } = await supabase.auth.signInWithPassword(credentials);
+  if (error || !data.session || !data.user) {
+    const status = error?.status ? ` HTTP ${error.status}` : '';
+    const code = error?.code ? ` (${error.code})` : '';
+    throw new Error(`Disposable Supabase identity bootstrap failed${status}${code}.`);
+  }
+  if (data.user.email?.toLowerCase() !== credentials.email.toLowerCase()) {
+    throw new Error('Disposable Supabase identity bootstrap returned the wrong user.');
+  }
+  return data.session;
+}
+
+async function seedDisposableBrowserSession(
+  page: Page,
+  config: Live18BrowserConfig,
+  session: Session,
+): Promise<void> {
+  const bootstrapUrl = `${config.appOrigin}/__live18_supabase_session_bootstrap__`;
+  await page.route(bootstrapUrl, async route => {
+    await route.fulfill({
+      body: '<!doctype html><html><body>Live18 session bootstrap</body></html>',
+      contentType: 'text/html',
+      status: 200,
+    });
+  });
+  try {
+    await page.goto(bootstrapUrl);
+    await page.evaluate(({ storageKey, value }) => {
+      window.localStorage.setItem(storageKey, JSON.stringify(value));
+    }, {
+      storageKey: supabaseSessionStorageKey(config.supabaseOrigin),
+      value: session,
+    });
+  } finally {
+    await page.unroute(bootstrapUrl);
+  }
+}
+
 export async function loginAndCaptureSession(
   page: Page,
-  appOrigin: string,
-  apiOrigin: string,
+  config: Live18BrowserConfig,
   credentials: { email: string; password: string },
 ): Promise<CapturedSession> {
-  await page.goto(appOrigin);
+  const supabaseSession = await disposableSupabaseSession(config, credentials);
+  await seedDisposableBrowserSession(page, config, supabaseSession);
   const exchange = page.waitForResponse((response: Response) => isExpectedSessionExchange(
-    response.url(), response.request().method(), apiOrigin,
+    response.url(), response.request().method(), config.apiOrigin,
   ), { timeout: 45_000 });
-  await page.locator('input[type="email"]').fill(credentials.email);
-  await page.locator('input[type="password"]').fill(credentials.password);
-  await page.getByRole('button', { name: 'Sign In', exact: true }).click();
+  await page.goto(config.appOrigin);
   const response = await exchange;
-  expect(response.status(), await response.text()).toBe(200);
+  expect(
+    response.status(),
+    'frontend Supabase session exchange must succeed against the reviewed API origin',
+  ).toBe(200);
   const body = await response.json() as { access_token?: string };
   if (!body.access_token) throw new Error('ERP session exchange omitted its access token.');
   await expect(
