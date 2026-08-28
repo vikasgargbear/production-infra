@@ -289,7 +289,7 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
             </div>
 
             {/* Content */}
-            <div className="flex-1 overflow-y-auto px-4 py-4">
+            <div data-testid="master-form-scroll" className="flex-1 overflow-y-auto px-4 py-4">
                 <div className="max-w-6xl mx-auto">
 
                     {/* Error Messages */}
@@ -591,7 +591,7 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
             </div>
 
             {/* Sticky Footer - STANDARD: py-4, full-width, right-aligned */}
-            <div className="flex-shrink-0 border-t border-gray-200 bg-white px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:hidden">
+            <div data-testid="master-form-actions" className="flex-shrink-0 border-t border-gray-200 bg-white px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:hidden">
                 <div className="flex items-center justify-end gap-2 sm:gap-3">
                     <button
                         onClick={onClose}

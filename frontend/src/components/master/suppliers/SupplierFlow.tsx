@@ -206,7 +206,7 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
             </header>
 
             {/* Scrollable Content */}
-            <main className="flex-1 overflow-y-auto py-4 sm:py-6" ref={formRef}>
+            <main data-testid="master-form-scroll" className="flex-1 overflow-y-auto py-4 sm:py-6" ref={formRef}>
                 <div className="mx-auto max-w-6xl space-y-4 px-3 sm:space-y-8 sm:px-6">
                     {/* Error Display */}
                     {errors.length > 0 && (
@@ -387,7 +387,7 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
             </main>
 
             {/* Sticky Footer - STANDARD: full-width, py-4, right-aligned */}
-            <footer className="shrink-0 border-t border-gray-200 bg-white px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:hidden">
+            <footer data-testid="master-form-actions" className="shrink-0 border-t border-gray-200 bg-white px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:hidden">
                 <div className="flex items-center justify-end gap-2 sm:gap-3">
                     <button
                         onClick={onClose}

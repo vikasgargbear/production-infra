@@ -625,7 +625,7 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
             </div>
             <div>
               <label htmlFor="cycle-count-completed-at" className="block text-sm font-medium text-gray-700">
-                Physical count completed at
+                Physical count completed at (UTC)
               </label>
               <input
                 id="cycle-count-completed-at"

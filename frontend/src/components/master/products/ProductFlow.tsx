@@ -151,7 +151,7 @@ const ProductFlow: React.FC<ProductFlowProps> = ({
         </button>
       </header>
 
-      <main className="flex-1 overflow-y-auto px-3 py-4 sm:px-6 sm:py-6">
+      <main data-testid="master-form-scroll" className="flex-1 overflow-y-auto px-3 py-4 sm:px-6 sm:py-6">
         <div className="mx-auto max-w-4xl space-y-6">
           {errors.length > 0 && (
             <div ref={errorRef} tabIndex={-1} role="alert" className="border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 outline-none focus:ring-2 focus:ring-red-500">
@@ -195,7 +195,7 @@ const ProductFlow: React.FC<ProductFlowProps> = ({
           </section>
         </div>
       </main>
-      <footer className="border-t border-gray-200 bg-white px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:hidden">
+      <footer data-testid="master-form-actions" className="border-t border-gray-200 bg-white px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:hidden">
         <button type="button" onClick={save} disabled={saving} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-green-700 px-4 font-medium text-white disabled:opacity-50">
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
           {saving ? 'Saving…' : 'Save product draft'}
