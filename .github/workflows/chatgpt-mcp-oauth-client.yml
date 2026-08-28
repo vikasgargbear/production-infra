@@ -26,7 +26,6 @@ jobs:
       SUPABASE_URL: https://rgihahbmkrmhitjdjvev.supabase.co
       CHATGPT_MCP_OAUTH_CALLBACK_URI: https://chatgpt.com/connector/oauth/_MPTGhIZ1AcM
       REVIEWED_SHA: ${{ github.sha }}
-      CANONICAL_DEMO_EVIDENCE_DIR: ${{ runner.temp }}/chatgpt-mcp-oauth-evidence
     steps:
       - uses: actions/checkout@v4
         with:
@@ -60,12 +59,14 @@ jobs:
             "$RUNNER_TEMP"/*) ;;
             *) echo "GITHUB_ENV is outside runner temporary storage" >&2; exit 2 ;;
           esac
-          case "$CANONICAL_DEMO_EVIDENCE_DIR" in
+          evidence_dir="$RUNNER_TEMP/chatgpt-mcp-oauth-evidence"
+          case "$evidence_dir" in
             "$RUNNER_TEMP"/*) ;;
             *) echo "OAuth evidence is outside runner temporary storage" >&2; exit 2 ;;
           esac
           umask 077
-          mkdir -p "$CANONICAL_DEMO_EVIDENCE_DIR"
+          mkdir -p "$evidence_dir"
+          echo "CANONICAL_DEMO_EVIDENCE_DIR=$evidence_dir" >> "$GITHUB_ENV"
 
       - name: Install only provisioning dependencies
         run: |
