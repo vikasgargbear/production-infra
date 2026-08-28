@@ -92,6 +92,10 @@ interface SupportedBusinessVariantRegistry {
   }>;
 }
 
+const derivedResourceSources: Record<string, string> = {
+  purchase_order_line: 'purchase_order',
+};
+
 const repositoryRoot = path.resolve(__dirname, '../../../..');
 
 export function loadOperationMatrix(): OperationContract[] {
@@ -305,7 +309,8 @@ export function loadFixture(required: boolean): Live18Fixture | null {
           ...runtimeTokens(step.locator?.name, `${operationId}.${phase}.locator.name`),
         ];
         for (const token of tokens.filter(value => value.startsWith('resource_'))) {
-          const sourceOperation = token.slice('resource_'.length);
+          const resourceName = token.slice('resource_'.length);
+          const sourceOperation = derivedResourceSources[resourceName] || resourceName;
           const sourceIndex = operationMatrix.findIndex(item => item.id === sourceOperation);
           if (sourceIndex < 0 || sourceIndex >= operationIndex) {
             throw new Error(

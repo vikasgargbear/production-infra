@@ -945,7 +945,9 @@ def test_sales_order_template_compiles_reviewed_commercial_choices() -> None:
     assert operation["prepare_steps"][9]["value"] == "84.1250"
     assert operation["prepare_steps"][10]["value"] == "5.000000"
     assert operation["prepare_steps"][11]["value"] == "0.250000"
-    assert operation["prepare_steps"][12]["value"] == "included_at_unit_rate"
+    assert operation["prepare_steps"][12]["action"] == "press"
+    assert operation["prepare_steps"][12]["value"] == "Tab"
+    assert operation["prepare_steps"][13]["value"] == "included_at_unit_rate"
 
 
 def test_live18_templates_use_only_canonical_hash_routes() -> None:
@@ -1292,7 +1294,8 @@ def test_supplier_advance_template_targets_prior_purchase_order_and_split_review
     assert used == set(scalars)
     assert operation["lifecycle_mode"] == "split"
     assert operation["prepare_steps"][2]["value"] == "{{resource_purchase_order}}"
-    assert operation["prepare_steps"][5]["value"] == "LIVE18-SADV-{{run_token}}"
+    assert operation["prepare_steps"][3]["value"] == "{{resource_purchase_order_line}}"
+    assert operation["prepare_steps"][6]["value"] == "LIVE18-SADV-{{run_token}}"
     assert operation["approval_steps"][2]["value"] == "{{command_request_id}}"
     assert operation["approval_steps"][5]["locator"]["name"] == approval
     assert operation["execute_steps"][1]["value"] == "{{command_request_id}}"

@@ -12,6 +12,7 @@
       {"actor":"requester","action":"goto","value":"/#/payment/supplier-advance"},
       {"actor":"requester","action":"select","locator":{"kind":"label","name":"Supplier","exact":true},"value":"{{fact.identity.supplier_account_id}}"},
       {"actor":"requester","action":"select","locator":{"kind":"label","name":"Approved purchase order","exact":true},"value":"{{resource_purchase_order}}"},
+      {"actor":"requester","action":"select","locator":{"kind":"label","name":"Approved PO product line","exact":true},"value":"{{resource_purchase_order_line}}"},
       {"actor":"requester","action":"select","locator":{"kind":"label","name":"Bank and settlement ledger","exact":true},"value":"{{fact.identity.bank_account_id}}"},
       {"actor":"requester","action":"select","locator":{"kind":"label","name":"Method","exact":true},"value":"{{scalar.supplier_advance_method}}"},
       {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Bank / UPI reference","exact":true},"value":"LIVE18-SADV-{{run_token}}"},

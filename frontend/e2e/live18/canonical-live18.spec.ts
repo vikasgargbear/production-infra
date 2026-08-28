@@ -101,13 +101,26 @@ function loadCompletedResources(): CompletedResources {
   return state;
 }
 
-function persistCompletedResource(operationId: string, resourceId: string): void {
+function persistCompletedResource(
+  operationId: string,
+  resourceId: string,
+  readback: Record<string, unknown>,
+): void {
   const root = evidenceRoot();
   fs.mkdirSync(root, { recursive: true });
   const statePath = resourceStatePath();
+  const derivedResources = operationId === 'purchase_order'
+    ? {
+      resource_purchase_order_line: requireUuid(
+        findDeep(readback, 'purchase_order_line_id'),
+        'purchase-order line UUID',
+      ),
+    }
+    : {};
   const next = {
     ...loadCompletedResources(),
     [`resource_${operationId}`]: resourceId,
+    ...derivedResources,
   } satisfies CompletedResources;
   const temporaryPath = `${statePath}.${process.pid}.tmp`;
   fs.writeFileSync(temporaryPath, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 });
@@ -495,7 +508,7 @@ async function runOperation(
         browserHealth.snapshot(),
         `${contract.id} browser must have no console, page, request, or API response failures`,
       ).toEqual([]);
-      persistCompletedResource(contract.id, resourceId);
+      persistCompletedResource(contract.id, resourceId, readback);
 
       beginStage(progress, 'evidence_write');
       const evidence = {
