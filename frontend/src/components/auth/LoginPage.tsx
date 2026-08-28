@@ -71,10 +71,10 @@ const LoginPage: React.FC = () => {
     };
 
     return (
-        <div className="flex min-h-screen items-start justify-center overflow-y-auto bg-gray-50 px-4 py-6 sm:items-center">
-            <div className="w-full max-w-md rounded-lg border border-gray-200 bg-white p-5 sm:p-8">
+        <div className="flex min-h-[100dvh] items-start justify-center overflow-y-auto bg-gray-50 p-3 sm:items-center sm:p-4">
+            <div className="my-auto w-full max-w-md rounded-lg border border-gray-200 bg-white p-4 sm:p-8">
                 {/* Header */}
-                <div className="text-center mb-8">
+                <div className={`${onboardingRequired ? 'mb-4' : 'mb-8'} text-center`}>
                     <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-lg border border-blue-200 bg-blue-50">
                         <svg className="h-8 w-8 text-blue-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
@@ -151,8 +151,8 @@ const LoginPage: React.FC = () => {
                 </button>
 
                 {/* Login Form */}
-                <details className="mt-6 rounded-lg border border-gray-200 p-4">
-                    <summary className="cursor-pointer text-sm font-medium text-gray-700">
+                <details className="mt-6 rounded-lg border border-gray-200 px-4">
+                    <summary className="flex min-h-12 cursor-pointer items-center text-sm font-medium text-gray-700">
                         Use email and password instead
                     </summary>
                 <form onSubmit={handleSubmit} className="mt-4 space-y-4">

@@ -1,4 +1,4 @@
-import React, { FormEvent, useState } from 'react';
+import React, { FormEvent, useEffect, useRef, useState } from 'react';
 import { AlertCircle, Building2, Loader2, MailCheck } from 'lucide-react';
 import { CreateOrganizationInput, useAuth } from '../../contexts/AuthContext';
 import { invitationTokenFromLocation } from '../../services/auth/oauthConsentClient';
@@ -24,6 +24,11 @@ const OrganizationOnboarding: React.FC = () => {
     const [invitationToken, setInvitationToken] = useState(initialInvitationToken);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    const errorRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (error) errorRef.current?.focus();
+    }, [error]);
 
     const updateOrganization = (field: keyof CreateOrganizationInput, value: string) => {
         setOrganization((previous) => ({ ...previous, [field]: value }));
@@ -80,13 +85,13 @@ const OrganizationOnboarding: React.FC = () => {
             </div>
 
             {error && (
-                <div role="alert" aria-live="assertive" className="flex items-start rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                <div ref={errorRef} tabIndex={-1} role="alert" aria-live="assertive" className="flex items-start rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800 outline-none focus:ring-2 focus:ring-red-500">
                     <AlertCircle aria-hidden="true" className="mr-2 mt-0.5 h-4 w-4 shrink-0" />
                     <span>{error}</span>
                 </div>
             )}
 
-            <div className="grid gap-3 sm:grid-cols-2" aria-label="Organization setup options">
+            <div className="grid grid-cols-1 gap-3 min-[400px]:grid-cols-2" aria-label="Organization setup options">
                 <button
                     type="button"
                     aria-pressed={mode === 'create'}
@@ -123,7 +128,7 @@ const OrganizationOnboarding: React.FC = () => {
                             maxLength={200}
                             required
                             disabled={loading}
-                            className="w-full rounded-md border border-gray-300 px-3 py-2.5 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="min-h-12 w-full rounded-md border border-gray-300 px-3 text-base focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                     </div>
                     <div>
@@ -136,7 +141,7 @@ const OrganizationOnboarding: React.FC = () => {
                             onChange={(event) => updateOrganization('trade_name', event.target.value)}
                             maxLength={200}
                             disabled={loading}
-                            className="w-full rounded-md border border-gray-300 px-3 py-2.5 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="min-h-12 w-full rounded-md border border-gray-300 px-3 text-base focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                     </div>
                     <div>
@@ -151,7 +156,7 @@ const OrganizationOnboarding: React.FC = () => {
                             maxLength={250}
                             required
                             disabled={loading}
-                            className="w-full rounded-md border border-gray-300 px-3 py-2.5 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="min-h-12 w-full rounded-md border border-gray-300 px-3 text-base focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                     </div>
                     <div>
@@ -166,10 +171,10 @@ const OrganizationOnboarding: React.FC = () => {
                             maxLength={120}
                             required
                             disabled={loading}
-                            className="w-full rounded-md border border-gray-300 px-3 py-2.5 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="min-h-12 w-full rounded-md border border-gray-300 px-3 text-base focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                     </div>
-                    <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-3 min-[400px]:grid-cols-2">
                         <div>
                             <label htmlFor="organization-state-code" className="mb-1 block text-sm font-medium text-gray-800">
                                 GST state code
@@ -185,7 +190,7 @@ const OrganizationOnboarding: React.FC = () => {
                                 aria-describedby="organization-state-code-help"
                                 required
                                 disabled={loading}
-                                className="w-full rounded-md border border-gray-300 px-3 py-2.5 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                className="min-h-12 w-full rounded-md border border-gray-300 px-3 text-base focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
                             <p id="organization-state-code-help" className="mt-1 text-xs text-gray-500">2 digits, for example 27</p>
                         </div>
@@ -205,7 +210,7 @@ const OrganizationOnboarding: React.FC = () => {
                                 aria-describedby="organization-postal-code-help"
                                 required
                                 disabled={loading}
-                                className="w-full rounded-md border border-gray-300 px-3 py-2.5 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                className="min-h-12 w-full rounded-md border border-gray-300 px-3 text-base focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
                             <p id="organization-postal-code-help" className="mt-1 text-xs text-gray-500">6-digit PIN code</p>
                         </div>
@@ -241,7 +246,7 @@ const OrganizationOnboarding: React.FC = () => {
                                 required
                                 disabled={loading}
                                 aria-describedby="organization-invitation-help"
-                                className="min-h-11 w-full rounded-md border border-gray-300 px-3 py-2.5 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                className="min-h-12 w-full rounded-md border border-gray-300 px-3 text-base focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
                             <p id="organization-invitation-help" className="mt-1 text-xs text-gray-500">
                                 Ask your administrator for the invitation link. Opening it fills this securely.

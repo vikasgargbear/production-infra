@@ -129,24 +129,24 @@ const ProductFlow: React.FC<ProductFlowProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-gray-50" ref={formRef}>
-      <header className="flex items-center justify-between border-b border-gray-200 bg-white px-6 py-4">
-        <div className="flex items-center gap-3">
-          <button type="button" onClick={onClose} className="p-2 hover:bg-gray-100" aria-label="Close product form">
+      <header className="flex items-center justify-between border-b border-gray-200 bg-white px-3 py-3 sm:px-6 sm:py-4">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+          <button type="button" onClick={onClose} className="inline-flex min-h-12 min-w-12 items-center justify-center rounded-lg hover:bg-gray-100" aria-label="Close product form">
             <ArrowLeft className="h-5 w-5" />
           </button>
-          <Package className="h-5 w-5 text-green-700" />
-          <div>
-            <h1 className="text-lg font-semibold text-gray-900">{isEditing ? 'Edit product draft' : 'New product draft'}</h1>
-            <p className="text-sm text-gray-500">Basic identity now; classification before sale</p>
+          <Package className="hidden h-5 w-5 text-green-700 sm:block" />
+          <div className="min-w-0">
+            <h1 className="truncate text-base font-semibold text-gray-900 sm:text-lg">{isEditing ? 'Edit product draft' : 'New product draft'}</h1>
+            <p className="hidden text-sm text-gray-500 sm:block">Basic identity now; classification before sale</p>
           </div>
         </div>
-        <button type="button" onClick={save} disabled={saving} className="flex items-center gap-2 bg-green-700 px-4 py-2 text-white hover:bg-green-800 disabled:opacity-50">
+        <button type="button" onClick={save} disabled={saving} className="hidden min-h-12 items-center gap-2 rounded-lg bg-green-700 px-4 text-white hover:bg-green-800 disabled:opacity-50 sm:flex">
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
           Save draft
         </button>
       </header>
 
-      <main className="flex-1 overflow-y-auto px-6 py-6">
+      <main className="flex-1 overflow-y-auto px-3 py-4 sm:px-6 sm:py-6">
         <div className="mx-auto max-w-4xl space-y-6">
           {errors.length > 0 && (
             <div className="border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -165,7 +165,7 @@ const ProductFlow: React.FC<ProductFlowProps> = ({
             )}
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <label className="text-sm font-medium text-gray-700">Product name
-              <input autoFocus value={form.product_name} onChange={event => set('product_name', event.target.value)} className="mt-1 w-full border border-gray-300 px-3 py-2" />
+              <input autoFocus value={form.product_name} onChange={event => set('product_name', event.target.value)} className="mt-1 min-h-12 w-full rounded-lg border border-gray-300 px-3 text-base" />
             </label>
             {isEditing && (
               <div className="text-sm font-medium text-gray-700">
@@ -176,10 +176,10 @@ const ProductFlow: React.FC<ProductFlowProps> = ({
               </div>
             )}
             <label className="text-sm font-medium text-gray-700">Generic display name
-              <input value={form.generic_name} onChange={event => set('generic_name', event.target.value)} className="mt-1 w-full border border-gray-300 px-3 py-2" />
+              <input value={form.generic_name} onChange={event => set('generic_name', event.target.value)} className="mt-1 min-h-12 w-full rounded-lg border border-gray-300 px-3 text-base" />
             </label>
             <label className="text-sm font-medium text-gray-700">Product kind
-              <select value={form.product_kind} onChange={event => set('product_kind', event.target.value as DraftForm['product_kind'])} className="mt-1 w-full border border-gray-300 px-3 py-2">
+              <select value={form.product_kind} onChange={event => set('product_kind', event.target.value as DraftForm['product_kind'])} className="mt-1 min-h-12 w-full rounded-lg border border-gray-300 bg-white px-3 text-base">
                 <option value="" disabled>Select product kind</option>
                 <option value="medicine">Medicine</option>
                 <option value="medical_device">Medical device</option>
@@ -190,6 +190,12 @@ const ProductFlow: React.FC<ProductFlowProps> = ({
           </section>
         </div>
       </main>
+      <footer className="border-t border-gray-200 bg-white px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:hidden">
+        <button type="button" onClick={save} disabled={saving} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-green-700 px-4 font-medium text-white disabled:opacity-50">
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          {saving ? 'Saving…' : 'Save product draft'}
+        </button>
+      </footer>
     </div>
   );
 };

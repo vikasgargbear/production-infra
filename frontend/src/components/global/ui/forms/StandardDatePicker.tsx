@@ -40,8 +40,8 @@ const StandardDatePicker: FC<StandardDatePickerProps> = ({
 }) => {
     const inputId = useId();
     const sizeClasses: Record<SizeKey, string> = {
-        sm: 'h-9 pl-8 pr-3 py-1.5 text-sm',
-        md: 'h-10 pl-10 pr-3 py-2 text-base',
+        sm: 'h-11 pl-8 pr-3 py-2 text-base',
+        md: 'h-12 pl-10 pr-3 py-2 text-base',
         lg: 'h-12 pl-12 pr-4 py-3 text-lg'
     };
 

@@ -243,37 +243,38 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
     if (!open) return null;
 
     // Compact input classes - STANDARD: py-2.5 for all inputs
-    const inputClass = "w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm";
-    const inputNoIconClass = "w-full px-3 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm";
+    const inputClass = "min-h-12 w-full pl-9 pr-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base";
+    const inputNoIconClass = "min-h-12 w-full px-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base";
     const labelClass = "block text-xs font-medium text-gray-600 mb-1";
 
     return (
         <div ref={formRef} className="h-full bg-white flex flex-col">
             {/* Header - STANDARD: py-4 */}
-            <div className="flex-shrink-0 bg-white border-b border-gray-200 px-6 py-4">
+            <div className="flex-shrink-0 bg-white border-b border-gray-200 px-3 py-3 sm:px-6 sm:py-4">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                         <button
                             onClick={onClose}
-                            className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+                            className="inline-flex min-h-12 min-w-12 items-center justify-center rounded-lg hover:bg-gray-100 transition-colors"
+                            aria-label="Close customer form"
                         >
                             <ArrowLeft className="w-5 h-5 text-gray-600" />
                         </button>
-                        <h1 className="text-xl font-semibold text-gray-900">New Customer</h1>
+                        <h1 className="text-lg font-semibold text-gray-900 sm:text-xl">New Customer</h1>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="hidden items-center gap-2 sm:flex">
                         <button
                             onClick={onClose}
                             disabled={saving}
-                            className="px-3 py-1.5 text-sm border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50"
+                            className="min-h-12 px-3 text-sm border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50"
                         >
                             Cancel
                         </button>
                         <button
                             onClick={handleSave}
                             disabled={saving}
-                            className="px-4 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-1.5 disabled:opacity-50"
+                            className="flex min-h-12 items-center gap-1.5 rounded-lg bg-blue-600 px-4 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
                         >
                             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                             {saving ? 'Saving...' : 'Save Customer'}
@@ -343,13 +344,15 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                                 Internal customer code is generated automatically after saving.
                             </p>
 
-                            <div className="grid grid-cols-3 gap-3">
-                                <div className="col-span-3 sm:col-span-2">
+                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                                <div className="col-span-1 sm:col-span-2">
                                     <label className={labelClass}>Customer Name *</label>
                                     <div className="relative">
                                         <User className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                                         <input
-                                            type="text"
+                                            type="tel"
+                                            inputMode="tel"
+                                            autoComplete="tel"
                                             value={formData.customer_name}
                                             onChange={(e) => updateField('customer_name', e.target.value)}
                                             className={inputClass}
@@ -457,11 +460,14 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                                 </div>
 
                                 {/* Row 3: City, GST state code, Pincode */}
-                                <div className="grid grid-cols-3 gap-3">
+                                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                                     <div>
                                         <label className={labelClass}>City *</label>
                                         <input
                                             type="text"
+                                            inputMode="numeric"
+                                            autoComplete="postal-code"
+                                            pattern="[0-9]{6}"
                                             value={formData.address.city}
                                             onChange={(e) => updateAddress('city', e.target.value)}
                                             className={inputNoIconClass}
@@ -580,19 +586,19 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
             </div>
 
             {/* Sticky Footer - STANDARD: py-4, full-width, right-aligned */}
-            <div className="flex-shrink-0 bg-white border-t border-gray-200 px-6 py-4">
-                <div className="flex items-center justify-end gap-3">
+            <div className="flex-shrink-0 border-t border-gray-200 bg-white px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-6 sm:py-4">
+                <div className="flex items-center justify-end gap-2 sm:gap-3">
                     <button
                         onClick={onClose}
                         disabled={saving}
-                        className="px-6 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                        className="min-h-12 flex-1 rounded-lg border border-gray-300 px-4 text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50 sm:flex-none sm:px-6"
                     >
                         Cancel
                     </button>
                     <button
                         onClick={handleSave}
                         disabled={saving}
-                        className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 disabled:opacity-50 transition-colors"
+                        className="flex min-h-12 flex-[2] items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-white transition-colors hover:bg-blue-700 disabled:opacity-50 sm:flex-none sm:px-6"
                     >
                         {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                         {saving ? 'Saving...' : 'Save Customer'}

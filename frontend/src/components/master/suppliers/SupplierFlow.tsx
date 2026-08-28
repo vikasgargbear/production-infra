@@ -169,29 +169,30 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
 
     if (!isOpen) return null;
 
-    const inputClass = "w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors";
+    const inputClass = "min-h-12 w-full rounded-lg border border-gray-300 px-3 text-base transition-colors focus:border-transparent focus:ring-2 focus:ring-blue-500";
 
     return (
         <div className="fixed inset-0 bg-gray-50 z-50 overflow-hidden flex flex-col">
             {/* Header - STANDARD: full-width, py-4, right-aligned save */}
-            <header className="bg-white border-b border-gray-200 shrink-0 px-6 py-4">
+            <header className="shrink-0 border-b border-gray-200 bg-white px-3 py-3 sm:px-6 sm:py-4">
                 <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
+                    <div className="flex min-w-0 items-center gap-2 sm:gap-4">
                         <button
                             onClick={onClose}
-                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                            className="inline-flex min-h-12 min-w-12 items-center justify-center rounded-lg hover:bg-gray-100 transition-colors"
+                            aria-label="Close supplier form"
                         >
                             <ArrowLeft className="w-5 h-5 text-gray-600" />
                         </button>
                         <div>
-                            <h1 className="text-xl font-semibold text-gray-900">Add New Supplier</h1>
-                            <p className="text-sm text-gray-500">Create supplier profile</p>
+                            <h1 className="truncate text-lg font-semibold text-gray-900 sm:text-xl">Add New Supplier</h1>
+                            <p className="hidden text-sm text-gray-500 sm:block">Create supplier profile</p>
                         </div>
                     </div>
                     <button
                         onClick={handleSave}
                         disabled={saving}
-                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                        className="hidden min-h-12 items-center gap-2 rounded-lg bg-blue-600 px-4 text-white transition-colors hover:bg-blue-700 disabled:opacity-50 sm:flex"
                     >
                         {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                         Save Supplier
@@ -200,8 +201,8 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
             </header>
 
             {/* Scrollable Content */}
-            <main className="flex-1 overflow-y-auto py-6" ref={formRef}>
-                <div className="max-w-6xl mx-auto px-6 space-y-8">
+            <main className="flex-1 overflow-y-auto py-4 sm:py-6" ref={formRef}>
+                <div className="mx-auto max-w-6xl space-y-4 px-3 sm:space-y-8 sm:px-6">
                     {/* Error Display */}
                     {errors.length > 0 && (
                         <div className="bg-red-50 border border-red-200 rounded-xl p-4">
@@ -380,19 +381,19 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
             </main>
 
             {/* Sticky Footer - STANDARD: full-width, py-4, right-aligned */}
-            <footer className="bg-white border-t border-gray-200 shrink-0 px-6 py-4">
-                <div className="flex items-center justify-end gap-3">
+            <footer className="shrink-0 border-t border-gray-200 bg-white px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-6 sm:py-4">
+                <div className="flex items-center justify-end gap-2 sm:gap-3">
                     <button
                         onClick={onClose}
                         disabled={saving}
-                        className="px-6 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                        className="min-h-12 flex-1 rounded-lg border border-gray-300 px-4 text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50 sm:flex-none sm:px-6"
                     >
                         Cancel
                     </button>
                     <button
                         onClick={handleSave}
                         disabled={saving}
-                        className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                        className="flex min-h-12 flex-[2] items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-white transition-colors hover:bg-blue-700 disabled:opacity-50 sm:flex-none sm:px-6"
                     >
                         {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                         {saving ? 'Saving...' : 'Save Supplier'}
