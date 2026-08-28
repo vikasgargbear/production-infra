@@ -46,12 +46,11 @@ def test_one_database_owner_controls_setup_readiness_and_activation():
     adapter = inspect.getsource(canonical_write_commands)
     route = inspect.getsource(canonical_erp_reads)
 
-    for function in (
-        "product_setup_missing_fields",
-        "configure_product_draft",
-        "activate_configured_product",
-    ):
+    for function in ("product_setup_missing_fields", "configure_product_draft"):
         assert source.count(f"CREATE FUNCTION erp_master_commands.{function}(") == 1
+    assert source.count(
+        "CREATE OR REPLACE FUNCTION erp_master_commands.activate_configured_product("
+    ) == 1
     assert "erp_regulatory_commands.activate_product" in source
     assert "only an unused product draft can be configured" in source
     assert "REVOKE INSERT,UPDATE,DELETE ON TABLE catalog.uom_conversions" in migration
