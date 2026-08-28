@@ -77,6 +77,7 @@
     "erp_product_setup_get",
     "erp_product_setup_options_get",
     "erp_profit_loss_get",
+    "erp_purchase_bill_mapping_review",
     "erp_purchase_order_get",
     "erp_purchase_order_prepare",
     "erp_purchase_return_prepare",
@@ -107,6 +108,14 @@
     "erp_trial_balance_get"
   ],
   "writes_exported": true,
+  "local_review_tools": {
+    "erp_purchase_bill_mapping_review": {
+      "mode": "read_only_stateless",
+      "persists_business_data": false,
+      "resolves_canonical_ids": false,
+      "contract": "aasopharma.purchase_bill_mapping.v1"
+    }
+  },
   "operator_actions": {
     "contract": "docs/architecture/mcp-operator-actions.json",
     "status": "published_bounded",

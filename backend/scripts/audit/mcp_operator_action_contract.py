@@ -80,6 +80,7 @@ EXPECTED_BASE_READ_TOOLS = {
     "erp_product_hsn_search",
     "erp_product_setup_get",
     "erp_profit_loss_get",
+    "erp_purchase_bill_mapping_review",
     "erp_supplier_search",
     "erp_supplier_get",
     "erp_gst_settings_get",

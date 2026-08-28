@@ -11,7 +11,8 @@ from starlette.testclient import TestClient
 
 from aasopharma_mcp.config import ConfigurationError, Settings
 from aasopharma_mcp.operations import OPERATIONS, OPERATOR_OPERATIONS
-from aasopharma_mcp.server import create_app, registered_tool_names
+from aasopharma_mcp.purchase_bill_mapping import PURCHASE_BILL_MAPPING_ARGUMENT_SCHEMA
+from aasopharma_mcp.server import LOCAL_REVIEW_TOOL_NAMES, create_app, registered_tool_names
 from conftest import settings
 
 _BASE_ENV = {
@@ -44,8 +45,10 @@ class Gateway:
 
 def test_exact_reviewed_tools_are_unique_and_streamable_http_routes_exist() -> None:
     names = registered_tool_names()
-    assert len(names) == len(set(names)) == 71
-    assert set(names) == set(OPERATIONS) | set(OPERATOR_OPERATIONS)
+    assert len(names) == len(set(names)) == 72
+    assert set(names) == (
+        set(OPERATIONS) | set(OPERATOR_OPERATIONS) | set(LOCAL_REVIEW_TOOL_NAMES)
+    )
     app = create_app(settings(), Verifier(), Gateway())
     route_paths = {route.path for route in app.routes if isinstance(route, Route)}
     assert "/mcp" in route_paths
@@ -65,6 +68,14 @@ def test_machine_service_contract_matches_runtime() -> None:
     assert contract["oauth"]["required_scopes"] == ["openid", "offline_access"]
     assert contract["oauth"]["dynamic_client_registration"] is False
     assert "SUPABASE_SERVICE_ROLE_KEY" not in contract["required_environment"]
+    assert contract["local_review_tools"] == {
+        "erp_purchase_bill_mapping_review": {
+            "mode": "read_only_stateless",
+            "persists_business_data": False,
+            "resolves_canonical_ids": False,
+            "contract": "aasopharma.purchase_bill_mapping.v1",
+        }
+    }
 
 
 def test_operator_sdk_argument_models_match_exact_published_schemas(monkeypatch) -> None:
@@ -104,6 +115,21 @@ def test_operator_sdk_argument_models_match_exact_published_schemas(monkeypatch)
     assert "charge_lines" not in sales_order.fn_metadata.validate_arguments(
         required_only
     )
+
+
+def test_purchase_bill_review_tool_publishes_its_exact_non_posting_schema(monkeypatch) -> None:
+    monkeypatch.setattr(
+        MCPServer,
+        "streamable_http_app",
+        lambda self, **_kwargs: self,
+    )
+    server = create_app(settings(), Verifier(), Gateway())
+    tool = server._tool_manager.get_tool("erp_purchase_bill_mapping_review")
+
+    assert tool is not None
+    assert tool.parameters == PURCHASE_BILL_MAPPING_ARGUMENT_SCHEMA
+    assert set(tool.fn_metadata.arg_model.model_fields) == {"mapping"}
+    assert tool.fn_metadata.arg_model.model_fields["mapping"].is_required()
 
 
 # ---------------------------------------------------------------------------
