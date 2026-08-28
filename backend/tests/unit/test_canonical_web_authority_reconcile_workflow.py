@@ -47,7 +47,7 @@ def test_user_authority_reconcile_keeps_the_bounded_web_envelope() -> None:
     assert 'test "$(jq -r .capability_count "$response")" = 11' in source
     assert "existing consent receipt capability envelope differs" in source
     assert "transaction_timestamp()+interval '30 days'" in source
-    assert "expected_capabilities = sorted(capability_rows)" in source
+    assert "(*row, audit_membership_id) for row in capability_rows" in source
     assert "reviewed user authority did not reconcile exactly" in source
 
 
@@ -71,7 +71,9 @@ def test_user_authority_reconcile_uses_the_canonical_mcp_envelope() -> None:
     assert '"MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS", ""' in source
     assert '.MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS == $client' in source
     assert '.status == "ok" and .git_commit == $sha' in source
-    assert '.status == "ready" and (.tools | length) > 0' in source
+    assert '.status == "ready" and (.tools | length) == 64' in source
+    assert 'git merge-base --is-ancestor "$MCP_REVIEWED_SHA" origin/main' in source
+    assert 'test "$observed_inventory_sha256" = "$MCP_TOOL_INVENTORY_SHA256"' in source
     assert "deployed MCP policy differs from the reviewed envelope" in source
 
 
@@ -81,7 +83,11 @@ def test_user_authority_reconcile_is_idempotent_for_an_exact_active_grant() -> N
     assert "existing consent receipt differs from the reviewed grant" in source
     assert "existing consent receipt capability envelope differs" in source
     assert "expected_grant = (" in source
-    assert "expected_capabilities = sorted(capability_rows)" in source
+    assert "(*row, audit_membership_id) for row in capability_rows" in source
+    assert "expires_at=consented_at+interval '30 days'" in source
+    assert "consented_at=granted_at" in source
+    assert "granted_by_membership_id::text" in source
+    assert "created_by_membership_id::text" in source
     assert 'reconciliation_outcome = "unchanged"' in source
     assert 'reconciliation_outcome = "created"' in source
     assert 'f"{consent_text_sha256}"' in source
@@ -121,6 +127,10 @@ def test_user_authority_reconcile_uses_canonical_identity_binding_only() -> None
 
     assert "FROM auth.users" not in source
     assert "user_row.auth_user_id=%s" in source
+    assert "user_row.id=%s" in source
+    assert "subject_auth_user_id" in source
+    assert "organization_id" in source
+    assert "access_grant.scope_kind='organization'" in source
     assert "reviewed user identity lacks one active canonical membership authority" in source
 
 
