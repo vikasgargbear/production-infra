@@ -98,6 +98,34 @@ class InvitationResult(BaseModel):
     invitation_url: str
 
 
+class InvitationRole(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    role_id: UUID
+    role_code: str
+    role_name: str
+    description: Optional[str]
+
+
+class InvitationBranch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    branch_id: UUID
+    branch_code: str
+    branch_name: str
+    city: str
+    state_code: str
+
+
+class InvitationContext(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    organization_id: UUID
+    organization_name: str
+    roles: list[InvitationRole]
+    branches: list[InvitationBranch]
+
+
 async def _verified_identity(
     credentials: Optional[HTTPAuthorizationCredentials],
 ) -> tuple[dict[str, Any], UUID, str]:
@@ -182,6 +210,85 @@ def _invitation_manager(user: Dict[str, Any] = Depends(PermissionChecker())):
     if user.get("is_admin") is not True and not can_manage_users:
         raise HTTPException(status_code=403, detail="User invitation access required")
     return user
+
+
+def _activate_invitation_context(
+    db: Session, current_user: Dict[str, Any]
+) -> UUID:
+    try:
+        organization_id = UUID(str(current_user["org_id"]))
+        auth_user_id = UUID(str(current_user["auth_user_id"]))
+    except (KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(status_code=401, detail="Invalid ERP identity context") from exc
+    db.execute(
+        text(
+            """
+            SELECT erp_security.activate_context(:auth_user_id, :org_id),
+                   pg_catalog.set_config('app.request_id', :request_id, true)
+            """
+        ),
+        {
+            "auth_user_id": auth_user_id,
+            "org_id": organization_id,
+            "request_id": str(uuid4()),
+        },
+    )
+    return organization_id
+
+
+@router.get("/invitations/context", response_model=InvitationContext)
+def invitation_context(
+    current_user: Dict[str, Any] = Depends(_invitation_manager),
+    db: Session = Depends(get_db),
+) -> InvitationContext:
+    """Return human-readable, active invitation choices for one organization."""
+    organization_id = _activate_invitation_context(db, current_user)
+    organization_rows = db.execute(
+        text(
+            """
+            SELECT id AS organization_id, legal_name AS organization_name
+              FROM core.organizations
+             WHERE id=:organization_id AND status='active'
+            """
+        ),
+        {"organization_id": organization_id},
+    ).mappings().all()
+    if len(organization_rows) != 1:
+        raise HTTPException(status_code=409, detail="Active organization is unavailable")
+
+    role_rows = db.execute(
+        text(
+            """
+            SELECT id AS role_id, code AS role_code, name AS role_name, description
+              FROM core.roles
+             WHERE org_id=:organization_id AND status='active'
+             ORDER BY name, id
+            """
+        ),
+        {"organization_id": organization_id},
+    ).mappings().all()
+    branch_rows = db.execute(
+        text(
+            """
+            SELECT id AS branch_id, code AS branch_code, name AS branch_name,
+                   city, state_code
+              FROM core.branches
+             WHERE org_id=:organization_id AND status='active'
+             ORDER BY code, id
+            """
+        ),
+        {"organization_id": organization_id},
+    ).mappings().all()
+    if not role_rows:
+        raise HTTPException(status_code=409, detail="No active invitation role is available")
+
+    organization = organization_rows[0]
+    return InvitationContext(
+        organization_id=organization["organization_id"],
+        organization_name=organization["organization_name"],
+        roles=[InvitationRole(**row) for row in role_rows],
+        branches=[InvitationBranch(**row) for row in branch_rows],
+    )
 
 
 @router.post("/organizations", response_model=OnboardingResult, status_code=201)

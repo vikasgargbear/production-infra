@@ -71,8 +71,8 @@ const LoginPage: React.FC = () => {
     };
 
     return (
-        <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
-            <div className="w-full max-w-md rounded-lg border border-gray-200 bg-white p-8">
+        <div className="flex min-h-screen items-start justify-center overflow-y-auto bg-gray-50 px-4 py-6 sm:items-center">
+            <div className="w-full max-w-md rounded-lg border border-gray-200 bg-white p-5 sm:p-8">
                 {/* Header */}
                 <div className="text-center mb-8">
                     <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-lg border border-blue-200 bg-blue-50">
