@@ -24,7 +24,9 @@ def test_live_promotion_is_exact_sha_canonical_and_disposable_org_bound():
     assert "CANONICAL_RENDER_DEPLOY_SHA=not_deployed_ci_api" in provision
 
     live_job = production.split("\n  live-erp:", 1)[1].split("\n  live-browser-erp:", 1)[0]
-    assert "verify_render_pilot_sha.py" in live_job
+    assert "verify_live18_deployment_sha.py" in live_job
+    assert "inputs.live18_provider == 'railway' && vars.RAILWAY_API_URL" in live_job
+    assert "inputs.live18_provider == 'railway' && format('{0}/mcp', vars.RAILWAY_MCP_URL)" in live_job
     assert 'test "$(git rev-parse HEAD)" = "$REVIEWED_DEPLOY_SHA"' in live_job
     assert "pytest -q backend/tests/live_canonical" in live_job
     assert "backend/tests/live_erp" not in live_job
@@ -36,7 +38,7 @@ def test_live_promotion_is_exact_sha_canonical_and_disposable_org_bound():
     assert "PHARMA_CANONICAL_LIVE_DELEGATED_TOKENS_JSON" not in live_job
     assert "PHARMA_CANONICAL_LIVE_FIXTURE_INPUT_JSON" in live_job
     assert "environment: canonical-staging" in live_job
-    assert "needs: [canonical-free-staging]" in live_job
+    assert "needs: [canonical-free-staging, railway-canonical-staging]" in live_job
     assert "needs.canonical-free-staging.result == 'success'" in live_job
     assert "inputs.provision_canonical_demo" in live_job
     assert "environment: live-erp-test" not in live_job
@@ -46,12 +48,12 @@ def test_live_promotion_is_exact_sha_canonical_and_disposable_org_bound():
     browser_job = production.split("\n  live-browser-erp:", 1)[1].split(
         "\n  live-browser-erp-two-user-approvals:", 1
     )[0]
-    assert "verify_render_pilot_sha.py" in browser_job
-    assert "PLAYWRIGHT_LIVE_BASE_URL: https://aasopharma-erp-pilot.onrender.com" in browser_job
+    assert "verify_live18_deployment_sha.py" in browser_job
+    assert "inputs.live18_provider == 'railway' && vars.RAILWAY_FRONTEND_URL" in browser_job
     assert "PLAYWRIGHT_LIVE_EXPECTED_ORG_ID" in browser_job
     assert "PLAYWRIGHT_SALES_CHAIN_FIXTURE" in browser_job
     assert "environment: canonical-staging" in browser_job
-    assert "needs: [canonical-free-staging]" in browser_job
+    assert "needs: [canonical-free-staging, railway-canonical-staging]" in browser_job
     assert "needs.canonical-free-staging.result == 'success'" in browser_job
     assert "inputs.provision_canonical_demo" in browser_job
     assert "environment: live-erp-test" not in browser_job
@@ -73,8 +75,8 @@ def test_live_promotion_is_exact_sha_canonical_and_disposable_org_bound():
     two_user_job = production.split("\n  live-browser-erp-two-user-approvals:", 1)[1].split(
         "\n  live18-acceptance:", 1
     )[0]
-    assert "verify_render_pilot_sha.py" in two_user_job
-    assert "needs: [canonical-free-staging]" in two_user_job
+    assert "verify_live18_deployment_sha.py" in two_user_job
+    assert "needs: [canonical-free-staging, railway-canonical-staging]" in two_user_job
     assert "needs.canonical-free-staging.result == 'success'" in two_user_job
     assert "inputs.provision_canonical_demo" in two_user_job
     assert 'PLAYWRIGHT_LIVE_EXPECTED_ORG_ID: "d3000000-0000-7000-8000-000000000001"' in two_user_job
@@ -138,7 +140,7 @@ def test_live_browser_two_user_approval_harness_is_explicit_and_ui_driven():
         "\n  live18-acceptance:", 1
     )[0]
     assert "environment: canonical-staging" in two_user_job
-    assert 'PLAYWRIGHT_LIVE_BASE_URL: "https://aasopharma-erp-pilot.onrender.com"' in two_user_job
+    assert "inputs.live18_provider == 'railway' && vars.RAILWAY_FRONTEND_URL" in two_user_job
     assert "environment: live-erp-test" not in two_user_job
     for long_lived_secret in (
         "PLAYWRIGHT_LIVE_REQUESTER_EMAIL",
