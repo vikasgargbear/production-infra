@@ -3,7 +3,7 @@
  * Manages state and logic for sales order creation flow
  */
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { toast } from 'react-toastify';
 import { apiClient } from '../../../../services/api';
 import {
@@ -76,6 +76,8 @@ export interface UseSalesOrderLogicReturn {
     setSameAsBilling: React.Dispatch<React.SetStateAction<boolean>>;
     saving: boolean;
     submissionUnavailableReason: string;
+    calculationStatus: SalesOrderCalculationStatus;
+    calculationUnavailableReason: string;
     preparedPreview: CanonicalCommandPreview | null;
     reviewOpen: boolean;
     message: string;
@@ -151,6 +153,67 @@ const createInitialOrder = (): Order => ({
     place_of_supply: ''
 });
 
+export type SalesOrderCalculationStatus =
+    | 'incomplete'
+    | 'pending'
+    | 'authoritative'
+    | 'error';
+
+interface SalesOrderCalculationState {
+    status: SalesOrderCalculationStatus;
+    fingerprint: string;
+    error: string;
+}
+
+/** Only editable calculation inputs belong in this identity. */
+export const salesOrderCalculationFingerprint = (order: Order): string => JSON.stringify({
+    customer_id: order.customer_id,
+    order_date: order.order_date,
+    expected_delivery_date: order.expected_delivery_date,
+    delivery_date: order.delivery_date,
+    delivery_charges: order.delivery_charges,
+    other_charges: order.other_charges,
+    document_discount_amount: order.document_discount_amount,
+    items: order.items.map(item => ({
+        product_id: item.product_id,
+        batch_id: item.batch_id,
+        batch_number: item.batch_number,
+        branch_id: item.branch_id,
+        quantity: item.quantity,
+        free_quantity: item.free_quantity,
+        free_supply_tax_treatment: item.free_supply_tax_treatment,
+        unit_price: item.unit_price,
+        mrp: item.mrp,
+        discount_percent: item.discount_percent,
+        unit: item.unit,
+        uom: item.uom,
+        pack_type: item.pack_type,
+    })),
+});
+
+const clearSalesOrderCalculation = (order: Order): Order => ({
+    ...order,
+    items: order.items.map(item => ({
+        ...item,
+        subtotal: 0,
+        discount_amount: 0,
+        tax_amount: 0,
+        total: 0,
+        calculated_total: 0,
+        taxable_amount: 0,
+    })),
+    total_quantity: 0,
+    subtotal_amount: 0,
+    tax_amount: 0,
+    total_amount: 0,
+    final_amount: 0,
+    cgst_amount: 0,
+    sgst_amount: 0,
+    igst_amount: 0,
+    gst_type: '',
+    calculatedLineItems: [],
+});
+
 // ==================== MAIN HOOK ====================
 
 export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
@@ -194,6 +257,19 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
     const [showImportModal, setShowImportModal] = useState(false);
     const [newProductName, setNewProductName] = useState('');
     const calculationRequestRef = useRef(0);
+    const [calculationState, setCalculationState] = useState<SalesOrderCalculationState>({
+        status: 'incomplete',
+        fingerprint: '',
+        error: '',
+    });
+    const calculationFingerprint = useMemo(
+        () => salesOrderCalculationFingerprint(order),
+        [order],
+    );
+    const calculationFingerprintRef = useRef(calculationFingerprint);
+    calculationFingerprintRef.current = calculationFingerprint;
+    const orderRef = useRef(order);
+    orderRef.current = order;
 
     useEffect(() => {
         if (businessDate) {
@@ -209,52 +285,32 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
         }
     }, [businessDate, businessDateError, businessDateLoading]);
 
-    // Recalculate totals
-    const recalculateTotals = useCallback(async (
-        items: OrderItem[],
-        sourceOrder: Order = order,
-    ): Promise<void> => {
+    // One fingerprint owns one authoritative result. Any draft change makes the
+    // previous result stale immediately, before this effect starts its request.
+    useEffect(() => {
         const requestId = ++calculationRequestRef.current;
-        const orderData = {
-            ...sourceOrder,
-            items,
-        };
-        if (!items || items.length === 0 || !isSalesOrderPreviewReady(orderData)) {
-            setOrder(prev => ({
-                ...prev,
-                items: items.map(item => ({
-                    ...item,
-                    subtotal: 0,
-                    discount_amount: 0,
-                    tax_amount: 0,
-                    total: 0,
-                    calculated_total: 0,
-                    taxable_amount: 0,
-                })),
-                total_quantity: 0,
-                subtotal_amount: 0,
-                tax_amount: 0,
-                total_amount: 0,
-                final_amount: 0,
-                cgst_amount: 0,
-                sgst_amount: 0,
-                igst_amount: 0,
-                gst_type: '',
-                calculatedLineItems: [],
-            }));
+        const orderData = orderRef.current;
+        const fingerprint = calculationFingerprint;
+        if (!orderData.items.length || !isSalesOrderPreviewReady(orderData)) {
+            setCalculationState({ status: 'incomplete', fingerprint, error: '' });
+            setOrder(clearSalesOrderCalculation);
             return;
         }
 
-        try {
-            const result = await calculateSalesOrderPreview(orderData, true);
-
-            if (requestId !== calculationRequestRef.current) {
-                return;
+        setCalculationState({ status: 'pending', fingerprint, error: '' });
+        setOrder(clearSalesOrderCalculation);
+        void calculateSalesOrderPreview(orderData, true).then(result => {
+            if (requestId !== calculationRequestRef.current
+                || calculationFingerprintRef.current !== fingerprint) return;
+            if (!result?.totals || !result.gst_type
+                || !Array.isArray(result.items)
+                || result.items.length !== orderData.items.length) {
+                throw new Error('The server returned an incomplete authoritative sales-order preview.');
             }
-
-            if (result && result.totals) {
-                const formattedTotals = result.totals;
-                const updatedItems = items.map((item, index) => {
+            const formattedTotals = result.totals;
+            setOrder(prev => {
+                if (salesOrderCalculationFingerprint(prev) !== fingerprint) return prev;
+                const updatedItems = prev.items.map((item, index) => {
                     const calculatedLineItem = result.items && result.items[index];
                     if (calculatedLineItem) {
                         return {
@@ -269,12 +325,11 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
                     }
                     return item;
                 });
-
-                setOrder(prev => ({
+                return {
                     ...prev,
                     items: updatedItems,
                     total_quantity: addExactDecimals(
-                        items.map(item => item.quantity),
+                        prev.items.map(item => item.quantity),
                         'Sales order total quantity',
                         { scale: 6, maximumWholeDigits: 14 },
                     ),
@@ -288,16 +343,34 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
                     igst_amount: formattedTotals.igst_amount,
                     gst_type: result.gst_type,
                     calculatedLineItems: result.items
-                }));
-            }
-        } catch (error) {
-            if (requestId !== calculationRequestRef.current) {
+                };
+            });
+            setCalculationState({ status: 'authoritative', fingerprint, error: '' });
+        }).catch(error => {
+            if (requestId !== calculationRequestRef.current
+                || calculationFingerprintRef.current !== fingerprint) {
                 return;
             }
             console.error('Calculation error:', error);
-            toast.error('Unable to calculate order totals. Please review the entered item values.');
-        }
-    }, [order]);
+            const reason = error instanceof Error && error.message
+                ? `Unable to calculate authoritative order totals: ${error.message}`
+                : 'Unable to calculate authoritative order totals. Review the item values and retry.';
+            setCalculationState({ status: 'error', fingerprint, error: reason });
+            toast.error(reason);
+        });
+    }, [calculationFingerprint]); // order calculation inputs are represented by the fingerprint
+
+    const calculationStatus: SalesOrderCalculationStatus =
+        calculationState.fingerprint === calculationFingerprint
+            ? calculationState.status
+            : isSalesOrderPreviewReady(order) ? 'pending' : 'incomplete';
+    const calculationUnavailableReason = calculationStatus === 'authoritative'
+        ? ''
+        : calculationStatus === 'pending'
+            ? 'Calculating authoritative tax and totals for your latest changes…'
+            : calculationStatus === 'error'
+                ? calculationState.error
+                : 'Complete the customer and all product quantity, rate, discount, and tax fields to calculate authoritative totals.';
 
     // Handle customer selection
     const handleCustomerSelect = useCallback(async (customer: Customer | null): Promise<void> => {
@@ -411,7 +484,6 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
                     : item
             );
             setOrder(prev => ({ ...prev, items: updatedItems }));
-            recalculateTotals(updatedItems);
         } else {
             const quantity = normalizeExactDecimal(
                 product.quantity ?? '1.000000',
@@ -458,9 +530,8 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
 
             const updatedItems = [...order.items, newItem];
             setOrder(prev => ({ ...prev, items: updatedItems }));
-            recalculateTotals(updatedItems);
         }
-    }, [order.items, recalculateTotals]);
+    }, [order.items]);
 
     // Handle import
     const handleImport = useCallback((importData: ImportData): void => {
@@ -526,8 +597,7 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
 
         setSelectedCustomer(importedCustomer);
         setOrder(importedOrder);
-        void recalculateTotals(formattedItems, importedOrder);
-    }, [order, recalculateTotals]);
+    }, [order]);
 
     // Update item
     const updateItem = useCallback((index: number, field: string, value: unknown): void => {
@@ -541,15 +611,13 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
         });
 
         setOrder(prev => ({ ...prev, items: updatedItems }));
-        recalculateTotals(updatedItems);
-    }, [order.items, recalculateTotals]);
+    }, [order.items]);
 
     // Remove item
     const removeItem = useCallback((index: number): void => {
         const updatedItems = order.items.filter((_, i) => i !== index);
         setOrder(prev => ({ ...prev, items: updatedItems }));
-        recalculateTotals(updatedItems);
-    }, [order.items, recalculateTotals]);
+    }, [order.items]);
 
     // Update item quantity
     const updateItemQuantity = useCallback((itemId: number | string, newQuantity: number): void => {
@@ -564,10 +632,17 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
         );
 
         setOrder(prev => ({ ...prev, items: updatedItems }));
-        recalculateTotals(updatedItems);
-    }, [order.items, removeItem, recalculateTotals]);
+    }, [order.items, removeItem]);
 
-    const saveOrder = handleSaveOrder;
+    const saveOrder = useCallback(async (): Promise<void> => {
+        if (calculationUnavailableReason) {
+            setMessage(calculationUnavailableReason);
+            setMessageType(calculationStatus === 'error' ? 'error' : 'warning');
+            toast.error(calculationUnavailableReason);
+            return;
+        }
+        await handleSaveOrder();
+    }, [calculationStatus, calculationUnavailableReason, handleSaveOrder]);
 
     // Print order
     const printOrder = useCallback((): void => {
@@ -621,6 +696,8 @@ Expected Delivery: ${order.expected_delivery_date}
         setSameAsBilling,
         saving: submissionSaving,
         submissionUnavailableReason,
+        calculationStatus,
+        calculationUnavailableReason,
         preparedPreview,
         reviewOpen,
         message,

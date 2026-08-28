@@ -6,6 +6,8 @@ import {
 import { apiClient } from '../../../../services/api';
 import { useSalesOrderLogic } from './useSalesOrderLogic';
 
+const mockHandleSaveOrder = jest.fn();
+
 jest.mock('react-toastify', () => ({
     toast: { error: jest.fn(), warning: jest.fn() },
 }));
@@ -30,7 +32,7 @@ jest.mock('./useSalesOrderSave', () => ({
     useSalesOrderSave: () => ({
         saving: false,
         submissionUnavailableReason: 'Unavailable in test',
-        handleSaveOrder: jest.fn(),
+        handleSaveOrder: mockHandleSaveOrder,
     }),
 }));
 jest.mock('../../../../services/calculations/salesOrderCalculationService', () => ({
@@ -49,6 +51,7 @@ const mockedApiGet = apiClient.get as jest.MockedFunction<typeof apiClient.get>;
 describe('useSalesOrderLogic canonical import calculation', () => {
     beforeEach(() => {
         jest.clearAllMocks();
+        mockHandleSaveOrder.mockReset();
         mockedApiGet.mockReset();
         mockedPreviewReady.mockImplementation(candidate => (
             Number(candidate.items[0]?.quantity ?? 0) > 0
@@ -104,6 +107,108 @@ describe('useSalesOrderLogic canonical import calculation', () => {
             free_quantity: '0.000000',
             free_supply_tax_treatment: 'excluded_from_taxable_value',
         }));
+        expect(result.current.calculationStatus).toBe('authoritative');
+        expect(result.current.calculationUnavailableReason).toBe('');
+    });
+
+    it('ignores an older calculation that resolves after the current draft', async () => {
+        let resolveFirst!: (value: any) => void;
+        let resolveSecond!: (value: any) => void;
+        mockedPreview
+            .mockImplementationOnce(() => new Promise(resolve => { resolveFirst = resolve; }))
+            .mockImplementationOnce(() => new Promise(resolve => { resolveSecond = resolve; }));
+        const { result } = renderHook(() => useSalesOrderLogic());
+
+        act(() => result.current.handleProductSelect({
+            product_id: '10000000-0000-7000-8000-000000000002',
+            product_name: 'Canonical Carton',
+            batch_id: '10000000-0000-7000-8000-000000000003',
+            batch_number: 'BATCH-1',
+            branch_id: '10000000-0000-7000-8000-000000000004',
+            location_id: '10000000-0000-7000-8000-000000000005',
+            uom_conversion_id: '10000000-0000-7000-8000-000000000006',
+            quantity: '1.000000', sale_price: '100.0000', mrp: '120.0000',
+            gst_percent: '12.000000',
+        } as any));
+        await waitFor(() => expect(mockedPreview).toHaveBeenCalledTimes(1));
+        expect(result.current.calculationStatus).toBe('pending');
+
+        act(() => result.current.updateItem(0, 'quantity', '2.000000'));
+        await waitFor(() => expect(mockedPreview).toHaveBeenCalledTimes(2));
+        await act(async () => resolveSecond({
+            items: [{ subtotal: '400.00', discount_amount: '0.00', gst_amount: '48.00', total_amount: '448.00', taxable_amount: '400.00' }],
+            totals: { subtotal_amount: '400.00', discount_amount: '0.00', total_tax_amount: '48.00', final_amount: '448.00', cgst_amount: '0.00', sgst_amount: '0.00', igst_amount: '48.00' },
+            gst_type: 'IGST',
+        }));
+        await waitFor(() => expect(result.current.calculationStatus).toBe('authoritative'));
+        expect(result.current.order.total_amount).toBe('448.00');
+        expect(result.current.order.gst_type).toBe('IGST');
+
+        await act(async () => resolveFirst({
+            items: [{ subtotal: '100.00', discount_amount: '0.00', gst_amount: '12.00', total_amount: '112.00', taxable_amount: '100.00' }],
+            totals: { subtotal_amount: '100.00', discount_amount: '0.00', total_tax_amount: '12.00', final_amount: '112.00', cgst_amount: '6.00', sgst_amount: '6.00', igst_amount: '0.00' },
+            gst_type: 'CGST/SGST',
+        }));
+        expect(result.current.order.total_amount).toBe('448.00');
+        expect(result.current.order.gst_type).toBe('IGST');
+        expect(result.current.order.items[0].quantity).toBe('2.000000');
+    });
+
+    it('refuses immediate posting until the current calculation becomes authoritative', async () => {
+        let resolvePreview!: (value: any) => void;
+        mockedPreview.mockImplementationOnce(() => new Promise(resolve => { resolvePreview = resolve; }));
+        const { result } = renderHook(() => useSalesOrderLogic());
+
+        act(() => result.current.handleProductSelect({
+            product_id: '10000000-0000-7000-8000-000000000002',
+            product_name: 'Canonical Carton',
+            batch_id: '10000000-0000-7000-8000-000000000003',
+            batch_number: 'BATCH-1',
+            branch_id: '10000000-0000-7000-8000-000000000004',
+            location_id: '10000000-0000-7000-8000-000000000005',
+            uom_conversion_id: '10000000-0000-7000-8000-000000000006',
+            quantity: '1.000000', sale_price: '100.0000', mrp: '120.0000',
+            gst_percent: '12.000000',
+        } as any));
+        await waitFor(() => expect(result.current.calculationStatus).toBe('pending'));
+
+        await act(async () => result.current.saveOrder());
+        expect(mockHandleSaveOrder).not.toHaveBeenCalled();
+        expect(result.current.message).toMatch(/calculating authoritative tax and totals/i);
+
+        await act(async () => resolvePreview({
+            items: [{ subtotal: '200.00', discount_amount: '0.00', gst_amount: '24.00', total_amount: '224.00', taxable_amount: '200.00' }],
+            totals: { subtotal_amount: '200.00', discount_amount: '0.00', total_tax_amount: '24.00', final_amount: '224.00', cgst_amount: '12.00', sgst_amount: '12.00', igst_amount: '0.00' },
+            gst_type: 'CGST/SGST',
+        }));
+        await waitFor(() => expect(result.current.calculationStatus).toBe('authoritative'));
+        await act(async () => result.current.saveOrder());
+        expect(mockHandleSaveOrder).toHaveBeenCalledTimes(1);
+    });
+
+    it('surfaces a current calculation failure and keeps posting blocked', async () => {
+        mockedPreview.mockRejectedValueOnce(new Error('canonical calculator unavailable'));
+        const { result } = renderHook(() => useSalesOrderLogic());
+        act(() => result.current.handleProductSelect({
+            product_id: '10000000-0000-7000-8000-000000000002',
+            product_name: 'Canonical Carton',
+            batch_id: '10000000-0000-7000-8000-000000000003',
+            batch_number: 'BATCH-1',
+            branch_id: '10000000-0000-7000-8000-000000000004',
+            location_id: '10000000-0000-7000-8000-000000000005',
+            uom_conversion_id: '10000000-0000-7000-8000-000000000006',
+            quantity: '1.000000', sale_price: '100.0000', mrp: '120.0000',
+            gst_percent: '12.000000',
+        } as any));
+
+        await waitFor(() => expect(result.current.calculationStatus).toBe('error'));
+        expect(result.current.calculationUnavailableReason).toMatch(
+            /canonical calculator unavailable/i,
+        );
+        expect(result.current.order.gst_type).toBe('');
+        expect(result.current.order.total_amount).toBe(0);
+        await act(async () => result.current.saveOrder());
+        expect(mockHandleSaveOrder).not.toHaveBeenCalled();
     });
 
     it('replaces raw address network errors and clears them after a successful retry', async () => {

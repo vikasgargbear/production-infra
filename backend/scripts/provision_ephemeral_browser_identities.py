@@ -2090,14 +2090,15 @@ def _resolve_core_sales_fixture(cursor) -> str:
                product.id::text,
                conversion.id::text,
                eligible.batch_id::text,
-               shipping.state_code
+               shipping.id::text,
+               shipping.row_version::text
           FROM core.organizations AS organization
           JOIN core.branches AS branch
             ON branch.org_id=organization.id AND branch.id=%s AND branch.status='active'
           JOIN parties.customer_accounts AS customer
             ON customer.org_id=organization.id AND customer.id=%s AND customer.status='active'
           JOIN LATERAL (
-              SELECT address.state_code,address.address_kind
+              SELECT address.id,address.row_version,address.address_kind
                 FROM parties.addresses AS address
                WHERE address.org_id=customer.org_id AND address.party_id=customer.party_id
                  AND address.is_primary AND address.status='active'
@@ -2153,7 +2154,15 @@ def _resolve_core_sales_fixture(cursor) -> str:
         raise EphemeralIdentityError(
             "Canonical staging did not resolve exactly one usable sales-chain fixture"
         )
-    branch_id, customer_id, product_id, conversion_id, batch_id, state_code = rows[0]
+    (
+        branch_id,
+        customer_id,
+        product_id,
+        conversion_id,
+        batch_id,
+        delivery_address_id,
+        delivery_address_row_version,
+    ) = rows[0]
     return json.dumps(
         {
             "branch_id": branch_id,
@@ -2161,10 +2170,11 @@ def _resolve_core_sales_fixture(cursor) -> str:
             "product_id": product_id,
             "uom_conversion_id": conversion_id,
             "expected_fefo_batch_id": batch_id,
+            "delivery_address_id": delivery_address_id,
+            "delivery_address_row_version": delivery_address_row_version,
             "billed_quantity": "1.000000",
             "free_quantity": "0.000000",
             "unit_rate": "84.0000",
-            "place_of_supply_state_code": state_code,
         },
         separators=(",", ":"),
         sort_keys=True,
