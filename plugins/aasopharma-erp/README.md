@@ -41,6 +41,9 @@ account on another ChatGPT surface.
 - Read tools return canonical UUIDs and authoritative records.
 - Write requests use prepare → review → approve → execute and expose the command
   UUID; no direct or apparent-success write path is accepted.
+- Reversible product create/setup tools share the browser's canonical setup
+  contract, require explicit user confirmation, and never add/release a product
+  for transactions; final **Add product** remains a UI review action.
 - Cross-tenant, stale, duplicate, and unauthorized requests fail closed.
 - No WhatsApp, email, SMS, or telephone action is sent by this plugin.
 

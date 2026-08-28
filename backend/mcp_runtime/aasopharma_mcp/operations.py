@@ -12,12 +12,15 @@ from mcp.server.auth.provider import AccessToken
 
 from .config import Settings
 from .operator_actions import (
+    DECIMAL_PATTERN,
     IDEMPOTENCY_KEY_PATTERN,
     MONEY_PATTERN,
     PREPARE_ACTIONS,
     PUBLISHED_PREPARE_TOOL_NAMES,
     SHARED_ACTION_SCHEMAS,
 )
+
+SIGNED_DECIMAL_PATTERN = r"^-?(?:0|[1-9][0-9]{0,13})(?:\.[0-9]{1,6})?$"
 
 
 class AuthorizationDenied(RuntimeError):
@@ -68,6 +71,24 @@ OPERATIONS = {
     "erp_product_search": Operation(
         "master.products.search", "erp_product_search", "/api/internal/mcp/reads/products",
         "catalog.product.manage", 100,
+    ),
+    "erp_product_setup_options_get": Operation(
+        "master.product_setup_options.get", "erp_product_setup_options_get",
+        "/api/internal/mcp/reads/product-setup-options", "catalog.product.manage", 250,
+    ),
+    "erp_product_ingredient_search": Operation(
+        "master.product_ingredients.search", "erp_product_ingredient_search",
+        "/api/internal/mcp/reads/product-ingredients", "catalog.product.manage", 50,
+        records_field="ingredients",
+    ),
+    "erp_product_hsn_search": Operation(
+        "master.product_hsn.search", "erp_product_hsn_search",
+        "/api/internal/mcp/reads/product-hsn", "catalog.product.manage", 50,
+        records_field="hsn_codes",
+    ),
+    "erp_product_setup_get": Operation(
+        "master.product_setup.get", "erp_product_setup_get",
+        "/api/internal/mcp/reads/product-setup", "catalog.product.manage", 1,
     ),
     "erp_supplier_search": Operation(
         "master.suppliers.search", "erp_supplier_search", "/api/internal/mcp/reads/suppliers",
@@ -240,11 +261,70 @@ MASTER_CREATE_SCHEMAS: Mapping[str, Mapping[str, Any]] = {
     ),
 }
 
+
+PRODUCT_SETUP_SCHEMA: Mapping[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "product_id": {"type": "string", "format": "uuid"},
+        "idempotency_key": {
+            "type": "string", "pattern": IDEMPOTENCY_KEY_PATTERN,
+            "description": "Stable caller key for exact replay of this setup request.",
+        },
+        "row_version": {"type": "integer", "minimum": 1},
+        "category_id": {"type": "string", "format": "uuid"},
+        "manufacturer_party_id": {"type": "string", "format": "uuid"},
+        "base_uom_code": {"type": "string", "minLength": 1, "maxLength": 16},
+        "dosage_form": {"type": "string", "maxLength": 64},
+        "strength_display": {"type": "string", "maxLength": 128},
+        "hsn_code": {"type": "string", "pattern": r"^[0-9]{4,8}$"},
+        "cold_chain_required": {"type": "boolean"},
+        "minimum_storage_celsius": {"type": "string", "pattern": SIGNED_DECIMAL_PATTERN},
+        "maximum_storage_celsius": {"type": "string", "pattern": SIGNED_DECIMAL_PATTERN},
+        "shelf_life_days": {"type": "integer", "minimum": 1, "maximum": 36500},
+        "gtin": {"type": "string", "pattern": r"^[0-9]{8,14}$"},
+        "pack_conversions": {
+            "type": "array", "maxItems": 12,
+            "items": {
+                "type": "object", "additionalProperties": False,
+                "properties": {
+                    "uom_code": {"type": "string", "minLength": 1, "maxLength": 16},
+                    "multiplier": {"type": "string", "pattern": DECIMAL_PATTERN},
+                },
+                "required": ["uom_code", "multiplier"],
+            },
+        },
+        "ingredients": {
+            "type": "array", "maxItems": 32,
+            "items": {
+                "type": "object", "additionalProperties": False,
+                "properties": {
+                    "ingredient_id": {"type": "string", "format": "uuid"},
+                    "ingredient_role": {"type": "string", "enum": ["active", "excipient"]},
+                    "strength_value": {"type": "string", "pattern": DECIMAL_PATTERN},
+                    "strength_uom_code": {"type": "string", "maxLength": 16},
+                    "basis_quantity": {"type": "string", "pattern": DECIMAL_PATTERN},
+                    "basis_uom_code": {"type": "string", "maxLength": 16},
+                },
+                "required": ["ingredient_id", "ingredient_role"],
+            },
+        },
+    },
+    "required": [
+        "product_id", "idempotency_key", "row_version", "manufacturer_party_id",
+        "base_uom_code", "hsn_code",
+    ],
+}
+
 OPERATOR_OPERATIONS.update(
     {
         "erp_product_create": OperatorOperation(
             "erp_product_create", "catalog.product_draft.create",
             MASTER_CREATE_SCHEMAS["erp_product_create"], "master_write",
+        ),
+        "erp_product_setup": OperatorOperation(
+            "erp_product_setup", "catalog.product_draft.configure",
+            PRODUCT_SETUP_SCHEMA, "master_write",
         ),
         "erp_customer_create": OperatorOperation(
             "erp_customer_create", "parties.customer.create",
@@ -552,6 +632,7 @@ class OperationGateway:
             method = "POST"
             path = {
                 "catalog.product_draft.create": "/api/internal/mcp/master/products",
+                "catalog.product_draft.configure": "/api/internal/mcp/master/products/setup",
                 "parties.customer.create": "/api/internal/mcp/master/customers",
                 "parties.supplier.create": "/api/internal/mcp/master/suppliers",
             }[operation.operation_key]

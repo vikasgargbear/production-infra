@@ -1,9 +1,11 @@
-"""Delegated MCP adapters for canonical master creation commands."""
+"""Delegated MCP adapters for canonical master-data write commands."""
 
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import ConfigDict, Field
@@ -17,13 +19,14 @@ from ...schemas.master.customer import CanonicalCustomerCreate
 from ...schemas.master.supplier import CanonicalSupplierCreate
 from ..canonical_erp_reads import (
     CanonicalProductDraftCreate,
+    CanonicalProductSetupWrite,
     _execute_canonical_customer_create,
     _execute_canonical_product_create,
     _execute_canonical_supplier_create,
     _raise_master_create_database_error,
 )
 from .mcp_actions import get_action_context
-from .mcp_master_contract import master_create_policy_for
+from .mcp_master_contract import master_write_policy_for
 
 
 router = APIRouter(
@@ -32,6 +35,14 @@ router = APIRouter(
 
 
 class MCPProductDraftCreate(CanonicalProductDraftCreate):
+    idempotency_key: str = Field(
+        min_length=8, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$"
+    )
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+
+class MCPProductSetup(CanonicalProductSetupWrite):
+    product_id: UUID
     idempotency_key: str = Field(
         min_length=8, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$"
     )
@@ -53,7 +64,7 @@ class MCPSupplierCreate(CanonicalSupplierCreate):
 
 
 def _require_master_authority(context: ActionContext, operation_key: str) -> None:
-    policy = master_create_policy_for(operation_key)
+    policy = master_write_policy_for(operation_key)
     if (
         policy is None
         or context.operation_key != operation_key
@@ -82,7 +93,7 @@ def _activate_master_context(db: Session, context: ActionContext) -> None:
     )
 
 
-def _run_master_create(
+def _run_master_write(
     db: Session,
     context: ActionContext,
     operation_key: str,
@@ -99,6 +110,57 @@ def _run_master_create(
         _raise_master_create_database_error(exc)
 
 
+def _execute_idempotent_product_setup(
+    db: Session,
+    context: ActionContext,
+    request: MCPProductSetup,
+    setup: CanonicalProductSetupWrite,
+) -> dict[str, Any]:
+    configured = db.execute(
+        text("""
+            SELECT product_id,product_code,product_name,new_row_version,
+                   idempotency_replayed
+              FROM erp_master_commands.configure_product_draft_idempotent(
+                :org_id,:product_id,:row_version,:category_id,
+                :manufacturer_party_id,:base_uom_code,:dosage_form,
+                :strength_display,:hsn_code,:cold_chain_required,
+                :minimum_storage_celsius,:maximum_storage_celsius,
+                :shelf_life_days,:gtin,CAST(:pack_conversions AS jsonb),
+                CAST(:ingredients AS jsonb),:idempotency_key_hash,
+                transaction_timestamp()+interval '24 hours'
+              )
+        """),
+        {
+            "org_id": context.organization_id,
+            "product_id": request.product_id,
+            "row_version": setup.row_version,
+            "category_id": setup.category_id,
+            "manufacturer_party_id": setup.manufacturer_party_id,
+            "base_uom_code": setup.base_uom_code,
+            "dosage_form": setup.dosage_form,
+            "strength_display": setup.strength_display,
+            "hsn_code": setup.hsn_code,
+            "cold_chain_required": setup.cold_chain_required,
+            "minimum_storage_celsius": setup.minimum_storage_celsius,
+            "maximum_storage_celsius": setup.maximum_storage_celsius,
+            "shelf_life_days": setup.shelf_life_days,
+            "gtin": setup.gtin,
+            "pack_conversions": json.dumps(
+                [item.model_dump(mode="json") for item in setup.pack_conversions],
+                separators=(",", ":"), sort_keys=True,
+            ),
+            "ingredients": json.dumps(
+                [item.model_dump(mode="json") for item in setup.ingredients],
+                separators=(",", ":"), sort_keys=True,
+            ),
+            "idempotency_key_hash": hashlib.sha256(
+                request.idempotency_key.encode("utf-8")
+            ).digest(),
+        },
+    ).mappings().one()
+    return dict(configured)
+
+
 @router.post("/products")
 def create_product_draft(
     request: MCPProductDraftCreate,
@@ -108,7 +170,7 @@ def create_product_draft(
     product = CanonicalProductDraftCreate.model_validate(
         request.model_dump(exclude={"idempotency_key"})
     )
-    return _run_master_create(
+    return _run_master_write(
         db,
         context,
         "catalog.product_draft.create",
@@ -116,6 +178,32 @@ def create_product_draft(
             db, context.organization_id, product, request.idempotency_key
         ),
     )
+
+
+@router.post("/products/setup")
+def configure_product_draft(
+    request: MCPProductSetup,
+    context: ActionContext = Depends(get_action_context),
+    db: Session = Depends(get_db),
+):
+    setup = CanonicalProductSetupWrite.model_validate(
+        request.model_dump(exclude={"product_id", "idempotency_key"})
+    )
+    configured = _run_master_write(
+        db,
+        context,
+        "catalog.product_draft.configure",
+        lambda: _execute_idempotent_product_setup(db, context, request, setup),
+    )
+    return {
+        "product_id": configured["product_id"],
+        "product_code": configured["product_code"],
+        "product_name": configured["product_name"],
+        "row_version": configured["new_row_version"],
+        "idempotency_replayed": configured["idempotency_replayed"],
+        "lifecycle_status": "draft",
+        "message": "Product details saved for review",
+    }
 
 
 @router.post("/customers")
@@ -127,7 +215,7 @@ def create_customer(
     customer = CanonicalCustomerCreate.model_validate(
         request.model_dump(exclude={"idempotency_key"})
     )
-    return _run_master_create(
+    return _run_master_write(
         db,
         context,
         "parties.customer.create",
@@ -146,7 +234,7 @@ def create_supplier(
     supplier = CanonicalSupplierCreate.model_validate(
         request.model_dump(exclude={"idempotency_key"})
     )
-    return _run_master_create(
+    return _run_master_write(
         db,
         context,
         "parties.supplier.create",

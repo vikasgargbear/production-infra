@@ -62,7 +62,7 @@ def test_master_code_migration_is_hash_bound_linear_and_deployed() -> None:
         "master_code_deployment_contract",
     )
     assert onboarding_revision.revision == "20260826_0028"
-    assert deployment.EXPECTED_CANONICAL_ALEMBIC_HEAD == "20260828_0049"
+    assert deployment.EXPECTED_CANONICAL_ALEMBIC_HEAD == "20260829_0050"
 
 
 def test_generated_authority_manifest_is_exact_and_post_baseline() -> None:
@@ -248,19 +248,32 @@ def test_rest_and_mcp_share_canonical_master_command_helpers() -> None:
         assert rest_source.count(helper_name) >= 2
         assert mcp_source.count(helper_name) >= 2
         assert f"erp_master_commands.{command_name}" in rest_source
-    assert "erp_master_commands." not in mcp_source
+    assert rest_source.count("_execute_canonical_product_setup") >= 2
+    assert "canonical_write_commands.configure_product_draft" in rest_source
+    assert "CanonicalProductSetupWrite" in mcp_source
+    assert "configure_product_draft_idempotent" in mcp_source
+    idempotent_setup_sql = (
+        ROOT / "backend/alembic/sql/20260829_0050_mcp_product_setup_idempotency.sql"
+    ).read_text(encoding="utf-8")
+    assert "FROM erp_master_commands.configure_product_draft(" in idempotent_setup_sql
+    assert "erp_core_commands.claim(" in idempotent_setup_sql
+    assert "erp_core_commands.finish_claim(" in idempotent_setup_sql
+    assert mcp_source.count("erp_master_commands.") == 1
+    assert "erp_master_commands.create_product_draft" not in mcp_source
+    assert "erp_master_commands.configure_product_draft(" not in mcp_source
     assert "INSERT INTO catalog.products" not in mcp_source
     assert "INSERT INTO parties.customer_accounts" not in mcp_source
     assert "INSERT INTO parties.supplier_accounts" not in mcp_source
 
-    assert set(mcp_master_contract.MASTER_CREATE_POLICIES) == {
+    assert set(mcp_master_contract.MASTER_WRITE_POLICIES) == {
         "catalog.product_draft.create",
+        "catalog.product_draft.configure",
         "parties.customer.create",
         "parties.supplier.create",
     }
     assert all(
         policy.branch_fields == () and policy.risk_class == "reversible_write"
-        for policy in mcp_master_contract.MASTER_CREATE_POLICIES.values()
+        for policy in mcp_master_contract.MASTER_WRITE_POLICIES.values()
     )
 
 
@@ -306,6 +319,95 @@ def test_mcp_master_create_contract_rejects_code_injection(model, payload, field
     with pytest.raises(ValidationError) as error:
         model.model_validate(payload)
     assert any(item["loc"] == (field,) for item in error.value.errors())
+
+
+def test_mcp_product_setup_reuses_exact_browser_setup_contract() -> None:
+    product_id = "33333333-3333-7333-8333-333333333333"
+    manufacturer_id = "44444444-4444-7444-8444-444444444444"
+    payload = {
+        "product_id": product_id,
+        "idempotency_key": "mcp-product-setup-0001",
+        "row_version": 1,
+        "manufacturer_party_id": manufacturer_id,
+        "base_uom_code": "EA",
+        "hsn_code": "3004",
+        "dosage_form": "Tablet",
+        "strength_display": "500 mg",
+        "pack_conversions": [{"uom_code": "STRIP", "multiplier": "10"}],
+        "ingredients": [],
+    }
+
+    mcp_setup = mcp_master_commands.MCPProductSetup.model_validate(payload)
+    browser_setup = canonical_erp_reads.CanonicalProductSetupWrite.model_validate(
+        mcp_setup.model_dump(exclude={"product_id", "idempotency_key"})
+    )
+
+    assert str(mcp_setup.product_id) == product_id
+    assert browser_setup.model_dump(mode="json") == {
+        "row_version": 1,
+        "category_id": None,
+        "manufacturer_party_id": manufacturer_id,
+        "base_uom_code": "EA",
+        "dosage_form": "Tablet",
+        "strength_display": "500 mg",
+        "hsn_code": "3004",
+        "cold_chain_required": False,
+        "minimum_storage_celsius": None,
+        "maximum_storage_celsius": None,
+        "shelf_life_days": None,
+        "gtin": None,
+        "pack_conversions": [{"uom_code": "STRIP", "multiplier": "10"}],
+        "ingredients": [],
+    }
+
+
+def test_mcp_product_create_and_setup_handlers_return_the_write_result(monkeypatch) -> None:
+    calls = []
+
+    def run(db, context, operation_key, execute):
+        calls.append((db, context, operation_key, execute))
+        if operation_key == "catalog.product_draft.create":
+            return {"product_code": "PROD-000001"}
+        return {
+            "product_id": "33333333-3333-7333-8333-333333333333",
+            "product_code": "PROD-000001",
+            "product_name": "Dolo 500",
+            "new_row_version": 2,
+            "idempotency_replayed": False,
+        }
+
+    monkeypatch.setattr(mcp_master_commands, "_run_master_write", run)
+    context = object()
+    db = object()
+    created = mcp_master_commands.create_product_draft(
+        mcp_master_commands.MCPProductDraftCreate.model_validate({
+            "product_name": "Dolo 500",
+            "product_kind": "medicine",
+            "idempotency_key": "mcp-product-create-0001",
+        }),
+        context,
+        db,
+    )
+    configured = mcp_master_commands.configure_product_draft(
+        mcp_master_commands.MCPProductSetup.model_validate({
+            "product_id": "33333333-3333-7333-8333-333333333333",
+            "idempotency_key": "mcp-product-setup-0001",
+            "row_version": 1,
+            "manufacturer_party_id": "44444444-4444-7444-8444-444444444444",
+            "base_uom_code": "EA",
+            "hsn_code": "3004",
+        }),
+        context,
+        db,
+    )
+
+    assert created == {"product_code": "PROD-000001"}
+    assert configured["message"] == "Product details saved for review"
+    assert configured["lifecycle_status"] == "draft"
+    assert [item[2] for item in calls] == [
+        "catalog.product_draft.create",
+        "catalog.product_draft.configure",
+    ]
 
 
 def test_unknown_database_failure_is_not_mislabeled_as_a_conflict() -> None:

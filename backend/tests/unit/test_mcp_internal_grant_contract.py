@@ -155,6 +155,10 @@ def test_exact_canonical_read_allowlist_has_no_write_or_generic_route():
         "finance.profit_loss.get",
         "finance.customer_activity.get",
         "master.products.search",
+        "master.product_setup_options.get",
+        "master.product_ingredients.search",
+        "master.product_hsn.search",
+        "master.product_setup.get",
         "master.suppliers.search",
         "gst.settings.get",
     }
@@ -170,6 +174,10 @@ def test_exact_canonical_read_allowlist_has_no_write_or_generic_route():
         "/internal/mcp/reads/profit-loss",
         "/internal/mcp/reads/customer-activity",
         "/internal/mcp/reads/products",
+        "/internal/mcp/reads/product-setup-options",
+        "/internal/mcp/reads/product-ingredients",
+        "/internal/mcp/reads/product-hsn",
+        "/internal/mcp/reads/product-setup",
         "/internal/mcp/reads/suppliers",
         "/internal/mcp/reads/gst-settings",
     }
@@ -216,7 +224,7 @@ def test_isolated_gateway_registry_matches_canonical_backend_contract():
         assert isinstance(tool_node, ast.Constant) and isinstance(operation_node, ast.Call)
         gateway[tool_node.value] = tuple(ast.literal_eval(argument) for argument in operation_node.args)
 
-    assert len(gateway) == 20
+    assert len(gateway) == 24
     assert {values[0] for values in gateway.values()} == set(
         ALL_CANONICAL_READ_POLICIES
     )
@@ -553,6 +561,60 @@ def test_three_hidden_reads_query_only_canonical_tables_with_bounds():
     assert gst["gstin"] == "27ABCDE1234F1Z5"
     assert "FROM tax.registrations" in gst_db.calls[0][0]
     assert gst_db.calls[0][1]["branch_id"] == branch_id
+
+
+def test_product_setup_reads_reuse_the_browser_canonical_contract(monkeypatch):
+    product_id = uuid4()
+    captured = []
+
+    monkeypatch.setattr(
+        mcp_canonical_reads.canonical_erp_reads,
+        "product_setup_options",
+        lambda manufacturer_search, user, db: captured.append(
+            ("options", manufacturer_search, user["org_id"], db)
+        ) or {"units": [], "manufacturers": []},
+    )
+    monkeypatch.setattr(
+        mcp_canonical_reads.canonical_erp_reads,
+        "product_setup_ingredients",
+        lambda search, limit, user, db: captured.append(
+            ("ingredients", search, limit, user["org_id"], db)
+        ) or [],
+    )
+    monkeypatch.setattr(
+        mcp_canonical_reads.canonical_erp_reads,
+        "product_setup_hsn_codes",
+        lambda search, limit, user, db: captured.append(
+            ("hsn", search, limit, user["org_id"], db)
+        ) or [],
+    )
+    monkeypatch.setattr(
+        mcp_canonical_reads.canonical_erp_reads,
+        "product_setup",
+        lambda selected_product_id, user, db: captured.append(
+            ("setup", selected_product_id, user["org_id"], db)
+        ) or {"product_id": str(selected_product_id)},
+    )
+    db = object()
+
+    options = mcp_canonical_reads.canonical_product_setup_options(
+        "micro", _context("master.product_setup_options.get"), db
+    )
+    ingredients = mcp_canonical_reads.canonical_product_ingredient_search(
+        "para", 20, _context("master.product_ingredients.search"), db
+    )
+    hsn = mcp_canonical_reads.canonical_product_hsn_search(
+        "3004", 20, _context("master.product_hsn.search"), db
+    )
+    setup = mcp_canonical_reads.canonical_product_setup_get(
+        product_id, _context("master.product_setup.get"), db
+    )
+
+    assert options == {"units": [], "manufacturers": []}
+    assert ingredients == {"ingredients": []}
+    assert hsn == {"hsn_codes": []}
+    assert setup == {"product_id": str(product_id)}
+    assert [row[0] for row in captured] == ["options", "ingredients", "hsn", "setup"]
 
 
 def test_hidden_read_rejects_cross_operation_delegation_and_ambiguous_gst():

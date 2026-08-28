@@ -22,7 +22,7 @@ from ....core.database import get_db
 from ....domain.operator_actions import ActionPolicy
 from ....domain.operator_actions import policy_for as operator_policy_for
 from .mcp_contract import policy_for
-from .mcp_master_contract import master_create_policy_for
+from .mcp_master_contract import master_write_policy_for
 router = APIRouter(
     prefix="/internal/mcp/agent-grants", tags=["Internal MCP"], include_in_schema=False
 )
@@ -625,7 +625,7 @@ def authorize_operator_action(
     _internal_auth(credentials)
     require_canonical_session_authority(db)
     _require_operator_release_gates()
-    policy = operator_policy_for(request.operation_key) or master_create_policy_for(
+    policy = operator_policy_for(request.operation_key) or master_write_policy_for(
         request.operation_key
     )
     if policy is None:

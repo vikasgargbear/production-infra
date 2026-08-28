@@ -132,6 +132,8 @@
     "backend/alembic/sql/20260828_0048_organization_operational_baseline.sql",
     "backend/alembic/versions/20260828_0049_canonical_product_setup.py",
     "backend/alembic/sql/20260828_0049_canonical_product_setup.sql",
+    "backend/alembic/versions/20260829_0050_mcp_product_setup_idempotency.py",
+    "backend/alembic/sql/20260829_0050_mcp_product_setup_idempotency.sql",
     "database/canonical/operations/automation/requester_command_status.sql",
     "backend/scripts/generate_requester_command_status_migration.py",
     "database/canonical/session_authority/generate_session_authority.py",

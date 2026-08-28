@@ -132,7 +132,9 @@ test('saves a complete product in one pass with exact familiar packing and typed
     ingredients: [{ ingredient_id: ingredientId, ingredient_role: 'active', strength_value: 500,
       strength_uom_code: 'MG', basis_quantity: 1, basis_uom_code: 'EA' }],
   })));
-  expect(await screen.findByText('Review and activate')).toBeInTheDocument();
+  expect(await screen.findByText('Review product')).toBeInTheDocument();
+  expect(screen.getAllByText('Ready to add')).toHaveLength(2);
+  expect(screen.getByRole('button', { name: 'Add product' })).toBeInTheDocument();
 });
 
 test('existing drafts stay on the compact setup page and expose immutable code without raw draft jargon', async () => {

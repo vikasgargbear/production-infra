@@ -154,6 +154,7 @@ ALLOWED_EFFECTIVE_MUTATIONS = {
     ("POST", "/api/internal/mcp/agent-grants/authorize"),
     ("POST", "/api/internal/mcp/agent-grants/authorize-action"),
     ("POST", "/api/internal/mcp/master/products"),
+    ("POST", "/api/internal/mcp/master/products/setup"),
     ("POST", "/api/internal/mcp/master/customers"),
     ("POST", "/api/internal/mcp/master/suppliers"),
     ("POST", "/api/internal/mcp/actions/{command_type}/prepare"),

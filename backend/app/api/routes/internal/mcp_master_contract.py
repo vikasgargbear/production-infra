@@ -7,12 +7,17 @@ from typing import Optional
 from ....domain.operator_actions import ActionPolicy
 
 
-MASTER_CREATE_POLICIES = {
+MASTER_WRITE_POLICIES = {
     policy.operation_key: policy
     for policy in (
         ActionPolicy(
             "catalog.product_draft.create", "catalog.product.manage",
             "reversible_write", "canonical_product_draft_create_v1",
+            "actor_confirmation", (),
+        ),
+        ActionPolicy(
+            "catalog.product_draft.configure", "catalog.product.manage",
+            "reversible_write", "canonical_product_setup_v1",
             "actor_confirmation", (),
         ),
         ActionPolicy(
@@ -29,5 +34,5 @@ MASTER_CREATE_POLICIES = {
 }
 
 
-def master_create_policy_for(operation_key: str) -> Optional[ActionPolicy]:
-    return MASTER_CREATE_POLICIES.get(operation_key)
+def master_write_policy_for(operation_key: str) -> Optional[ActionPolicy]:
+    return MASTER_WRITE_POLICIES.get(operation_key)
