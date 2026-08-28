@@ -9,6 +9,7 @@ from mcp.server.auth.middleware.auth_context import get_access_token
 from mcp.server.auth.settings import AuthSettings
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.utilities.func_metadata import ArgModelBase
+from mcp.types import ToolAnnotations
 from pydantic import AnyHttpUrl, ConfigDict, Field, create_model
 from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
@@ -19,6 +20,7 @@ from .config import Settings
 from .operations import (
     OPERATIONS,
     OPERATOR_OPERATIONS,
+    READ_ONLY_OPERATOR_KINDS,
     OperationGateway,
     published_operator_action_tool_names,
 )
@@ -30,6 +32,25 @@ from .purchase_bill_mapping import (
 
 
 LOCAL_REVIEW_TOOL_NAMES = frozenset({"erp_purchase_bill_mapping_review"})
+
+READ_ONLY_TOOL_ANNOTATIONS = ToolAnnotations(
+    readOnlyHint=True,
+    destructiveHint=False,
+    idempotentHint=True,
+    openWorldHint=True,
+)
+LOCAL_REVIEW_TOOL_ANNOTATIONS = ToolAnnotations(
+    readOnlyHint=True,
+    destructiveHint=False,
+    idempotentHint=True,
+    openWorldHint=False,
+)
+STATE_CHANGING_TOOL_ANNOTATIONS = ToolAnnotations(
+    readOnlyHint=False,
+    destructiveHint=True,
+    idempotentHint=True,
+    openWorldHint=True,
+)
 
 
 class ExactOperatorArguments(ArgModelBase):
@@ -388,6 +409,7 @@ def create_app(
             "preserve unresolved/skipped facts and report the remaining canonical "
             "purchase-order, goods-receipt, and supplier-invoice gates."
         ),
+        annotations=LOCAL_REVIEW_TOOL_ANNOTATIONS,
         structured_output=False,
     )
     purchase_bill_review_tool = server._tool_manager.get_tool(
@@ -404,6 +426,11 @@ def create_app(
 
     def register_operator_tool(tool_name: str) -> None:
         operation = OPERATOR_OPERATIONS[tool_name]
+        annotations = (
+            READ_ONLY_TOOL_ANNOTATIONS
+            if operation.kind in READ_ONLY_OPERATOR_KINDS | {"review"}
+            else STATE_CHANGING_TOOL_ANNOTATIONS
+        )
 
         async def invoke(**arguments: Any) -> Any:
             return await operation_gateway.execute_operator(
@@ -414,6 +441,7 @@ def create_app(
             invoke,
             name=tool_name,
             description=OPERATOR_TOOL_DESCRIPTIONS[tool_name],
+            annotations=annotations,
             structured_output=False,
         )
         registered = server._tool_manager.get_tool(tool_name)
@@ -441,6 +469,12 @@ def create_app(
 
     for operator_tool_name in published_operator_action_tool_names():
         register_operator_tool(operator_tool_name)
+
+    for read_tool_name in OPERATIONS:
+        registered = server._tool_manager.get_tool(read_tool_name)
+        if registered is None:
+            raise RuntimeError(f"official MCP SDK did not register {read_tool_name}")
+        registered.annotations = READ_ONLY_TOOL_ANNOTATIONS
 
     @server.custom_route("/health", methods=["GET"])
     async def health(_: Request) -> JSONResponse:
