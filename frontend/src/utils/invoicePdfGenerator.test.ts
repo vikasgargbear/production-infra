@@ -217,3 +217,25 @@ test('downloads the reconciled canonical facts through the paginated A4 PDF buil
   expect(mockPdfSave).toHaveBeenCalledWith('INV-2026-1.pdf');
   expect(document.body.childElementCount).toBe(before);
 });
+
+test('keeps every invoice item column inside the A4 printable width with Amount visible', async () => {
+  mockAutoTable.mockClear();
+  await downloadInvoicePDF(invoice());
+
+  const options = mockAutoTable.mock.calls.at(-1)?.[1];
+  expect(options).toBeDefined();
+  expect(options.head[0].at(-1)).toBe('Amount');
+  expect(options.body[0].at(-1)).toBe('INR 168.00');
+  expect(options.margin.left).toBe(9);
+  expect(options.margin.right).toBe(9);
+  expect(options.tableWidth).toBe(192);
+  expect(options.horizontalPageBreak).toBe(false);
+
+  const columnWidths = Object.values(options.columnStyles)
+    .map((style: any) => style.cellWidth as number);
+  expect(columnWidths).toEqual([7, 80, 14, 16, 11, 19, 19, 26]);
+  expect(columnWidths.reduce((total: number, width: number) => total + width, 0))
+    .toBe(options.tableWidth);
+  expect(options.margin.left + options.tableWidth + options.margin.right).toBe(210);
+  expect(options.columnStyles[1].cellWidth).toBeGreaterThan(options.columnStyles[7].cellWidth);
+});
