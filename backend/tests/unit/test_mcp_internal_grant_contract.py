@@ -586,6 +586,41 @@ def test_three_hidden_reads_query_only_canonical_tables_with_bounds():
     assert gst_db.calls[0][1]["branch_id"] == branch_id
 
 
+def test_supplier_search_requires_selection_when_candidates_are_ambiguous():
+    candidates = []
+    for suffix in ("1", "2"):
+        candidates.append(
+            SimpleNamespace(
+                _mapping={
+                    "supplier_account_id": uuid4(),
+                    "supplier_code": f"SUP-{suffix}",
+                    "party_id": uuid4(),
+                    "legal_name": "Med Supplier",
+                    "trade_name": None,
+                    "payment_days": 30,
+                    "status": "active",
+                    "gstin": None,
+                    "phone": None,
+                    "email": None,
+                    "row_version": 1,
+                }
+            )
+        )
+    database = _Database([candidates])
+
+    result = mcp_canonical_reads.canonical_supplier_search(
+        "med", 50, 0, _context("master.suppliers.search", sensitive=True), database
+    )
+
+    assert result.match_state == "multiple_matches"
+    assert result.requires_selection is True
+    assert result.returned_count == 2
+    assert [candidate.supplier_code for candidate in result.suppliers] == [
+        "SUP-1",
+        "SUP-2",
+    ]
+
+
 def test_product_setup_reads_reuse_the_browser_canonical_contract(monkeypatch):
     product_id = uuid4()
     captured = []
