@@ -110,6 +110,7 @@ const canonicalDetail = (): CanonicalInvoiceDetail => ({
   items: invoice().items.map((item, index) => ({
     ...item,
     id: `line-${index + 1}`,
+    source_document_kind: 'sales_order' as const,
     product_id: `product-${index + 1}`,
     product_code: `PROD-${index + 1}`,
     uom_code: item.sale_unit,
@@ -123,7 +124,9 @@ const canonicalDetail = (): CanonicalInvoiceDetail => ({
 });
 
 test('builds printable facts only from captured archival evidence', () => {
-  const printable = printableCanonicalInvoice(canonicalDetail());
+  const detail = canonicalDetail();
+  expect(detail.items[0].source_document_kind).toBe('sales_order');
+  const printable = printableCanonicalInvoice(detail);
   const html = generateInvoiceHTML(printable);
 
   expect(printable.seller_drug_license_numbers).toEqual(['ARCHIVED-SELLER-20B']);

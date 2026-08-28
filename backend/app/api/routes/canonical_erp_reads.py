@@ -2804,6 +2804,7 @@ class CanonicalInvoiceDetailItem(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: UUID
+    source_document_kind: Literal["sales_order"]
     product_id: UUID
     product_name: str
     product_code: str
