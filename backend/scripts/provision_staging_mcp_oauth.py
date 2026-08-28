@@ -76,6 +76,7 @@ REDIRECT_URIS = (
 CHATGPT_STABLE_CALLBACK = "https://chatgpt.com/connector_platform_oauth_redirect"
 CHATGPT_CALLBACK_PATH_PREFIX = "/connector/oauth/"
 REVIEWED_CHATGPT_CALLBACK = "https://chatgpt.com/connector/oauth/_MPTGhIZ1AcM"
+PERSISTENT_REDIRECT_URIS = (*REDIRECT_URIS, REVIEWED_CHATGPT_CALLBACK)
 TEST_EMAIL = "mcp-e2e@canonical-staging.aasopharma.invalid"
 TEST_USER_ID = "d3000000-0000-7000-8000-00000000002a"
 TEST_MEMBERSHIP_ID = "d3000000-0000-7000-8000-00000000002b"
@@ -210,7 +211,7 @@ def _client_shape(client: dict[str, Any]) -> tuple[Any, ...]:
 def _reconcile_client(
     authority: SupabaseAuthAdminAuthority,
     *,
-    redirect_uris: tuple[str, ...] = REDIRECT_URIS,
+    redirect_uris: tuple[str, ...] = PERSISTENT_REDIRECT_URIS,
 ) -> dict[str, Any]:
     endpoint = "oauth/clients"
     listed = _auth_admin_json(
@@ -957,13 +958,13 @@ def _reviewed_chatgpt_callback_uri(value: str) -> str:
 
 def _redirect_uris_for_mode(mode: str) -> tuple[str, ...]:
     if mode != "chatgpt-client-authority-only":
-        return REDIRECT_URIS
+        return PERSISTENT_REDIRECT_URIS
     callback_uri = _reviewed_chatgpt_callback_uri(_required(CHATGPT_CALLBACK_ENV))
     if not secrets.compare_digest(callback_uri, REVIEWED_CHATGPT_CALLBACK):
         raise ProvisioningError(
             f"{CHATGPT_CALLBACK_ENV} does not match the reviewed ChatGPT app callback"
         )
-    return (*REDIRECT_URIS, callback_uri)
+    return PERSISTENT_REDIRECT_URIS
 
 
 def _write_client_evidence(
@@ -971,7 +972,7 @@ def _write_client_evidence(
     client_id: str,
     mode: str,
     demo_bound: bool,
-    redirect_uris: tuple[str, ...] = REDIRECT_URIS,
+    redirect_uris: tuple[str, ...] = PERSISTENT_REDIRECT_URIS,
     reviewed_sha: str | None = None,
 ) -> None:
     evidence_path = Path(os.getenv("CANONICAL_DEMO_EVIDENCE_DIR", "staging-evidence"))

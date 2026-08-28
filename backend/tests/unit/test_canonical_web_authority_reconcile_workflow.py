@@ -45,9 +45,9 @@ def test_user_authority_reconcile_keeps_the_bounded_web_envelope() -> None:
         assert operation in source
     assert "STATUS_CAPABILITY" in source
     assert 'test "$(jq -r .capability_count "$response")" = 11' in source
-    assert "allow_sensitive_read=excluded.allow_sensitive_read" in source
+    assert "existing consent receipt capability envelope differs" in source
     assert "transaction_timestamp()+interval '30 days'" in source
-    assert "capability_code<>ALL(%s::varchar[])" in source
+    assert "expected_capabilities = sorted(capability_rows)" in source
     assert "reviewed user authority did not reconcile exactly" in source
 
 
@@ -61,11 +61,32 @@ def test_user_authority_reconcile_uses_the_canonical_mcp_envelope() -> None:
         'configured_clients != {target_client_id}',
         'os.environ.get(\n                      "MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS", ""',
         'test "$(jq -r .client_id "$response")" = "$MCP_CLIENT_ID"',
+        'test "$(jq -r .subject_user_id "$response")" = "$SUBJECT_USER_ID"',
+        'test "$(jq -r .mcp_commit_sha "$response")" = "$MCP_REVIEWED_SHA"',
         'test "$(jq -r .capability_count "$response")" = 28',
     ):
         assert contract in source
     assert "staging-chatgpt-mcp-manual-v1" in source
     assert "canonical staging bounded ChatGPT MCP command consent" in source
+    assert '"MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS", ""' in source
+    assert '.MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS == $client' in source
+    assert '.status == "ok" and .git_commit == $sha' in source
+    assert '.status == "ready" and (.tools | length) > 0' in source
+    assert "deployed MCP policy differs from the reviewed envelope" in source
+
+
+def test_user_authority_reconcile_is_idempotent_for_an_exact_active_grant() -> None:
+    source = WORKFLOW.read_text(encoding="utf-8")
+
+    assert "existing consent receipt differs from the reviewed grant" in source
+    assert "existing consent receipt capability envelope differs" in source
+    assert "expected_grant = (" in source
+    assert "expected_capabilities = sorted(capability_rows)" in source
+    assert 'reconciliation_outcome = "unchanged"' in source
+    assert 'reconciliation_outcome = "created"' in source
+    assert 'f"{consent_text_sha256}"' in source
+    assert ") ON CONFLICT (org_id,id) DO NOTHING" in source
+    assert '"reconciliation_outcome": reconciliation_outcome' in source
 
 
 def test_web_authority_reconcile_does_not_reset_deploy_or_write_business_data() -> None:
