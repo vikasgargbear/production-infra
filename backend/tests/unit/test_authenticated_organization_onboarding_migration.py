@@ -75,7 +75,9 @@ def test_unauthenticated_bootstrap_is_narrowly_system_audited() -> None:
         "authenticated_onboarding_scope := EXISTS",
         "scope.scope IN ('authenticated_organization_onboard','authenticated_invitation_accept')",
         "scope.org_id=event_org_id",
-        "WHEN regulatory_import_scope OR provider_completion_scope OR authenticated_onboarding_scope THEN 'system'",
+        "WHEN regulatory_import_scope THEN 'system'",
+        "WHEN provider_completion_scope THEN 'system'",
+        "WHEN authenticated_onboarding_scope THEN 'system'",
         "erp_core_commands.command_scopes",
         "runtime audited mutation lacks actor membership",
     ):

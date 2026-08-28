@@ -52,6 +52,7 @@ BEGIN
     END IF;
     event_actor_id := NULLIF(pg_catalog.current_setting('app.membership_id', true), '')::uuid;
     regulatory_import_scope := SESSION_USER = 'erp_regulatory_importer'
+      AND event_request_id IS NOT NULL
       AND EXISTS (
         SELECT 1 FROM erp_regulatory_commands.command_scopes AS scope
          WHERE scope.backend_pid=pg_catalog.pg_backend_pid()
@@ -59,6 +60,7 @@ BEGIN
            AND scope.scope='reference_import'
       );
     provider_completion_scope := SESSION_USER = 'erp_tax_provider'
+      AND event_request_id IS NOT NULL
       AND EXISTS (
         SELECT 1 FROM erp_tax_provider_commands.command_scopes AS scope
          WHERE scope.backend_pid=pg_catalog.pg_backend_pid()
@@ -82,7 +84,9 @@ BEGIN
     END IF;
     event_actor_kind := CASE
       WHEN event_actor_id IS NOT NULL THEN 'membership'
-      WHEN regulatory_import_scope OR provider_completion_scope OR authenticated_onboarding_scope THEN 'system'
+      WHEN regulatory_import_scope THEN 'system'
+      WHEN provider_completion_scope THEN 'system'
+      WHEN authenticated_onboarding_scope THEN 'system'
       ELSE 'migration'
     END;
     event_command_id := NULLIF(pg_catalog.current_setting('app.command_request_id', true), '')::uuid;
