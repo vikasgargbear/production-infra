@@ -371,15 +371,15 @@ def canonical_customer_activity(
     )
 
 
-@router.get("/products")
-def canonical_product_search(
-    q: str = Query("", max_length=128),
-    limit: int = Query(20, ge=1, le=100),
-    offset: int = Query(0, ge=0, le=10000),
-    context: CanonicalDelegation = Depends(get_canonical_delegation),
-    db: Session = Depends(get_db),
+def _canonical_product_rows(
+    q: str,
+    limit: int,
+    offset: int,
+    context: CanonicalDelegation,
+    db: Session,
+    *,
+    include_drafts: bool,
 ):
-    _require_operation(context, "master.products.search")
     search = " ".join(q.casefold().split())
     rows = db.execute(
         text(
@@ -388,7 +388,8 @@ def canonical_product_search(
                    product.name, product.generic_name, product.base_uom_code,
                    dosage_form, strength_display, hsn_code, drug_schedule,
                    requires_prescription, ndps_regulated, cold_chain_required,
-                   gtin, product.status, product.row_version,
+                   gtin, product.status, product.status AS lifecycle_status,
+                   product.row_version,
                    conversions.uom_conversions
               FROM catalog.products AS product
               CROSS JOIN LATERAL (
@@ -443,7 +444,9 @@ def canonical_product_search(
                      AND composition.valid_until IS NULL
                      AND ingredient.status='active'
               ) AS composition ON true
-             WHERE product.org_id=:org_id AND product.status IN ('active','blocked')
+             WHERE product.org_id=:org_id
+               AND (product.status IN ('active','blocked')
+                    OR (:include_drafts AND product.status='draft'))
                AND (:search='' OR pg_catalog.lower(product.name) LIKE :prefix
                     OR pg_catalog.lower(COALESCE(product.generic_name,'')) LIKE :prefix
                     OR pg_catalog.lower(product.sku) LIKE :prefix
@@ -472,9 +475,42 @@ def canonical_product_search(
             "tsquery": _search_tsquery(search),
             "limit": limit,
             "offset": offset,
+            "include_drafts": include_drafts,
         },
     ).fetchall()
     return _row_dicts(rows)
+
+
+@router.get("/products")
+def canonical_product_search(
+    q: str = Query("", max_length=128),
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0, le=10000),
+    context: CanonicalDelegation = Depends(get_canonical_delegation),
+    db: Session = Depends(get_db),
+):
+    """Transaction product selection; drafts are never eligible."""
+
+    _require_operation(context, "master.products.search")
+    return _canonical_product_rows(
+        q, limit, offset, context, db, include_drafts=False
+    )
+
+
+@router.get("/product-master")
+def canonical_product_master_search(
+    q: str = Query("", max_length=128),
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0, le=10000),
+    context: CanonicalDelegation = Depends(get_canonical_delegation),
+    db: Session = Depends(get_db),
+):
+    """Master-data product search with draft lifecycle and row versions."""
+
+    _require_operation(context, "master.product_catalog.search")
+    return _canonical_product_rows(
+        q, limit, offset, context, db, include_drafts=True
+    )
 
 
 @router.get("/suppliers", response_model=SupplierSearchResponse)
