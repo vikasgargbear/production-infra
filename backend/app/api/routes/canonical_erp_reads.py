@@ -83,21 +83,14 @@ def _execute_canonical_product_create(
     product: "CanonicalProductDraftCreate",
     idempotency_key: str,
 ):
-    return db.execute(
+    created = db.execute(
         text("""
-            WITH created AS MATERIALIZED (
-              SELECT product_id,product_code,idempotency_replayed
-                FROM erp_master_commands.create_product_draft(
+            SELECT product_id,product_code,idempotency_replayed
+              FROM erp_master_commands.create_product_draft(
                 :org_id,:name,:generic_name,:product_kind,
                 :idempotency_key_hash,
                 transaction_timestamp()+interval '24 hours'
               )
-            )
-            SELECT created.product_id,created.product_code,
-                   created.idempotency_replayed,product.row_version
-              FROM created
-              JOIN catalog.products product
-                ON product.org_id=:org_id AND product.id=created.product_id
         """),
         {
             "org_id": org_id,
@@ -109,6 +102,18 @@ def _execute_canonical_product_create(
             ).digest(),
         },
     ).mappings().one()
+    # The command function writes through a SECURITY DEFINER boundary.  Read the
+    # created row in a subsequent SQL statement so PostgreSQL advances the
+    # command counter; a join in the same outer statement cannot see that write.
+    row_version = db.execute(
+        text("""
+            SELECT row_version
+              FROM catalog.products
+             WHERE org_id=:org_id AND id=:product_id
+        """),
+        {"org_id": org_id, "product_id": created["product_id"]},
+    ).scalar_one()
+    return {**created, "row_version": row_version}
 
 
 def _execute_canonical_customer_create(

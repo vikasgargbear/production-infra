@@ -1876,6 +1876,7 @@ class ProductDraftDatabase:
     def __init__(self) -> None:
         self.statements = []
         self.commits = 0
+        self.product_id = uuid4()
 
     def execute(self, statement, params):
         sql = str(statement)
@@ -1884,14 +1885,16 @@ class ProductDraftDatabase:
             return SimpleNamespace()
         if "erp_master_commands.create_product_draft" in sql:
             row = {
-                "product_id": uuid4(),
+                "product_id": self.product_id,
                 "product_code": "PROD-000001",
                 "idempotency_replayed": False,
-                "row_version": 1,
             }
             return SimpleNamespace(
                 mappings=lambda: SimpleNamespace(one=lambda: row)
             )
+        if "SELECT row_version" in sql and "FROM catalog.products" in sql:
+            assert params["product_id"] == self.product_id
+            return SimpleNamespace(scalar_one=lambda: 1)
         raise AssertionError(sql)
 
     def commit(self):
@@ -1918,6 +1921,8 @@ def test_product_draft_write_uses_canonical_catalog_and_returns_uuid() -> None:
     assert database.commits == 1
     sql = "\n".join(database.statements)
     assert "erp_master_commands.create_product_draft" in sql
+    assert "SELECT row_version" in sql
+    assert "JOIN catalog.products" not in sql
     assert "INSERT INTO catalog.products" not in sql
     assert "inventory.products" not in sql
 
