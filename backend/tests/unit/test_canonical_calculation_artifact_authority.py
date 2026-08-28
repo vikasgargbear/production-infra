@@ -10,6 +10,7 @@ import pytest
 from jsonschema import Draft202012Validator, ValidationError
 from referencing import Registry, Resource
 
+from app.api.services.sales.calculation import calculate_sales_totals
 from app.domain.calculations import (
     ChargeReversalInput,
     PriorChargeReversalTotals,
@@ -224,6 +225,62 @@ def test_sales_order_adapter_emits_fixed_authority_envelopes() -> None:
     output_validator.validate(calculation_output)
     assert calculation_input["operation"] == "sales.order.approve"
     assert calculation_output["totals"]["grand_total"] == "236.00"
+
+
+def test_sales_preview_and_prepare_share_no_rounding_money_totals() -> None:
+    line_id = uuid4()
+    request = {
+        "rounding_policy": "none",
+        "zero_rated_payment_mode": "not_applicable",
+        "document_discount": {
+            "document_discount_kind": "none",
+            "document_discount_basis": "price_value",
+            "document_discount_value": "0.00",
+        },
+    }
+    resolution = {
+        "supply_type": "intra_state",
+        "ruleset_version": "gst-rules-1",
+        "lines": [{
+            "line_id": str(line_id),
+            "line_kind": "product",
+            "product_id": str(uuid4()),
+            "multiplier": "1.000000",
+            "gst_rate": "12.000000",
+            "cess_rate": "0.000000",
+            "taxability": "taxable",
+            "input": {
+                "billed_quantity": "2.000000",
+                "free_quantity": "0.000000",
+                "free_supply_tax_treatment": "excluded_from_taxable_value",
+                "quoted_unit_rate": "100.000000",
+                "price_basis": "tax_exclusive",
+                "line_discount": {
+                    "line_discount_kind": "percent",
+                    "line_discount_basis": "price_value",
+                    "line_discount_value": "5.000000",
+                },
+                "document_discount_eligible": True,
+            },
+        }],
+    }
+    _, prepared = calculation_documents(request, resolution, order_id=uuid4())
+    preview = calculate_sales_totals(
+        [{
+            "quantity": "2.000000",
+            "free_quantity": "0.000000",
+            "free_supply_tax_treatment": "excluded_from_taxable_value",
+            "unit_price": "100.000000",
+            "discount_percent": "5.000000",
+            "resolved_gst_percent": "12.000000",
+        }],
+        "CGST/SGST",
+    )
+
+    assert prepared["totals"]["rounding_adjustment"] == "0.00"
+    assert prepared["totals"]["grand_total"] == "212.80"
+    assert preview["round_off_amount"] == Decimal("0.00")
+    assert preview["final_amount"] == Decimal(prepared["totals"]["grand_total"])
 
 
 def _zero_mode_sales_order(mode: str, *, supply_type: str, taxability: str, rate: str):
