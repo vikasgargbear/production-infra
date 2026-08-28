@@ -129,6 +129,17 @@ def test_user_authority_reconcile_uses_canonical_identity_binding_only() -> None
     assert "reviewed user identity lacks one active canonical membership authority" in source
 
 
+def test_mcp_authority_reconciles_the_signed_organization_claim_exactly() -> None:
+    source = WORKFLOW.read_text(encoding="utf-8")
+
+    assert "Bind the exact MCP subject to its signed organization claim" in source
+    assert "resolve_auth_admin_authority" in source
+    assert 'expected_metadata = {**original_metadata, "org_id": organization_id}' in source
+    assert 'payload={"app_metadata": expected_metadata}' in source
+    assert "if readback_metadata != expected_metadata:" in source
+    assert "reviewed MCP signed organization claim did not reconcile" in source
+
+
 def test_web_authority_reconcile_rolls_back_before_role_cleanup_on_failure() -> None:
     source = WORKFLOW.read_text(encoding="utf-8")
 

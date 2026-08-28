@@ -759,6 +759,73 @@ jobs:
                consent_text_sha256,expires_at}' "$response" > "$AUTHORITY_RECEIPT_PATH"
           test "$(wc -c < "$AUTHORITY_RECEIPT_PATH")" -le 4096
 
+      - name: Bind the exact MCP subject to its signed organization claim
+        if: env.AUTHORITY_SCOPE == 'mcp'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$SUPABASE_ACCESS_TOKEN"
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          import sys
+          from uuid import UUID
+
+          sys.path.insert(0, "backend")
+          from scripts.supabase_auth_admin import (
+              auth_admin_request,
+              mask_auth_admin_secret,
+              resolve_auth_admin_authority,
+          )
+
+          project_ref = os.environ["CANONICAL_STAGING_PROJECT_REF"]
+          receipt = json.loads(
+              Path(os.environ["AUTHORITY_RECEIPT_PATH"]).read_text(encoding="utf-8")
+          )
+          if receipt.get("status") != "ready" or receipt.get("authority_scope") != "mcp":
+              raise SystemExit("reviewed MCP authority receipt is unavailable")
+          subject_auth_user_id = str(UUID(receipt["subject_auth_user_id"]))
+          organization_id = str(UUID(receipt["organization_id"]))
+          authority = resolve_auth_admin_authority(
+              os.environ["SUPABASE_ACCESS_TOKEN"], project_ref
+          )
+          mask_auth_admin_secret(authority)
+          user = auth_admin_request(
+              authority, "GET", f"users/{subject_auth_user_id}"
+          )
+          if not isinstance(user, dict) or user.get("id") != subject_auth_user_id:
+              raise SystemExit("reviewed MCP Auth subject did not resolve exactly")
+          original_metadata = user.get("app_metadata")
+          if not isinstance(original_metadata, dict):
+              raise SystemExit("reviewed MCP Auth subject omitted application metadata")
+          expected_metadata = {**original_metadata, "org_id": organization_id}
+          claim_outcome = "unchanged"
+          if original_metadata != expected_metadata:
+              updated = auth_admin_request(
+                  authority,
+                  "PUT",
+                  f"users/{subject_auth_user_id}",
+                  payload={"app_metadata": expected_metadata},
+              )
+              if not isinstance(updated, dict) or updated.get("id") != subject_auth_user_id:
+                  raise SystemExit("reviewed MCP Auth subject update was ambiguous")
+              claim_outcome = "updated"
+          readback = auth_admin_request(
+              authority, "GET", f"users/{subject_auth_user_id}"
+          )
+          readback_metadata = readback.get("app_metadata") if isinstance(readback, dict) else None
+          if readback_metadata != expected_metadata:
+              raise SystemExit("reviewed MCP signed organization claim did not reconcile")
+          receipt["signed_organization_claim_outcome"] = claim_outcome
+          Path(os.environ["AUTHORITY_RECEIPT_PATH"]).write_text(
+              json.dumps(receipt, sort_keys=True) + "\n", encoding="utf-8"
+          )
+          print(json.dumps({"status": "ready", "outcome": claim_outcome}))
+          PY
+          test "$(wc -c < "$AUTHORITY_RECEIPT_PATH")" -le 4096
+
       - name: Upload the secret-free authority receipt
         uses: actions/upload-artifact@v4
         with:
