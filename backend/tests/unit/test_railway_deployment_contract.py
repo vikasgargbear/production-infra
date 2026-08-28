@@ -154,7 +154,9 @@ def test_frontend_container_builds_once_and_serves_spa_with_healthcheck() -> Non
 
     assert "FROM node:22-alpine AS build" in dockerfile
     assert "ARG RAILWAY_GIT_COMMIT_SHA" in dockerfile
-    assert "npm run test:ci -- --runInBand" in dockerfile
+    assert "npm run test:ci" not in dockerfile
+    assert "npm run lint:critical" not in dockerfile
+    assert "npm run typecheck" not in dockerfile
     assert "CI=false npm run build" in dockerfile
     assert "FROM caddy:2.10.2-alpine" in dockerfile
     assert "COPY . ." in dockerfile
@@ -347,8 +349,10 @@ def test_workflow_uploads_fresh_source_and_polls_exact_deployment_ids() -> None:
     assert 'python3 "$GITHUB_WORKSPACE/backend/scripts/railway_upload_diagnostic.py"' in workflow
     assert 'python "$GITHUB_WORKSPACE/backend/scripts/railway_upload_diagnostic.py"' not in workflow
 
-    assert "group: railway-canonical-staging-pilot" in workflow
+    assert "group: railway-canonical-certification" in workflow
     assert "cancel-in-progress: false" in workflow
+    assert "Reusing the three already-active deployments" in workflow
+    assert 'echo "reused_exact_sha=true"' in workflow
     assert "timeout-minutes: 45" in workflow
     up_commands = re.findall(r"^\s+if railway up .+$", workflow, flags=re.MULTILINE)
     assert len(up_commands) == 1

@@ -2,10 +2,13 @@ name: Production readiness
 
 on:
   pull_request:
-  push:
-    branches: [main]
   workflow_dispatch:
     inputs:
+      release_certification:
+        description: Run the complete static and Live18 release-certification lane
+        required: true
+        default: false
+        type: boolean
       run_live_erp:
         description: Run credential-gated live API and Supabase write tests
         required: true
@@ -119,7 +122,74 @@ permissions:
   contents: read
   actions: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
+  dispatch-contract:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate release-certification intent
+        env:
+          RELEASE_CERTIFICATION: ${{ inputs.release_certification }}
+          RUN_LIVE18: ${{ inputs.run_live18 }}
+          DEPLOY_CANONICAL_STAGING: ${{ inputs.deploy_canonical_staging }}
+          REVIEWED_SHA: ${{ inputs.canonical_staging_deploy_sha }}
+        run: |
+          set -euo pipefail
+          if test "$RELEASE_CERTIFICATION" = true; then
+            test "$RUN_LIVE18" = true
+            test "$DEPLOY_CANONICAL_STAGING" = true
+            [[ "$REVIEWED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          else
+            test "$RUN_LIVE18" = false
+          fi
+
+  change-plan:
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.plan.outputs.backend }}
+      frontend: ${{ steps.plan.outputs.frontend }}
+      mcp: ${{ steps.plan.outputs.mcp }}
+      postgres: ${{ steps.plan.outputs.postgres }}
+      backend_dependencies: ${{ steps.plan.outputs.backend_dependencies }}
+      frontend_dependencies: ${{ steps.plan.outputs.frontend_dependencies }}
+      deploy_api: ${{ steps.plan.outputs.deploy_api }}
+      deploy_mcp: ${{ steps.plan.outputs.deploy_mcp }}
+      deploy_frontend: ${{ steps.plan.outputs.deploy_frontend }}
+      deploy_any: ${{ steps.plan.outputs.deploy_any }}
+      release_required: ${{ steps.plan.outputs.release_required }}
+      plan: ${{ steps.plan.outputs.plan }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Select the smallest safe test plan
+        id: plan
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          RELEASE_CERTIFICATION: ${{ inputs.release_certification }}
+        run: |
+          set -euo pipefail
+          if test "$GITHUB_EVENT_NAME" = workflow_dispatch && \
+             test "$RELEASE_CERTIFICATION" = true; then
+            python backend/scripts/ci_change_plan.py \
+              --release --github-output "$GITHUB_OUTPUT" </dev/null
+          elif test "$GITHUB_EVENT_NAME" = workflow_dispatch; then
+            python backend/scripts/ci_change_plan.py \
+              --github-output "$GITHUB_OUTPUT" </dev/null
+          else
+            test -n "$BASE_SHA"
+            test -n "$HEAD_SHA"
+            git diff --name-only -z "$BASE_SHA" "$HEAD_SHA" \
+              | python backend/scripts/ci_change_plan.py \
+                  --github-output "$GITHUB_OUTPUT"
+          fi
+
   canonical-free-staging:
     if: >-
       github.event_name == 'workflow_dispatch' &&
@@ -139,7 +209,9 @@ jobs:
     secrets: inherit
 
   railway-canonical-staging:
+    needs: [dispatch-contract]
     if: >-
+      needs.dispatch-contract.result == 'success' &&
       github.event_name == 'workflow_dispatch' &&
       (inputs.deploy_canonical_staging || inputs.reset_canonical_staging) &&
       inputs.live18_provider == 'railway' &&
@@ -148,6 +220,7 @@ jobs:
     with:
       reviewed_sha: ${{ inputs.canonical_staging_deploy_sha }}
       reset_disposable_data: ${{ inputs.reset_canonical_staging }}
+      github_environment: canonical-certification
     secrets: inherit
 
   canonical-application-promotion-evidence:
@@ -320,6 +393,8 @@ jobs:
           PY
 
   mcp-sdk-compatibility:
+    needs: [change-plan]
+    if: needs.change-plan.outputs.mcp == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -347,6 +422,8 @@ jobs:
           }
 
   backend-unit:
+    needs: [change-plan]
+    if: needs.change-plan.outputs.backend == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -359,6 +436,7 @@ jobs:
             backend/requirements-dev.txt
       - run: pip install -r backend/requirements-dev.txt
       - name: Audit backend runtime dependencies
+        if: needs.change-plan.outputs.backend_dependencies == 'true'
         run: |
           set -o pipefail
           log_file=$(mktemp)
@@ -400,6 +478,8 @@ jobs:
       - run: python backend/scripts/schema_readiness.py --validate-claim
 
   frontend:
+    needs: [change-plan]
+    if: needs.change-plan.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -433,6 +513,8 @@ jobs:
           retention-days: 14
 
   frontend-dependency-audit:
+    needs: [change-plan]
+    if: needs.change-plan.outputs.frontend_dependencies == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -448,6 +530,8 @@ jobs:
       - run: npm audit --omit=dev --audit-level=high
 
   frontend-toolchain-dependency-audit:
+    needs: [change-plan]
+    if: needs.change-plan.outputs.frontend_dependencies == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -612,6 +696,10 @@ jobs:
             | grep -F '<div id="root"></div>' >/dev/null
 
   production-blockers:
+    needs: [change-plan]
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.release_certification
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -649,6 +737,8 @@ jobs:
         run: python backend/scripts/audit/test_implementation_audit.py
 
   canonical-postgres15:
+    needs: [change-plan]
+    if: needs.change-plan.outputs.postgres == 'true'
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -695,6 +785,8 @@ jobs:
           }
 
   canonical-alembic-postgres15:
+    needs: [change-plan]
+    if: needs.change-plan.outputs.postgres == 'true'
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -739,6 +831,42 @@ jobs:
             exit 1
           }
 
+  pr-readiness:
+    name: PR readiness
+    if: always() && github.event_name == 'pull_request'
+    needs:
+      - change-plan
+      - backend-unit
+      - canonical-postgres15
+      - canonical-alembic-postgres15
+      - frontend
+      - frontend-dependency-audit
+      - frontend-toolchain-dependency-audit
+      - mcp-sdk-compatibility
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every selected lane to pass
+        env:
+          CHANGE_PLAN: ${{ needs.change-plan.result }}
+          BACKEND: ${{ needs.backend-unit.result }}
+          POSTGRES: ${{ needs.canonical-postgres15.result }}
+          ALEMBIC: ${{ needs.canonical-alembic-postgres15.result }}
+          FRONTEND: ${{ needs.frontend.result }}
+          FRONTEND_RUNTIME_AUDIT: ${{ needs.frontend-dependency-audit.result }}
+          FRONTEND_TOOLCHAIN_AUDIT: ${{ needs.frontend-toolchain-dependency-audit.result }}
+          MCP: ${{ needs.mcp-sdk-compatibility.result }}
+        run: |
+          set -euo pipefail
+          test "$CHANGE_PLAN" = success
+          for result in \
+            "$BACKEND" "$POSTGRES" "$ALEMBIC" "$FRONTEND" \
+            "$FRONTEND_RUNTIME_AUDIT" "$FRONTEND_TOOLCHAIN_AUDIT" "$MCP"; do
+            case "$result" in
+              success|skipped) ;;
+              *) echo "A selected PR lane ended as $result" >&2; exit 1 ;;
+            esac
+          done
+
   live-erp:
     needs: [canonical-free-staging, railway-canonical-staging]
     if: >-
@@ -750,16 +878,16 @@ jobs:
         !inputs.provision_canonical_demo &&
         needs.railway-canonical-staging.result == 'success'))
     runs-on: ubuntu-latest
-    environment: canonical-staging
+    environment: canonical-certification
     concurrency:
-      group: canonical-staging-live-browser-identities
+      group: canonical-certification-live-browser-identities
       cancel-in-progress: false
     env:
       REVIEWED_DEPLOY_SHA: ${{ inputs.canonical_staging_deploy_sha }}
       PHARMA_CANONICAL_LIVE_WRITE_ACK: "true"
       PHARMA_CANONICAL_LIVE_TARGET_KIND: disposable_test
-      PHARMA_CANONICAL_LIVE_PROJECT_REF: rgihahbmkrmhitjdjvev
-      PHARMA_CANONICAL_LIVE_ALLOWED_PROJECT_REF: rgihahbmkrmhitjdjvev
+      PHARMA_CANONICAL_LIVE_PROJECT_REF: ${{ vars.CANONICAL_STAGING_PROJECT_REF }}
+      PHARMA_CANONICAL_LIVE_ALLOWED_PROJECT_REF: ${{ vars.CANONICAL_STAGING_PROJECT_REF }}
       PHARMA_CANONICAL_PRODUCTION_PROJECT_REFS: ${{ vars.CANONICAL_PRODUCTION_PROJECT_REFS }}
       PHARMA_CANONICAL_LIVE_API_BASE_URL: ${{ inputs.live18_provider == 'railway' && vars.RAILWAY_API_URL || 'https://aasopharma-api-pilot.onrender.com' }}
       CANONICAL_STAGING_PROJECT_REF: ${{ vars.CANONICAL_STAGING_PROJECT_REF }}
@@ -805,8 +933,8 @@ jobs:
       - name: Build the masked exact erp_runtime connection
         run: |
           set -euo pipefail
-          test "$CANONICAL_STAGING_PROJECT_REF" = rgihahbmkrmhitjdjvev
-          test "$SUPABASE_URL" = https://rgihahbmkrmhitjdjvev.supabase.co
+          test "$CANONICAL_STAGING_PROJECT_REF" != rgihahbmkrmhitjdjvev
+          test "$SUPABASE_URL" = "https://${CANONICAL_STAGING_PROJECT_REF}.supabase.co"
           encoded_password=$(jq -nr --arg value "$ERP_RUNTIME_PASSWORD" '$value|@uri')
           runtime_url="postgresql://erp_runtime:${encoded_password}@db.${CANONICAL_STAGING_PROJECT_REF}.supabase.co:5432/postgres?sslmode=require&gssencmode=disable&connect_timeout=15&application_name=canonical_live_reconciliation"
           echo "::add-mask::$runtime_url"
@@ -886,10 +1014,10 @@ jobs:
         !inputs.provision_canonical_demo &&
         needs.railway-canonical-staging.result == 'success'))
     runs-on: ubuntu-latest
-    environment: canonical-staging
+    environment: canonical-certification
     timeout-minutes: 60
     concurrency:
-      group: canonical-staging-live-browser-identities
+      group: canonical-certification-live-browser-identities
       cancel-in-progress: false
     defaults:
       run:
@@ -942,8 +1070,8 @@ jobs:
           set -euo pipefail
           test -n "$PLAYWRIGHT_LIVE_BASE_URL"
           test "$PLAYWRIGHT_LIVE_EXPECTED_ORG_ID" = d3000000-0000-7000-8000-000000000001
-          test "$CANONICAL_STAGING_PROJECT_REF" = rgihahbmkrmhitjdjvev
-          test "$SUPABASE_URL" = https://rgihahbmkrmhitjdjvev.supabase.co
+          test "$CANONICAL_STAGING_PROJECT_REF" != rgihahbmkrmhitjdjvev
+          test "$SUPABASE_URL" = "https://${CANONICAL_STAGING_PROJECT_REF}.supabase.co"
           case "$PLAYWRIGHT_LIVE_BASE_URL" in
             https://*) ;;
             *) echo "Live browser target must use HTTPS" >&2; exit 2 ;;
@@ -1226,10 +1354,10 @@ jobs:
         !inputs.provision_canonical_demo &&
         needs.railway-canonical-staging.result == 'success'))
     runs-on: ubuntu-latest
-    environment: canonical-staging
+    environment: canonical-certification
     timeout-minutes: 45
     concurrency:
-      group: canonical-staging-live-browser-identities
+      group: canonical-certification-live-browser-identities
       cancel-in-progress: false
     defaults:
       run:
@@ -1282,8 +1410,8 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$PLAYWRIGHT_LIVE_BASE_URL"
-          test "$CANONICAL_STAGING_PROJECT_REF" = rgihahbmkrmhitjdjvev
-          test "$SUPABASE_URL" = https://rgihahbmkrmhitjdjvev.supabase.co
+          test "$CANONICAL_STAGING_PROJECT_REF" != rgihahbmkrmhitjdjvev
+          test "$SUPABASE_URL" = "https://${CANONICAL_STAGING_PROJECT_REF}.supabase.co"
           case "$PLAYWRIGHT_LIVE_BASE_URL" in
             https://*) ;;
             *) echo "Two-user browser target must use HTTPS" >&2; exit 2 ;;
@@ -1361,9 +1489,10 @@ jobs:
           retention-days: 30
 
   live18-acceptance:
-    needs: [canonical-free-staging, railway-canonical-staging]
+    needs: [dispatch-contract, canonical-free-staging, railway-canonical-staging]
     if: >-
-      always() && github.event_name == 'workflow_dispatch' && inputs.run_live18 &&
+      always() && github.event_name == 'workflow_dispatch' &&
+      inputs.release_certification && inputs.run_live18 &&
       ((inputs.live18_provider == 'render' &&
         needs.canonical-free-staging.result == 'success' &&
         needs.railway-canonical-staging.result == 'skipped') ||
@@ -1371,10 +1500,10 @@ jobs:
         needs.canonical-free-staging.result == 'skipped' &&
         needs.railway-canonical-staging.result == 'success'))
     runs-on: ubuntu-latest
-    environment: canonical-staging
+    environment: canonical-certification
     timeout-minutes: 180
     concurrency:
-      group: canonical-staging-live-browser-identities
+      group: canonical-certification-live-browser-identities
       cancel-in-progress: false
     env:
       REVIEWED_DEPLOY_SHA: ${{ inputs.canonical_staging_deploy_sha }}
@@ -1385,8 +1514,8 @@ jobs:
       SUPABASE_URL: ${{ vars.SUPABASE_URL }}
       PHARMA_CANONICAL_LIVE_WRITE_ACK: "true"
       PHARMA_CANONICAL_LIVE_TARGET_KIND: disposable_test
-      PHARMA_CANONICAL_LIVE_PROJECT_REF: rgihahbmkrmhitjdjvev
-      PHARMA_CANONICAL_LIVE_ALLOWED_PROJECT_REF: rgihahbmkrmhitjdjvev
+      PHARMA_CANONICAL_LIVE_PROJECT_REF: ${{ vars.CANONICAL_STAGING_PROJECT_REF }}
+      PHARMA_CANONICAL_LIVE_ALLOWED_PROJECT_REF: ${{ vars.CANONICAL_STAGING_PROJECT_REF }}
       PHARMA_CANONICAL_PRODUCTION_PROJECT_REFS: ${{ vars.CANONICAL_PRODUCTION_PROJECT_REFS }}
       PHARMA_CANONICAL_LIVE_TIMEOUT_SECONDS: "30"
       LIVE18_REQUIRED: "true"
@@ -1587,8 +1716,8 @@ jobs:
             echo 'live18 requires a same-run canonical demo provision for run-scoped business lineage' >&2
             exit 2
           fi
-          test "$CANONICAL_STAGING_PROJECT_REF" = rgihahbmkrmhitjdjvev
-          test "$SUPABASE_URL" = https://rgihahbmkrmhitjdjvev.supabase.co
+          test "$CANONICAL_STAGING_PROJECT_REF" != rgihahbmkrmhitjdjvev
+          test "$SUPABASE_URL" = "https://${CANONICAL_STAGING_PROJECT_REF}.supabase.co"
           case "$LIVE18_APP_ORIGIN|$LIVE18_API_ORIGIN|$LIVE18_MCP_ORIGIN" in
             *localhost*|*127.0.0.1*|*http://*) exit 2 ;;
           esac

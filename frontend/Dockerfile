@@ -23,10 +23,11 @@ ENV RAILWAY_GIT_COMMIT_SHA=${RAILWAY_GIT_COMMIT_SHA} \
     REACT_APP_SUPABASE_URL=${REACT_APP_SUPABASE_URL} \
     REACT_APP_SUPABASE_ANON_KEY=${REACT_APP_SUPABASE_ANON_KEY}
 
-RUN npm run typecheck \
-    && npm run lint:critical \
-    && npm run test:ci -- --runInBand \
-    && CI=false npm run build
+# Test, lint, browser, and typecheck authority lives in the immutable-SHA CI
+# lane. Repeating the complete suite in Railway's image builder delayed every
+# frontend delivery without adding a different boundary. The image still must
+# produce the reviewed production bundle from scratch.
+RUN CI=false npm run build
 
 FROM caddy:2.10.2-alpine
 
