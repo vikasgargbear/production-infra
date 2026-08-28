@@ -35,6 +35,11 @@ The frontend consent page uses the official Supabase OAuth SDK. If the installed
 SDK cannot provide the required authorization methods, consent remains
 unavailable; do not substitute raw OAuth calls or bypass PKCE/state validation.
 
+For ChatGPT developer mode while CIMD and DCR are unavailable, follow the
+[predefined public-client procedure](./chatgpt-mcp-oauth.md). It requires the
+exact callback displayed by ChatGPT app management and fails closed before
+provisioning when that callback is absent or invalid.
+
 ## Release verification
 
 Before adding the MCP URL to ChatGPT or Codex:

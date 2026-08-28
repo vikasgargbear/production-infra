@@ -6,6 +6,11 @@ endpoint, or offline fallback.
 
 ## Developer connection
 
+Complete the repository's
+[ChatGPT predefined OAuth procedure](../../docs/deployment/chatgpt-mcp-oauth.md)
+before creating the connection when the authorization server has neither CIMD
+nor DCR. Never invent or commit a ChatGPT callback ID.
+
 1. Deploy one reviewed SHA for the API, MCP, frontend, and canonical database.
 2. Require both `/health` and `/ready` to pass on the public MCP origin.
 3. In ChatGPT on the web, enable Developer mode under **Settings → Security and
