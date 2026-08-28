@@ -145,6 +145,7 @@ export const challansApi = {
     ...crud,
     getById: (id: ChallanId) => apiHelpers.get<CanonicalChallanImportDetail>(
         `/canonical/challans/${id}/import-detail`,
+        { preserveExactDecimals: true },
     ),
     create: (_data: any) => rejectCanonicalWrite('Legacy delivery-challan creation'),
     update: (_id: ChallanId, _data: any) => rejectCanonicalWrite('Legacy delivery-challan editing'),
