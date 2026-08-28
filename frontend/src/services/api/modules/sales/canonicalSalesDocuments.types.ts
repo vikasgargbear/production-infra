@@ -88,7 +88,10 @@ export interface CanonicalInvoiceDetail {
   currency_code: string;
   tax_charge_mechanism: 'normal' | 'reverse_charge';
   subtotal_amount: ExactDecimalString;
+  /** Persisted customer-payable discount, including any tax effect. */
   discount_amount: ExactDecimalString;
+  /** Pre-tax reduction used to reconcile gross value to net value. */
+  pre_tax_discount_amount: ExactDecimalString;
   charges_amount: ExactDecimalString;
   net_value_amount: ExactDecimalString;
   taxable_amount: ExactDecimalString;

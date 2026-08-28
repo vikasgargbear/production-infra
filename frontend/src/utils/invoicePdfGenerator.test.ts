@@ -72,6 +72,7 @@ const invoice = (): InvoiceData => ({
   }],
   subtotal_amount: '155.00',
   discount_amount: '5.00',
+  pre_tax_discount_amount: '5.00',
   charges_amount: '0.00',
   net_value_amount: '150.00',
   taxable_amount: '150.00',
@@ -138,6 +139,30 @@ test('builds printable facts only from captured archival evidence', () => {
   expect(html).not.toContain('LIVE-BUYER-LICENCE-MUST-NOT-PRINT');
   expect(html).not.toContain('9999999999');
   expect(html).not.toContain('live-profile@example.test');
+});
+
+test('uses the pre-tax reduction for printable discount and preserves header discount semantics', () => {
+  const detail = {
+    ...canonicalDetail(),
+    subtotal_amount: '200.00',
+    discount_amount: '11.20',
+    pre_tax_discount_amount: '10.00',
+    charges_amount: '0.00',
+    net_value_amount: '190.00',
+    taxable_amount: '190.00',
+    cgst_amount: '11.40',
+    sgst_amount: '11.40',
+    total_amount: '212.80',
+    items: [{
+      ...canonicalDetail().items[0], taxable_amount: '190.00',
+      cgst_amount: '11.40', sgst_amount: '11.40', line_total: '212.80',
+    }],
+  };
+
+  const printable = printableCanonicalInvoice(detail);
+  expect(detail.discount_amount).toBe('11.20');
+  expect(printable.discount_amount).toBe('10.00');
+  expect(generateInvoiceHTML(printable)).toContain('<span>Discount</span><span>-₹10.00</span>');
 });
 
 test('fails closed instead of falling back when archival evidence is unavailable or contradictory', () => {

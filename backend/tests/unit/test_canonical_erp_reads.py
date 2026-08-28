@@ -604,7 +604,8 @@ def test_canonical_sales_detail_openapi_publishes_only_exact_decimal_strings() -
             "sgst_amount": 2, "igst_amount": 2, "line_total": 2, "mrp": 4,
         },
         "CanonicalInvoiceDetailResponse": {
-            "subtotal_amount": 2, "discount_amount": 2, "charges_amount": 2,
+            "subtotal_amount": 2, "discount_amount": 2,
+            "pre_tax_discount_amount": 2, "charges_amount": 2,
             "net_value_amount": 2, "taxable_amount": 2, "cgst_amount": 2,
             "sgst_amount": 2, "igst_amount": 2, "cess_amount": 2,
             "rounding_adjustment": 2, "total_amount": 2,
@@ -1399,6 +1400,9 @@ def test_sales_invoice_reads_project_authoritative_gst_header_totals() -> None:
         "rounding_adjustment", "tax_charge_mechanism",
     ):
         assert f"invoice.{field}" in detail_source
+    assert "discount_line.line_taxable_discount_amount" in detail_source
+    assert "discount_line.document_taxable_discount_amount" in detail_source
+    assert "AS pre_tax_discount_amount" in detail_source
     assert "AS seller_drug_license_numbers" in detail_source
     assert "AS customer_drug_license_numbers" in detail_source
     assert "seller_drug_licence_evidence_snapshot->'licences'" in detail_source
@@ -1573,7 +1577,8 @@ def test_sales_invoice_detail_response_validates_zero_one_and_many_allocations()
         "customer_drug_licence_evidence": {"availability": "none_effective"},
         "due_date": None, "currency_code": "INR",
         "tax_charge_mechanism": "normal", "subtotal_amount": 300,
-        "discount_amount": 0, "charges_amount": 0, "net_value_amount": 300,
+        "discount_amount": 0, "pre_tax_discount_amount": 0,
+        "charges_amount": 0, "net_value_amount": 300,
         "taxable_amount": 300, "cgst_amount": 18, "sgst_amount": 18,
         "igst_amount": 0, "cess_amount": 0, "rounding_adjustment": 0,
         "total_amount": 336,
@@ -1591,6 +1596,30 @@ def test_sales_invoice_detail_response_validates_zero_one_and_many_allocations()
     assert response.items[2].batch_id is None
     assert response.items[2].batch_allocations[1].source_kind == "direct_issue"
     assert response.items[3].batch_allocations[0].source_kind == "dispatch_allocation"
+
+    tax_inclusive_discount = {
+        **payload,
+        "subtotal_amount": "200.00",
+        "discount_amount": "11.20",
+        "pre_tax_discount_amount": "10.00",
+        "charges_amount": "0.00",
+        "net_value_amount": "190.00",
+        "taxable_amount": "190.00",
+        "cgst_amount": "11.40",
+        "sgst_amount": "11.40",
+        "total_amount": "212.80",
+    }
+    discount_response = (
+        canonical_erp_reads.CanonicalInvoiceDetailResponse.model_validate(
+            tax_inclusive_discount
+        )
+    )
+    assert discount_response.discount_amount == Decimal("11.20")
+    assert discount_response.pre_tax_discount_amount == Decimal("10.00")
+    with pytest.raises(ValidationError, match="pre-tax discount"):
+        canonical_erp_reads.CanonicalInvoiceDetailResponse.model_validate(
+            {**tax_inclusive_discount, "pre_tax_discount_amount": "11.20"}
+        )
 
     missing_line_identity = {**direct}
     missing_line_identity.pop("inventory_document_line_id")
