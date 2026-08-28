@@ -69,6 +69,10 @@ OPERATIONS = {
         "master.products.search", "erp_product_search", "/api/internal/mcp/reads/products",
         "catalog.product.manage", 100,
     ),
+    "erp_product_master_search": Operation(
+        "master.product_catalog.search", "erp_product_master_search",
+        "/api/internal/mcp/reads/product-master", "catalog.product.manage", 100,
+    ),
     "erp_supplier_search": Operation(
         "master.suppliers.search", "erp_supplier_search", "/api/internal/mcp/reads/suppliers",
         "parties.supplier.manage", 200, records_field="suppliers",

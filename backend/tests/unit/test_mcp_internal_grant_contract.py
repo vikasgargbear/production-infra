@@ -155,12 +155,14 @@ def test_exact_canonical_read_allowlist_has_no_write_or_generic_route():
         "finance.profit_loss.get",
         "finance.customer_activity.get",
         "master.products.search",
+        "master.product_catalog.search",
         "master.suppliers.search",
         "gst.settings.get",
     }
     assert all(policy.path.startswith("/internal/mcp/reads/") for policy in CANONICAL_READ_POLICIES.values())
     assert all(policy.capability_code == policy.operation_key for policy in CANONICAL_READ_POLICIES.values())
     assert CANONICAL_READ_POLICIES["master.products.search"].permission_code == "catalog.product.manage"
+    assert CANONICAL_READ_POLICIES["master.product_catalog.search"].permission_code == "catalog.product.manage"
     assert CANONICAL_READ_POLICIES["master.suppliers.search"].sensitive_read is True
     route_paths = {route.path for route in mcp_canonical_reads.router.routes}
     assert route_paths == {
@@ -170,6 +172,7 @@ def test_exact_canonical_read_allowlist_has_no_write_or_generic_route():
         "/internal/mcp/reads/profit-loss",
         "/internal/mcp/reads/customer-activity",
         "/internal/mcp/reads/products",
+        "/internal/mcp/reads/product-master",
         "/internal/mcp/reads/suppliers",
         "/internal/mcp/reads/gst-settings",
     }
@@ -216,7 +219,7 @@ def test_isolated_gateway_registry_matches_canonical_backend_contract():
         assert isinstance(tool_node, ast.Constant) and isinstance(operation_node, ast.Call)
         gateway[tool_node.value] = tuple(ast.literal_eval(argument) for argument in operation_node.args)
 
-    assert len(gateway) == 20
+    assert len(gateway) == 21
     assert {values[0] for values in gateway.values()} == set(
         ALL_CANONICAL_READ_POLICIES
     )
@@ -504,6 +507,22 @@ def test_three_hidden_reads_query_only_canonical_tables_with_bounds():
     assert product[0]["sku"] == "SKU-1"
     assert "FROM catalog.products" in product_db.calls[0][0]
     assert product_db.calls[0][1]["limit"] == 20
+    assert product_db.calls[0][1]["include_drafts"] is False
+
+    draft_id = uuid4()
+    master_product_db = _Database(
+        [[SimpleNamespace(_mapping={
+            "product_id": draft_id, "sku": "PROD-DRAFT", "name": "Draft product",
+            "status": "draft", "lifecycle_status": "draft", "row_version": 3,
+        })]]
+    )
+    master_product = mcp_canonical_reads.canonical_product_master_search(
+        "draft", 20, 0, _context("master.product_catalog.search"), master_product_db
+    )
+    assert master_product[0]["product_id"] == draft_id
+    assert master_product[0]["lifecycle_status"] == "draft"
+    assert master_product[0]["row_version"] == 3
+    assert master_product_db.calls[0][1]["include_drafts"] is True
 
     supplier_account_id = uuid4()
     supplier_db = _Database(

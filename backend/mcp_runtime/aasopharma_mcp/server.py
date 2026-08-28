@@ -121,12 +121,26 @@ def create_app(
         )
 
     @server.tool()
+    async def erp_product_master_search(
+        q: Annotated[str, Field(max_length=128, description="Optional product name, generic name, SKU, or HSN fragment.")] = "",
+        limit: Annotated[int, Field(ge=1, le=100, description="Maximum draft, active, or blocked master products to return.")] = 20,
+        offset: Annotated[int, Field(ge=0, description="Zero-based master-product result offset.")] = 0,
+    ) -> Any:
+        """Search canonical product master data, including drafts and lifecycle versions."""
+        if not 1 <= limit <= 100 or offset < 0:
+            raise ValueError("limit must be 1..100 and offset must be nonnegative")
+        return await operation_gateway.execute(
+            OPERATIONS["erp_product_master_search"], _access_token(),
+            {"q": q, "limit": limit, "offset": offset},
+        )
+
+    @server.tool()
     async def erp_product_search(
         q: Annotated[str, Field(max_length=128, description="Optional product name, generic name, SKU, or HSN fragment.")] = "",
         limit: Annotated[int, Field(ge=1, le=100, description="Maximum matching products to return.")] = 20,
         offset: Annotated[int, Field(ge=0, description="Zero-based product result offset.")] = 0,
     ) -> Any:
-        """Search the current organization's products by name, generic name, SKU, or HSN."""
+        """Search transaction-eligible active or blocked products; drafts are excluded."""
         if not 1 <= limit <= 100 or offset < 0:
             raise ValueError("limit must be 1..100 and offset must be nonnegative")
         return await operation_gateway.execute(

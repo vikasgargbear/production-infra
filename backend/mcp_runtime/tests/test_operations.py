@@ -147,6 +147,30 @@ async def test_tool_authorizes_app_owned_grant_then_uses_only_delegated_token() 
 
 
 @pytest.mark.asyncio
+async def test_product_master_search_uses_distinct_draft_aware_capability_and_route() -> None:
+    access = _access()
+    calls: list[tuple] = []
+    responses = [
+        Response(200, _grant(access, "erp_product_master_search")),
+        Response(200, [{
+            "product_id": str(uuid4()), "status": "draft",
+            "lifecycle_status": "draft", "row_version": 1,
+        }]),
+    ]
+    gateway = OperationGateway(settings(), lambda: Client(responses, calls))
+    arguments = {"q": "draft", "limit": 20, "offset": 0}
+
+    result = await gateway.execute(
+        OPERATIONS["erp_product_master_search"], access, arguments
+    )
+
+    assert result[0]["lifecycle_status"] == "draft"
+    assert calls[0][2]["json"]["capability_code"] == "master.product_catalog.search"
+    assert calls[1][1].endswith("/api/internal/mcp/reads/product-master")
+    assert calls[1][2]["params"] == arguments
+
+
+@pytest.mark.asyncio
 async def test_master_create_uses_scoped_write_grant_and_canonical_backend_route() -> None:
     access = _access()
     calls: list[tuple] = []

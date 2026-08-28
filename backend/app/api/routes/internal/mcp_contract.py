@@ -66,6 +66,13 @@ CANONICAL_READ_POLICIES = {
         "/internal/mcp/reads/products",
         100,
     ),
+    "master.product_catalog.search": CanonicalReadPolicy(
+        "master.product_catalog.search",
+        "master.product_catalog.search",
+        "catalog.product.manage",
+        "/internal/mcp/reads/product-master",
+        100,
+    ),
     "master.suppliers.search": CanonicalReadPolicy(
         "master.suppliers.search",
         "master.suppliers.search",
