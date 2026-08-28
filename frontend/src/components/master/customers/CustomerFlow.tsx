@@ -51,6 +51,49 @@ interface CustomerFormData {
     };
 }
 
+type CustomerField =
+    | 'customer_name'
+    | 'primary_phone'
+    | 'primary_email'
+    | 'address_line1'
+    | 'city'
+    | 'state_code'
+    | 'pincode'
+    | 'gst_number'
+    | 'pan_number'
+    | 'credit_limit'
+    | 'credit_days';
+
+type CustomerFieldErrors = Partial<Record<CustomerField, string>>;
+
+const CUSTOMER_FIELD_IDS: Record<CustomerField, string> = {
+    customer_name: 'customer-name',
+    primary_phone: 'customer-phone',
+    primary_email: 'customer-email',
+    address_line1: 'customer-address-line1',
+    city: 'customer-city',
+    state_code: 'customer-state-code',
+    pincode: 'customer-pincode',
+    gst_number: 'customer-gstin',
+    pan_number: 'customer-pan',
+    credit_limit: 'customer-credit-limit',
+    credit_days: 'customer-credit-days',
+};
+
+const API_FIELD_NAMES: Record<string, CustomerField> = {
+    customer_name: 'customer_name',
+    primary_phone: 'primary_phone',
+    primary_email: 'primary_email',
+    address_line1: 'address_line1',
+    city: 'city',
+    state_code: 'state_code',
+    pincode: 'pincode',
+    gst_number: 'gst_number',
+    pan_number: 'pan_number',
+    credit_limit: 'credit_limit',
+    credit_days: 'credit_days',
+};
+
 // ==================== COMPONENT ====================
 
 const CustomerFlow: React.FC<CustomerFlowProps> = ({
@@ -65,6 +108,7 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
     const idempotencyKeyRef = useRef(newMasterCreateIdempotencyKey('customer'));
     const [saving, setSaving] = useState(false);
     const [errors, setErrors] = useState<string[]>([]);
+    const [fieldErrors, setFieldErrors] = useState<CustomerFieldErrors>({});
 
     const getInitialCustomerType = (): CustomerFormData['customer_type'] => {
         if (isB2COnly) return 'individual';
@@ -124,6 +168,9 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
 
     const updateField = (field: keyof CustomerFormData, value: any) => {
         setFormData(prev => ({ ...prev, [field]: value }));
+        if (field in CUSTOMER_FIELD_IDS) {
+            setFieldErrors(prev => ({ ...prev, [field]: undefined }));
+        }
     };
 
     const updateAddress = (field: keyof CustomerFormData['address'], value: string) => {
@@ -131,53 +178,72 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
             ...prev,
             address: { ...prev.address, [field]: value }
         }));
+        if (field in CUSTOMER_FIELD_IDS) {
+            setFieldErrors(prev => ({ ...prev, [field]: undefined }));
+        }
+    };
+
+    const focusFirstInvalidField = (invalidFields: CustomerFieldErrors) => {
+        const firstField = (Object.keys(CUSTOMER_FIELD_IDS) as CustomerField[])
+            .find(field => Boolean(invalidFields[field]));
+        if (!firstField) return;
+        window.setTimeout(() => {
+            document.getElementById(CUSTOMER_FIELD_IDS[firstField])?.focus();
+        }, 0);
     };
 
     const validateForm = (): boolean => {
-        const newErrors: string[] = [];
+        const newFieldErrors: CustomerFieldErrors = {};
 
-        if (!formData.customer_name.trim()) newErrors.push('Customer name is required');
+        if (!formData.customer_name.trim()) newFieldErrors.customer_name = 'Customer name is required';
         if (!formData.primary_phone.trim()) {
-            newErrors.push('Phone number is required');
+            newFieldErrors.primary_phone = 'Phone number is required';
         } else if (!/^\d{10}$/.test(formData.primary_phone.replace(/\D/g, ''))) {
-            newErrors.push('Please enter a valid 10-digit phone number');
+            newFieldErrors.primary_phone = 'Enter a valid 10-digit phone number';
         }
-        if (!formData.address.address_line1.trim()) newErrors.push('Address is required');
-        if (!formData.address.city.trim()) newErrors.push('City is required');
+        if (!formData.address.address_line1.trim()) newFieldErrors.address_line1 = 'Address is required';
+        if (!formData.address.city.trim()) newFieldErrors.city = 'City is required';
         if (!/^\d{2}$/.test(formData.address.state_code)) {
-            newErrors.push('GST state code must contain exactly 2 digits');
+            newFieldErrors.state_code = 'Select a GST state code';
         }
         if (!formData.address.pincode.trim()) {
-            newErrors.push('Pincode is required');
+            newFieldErrors.pincode = 'Pincode is required';
         } else if (!/^\d{6}$/.test(formData.address.pincode)) {
-            newErrors.push('Please enter a valid 6-digit pincode');
+            newFieldErrors.pincode = 'Enter a valid 6-digit pincode';
         }
 
         if (isBusinessCustomer) {
             if (features.require_gst_for_b2b && !formData.gst_number.trim()) {
-                newErrors.push('GST Number is required');
+                newFieldErrors.gst_number = 'GST number is required';
             }
             if (formData.gst_number && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(formData.gst_number)) {
-                newErrors.push('Invalid GST number format');
+                newFieldErrors.gst_number = 'Enter a valid 15-character GSTIN';
             }
             if (formData.gst_number && /^\d{2}$/.test(formData.address.state_code)
                 && formData.gst_number.slice(0, 2) !== formData.address.state_code) {
-                newErrors.push('GSTIN state code must match the address GST state code');
+                newFieldErrors.gst_number = 'GSTIN state code must match the address state';
+                newFieldErrors.state_code = 'Address state must match the GSTIN';
+            }
+            if (formData.pan_number && !/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(formData.pan_number)) {
+                newFieldErrors.pan_number = 'Enter a valid 10-character PAN';
             }
         }
         if (formData.credit_limit === '') {
-            newErrors.push('Credit limit is required; enter 0 for no credit');
+            newFieldErrors.credit_limit = 'Credit limit is required; enter 0 for no credit';
         } else if (!/^(?:0|[1-9]\d{0,17})(?:\.\d{1,2})?$/.test(formData.credit_limit)) {
-            newErrors.push('Credit limit must be a non-negative amount with at most 2 decimal places');
+            newFieldErrors.credit_limit = 'Enter a non-negative amount with at most 2 decimals';
         }
         if (formData.credit_days === '') {
-            newErrors.push('Credit days are required; enter 0 for immediate payment');
+            newFieldErrors.credit_days = 'Credit days are required; enter 0 for immediate payment';
         } else if (!Number.isInteger(formData.credit_days)
             || formData.credit_days < 0 || formData.credit_days > 365) {
-            newErrors.push('Credit days must be a whole number from 0 to 365');
+            newFieldErrors.credit_days = 'Enter a whole number from 0 to 365';
         }
 
+        setFieldErrors(newFieldErrors);
+        const newErrors = Object.values(newFieldErrors).filter((error): error is string => Boolean(error));
         setErrors(newErrors);
+        if (newErrors.length > 0) focusFirstInvalidField(newFieldErrors);
         return newErrors.length === 0;
     };
 
@@ -191,6 +257,7 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
         submissionInFlightRef.current = true;
         setSaving(true);
         setErrors([]);
+        setFieldErrors({});
 
         try {
             const customerData = {
@@ -226,7 +293,17 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
             if (error.response?.data?.detail) {
                 const detail = error.response.data.detail;
                 if (Array.isArray(detail)) {
-                    setErrors(detail.map((err: any) => typeof err === 'string' ? err : err.msg || JSON.stringify(err)));
+                    const apiFieldErrors: CustomerFieldErrors = {};
+                    const messages = detail.map((err: any) => {
+                        const fieldName = Array.isArray(err?.loc) ? err.loc[err.loc.length - 1] : undefined;
+                        const field = typeof fieldName === 'string' ? API_FIELD_NAMES[fieldName] : undefined;
+                        const message = typeof err === 'string' ? err : err.msg || JSON.stringify(err);
+                        if (field) apiFieldErrors[field] = message;
+                        return message;
+                    });
+                    setErrors(messages);
+                    setFieldErrors(apiFieldErrors);
+                    focusFirstInvalidField(apiFieldErrors);
                 } else {
                     setErrors([typeof detail === 'string' ? detail : JSON.stringify(detail)]);
                 }
@@ -245,6 +322,18 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
     // Compact input classes - STANDARD: py-2.5 for all inputs
     const inputClass = "w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm";
     const inputNoIconClass = "w-full px-3 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm";
+    const invalidClass = "border-red-500 bg-red-50 focus:ring-red-500";
+    const fieldClass = (field: CustomerField, baseClass: string) => `${baseClass} ${fieldErrors[field] ? invalidClass : ''}`;
+    const fieldError = (field: CustomerField) => fieldErrors[field] ? (
+        <p id={`${CUSTOMER_FIELD_IDS[field]}-error`} className="mt-1 text-xs text-red-600" role="alert">
+            {fieldErrors[field]}
+        </p>
+    ) : null;
+    const fieldA11y = (field: CustomerField) => ({
+        id: CUSTOMER_FIELD_IDS[field],
+        'aria-invalid': Boolean(fieldErrors[field]) || undefined,
+        'aria-describedby': fieldErrors[field] ? `${CUSTOMER_FIELD_IDS[field]}-error` : undefined,
+    });
     const labelClass = "block text-xs font-medium text-gray-600 mb-1";
 
     return (
@@ -345,18 +434,20 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
 
                             <div className="grid grid-cols-3 gap-3">
                                 <div className="col-span-3 sm:col-span-2">
-                                    <label className={labelClass}>Customer Name *</label>
+                                    <label htmlFor="customer-name" className={labelClass}>Customer Name *</label>
                                     <div className="relative">
                                         <User className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                                         <input
+                                            {...fieldA11y('customer_name')}
                                             type="text"
                                             value={formData.customer_name}
                                             onChange={(e) => updateField('customer_name', e.target.value)}
-                                            className={inputClass}
+                                            className={fieldClass('customer_name', inputClass)}
                                             placeholder={isBusinessCustomer ? "Company name" : "Full name"}
                                             autoFocus
                                         />
                                     </div>
+                                    {fieldError('customer_name')}
                                 </div>
 
                                 <div>
@@ -365,32 +456,36 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                                 </div>
 
                                 <div>
-                                    <label className={labelClass}>Phone *</label>
+                                    <label htmlFor="customer-phone" className={labelClass}>Phone *</label>
                                     <div className="relative">
                                         <Phone className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                                         <input
+                                            {...fieldA11y('primary_phone')}
                                             type="text"
                                             value={formData.primary_phone}
                                             onChange={(e) => updateField('primary_phone', e.target.value)}
-                                            className={inputClass}
+                                            className={fieldClass('primary_phone', inputClass)}
                                             placeholder="10-digit"
                                             maxLength={10}
                                         />
                                     </div>
+                                    {fieldError('primary_phone')}
                                 </div>
 
                                 <div>
-                                    <label className={labelClass}>Email</label>
+                                    <label htmlFor="customer-email" className={labelClass}>Email</label>
                                     <div className="relative">
                                         <Mail className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                                         <input
+                                            {...fieldA11y('primary_email')}
                                             type="email"
                                             value={formData.primary_email}
                                             onChange={(e) => updateField('primary_email', e.target.value)}
-                                            className={inputClass}
+                                            className={fieldClass('primary_email', inputClass)}
                                             placeholder="email@company.com"
                                         />
                                     </div>
+                                    {fieldError('primary_email')}
                                 </div>
                             </div>
                         </div>
@@ -432,14 +527,16 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                             <div className="space-y-3">
                                 {/* Row 1: Address Line 1 */}
                                 <div>
-                                    <label className={labelClass}>Address Line 1 *</label>
+                                    <label htmlFor="customer-address-line1" className={labelClass}>Address Line 1 *</label>
                                     <input
+                                        {...fieldA11y('address_line1')}
                                         type="text"
                                         value={formData.address.address_line1}
                                         onChange={(e) => updateAddress('address_line1', e.target.value)}
-                                        className={inputNoIconClass}
+                                        className={fieldClass('address_line1', inputNoIconClass)}
                                         placeholder="Building, street address"
                                     />
+                                    {fieldError('address_line1')}
                                 </div>
 
                                 {/* Row 2: Address Line 2 */}
@@ -459,35 +556,40 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                                 {/* Row 3: City, GST state code, Pincode */}
                                 <div className="grid grid-cols-3 gap-3">
                                     <div>
-                                        <label className={labelClass}>City *</label>
+                                        <label htmlFor="customer-city" className={labelClass}>City *</label>
                                         <input
+                                            {...fieldA11y('city')}
                                             type="text"
                                             value={formData.address.city}
                                             onChange={(e) => updateAddress('city', e.target.value)}
-                                            className={inputNoIconClass}
+                                            className={fieldClass('city', inputNoIconClass)}
                                             placeholder="City"
                                         />
+                                        {fieldError('city')}
                                     </div>
                                     <div>
                                         <label htmlFor="customer-state-code" className={labelClass}>GST state code (2 digits) *</label>
                                         <GSTJurisdictionSelect
-                                            id="customer-state-code"
+                                            {...fieldA11y('state_code')}
                                             value={formData.address.state_code}
                                             onChange={(stateCode) => updateAddress('state_code', stateCode)}
-                                            className={inputNoIconClass}
+                                            className={fieldClass('state_code', inputNoIconClass)}
                                             required
                                         />
+                                        {fieldError('state_code')}
                                     </div>
                                     <div>
-                                        <label className={labelClass}>Pincode *</label>
+                                        <label htmlFor="customer-pincode" className={labelClass}>Pincode *</label>
                                         <input
+                                            {...fieldA11y('pincode')}
                                             type="text"
                                             value={formData.address.pincode}
                                             onChange={(e) => updateAddress('pincode', e.target.value)}
-                                            className={inputNoIconClass}
+                                            className={fieldClass('pincode', inputNoIconClass)}
                                             placeholder="6-digit"
                                             maxLength={6}
                                         />
+                                        {fieldError('pincode')}
                                     </div>
                                 </div>
                             </div>
@@ -503,35 +605,39 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                     <div>
-                                        <label className={labelClass}>
+                                        <label htmlFor="customer-gstin" className={labelClass}>
                                             GST Number {features.require_gst_for_b2b && '*'}
                                         </label>
                                         <div className="relative">
                                             <FileText className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                                             <input
+                                                {...fieldA11y('gst_number')}
                                                 type="text"
                                                 value={formData.gst_number}
                                                 onChange={(e) => updateField('gst_number', e.target.value.toUpperCase())}
-                                                className={inputClass}
+                                                className={fieldClass('gst_number', inputClass)}
                                                 placeholder="27AAPFU0939F1ZV"
                                                 maxLength={15}
                                             />
                                         </div>
+                                        {fieldError('gst_number')}
                                     </div>
 
                                     <div>
-                                        <label className={labelClass}>PAN</label>
+                                        <label htmlFor="customer-pan" className={labelClass}>PAN</label>
                                         <div className="relative">
                                             <FileText className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                                             <input
+                                                {...fieldA11y('pan_number')}
                                                 type="text"
                                                 value={formData.pan_number}
                                                 onChange={(e) => updateField('pan_number', e.target.value.toUpperCase())}
-                                                className={inputClass}
+                                                className={fieldClass('pan_number', inputClass)}
                                                 placeholder="AAPFU0939F"
                                                 maxLength={10}
                                             />
                                         </div>
+                                        {fieldError('pan_number')}
                                     </div>
                                 </div>
                                 <p className="mt-3 text-xs text-gray-500">
@@ -549,29 +655,33 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                     <div>
-                                        <label className={labelClass}>Credit Limit (₹) *</label>
+                                        <label htmlFor="customer-credit-limit" className={labelClass}>Credit Limit (₹) *</label>
                                         <input
+                                            {...fieldA11y('credit_limit')}
                                             type="number"
                                             inputMode="decimal"
                                             step="0.01"
                                             value={formData.credit_limit}
                                             onChange={(e) => updateField('credit_limit', e.target.value)}
-                                            className={inputNoIconClass}
+                                            className={fieldClass('credit_limit', inputNoIconClass)}
                                             placeholder="5000"
                                             min={0}
                                         />
+                                        {fieldError('credit_limit')}
                                     </div>
 
                                     <div>
-                                        <label className={labelClass}>Credit Days *</label>
+                                        <label htmlFor="customer-credit-days" className={labelClass}>Credit Days *</label>
                                         <input
+                                            {...fieldA11y('credit_days')}
                                             type="number"
                                             value={formData.credit_days}
                                             onChange={(e) => updateField('credit_days', e.target.value === '' ? '' : Number(e.target.value))}
-                                            className={inputNoIconClass}
+                                            className={fieldClass('credit_days', inputNoIconClass)}
                                             min={0}
                                             max={365}
                                         />
+                                        {fieldError('credit_days')}
                                     </div>
                                 </div>
                             </div>

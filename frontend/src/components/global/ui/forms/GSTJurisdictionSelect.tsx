@@ -17,6 +17,7 @@ interface GSTJurisdictionSelectProps {
   required?: boolean;
   'aria-label'?: string;
   'aria-invalid'?: boolean;
+  'aria-describedby'?: string;
 }
 
 const GSTJurisdictionSelect: React.FC<GSTJurisdictionSelectProps> = ({
@@ -30,6 +31,7 @@ const GSTJurisdictionSelect: React.FC<GSTJurisdictionSelectProps> = ({
   required = false,
   'aria-label': ariaLabel,
   'aria-invalid': ariaInvalid,
+  'aria-describedby': ariaDescribedBy,
 }) => {
   const [items, setItems] = useState<CanonicalGSTJurisdiction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -65,6 +67,7 @@ const GSTJurisdictionSelect: React.FC<GSTJurisdictionSelectProps> = ({
       aria-label={ariaLabel}
       aria-busy={loading}
       aria-invalid={failed || ariaInvalid || undefined}
+      aria-describedby={ariaDescribedBy}
     >
       <option value="">
         {loading ? 'Loading GST jurisdictions…' : failed ? 'GST jurisdictions unavailable' : 'Select GST jurisdiction'}
