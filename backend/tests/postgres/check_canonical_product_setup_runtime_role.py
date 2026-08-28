@@ -159,7 +159,8 @@ def main() -> None:
             assert configured == (fixture.PRODUCT_DELETE, "TEST-A-2", "Delete A", 2)
             missing_fields = connection.scalar(
                 text(
-                    "SELECT erp_master_commands.product_setup_missing_fields(:org,:product,CURRENT_DATE)"
+                    "SELECT erp_master_commands.product_setup_missing_fields("
+                    ":org,:product,erp_core_commands.current_organization_business_date())"
                 ),
                 {"org": fixture.ORG_A, "product": fixture.PRODUCT_DELETE},
             )
@@ -247,7 +248,8 @@ def main() -> None:
 
             _expect_denied(
                 connection,
-                "SELECT * FROM erp_master_commands.product_setup_missing_fields(:org,:product,CURRENT_DATE)",
+                "SELECT * FROM erp_master_commands.product_setup_missing_fields("
+                ":org,:product,erp_core_commands.current_organization_business_date())",
                 {"org": fixture.ORG_A, "product": fixture.PRODUCT_B},
             )
             print("canonical product setup runtime-role checks passed")
