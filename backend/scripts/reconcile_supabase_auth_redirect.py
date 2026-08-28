@@ -71,12 +71,21 @@ def parse_allow_list(value: object) -> list[str]:
     return [entry.strip() for entry in value.split(",") if entry.strip()]
 
 
+def reviewed_redirect_urls(frontend_origin: str) -> list[str]:
+    origin = normalize_https_origin(frontend_origin)
+    return [
+        origin,
+        f"{origin}/?invitation_token=**",
+        f"{origin}/oauth/consent?authorization_id=**",
+    ]
+
+
 def build_update(current: Mapping[str, object], frontend_origin: str) -> dict[str, object]:
     origin = normalize_https_origin(frontend_origin)
     parse_allow_list(current.get("uri_allow_list"))
     return {
         "site_url": origin,
-        "uri_allow_list": origin,
+        "uri_allow_list": ",".join(reviewed_redirect_urls(origin)),
         "oauth_server_enabled": True,
         "oauth_server_allow_dynamic_registration": False,
         "oauth_server_authorization_path": "/oauth/consent",
@@ -173,6 +182,7 @@ def reconcile(
         "oauth_server_authorization_path": "/oauth/consent",
         "git_commit": reviewed_sha,
         "redirect_origin_allowlisted": True,
+        "redirect_url_count": len(reviewed_redirect_urls(frontend_origin)),
     }
 
 

@@ -26,7 +26,7 @@ def test_normalize_https_origin_rejects_non_origins(value: str) -> None:
         redirect.normalize_https_origin(value)
 
 
-def test_build_update_replaces_drift_with_one_exact_reviewed_authority() -> None:
+def test_build_update_replaces_drift_with_exact_reviewed_redirects() -> None:
     current = {
         "site_url": "https://old.example.com",
         "uri_allow_list": "https://old.example.com, https://erp.example.com",
@@ -36,7 +36,11 @@ def test_build_update_replaces_drift_with_one_exact_reviewed_authority() -> None
 
     assert update == {
         "site_url": "https://erp.example.com",
-        "uri_allow_list": "https://erp.example.com",
+        "uri_allow_list": (
+            "https://erp.example.com,"
+            "https://erp.example.com/?invitation_token=**,"
+            "https://erp.example.com/oauth/consent?authorization_id=**"
+        ),
         "oauth_server_enabled": True,
         "oauth_server_allow_dynamic_registration": False,
         "oauth_server_authorization_path": "/oauth/consent",
@@ -95,17 +99,26 @@ def test_reconcile_gets_then_patches_and_returns_scrubbed_evidence(monkeypatch) 
     assert evidence == {
         "project_ref": "rgihahbmkrmhitjdjvev",
         "site_url": "https://erp.example.com",
-        "uri_allow_list": "https://erp.example.com",
+        "uri_allow_list": (
+            "https://erp.example.com,"
+            "https://erp.example.com/?invitation_token=**,"
+            "https://erp.example.com/oauth/consent?authorization_id=**"
+        ),
         "oauth_server_enabled": True,
         "oauth_server_allow_dynamic_registration": False,
         "oauth_server_authorization_path": "/oauth/consent",
         "git_commit": "a" * 40,
         "redirect_origin_allowlisted": True,
+        "redirect_url_count": 3,
     }
     assert [request[0] for request in requests] == ["GET", "PATCH"]
     assert requests[1][3] == {
         "site_url": "https://erp.example.com",
-        "uri_allow_list": "https://erp.example.com",
+        "uri_allow_list": (
+            "https://erp.example.com,"
+            "https://erp.example.com/?invitation_token=**,"
+            "https://erp.example.com/oauth/consent?authorization_id=**"
+        ),
         "oauth_server_enabled": True,
         "oauth_server_allow_dynamic_registration": False,
         "oauth_server_authorization_path": "/oauth/consent",
