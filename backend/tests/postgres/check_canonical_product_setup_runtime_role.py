@@ -157,12 +157,13 @@ def main() -> None:
                 },
             ).one()
             assert configured == (fixture.PRODUCT_DELETE, "TEST-A-2", "Delete A", 2)
-            assert connection.scalar(
+            missing_fields = connection.scalar(
                 text(
                     "SELECT erp_master_commands.product_setup_missing_fields(:org,:product,CURRENT_DATE)"
                 ),
                 {"org": fixture.ORG_A, "product": fixture.PRODUCT_DELETE},
-            ) == []
+            )
+            assert missing_fields == [], missing_fields
             assert connection.scalar(
                 text(
                     "SELECT count(*) FROM catalog.uom_conversions WHERE org_id=:org AND product_id=:product AND from_uom_code='EA' AND to_uom_code='EA' AND multiplier=1"
