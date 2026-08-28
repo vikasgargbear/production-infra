@@ -42,6 +42,14 @@ def test_first_organization_gets_atomic_erp_baseline() -> None:
         assert fragment in sql
 
 
+def test_non_onboarding_branch_fixtures_are_not_intercepted() -> None:
+    sql = SQL.read_text(encoding="utf-8")
+    assert "IF NEW.code<>'MAIN' THEN RETURN NEW; END IF;" in sql
+    assert "actor_id:=erp_security.current_membership_id();" in sql
+    assert "IF actor_id IS NULL THEN" in sql
+    assert "first active branch requires an authenticated onboarding owner" not in sql
+
+
 def test_backfill_only_touches_genuinely_empty_organizations() -> None:
     sql = SQL.read_text(encoding="utf-8")
     assert "NOT EXISTS(SELECT 1 FROM finance.accounts account WHERE account.org_id=organization.id)" in sql

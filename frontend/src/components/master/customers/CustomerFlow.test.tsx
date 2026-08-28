@@ -71,3 +71,62 @@ it('maps canonical API field errors back to the exact input', async () => {
   expect(screen.getByLabelText('PAN').getAttribute('aria-invalid')).toBe('true');
   await waitFor(() => expect(screen.getByLabelText('PAN')).toHaveFocus());
 });
+
+it('highlights state, pincode, and GSTIN when jurisdiction details disagree', async () => {
+  render(<CustomerFlow />);
+  fillRequiredFields();
+  fireEvent.change(screen.getByLabelText('Pincode *'), { target: { value: '32220' } });
+  fireEvent.change(screen.getByLabelText('GST Number'), { target: { value: '27AAPFU0939F1ZV' } });
+
+  fireEvent.click(screen.getAllByRole('button', { name: 'Save Customer' })[0]);
+
+  expect(await screen.findByText('Address state must match the GSTIN', { selector: 'p' })).toBeTruthy();
+  expect(screen.getByText('Enter a valid 6-digit pincode', { selector: 'p' })).toBeTruthy();
+  expect(screen.getByText('GSTIN state code must match the address state', { selector: 'p' })).toBeTruthy();
+  expect(screen.getByLabelText('GST state code (2 digits) *')).toHaveAttribute('aria-invalid', 'true');
+  expect(screen.getByLabelText('Pincode *')).toHaveAttribute('aria-invalid', 'true');
+  expect(screen.getByLabelText('GST Number')).toHaveAttribute('aria-invalid', 'true');
+  await waitFor(() => expect(screen.getByLabelText('GST state code (2 digits) *')).toHaveFocus());
+  expect(create).not.toHaveBeenCalled();
+});
+
+it('maps all canonical address and tax API errors to their exact inputs', async () => {
+  create.mockRejectedValue({
+    response: {
+      data: {
+        detail: [
+          { loc: ['body', 'state_code'], msg: 'State is unavailable' },
+          { loc: ['body', 'pincode'], msg: 'Pincode is outside the state' },
+          { loc: ['body', 'gst_number'], msg: 'GSTIN could not be verified' },
+        ],
+      },
+    },
+  });
+  render(<CustomerFlow />);
+  fillRequiredFields();
+
+  fireEvent.click(screen.getAllByRole('button', { name: 'Save Customer' })[0]);
+
+  expect(await screen.findByText('State is unavailable', { selector: 'p' })).toBeTruthy();
+  expect(screen.getByText('Pincode is outside the state', { selector: 'p' })).toBeTruthy();
+  expect(screen.getByText('GSTIN could not be verified', { selector: 'p' })).toBeTruthy();
+  expect(screen.getByLabelText('GST state code (2 digits) *')).toHaveAttribute('aria-invalid', 'true');
+  expect(screen.getByLabelText('Pincode *')).toHaveAttribute('aria-invalid', 'true');
+  expect(screen.getByLabelText('GST Number')).toHaveAttribute('aria-invalid', 'true');
+  await waitFor(() => expect(screen.getByLabelText('GST state code (2 digits) *')).toHaveFocus());
+});
+
+it('shows canonical operational-baseline failures without blaming a form field', async () => {
+  create.mockRejectedValue({
+    response: { data: { detail: 'Master data configuration is incomplete' } },
+  });
+  render(<CustomerFlow />);
+  fillRequiredFields();
+
+  fireEvent.click(screen.getAllByRole('button', { name: 'Save Customer' })[0]);
+
+  expect(await screen.findByText('Master data configuration is incomplete')).toBeTruthy();
+  expect(screen.getByLabelText('Customer Name *')).not.toHaveAttribute('aria-invalid');
+  expect(screen.getByLabelText('GST state code (2 digits) *')).not.toHaveAttribute('aria-invalid');
+  expect(screen.getByLabelText('Pincode *')).not.toHaveAttribute('aria-invalid');
+});

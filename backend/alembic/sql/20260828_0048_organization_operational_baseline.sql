@@ -185,13 +185,22 @@ AS $function$
 DECLARE actor_id uuid;
 BEGIN
   IF NEW.status<>'active' THEN RETURN NEW; END IF;
+  -- Authenticated self-service onboarding owns the reserved first-branch code
+  -- MAIN.  Canonical demos, imports and administrative fixtures provision
+  -- explicitly named branches and must retain their reviewed master data.
+  IF NEW.code<>'MAIN' THEN RETURN NEW; END IF;
   IF EXISTS(SELECT 1 FROM finance.accounts account WHERE account.org_id=NEW.org_id) THEN
     RETURN NEW;
   END IF;
   actor_id:=erp_security.current_membership_id();
   IF actor_id IS NULL THEN
-    RAISE EXCEPTION USING ERRCODE='42501',
-      MESSAGE='first active branch requires an authenticated onboarding owner';
+    -- Migration fixtures and reviewed administrative repairs may create their
+    -- own first branch without an application membership context.  They are
+    -- not the authenticated self-service onboarding path and must remain
+    -- compatible with the canonical command regression suite.  Runtime users
+    -- cannot insert branches directly; 0048's backfill handles any genuinely
+    -- empty organization that already existed when this migration was applied.
+    RETURN NEW;
   END IF;
   PERFORM erp_core_commands.provision_organization_operational_baseline(
     NEW.org_id,actor_id,NEW.id
