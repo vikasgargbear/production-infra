@@ -868,7 +868,7 @@ def product_setup(
 def configure_product_setup(
     product_id: UUID,
     setup: CanonicalProductSetupWrite,
-    user: dict = Depends(PermissionChecker("master", "update")),
+    user: dict = Depends(PermissionChecker("master", "edit")),
     db: Session = Depends(get_db),
 ):
     org_id = _activate(db, user)
@@ -921,7 +921,7 @@ def activate_product_setup(
         ...,alias="X-Idempotency-Key",min_length=8,max_length=128,
         pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
     ),
-    user: dict = Depends(PermissionChecker("master", "update")),
+    user: dict = Depends(PermissionChecker("master", "edit")),
     db: Session = Depends(get_db),
 ):
     org_id = _activate(db, user)
@@ -1001,7 +1001,7 @@ def create_product_draft(
 def update_product_draft(
     product_id: UUID,
     product: CanonicalProductDraftUpdate,
-    user: dict = Depends(PermissionChecker("master", "update")),
+    user: dict = Depends(PermissionChecker("master", "edit")),
     db: Session = Depends(get_db),
 ):
     """Update only mutable identity fields while the product remains a draft."""

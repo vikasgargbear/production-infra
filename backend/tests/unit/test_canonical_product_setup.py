@@ -65,6 +65,20 @@ def test_one_database_owner_controls_setup_readiness_and_activation():
     assert "release.ruleset_version" in route
 
 
+def test_product_mutations_use_the_supported_master_edit_permission_action():
+    routes = "\n".join(
+        inspect.getsource(route)
+        for route in (
+            canonical_erp_reads.configure_product_setup,
+            canonical_erp_reads.activate_product_setup,
+            canonical_erp_reads.update_product_draft,
+        )
+    )
+
+    assert routes.count('PermissionChecker("master", "edit")') == 3
+    assert 'PermissionChecker("master", "update")' not in routes
+
+
 def test_setup_contract_requires_canonical_manufacturer_hsn_and_typed_composition():
     with pytest.raises(ValidationError):
         canonical_erp_reads.CanonicalProductSetupWrite.model_validate({
