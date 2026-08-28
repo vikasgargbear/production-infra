@@ -58,4 +58,5 @@ test('shows both onboarding choices for a Google user without ERP membership', (
     expect(screen.getByRole('button', { name: 'Create new organization' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Join with invitation' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Retry ERP connection' })).not.toBeInTheDocument();
+    expect(screen.getByTestId('login-panel')).toHaveClass('max-w-4xl');
 });

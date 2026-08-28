@@ -71,7 +71,8 @@ test('preselects join and accepts an invitation token from the query URL', async
 test('offers both onboarding paths and a safe account switch', () => {
     render(<OrganizationOnboarding />);
 
-    expect(screen.getByRole('heading', { name: 'Choose how to continue' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Set up your workspace' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Organization details' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Create new organization' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Join with invitation' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Sign out and use another Google account' })).toBeInTheDocument();
