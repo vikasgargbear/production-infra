@@ -64,7 +64,7 @@ function requiredFixture(): Json {
     const required = [
       'branch_id', 'customer_account_id', 'product_id', 'uom_conversion_id',
       'expected_fefo_batch_id', 'billed_quantity', 'free_quantity', 'unit_rate',
-      'place_of_supply_state_code',
+      'delivery_address_id', 'delivery_address_row_version',
     ];
     const missing = required.filter(key => fixture[key] === undefined || fixture[key] === null || fixture[key] === '');
     if (missing.length) throw new Error(`missing required fields: ${missing.join(', ')}`);
@@ -83,7 +83,8 @@ test.describe('live desktop sales-chain API acceptance', () => {
   test('order -> FEFO reservation -> dispatch -> invoice reconciles exact canonical effects', async ({ page }, testInfo) => {
     test.setTimeout(240_000);
     const f = requiredFixture();
-    for (const key of ['branch_id','customer_account_id','product_id','uom_conversion_id','expected_fefo_batch_id']) uuid(f[key], key);
+    for (const key of ['branch_id','customer_account_id','product_id','uom_conversion_id','expected_fefo_batch_id','delivery_address_id']) uuid(f[key], key);
+    expect(String(f.delivery_address_row_version), 'delivery address row version').toMatch(/^[1-9][0-9]*$/);
     const api = await origin(page);
     const businessContext = await call(page, api, 'GET', '/canonical/business-context');
     expect(businessContext.business_date, 'authoritative organization business date').toMatch(/^\d{4}-\d{2}-\d{2}$/);
@@ -95,10 +96,11 @@ test.describe('live desktop sales-chain API acceptance', () => {
       price_basis: 'tax_exclusive', line_discount: { line_discount_kind: 'none', line_discount_basis: 'taxable_value', line_discount_value: '0' },
       document_discount_eligible: true };
     const common = { branch_id: f.branch_id, customer_account_id: f.customer_account_id,
+      delivery_address_id: f.delivery_address_id, delivery_address_row_version: String(f.delivery_address_row_version),
       document_discount: { document_discount_kind: 'none', document_discount_basis: 'taxable_value', document_discount_value: '0' },
       rounding_policy: 'none', zero_rated_payment_mode: 'not_applicable' };
     const orderLife = await lifecycle(page, api, 'sales.order.prepare', { idempotency_key: `CODEX-SALES-ORDER-${run}`,
-      ...common, order_date: date, lines: [line] });
+      ...common, order_date: date, requested_delivery_date: date, lines: [line] });
     const orderId = uuid(orderLife.executed.resource_id, 'order resource');
     const order = await call(page, api, 'GET', `/canonical/sales-orders/${orderId}/acceptance-readback`);
     const orderAgain = await call(page, api, 'GET', `/canonical/sales-orders/${orderId}/acceptance-readback`);
@@ -121,7 +123,7 @@ test.describe('live desktop sales-chain API acceptance', () => {
     expect(exact(allocation.billed_quantity, 'dispatch billed')).toBe(line.billed_quantity);
     expect(exact(allocation.free_quantity, 'dispatch free')).toBe(line.free_quantity);
     const invoiceLife = await lifecycle(page, api, 'sales.invoice.prepare', { idempotency_key: `CODEX-SALES-INVOICE-${run}`,
-      ...common, invoice_date: date, tax_charge_mechanism: 'normal', place_of_supply_state_code: f.place_of_supply_state_code,
+      ...common, invoice_date: date, tax_charge_mechanism: 'normal',
       lines: [{ ...line, fulfillment_source: 'dispatch_allocated', dispatch_allocations: [{
         dispatch_line_id: uuid(dispatch.lines[0].dispatch_line_id, 'dispatch line'),
         allocated_base_billed_quantity: exact(allocation.base_billed_quantity, 'dispatch base billed'),

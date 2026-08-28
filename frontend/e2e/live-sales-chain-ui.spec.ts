@@ -37,6 +37,9 @@ test.describe('live desktop sales-chain visible UI acceptance', () => {
     await expect(page.getByText(/select a customer|add at least one item/i).first()).toBeVisible();
     await choose(page, /search customer/i, 'Demo Retail', /Demo Retail/i);
     await choose(page, /search product/i, 'Synthetic Corrugated', /Synthetic Corrugated Pharmacy Packing Carton/i);
+    const orderDate = await page.getByLabel('Order Date').inputValue();
+    expect(orderDate, 'canonical order business date').toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    await page.getByLabel('Expected Delivery').fill(orderDate);
     await page.getByRole('button', { name: /continue/i }).click();
     await page.getByRole('button', { name: 'Generate Order', exact: true }).click();
     const orderReview = page.getByRole('dialog', { name: 'Review exact sales order' });
@@ -55,6 +58,7 @@ test.describe('live desktop sales-chain visible UI acceptance', () => {
     await page.getByText(String(orderDetail.order_number), { exact: true }).first().click();
     await page.getByRole('button', { name: 'Import to Challan', exact: true }).click();
     await page.getByRole('button', { name: /continue/i }).click();
+    await page.getByLabel('Exact distance (km)').fill('1.00');
     await page.getByRole('button', { name: 'Generate Challan', exact: true }).click();
     const dispatchReview = page.getByRole('dialog', { name: 'Review exact delivery dispatch' });
     await expect(dispatchReview).toBeVisible();
@@ -79,8 +83,11 @@ test.describe('live desktop sales-chain visible UI acceptance', () => {
     const invoicePrepare = (await invoicePrepareRequest).postDataJSON();
     expect(invoicePrepare.lines[0].billed_quantity).toBe(dispatchDetail.lines[0].billed_quantity);
     expect(invoicePrepare.lines[0].free_quantity).toBe(dispatchDetail.lines[0].free_quantity);
-    expect(invoicePrepare.lines[0].base_billed_quantity).toBe(dispatchDetail.lines[0].base_billed_quantity);
-    expect(invoicePrepare.lines[0].base_free_quantity).toBe(dispatchDetail.lines[0].base_free_quantity);
+    expect(invoicePrepare.lines[0].dispatch_allocations).toEqual([{
+      dispatch_line_id: dispatchDetail.lines[0].dispatch_line_id,
+      allocated_base_billed_quantity: dispatchDetail.lines[0].base_billed_quantity,
+      allocated_base_free_quantity: dispatchDetail.lines[0].base_free_quantity,
+    }]);
     const invoiceReview = page.getByRole('dialog', { name: 'Review exact sales invoice' });
     await expect(invoiceReview).toBeVisible();
     await invoiceReview.getByRole('checkbox').check();

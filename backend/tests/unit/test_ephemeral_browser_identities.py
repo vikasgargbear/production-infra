@@ -1173,7 +1173,8 @@ def test_core_fixture_is_resolved_from_available_live_fefo_stock():
                 "d3000000-0000-7000-8000-000000000015",
                 "d3000000-0000-7000-8000-000000000016",
                 "d5000000-0000-7000-8000-000000000001",
-                "27",
+                "d3200000-0000-7000-8000-000000000021",
+                "4",
             )]
 
     cursor = Cursor()
@@ -1184,6 +1185,9 @@ def test_core_fixture_is_resolved_from_available_live_fefo_stock():
     assert "NOT location.allows_negative_stock" in cursor.sql
     assert "ORDER BY batch.expires_on" in cursor.sql
     assert fixture["expected_fefo_batch_id"] == "d5000000-0000-7000-8000-000000000001"
+    assert fixture["delivery_address_id"] == "d3200000-0000-7000-8000-000000000021"
+    assert fixture["delivery_address_row_version"] == "4"
+    assert "place_of_supply_state_code" not in fixture
     assert fixture["billed_quantity"] == "1.000000"
     assert fixture["unit_rate"] == "84.0000"
 
