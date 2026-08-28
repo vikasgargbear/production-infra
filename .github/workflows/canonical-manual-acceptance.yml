@@ -42,8 +42,6 @@ jobs:
       REVIEWED_SHA: ${{ inputs.reviewed_sha }}
       AUTHORITY_ACTION: ${{ inputs.action }}
       AUTHORITY_CONFIRMATION: ${{ inputs.confirmation }}
-      SSH_PRIVATE_KEY: ${{ runner.temp }}/canonical-manual-${{ github.run_id }}-${{ github.run_attempt }}
-      SSH_FINGERPRINT_PATH: ${{ runner.temp }}/canonical-manual-ssh-fingerprint
     steps:
       - uses: actions/checkout@v4
         with:
@@ -55,6 +53,8 @@ jobs:
       - name: Bind the action to exact deployed disposable staging without resetting data
         run: |
           set -euo pipefail
+          echo "SSH_PRIVATE_KEY=$RUNNER_TEMP/canonical-manual-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_ENV"
+          echo "SSH_FINGERPRINT_PATH=$RUNNER_TEMP/canonical-manual-ssh-fingerprint" >> "$GITHUB_ENV"
           [[ "$REVIEWED_SHA" =~ ^[0-9a-f]{40}$ ]]
           test "$(git rev-parse HEAD)" = "$REVIEWED_SHA"
           git fetch origin main
