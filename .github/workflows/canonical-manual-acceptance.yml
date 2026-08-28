@@ -120,7 +120,7 @@ jobs:
             --project "$RAILWAY_PROJECT_ID" \
             --environment "$RAILWAY_ENVIRONMENT_ID" \
             --json > "$status"
-          instance_id=$(jq -er \
+          mapfile -t candidate_instance_ids < <(jq -r \
             --arg environment "$RAILWAY_ENVIRONMENT_ID" \
             --arg service "$RAILWAY_API_SERVICE" '
               [.environments.edges[].node
@@ -128,21 +128,27 @@ jobs:
                | .serviceInstances.edges[].node
                | select(.serviceName == $service)
                | .activeDeployments[]
-               | select(.status == "SUCCESS" and .deploymentStopped == false)
                | .instances[]
                | select(.status == "RUNNING")
                | .id]
-              | if length == 1 then .[0]
-                else error("expected one active Railway API instance") end
+              | unique[]
             ' "$status")
-          observed_sha=$(railway ssh \
-            --project "$RAILWAY_PROJECT_ID" \
-            --environment "$RAILWAY_ENVIRONMENT_ID" \
-            --service "$RAILWAY_API_SERVICE" \
-            --deployment-instance "$instance_id" \
-            --identity-file "$SSH_PRIVATE_KEY" \
-            -- printenv RAILWAY_GIT_COMMIT_SHA)
-          test "$observed_sha" = "$REVIEWED_SHA"
+          test "${#candidate_instance_ids[@]}" -ge 1
+          matching_instance_ids=()
+          for candidate in "${candidate_instance_ids[@]}"; do
+            observed_sha=$(railway ssh \
+              --project "$RAILWAY_PROJECT_ID" \
+              --environment "$RAILWAY_ENVIRONMENT_ID" \
+              --service "$RAILWAY_API_SERVICE" \
+              --deployment-instance "$candidate" \
+              --identity-file "$SSH_PRIVATE_KEY" \
+              -- printenv RAILWAY_GIT_COMMIT_SHA 2>/dev/null || true)
+            if test "$observed_sha" = "$REVIEWED_SHA"; then
+              matching_instance_ids+=("$candidate")
+            fi
+          done
+          test "${#matching_instance_ids[@]}" -eq 1
+          instance_id=${matching_instance_ids[0]}
           echo "RAILWAY_API_DEPLOYMENT_INSTANCE_ID=$instance_id" >> "$GITHUB_ENV"
       - name: Apply the reviewed authority state without changing ERP data
         env:
