@@ -265,10 +265,10 @@ def test_supported_business_variants_compile_to_visible_exact_resource_chains() 
     assert "{{resource_sales_order}}" in json.dumps(
         operations["customer_receipt_cheque_bounce"]
     )
-    assert '"value": "84.00"' in json.dumps(
+    assert '"value": "168.00"' in json.dumps(
         operations["customer_receipt_cheque_clearance"]
     )
-    assert '"value": "84.00"' in json.dumps(
+    assert '"value": "168.00"' in json.dumps(
         operations["customer_receipt_cheque_bounce"]
     )
     clearance = json.dumps(operations["customer_cheque_clearance"])
@@ -288,16 +288,28 @@ def test_supported_business_variants_compile_to_visible_exact_resource_chains() 
         assert "Execute as requester" in serialized
 
 
-def test_customer_cheque_receipts_split_the_reviewed_ceiling_exactly() -> None:
+def test_customer_cheque_receipts_reuse_the_exact_reviewed_amount() -> None:
     assert derive_customer_cheque_receipt_choices(
         {"customer_receipt_amount": "168.01"}
     ) == {
-        "customer_receipt_cheque_clearance_amount": "84.00",
-        "customer_receipt_cheque_bounce_amount": "84.01",
+        "customer_receipt_cheque_clearance_amount": "168.01",
+        "customer_receipt_cheque_bounce_amount": "168.01",
     }
+
+
+def test_customer_cheque_receipts_accept_the_minimum_positive_amount() -> None:
+    assert derive_customer_cheque_receipt_choices(
+        {"customer_receipt_amount": "0.01"}
+    ) == {
+        "customer_receipt_cheque_clearance_amount": "0.01",
+        "customer_receipt_cheque_bounce_amount": "0.01",
+    }
+
+
+def test_customer_cheque_receipts_reject_zero() -> None:
     with pytest.raises(
-        Live23VariantError, match="must fund two positive cheque receipts"
+        Live23VariantError, match="must be positive"
     ):
         derive_customer_cheque_receipt_choices(
-            {"customer_receipt_amount": "0.01"}
+            {"customer_receipt_amount": "0.00"}
         )

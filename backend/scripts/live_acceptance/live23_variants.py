@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 import re
-from decimal import Decimal, ROUND_DOWN
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -128,7 +128,7 @@ def derive_final_return_choices(scalars: dict[str, Any]) -> dict[str, str]:
 def derive_customer_cheque_receipt_choices(
     scalars: dict[str, Any],
 ) -> dict[str, str]:
-    """Split the reviewed receipt ceiling across two exact cheque lifecycles."""
+    """Reuse one reviewed per-receipt amount for both cheque lifecycles."""
 
     raw = scalars.get("customer_receipt_amount")
     text = str(raw) if isinstance(raw, (str, int, float)) and not isinstance(raw, bool) else ""
@@ -136,20 +136,15 @@ def derive_customer_cheque_receipt_choices(
         raise Live23VariantError(
             "customer_receipt_amount must be a plain amount with at most 2 decimals"
         )
-    total = Decimal(text)
-    if total < Decimal("0.02"):
+    amount = Decimal(text)
+    if amount <= 0:
         raise Live23VariantError(
-            "customer_receipt_amount must fund two positive cheque receipts"
+            "customer_receipt_amount must be positive"
         )
-    clearance = (total / 2).quantize(Decimal("0.01"), rounding=ROUND_DOWN)
-    bounce = total - clearance
-    if clearance <= 0 or bounce <= 0 or clearance + bounce != total:
-        raise Live23VariantError(
-            "customer cheque receipt split must exactly preserve the reviewed amount"
-        )
+    reviewed_amount = format(amount, ".2f")
     return {
-        "customer_receipt_cheque_clearance_amount": format(clearance, ".2f"),
-        "customer_receipt_cheque_bounce_amount": format(bounce, ".2f"),
+        "customer_receipt_cheque_clearance_amount": reviewed_amount,
+        "customer_receipt_cheque_bounce_amount": reviewed_amount,
     }
 
 
