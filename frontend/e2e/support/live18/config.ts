@@ -32,6 +32,8 @@ const httpsOrigin = (name: string): string => {
 export interface Live18BrowserConfig {
   appOrigin: string;
   apiOrigin: string;
+  supabaseOrigin: string;
+  supabaseAnonKey: string;
   expectedSha: string;
   expectedOrgId: string;
   expectedBranchId: string;
@@ -84,6 +86,10 @@ export function loadBrowserConfig(): Live18BrowserConfig {
   if (stagingProjectRef !== CANONICAL_STAGING_PROJECT_REF) {
     throw new Error('Live18 browser evidence is restricted to the exact canonical staging project.');
   }
+  const supabaseOrigin = httpsOrigin('SUPABASE_URL');
+  if (supabaseOrigin !== `https://${stagingProjectRef}.supabase.co`) {
+    throw new Error('SUPABASE_URL must be the exact canonical staging Supabase origin.');
+  }
   const runToken = required('LIVE18_RUN_TOKEN');
   if (!/^[0-9]{1,20}-[0-9]{1,5}$/.test(runToken) || runToken.length > 26) {
     throw new Error('LIVE18_RUN_TOKEN must be the bounded GITHUB_RUN_ID-GITHUB_RUN_ATTEMPT value.');
@@ -91,6 +97,8 @@ export function loadBrowserConfig(): Live18BrowserConfig {
   return {
     appOrigin: httpsOrigin('LIVE18_APP_ORIGIN'),
     apiOrigin: httpsOrigin('LIVE18_API_ORIGIN'),
+    supabaseOrigin,
+    supabaseAnonKey: required('SUPABASE_ANON_KEY'),
     expectedSha,
     expectedOrgId,
     expectedBranchId,
