@@ -395,13 +395,16 @@ export const printInvoice = (invoiceData: InvoiceData): void => {
 type InvoicePdfDocument = jsPDF & { lastAutoTable?: { finalY: number } };
 
 const pdfMoney = (value: unknown, label: string): string => money(value, label).replace('₹', 'INR ');
+const PDF_PAGE_MARGIN_MM = 9;
+const INVOICE_TABLE_COLUMN_WIDTHS_MM = [7, 80, 14, 16, 11, 19, 19, 26] as const;
+const INVOICE_TABLE_WIDTH_MM = INVOICE_TABLE_COLUMN_WIDTHS_MM.reduce((total, width) => total + width, 0);
 
 /** Build a vector A4 PDF with deterministic pagination and repeated table headers. */
 export const buildInvoicePDF = (invoiceData: InvoiceData): jsPDF => {
     generateInvoiceHTML(invoiceData); // Validate required facts and exact reconciliation once.
     const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' }) as InvoicePdfDocument;
     const pageWidth = pdf.internal.pageSize.getWidth();
-    const margin = 8;
+    const margin = PDF_PAGE_MARGIN_MM;
     const right = pageWidth - margin;
 
     pdf.setTextColor(17, 24, 39);
@@ -476,15 +479,21 @@ export const buildInvoicePDF = (invoiceData: InvoiceData): jsPDF => {
         head: [['#', 'Product / Batch / Tax', 'HSN', 'Qty / Free', 'Unit', 'Rate', 'Disc / GST', 'Amount']],
         body,
         margin: { left: margin, right: margin, top: margin, bottom: 12 },
+        tableWidth: INVOICE_TABLE_WIDTH_MM,
         theme: 'grid',
         styles: { font: 'helvetica', fontSize: 6.2, cellPadding: 1.4, overflow: 'linebreak', valign: 'top' },
         headStyles: { fillColor: [226, 232, 240], textColor: [17, 24, 39], fontStyle: 'bold', fontSize: 6 },
         columnStyles: {
-            0: { cellWidth: 7, halign: 'center' }, 1: { cellWidth: 77 }, 2: { cellWidth: 16, halign: 'center' },
-            3: { cellWidth: 17, halign: 'center' }, 4: { cellWidth: 13, halign: 'center' },
-            5: { cellWidth: 20, halign: 'right' }, 6: { cellWidth: 19, halign: 'center' },
-            7: { cellWidth: 25, halign: 'right', fontStyle: 'bold' },
+            0: { cellWidth: INVOICE_TABLE_COLUMN_WIDTHS_MM[0], halign: 'center' },
+            1: { cellWidth: INVOICE_TABLE_COLUMN_WIDTHS_MM[1] },
+            2: { cellWidth: INVOICE_TABLE_COLUMN_WIDTHS_MM[2], halign: 'center' },
+            3: { cellWidth: INVOICE_TABLE_COLUMN_WIDTHS_MM[3], halign: 'center' },
+            4: { cellWidth: INVOICE_TABLE_COLUMN_WIDTHS_MM[4], halign: 'center' },
+            5: { cellWidth: INVOICE_TABLE_COLUMN_WIDTHS_MM[5], halign: 'right' },
+            6: { cellWidth: INVOICE_TABLE_COLUMN_WIDTHS_MM[6], halign: 'center' },
+            7: { cellWidth: INVOICE_TABLE_COLUMN_WIDTHS_MM[7], halign: 'right', fontStyle: 'bold' },
         },
+        horizontalPageBreak: false,
         rowPageBreak: 'avoid',
         showHead: 'everyPage',
     });
