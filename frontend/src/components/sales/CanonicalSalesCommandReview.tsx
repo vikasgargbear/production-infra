@@ -19,8 +19,12 @@ export default function CanonicalSalesCommandReview({
   const dialogRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
   const postingRef = useRef(posting);
+  const onBackRef = useRef(onBack);
   useEffect(() => { postingRef.current = posting; }, [posting]);
-  const closeReview = useCallback(() => { if (!postingRef.current) onBack(); }, [onBack]);
+  useEffect(() => { onBackRef.current = onBack; }, [onBack]);
+  const closeReview = useCallback(() => {
+    if (!postingRef.current) onBackRef.current();
+  }, []);
 
   useEffect(() => {
     if (!open) return;

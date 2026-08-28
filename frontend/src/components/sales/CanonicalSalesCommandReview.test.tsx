@@ -37,6 +37,35 @@ describe('CanonicalSalesCommandReview', () => {
     expect(post.disabled).toBe(false);
   });
 
+  it('keeps acknowledgement when the parent refreshes callbacks for the same preview', () => {
+    const { rerender } = render(<CanonicalSalesCommandReview
+      title="Review exact delivery dispatch"
+      preview={preview}
+      open
+      posting={false}
+      onBack={() => undefined}
+      onPost={async () => undefined}
+    />);
+
+    const checkbox = screen.getByRole('checkbox', {
+      name: /reviewed this exact server preview/i,
+    }) as HTMLInputElement;
+    fireEvent.click(checkbox);
+    expect(checkbox.checked).toBe(true);
+
+    rerender(<CanonicalSalesCommandReview
+      title="Review exact delivery dispatch"
+      preview={preview}
+      open
+      posting={false}
+      onBack={() => undefined}
+      onPost={async () => undefined}
+    />);
+
+    expect(checkbox.checked).toBe(true);
+    expect(screen.getByRole('button', { name: 'Approve & Post' })).toBeEnabled();
+  });
+
   it('contains Tab focus, closes only itself on Escape, and restores trigger focus', () => {
     const trigger = document.createElement('button');
     document.body.appendChild(trigger);
