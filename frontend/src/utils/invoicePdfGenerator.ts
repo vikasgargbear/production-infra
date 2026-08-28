@@ -64,57 +64,130 @@ export interface InvoiceData {
     total_amount: string;
 }
 
-export const printableCanonicalInvoice = (detail: CanonicalInvoiceDetail): InvoiceData => ({
-    invoice_number: detail.invoice_number,
-    invoice_date: detail.invoice_date,
-    status: detail.status,
-    seller_legal_name: detail.seller_legal_name,
-    seller_gstin: detail.seller_gstin,
-    seller_address: detail.seller_address,
-    seller_drug_license_numbers: detail.seller_drug_license_numbers,
-    customer_name: detail.customer_name,
-    customer_phone: detail.customer_phone ?? undefined,
-    customer_gst_number: detail.customer_gst_number ?? undefined,
-    customer_drug_license_numbers: detail.customer_drug_license_numbers,
-    billing_address: detail.billing_address,
-    shipping_address: detail.shipping_address,
-    tax_charge_mechanism: detail.tax_charge_mechanism,
-    items: detail.items.map(item => ({
-        product_name: item.product_name,
-        batch_number: item.batch_number,
-        expiry_date: item.expiry_date,
-        batch_allocations: item.batch_allocations.map(allocation => ({
-            batch_number: allocation.batch_number,
-            expiry_date: allocation.expiry_date,
-            billed_quantity: allocation.billed_quantity,
-            free_quantity: allocation.free_quantity,
+const archivedText = (value: unknown, label: string): string => {
+    if (typeof value !== 'string' || !value.trim()) throw new Error(`${label} is unavailable.`);
+    return value.trim();
+};
+
+const archivedEvidence = (value: unknown, label: string): Record<string, unknown> => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        throw new Error(`${label} is unavailable.`);
+    }
+    return value as Record<string, unknown>;
+};
+
+const archivedLicenceNumbers = (value: unknown, label: string): string[] => {
+    const evidence = archivedEvidence(value, label);
+    const availability = evidence.availability;
+    if (availability === 'none_effective') {
+        if (evidence.licences !== undefined
+            && (!Array.isArray(evidence.licences) || evidence.licences.length !== 0)) {
+            throw new Error(`${label} contradicts its archived availability.`);
+        }
+        return [];
+    }
+    if (availability !== 'available' || !Array.isArray(evidence.licences)
+        || evidence.licences.length === 0) {
+        throw new Error(`${label} is unavailable.`);
+    }
+    return evidence.licences.map((entry, index) => {
+        const licence = archivedEvidence(entry, `${label} ${index + 1}`);
+        return archivedText(licence.license_number, `${label} ${index + 1} number`);
+    });
+};
+
+const archivedSellerGstin = (value: unknown, snapshot: unknown): string => {
+    const evidence = archivedEvidence(value, 'Archived seller GST evidence');
+    if (evidence.availability !== 'available') {
+        throw new Error('Archived seller GST evidence is unavailable.');
+    }
+    const gstin = archivedText(evidence.gstin, 'Archived seller GSTIN');
+    if (gstin !== archivedText(snapshot, 'Seller GSTIN snapshot')) {
+        throw new Error('Archived seller GST evidence does not match the invoice snapshot.');
+    }
+    return gstin;
+};
+
+const archivedCustomerGstin = (value: unknown, snapshot: unknown): string | undefined => {
+    const evidence = archivedEvidence(value, 'Archived customer GST evidence');
+    if (evidence.availability === 'not_registered') {
+        if (snapshot !== null && snapshot !== undefined && snapshot !== '') {
+            throw new Error('Archived customer GST evidence contradicts the invoice snapshot.');
+        }
+        return undefined;
+    }
+    if (evidence.availability !== 'available') {
+        throw new Error('Archived customer GST evidence is unavailable.');
+    }
+    const gstin = archivedText(evidence.registration_number, 'Archived customer GSTIN');
+    if (gstin !== archivedText(snapshot, 'Customer GSTIN snapshot')) {
+        throw new Error('Archived customer GST evidence does not match the invoice snapshot.');
+    }
+    return gstin;
+};
+
+export const printableCanonicalInvoice = (detail: CanonicalInvoiceDetail): InvoiceData => {
+    if (detail.archival_snapshot_state !== 'captured') {
+        throw new Error('Archived invoice party evidence is unavailable for this invoice.');
+    }
+    return {
+        invoice_number: detail.invoice_number,
+        invoice_date: detail.invoice_date,
+        status: detail.status,
+        seller_legal_name: archivedText(detail.seller_legal_name, 'Seller legal-name snapshot'),
+        seller_gstin: archivedSellerGstin(detail.seller_gst_evidence, detail.seller_gstin),
+        seller_address: archivedText(detail.seller_address, 'Seller address snapshot'),
+        seller_drug_license_numbers: archivedLicenceNumbers(
+            detail.seller_drug_licence_evidence, 'Archived seller drug licences',
+        ),
+        customer_name: archivedText(detail.customer_name, 'Customer legal-name snapshot'),
+        customer_phone: undefined,
+        customer_gst_number: archivedCustomerGstin(
+            detail.customer_gst_evidence, detail.customer_gst_number,
+        ),
+        customer_drug_license_numbers: archivedLicenceNumbers(
+            detail.customer_drug_licence_evidence, 'Archived customer drug licences',
+        ),
+        billing_address: archivedText(detail.billing_address, 'Billing-address snapshot'),
+        shipping_address: archivedText(detail.shipping_address, 'Shipping-address snapshot'),
+        tax_charge_mechanism: detail.tax_charge_mechanism,
+        items: detail.items.map(item => ({
+            product_name: item.product_name,
+            batch_number: item.batch_number,
+            expiry_date: item.expiry_date,
+            batch_allocations: item.batch_allocations.map(allocation => ({
+                batch_number: allocation.batch_number,
+                expiry_date: allocation.expiry_date,
+                billed_quantity: allocation.billed_quantity,
+                free_quantity: allocation.free_quantity,
+            })),
+            hsn_code: item.hsn_code,
+            sale_unit: item.unit,
+            quantity: item.quantity,
+            free_quantity: item.free_quantity,
+            unit_price: item.unit_price,
+            discount_percent: item.discount_percent,
+            gst_percent: item.gst_percent,
+            taxable_amount: item.taxable_amount,
+            cgst_amount: item.cgst_amount,
+            sgst_amount: item.sgst_amount,
+            igst_amount: item.igst_amount,
+            cess_amount: item.cess_amount,
+            line_total: item.line_total,
         })),
-        hsn_code: item.hsn_code,
-        sale_unit: item.unit,
-        quantity: item.quantity,
-        free_quantity: item.free_quantity,
-        unit_price: item.unit_price,
-        discount_percent: item.discount_percent,
-        gst_percent: item.gst_percent,
-        taxable_amount: item.taxable_amount,
-        cgst_amount: item.cgst_amount,
-        sgst_amount: item.sgst_amount,
-        igst_amount: item.igst_amount,
-        cess_amount: item.cess_amount,
-        line_total: item.line_total,
-    })),
-    subtotal_amount: detail.subtotal_amount,
-    discount_amount: detail.discount_amount,
-    charges_amount: detail.charges_amount,
-    net_value_amount: detail.net_value_amount,
-    taxable_amount: detail.taxable_amount,
-    cgst_amount: detail.cgst_amount,
-    sgst_amount: detail.sgst_amount,
-    igst_amount: detail.igst_amount,
-    cess_amount: detail.cess_amount,
-    rounding_adjustment: detail.rounding_adjustment,
-    total_amount: detail.total_amount,
-});
+        subtotal_amount: detail.subtotal_amount,
+        discount_amount: detail.discount_amount,
+        charges_amount: detail.charges_amount,
+        net_value_amount: detail.net_value_amount,
+        taxable_amount: detail.taxable_amount,
+        cgst_amount: detail.cgst_amount,
+        sgst_amount: detail.sgst_amount,
+        igst_amount: detail.igst_amount,
+        cess_amount: detail.cess_amount,
+        rounding_adjustment: detail.rounding_adjustment,
+        total_amount: detail.total_amount,
+    };
+};
 
 const moneyOptions = { scale: 2, maximumWholeDigits: 20, allowNegative: true } as const;
 

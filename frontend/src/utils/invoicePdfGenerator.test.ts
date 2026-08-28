@@ -1,4 +1,7 @@
-import { downloadInvoicePDF, generateInvoiceHTML, InvoiceData } from './invoicePdfGenerator';
+import {
+  downloadInvoicePDF, generateInvoiceHTML, InvoiceData, printableCanonicalInvoice,
+} from './invoicePdfGenerator';
+import type { CanonicalInvoiceDetail } from '../services/api/modules/sales/canonicalSalesDocuments.types';
 
 const mockPdfSave = jest.fn();
 jest.mock('jspdf', () => ({
@@ -78,6 +81,76 @@ const invoice = (): InvoiceData => ({
   cess_amount: '0.00',
   rounding_adjustment: '0.00',
   total_amount: '168.00',
+});
+
+const canonicalDetail = (): CanonicalInvoiceDetail => ({
+  ...invoice(),
+  invoice_id: '7c1ef24b-08f8-4f0d-8c03-f11e62c279ce',
+  archival_snapshot_state: 'captured',
+  seller_drug_license_numbers: ['LIVE-SELLER-LICENCE-MUST-NOT-PRINT'],
+  customer_id: 'd52e98a0-c12b-4a42-826a-26841e334516',
+  customer_phone: '9999999999',
+  customer_email: 'live-profile@example.test',
+  customer_gst_number: null,
+  customer_drug_license_numbers: ['LIVE-BUYER-LICENCE-MUST-NOT-PRINT'],
+  seller_gst_evidence: {
+    availability: 'available', gstin: '27ABCDE1234F1Z5',
+  },
+  customer_gst_evidence: { availability: 'not_registered' },
+  seller_drug_licence_evidence: {
+    availability: 'available',
+    licences: [{ license_number: 'ARCHIVED-SELLER-20B' }],
+  },
+  customer_drug_licence_evidence: {
+    availability: 'available',
+    licences: [{ license_number: 'ARCHIVED-BUYER-20B' }],
+  },
+  due_date: null,
+  currency_code: 'INR',
+  items: invoice().items.map((item, index) => ({
+    ...item,
+    id: `line-${index + 1}`,
+    product_id: `product-${index + 1}`,
+    product_code: `PROD-${index + 1}`,
+    uom_code: item.sale_unit,
+    unit: item.sale_unit,
+    base_billed_quantity: item.quantity,
+    base_free_quantity: item.free_quantity,
+    free_supply_tax_treatment: 'excluded_from_taxable_value' as const,
+  })),
+  created_at: '2026-08-25T12:00:00Z',
+  updated_at: '2026-08-25T12:00:00Z',
+});
+
+test('builds printable facts only from captured archival evidence', () => {
+  const printable = printableCanonicalInvoice(canonicalDetail());
+  const html = generateInvoiceHTML(printable);
+
+  expect(printable.seller_drug_license_numbers).toEqual(['ARCHIVED-SELLER-20B']);
+  expect(printable.customer_drug_license_numbers).toEqual(['ARCHIVED-BUYER-20B']);
+  expect(printable.customer_phone).toBeUndefined();
+  expect(html).toContain('ARCHIVED-SELLER-20B');
+  expect(html).toContain('ARCHIVED-BUYER-20B');
+  expect(html).not.toContain('LIVE-SELLER-LICENCE-MUST-NOT-PRINT');
+  expect(html).not.toContain('LIVE-BUYER-LICENCE-MUST-NOT-PRINT');
+  expect(html).not.toContain('9999999999');
+  expect(html).not.toContain('live-profile@example.test');
+});
+
+test('fails closed instead of falling back when archival evidence is unavailable or contradictory', () => {
+  expect(() => printableCanonicalInvoice({
+    ...canonicalDetail(), archival_snapshot_state: 'unavailable',
+  })).toThrow('Archived invoice party evidence is unavailable');
+  expect(() => printableCanonicalInvoice({
+    ...canonicalDetail(), seller_drug_licence_evidence: {
+      availability: 'unavailable', reason: 'invoice_predates_archival_migration',
+    },
+  })).toThrow('Archived seller drug licences is unavailable');
+  expect(() => printableCanonicalInvoice({
+    ...canonicalDetail(), seller_gst_evidence: {
+      availability: 'available', gstin: '29ABCDE1234F1Z5',
+    },
+  })).toThrow('does not match the invoice snapshot');
 });
 
 test('renders only canonical seller, buyer, line, and exact money facts', () => {

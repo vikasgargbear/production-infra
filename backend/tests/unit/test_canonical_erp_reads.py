@@ -1401,7 +1401,10 @@ def test_sales_invoice_reads_project_authoritative_gst_header_totals() -> None:
         assert f"invoice.{field}" in detail_source
     assert "AS seller_drug_license_numbers" in detail_source
     assert "AS customer_drug_license_numbers" in detail_source
-    assert "valid_from<=invoice.invoice_date" in detail_source
+    assert "seller_drug_licence_evidence_snapshot->'licences'" in detail_source
+    assert "buyer_drug_licence_evidence_snapshot->'licences'" in detail_source
+    assert "FROM compliance.licenses" not in detail_source
+    assert "FROM parties.contacts" not in detail_source
 
 
 def test_sales_invoice_detail_projects_executed_batch_allocations() -> None:
@@ -1552,6 +1555,7 @@ def test_sales_invoice_detail_response_validates_zero_one_and_many_allocations()
     payload = {
         "invoice_id": uuid4(), "invoice_number": "INV-1",
         "invoice_date": date(2026, 8, 24), "status": "draft",
+        "archival_snapshot_state": "captured",
         "seller_legal_name": "Canonical Seller Private Limited",
         "seller_gstin": "27ABCDE1234F1Z5", "seller_address": "Seller Address",
         "seller_drug_license_numbers": ["MH-MZ6-20B"],
@@ -1559,7 +1563,12 @@ def test_sales_invoice_detail_response_validates_zero_one_and_many_allocations()
         "customer_phone": None, "customer_email": None,
         "customer_gst_number": None, "customer_drug_license_numbers": [],
         "billing_address": "Address",
-        "shipping_address": "Address", "due_date": None, "currency_code": "INR",
+        "shipping_address": "Address",
+        "seller_gst_evidence": {"availability": "available"},
+        "customer_gst_evidence": {"availability": "not_registered"},
+        "seller_drug_licence_evidence": {"availability": "none_effective"},
+        "customer_drug_licence_evidence": {"availability": "none_effective"},
+        "due_date": None, "currency_code": "INR",
         "tax_charge_mechanism": "normal", "subtotal_amount": 300,
         "discount_amount": 0, "charges_amount": 0, "net_value_amount": 300,
         "taxable_amount": 300, "cgst_amount": 18, "sgst_amount": 18,
