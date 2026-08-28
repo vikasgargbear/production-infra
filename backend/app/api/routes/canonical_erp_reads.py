@@ -868,7 +868,7 @@ def product_setup(
 def configure_product_setup(
     product_id: UUID,
     setup: CanonicalProductSetupWrite,
-    user: dict = Depends(PermissionChecker("master", "update")),
+    user: dict = Depends(PermissionChecker("master", "edit")),
     db: Session = Depends(get_db),
 ):
     org_id = _activate(db, user)
@@ -921,7 +921,7 @@ def activate_product_setup(
         ...,alias="X-Idempotency-Key",min_length=8,max_length=128,
         pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
     ),
-    user: dict = Depends(PermissionChecker("master", "update")),
+    user: dict = Depends(PermissionChecker("master", "edit")),
     db: Session = Depends(get_db),
 ):
     org_id = _activate(db, user)
@@ -1001,7 +1001,7 @@ def create_product_draft(
 def update_product_draft(
     product_id: UUID,
     product: CanonicalProductDraftUpdate,
-    user: dict = Depends(PermissionChecker("master", "update")),
+    user: dict = Depends(PermissionChecker("master", "edit")),
     db: Session = Depends(get_db),
 ):
     """Update only mutable identity fields while the product remains a draft."""
@@ -1336,8 +1336,10 @@ _PARTY_CONTACTS = """
         SELECT registration_number, status AS registration_status
           FROM parties.tax_registrations r
          WHERE r.org_id=account.org_id AND r.party_id=account.party_id
-           AND r.registration_type='GSTIN' AND r.status='active'
-         ORDER BY r.valid_from DESC NULLS LAST, r.id LIMIT 1
+           AND r.registration_type='GSTIN'
+           AND r.status IN ('active','pending_verification')
+         ORDER BY CASE WHEN r.status='active' THEN 0 ELSE 1 END,
+                  r.valid_from DESC NULLS LAST, r.id LIMIT 1
     ) registration ON true
 """
 

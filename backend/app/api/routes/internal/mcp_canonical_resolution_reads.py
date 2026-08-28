@@ -274,8 +274,10 @@ def canonical_customer_search(
                       SELECT registration_number
                         FROM parties.tax_registrations
                        WHERE org_id=customer.org_id AND party_id=customer.party_id
-                         AND registration_type='GSTIN' AND status='active'
-                       ORDER BY valid_from DESC NULLS LAST, id LIMIT 1
+                         AND registration_type='GSTIN'
+                         AND status IN ('active','pending_verification')
+                       ORDER BY CASE WHEN status='active' THEN 0 ELSE 1 END,
+                                valid_from DESC NULLS LAST, id LIMIT 1
                   ) AS registration ON true
                   LEFT JOIN LATERAL (
                       SELECT phone FROM parties.contacts

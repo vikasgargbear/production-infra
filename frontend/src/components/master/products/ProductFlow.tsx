@@ -259,7 +259,7 @@ const ProductFlow: React.FC<ProductFlowProps> = ({ open, show, product, onClose,
       </>}
     </div></main>
 
-    <footer className="absolute inset-x-0 bottom-0 border-t bg-white/95 px-3 py-3 shadow-[0_-8px_24px_rgba(0,0,0,0.06)] backdrop-blur sm:px-6"><div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
+    <footer className="absolute inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] border-t bg-white/95 px-3 py-3 shadow-[0_-8px_24px_rgba(0,0,0,0.06)] backdrop-blur sm:px-6 md:bottom-0"><div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
       <button type="button" onClick={() => setStep(current => Math.max(0, current - 1))} disabled={step === 0 || saving} className="inline-flex min-h-12 items-center gap-2 rounded-lg border px-4 disabled:invisible"><ChevronLeft className="h-4 w-4" /> Back</button>
       {step < 4 ? <button type="button" onClick={() => void advance()} disabled={saving || loading} className="inline-flex min-h-12 min-w-40 items-center justify-center gap-2 rounded-lg bg-green-700 px-5 text-base font-semibold text-white disabled:opacity-50">{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : step === 0 ? <Package className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}{step === 0 ? 'Save & continue' : step === 3 ? 'Review setup' : 'Continue'}</button> : <button type="button" onClick={() => void activate()} disabled={saving || missingFields.length > 0} className="inline-flex min-h-12 min-w-40 items-center justify-center gap-2 rounded-lg bg-green-700 px-5 text-base font-semibold text-white disabled:opacity-50">{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} Activate product</button>}
     </div></footer>

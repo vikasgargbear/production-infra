@@ -533,6 +533,8 @@ def test_three_hidden_reads_query_only_canonical_tables_with_bounds():
     assert supplier.suppliers[0].supplier_account_id == supplier_account_id
     assert supplier.suppliers[0].supplier_code == "SUP-1"
     supplier_sql = supplier_db.calls[0][0]
+    assert "status IN ('active','pending_verification')" in supplier_sql
+    assert "CASE WHEN status='active' THEN 0 ELSE 1 END" in supplier_sql
     for relation in (
         "parties.supplier_accounts",
         "parties.parties",
