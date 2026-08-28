@@ -769,14 +769,12 @@ def resolve_authoritative_facts(
         JOIN core.organizations organization ON organization.id=balance.org_id
           AND organization.status='active'
         JOIN tax.return_periods period ON period.org_id=registration.org_id
-          AND period.id=%s
           AND period.registration_id=registration.id AND period.status='open'
           AND (transaction_timestamp() AT TIME ZONE organization.timezone)::date
               BETWEEN period.period_start AND period.period_end
         JOIN tax.returns filing ON filing.org_id=period.org_id
-          AND filing.id=%s
           AND filing.return_period_id=period.id AND filing.return_type='gstr3b'
-          AND filing.status='draft'
+          AND filing.revision=1 AND filing.status='draft'
         JOIN tax.itc_reversal_rule_versions rule ON rule.status='active'
           AND rule.id=%s
           AND rule.event_kind='goods_destroyed' AND rule.legal_section='17(5)(h)'
@@ -974,8 +972,6 @@ def resolve_authoritative_facts(
                     identities["quarantine_location_id"],
                     identities["uom_conversion_id"],
                     destruction_authority.gst_registration_id,
-                    destruction_authority.return_period_id,
-                    destruction_authority.gstr3b_return_id,
                     destruction_authority.itc_reversal_rule_id,
                     destruction_authority.certificate_attachment_id,
                     destruction_authority.certificate_storage_object_path,

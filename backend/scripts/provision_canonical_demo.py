@@ -576,8 +576,6 @@ for resource_key, authority_value in (
         "destruction_itc_reversal_evidence",
         LIVE18_DESTRUCTION_AUTHORITY.itc_reversal_attachment_id,
     ),
-    ("destruction_return_period", LIVE18_DESTRUCTION_AUTHORITY.return_period_id),
-    ("destruction_gstr3b_return", LIVE18_DESTRUCTION_AUTHORITY.gstr3b_return_id),
 ):
     if IDS[resource_key] != authority_value:
         raise RuntimeError(f"shared destruction authority drifted: {resource_key}")
