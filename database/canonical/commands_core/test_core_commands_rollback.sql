@@ -11,12 +11,13 @@ BEGIN
      WHERE namespace.nspname='erp_core_commands'
        AND proc.proname IN (
          'allocate_document_number','replace_setting','change_customer_terms','change_supplier_terms',
-         'complete_retention_case'
+         'complete_retention_case','resolve_auth_organization','onboard_organization',
+         'create_organization_invitation','accept_organization_invitation'
        )
        AND proc.prosecdef
        AND pg_catalog.has_function_privilege('erp_app',proc.oid,'EXECUTE');
-    IF runtime_commands<>5 THEN
-        RAISE EXCEPTION 'expected five private-definer core commands, found %',runtime_commands;
+    IF runtime_commands<>9 THEN
+        RAISE EXCEPTION 'expected nine private-definer core commands, found %',runtime_commands;
     END IF;
 
     SELECT count(*) INTO exposed_helpers
@@ -25,7 +26,8 @@ BEGIN
      WHERE namespace.nspname='erp_core_commands'
        AND proc.proname NOT IN (
          'allocate_document_number','replace_setting','change_customer_terms','change_supplier_terms',
-         'complete_retention_case'
+         'complete_retention_case','resolve_auth_organization','onboard_organization',
+         'create_organization_invitation','accept_organization_invitation'
        )
        AND pg_catalog.has_function_privilege('erp_app',proc.oid,'EXECUTE');
     IF exposed_helpers<>0 THEN
