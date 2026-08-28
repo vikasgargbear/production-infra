@@ -37,6 +37,13 @@ def test_authoritative_selector_uses_named_batch_identity_after_account_fields()
     assert resolved["direct_issue_batch_id"] != resolved["cash_on_hand_account_name"]
 
 
+def test_authoritative_selector_binds_current_run_goods_receipt_batch() -> None:
+    source = inspect.getsource(resolve_authoritative_facts)
+
+    assert "batch.batch_number=%s" in source
+    assert 'f"DEMO-BATCH-{run_id}"' in source
+
+
 def test_deferred_expense_claim_does_not_block_ready_fact_resolution() -> None:
     source = inspect.getsource(resolve_authoritative_facts)
 
