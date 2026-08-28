@@ -23,6 +23,13 @@ from .operations import (
     published_operator_action_tool_names,
 )
 from .operator_actions import OPERATOR_TOOL_DESCRIPTIONS
+from .purchase_bill_mapping import (
+    PURCHASE_BILL_MAPPING_ARGUMENT_SCHEMA,
+    review_purchase_bill_mapping,
+)
+
+
+LOCAL_REVIEW_TOOL_NAMES = frozenset({"erp_purchase_bill_mapping_review"})
 
 
 class ExactOperatorArguments(ArgModelBase):
@@ -39,7 +46,11 @@ class ExactOperatorArguments(ArgModelBase):
 
 
 def registered_tool_names() -> tuple[str, ...]:
-    return tuple(sorted((*OPERATIONS, *published_operator_action_tool_names())))
+    return tuple(
+        sorted(
+            (*OPERATIONS, *published_operator_action_tool_names(), *LOCAL_REVIEW_TOOL_NAMES)
+        )
+    )
 
 
 def _access_token():
@@ -365,6 +376,31 @@ def create_app(
         return await operation_gateway.execute(
             OPERATIONS["erp_inventory_destruction_readback_get"], _access_token(), locals(),
         )
+
+    async def purchase_bill_mapping_review(**arguments: Any) -> Any:
+        return review_purchase_bill_mapping(arguments["mapping"])
+
+    server.add_tool(
+        purchase_bill_mapping_review,
+        name="erp_purchase_bill_mapping_review",
+        description=(
+            "Validate and resume a stateless, non-posting purchase-bill evidence mapping; "
+            "preserve unresolved/skipped facts and report the remaining canonical "
+            "purchase-order, goods-receipt, and supplier-invoice gates."
+        ),
+        structured_output=False,
+    )
+    purchase_bill_review_tool = server._tool_manager.get_tool(
+        "erp_purchase_bill_mapping_review"
+    )
+    if purchase_bill_review_tool is None:
+        raise RuntimeError("official MCP SDK did not register purchase-bill mapping review")
+    purchase_bill_review_tool.parameters = dict(PURCHASE_BILL_MAPPING_ARGUMENT_SCHEMA)
+    purchase_bill_review_tool.fn_metadata.arg_model = create_model(
+        "erp_purchase_bill_mapping_reviewArguments",
+        __base__=ExactOperatorArguments,
+        mapping=(Any, ...),
+    )
 
     def register_operator_tool(tool_name: str) -> None:
         operation = OPERATOR_OPERATIONS[tool_name]

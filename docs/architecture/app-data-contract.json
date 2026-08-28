@@ -169,6 +169,7 @@
     {"tool":"erp_product_ingredient_search","resource":"catalog","mode":"read","risk":"read_only","idempotency":"not_applicable","approval":"none"},
     {"tool":"erp_product_hsn_search","resource":"catalog","mode":"read","risk":"read_only","idempotency":"not_applicable","approval":"none"},
     {"tool":"erp_product_setup_get","resource":"catalog","mode":"read","risk":"read_only","idempotency":"not_applicable","approval":"none"},
+    {"tool":"erp_purchase_bill_mapping_review","resource":"supplier_invoice","mode":"read","risk":"read_only","idempotency":"not_applicable","approval":"none"},
     {"tool":"erp_supplier_search","resource":"parties","mode":"read","risk":"read_only","idempotency":"not_applicable","approval":"none"},
     {"tool":"erp_customer_get","resource":"parties","mode":"read","risk":"read_only","idempotency":"not_applicable","approval":"none"},
     {"tool":"erp_supplier_get","resource":"parties","mode":"read","risk":"read_only","idempotency":"not_applicable","approval":"none"},
