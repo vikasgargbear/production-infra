@@ -62,7 +62,7 @@ def test_master_code_migration_is_hash_bound_linear_and_deployed() -> None:
         "master_code_deployment_contract",
     )
     assert onboarding_revision.revision == "20260826_0028"
-    assert deployment.EXPECTED_CANONICAL_ALEMBIC_HEAD == "20260828_0049"
+    assert deployment.EXPECTED_CANONICAL_ALEMBIC_HEAD == "20260828_0050"
 
 
 def test_generated_authority_manifest_is_exact_and_post_baseline() -> None:
@@ -228,9 +228,9 @@ def test_public_create_contract_rejects_code_injection(model, payload, field) ->
 def test_routes_require_bounded_idempotency_and_use_typed_commands() -> None:
     source = Path(canonical_erp_reads.__file__).read_text(encoding="utf-8")
 
-    assert source.count('alias="X-Idempotency-Key"') == 4
-    assert source.count("min_length=8") >= 4
-    assert source.count("max_length=128") >= 4
+    assert source.count('alias="X-Idempotency-Key"') == 6
+    assert source.count("min_length=8") >= 6
+    assert source.count("max_length=128") >= 6
     for command in ("create_customer", "create_supplier", "create_product_draft"):
         assert f"erp_master_commands.{command}(" in source
     assert 'response.headers["X-Idempotency-Replayed"]' in source
@@ -253,14 +253,16 @@ def test_rest_and_mcp_share_canonical_master_command_helpers() -> None:
     assert "INSERT INTO parties.customer_accounts" not in mcp_source
     assert "INSERT INTO parties.supplier_accounts" not in mcp_source
 
-    assert set(mcp_master_contract.MASTER_CREATE_POLICIES) == {
+    assert set(mcp_master_contract.MASTER_WRITE_POLICIES) == {
         "catalog.product_draft.create",
         "parties.customer.create",
         "parties.supplier.create",
+        "parties.customer.update",
+        "parties.supplier.update",
     }
     assert all(
         policy.branch_fields == () and policy.risk_class == "reversible_write"
-        for policy in mcp_master_contract.MASTER_CREATE_POLICIES.values()
+        for policy in mcp_master_contract.MASTER_WRITE_POLICIES.values()
     )
 
 

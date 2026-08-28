@@ -240,6 +240,107 @@ MASTER_CREATE_SCHEMAS: Mapping[str, Mapping[str, Any]] = {
     ),
 }
 
+
+def _master_update_schema(
+    *,
+    identity_field: str,
+    properties: Mapping[str, Any],
+    mutable_fields: tuple[str, ...],
+) -> Mapping[str, Any]:
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            identity_field: {"type": "string", "format": "uuid"},
+            "account_row_version": {"type": "integer", "minimum": 1},
+            "party_row_version": {"type": "integer", "minimum": 1},
+            **properties,
+            "idempotency_key": {
+                "type": "string",
+                "pattern": IDEMPOTENCY_KEY_PATTERN,
+                "description": "Stable caller key for exact replay of this update request.",
+            },
+        },
+        "required": [
+            identity_field,
+            "account_row_version",
+            "party_row_version",
+            "idempotency_key",
+        ],
+        "anyOf": [{"required": [field]} for field in mutable_fields],
+    }
+
+
+MASTER_UPDATE_SCHEMAS: Mapping[str, Mapping[str, Any]] = {
+    "erp_customer_update": _master_update_schema(
+        identity_field="customer_id",
+        properties={
+            "customer_name": {"type": "string", "minLength": 1, "maxLength": 200},
+            "customer_type": {"type": "string", "enum": ["individual", "organization"]},
+            "primary_phone": {"type": "string", "pattern": r"^[0-9]{10}$"},
+            "primary_email": {
+                "anyOf": [
+                    {"type": "string", "format": "email", "maxLength": 320},
+                    {"type": "null"},
+                ]
+            },
+            "contact_person_name": {
+                "anyOf": [
+                    {"type": "string", "maxLength": 100},
+                    {"type": "null"},
+                ]
+            },
+            "pan_number": {
+                "anyOf": [
+                    {"type": "string", "pattern": r"^[A-Z]{5}[0-9]{4}[A-Z]$"},
+                    {"type": "null"},
+                ]
+            },
+            "credit_limit": {"type": "string", "pattern": MONEY_PATTERN},
+            "credit_days": {"type": "integer", "minimum": 0, "maximum": 365},
+        },
+        mutable_fields=(
+            "customer_name", "customer_type", "primary_phone", "primary_email",
+            "contact_person_name", "pan_number", "credit_limit", "credit_days",
+        ),
+    ),
+    "erp_supplier_update": _master_update_schema(
+        identity_field="supplier_id",
+        properties={
+            "supplier_name": {"type": "string", "minLength": 1, "maxLength": 200},
+            "primary_phone": {
+                "anyOf": [
+                    {"type": "string", "pattern": r"^[0-9]{10}$"},
+                    {"type": "null"},
+                ]
+            },
+            "primary_email": {
+                "anyOf": [
+                    {"type": "string", "format": "email", "maxLength": 320},
+                    {"type": "null"},
+                ]
+            },
+            "contact_person": {
+                "anyOf": [
+                    {"type": "string", "maxLength": 100},
+                    {"type": "null"},
+                ]
+            },
+            "pan_number": {
+                "anyOf": [
+                    {"type": "string", "pattern": r"^[A-Z]{5}[0-9]{4}[A-Z]$"},
+                    {"type": "null"},
+                ]
+            },
+            "payment_days": {"type": "integer", "minimum": 0, "maximum": 180},
+        },
+        mutable_fields=(
+            "supplier_name", "primary_phone", "primary_email", "contact_person",
+            "pan_number", "payment_days",
+        ),
+    ),
+}
+
 OPERATOR_OPERATIONS.update(
     {
         "erp_product_create": OperatorOperation(
@@ -253,6 +354,14 @@ OPERATOR_OPERATIONS.update(
         "erp_supplier_create": OperatorOperation(
             "erp_supplier_create", "parties.supplier.create",
             MASTER_CREATE_SCHEMAS["erp_supplier_create"], "master_write",
+        ),
+        "erp_customer_update": OperatorOperation(
+            "erp_customer_update", "parties.customer.update",
+            MASTER_UPDATE_SCHEMAS["erp_customer_update"], "master_write",
+        ),
+        "erp_supplier_update": OperatorOperation(
+            "erp_supplier_update", "parties.supplier.update",
+            MASTER_UPDATE_SCHEMAS["erp_supplier_update"], "master_write",
         ),
     }
 )
@@ -554,6 +663,8 @@ class OperationGateway:
                 "catalog.product_draft.create": "/api/internal/mcp/master/products",
                 "parties.customer.create": "/api/internal/mcp/master/customers",
                 "parties.supplier.create": "/api/internal/mcp/master/suppliers",
+                "parties.customer.update": "/api/internal/mcp/master/customers/update",
+                "parties.supplier.update": "/api/internal/mcp/master/suppliers/update",
             }[operation.operation_key]
             payload = arguments
         elif operation.kind in {"approve", "execute"}:

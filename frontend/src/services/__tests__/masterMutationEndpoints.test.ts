@@ -9,6 +9,7 @@ jest.mock('../api/apiClient', () => ({
   apiHelpers: {
     get: jest.fn(),
     post: jest.fn(),
+    patch: jest.fn(),
     put: jest.fn(),
     delete: jest.fn(),
   },
@@ -63,6 +64,37 @@ describe('canonical master mutation endpoints', () => {
     expect(apiHelpers.get).toHaveBeenCalledWith(`/products/${productId}/batches`, {
       preserveExactDecimals: true,
     });
+  });
+
+  it('patches party accounts with versions and bounded replay keys', () => {
+    const customerId = '22222222-2222-7222-8222-222222222222';
+    const supplierId = '33333333-3333-7333-8333-333333333333';
+
+    customersApi.update(customerId, {
+      account_row_version: 2,
+      party_row_version: 4,
+      primary_email: null,
+      pan_number: 'abcde1234f',
+    }, 'erp-web-master-customer-update:11111111-1111-4111-8111-111111111111');
+    suppliersApi.update(supplierId, {
+      account_row_version: 3,
+      party_row_version: 5,
+      primary_phone: null,
+      payment_days: 45,
+    }, 'erp-web-master-supplier-update:22222222-2222-4222-8222-222222222222');
+
+    expect(apiHelpers.patch).toHaveBeenNthCalledWith(1, `/customers/${customerId}`, {
+      account_row_version: 2,
+      party_row_version: 4,
+      primary_email: null,
+      pan_number: 'ABCDE1234F',
+    }, { headers: { 'X-Idempotency-Key': 'erp-web-master-customer-update:11111111-1111-4111-8111-111111111111' } });
+    expect(apiHelpers.patch).toHaveBeenNthCalledWith(2, `/suppliers/${supplierId}`, {
+      account_row_version: 3,
+      party_row_version: 5,
+      primary_phone: null,
+      payment_days: 45,
+    }, { headers: { 'X-Idempotency-Key': 'erp-web-master-supplier-update:22222222-2222-4222-8222-222222222222' } });
   });
 
   it('keeps the complete bounded canonical master authoring set effective', async () => {

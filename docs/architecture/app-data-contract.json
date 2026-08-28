@@ -159,7 +159,9 @@
   "mcp_operations": [
     {"tool":"erp_product_create","resource":"catalog","mode":"write","risk":"reversible_write","idempotency":"required","approval":"actor_confirmation"},
     {"tool":"erp_customer_create","resource":"parties","mode":"write","risk":"reversible_write","idempotency":"required","approval":"actor_confirmation"},
+    {"tool":"erp_customer_update","resource":"parties","mode":"write","risk":"reversible_write","idempotency":"required","approval":"actor_confirmation"},
     {"tool":"erp_supplier_create","resource":"parties","mode":"write","risk":"reversible_write","idempotency":"required","approval":"actor_confirmation"},
+    {"tool":"erp_supplier_update","resource":"parties","mode":"write","risk":"reversible_write","idempotency":"required","approval":"actor_confirmation"},
     {"tool":"erp_product_search","resource":"catalog","mode":"read","risk":"read_only","idempotency":"not_applicable","approval":"none"},
     {"tool":"erp_supplier_search","resource":"parties","mode":"read","risk":"read_only","idempotency":"not_applicable","approval":"none"},
     {"tool":"erp_gst_settings_get","resource":"tax","mode":"read","risk":"read_only","idempotency":"not_applicable","approval":"none"},
