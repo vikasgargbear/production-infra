@@ -66,6 +66,8 @@ def test_destruction_fact_resolution_binds_one_exact_run_authority() -> None:
     assert "period.period_start=date_trunc(" in source
     assert "period.period_end=(date_trunc(" in source
     assert "filing.revision=1" in source
+    assert "returned.id=%s" in source
+    assert "destruction_authority.sales_return_id" in source
 
 
 def test_authoritative_fact_evidence_is_bound_to_exact_identity_and_run(

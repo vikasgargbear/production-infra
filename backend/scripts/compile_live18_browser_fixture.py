@@ -450,6 +450,7 @@ def resolve_authoritative_facts(
         org_id,
         run_id,
         run_attempt,
+        requester_membership_id="d3000000-0000-7000-8000-000000000024",
         gst_registration_id="d3200000-0000-7000-8000-000000000005",
         itc_reversal_rule_version="cgst-act-section-17-5-h-2022-01-01",
     )
@@ -817,6 +818,7 @@ def resolve_authoritative_facts(
              AND returned_document.id=returned_ledger.inventory_document_id
             JOIN sales.returns returned ON returned.org_id=returned_document.org_id
              AND returned.id=returned_document.sales_return_id
+             AND returned.id=%s
            WHERE returned_ledger.org_id=balance.org_id
              AND returned_ledger.location_id=balance.location_id
              AND returned_ledger.batch_id=balance.batch_id
@@ -982,6 +984,7 @@ def resolve_authoritative_facts(
                     destruction_authority.certificate_storage_object_path,
                     destruction_authority.itc_reversal_attachment_id,
                     destruction_authority.itc_reversal_storage_object_path,
+                    destruction_authority.sales_return_id,
                     org_id, identities["branch_id"], identities["product_id"],
                 ),
             )

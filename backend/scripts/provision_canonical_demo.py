@@ -551,6 +551,7 @@ LIVE18_DESTRUCTION_AUTHORITY = canonical_live18_destruction_authority(
     IDS["org"],
     DEMO_RUN_ID,
     DEMO_RUN_ATTEMPT,
+    requester_membership_id=IDS["operator_membership"],
     gst_registration_id=IDS["org_gst_registration"],
     itc_reversal_rule_version=ITC_REVERSAL_RULESET_VERSION,
 )
@@ -6479,6 +6480,11 @@ def main() -> int:
         sales_return_request,
         separate_approver=True,
     )
+    if (
+        sales_return_journey["executed"]["resource_id"]
+        != LIVE18_DESTRUCTION_AUTHORITY.sales_return_id
+    ):
+        raise RuntimeError("demo destruction source sales-return authority drifted")
     with database_connection("ERP_RUNTIME_DATABASE_URL") as runtime:
         sales_return_reconciliation = reconcile_sales_return(
             runtime,
