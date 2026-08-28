@@ -1,0 +1,168 @@
+import fs from 'fs';
+import path from 'path';
+
+
+const srcRoot = path.resolve(__dirname, '../..');
+const read = (relativePath: string): string =>
+  fs.readFileSync(path.join(srcRoot, relativePath), 'utf8');
+
+
+describe('deferred production surfaces', () => {
+  test('payroll and loyalty modules are absent from the production API boundary', () => {
+    const apiIndex = read('services/api/index.ts');
+
+    expect(apiIndex).not.toMatch(/modules\/payroll/);
+    expect(apiIndex).not.toContain('payroll:');
+    expect(apiIndex).not.toContain('loyaltyPointsApi');
+    expect(fs.existsSync(path.join(srcRoot, 'services/api/modules/payroll'))).toBe(false);
+    expect(fs.existsSync(path.join(srcRoot, 'services/api/modules/sales/loyaltyPoints.api.ts'))).toBe(false);
+  });
+
+  test('payroll cannot be reached from the application shell or home actions', () => {
+    const shell = `${read('App.tsx')}\n${read('components/Home.tsx')}`;
+
+    expect(shell).not.toContain('PayrollHub');
+    expect(shell).not.toMatch(/['"]payroll['"]/);
+    expect(fs.existsSync(path.join(srcRoot, 'components/payroll'))).toBe(false);
+  });
+
+  test('fabricated prescription and loyalty navigation stays retired', () => {
+    for (const deferredId of [
+      'quick-prescription',
+      "Today's Prescriptions",
+      'drug-interaction',
+      "id: 'loyalty'",
+      'narcotic-register',
+      'clinical-decision',
+    ]) {
+      expect(read('App.tsx')).not.toContain(deferredId);
+    }
+    expect(fs.existsSync(path.join(srcRoot, 'components/global/navigation/Sidebar.tsx'))).toBe(false);
+    expect(fs.existsSync(path.join(
+      srcRoot, 'services/api/modules/compliance/compliance.api.ts',
+    ))).toBe(false);
+    expect(fs.existsSync(path.join(srcRoot, 'components/compliance/NarcoticRegister.tsx'))).toBe(false);
+  });
+
+  test('employee reads remain exported while unused department CRUD is retired', () => {
+    const apiIndex = read('services/api/index.ts');
+
+    expect(apiIndex).toContain('employeesApi');
+    expect(apiIndex).not.toContain('departmentsApi');
+    expect(fs.existsSync(path.join(srcRoot, 'services/api/modules/org/departments.api.ts'))).toBe(false);
+  });
+
+  test('legacy cache-first workers are retired and their caches are purged', () => {
+    const appEntry = read('index.tsx');
+    const workerTombstone = fs.readFileSync(
+      path.resolve(srcRoot, '../public/service-worker.js'),
+      'utf8',
+    );
+
+    expect(appEntry).toContain('registration.unregister()');
+    expect(appEntry).toContain('window.caches.delete');
+    expect(workerTombstone).toContain('self.registration.unregister()');
+    expect(workerTombstone).toContain('caches.delete');
+    expect(workerTombstone).not.toContain("addEventListener('fetch'");
+    expect(workerTombstone).not.toContain('respondWith');
+
+    [
+      path.resolve(srcRoot, '../../docs/guides/offline-first-development.md'),
+      path.resolve(srcRoot, '../../docs/frontend/offline/README.md'),
+      path.resolve(srcRoot, '../docs/offline/README.md'),
+      path.resolve(srcRoot, '../docs/user-guides/troubleshooting/sync-issues.md'),
+    ].forEach(retiredGuide => expect(fs.existsSync(retiredGuide)).toBe(false));
+  });
+
+  test('fabricated help-center and schema snapshots stay retired', () => {
+    [
+      path.resolve(srcRoot, '../docs/user-guides/README.md'),
+      path.resolve(srcRoot, '../docs/UI_AUDIT_INVOICE_MODULE.md'),
+      path.resolve(srcRoot, '../docs/VARIABLE_NAMING_DICTIONARY.html'),
+      path.resolve(srcRoot, '../jest.config.js'),
+    ].forEach(retiredPath => expect(fs.existsSync(retiredPath)).toBe(false));
+
+    const docsIndex = fs.readFileSync(
+      path.resolve(srcRoot, '../docs/README.md'),
+      'utf8',
+    );
+    expect(docsIndex).not.toMatch(/support@yourapp|XXXXX|1800-XXX/);
+    expect(docsIndex).not.toContain('Status: ✅ Complete');
+  });
+
+  test('zero-consumer compatibility clients and unreachable shells stay retired', () => {
+    [
+      'hooks/useValidation.ts',
+      'components/global/pdf/GlobalPDFGenerator.ts',
+      'components/global/GlobalDocumentSummary.tsx',
+      'components/global/auth/PermissionGate.tsx',
+      'components/global/ui/StandardComponents.tsx',
+      'components/global/ui/KeyboardNavigationGuide.tsx',
+      'components/global/ui/feedback/EmptyState.tsx',
+      'components/global/ui/feedback/LoadingState.tsx',
+      'components/master/utils/DataValidationEngine.tsx',
+      'components/master/utils/BulkOperations.tsx',
+      'components/payment/entry/PaymentReceived.tsx',
+      'services/api/modules/audit/audit.api.ts',
+      'services/api/modules/auth/auth.api.ts',
+      'services/api/modules/compliance/taxEntries.api.ts',
+      'services/api/modules/inventory/conversions.api.ts',
+      'services/api/modules/org/organizations.api.ts',
+      'services/api/modules/purchase/supplierInvoices.api.ts',
+      'services/api/modules/settings/setup.api.ts',
+      'services/api/modules/settings/utils.api.ts',
+      'tests/api/test-sales-apis.ts',
+    ].forEach(relativePath => {
+      expect(fs.existsSync(path.join(srcRoot, relativePath))).toBe(false);
+    });
+
+    const apiIndex = read('services/api/index.ts');
+    [
+      'auditApi',
+      'authApi',
+      'taxEntriesApi',
+      'conversionsApi',
+      'organizationsApi',
+      'supplierInvoicesApi',
+      'setupApi',
+      'utilsApi',
+    ].forEach(retiredExport => expect(apiIndex).not.toContain(retiredExport));
+
+    const masterHub = read('components/master/MasterHub.tsx');
+    const masterUtils = read('components/master/utils/index.ts');
+    expect(masterHub).not.toMatch(/DataValidationEngine|BulkOperations/);
+    expect(masterUtils).not.toMatch(/DataValidationEngine|BulkOperations/);
+
+    const globalIndex = read('components/global/index.ts');
+    expect(globalIndex).not.toContain("./ui/StandardComponents");
+  });
+
+  test('retirement preserves canonical invoice PDF and cloud-session authority', () => {
+    const invoicePdfPath = path.join(srcRoot, 'utils/invoicePdfGenerator.ts');
+    expect(fs.existsSync(invoicePdfPath)).toBe(true);
+    expect(read('components/sales/invoice/invoicelist/components/InvoiceTable.tsx'))
+      .toContain('utils/invoicePdfGenerator');
+
+    const authContext = read('contexts/AuthContext.tsx');
+    const erpSession = read('services/auth/erpSessionStorage.ts');
+    const apiClient = read('services/api/apiClient.ts');
+    expect(authContext).toContain('saveErpSession');
+    expect(erpSession).toContain('ERP_SESSION_KEYS');
+    expect(erpSession).toContain('sessionStorage');
+    expect(erpSession).not.toMatch(/localStorage\.(?:getItem|setItem)/);
+    expect(apiClient).toContain('getErpAccessToken');
+  });
+
+  test('runtime identifiers do not use Math.random fallbacks', () => {
+    for (const relativePath of [
+      'utils/clientUuid.ts',
+      'utils/runtimeId.ts',
+      'contexts/EscapeKeyContext.tsx',
+      'components/global/ui/feedback/Toast.tsx',
+      'components/purchase/utils/productItemTransform.ts',
+    ]) {
+      expect(read(relativePath)).not.toContain('Math.random');
+    }
+    expect(read('utils/clientUuid.ts')).toContain('Secure UUID generation is unavailable');
+  });
+});

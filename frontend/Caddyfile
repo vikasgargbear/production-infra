@@ -1,0 +1,24 @@
+{
+	admin off
+	auto_https off
+	persist_config off
+}
+
+:{$PORT:8080} {
+	log {
+		format json
+	}
+
+	encode zstd gzip
+
+	handle /health {
+		header Content-Type "text/plain; charset=utf-8"
+		respond "ok" 200
+	}
+
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}

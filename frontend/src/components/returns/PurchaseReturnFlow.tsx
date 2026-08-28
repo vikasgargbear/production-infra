@@ -1,33 +1,57 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Package, X, AlertCircle, CheckCircle,
-  RotateCcw, FileText, Building2, Plus
+  RotateCcw, FileText, Building2
 } from 'lucide-react';
 import {
   SupplierSearch, ModuleHeader,
   Select, NotesSection, useToast,
-  ProceedToReviewComponent, StandardDatePicker, ItemsTable
+  ProceedToReviewComponent, StandardDatePicker
 } from '../global';
 import KeyboardShortcuts, { SHORTCUT_SETS } from '../global/ui/KeyboardShortcuts';
-import { returnsApi, purchasesApi, metadataApi } from '../../services/api';
-import { calculateReturnPreview } from '../../services/calculations/returnCalculationService';
+import { purchasesApi } from '../../services/api';
+import {
+  canonicalReturnsApi,
+  type CanonicalPurchaseReturnLogisticsMode,
+  type CanonicalPurchaseReturnTransporterChoice,
+} from '../../services/api/modules/returns/canonicalReturns.api';
 import PurchaseReturnSelector from './ui/PurchaseReturnSelector';
-import DebitNotePreview from './ui/DebitNotePreview';
-import offlineStorage from '../../services/offlineStorage';
+import ReturnBusinessDateGate from './components/ReturnBusinessDateGate';
 import { BaseReturnItem } from '../returns/types/returnsSharedTypes';
-import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { usePurchaseReturnSave } from './hooks/usePurchaseReturnSave';
+import { updatePurchaseReturnItem } from './utils/purchaseReturnProjection';
+import { prepareCanonicalPurchaseReturn, type AwaitingIndependentApproval } from './utils/canonicalReturnLifecycle';
+import { clientUuid } from '../../utils/clientUuid';
+import { returnFlowOwnsEscape } from './utils/returnKeyboardBoundary';
+import { formatCanonicalReasonCode } from './utils/canonicalReturnCommand';
+import { addExactDecimals, compareExactDecimals, exactDecimalUnits } from '../../utils/exactDecimal';
+import { useCanonicalBusinessDate } from '../../hooks/useCanonicalBusinessDate';
+import { isCanonicalUuid } from '../../utils/canonicalUuid';
+import { formatCalendarDate } from '../../utils/calendarDate';
+import { requireCanonicalPostingDate } from '../../utils/canonicalPostingDate';
+import {
+  authoritativeReturnQuantity,
+  authoritativeReturnRate,
+  formatReturnMoney,
+  hasExactReturnPreview,
+} from './utils/returnDecimal';
+
+const purchaseQuantityOptions = { scale: 6, maximumWholeDigits: 14 } as const;
+const purchaseRateOptions = { scale: 6, maximumWholeDigits: 14 } as const;
 
 interface TransportDetails {
   transport_mode: string;
-  vehicle_no: string;
-  transporter_name: string;
-  lr_no: string;
+  distance_km: string;
+  vehicle_number?: string;
+  vehicle_type?: string;
+  transporter_party_id?: string;
+  transport_document_number?: string;
+  transport_document_date?: string;
 }
 
 interface PurchaseReturnItem extends Omit<BaseReturnItem, 'product_id'> {
   id: string | number;
-  product_id: number | undefined;
+  product_id: number | string | undefined;
   invoice_item_id?: string | number;
   restock?: boolean;
   disposition?: string;
@@ -46,33 +70,52 @@ interface PurchaseReturnData {
   items: PurchaseReturnItem[];
   return_reason: string;
   return_reason_notes: string;
-  return_method: string;
-  subtotal_amount: number;
-  tax_amount: number;
-  total_amount: number;
+  subtotal_amount: string;
+  tax_amount: string;
+  total_amount: string;
   debit_note_no: string;
-  status: string;
-  include_gst: boolean;
+  branch_id: string;
+  gst_tax_treatment: '' | 'commercial_only' | 'statutory';
+  return_reason_choices: Array<{
+    reason_code: string;
+    supported_gst_treatments: Array<'commercial_only' | 'statutory'>;
+  }>;
+  supplier_destinations: any[];
+  supplier_destination_address_id: string;
+  statutory_gstr2b_credit_notes: any[];
+  supplier_credit_note_portal_line_id: string;
+  logistics_modes: CanonicalPurchaseReturnLogisticsMode[];
+  transporter_choices: CanonicalPurchaseReturnTransporterChoice[];
   transport_details: TransportDetails;
 }
+
+const isPositiveDecimalText = (value: unknown) => {
+  try { return exactDecimalUnits(value, 'Purchase return quantity', purchaseQuantityOptions) > 0n; }
+  catch { return false; }
+};
 
 const PurchaseReturnFlowV2 = ({ onClose }) => {
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const historyButtonRef = useRef(null);
+  const [preparing, setPreparing] = useState(false);
+  const [preparedApproval, setPreparedApproval] = useState<AwaitingIndependentApproval | null>(null);
+  const {
+    businessDate: authoritativeBusinessDate,
+    loading: businessDateLoading,
+    error: businessDateError,
+    retry: retryBusinessDate,
+  } = useCanonicalBusinessDate();
+  const prepareKeyRef = useRef(`erp-web-purchase-return-prepare:${clientUuid()}`);
   const toast = useToast();
 
   // Refs for keyboard navigation
   const supplierSearchRef = useRef<any>(null);
   const invoiceSearchRef = useRef<any>(null);
-  const firstInputRef = useRef(null);
-  const calculationRequestRef = useRef(0);
 
   // Return data state - matching sales return structure
   const [returnData, setReturnData] = useState<PurchaseReturnData>({
     return_no: '',
-    return_date: new Date().toISOString().split('T')[0],
+    return_date: '',
     supplier_id: '',
     supplier_details: null,
     supplier_invoice_id: '',
@@ -82,77 +125,62 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
     items: [],
     return_reason: '',
     return_reason_notes: '',
-    return_method: 'debit_note', // Default to debit note
-    subtotal_amount: 0,
-    tax_amount: 0,
-    total_amount: 0,
+    subtotal_amount: '',
+    tax_amount: '',
+    total_amount: '',
     debit_note_no: '',
-    status: 'PENDING',
-    include_gst: true,
+    branch_id: '',
+    gst_tax_treatment: '',
+    return_reason_choices: [],
+    supplier_destinations: [],
+    supplier_destination_address_id: '',
+    statutory_gstr2b_credit_notes: [],
+    supplier_credit_note_portal_line_id: '',
+    logistics_modes: [],
+    transporter_choices: [],
     transport_details: {
       transport_mode: '',
-      vehicle_no: '',
-      transporter_name: '',
-      lr_no: ''
+      distance_km: ''
     }
   });
 
   const [selectedSupplier, setSelectedSupplier] = useState<any>(null);
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
   const [returnReasons, setReturnReasons] = useState<{ value: string; label: string; }[]>([]);
-  const [showManualEntry, setShowManualEntry] = useState(false);
   const [showInvoiceSection, setShowInvoiceSection] = useState(true);
-  const [manualItemCounter, setManualItemCounter] = useState(1);
   const [returnableInvoices, setReturnableInvoices] = useState<any[]>([]);
-  const [availableBatches, setAvailableBatches] = useState({});
 
-  // Network status for offline-first
-  const { isOnline } = useNetworkStatus();
   const returnDataRef = useRef(returnData);
   returnDataRef.current = returnData;
+  const invoiceContextRequestSequence = useRef(0);
+  const supplierInvoicesRequestSequence = useRef(0);
+  const hasPositiveReturnLine = returnData.items.some(item => item.selected && (
+    isPositiveDecimalText(item.return_paid_qty)
+    || isPositiveDecimalText(item.return_free_qty)
+  ));
+  const hasMonetaryPreview = hasExactReturnPreview(returnData.items, returnData);
+  const displayedTotal = (() => {
+    if (!hasMonetaryPreview) return 'Pending backend preview';
+    try { return formatReturnMoney(returnData.total_amount, 'Purchase return total'); }
+    catch { return 'Invalid amount'; }
+  })();
+  const selectedLogisticsMode = returnData.logistics_modes.find(
+    policy => policy.transport_mode === returnData.transport_details.transport_mode,
+  );
 
-  // Load return reasons from system settings
   useEffect(() => {
-    const loadReturnReasons = async () => {
-      // First set default reasons immediately
-      const defaultReasons = [
-        { value: 'NOT_ORDERED', label: 'Product Not Ordered (Restocks)' },
-        { value: 'EXPIRED', label: 'Expired Product (No Restock)' },
-        { value: 'WRONG_PRODUCT', label: 'Wrong Product Received (Restocks)' },
-        { value: 'QUALITY_ISSUE', label: 'Quality Issue (Restocks)' },
-        { value: 'EXCESS_ORDER', label: 'Excess Order (Restocks)' },
-        { value: 'NEAR_EXPIRY', label: 'Near Expiry (Restocks)' },
-        { value: 'RATE_DISPUTE', label: 'Rate Dispute (Restocks)' },
-        { value: 'SCHEME_ISSUE', label: 'Scheme/Discount Issue (Restocks)' },
-        { value: 'DAMAGED', label: 'Damaged/Defective Product (No Restock)' },
-        { value: 'OTHER', label: 'Other (Restocks)' }
-      ];
-      setReturnReasons(defaultReasons);
-
-      // Then try to load from backend in background
-      try {
-        const cached = await offlineStorage.getOffline('purchase_return_reasons', { persistent: true });
-        if (cached && cached.data && Array.isArray(cached.data) && cached.data.length > 0) {
-          setReturnReasons(cached.data);
-        }
-
-        const response = await metadataApi.getReturnReasons();
-        const fetchedReasons = response.data?.purchase_return_reasons || [];
-
-        if (Array.isArray(fetchedReasons) && fetchedReasons.length > 0) {
-          setReturnReasons(fetchedReasons);
-          await offlineStorage.storeOffline('purchase_return_reasons', fetchedReasons, { persistent: true });
-        }
-      } catch (error) {
-      }
-    };
-
-    loadReturnReasons();
-  }, []);
+    if (authoritativeBusinessDate) {
+      setReturnData(previous => previous.return_date ? previous : ({
+          ...previous,
+          return_date: authoritativeBusinessDate,
+        }));
+    }
+  }, [authoritativeBusinessDate]);
 
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e) => {
+      if (e.defaultPrevented) return;
       if (e.ctrlKey || e.metaKey) {
         switch (e.key) {
           case 'r':
@@ -171,8 +199,6 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
             e.preventDefault();
             if (currentStep === 1) {
               handleProceedToReview();
-            } else if (currentStep === 2) {
-              handleSaveReturn();
             }
             break;
           case 'p':
@@ -182,7 +208,8 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
         }
       }
 
-      if (e.key === 'Escape') {
+      if (returnFlowOwnsEscape(e)) {
+        if (preparedApproval) return;
         if (currentStep === 2) setCurrentStep(1);
         else onClose();
       }
@@ -190,98 +217,209 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [currentStep]);
+  }, [currentStep, preparedApproval, onClose]);
 
   // Handle invoice selection
   const handleInvoiceSelect = async (invoice) => {
-    if (!invoice) return;
+    const requestSequence = ++invoiceContextRequestSequence.current;
+    if (!invoice) {
+      setLoading(false);
+      return;
+    }
+    try {
+      requireCanonicalPostingDate(
+        returnDataRef.current.return_date,
+        authoritativeBusinessDate,
+        'Purchase return date',
+        invoice.invoice_date,
+      );
+    } catch (error) {
+      setLoading(false);
+      toast.error(error instanceof Error ? error.message : 'Purchase return date is invalid.');
+      return;
+    }
+
+    const invoiceId = String(invoice.supplier_invoice_id ?? invoice.invoice_id ?? '');
+    if (!isCanonicalUuid(invoiceId)) {
+      setLoading(false);
+      toast.error('This supplier invoice is missing its canonical UUID and cannot be returned.');
+      return;
+    }
 
     setSelectedInvoice(invoice);
+    setReturnReasons([]);
     setReturnData(prev => ({
       ...prev,
-      supplier_invoice_id: invoice.supplier_invoice_id || invoice.invoice_id,
-      invoice_number: invoice.supplier_invoice_number || invoice.invoice_number,
+      supplier_invoice_id: invoiceId,
+      invoice_number: invoice.supplier_invoice_number ?? invoice.invoice_number,
       invoice_date: invoice.invoice_date,
-      original_invoice: invoice
+      original_invoice: invoice,
+      items: [],
+      subtotal_amount: '',
+      tax_amount: '',
+      total_amount: '',
+      return_reason: '',
+      return_reason_choices: [],
+      gst_tax_treatment: '',
+      statutory_gstr2b_credit_notes: [],
+      supplier_credit_note_portal_line_id: '',
+      logistics_modes: [],
+      transporter_choices: [],
+      transport_details: { transport_mode: '', distance_km: '' },
     }));
 
     // Load invoice items if not already loaded
     try {
       setLoading(true);
-      const response = await returnsApi.getSupplierInvoiceReturnableItems(
-        invoice.supplier_invoice_id || invoice.invoice_id
+      const response = await canonicalReturnsApi.getPurchaseContext(
+        invoiceId,
+        returnDataRef.current.return_date,
       );
+      if (requestSequence !== invoiceContextRequestSequence.current) return;
+      const context = response.data;
 
-      if (response.data.items) {
-
-        const mappedItems = response.data.items.map(item => {
+      if (context.lines.length) {
+        const mappedItems: PurchaseReturnItem[] = context.lines.map((item, index) => {
+          const label = `Purchase return context lines[${index}]`;
+          const billed = authoritativeReturnQuantity(
+            item.returnable_billed_quantity,
+            `${label}.returnable_billed_quantity`,
+          );
+          const free = authoritativeReturnQuantity(
+            item.returnable_free_quantity,
+            `${label}.returnable_free_quantity`,
+          );
+          const total = addExactDecimals([billed, free], `${label}.return_quantity`, purchaseQuantityOptions);
+          const taxRates = [item.cgst_rate, item.sgst_rate, item.igst_rate, item.cess_rate]
+            .map((value, componentIndex) => authoritativeReturnRate(
+              value,
+              `${label}.tax_component[${componentIndex}]`,
+            ));
           return {
             ...item,
-            id: item.invoice_item_id || item.id,
-            invoice_item_id: item.invoice_item_id,
-            return_quantity: parseFloat(item.returnable_quantity || 0), // Pre-fill with max returnable
-            selected: true, // Pre-select all
-            unit_price: parseFloat(item.unit_price || 0),
-            tax_percent: item.tax_percent || 18,
-            discount_percent: item.discount_percent || 0,
-            max_returnable_qty: parseFloat(item.returnable_quantity || 0),
-            batch_id: item.batch_id,
-            batch_number: item.batch_number,
-            disposition: 'RESTOCK',
-            restock: true
-          };
+            id: item.supplier_invoice_receipt_allocation_id,
+            invoice_item_id: item.supplier_invoice_line_id,
+            return_paid_qty: '',
+            return_free_qty: '',
+            return_quantity: '',
+            original_quantity: total,
+            selected: false,
+            unit_price: authoritativeReturnRate(item.quoted_unit_rate, `${label}.quoted_unit_rate`),
+            tax_percent: addExactDecimals(taxRates, `${label}.tax_rate`, purchaseRateOptions),
+            discount_percent: '',
+            max_returnable_qty: total,
+          } as any;
         });
 
         setReturnData(prev => ({
           ...prev,
-          items: mappedItems
+          branch_id: context.branch_id,
+          supplier_invoice_id: context.supplier_invoice_id,
+          invoice_number: context.supplier_invoice_number,
+          invoice_date: context.supplier_invoice_date,
+          items: mappedItems,
+          subtotal_amount: '',
+          tax_amount: '',
+          total_amount: '',
+          return_reason: '',
+          return_reason_choices: context.return_reason_choices,
+          supplier_destinations: context.supplier_destinations,
+          supplier_destination_address_id: '',
+          statutory_gstr2b_credit_notes: context.statutory_gstr2b_credit_notes,
+          supplier_credit_note_portal_line_id: '',
+          gst_tax_treatment: '',
+          logistics_modes: context.logistics_modes,
+          transporter_choices: context.transporter_choices,
+          transport_details: {
+            transport_mode: '',
+            distance_km: '',
+          },
         }));
+        setReturnReasons(context.return_reason_choices.map(choice => ({
+          value: choice.reason_code,
+          label: formatCanonicalReasonCode(choice.reason_code),
+        })));
       }
     } catch (error) {
+      if (requestSequence !== invoiceContextRequestSequence.current) return;
       toast.error('Failed to load invoice items');
+      setSelectedInvoice(null);
+      setShowInvoiceSection(true);
+      setReturnReasons([]);
+      setReturnData(prev => ({
+        ...prev,
+        supplier_invoice_id: '', invoice_number: '', invoice_date: '', original_invoice: null,
+        items: [], subtotal_amount: '', tax_amount: '', total_amount: '',
+        return_reason: '', return_reason_choices: [], branch_id: '', gst_tax_treatment: '',
+        supplier_destinations: [], supplier_destination_address_id: '',
+        statutory_gstr2b_credit_notes: [], supplier_credit_note_portal_line_id: '',
+        logistics_modes: [], transporter_choices: [],
+        transport_details: { transport_mode: '', distance_km: '' },
+      }));
     } finally {
-      setLoading(false);
+      if (requestSequence === invoiceContextRequestSequence.current) setLoading(false);
     }
   };
 
   // Handle supplier selection
   const handleSupplierSelect = async (supplier) => {
+    invoiceContextRequestSequence.current += 1;
+    const requestSequence = ++supplierInvoicesRequestSequence.current;
     if (!supplier) {
+      setLoading(false);
       setSelectedSupplier(null);
       setSelectedInvoice(null);
       setShowInvoiceSection(true);
-      setShowManualEntry(false);
+      setReturnReasons([]);
+      setReturnableInvoices([]);
       setReturnData(prev => ({
         ...prev,
         supplier_id: '',
         supplier_details: null,
-        supplier_invoice_id: '',
-        items: []
+        supplier_invoice_id: '', invoice_number: '', invoice_date: '', original_invoice: null,
+        items: [],
+        return_reason: '', return_reason_choices: [], branch_id: '', gst_tax_treatment: '',
+        subtotal_amount: '',
+        tax_amount: '',
+        total_amount: '',
+        supplier_destinations: [], supplier_destination_address_id: '',
+        statutory_gstr2b_credit_notes: [], supplier_credit_note_portal_line_id: '',
+        logistics_modes: [], transporter_choices: [],
+        transport_details: { transport_mode: '', distance_km: '' },
       }));
       return;
     }
 
     const fullSupplier = {
       ...supplier,
-      supplier_name: supplier.supplier_name || supplier.name,
+      supplier_name: supplier.supplier_name,
       address: supplier.address || supplier.billing_address || '',
       phone: supplier.phone || supplier.mobile || '',
-      gst_number: supplier.gst_number || supplier.gst_number || ''
+      gst_number: supplier.gst_number ?? ''
     };
 
     setSelectedSupplier(fullSupplier);
     setSelectedInvoice(null);
     setShowInvoiceSection(true);
-    setShowManualEntry(false);
+    setReturnReasons([]);
+    setReturnableInvoices([]);
 
-    const supplierId = supplier.supplier_id || supplier.id || supplier.party_id;
+    const supplierId = supplier.supplier_id;
 
     setReturnData(prev => ({
       ...prev,
       supplier_id: supplierId,
       supplier_details: fullSupplier,
-      supplier_invoice_id: '',
-      items: []
+      supplier_invoice_id: '', invoice_number: '', invoice_date: '', original_invoice: null,
+      items: [],
+      return_reason: '', return_reason_choices: [], branch_id: '', gst_tax_treatment: '',
+      subtotal_amount: '',
+      tax_amount: '',
+      total_amount: '',
+      supplier_destinations: [], supplier_destination_address_id: '',
+      statutory_gstr2b_credit_notes: [], supplier_credit_note_portal_line_id: '',
+      logistics_modes: [], transporter_choices: [],
+      transport_details: { transport_mode: '', distance_km: '' },
     }));
 
     // Fetch returnable invoices
@@ -290,117 +428,44 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
       const response = await purchasesApi.getReturnableInvoices({
         supplier_id: supplierId
       });
+      if (requestSequence !== supplierInvoicesRequestSequence.current) return;
       setReturnableInvoices(response.data?.invoices || []);
     } catch (error) {
+      if (requestSequence !== supplierInvoicesRequestSequence.current) return;
       toast.error('Failed to fetch supplier invoices');
     } finally {
-      setLoading(false);
+      if (requestSequence === supplierInvoicesRequestSequence.current) setLoading(false);
     }
   };
 
-  // Skip invoice selection for manual entry
-  const handleSkipInvoiceSelection = () => {
-    setShowInvoiceSection(false);
-    setShowManualEntry(true);
-    setSelectedInvoice(null);
-    setReturnData(prev => ({
-      ...prev,
-      supplier_invoice_id: '',
-      invoice_number: '',
-      items: []
-    }));
-  };
-
-  // Add manual item
-  const handleAddManualItem = () => {
-    const newItem = {
-      id: `manual_${manualItemCounter}`,
-      product_id: undefined,
-      product_name: '',
-      batch_number: '',
-      quantity: 0,
-      original_quantity: 0,
-      return_quantity: 0,
-      unit_price: 0,
-      tax_percent: 18,
-      discount_percent: 0,
-      selected: true,
-      is_manual: true,
-      max_returnable_qty: 999999
-    };
-
-    setReturnData(prev => ({
-      ...prev,
-      items: [...prev.items, newItem]
-    }));
-    setManualItemCounter(prev => prev + 1);
-  };
-
   // Update return item
-  const updateReturnItem = (itemId, field, value) => {
+  const updateReturnItem = (itemIndex, field, value) => {
     setReturnData(prev => ({
       ...prev,
-      items: prev.items.map(item => {
-        if (item.id === itemId || item.invoice_item_id === itemId) {
-          return {
-            ...item,
-            [field]: value
-          };
-        }
-        return item;
-      })
+      items: updatePurchaseReturnItem(prev.items, itemIndex, field, value) as PurchaseReturnItem[],
+      subtotal_amount: '', tax_amount: '', total_amount: '',
     }));
   };
 
-  // Use effect to recalculate totals when items change
-  React.useEffect(() => {
-    const requestId = ++calculationRequestRef.current;
-    if (!returnData.items.some(item => item.selected && item.return_quantity > 0)) return;
-
-    const calculate = async () => {
-      try {
-        const calculation = await calculateReturnPreview(returnDataRef.current, 'purchase', isOnline);
-        if (requestId !== calculationRequestRef.current) return;
-        const totals = calculation.totals;
-        setReturnData(prev => {
-          let calculatedIndex = 0;
-          let itemValuesChanged = false;
-          const items = prev.items.map(item => {
-            if (!item.selected || item.return_quantity <= 0) return item;
-            const calculated = calculation.items[calculatedIndex++] || {};
-            const totalAmount = Number(calculated.total_amount || 0);
-            const taxableAmount = Number(calculated.taxable_amount || 0);
-            const taxAmount = Number(calculated.tax_amount || 0);
-            if (
-              Number(item.total_amount || 0) === totalAmount &&
-              Number(item.taxable_amount || 0) === taxableAmount &&
-              Number(item.tax_amount || 0) === taxAmount
-            ) return item;
-            itemValuesChanged = true;
-            return { ...item, ...calculated, total_amount: totalAmount, taxable_amount: taxableAmount, tax_amount: taxAmount };
-          });
-          return {
-            ...prev,
-            items: itemValuesChanged ? items : prev.items,
-            subtotal_amount: totals.subtotal_amount || totals.subtotal || 0,
-            tax_amount: totals.tax_amount || totals.total_tax_amount || 0,
-            total_amount: totals.total_amount || totals.final_amount || 0
-          };
-        });
-      } catch (error) {
-        if (requestId === calculationRequestRef.current) {
-          toast.error(error instanceof Error ? error.message : 'Unable to calculate return totals.');
-        }
-      }
-    };
-    void calculate();
-  }, [returnData.items, returnData.include_gst, returnData.supplier_id, isOnline, toast]);
-
-  // Remove manual item
-  const removeManualItem = (itemId) => {
+  const updateTransportMode = (mode: string) => {
+    const policy = returnDataRef.current.logistics_modes.find(
+      candidate => candidate.transport_mode === mode,
+    );
     setReturnData(prev => ({
       ...prev,
-      items: prev.items.filter(item => item.id !== itemId)
+      transport_details: policy ? {
+        transport_mode: policy.transport_mode,
+        distance_km: '',
+        ...(policy.vehicle_requirement !== 'forbidden'
+          ? { vehicle_number: '', vehicle_type: '' }
+          : {}),
+        ...(policy.transporter_requirement !== 'forbidden'
+          ? { transporter_party_id: '' }
+          : {}),
+        ...(policy.transport_document_requirement !== 'forbidden'
+          ? { transport_document_number: '', transport_document_date: '' }
+          : {}),
+      } : { transport_mode: '', distance_km: '' },
     }));
   };
 
@@ -411,17 +476,31 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
       return false;
     }
 
-    const hasSelectedItems = returnData.items.some(item =>
-      item.selected && item.return_quantity > 0
-    );
-
-    if (!hasSelectedItems) {
+    if (!hasPositiveReturnLine) {
       toast.error('Please select items to return');
+      return false;
+    }
+
+    const overLimitItem = returnData.items.find(item => item.selected
+      && isPositiveDecimalText(item.return_quantity)
+      && compareExactDecimals(
+        item.return_quantity,
+        item.max_returnable_qty ?? item.original_quantity,
+        `Purchase return quantity for ${item.product_name || 'item'}`,
+        purchaseQuantityOptions,
+      ) > 0);
+    if (overLimitItem) {
+      toast.error(`${overLimitItem.product_name || 'Return item'} exceeds the available return quantity.`);
       return false;
     }
 
     if (!returnData.return_reason) {
       toast.error('Please select a return reason');
+      return false;
+    }
+
+    if (!canPrepare) {
+      toast.error(unavailableReason);
       return false;
     }
 
@@ -436,25 +515,32 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
     }
   };
 
-  // Offline-first save hook
-  const { saving: offlineSaving, handleSaveReturn } = usePurchaseReturnSave({
-    returnData,
-    selectedInvoice,
-    isOnline,
-    validateReturn,
-    onClose,
-    toast
-  });
+  const { canPrepare, unavailableReason } = usePurchaseReturnSave(returnData as any);
 
-  // Handle print
-  const handlePrint = () => {
-    window.print();
+  const handlePrepareReturn = async () => {
+    if (!canPrepare || preparedApproval) return;
+    setPreparing(true);
+    try {
+      requireCanonicalPostingDate(
+        returnData.return_date,
+        authoritativeBusinessDate,
+        'Purchase return date',
+        returnData.invoice_date,
+      );
+      const result = await prepareCanonicalPurchaseReturn(returnData as any, prepareKeyRef.current);
+      setPreparedApproval(result);
+      toast.success('Immutable purchase-return preview prepared for independent approval.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to prepare canonical purchase return.');
+    } finally {
+      setPreparing(false);
+    }
   };
 
   // Step 1: Create Return - Sales Return Style
   if (currentStep === 1) {
     return (
-      <div className="h-full bg-blue-50">
+      <div className="h-full bg-gray-50">
         <div className="h-full flex flex-col">
           <ModuleHeader
             title="Purchase Return"
@@ -469,44 +555,59 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
           <KeyboardShortcuts shortcuts={SHORTCUT_SETS.RETURNS} />
 
           {/* Content */}
-          <div className="flex-1 overflow-y-auto bg-blue-50 p-6">
+          <div className="flex-1 overflow-y-auto bg-gray-50 p-4 sm:p-6">
             <div className="max-w-6xl mx-auto space-y-6">
+              <p className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+                Required: select an exact supplier invoice, return line and quantities, reason, GST treatment, verified destination, transport mode, and distance.
+              </p>
               {/* Top Section - Date, Reason, Method - 3-column grid with consistent h-10 heights */}
-              <div className="grid grid-cols-3 gap-4 mb-6">
+              <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
                 <StandardDatePicker
                   label="Return Date"
                   value={returnData.return_date}
-                  onChange={(dateStr) => setReturnData(prev => ({
-                    ...prev,
-                    return_date: dateStr || new Date().toISOString().split('T')[0]
-                  }))}
+                  max={authoritativeBusinessDate || undefined}
+                  onChange={(dateStr) => {
+                    setSelectedInvoice(null);
+                    setReturnReasons([]);
+                    setShowInvoiceSection(true);
+                    setReturnData(prev => ({
+                      ...prev,
+                      return_date: dateStr,
+                      supplier_invoice_id: '',
+                      invoice_number: '',
+                      invoice_date: '',
+                      original_invoice: null,
+                      items: [],
+                      subtotal_amount: '',
+                      tax_amount: '',
+                      total_amount: '',
+                      return_reason: '',
+                      return_reason_choices: [],
+                      gst_tax_treatment: '',
+                      statutory_gstr2b_credit_notes: [],
+                      supplier_credit_note_portal_line_id: '',
+                      logistics_modes: [],
+                      transporter_choices: [],
+                      transport_details: { transport_mode: '', distance_km: '' },
+                    }));
+                  }}
                   required
                 />
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Return Reason <span className="text-red-500">*</span>
-                  </label>
                   <Select
+                    label="Return Reason"
+                    required
                     value={returnData.return_reason}
-                    onChange={(value) => setReturnData(prev => ({ ...prev, return_reason: value as string }))}
+                    onChange={(value) => setReturnData(prev => ({
+                      ...prev,
+                      return_reason: value as string,
+                      gst_tax_treatment: '',
+                      supplier_credit_note_portal_line_id: '',
+                    }))}
                     options={returnReasons}
                     placeholder="Select reason..."
                     className="w-full"
                   />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Return Method <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={returnData.return_method || 'debit_note'}
-                    onChange={(e) => setReturnData(prev => ({ ...prev, return_method: e.target.value }))}
-                    className="w-full h-10 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
-                  >
-                    <option value="debit_note">Debit Note (Recommended)</option>
-                    <option value="replacement">Replacement</option>
-                    <option value="refund">Refund (Requires Approval)</option>
-                  </select>
                 </div>
               </div>
 
@@ -528,22 +629,6 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
                 />
               </div>
 
-              {/* Show option to select invoice if skipped */}
-              {selectedSupplier && !showInvoiceSection && showManualEntry && (
-                <div className="mb-4">
-                  <button
-                    onClick={() => {
-                      setShowInvoiceSection(true);
-                      setShowManualEntry(false);
-                      setReturnData(prev => ({ ...prev, items: [] }));
-                    }}
-                    className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-                  >
-                    ← Back to Invoice Selection
-                  </button>
-                </div>
-              )}
-
               {/* Invoice Section */}
               {selectedSupplier && showInvoiceSection && (
                 <div>
@@ -552,12 +637,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
                       <FileText className="w-4 h-4 mr-2" />
                       SELECT SUPPLIER INVOICE
                     </h3>
-                    <button
-                      onClick={handleSkipInvoiceSelection}
-                      className="px-4 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                    >
-                      Skip Invoice Selection
-                    </button>
+                    <span className="text-xs text-gray-600">Invoice lineage is required for a canonical purchase return.</span>
                   </div>
 
                   {/* Show selected invoice if any */}
@@ -568,22 +648,39 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
                           Invoice #{selectedInvoice.supplier_invoice_number || selectedInvoice.invoice_number}
                         </h4>
                         <p className="text-sm text-gray-600">
-                          Date: {new Date(selectedInvoice.invoice_date).toLocaleDateString()}
+                          Date: {selectedInvoice.invoice_date ? formatCalendarDate(selectedInvoice.invoice_date) : 'Unavailable'}
                         </p>
                         <p className="text-sm text-gray-600">
-                          Amount: ₹{(selectedInvoice.total_amount || selectedInvoice.invoice_amount || 0).toLocaleString()}
+                          Amount: {(() => {
+                            const amount = selectedInvoice.total_amount ?? selectedInvoice.invoice_amount;
+                            if (amount === '' || amount === null || amount === undefined) return 'Unavailable';
+                            try { return formatReturnMoney(amount, 'Supplier invoice amount'); }
+                            catch { return 'Invalid amount'; }
+                          })()}
                         </p>
                       </div>
                       <button
+                        type="button"
                         onClick={() => {
                           setSelectedInvoice(null);
+                          setReturnReasons([]);
                           setReturnData(prev => ({
                             ...prev,
-                            supplier_invoice_id: '',
-                            items: []
+                            supplier_invoice_id: '', invoice_number: '', invoice_date: '', original_invoice: null,
+                            items: [],
+                            return_reason: '', return_reason_choices: [], branch_id: '', gst_tax_treatment: '',
+                            subtotal_amount: '',
+                            tax_amount: '',
+                            total_amount: '',
+                            supplier_destinations: [], supplier_destination_address_id: '',
+                            statutory_gstr2b_credit_notes: [], supplier_credit_note_portal_line_id: '',
+                            logistics_modes: [], transporter_choices: [],
+                            transport_details: { transport_mode: '', distance_km: '' },
                           }));
                         }}
-                        className="text-red-600 hover:text-red-700"
+                        className="flex min-h-11 min-w-11 items-center justify-center rounded-md text-red-700 hover:bg-red-50"
+                        aria-label="Remove selected invoice"
+                        title="Remove selected invoice"
                       >
                         <X className="w-5 h-5" />
                       </button>
@@ -592,61 +689,198 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
 
                   {/* Invoice Selector */}
                   {!selectedInvoice && (
-                    <PurchaseReturnSelector
-                      invoices={returnableInvoices}
-                      onInvoiceSelect={handleInvoiceSelect}
-                      loading={loading}
-                    />
+                    <ReturnBusinessDateGate
+                      loading={businessDateLoading || (!businessDateError && (!authoritativeBusinessDate || !returnData.return_date))}
+                      error={businessDateError}
+                      onRetry={retryBusinessDate}
+                    >
+                      <PurchaseReturnSelector
+                        invoices={returnableInvoices}
+                        onInvoiceSelect={handleInvoiceSelect}
+                        loading={loading}
+                      />
+                    </ReturnBusinessDateGate>
                   )}
                 </div>
               )}
 
               {/* Return Items */}
-              {(selectedInvoice || showManualEntry) && returnData.items.length > 0 && (
+              {selectedInvoice && (
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                  <div className="flex justify-between items-center mb-4">
+                  <div className="mb-4 flex items-center justify-between">
                     <h3 className="text-lg font-semibold text-gray-900 flex items-center">
                       <Package className="w-5 h-5 mr-2 text-blue-600" />
                       Return Items
                     </h3>
-                    {showManualEntry && (
-                      <button
-                        onClick={handleAddManualItem}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
-                      >
-                        <Plus className="w-4 h-4" />
-                        Add Item
-                      </button>
-                    )}
                   </div>
 
-                  <ItemsTable
-                    items={returnData.items}
-                    onUpdateItem={updateReturnItem}
-                    onRemoveItem={showManualEntry ? removeManualItem : undefined}
-                  />
+                  {returnData.items.length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <table className="w-full border-collapse text-sm">
+                        <thead><tr className="border-b border-gray-200 text-left text-gray-600">
+                          <th className="p-2">Return</th><th className="p-2">Product / batch</th>
+                          <th className="p-2">Billed quantity</th><th className="p-2">Free quantity</th><th className="p-2">Location</th>
+                        </tr></thead>
+                        <tbody>{returnData.items.map((item, index) => (
+                          <tr key={String(item.id)} className="border-b border-gray-100">
+                            <td className="p-2"><input aria-label={`Return ${item.product_name}`} type="checkbox" checked={item.selected} onChange={(event) => updateReturnItem(index, 'selected', event.target.checked)} /></td>
+                            <td className="p-2"><p className="font-medium">{item.product_name}</p><p className="text-xs text-gray-600">{item.batch_number}</p></td>
+                            <td className="p-2"><input aria-label={`Billed quantity for ${item.product_name}`} inputMode="decimal" value={String(item.return_paid_qty ?? '')} onChange={(event) => updateReturnItem(index, 'return_paid_qty', event.target.value)} className="min-h-11 w-28 rounded border border-gray-300 px-2" /><p className="text-xs text-gray-500">Max {item.returnable_billed_quantity}</p></td>
+                            <td className="p-2"><input aria-label={`Free quantity for ${item.product_name}`} inputMode="decimal" value={String(item.return_free_qty ?? '')} onChange={(event) => updateReturnItem(index, 'return_free_qty', event.target.value)} className="min-h-11 w-28 rounded border border-gray-300 px-2" /><p className="text-xs text-gray-500">Max {item.returnable_free_quantity}</p></td>
+                            <td className="p-2 text-xs">{item.from_location_code} · {item.from_location_name}</td>
+                          </tr>
+                        ))}</tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="border border-dashed border-gray-300 px-4 py-8 text-center text-sm text-gray-600">
+                      This invoice has no exact receipt allocation remaining to return.
+                    </div>
+                  )}
                 </div>
               )}
 
-              {/* Manual Entry Option */}
-              {showManualEntry && returnData.items.length === 0 && (
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                  <div className="text-center py-8">
-                    <Package className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-                    <p className="text-gray-600 mb-4">No items added yet</p>
-                    <button
-                      onClick={handleAddManualItem}
-                      className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 mx-auto"
-                    >
-                      <Plus className="w-5 h-5" />
-                      Add First Item
-                    </button>
-                  </div>
+              {selectedInvoice && (
+                <div className="grid gap-4 rounded-lg border border-gray-200 bg-white p-6 md:grid-cols-3">
+                  <Select
+                    label="GST treatment"
+                    required
+                    value={returnData.gst_tax_treatment}
+                    onChange={(value) => setReturnData(prev => ({ ...prev, gst_tax_treatment: value as any, supplier_credit_note_portal_line_id: '' }))}
+                    options={(returnData.return_reason_choices.find(
+                      choice => choice.reason_code === returnData.return_reason,
+                    )?.supported_gst_treatments || []).map(value => ({ value, label: value === 'statutory' ? 'Statutory GST debit note' : 'Commercial only (no GST adjustment)' }))}
+                    placeholder="Choose GST treatment"
+                  />
+                  <Select
+                    label="Supplier destination"
+                    required
+                    value={returnData.supplier_destination_address_id}
+                    onChange={(value) => setReturnData(prev => ({ ...prev, supplier_destination_address_id: String(value || '') }))}
+                    options={returnData.supplier_destinations.map(address => ({ value: address.id, label: `${address.address_kind}: ${address.line1}, ${address.city}` }))}
+                    placeholder="Choose verified address"
+                  />
+                  <Select
+                    label="Transport mode"
+                    required
+                    value={returnData.transport_details.transport_mode}
+                    onChange={(value) => updateTransportMode(String(value))}
+                    options={returnData.logistics_modes.map(policy => ({
+                      value: policy.transport_mode,
+                      label: policy.display_name,
+                    }))}
+                    placeholder="Choose transport mode"
+                  />
+                  {selectedLogisticsMode?.distance_required && (
+                    <label className="text-sm font-medium text-gray-700">
+                      Distance (km) <span className="text-red-500">*</span>
+                      <input
+                        aria-label="Distance (km)"
+                        inputMode="decimal"
+                        min={selectedLogisticsMode.minimum_distance_km}
+                        value={returnData.transport_details.distance_km}
+                        onChange={(event) => setReturnData(prev => ({
+                          ...prev,
+                          transport_details: { ...prev.transport_details, distance_km: event.target.value },
+                        }))}
+                        placeholder={`Minimum ${selectedLogisticsMode.minimum_distance_km} km`}
+                        className="mt-1 min-h-11 w-full rounded-lg border border-gray-300 px-3"
+                      />
+                    </label>
+                  )}
+                  {selectedLogisticsMode
+                    && selectedLogisticsMode.transporter_requirement !== 'forbidden' && (
+                    <Select
+                      label="Transporter"
+                      required={selectedLogisticsMode.transporter_requirement === 'required'}
+                      value={returnData.transport_details.transporter_party_id ?? ''}
+                      onChange={(value) => setReturnData(prev => ({
+                        ...prev,
+                        transport_details: {
+                          ...prev.transport_details,
+                          transporter_party_id: String(value || ''),
+                        },
+                      }))}
+                      options={returnData.transporter_choices.map(transporter => ({
+                        value: transporter.party_id,
+                        label: transporter.gstin
+                          ? `${transporter.legal_name} · ${transporter.gstin}`
+                          : transporter.legal_name,
+                      }))}
+                      placeholder="Choose canonical transporter"
+                    />
+                  )}
+                  {selectedLogisticsMode?.vehicle_requirement !== 'forbidden' && (
+                    <>
+                      <label className="text-sm font-medium text-gray-700">
+                        Vehicle number {selectedLogisticsMode?.vehicle_requirement === 'required'
+                          && <span className="text-red-500">*</span>}
+                        <input
+                          value={returnData.transport_details.vehicle_number ?? ''}
+                          onChange={(event) => setReturnData(prev => ({
+                            ...prev,
+                            transport_details: { ...prev.transport_details, vehicle_number: event.target.value },
+                          }))}
+                          className="mt-1 min-h-11 w-full rounded-lg border border-gray-300 px-3"
+                        />
+                      </label>
+                      <Select
+                        label="Vehicle type"
+                        required={selectedLogisticsMode?.vehicle_requirement === 'required'}
+                        value={returnData.transport_details.vehicle_type ?? ''}
+                        onChange={(value) => setReturnData(prev => ({
+                          ...prev,
+                          transport_details: { ...prev.transport_details, vehicle_type: String(value) },
+                        }))}
+                        options={(selectedLogisticsMode?.vehicle_type_choices || []).map(value => ({
+                          value,
+                          label: formatCanonicalReasonCode(value),
+                        }))}
+                        placeholder="Choose vehicle type"
+                      />
+                    </>
+                  )}
+                  {selectedLogisticsMode
+                    && selectedLogisticsMode.transport_document_requirement !== 'forbidden' && (
+                    <>
+                      <label className="text-sm font-medium text-gray-700">
+                        Transport document number {selectedLogisticsMode.transport_document_requirement === 'required'
+                          && <span className="text-red-500">*</span>}
+                        <input
+                          value={returnData.transport_details.transport_document_number ?? ''}
+                          onChange={(event) => setReturnData(prev => ({
+                            ...prev,
+                            transport_details: { ...prev.transport_details, transport_document_number: event.target.value },
+                          }))}
+                          className="mt-1 min-h-11 w-full rounded-lg border border-gray-300 px-3"
+                        />
+                      </label>
+                      <StandardDatePicker
+                        label="Transport document date"
+                        required={selectedLogisticsMode.transport_document_requirement === 'required'}
+                        value={returnData.transport_details.transport_document_date ?? ''}
+                        onChange={(date) => setReturnData(prev => ({
+                          ...prev,
+                          transport_details: { ...prev.transport_details, transport_document_date: date },
+                        }))}
+                      />
+                    </>
+                  )}
+                  {returnData.gst_tax_treatment === 'statutory' && (
+                    <Select
+                      label="GSTR-2B supplier credit-note evidence"
+                      required
+                      value={returnData.supplier_credit_note_portal_line_id}
+                      onChange={(value) => setReturnData(prev => ({ ...prev, supplier_credit_note_portal_line_id: String(value || '') }))}
+                      options={returnData.statutory_gstr2b_credit_notes.map(item => ({ value: item.id, label: `${item.invoice_number} · ${item.invoice_date} · ₹${item.total_amount}` }))}
+                      placeholder="Select portal evidence"
+                    />
+                  )}
                 </div>
               )}
 
               {/* Additional Notes */}
-              {(selectedInvoice || showManualEntry) && (
+              {selectedInvoice && (
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                   <NotesSection
                     value={returnData.return_reason_notes}
@@ -666,20 +900,22 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
                   {returnData.items.filter(item => item.selected).length} items selected
                 </span>
                 <span className="text-lg font-semibold">
-                  Total: ₹{returnData.total_amount.toLocaleString()}
+                  Total: {displayedTotal}
                 </span>
               </div>
               <div className="flex gap-3">
                 <button
+                  type="button"
                   onClick={onClose}
-                  className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                  className="min-h-11 rounded-md border border-gray-300 px-6 py-2 text-gray-700 hover:bg-gray-50"
                 >
                   Cancel
                 </button>
                 <button
+                  type="button"
                   onClick={handleProceedToReview}
-                  disabled={!returnData.items.some(item => item.selected && item.return_quantity > 0)}
-                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                  disabled={!hasPositiveReturnLine}
+                  className="min-h-11 rounded-md bg-blue-600 px-6 py-2 text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
                 >
                   Proceed to Review
                 </button>
@@ -698,7 +934,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
         <ModuleHeader
           title="Review Purchase Return"
           documentNumber={returnData.return_no}
-          status="pending"
+          status="review"
           icon={CheckCircle}
           iconColor="text-green-600"
           onClose={onClose}
@@ -708,11 +944,33 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
         <div className="flex-1 overflow-y-auto">
           <div className="max-w-6xl mx-auto p-6">
             {/* Main Debit Note Preview */}
-            <DebitNotePreview
-              returnData={returnData}
-              supplier={selectedSupplier}
-              purchase={selectedInvoice}
-            />
+            <div className="border border-gray-200 bg-white p-6">
+                <h2 className="text-lg font-semibold text-gray-900">Canonical purchase-return review</h2>
+                <p className="mt-2 text-sm text-gray-600">
+                  Supplier-invoice, receipt-line, batch and location lineage are ready. Monetary and GST impacts appear only when an authoritative preview supplies them.
+                </p>
+                <div className="mt-5 overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead><tr className="border-b text-left text-gray-600"><th className="p-2">Product</th><th className="p-2">Batch</th><th className="p-2">Billed</th><th className="p-2">Free</th><th className="p-2">Receipt location</th><th className="p-2">Amount</th></tr></thead>
+                    <tbody>{returnData.items.filter(item => item.selected).map((item, index) => (
+                      <tr key={String(item.id ?? index)} className="border-b border-gray-100">
+                        <td className="p-2">{item.product_name}</td>
+                        <td className="p-2">{item.batch_number || 'Unavailable'}</td>
+                        <td className="p-2">{item.return_paid_qty === '' || item.return_paid_qty === undefined ? 'Unavailable' : item.return_paid_qty}</td>
+                        <td className="p-2">{item.return_free_qty === '' || item.return_free_qty === undefined ? 'Unavailable' : item.return_free_qty}</td>
+                        <td className="p-2">{item.from_location_code || 'Unavailable'}</td>
+                        <td className="p-2">{(() => {
+                          if (!hasMonetaryPreview) return 'Pending backend preview';
+                          const amount = item.total_amount ?? item.line_total;
+                          if (amount === '' || amount === null || amount === undefined) return 'Unavailable';
+                          try { return formatReturnMoney(amount, `Purchase return lines[${index}].total_amount`); }
+                          catch { return 'Invalid amount'; }
+                        })()}</td>
+                      </tr>
+                    ))}</tbody>
+                  </table>
+                </div>
+              </div>
 
             {/* Return Notes Section - Below preview */}
             <div className="mt-6 bg-white rounded-lg shadow-sm border border-blue-200 p-6">
@@ -728,15 +986,27 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
             </div>
 
             {/* Important Notice - Below notes */}
-            <div className="mt-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+            <div className={`mt-6 rounded-lg border p-4 ${preparedApproval ? 'border-blue-300 bg-blue-50' : 'border-yellow-200 bg-yellow-50'}`}>
               <div className="flex items-start gap-3">
-                <AlertCircle className="w-5 h-5 text-yellow-600 mt-0.5" />
+                <AlertCircle className={`w-5 h-5 mt-0.5 ${preparedApproval ? 'text-blue-700' : 'text-yellow-600'}`} />
                 <div className="text-sm">
-                  <p className="font-medium text-yellow-900 mb-1">Important</p>
-                  <p className="text-yellow-700">
-                    Once confirmed, a debit note will be generated and the supplier will be notified.
-                    The return amount of <span className="font-bold">₹{returnData.total_amount.toFixed(2)}</span> will be adjusted against future purchases.
+                  <p className={`font-medium mb-1 ${preparedApproval ? 'text-blue-950' : 'text-yellow-900'}`}>
+                    {preparedApproval ? 'Awaiting independent approval' : 'Canonical preparation check'}
                   </p>
+                  <p className={preparedApproval ? 'text-blue-900' : 'text-yellow-700'}>
+                    {preparedApproval?.message || unavailableReason || 'The immutable preview is ready to prepare.'}
+                  </p>
+                  {preparedApproval && (
+                    <div className="mt-3">
+                      <p className="break-all">Command: {preparedApproval.preview.command_request_id}</p>
+                      <p className="break-all">Preview hash: {preparedApproval.preview.preview_hash}</p>
+                      <div className="mt-3 grid gap-3 md:grid-cols-3">
+                        <pre className="overflow-auto rounded border border-blue-200 bg-white p-2 text-xs">{JSON.stringify(preparedApproval.preview.inventory_impact || [], null, 2)}</pre>
+                        <pre className="overflow-auto rounded border border-blue-200 bg-white p-2 text-xs">{JSON.stringify(preparedApproval.preview.financial_impact || [], null, 2)}</pre>
+                        <pre className="overflow-auto rounded border border-blue-200 bg-white p-2 text-xs">{JSON.stringify(preparedApproval.preview.tax_impact || [], null, 2)}</pre>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -746,15 +1016,15 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
         {/* Footer - Using Global Component */}
         <ProceedToReviewComponent
           currentStep={2}
-          canProceed={true}
-          onBack={() => setCurrentStep(1)}
-          onProceed={handleSaveReturn}
+          canProceed={canPrepare && !preparedApproval}
+          onBack={preparedApproval ? () => undefined : () => setCurrentStep(1)}
+          onProceed={handlePrepareReturn}
           onReset={undefined}
           totalItems={returnData.items.filter(item => item.selected).length}
-          totalAmount={returnData.total_amount}
-          proceedText="Generate Debit Note"
+          totalAmount={hasMonetaryPreview ? returnData.total_amount : undefined}
+          proceedText={preparedApproval ? 'Awaiting independent approval' : 'Prepare Immutable Return'}
           backText="Back"
-          saving={offlineSaving || saving}
+          saving={preparing}
         />
       </div>
     </div>

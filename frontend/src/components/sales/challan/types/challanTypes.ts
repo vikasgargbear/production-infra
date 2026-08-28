@@ -7,11 +7,30 @@
 
 // ==================== BASE TYPES ====================
 
+import type { EditableDecimalValue } from '../../../../utils/exactDecimal';
+import type { CanonicalDocumentPolicy } from '../../../../services/api/modules/org/canonicalBusinessContext.api';
+
 /** Challan status values */
 export type ChallanStatus = 'draft' | 'pending' | 'dispatched' | 'delivered' | 'cancelled';
 
 /** Delivery type values */
 export type DeliveryType = 'PICKUP' | 'SAME_DAY' | 'NEXT_DAY' | 'EXPRESS' | 'STANDARD';
+export type FreeSupplyTaxTreatment =
+    | 'excluded_from_taxable_value'
+    | 'included_at_unit_rate';
+export type AllocationSourceKind = 'direct_issue' | 'dispatch_allocation';
+
+export interface ChallanEligibleBatch {
+    batch_id: string;
+    batch_number: string;
+    expiry_date: string;
+    location_id: string;
+    location_name: string;
+    mrp: string;
+    available_quantity: string;
+    available_base_quantity: string;
+    fefo_priority: number;
+}
 
 // ==================== CUSTOMER ====================
 
@@ -19,18 +38,8 @@ export type DeliveryType = 'PICKUP' | 'SAME_DAY' | 'NEXT_DAY' | 'EXPRESS' | 'STA
 export interface CustomerDetails {
     customer_id?: string | number;
     customer_name?: string;
-    name?: string;
-    address?: string;
-    address_line1?: string;
-    city?: string;
-    state?: string;
-    pincode?: string;
     gst_number?: string;
-    phone?: string;
     primary_phone?: string;
-    mobile?: string;
-    contact_number?: string;
-    contact_person?: string;
 }
 
 // ==================== CHALLAN ITEM ====================
@@ -42,45 +51,47 @@ export interface ChallanItem {
     product_name: string;
     product_code?: string;
     hsn_code?: string;
-    batch_id?: string | number;
+    batch_id?: string | number | null;
     batch_number?: string;
-    expiry_date?: string;
-    quantity: number;
+    expiry_date?: string | null;
+    branch_id?: string;
+    location_id?: string;
+    uom_conversion_id?: string;
+    source_order_line_id?: string;
+    eligible_batches?: ChallanEligibleBatch[];
+    base_billed_quantity?: string;
+    base_free_quantity?: string;
+    quantity: string | number;
+    free_quantity?: string | number;
     unit?: string;
     base_uom?: string;
     uom_code?: string;
-    mrp?: number;
-    unit_price?: number;
-    sale_price?: number;
-    gst_percent?: number;
-    tax_percent?: number;
-    taxable_amount?: number;
-    tax_amount?: number;
-    total_tax_amount?: number;
-    total?: number;
-    line_total?: number;
+    mrp?: string | number;
+    unit_price?: string | number;
+    sale_price?: string | number;
+    gst_percent?: string | number;
+    discount_percent?: string | number;
+    free_supply_tax_treatment?: FreeSupplyTaxTreatment;
+    taxable_amount?: EditableDecimalValue;
+    cgst_amount?: EditableDecimalValue;
+    sgst_amount?: EditableDecimalValue;
+    igst_amount?: EditableDecimalValue;
+    cess_amount?: number;
+    tax_amount?: EditableDecimalValue;
+    total_tax_amount?: EditableDecimalValue;
+    total?: EditableDecimalValue;
+    line_total?: EditableDecimalValue;
     manufacturer?: string;
     category?: string;
-}
-
-// ==================== TRANSPORT DETAILS ====================
-
-/** Transport information for challan */
-export interface TransportDetails {
-    transport_company?: string;
-    transporter_name?: string;  // Alias for transport_company
-    vehicle_number?: string;
-    vehicle_no?: string;  // Alias for vehicle_number
-    driver_name?: string;
-    driver_phone?: string;
-    lr_number?: string;
-    lr_no?: string;  // Alias for lr_number
-    eway_bill_number?: string;
-    eway_bill_no?: string;  // Alias for eway_bill_number
-    freight_charges?: number;
-    loading_charges?: number;
-    other_charges?: number;
-    weight?: string;
+    source_line_id?: string | number;
+    source_allocation_kind?: AllocationSourceKind;
+    allocation_id?: string;
+    command_request_id?: string | null;
+    inventory_document_id?: string;
+    inventory_document_line_id?: string;
+    invoice_dispatch_allocation_id?: string | null;
+    dispatch_id?: string | null;
+    dispatch_line_id?: string | null;
 }
 
 // ==================== CHALLAN ====================
@@ -93,6 +104,8 @@ export interface Challan {
     // Document info - DB: challan_id (integer NOT NULL), challan_number (text NOT NULL), challan_date (date NOT NULL)
     challan_id: number;  // REQUIRED - DB: integer NOT NULL
     challan_number: string;  // REQUIRED - DB: text NOT NULL
+    source_order_id?: string;
+    reference_doc?: string;
     challan_date: string;  // REQUIRED - DB: date NOT NULL
     expected_delivery_date: string;
     status: ChallanStatus;
@@ -100,7 +113,7 @@ export interface Challan {
     delivery_status?: string;  // DB field
 
     // Customer - DB: customer_id (integer NOT NULL)
-    customer_id: number;  // REQUIRED - DB: integer NOT NULL (changed from string | number)
+    customer_id: string | number;
     customer_name: string;
     customer_details: CustomerDetails | null;
 
@@ -117,26 +130,16 @@ export interface Challan {
     // Items
     items: ChallanItem[];
 
-    // Transport - Individual fields (DB style)
-    transport_company: string;
-    eway_bill_number: string;
-    lr_number: string;
-    vehicle_number: string;
-    driver_name: string;
-    driver_phone: string;
-    freight_charges: number;
-
-    // Transport - Nested object (UI compatibility)
-    transport_details?: TransportDetails;
+    // Canonical logistics evidence entered for the reviewed dispatch command.
+    distance_km: string;
 
     // Totals
     total_packages: number;
     total_weight: number;
-    total_quantity: number;
-    total_amount: number;
-    taxable_amount?: number;
-    total_tax_amount?: number;
-    gst_type?: 'CGST/SGST' | 'IGST';
+    total_quantity: EditableDecimalValue;
+    total_amount: EditableDecimalValue;
+    taxable_amount?: EditableDecimalValue;
+    total_tax_amount?: EditableDecimalValue;
 
     // Notes
     notes: string;
@@ -162,6 +165,7 @@ export interface Employee {
 
 /** Data structure for importing from invoice/order */
 export interface ImportData {
+    source_order_id?: string;
     customer_id?: string | number;
     customer_name?: string;
     customer_details?: CustomerDetails;
@@ -171,6 +175,7 @@ export interface ImportData {
     delivery_state?: string;
     delivery_pincode?: string;
     items?: ChallanItem[];
+    reference_doc?: string;
     notes?: string;
 }
 
@@ -182,8 +187,9 @@ export interface CreatedChallanData {
     challan_number: string;
     customer_name: string;
     customer_details?: CustomerDetails;
-    items: ChallanItem[];
-    total_amount: number;
+    inventory_document_id: string;
+    inventory_base_quantity: string;
+    lines: unknown[];
 }
 
 // ==================== COMPANY INFO ====================
@@ -208,6 +214,9 @@ export interface UseChallanLogicReturn {
     currentStep: number;
     setCurrentStep: React.Dispatch<React.SetStateAction<number>>;
     saving: boolean;
+    submissionUnavailableReason: string;
+    preparedPreview: import('../../../../services/api/canonicalOperatorActions').CanonicalCommandPreview | null;
+    reviewOpen: boolean;
     showCreateCustomer: boolean;
     setShowCreateCustomer: React.Dispatch<React.SetStateAction<boolean>>;
     showCreateProduct: boolean;
@@ -224,6 +233,7 @@ export interface UseChallanLogicReturn {
     fetchingAddress: boolean;
     message: string;
     messageType: string;
+    documentPolicy: CanonicalDocumentPolicy | null;
 
     // Refs
     customerSearchRef: React.RefObject<HTMLInputElement>;
@@ -234,10 +244,12 @@ export interface UseChallanLogicReturn {
     // Handlers
     handleCustomerSelect: (customer: CustomerDetails | null) => Promise<void>;
     handleProductSelect: (product: any) => void;
-    handleImport: (importData: ImportData) => void;
+    handleImport: (importData: ImportData) => Promise<void>;
     updateItem: (index: number, field: string, value: any) => void;
     removeItem: (itemId: number | string) => void;
     saveChallan: () => Promise<void>;
+    confirmPreparedChallan: () => Promise<void>;
+    closeChallanReview: () => void;
     shareOnWhatsApp: () => void;
     printChallan: () => void;
     thermalPrintChallan: (width?: string) => void;
@@ -250,8 +262,8 @@ export interface UseChallanLogicReturn {
 export const getInitialChallan = (): Challan => ({
     challan_id: 0,  // Will be set when saved
     challan_number: '',
-    challan_date: new Date().toISOString().split('T')[0],
-    expected_delivery_date: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    challan_date: '',
+    expected_delivery_date: '',
     customer_id: 0,  // Will be set when customer is selected
     customer_name: '',
     customer_details: null,
@@ -263,13 +275,7 @@ export const getInitialChallan = (): Challan => ({
     delivery_contact_person: '',
     delivery_contact_phone: '',
     items: [],
-    transport_company: '',
-    eway_bill_number: '',
-    lr_number: '',
-    vehicle_number: '',
-    driver_name: '',
-    driver_phone: '',
-    freight_charges: 0,
+    distance_km: '',
     status: 'draft',
     total_packages: 0,
     total_weight: 0,

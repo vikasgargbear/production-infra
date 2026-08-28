@@ -5,7 +5,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
-from jose import JWTError, jwt
+import jwt
+from jwt import InvalidTokenError as JWTError
 
 from app.core.auth import jwt_auth
 

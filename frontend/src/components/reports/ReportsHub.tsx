@@ -32,6 +32,16 @@ import GSTR3BReport from '../gst/reports/GSTR3BReport';
 interface ReportsHubProps {
   open: boolean;
   onClose: () => void;
+  /**
+   * Deep-link sub-module to open on mount (e.g. "sales-analytics").
+   * Comes from the URL hash (#/reports/<subpage>).
+   */
+  initialSubpage?: string | null;
+  /**
+   * Called when the user switches sub-modules inside the hub.
+   * The parent (App) uses this to keep the URL hash in sync.
+   */
+  onSubpageChange?: (subpage: string | null) => void;
 }
 
 interface ReportModule {
@@ -45,7 +55,20 @@ interface ReportModule {
   category?: string;
 }
 
-const ReportsHub: React.FC<ReportsHubProps> = ({ open = true, onClose }) => {
+const ReportsHub: React.FC<ReportsHubProps> = ({ open = true, onClose, initialSubpage, onSubpageChange }) => {
+  /** All valid sub-module IDs for deep-linking into ReportsHub. */
+  const REPORTS_SUBPAGE_IDS = [
+    'executive-dashboard', 'sales-analytics', 'customer-insights',
+    'purchase-analytics', 'inventory-analytics', 'product-performance',
+    'financial-overview', 'ledger-analytics', 'payment-analytics',
+    'profit-loss', 'tax-analytics', 'gstr1-report', 'gstr3b-report',
+  ] as const;
+
+  const resolvedDefault =
+    initialSubpage && REPORTS_SUBPAGE_IDS.includes(initialSubpage as any)
+      ? initialSubpage
+      : 'executive-dashboard';
+
   const reportModules: ReportModule[] = [
     // Executive & Overview
     {
@@ -198,7 +221,8 @@ const ReportsHub: React.FC<ReportsHubProps> = ({ open = true, onClose }) => {
       subtitle="Enterprise business intelligence & insights"
       icon={BarChart3}
       modules={reportModules}
-      defaultModule="executive-dashboard"
+      defaultModule={resolvedDefault}
+      onActiveModuleChange={onSubpageChange}
     />
   );
 };

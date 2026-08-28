@@ -2,8 +2,8 @@
 Customer schemas for enterprise pharma system
 Handles GST-compliant customer management with credit limits
 """
-from typing import Optional, List, Annotated
-from pydantic import BaseModel, Field, field_validator, ConfigDict, EmailStr
+from typing import Optional, List, Annotated, Literal
+from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict, EmailStr
 from datetime import datetime, date
 from decimal import Decimal
 import re
@@ -161,6 +161,49 @@ class CustomerCreate(CustomerBase):
     pass
 
 
+class CanonicalCustomerCreate(BaseModel):
+    """Reviewed customer-account creation contract used by the live ERP UI.
+
+    Compliance licences, secondary contacts, notes, discounts, and tenant
+    identity are deliberately absent.  Those facts have separate owners and
+    must not leak through a convenience create form.
+    """
+
+    customer_name: str = Field(min_length=1, max_length=200)
+    customer_type: Literal["individual", "organization"]
+    primary_phone: str = Field(pattern=r"^\d{10}$")
+    primary_email: Optional[EmailStr] = None
+    contact_person_name: Optional[str] = Field(default=None, max_length=100)
+    address_line1: Optional[str] = Field(default=None, max_length=255)
+    address_line2: Optional[str] = Field(default=None, max_length=255)
+    city: Optional[str] = Field(default=None, max_length=100)
+    state_code: Optional[str] = Field(default=None, pattern=r"^[0-9]{2}$")
+    pincode: Optional[str] = Field(default=None, pattern=r"^\d{6}$")
+    gst_number: Optional[str] = Field(default=None, min_length=15, max_length=15)
+    pan_number: Optional[str] = Field(default=None, min_length=10, max_length=10)
+    credit_limit: Decimal = Field(ge=0)
+    credit_days: int = Field(ge=0, le=365)
+
+    @field_validator("gst_number")
+    @classmethod
+    def validate_gst_number(cls, value: Optional[str]) -> Optional[str]:
+        return CustomerBase.validate_gst_number(value)
+
+    @field_validator("pan_number")
+    @classmethod
+    def validate_pan_number(cls, value: Optional[str]) -> Optional[str]:
+        return CustomerBase.validate_pan_number(value)
+
+    @model_validator(mode="after")
+    def require_complete_address(self):
+        address = (self.address_line1, self.city, self.state_code, self.pincode)
+        if any(address) and not all(address):
+            raise ValueError("Address line, city, state code, and pincode must be supplied together")
+        return self
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+
 class CustomerUpdate(BaseModel):
     """Schema for updating customer - all fields optional"""
     
@@ -226,7 +269,6 @@ class CustomerResponse(CustomerBase):
     territory_id: Optional[int] = None
     route_id: Optional[int] = None
     assigned_salesperson_id: Optional[int] = None
-    price_list_id: Optional[int] = None
     discount_group_id: Optional[int] = None
     
     # Communication Preferences
@@ -241,10 +283,6 @@ class CustomerResponse(CustomerBase):
     total_business_amount: Decimal = Field(default=Decimal("0.00"))
     total_transactions: int = Field(default=0)
     average_order_value: Decimal = Field(default=Decimal("0.00"))
-    
-    # Loyalty
-    loyalty_points: Decimal = Field(default=Decimal("0.00"))
-    loyalty_tier: Optional[str] = Field(default="bronze", description="bronze/silver/gold/platinum")
     
     # Blacklist
     blacklisted: bool = Field(default=False)

@@ -6,6 +6,8 @@
  * This file contains only the truly shared abstractions.
  */
 
+import type { EditableDecimalValue } from '../../../utils/exactDecimal';
+
 // ==================== BASE ENUMS / UNION TYPES ====================
 
 /** Generic document status (foundation for specific statuses) */
@@ -16,6 +18,27 @@ export type PaymentStatusType = 'pending' | 'partial' | 'paid' | 'overdue' | 'un
 
 /** Delivery type options */
 export type DeliveryTypeBase = 'PICKUP' | 'DELIVERY' | 'COURIER' | 'TRANSPORT';
+
+export type FreeSupplyTaxTreatment =
+    | 'excluded_from_taxable_value'
+    | 'included_at_unit_rate';
+
+export type CanonicalAllocationSourceKind =
+    | 'direct_issue'
+    | 'dispatch_allocation';
+
+export type CanonicalSourceDocumentKind =
+    | 'sales_order'
+    | 'delivery_challan'
+    | 'sales_invoice';
+
+/**
+ * Decimal values in an active canonical sales draft stay as strings.  The
+ * number member exists only for operator-entered safe-integer defaults while
+ * a draft is being edited; API-owned fractions must never cross through an
+ * IEEE-754 conversion.
+ */
+export type SalesDecimal = EditableDecimalValue;
 
 // ==================== EMPLOYEE (SHARED) ====================
 
@@ -67,29 +90,46 @@ export interface BaseLineItem {
     product_name: string;
 
     // Batch - backend uses batch_number
-    batch_id?: string | number;
+    batch_id?: string | number | null;
     batch_number?: string;
-    expiry_date?: string;
+    expiry_date?: string | null;
 
     // Quantity
-    quantity: number;
-    free_quantity?: number;
+    quantity: SalesDecimal;
+    free_quantity?: SalesDecimal;
+    free_supply_tax_treatment?: FreeSupplyTaxTreatment;
     unit?: string;
 
+    // Immutable executed-allocation lineage retained by canonical imports.
+    source_line_id?: string | number;
+    source_document_kind?: CanonicalSourceDocumentKind;
+    source_allocation_kind?: CanonicalAllocationSourceKind;
+    allocation_id?: string;
+    command_request_id?: string | null;
+    inventory_document_id?: string;
+    inventory_document_line_id?: string;
+    invoice_dispatch_allocation_id?: string | null;
+    dispatch_id?: string | null;
+    dispatch_line_id?: string | null;
+    base_billed_quantity?: SalesDecimal;
+    base_free_quantity?: SalesDecimal;
+    source_billed_quantity?: SalesDecimal;
+    source_free_quantity?: SalesDecimal;
+
     // Pricing - backend uses unit_price and mrp
-    mrp?: number;
-    unit_price?: number;
-    discount_percent?: number;
+    mrp?: SalesDecimal;
+    unit_price?: SalesDecimal;
+    discount_percent?: SalesDecimal;
 
     // Tax
-    gst_percent?: number;
+    gst_percent?: SalesDecimal;
     hsn_code?: string;
-    cgst_amount?: number;
-    sgst_amount?: number;
-    igst_amount?: number;
+    cgst_amount?: SalesDecimal;
+    sgst_amount?: SalesDecimal;
+    igst_amount?: SalesDecimal;
 
     // Totals - backend uses line_total
-    line_total?: number;
+    line_total?: SalesDecimal;
 }
 
 // ==================== TRANSPORT DETAILS (SHARED) ====================
@@ -124,8 +164,7 @@ export type OnItemRemove = (indexOrId: number | string) => void;
 /** Common state and handlers returned by all sales logic hooks */
 export interface BaseSalesHookReturn<
     TDocument,
-    TCustomer extends BaseCustomer = BaseCustomer,
-    TItem extends BaseLineItem = BaseLineItem
+    TCustomer extends BaseCustomer = BaseCustomer
 > {
     // Document state
     document: TDocument;
@@ -166,7 +205,6 @@ export interface BaseImportData<TCustomer extends BaseCustomer = BaseCustomer, T
 /** Company information for previews and prints */
 export interface BaseCompanyInfo {
     name?: string;
-    company_name?: string;
     address?: string;
     gst_number?: string;
     phone?: string;

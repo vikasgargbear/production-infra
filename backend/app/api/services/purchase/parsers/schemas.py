@@ -22,15 +22,15 @@ class ParsedItem(BaseModel):
     hsn_code: str = Field(default="", description="HSN code for GST")
     batch_number: str = Field(default="", description="Batch/lot number")
     expiry_date: Optional[date] = Field(default=None, description="Expiry date")
-    quantity: int = Field(default=0, ge=0, description="Quantity received")
-    free_quantity: int = Field(default=0, ge=0, description="Free/bonus quantity")
-    unit: str = Field(default="strip", description="Unit of measure")
-    pack_size: int = Field(default=1, ge=1, description="Pack size")
-    mrp: Decimal = Field(default=Decimal("0"), ge=0, description="MRP per unit")
-    cost_price: Decimal = Field(default=Decimal("0"), ge=0, description="Purchase rate")
-    discount_percent: Decimal = Field(default=Decimal("0"), ge=0, le=100)
-    tax_percent: Decimal = Field(default=Decimal("12"), ge=0, le=28)
-    amount: Decimal = Field(default=Decimal("0"), ge=0, description="Line total")
+    quantity: Optional[int] = Field(default=None, ge=0, description="Quantity received")
+    free_quantity: Optional[int] = Field(default=None, ge=0, description="Free/bonus quantity")
+    unit: Optional[str] = Field(default=None, description="Unit of measure")
+    pack_size: Optional[int] = Field(default=None, ge=1, description="Pack size")
+    mrp: Optional[Decimal] = Field(default=None, ge=0, description="MRP per unit")
+    cost_price: Optional[Decimal] = Field(default=None, ge=0, description="Purchase rate")
+    discount_percent: Optional[Decimal] = Field(default=None, ge=0, le=100)
+    tax_percent: Optional[Decimal] = Field(default=None, ge=0, le=100)
+    amount: Optional[Decimal] = Field(default=None, ge=0, description="Line total")
 
     @field_validator('expiry_date', mode='before')
     @classmethod
@@ -66,10 +66,10 @@ class ParsedInvoice(BaseModel):
     drug_license: str = Field(default="", description="Drug license number")
     
     # Totals
-    subtotal: Decimal = Field(default=Decimal("0"), ge=0)
-    tax_amount: Decimal = Field(default=Decimal("0"), ge=0)
-    discount_amount: Decimal = Field(default=Decimal("0"), ge=0)
-    grand_total: Decimal = Field(default=Decimal("0"), ge=0)
+    subtotal: Optional[Decimal] = Field(default=None, ge=0)
+    tax_amount: Optional[Decimal] = Field(default=None, ge=0)
+    discount_amount: Optional[Decimal] = Field(default=None, ge=0)
+    grand_total: Optional[Decimal] = Field(default=None, ge=0)
     
     # Line items
     items: List[ParsedItem] = Field(default_factory=list)
@@ -118,8 +118,12 @@ class ParseResult(BaseModel):
         if data.items:
             score += 0.25
             # Bonus for item completeness
-            complete_items = sum(1 for item in data.items 
-                               if item.product_name and item.quantity > 0 and item.cost_price > 0)
+            complete_items = sum(
+                1 for item in data.items
+                if item.product_name
+                and item.quantity is not None and item.quantity > 0
+                and item.cost_price is not None and item.cost_price > 0
+            )
             if data.items:
                 score += 0.2 * (complete_items / len(data.items))
         
@@ -137,9 +141,6 @@ class ParseResult(BaseModel):
 
 
 class ParserDefaults:
-    """Default values and constants"""
-    DEFAULT_TAX_PERCENT = Decimal("12")
-    DEFAULT_UNIT = "strip"
-    CONFIDENCE_THRESHOLD = 0.7
+    """Structural parser limits; business facts are never defaulted here."""
     MAX_HEADER_LINES = 20
     MAX_TABLE_ROWS = 500

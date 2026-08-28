@@ -4,6 +4,7 @@
  */
 
 import { Customer } from './customer';
+import type { EditableDecimalValue } from '../../utils/exactDecimal';
 
 /**
  * Order item line
@@ -14,25 +15,47 @@ export interface OrderItem {
     product_name: string;
     product_code?: string;
     hsn_code?: string;
-    batch_id?: number | string;
+    batch_id?: number | string | null;
     batch_number?: string;
-    expiry_date?: string;
+    expiry_date?: string | null;
+    branch_id?: string;
+    location_id?: string;
+    uom_conversion_id?: string;
 
     // Quantities
-    quantity: number;
-    free_quantity?: number;
+    quantity: string | number;
+    free_quantity?: string | number;
+    free_supply_tax_treatment?:
+        | 'excluded_from_taxable_value'
+        | 'included_at_unit_rate';
+
+    // Canonical executed-allocation lineage retained by document imports
+    source_line_id?: string | number;
+    source_allocation_kind?: 'direct_issue' | 'dispatch_allocation';
+    allocation_id?: string;
+    command_request_id?: string | null;
+    inventory_document_id?: string;
+    inventory_document_line_id?: string;
+    invoice_dispatch_allocation_id?: string | null;
+    dispatch_id?: string | null;
+    dispatch_line_id?: string | null;
 
     // Pricing
-    unit_price: number;
-    mrp?: number;
-    rate?: number;
-    sale_price?: number;
+    unit_price: string | number;
+    mrp?: string | number;
+    rate?: string | number;
+    sale_price?: string | number;
 
     // Discounts & Taxes
-    discount_percent: number;
-    discount_amount?: number;
-    gst_percent: number;
-    tax_amount?: number;
+    discount_percent: string | number;
+    discount_amount?: EditableDecimalValue;
+    gst_percent: string | number;
+    tax_amount?: EditableDecimalValue;
+    total_tax_amount?: EditableDecimalValue;
+    cgst_amount?: EditableDecimalValue;
+    sgst_amount?: EditableDecimalValue;
+    igst_amount?: EditableDecimalValue;
+    cess_amount?: EditableDecimalValue;
 
     // Units
     unit?: string;
@@ -41,11 +64,11 @@ export interface OrderItem {
     pack_type?: string;
 
     // Calculated values
-    subtotal?: number;
-    total?: number;
-    calculated_total?: number;
-    taxable_amount?: number;
-    line_total?: number;
+    subtotal?: EditableDecimalValue;
+    total?: EditableDecimalValue;
+    calculated_total?: EditableDecimalValue;
+    taxable_amount?: EditableDecimalValue;
+    line_total?: EditableDecimalValue;
 
     // Meta
     manufacturer?: string;
@@ -56,11 +79,15 @@ export interface OrderItem {
  * Address structure
  */
 export interface Address {
+    address_id?: string;
+    id?: string;
+    row_version?: string | number;
+    address_type?: 'registered' | 'billing' | 'shipping';
     address_line1?: string;
     address_line2?: string;
     city?: string;
     state?: string;
-    state_name?: string;
+    state_code?: string;
     pincode?: string;
     country?: string;
 }
@@ -74,7 +101,7 @@ export interface Address {
  */
 export interface Order {
     // Identifiers - DB: order_id (integer NOT NULL), order_number (text NOT NULL)
-    order_id: number;  // REQUIRED - DB: integer NOT NULL
+    order_id: number | string;
     order_number: string;  // REQUIRED - DB: text NOT NULL
 
     // Dates - DB: order_date (date NOT NULL)
@@ -83,7 +110,7 @@ export interface Order {
     delivery_date?: string;
 
     // Customer - DB: customer_id (integer NOT NULL)
-    customer_id: number;  // REQUIRED - DB: integer NOT NULL
+    customer_id: number | string;
     customer_name: string;
     customer_details: Customer | null;
     customer_phone?: string;
@@ -98,18 +125,21 @@ export interface Order {
     items: OrderItem[];
 
     // Financial (all nullable in DB)
-    subtotal_amount: number;
-    discount_amount: number;
-    tax_amount: number;
-    cgst_amount: number;
-    sgst_amount: number;
-    igst_amount: number;
-    round_off: number;
-    total_amount: number;
-    final_amount?: number;
+    subtotal_amount: EditableDecimalValue;
+    /** Explicit editable document-level discount. Line discounts are not stored here. */
+    document_discount_amount?: EditableDecimalValue;
+    /** Authoritative aggregate of line and document discounts for display. */
+    discount_amount: EditableDecimalValue;
+    tax_amount: EditableDecimalValue;
+    cgst_amount: EditableDecimalValue;
+    sgst_amount: EditableDecimalValue;
+    igst_amount: EditableDecimalValue;
+    round_off: EditableDecimalValue;
+    total_amount: EditableDecimalValue;
+    final_amount?: EditableDecimalValue;
     delivery_charges?: number;
     other_charges: number;
-    total_quantity: number;
+    total_quantity: EditableDecimalValue;
 
     // GST
     gst_type: string;
@@ -159,11 +189,11 @@ export interface CreatedOrderData {
     orderId: number | string;
     orderNumber: string;
     customerName: string;
-    totalAmount: number;
+    totalAmount: string;
 }
 
 /**
- * Calculation result from EnterpriseCalculator
+ * Calculation result returned by the canonical calculation API.
  */
 export interface CalculationResult {
     success: boolean;

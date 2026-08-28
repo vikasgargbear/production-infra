@@ -1,0 +1,24 @@
+{
+  "state": "draft",
+  "plan_contract_version": "pause-duration-v1",
+  "retired_project_ref": "jfrairkkzxwkhbtqejnz",
+  "reviewer": null,
+  "reviewed_at": null,
+  "owner": null,
+  "prerequisites": [],
+  "data_retention_disposition": "discard_disposable_retired_project_data",
+  "data_preservation_required": false,
+  "final_backup_required": false,
+  "pause_receipt_required": true,
+  "rollback_window_duration_hours": null,
+  "rollback_window_anchor": "retired_project_pause_receipt.paused_at",
+  "absolute_deletion_time_source": "retired_project_pause_receipt.rollback_window_ends_at",
+  "irreversible_action_approval_required": true,
+  "deletion_receipt_required": true,
+  "steps": [],
+  "blockers": [
+    "Record the reviewer, owner, prerequisites, and a positive rollback-window duration without inventing an absolute deletion timestamp.",
+    "Provide the exact ordered pause, pause-receipt, wait, no-traffic, canonical-acceptance, irreversible-approval, deletion, and deletion-receipt commands.",
+    "The later pause receipt must derive rollback_window_ends_at from its actual paused_at timestamp plus the reviewed duration."
+  ]
+}

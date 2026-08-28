@@ -48,9 +48,7 @@ master/
 │   ├── customerSchema.ts
 │   ├── productSchema.ts
 │   └── supplierSchema.ts
-└── utils/                  # Utilities (5)
-    ├── BulkOperations.tsx
-    ├── DataValidationEngine.tsx
+└── utils/                  # Shared validation utilities
     ├── ImportExport.tsx
     ├── masterUtils.ts
     └── validationHelpers.ts

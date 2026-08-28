@@ -2,56 +2,61 @@
 jest.mock('../api/modules/purchase/calculations.api', () => ({
   purchaseCalculationsApi: { preview: jest.fn() }
 }));
-jest.mock('../enterpriseCalculator', () => ({
-  __esModule: true,
-  default: { calculateTotals: jest.fn() }
-}));
 
-import EnterpriseCalculator from '../enterpriseCalculator';
 import { purchaseCalculationsApi } from '../api/modules/purchase/calculations.api';
-import { calculatePurchaseOrderPreview } from '../calculations/purchaseOrderCalculationService';
-
+import { calculatePurchaseOrderPreview, toPurchaseCalculationRequest } from '../calculations/purchaseOrderCalculationService';
+import { exactPurchaseResponse } from './exactCalculationFixtures';
 
 const order = {
-  supplier_id: 5,
-  discount_amount: 0,
-  freight_charges: 0,
-  items: [{ product_id: 11, quantity: 2, unit_price: 100, tax_percent: 18 }]
+  supplier_id: '10000000-0000-7000-8000-000000000001',
+  discount_amount: '0.00', freight_charges: '0.00', insurance_charges: '0.00', other_charges: '0.00',
+  items: [{
+    product_id: '10000000-0000-7000-8000-000000000002',
+    quantity: '0.123456', free_quantity: '0', unit_price: '9007199254740993.000000', mrp: '9007199254740993.000000',
+    discount_percent: '0', tax_percent: '18',
+  }],
 };
 
-test('uses backend purchase preview when online', async () => {
-  purchaseCalculationsApi.preview.mockResolvedValue({
-    data: {
-      success: true,
-      gst_type: 'IGST',
-      calculation_timestamp: 1,
-      line_items: [{ taxable_amount: 200, tax_amount: 36, line_total: 200 }],
-      totals: { subtotal_amount: 200, tax_amount: 36, total_amount: 236 }
-    }
-  });
+beforeEach(() => jest.clearAllMocks());
 
+test('keeps six-place quantities and >2^53 rates in purchase requests', async () => {
+  purchaseCalculationsApi.preview.mockResolvedValue({ data: exactPurchaseResponse({
+    line_items: [{ ...exactPurchaseResponse().line_items[0], quantity: '0.123456' }],
+  }) });
   const result = await calculatePurchaseOrderPreview(order, true);
-
   expect(purchaseCalculationsApi.preview).toHaveBeenCalledWith(expect.objectContaining({
-    supplier_id: 5,
-    items: [expect.objectContaining({ tax_percent: 18 })]
+    items: [expect.objectContaining({ quantity: '0.123456', unit_price: '9007199254740993.000000' })],
   }));
-  expect(EnterpriseCalculator.calculateTotals).not.toHaveBeenCalled();
-  expect(result.items[0]).toEqual(expect.objectContaining({ total: 236 }));
-  expect(result.totals).toEqual(expect.objectContaining({ net_amount: 236 }));
+  expect(result.items[0].total).toBe('0.12');
+  expect(result.totals.final_amount).toBe('0.00');
 });
 
-test('blocks unbaselined header discounts online', async () => {
-  await expect(calculatePurchaseOrderPreview({ ...order, discount_amount: 10 }, true))
-    .rejects.toThrow('header discounts are blocked');
+test('preserves UUIDv7 identities without numeric coercion', () => {
+  expect(toPurchaseCalculationRequest(order)).toEqual(expect.objectContaining({
+    supplier_id: order.supplier_id,
+    items: [expect.objectContaining({ product_id: order.items[0].product_id })],
+  }));
+});
+
+test.each([1, '0.1234567'])('rejects invalid authoritative quantity %p', async quantity => {
+  purchaseCalculationsApi.preview.mockResolvedValue({ data: exactPurchaseResponse({
+    line_items: [{ ...exactPurchaseResponse().line_items[0], quantity }],
+  }) });
+  await expect(calculatePurchaseOrderPreview({ ...order, items: [{ ...order.items[0], quantity: '1.000000' }] }, true))
+    .rejects.toThrow(/exact decimal string|precision/);
+});
+
+test('blocks offline calculation', async () => {
+  await expect(calculatePurchaseOrderPreview(order, false)).rejects.toThrow('live ERP API');
   expect(purchaseCalculationsApi.preview).not.toHaveBeenCalled();
 });
 
-test('uses local calculation only when explicitly offline', async () => {
-  EnterpriseCalculator.calculateTotals.mockReturnValue({ items: [], totals: { total_amount: 236 } });
-
-  await calculatePurchaseOrderPreview(order, false);
-
-  expect(EnterpriseCalculator.calculateTotals).toHaveBeenCalled();
-  expect(purchaseCalculationsApi.preview).not.toHaveBeenCalled();
+test.each([
+  ['free quantity', { items: [{ ...order.items[0], free_quantity: undefined }] }],
+  ['line discount', { items: [{ ...order.items[0], discount_percent: undefined }] }],
+  ['freight', { freight_charges: undefined }],
+  ['insurance', { insurance_charges: '' }],
+  ['other charges', { other_charges: null }],
+])('requires explicit %s, including explicit zero', (_label, override) => {
+  expect(() => toPurchaseCalculationRequest({ ...order, ...override })).toThrow(/must be explicit/i);
 });

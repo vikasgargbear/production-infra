@@ -1,12 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
-    Building, Save, Mail, Phone,
+    Building, Mail, Phone,
     MapPin, FileText, Printer,
     Globe, Image, Loader2,
     AlertCircle, RefreshCw
 } from 'lucide-react';
 import { companyApi } from '../../../services/api';
-import { CompanyDataService } from '../../../services/offline/modules/company';
+import { normalizeCompanyProfile, unwrapCompanyProfileResponse } from '../../../utils/companyProfile';
 import BankAccountManager from '../masters/BankAccountManager';
 
 interface CompanyProfileProps {
@@ -65,9 +65,9 @@ interface CompanyData {
     defaultTerms: string;
     defaultFooter: string;
     printFormat: string;
-    showSignature: boolean;
-    showLogo: boolean;
-    showBankDetails: boolean;
+    showSignature: boolean | null;
+    showLogo: boolean | null;
+    showBankDetails: boolean | null;
 
     // Regional Settings
     timezone: string;
@@ -78,10 +78,8 @@ interface CompanyData {
 const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [logoPreview, setLogoPreview] = useState<string | null>(null);
-    const [isSaving, setIsSaving] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [successMessage, setSuccessMessage] = useState('');
     const [refreshing, setRefreshing] = useState(false);
 
     const [companyData, setCompanyData] = useState<CompanyData>({
@@ -103,46 +101,46 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
         state: '',
         stateCode: '',
         pincode: '',
-        country: 'India',
+        country: '',
         phone: '',
         altPhone: '',
         email: '',
         website: '',
 
         // Financial Settings
-        financialYearStart: '2024-04-01',
-        financialYearEnd: '2025-03-31',
-        defaultCurrency: 'INR',
-        currencySymbol: '₹',
+        financialYearStart: '',
+        financialYearEnd: '',
+        defaultCurrency: '',
+        currencySymbol: '',
 
         // Bank Details
         bankName: '',
         accountNumber: '',
         accountName: '',
-        accountType: 'CURRENT',
+        accountType: '',
         ifscCode: '',
         branchName: '',
 
         // Invoice Settings
-        invoicePrefix: 'INV/',
-        challanPrefix: 'DC/',
-        poPrefix: 'PO/',
-        returnPrefix: 'RTN/',
-        creditNotePrefix: 'CN/',
-        debitNotePrefix: 'DN/',
+        invoicePrefix: '',
+        challanPrefix: '',
+        poPrefix: '',
+        returnPrefix: '',
+        creditNotePrefix: '',
+        debitNotePrefix: '',
 
         // Receipt Settings
         defaultTerms: '',
         defaultFooter: '',
-        printFormat: 'A4',
-        showSignature: true,
-        showLogo: true,
-        showBankDetails: true,
+        printFormat: '',
+        showSignature: null,
+        showLogo: null,
+        showBankDetails: null,
 
         // Regional Settings (NEW - for timezone handling)
-        timezone: 'Asia/Kolkata',
-        dateFormat: 'DD-MM-YYYY',
-        timeFormat: '12h'
+        timezone: '',
+        dateFormat: '',
+        timeFormat: ''
     });
 
     // Fetch organization profile on mount
@@ -154,125 +152,119 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
 
     const fetchOrganizationProfile = async () => {
         setError(null);
-
-        // STEP 1: Try to get cached profile instantly (from memory/IndexedDB)
-        // This should be <5ms if cache is warm
-        const cachedProfile = await CompanyDataService.getProfile();
-
-        if (cachedProfile) {
-            // Set logo preview immediately
-            if (cachedProfile.company_logo) {
-                setLogoPreview(cachedProfile.company_logo);
-            }
-
-            // Populate form with cached data while API loads
-            setCompanyData(prev => ({
-                ...prev,
-                businessName: cachedProfile.company_name || prev.businessName,
-                address: cachedProfile.company_address || prev.address,
-                gst_number: cachedProfile.company_gst_number || prev.gst_number,
-                drugLicenseNo: cachedProfile.company_drug_license || prev.drugLicenseNo,
-                phone: cachedProfile.company_phone || prev.phone,
-                altPhone: cachedProfile.company_alternate_phone || prev.altPhone,
-                email: cachedProfile.company_email || prev.email,
-                website: cachedProfile.company_website || prev.website,
-                pan_number: cachedProfile.company_pan || prev.pan_number,
-                fssaiNo: cachedProfile.company_fssai || prev.fssaiNo,
-                logo: cachedProfile.company_logo || prev.logo,
-            }));
-
-            // We have cached data, so don't show loading spinner
-            console.log('[CompanyProfile] Loaded from cache instantly');
-        } else {
-            // No cache, need to show loading
-            setIsLoading(true);
-        }
-
-        // STEP 2: Fetch fresh data from API (in background)
+        setIsLoading(true);
         try {
             const response = await companyApi.getCompanyInfo();
 
             if (response) {
-                const data = (response as any).data || response;
+                const data = unwrapCompanyProfileResponse(response);
+                if (!data) throw new Error('Organization profile response is empty');
+                const normalized = normalizeCompanyProfile(data);
 
-                // Map API response to component state (matching backend company.py response)
+                if (!normalized) {
+                    throw new Error('Canonical organization profile has no legal name');
+                }
+                const primaryBank = normalized.bankAccounts[0];
+                const businessSettings = data.business_settings
+                    && typeof data.business_settings === 'object'
+                    ? data.business_settings
+                    : {};
+                const canonicalText = (...values: unknown[]): string => {
+                    const value = values.find(candidate => typeof candidate === 'string');
+                    return typeof value === 'string' ? value : '';
+                };
+                const canonicalBoolean = (...values: unknown[]): boolean | null => {
+                    const value = values.find(candidate => typeof candidate === 'boolean');
+                    return typeof value === 'boolean' ? value : null;
+                };
+
+                // Map the canonical organization projection through the same boundary
+                // used by invoice documents and the global company context.
                 setCompanyData({
                     // Basic Details
-                    businessName: data.name || '',
-                    tagline: data.tagline || '',
-                    logo: data.logo || null,
+                    businessName: normalized.name,
+                    tagline: canonicalText(businessSettings.tagline),
+                    logo: normalized.logo,
 
                     // Registration Details
-                    pan_number: data.pan_number || '',
-                    gst_number: data.gst_number || '',
-                    drugLicenseNo: data.drug_license_number || '',
-                    fssaiNo: data.fssai_number || '',
-                    msmeNo: data.msme_number || '',
+                    pan_number: normalized.pan_number,
+                    gst_number: normalized.gst_number,
+                    drugLicenseNo: normalized.drug_license_number,
+                    fssaiNo: normalized.fssai_number,
+                    msmeNo: normalized.msme_number,
 
                     // Contact Details
-                    address: data.address || '',
-                    city: data.city || '',
-                    state: data.state || '',
-                    stateCode: data.state_code || '',
-                    pincode: data.pincode || '',
-                    country: data.country || 'India',
-                    phone: data.phone || '',
+                    address: normalized.address,
+                    city: normalized.city,
+                    state: normalized.state,
+                    stateCode: normalized.state,
+                    pincode: normalized.pincode,
+                    country: canonicalText(data.country),
+                    phone: normalized.phone,
                     altPhone: data.alt_phone || '',
-                    email: data.email || '',
+                    email: normalized.email,
                     website: data.website || '',
 
                     // Financial Settings
-                    financialYearStart: data.financial_year_start || '2024-04-01',
-                    financialYearEnd: data.financial_year_end || '2025-03-31',
-                    defaultCurrency: data.currency || 'INR',
-                    currencySymbol: data.currency_symbol || '₹',
+                    financialYearStart: canonicalText(
+                        businessSettings.financial_year_start,
+                        data.financial_year_start,
+                    ),
+                    financialYearEnd: canonicalText(
+                        businessSettings.financial_year_end,
+                        data.financial_year_end,
+                    ),
+                    defaultCurrency: canonicalText(businessSettings.currency, data.currency),
+                    currencySymbol: canonicalText(
+                        businessSettings.currency_symbol,
+                        data.currency_symbol,
+                    ),
 
                     // Bank Details
-                    bankName: data.bank_name || '',
-                    accountNumber: data.account_number || '',
-                    accountName: data.account_name || '',
-                    accountType: data.account_type || 'CURRENT',
-                    ifscCode: data.ifsc_code || '',
-                    branchName: data.branch_name || '',
+                    bankName: primaryBank?.bank_name || '',
+                    accountNumber: primaryBank?.account_number || '',
+                    accountName: primaryBank?.account_name || '',
+                    accountType: canonicalText(primaryBank?.account_type),
+                    ifscCode: primaryBank?.ifsc_code || '',
+                    branchName: primaryBank?.branch_name || '',
 
                     // Invoice Settings
-                    invoicePrefix: data.business_settings?.invoice_prefix || data.invoice_prefix || 'INV/',
-                    challanPrefix: data.business_settings?.challan_prefix || data.challan_prefix || 'DC/',
-                    poPrefix: data.business_settings?.po_prefix || data.po_prefix || 'PO/',
-                    returnPrefix: data.business_settings?.return_prefix || data.return_prefix || 'RTN/',
-                    creditNotePrefix: data.business_settings?.credit_note_prefix || data.credit_note_prefix || 'CN/',
-                    debitNotePrefix: data.business_settings?.debit_note_prefix || data.debit_note_prefix || 'DN/',
+                    invoicePrefix: canonicalText(businessSettings.invoice_prefix, data.invoice_prefix),
+                    challanPrefix: canonicalText(businessSettings.challan_prefix, data.challan_prefix),
+                    poPrefix: canonicalText(businessSettings.po_prefix, data.po_prefix),
+                    returnPrefix: canonicalText(businessSettings.return_prefix, data.return_prefix),
+                    creditNotePrefix: canonicalText(
+                        businessSettings.credit_note_prefix,
+                        data.credit_note_prefix,
+                    ),
+                    debitNotePrefix: canonicalText(
+                        businessSettings.debit_note_prefix,
+                        data.debit_note_prefix,
+                    ),
 
                     // Receipt Settings
-                    defaultTerms: data.business_settings?.default_terms || data.default_terms || '',
-                    defaultFooter: data.business_settings?.default_footer || data.default_footer || '',
-                    printFormat: data.business_settings?.print_format || data.print_format || 'A4',
-                    showSignature: data.business_settings?.show_signature !== false,
-                    showLogo: data.business_settings?.show_logo !== false,
-                    showBankDetails: data.business_settings?.show_bank_details !== false,
+                    defaultTerms: canonicalText(businessSettings.default_terms, data.default_terms),
+                    defaultFooter: canonicalText(businessSettings.default_footer, data.default_footer),
+                    printFormat: canonicalText(businessSettings.print_format, data.print_format),
+                    showSignature: canonicalBoolean(businessSettings.show_signature),
+                    showLogo: canonicalBoolean(businessSettings.show_logo),
+                    showBankDetails: canonicalBoolean(businessSettings.show_bank_details),
 
                     // Regional Settings (NEW)
-                    timezone: data.timezone || data.business_settings?.timezone || 'Asia/Kolkata',
-                    dateFormat: data.date_format || data.business_settings?.date_format || 'DD-MM-YYYY',
-                    timeFormat: data.time_format || data.business_settings?.time_format || '12h'
+                    timezone: canonicalText(data.timezone, businessSettings.timezone),
+                    dateFormat: canonicalText(data.date_format, businessSettings.date_format),
+                    timeFormat: canonicalText(data.time_format, businessSettings.time_format),
                 });
 
                 // Update logo if it came from API
-                if (data.logo) {
-                    setLogoPreview(data.logo);
+                if (normalized.logo) {
+                    setLogoPreview(normalized.logo);
                 }
-            } else if (!cachedProfile) {
-                // No API response AND no cache
+            } else {
                 setError('No organization data available');
             }
         } catch (error) {
-            // Only show error if we had no cached data
-            if (!cachedProfile) {
-                setError('Failed to load organization profile. Please check your connection and try again.');
-                setTimeout(() => setError(null), 10000);
-            } else {
-                console.warn('[CompanyProfile] API fetch failed, using cached data');
-            }
+            setError('Failed to load organization profile from the server.');
         } finally {
             setIsLoading(false);
         }
@@ -286,10 +278,6 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
     };
 
     const handleInputChange = (field: keyof CompanyData, value: any) => {
-        // DEBUG: Log every input change
-        if (field === 'defaultTerms' || field === 'fssaiNo' || field === 'msmeNo') {
-            console.log(`[CompanyProfile] Field "${field}" changed to:`, value);
-        }
         setCompanyData(prev => ({
             ...prev,
             [field]: value
@@ -306,154 +294,17 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                 return;
             }
 
-            // Show preview and save to IndexedDB
+            // Preview only. Persistence requires a confirmed canonical API response.
             const reader = new FileReader();
-            reader.onloadend = async () => {
+            reader.onloadend = () => {
                 const base64Logo = reader.result as string;
                 setLogoPreview(base64Logo);
-
-                // Save to IndexedDB for offline persistence (instead of localStorage)
-                await CompanyDataService.updateProfile({ company_logo: base64Logo });
-
-                // Update company data
                 setCompanyData(prev => ({
                     ...prev,
                     logo: base64Logo
                 }));
-
-                setSuccessMessage('Logo uploaded successfully!');
-                setTimeout(() => setSuccessMessage(''), 3000);
             };
             reader.readAsDataURL(file);
-        }
-    };
-
-    const handleSave = async () => {
-        setIsSaving(true);
-        setError(null);
-        setSuccessMessage('');
-
-        try {
-            // STEP 1: Upload logo separately if it exists (backend has dedicated endpoint)
-            if (companyData.logo) {
-                try {
-                    await companyApi.uploadLogo(companyData.logo);
-                    console.log('Logo uploaded successfully');
-                } catch (logoError) {
-                    console.error('Logo upload failed:', logoError);
-                    // Continue with other data even if logo fails
-                }
-            }
-
-            // STEP 2: Prepare data for API (matching backend company.py expected format)
-            const profileData = {
-                name: companyData.businessName,
-                address: companyData.address,
-                city: companyData.city,
-                state: companyData.state,
-                pincode: companyData.pincode,
-                country: companyData.country,
-                phone: companyData.phone,
-                email: companyData.email,
-                website: companyData.website,
-                gst_number: companyData.gst_number,
-                pan_number: companyData.pan_number,
-                // NOTE: DO NOT send logo here - it has its own endpoint
-                // Additional fields can be stored here
-                tagline: companyData.tagline,
-                drug_license_number: companyData.drugLicenseNo,
-                fssai_number: companyData.fssaiNo,
-                msme_number: companyData.msmeNo,
-                state_code: companyData.stateCode,
-                alt_phone: companyData.altPhone,
-                financial_year_start: companyData.financialYearStart,
-                financial_year_end: companyData.financialYearEnd,
-                currency: companyData.defaultCurrency,
-                currency_symbol: companyData.currencySymbol,
-                bank_name: companyData.bankName,
-                account_number: companyData.accountNumber,
-                account_name: companyData.accountName,
-                account_type: companyData.accountType,
-                ifsc_code: companyData.ifscCode,
-                branch_name: companyData.branchName,
-                invoice_prefix: companyData.invoicePrefix,
-                challan_prefix: companyData.challanPrefix,
-                po_prefix: companyData.poPrefix,
-                return_prefix: companyData.returnPrefix,
-                credit_note_prefix: companyData.creditNotePrefix,
-                debit_note_prefix: companyData.debitNotePrefix,
-                default_terms: companyData.defaultTerms,
-                default_footer: companyData.defaultFooter,
-                print_format: companyData.printFormat,
-                show_signature: companyData.showSignature,
-                show_logo: companyData.showLogo,
-                show_bank_details: companyData.showBankDetails,
-                // Regional Settings
-                timezone: companyData.timezone,
-                date_format: companyData.dateFormat,
-                time_format: companyData.timeFormat
-            };
-
-            // Save timezone to localStorage for quick access
-            localStorage.setItem('company_timezone', companyData.timezone);
-            localStorage.setItem('date_format', companyData.dateFormat);
-            localStorage.setItem('time_format', companyData.timeFormat);
-
-            // Save business settings including TnC for invoice preview
-            const businessSettings = JSON.parse(localStorage.getItem('companyBusinessSettings') || '{}');
-            businessSettings.terms_and_conditions = companyData.defaultTerms;
-            businessSettings.default_terms = companyData.defaultTerms;
-            businessSettings.default_footer = companyData.defaultFooter;
-            localStorage.setItem('companyBusinessSettings', JSON.stringify(businessSettings));
-
-            // Also update city, state, pincode for invoice preview
-            localStorage.setItem('companyCity', companyData.city);
-            localStorage.setItem('companyState', companyData.state);
-            localStorage.setItem('companyPincode', companyData.pincode);
-            localStorage.setItem('companyFssai', companyData.fssaiNo);
-            localStorage.setItem('companyMsme', companyData.msmeNo);
-
-            // DEBUG: Log what we're sending to API
-            console.log('[CompanyProfile] Sending to API:', JSON.stringify(profileData, null, 2));
-            console.log('[CompanyProfile] default_terms value:', profileData.default_terms);
-            console.log('[CompanyProfile] fssai_number value:', profileData.fssai_number);
-
-            const response = await companyApi.updateCompanyInfo(profileData);
-
-            console.log('[CompanyProfile] API Response:', response);
-
-            if (response) {
-                // Update IndexedDB cache with new profile data
-                await CompanyDataService.updateProfile({
-                    company_name: companyData.businessName,
-                    company_address: companyData.address,
-                    company_gst_number: companyData.gst_number,
-                    company_drug_license: companyData.drugLicenseNo,
-                    company_phone: companyData.phone,
-                    company_alternate_phone: companyData.altPhone,
-                    company_email: companyData.email,
-                    company_website: companyData.website,
-                    company_pan: companyData.pan_number,
-                    company_fssai: companyData.fssaiNo,
-                    company_msme: companyData.msmeNo,
-                    company_logo: companyData.logo || '',
-                    company_city: companyData.city,
-                    company_state: companyData.state,
-                    company_pincode: companyData.pincode,
-                    billing_address: companyData.address,
-                    shipping_address: companyData.address,
-                    terms_and_conditions: companyData.defaultTerms,
-                });
-
-                setSuccessMessage('Company profile saved successfully!');
-                setTimeout(() => {
-                    setSuccessMessage('');
-                }, 3000);
-            }
-        } catch (error) {
-            setError('Failed to save company profile. Please try again.');
-        } finally {
-            setIsSaving(false);
         }
     };
 
@@ -469,10 +320,13 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
     }
 
     return (
-        <div className="h-screen flex flex-col bg-gray-50">
+        <div
+            data-testid="company-profile-root"
+            className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-gray-50"
+        >
             {/* Header */}
-            <div className="bg-white border-b border-gray-200 px-6 py-4 flex-shrink-0">
-                <div className="flex items-center justify-between">
+            <div className="flex-shrink-0 border-b border-gray-200 bg-white px-3 py-4 sm:px-6">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="flex items-center space-x-3">
                         <Building className="w-6 h-6 text-gray-700" />
                         <h1 className="text-2xl font-bold text-gray-900">Company Profile</h1>
@@ -481,23 +335,14 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                         <button
                             onClick={handleRefresh}
                             disabled={refreshing}
-                            className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                            className="flex min-h-11 items-center space-x-2 rounded-lg border border-gray-300 px-3 py-2 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
                         >
                             <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
                             <span>{refreshing ? 'Refreshing...' : 'Refresh'}</span>
                         </button>
-                        <button
-                            onClick={handleSave}
-                            disabled={isSaving}
-                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 disabled:opacity-500"
-                        >
-                            {isSaving ? (
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                                <Save className="w-4 h-4" />
-                            )}
-                            <span>{isSaving ? 'Saving...' : 'Save Changes'}</span>
-                        </button>
+                        <span className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-600">
+                            Canonical profile · read only
+                        </span>
                     </div>
                 </div>
             </div>
@@ -510,14 +355,6 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                 </div>
             )}
 
-            {/* Success/Error Messages */}
-            {successMessage && (
-                <div className="mx-6 mt-4 p-4 bg-green-50 border border-green-200 rounded-lg flex items-center">
-                    <AlertCircle className="w-5 h-5 text-green-600 mr-3" />
-                    <p className="text-green-800">{successMessage}</p>
-                </div>
-            )}
-
             {error && (
                 <div className="mx-6 mt-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center">
                     <AlertCircle className="w-5 h-5 text-red-600 mr-3" />
@@ -526,20 +363,26 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
             )}
 
             {/* Content */}
-            <div className="flex-1 overflow-y-auto">
-                <div className="max-w-6xl mx-auto p-6 space-y-6">
+            <div
+                data-testid="company-profile-scroll-region"
+                className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden"
+            >
+                <fieldset disabled className="mx-auto max-w-6xl min-w-0 space-y-6 p-3 disabled:opacity-100 sm:p-6">
+                    <div className="rounded-md border border-amber-200 bg-white px-4 py-3 text-sm text-amber-800">
+                        Profile changes are disabled until the canonical cloud update workflow is available.
+                    </div>
 
                     {/* Business Identity */}
-                    <div className="bg-white rounded-lg border border-gray-200 p-6">
+                    <div className="rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
                         <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                             <Building className="w-5 h-5 mr-2" />
                             Business Identity
                         </h2>
 
-                        <div className="grid grid-cols-3 gap-6">
+                        <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
                             {/* Logo Upload */}
-                            <div className="col-span-1">
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                            <div className="sm:col-span-1">
+                                <label htmlFor="company-logo" className="block text-sm font-medium text-gray-700 mb-2">
                                     Company Logo
                                 </label>
                                 <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
@@ -569,6 +412,7 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                                         </div>
                                     )}
                                     <input
+                                        id="company-logo"
                                         ref={fileInputRef}
                                         type="file"
                                         accept="image/*"
@@ -579,12 +423,13 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                             </div>
 
                             {/* Business Name & Tagline */}
-                            <div className="col-span-2 space-y-4">
+                            <div className="space-y-4 sm:col-span-2">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    <label htmlFor="company-business-name" className="block text-sm font-medium text-gray-700 mb-1">
                                         Business Name
                                     </label>
                                     <input
+                                        id="company-business-name"
                                         type="text"
                                         value={companyData.businessName}
                                         onChange={(e) => handleInputChange('businessName', e.target.value)}
@@ -594,10 +439,11 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    <label htmlFor="company-tagline" className="block text-sm font-medium text-gray-700 mb-1">
                                         Tagline
                                     </label>
                                     <input
+                                        id="company-tagline"
                                         type="text"
                                         value={companyData.tagline}
                                         onChange={(e) => handleInputChange('tagline', e.target.value)}
@@ -610,18 +456,19 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                     </div>
 
                     {/* Registration Details */}
-                    <div className="bg-white rounded-lg border border-gray-200 p-6">
+                    <div className="rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
                         <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                             <FileText className="w-5 h-5 mr-2" />
                             Registration Details
                         </h2>
 
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label htmlFor="company-pan" className="block text-sm font-medium text-gray-700 mb-1">
                                     PAN Number
                                 </label>
                                 <input
+                                    id="company-pan"
                                     type="text"
                                     value={companyData.pan_number}
                                     onChange={(e) => handleInputChange('pan_number', e.target.value)}
@@ -631,10 +478,11 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label htmlFor="company-gstin" className="block text-sm font-medium text-gray-700 mb-1">
                                     GSTIN
                                 </label>
                                 <input
+                                    id="company-gstin"
                                     type="text"
                                     value={companyData.gst_number}
                                     onChange={(e) => handleInputChange('gst_number', e.target.value)}
@@ -644,10 +492,11 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label htmlFor="company-drug-license" className="block text-sm font-medium text-gray-700 mb-1">
                                     Drug License No.
                                 </label>
                                 <input
+                                    id="company-drug-license"
                                     type="text"
                                     value={companyData.drugLicenseNo}
                                     onChange={(e) => handleInputChange('drugLicenseNo', e.target.value)}
@@ -657,10 +506,11 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label htmlFor="company-fssai" className="block text-sm font-medium text-gray-700 mb-1">
                                     FSSAI No.
                                 </label>
                                 <input
+                                    id="company-fssai"
                                     type="text"
                                     value={companyData.fssaiNo}
                                     onChange={(e) => handleInputChange('fssaiNo', e.target.value)}
@@ -670,10 +520,11 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label htmlFor="company-msme" className="block text-sm font-medium text-gray-700 mb-1">
                                     MSME/Udyam No.
                                 </label>
                                 <input
+                                    id="company-msme"
                                     type="text"
                                     value={companyData.msmeNo}
                                     onChange={(e) => handleInputChange('msmeNo', e.target.value)}
@@ -685,7 +536,7 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                     </div>
 
                     {/* Contact Details */}
-                    <div className="bg-white rounded-lg border border-gray-200 p-6">
+                    <div className="rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
                         <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                             <MapPin className="w-5 h-5 mr-2" />
                             Contact Details
@@ -693,10 +544,11 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
 
                         <div className="space-y-4">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label htmlFor="company-address" className="block text-sm font-medium text-gray-700 mb-1">
                                     Address
                                 </label>
                                 <input
+                                    id="company-address"
                                     type="text"
                                     value={companyData.address}
                                     onChange={(e) => handleInputChange('address', e.target.value)}
@@ -705,12 +557,13 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                                 />
                             </div>
 
-                            <div className="grid grid-cols-4 gap-4">
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    <label htmlFor="company-city" className="block text-sm font-medium text-gray-700 mb-1">
                                         City
                                     </label>
                                     <input
+                                        id="company-city"
                                         type="text"
                                         value={companyData.city}
                                         onChange={(e) => handleInputChange('city', e.target.value)}
@@ -719,50 +572,55 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        State
+                                    <label htmlFor="company-state-code" className="block text-sm font-medium text-gray-700 mb-1">
+                                        GST state code (2 digits)
                                     </label>
                                     <input
-                                        type="text"
-                                        value={companyData.state}
-                                        onChange={(e) => handleInputChange('state', e.target.value)}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        State Code
-                                    </label>
-                                    <input
+                                        id="company-state-code"
                                         type="text"
                                         value={companyData.stateCode}
                                         onChange={(e) => handleInputChange('stateCode', e.target.value)}
                                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                        placeholder="29"
+                                        placeholder="Unavailable"
                                     />
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    <label htmlFor="company-pincode" className="block text-sm font-medium text-gray-700 mb-1">
                                         Pincode
                                     </label>
                                     <input
+                                        id="company-pincode"
                                         type="text"
                                         value={companyData.pincode}
                                         onChange={(e) => handleInputChange('pincode', e.target.value)}
                                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                                     />
                                 </div>
+
+                                <div>
+                                    <label htmlFor="company-country" className="block text-sm font-medium text-gray-700 mb-1">
+                                        Country
+                                    </label>
+                                    <input
+                                        id="company-country"
+                                        type="text"
+                                        value={companyData.country}
+                                        onChange={(e) => handleInputChange('country', e.target.value)}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                        placeholder="Unavailable"
+                                    />
+                                </div>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    <label htmlFor="company-phone" className="block text-sm font-medium text-gray-700 mb-1">
                                         <Phone className="w-4 h-4 inline mr-1" />
                                         Primary Phone
                                     </label>
                                     <input
+                                        id="company-phone"
                                         type="tel"
                                         value={companyData.phone}
                                         onChange={(e) => handleInputChange('phone', e.target.value)}
@@ -771,11 +629,12 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    <label htmlFor="company-alt-phone" className="block text-sm font-medium text-gray-700 mb-1">
                                         <Phone className="w-4 h-4 inline mr-1" />
                                         Alternate Phone
                                     </label>
                                     <input
+                                        id="company-alt-phone"
                                         type="tel"
                                         value={companyData.altPhone}
                                         onChange={(e) => handleInputChange('altPhone', e.target.value)}
@@ -784,11 +643,12 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    <label htmlFor="company-email" className="block text-sm font-medium text-gray-700 mb-1">
                                         <Mail className="w-4 h-4 inline mr-1" />
                                         Email
                                     </label>
                                     <input
+                                        id="company-email"
                                         type="email"
                                         value={companyData.email}
                                         onChange={(e) => handleInputChange('email', e.target.value)}
@@ -797,11 +657,12 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    <label htmlFor="company-website" className="block text-sm font-medium text-gray-700 mb-1">
                                         <Globe className="w-4 h-4 inline mr-1" />
                                         Website
                                     </label>
                                     <input
+                                        id="company-website"
                                         type="url"
                                         value={companyData.website}
                                         onChange={(e) => handleInputChange('website', e.target.value)}
@@ -812,24 +673,103 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                         </div>
                     </div>
 
+                    <div className="rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
+                        <h2 className="mb-4 flex items-center text-lg font-semibold text-gray-900">
+                            <FileText className="mr-2 h-5 w-5" />
+                            Authoritative Business Settings
+                        </h2>
+                        <p className="mb-4 text-sm text-gray-600">
+                            Missing settings are shown as unavailable; this page does not infer company defaults.
+                        </p>
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+                            <div>
+                                <label htmlFor="company-financial-year-start" className="mb-1 block text-sm font-medium text-gray-700">
+                                    Financial Year Start
+                                </label>
+                                <input
+                                    id="company-financial-year-start"
+                                    type="text"
+                                    value={companyData.financialYearStart}
+                                    onChange={(e) => handleInputChange('financialYearStart', e.target.value)}
+                                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                                    placeholder="Unavailable"
+                                />
+                            </div>
+                            <div>
+                                <label htmlFor="company-financial-year-end" className="mb-1 block text-sm font-medium text-gray-700">
+                                    Financial Year End
+                                </label>
+                                <input
+                                    id="company-financial-year-end"
+                                    type="text"
+                                    value={companyData.financialYearEnd}
+                                    onChange={(e) => handleInputChange('financialYearEnd', e.target.value)}
+                                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                                    placeholder="Unavailable"
+                                />
+                            </div>
+                            <div>
+                                <label htmlFor="company-currency" className="mb-1 block text-sm font-medium text-gray-700">
+                                    Currency
+                                </label>
+                                <input
+                                    id="company-currency"
+                                    type="text"
+                                    value={companyData.defaultCurrency}
+                                    onChange={(e) => handleInputChange('defaultCurrency', e.target.value)}
+                                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                                    placeholder="Unavailable"
+                                />
+                            </div>
+                            <div>
+                                <label htmlFor="company-currency-symbol" className="mb-1 block text-sm font-medium text-gray-700">
+                                    Currency Symbol
+                                </label>
+                                <input
+                                    id="company-currency-symbol"
+                                    type="text"
+                                    value={companyData.currencySymbol}
+                                    onChange={(e) => handleInputChange('currencySymbol', e.target.value)}
+                                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                                    placeholder="Unavailable"
+                                />
+                            </div>
+                            <div>
+                                <label htmlFor="company-primary-account-type" className="mb-1 block text-sm font-medium text-gray-700">
+                                    Primary Account Type
+                                </label>
+                                <input
+                                    id="company-primary-account-type"
+                                    type="text"
+                                    value={companyData.accountType}
+                                    onChange={(e) => handleInputChange('accountType', e.target.value)}
+                                    className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                                    placeholder="Unavailable"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
                     {/* Regional Settings - NEW */}
-                    <div className="bg-white rounded-lg border border-gray-200 p-6">
+                    <div className="rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
                         <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                             <Globe className="w-5 h-5 mr-2" />
                             Regional Settings
                         </h2>
 
-                        <div className="grid grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                             {/* Timezone */}
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label htmlFor="company-timezone" className="block text-sm font-medium text-gray-700 mb-1">
                                     Business Timezone
                                 </label>
                                 <select
+                                    id="company-timezone"
                                     value={companyData.timezone}
                                     onChange={(e) => handleInputChange('timezone', e.target.value)}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                                 >
+                                    <option value="">Unavailable</option>
                                     <option value="Asia/Kolkata">India (IST - UTC+5:30)</option>
                                     <option value="Asia/Dubai">UAE (GST - UTC+4)</option>
                                     <option value="Asia/Singapore">Singapore (SGT - UTC+8)</option>
@@ -843,14 +783,16 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
 
                             {/* Date Format */}
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label htmlFor="company-date-format" className="block text-sm font-medium text-gray-700 mb-1">
                                     Date Format
                                 </label>
                                 <select
+                                    id="company-date-format"
                                     value={companyData.dateFormat}
                                     onChange={(e) => handleInputChange('dateFormat', e.target.value)}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                                 >
+                                    <option value="">Unavailable</option>
                                     <option value="DD-MM-YYYY">31-12-2024 (Indian)</option>
                                     <option value="MM-DD-YYYY">12-31-2024 (US)</option>
                                     <option value="YYYY-MM-DD">2024-12-31 (ISO)</option>
@@ -862,14 +804,16 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
 
                             {/* Time Format */}
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label htmlFor="company-time-format" className="block text-sm font-medium text-gray-700 mb-1">
                                     Time Format
                                 </label>
                                 <select
+                                    id="company-time-format"
                                     value={companyData.timeFormat}
                                     onChange={(e) => handleInputChange('timeFormat', e.target.value)}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                                 >
+                                    <option value="">Unavailable</option>
                                     <option value="12h">12 Hour (3:30 PM)</option>
                                     <option value="24h">24 Hour (15:30)</option>
                                 </select>
@@ -910,105 +854,119 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                     />
 
                     {/* Invoice Settings */}
-                    <div className="bg-white rounded-lg border border-gray-200 p-6">
+                    <div className="rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
                         <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                             <Printer className="w-5 h-5 mr-2" />
                             Document Prefixes
                         </h2>
 
-                        <div className="grid grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label htmlFor="company-invoice-prefix" className="block text-sm font-medium text-gray-700 mb-1">
                                     Invoice Prefix
                                 </label>
                                 <input
+                                    id="company-invoice-prefix"
                                     type="text"
                                     value={companyData.invoicePrefix}
                                     onChange={(e) => handleInputChange('invoicePrefix', e.target.value)}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                    placeholder="Unavailable"
                                 />
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label htmlFor="company-challan-prefix" className="block text-sm font-medium text-gray-700 mb-1">
                                     Challan Prefix
                                 </label>
                                 <input
+                                    id="company-challan-prefix"
                                     type="text"
                                     value={companyData.challanPrefix}
                                     onChange={(e) => handleInputChange('challanPrefix', e.target.value)}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                    placeholder="Unavailable"
                                 />
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label htmlFor="company-po-prefix" className="block text-sm font-medium text-gray-700 mb-1">
                                     PO Prefix
                                 </label>
                                 <input
+                                    id="company-po-prefix"
                                     type="text"
                                     value={companyData.poPrefix}
                                     onChange={(e) => handleInputChange('poPrefix', e.target.value)}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                    placeholder="Unavailable"
                                 />
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label htmlFor="company-return-prefix" className="block text-sm font-medium text-gray-700 mb-1">
                                     Return Prefix
                                 </label>
                                 <input
+                                    id="company-return-prefix"
                                     type="text"
                                     value={companyData.returnPrefix}
                                     onChange={(e) => handleInputChange('returnPrefix', e.target.value)}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                    placeholder="Unavailable"
                                 />
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label htmlFor="company-credit-prefix" className="block text-sm font-medium text-gray-700 mb-1">
                                     Credit Note Prefix
                                 </label>
                                 <input
+                                    id="company-credit-prefix"
                                     type="text"
                                     value={companyData.creditNotePrefix}
                                     onChange={(e) => handleInputChange('creditNotePrefix', e.target.value)}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                    placeholder="Unavailable"
                                 />
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label htmlFor="company-debit-prefix" className="block text-sm font-medium text-gray-700 mb-1">
                                     Debit Note Prefix
                                 </label>
                                 <input
+                                    id="company-debit-prefix"
                                     type="text"
                                     value={companyData.debitNotePrefix}
                                     onChange={(e) => handleInputChange('debitNotePrefix', e.target.value)}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                    placeholder="Unavailable"
                                 />
                             </div>
                         </div>
                     </div>
 
                     {/* Print Settings */}
-                    <div className="bg-white rounded-lg border border-gray-200 p-6">
+                    <div className="rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
                         <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                             <Printer className="w-5 h-5 mr-2" />
                             Print Settings
                         </h2>
 
                         <div className="space-y-4">
-                            <div className="grid grid-cols-3 gap-4">
+                            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    <label htmlFor="company-print-format" className="block text-sm font-medium text-gray-700 mb-1">
                                         Print Format
                                     </label>
                                     <select
+                                        id="company-print-format"
                                         value={companyData.printFormat}
                                         onChange={(e) => handleInputChange('printFormat', e.target.value)}
                                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                                     >
+                                        <option value="">Unavailable</option>
                                         <option value="A4">A4</option>
                                         <option value="A5">A5</option>
                                         <option value="Letter">Letter</option>
@@ -1016,44 +974,48 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                                     </select>
                                 </div>
 
-                                <div className="col-span-2 space-y-3">
+                                <div className="space-y-3 md:col-span-2">
                                     <label className="flex items-center space-x-2">
                                         <input
                                             type="checkbox"
-                                            checked={companyData.showLogo}
+                                            checked={companyData.showLogo === true}
                                             onChange={(e) => handleInputChange('showLogo', e.target.checked)}
                                             className="rounded text-blue-600"
                                         />
                                         <span className="text-sm text-gray-700">Show logo on receipts</span>
+                                        {companyData.showLogo === null && <span className="text-xs text-gray-500">Unavailable</span>}
                                     </label>
 
                                     <label className="flex items-center space-x-2">
                                         <input
                                             type="checkbox"
-                                            checked={companyData.showSignature}
+                                            checked={companyData.showSignature === true}
                                             onChange={(e) => handleInputChange('showSignature', e.target.checked)}
                                             className="rounded text-blue-600"
                                         />
                                         <span className="text-sm text-gray-700">Show signature line</span>
+                                        {companyData.showSignature === null && <span className="text-xs text-gray-500">Unavailable</span>}
                                     </label>
 
                                     <label className="flex items-center space-x-2">
                                         <input
                                             type="checkbox"
-                                            checked={companyData.showBankDetails}
+                                            checked={companyData.showBankDetails === true}
                                             onChange={(e) => handleInputChange('showBankDetails', e.target.checked)}
                                             className="rounded text-blue-600"
                                         />
                                         <span className="text-sm text-gray-700">Show bank details</span>
+                                        {companyData.showBankDetails === null && <span className="text-xs text-gray-500">Unavailable</span>}
                                     </label>
                                 </div>
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label htmlFor="company-default-terms" className="block text-sm font-medium text-gray-700 mb-1">
                                     Default Terms & Conditions
                                 </label>
                                 <textarea
+                                    id="company-default-terms"
                                     value={companyData.defaultTerms}
                                     onChange={(e) => handleInputChange('defaultTerms', e.target.value)}
                                     rows={3}
@@ -1063,10 +1025,11 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label htmlFor="company-default-footer" className="block text-sm font-medium text-gray-700 mb-1">
                                     Default Footer Text
                                 </label>
                                 <input
+                                    id="company-default-footer"
                                     type="text"
                                     value={companyData.defaultFooter}
                                     onChange={(e) => handleInputChange('defaultFooter', e.target.value)}
@@ -1077,7 +1040,7 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                         </div>
                     </div>
 
-                </div>
+                </fieldset>
             </div>
         </div>
     );

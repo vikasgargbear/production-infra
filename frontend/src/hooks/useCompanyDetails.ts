@@ -1,126 +1,56 @@
-/**
- * useCompanyDetails Hook
- * 
- * Provides company profile data using offline-first architecture.
- * Data flow: Memory Cache → IndexedDB → API
- * 
- * Performance:
- * - Memory cache hit: <1ms (instant)
- * - IndexedDB hit: 5-20ms
- * - API fallback: 200-1500ms
- */
+import { useCallback, useMemo } from 'react';
+import { useCompany } from '../contexts/CompanyContext';
 
-import { useState, useEffect, useCallback } from 'react';
-import { CompanyDataService, CompanyMemoryCache, type CompanyProfile } from '../services/offline/modules/company';
-
-// Re-export types for backward compatibility
-export type { CompanyProfile };
-
-export interface CompanyDetails extends CompanyProfile {
-    // Alias for backward compatibility
+/** Print-facing projection of the canonical organization profile. */
+export interface CompanyDetails {
+    company_name: string;
+    company_address: string;
+    company_state: string;
+    company_gst_number: string;
+    company_drug_license: string;
+    company_phone: string;
+    company_alternate_phone: string;
+    company_email: string;
+    company_logo: string;
 }
 
 interface UseCompanyDetailsReturn {
-    companyDetails: CompanyDetails;
+    companyDetails: CompanyDetails | null;
     loading: boolean;
     error: Error | null;
     refreshCompanyDetails: () => Promise<void>;
 }
 
-const defaultCompanyDetails: CompanyDetails = {
-    key: 'current',
-    company_name: 'Company',
-    company_address: '',
-    company_city: '',
-    company_state: '',
-    company_pincode: '',
-    company_gst_number: '',
-    company_drug_license: '',
-    company_phone: '',
-    company_alternate_phone: '',
-    company_email: '',
-    company_website: '',
-    company_pan: '',
-    company_cin: '',
-    company_fssai: '',
-    company_msme: '',
-    company_logo: '',
-    billing_address: '',
-    shipping_address: '',
-    terms_and_conditions: '',
-    bank_details: {},
-    updated_at: ''
-};
-
+/**
+ * Exposes the already-loaded canonical company context to print previews.
+ * It deliberately has no second cache, IndexedDB read, or fallback profile.
+ */
 const useCompanyDetails = (): UseCompanyDetailsReturn => {
-    const [companyDetails, setCompanyDetails] = useState<CompanyDetails>(() => {
-        // Instant sync read from memory cache on mount
-        const cached = CompanyMemoryCache.get();
-        return cached || defaultCompanyDetails;
-    });
-    const [loading, setLoading] = useState<boolean>(!CompanyMemoryCache.isReady());
-    const [error, setError] = useState<Error | null>(null);
+    const { companyInfo, loading, error, refreshCompanyData } = useCompany();
 
-    useEffect(() => {
-        let mounted = true;
-
-        const loadCompanyDetails = async () => {
-            // If memory cache is ready, we already have data from useState initializer
-            if (CompanyMemoryCache.isReady()) {
-                setLoading(false);
-                return;
-            }
-
-            try {
-                const profile = await CompanyDataService.getProfile();
-
-                if (mounted && profile) {
-                    setCompanyDetails(profile);
-                }
-            } catch (err) {
-                console.error('[useCompanyDetails] Error loading profile:', err);
-                if (mounted) {
-                    setError(err as Error);
-                }
-            } finally {
-                if (mounted) {
-                    setLoading(false);
-                }
-            }
+    const companyDetails = useMemo<CompanyDetails | null>(() => {
+        if (!companyInfo) return null;
+        return {
+            company_name: companyInfo.name,
+            company_address: [
+                companyInfo.address,
+                companyInfo.city,
+                companyInfo.state,
+                companyInfo.pincode,
+            ].filter(Boolean).join(', '),
+            company_state: companyInfo.state,
+            company_gst_number: companyInfo.gst_number,
+            company_drug_license: companyInfo.drug_license_number,
+            company_phone: companyInfo.phone,
+            company_alternate_phone: '',
+            company_email: companyInfo.email,
+            company_logo: companyInfo.logo || '',
         };
+    }, [companyInfo]);
 
-        loadCompanyDetails();
-
-        return () => {
-            mounted = false;
-        };
-    }, []);
-
-    /**
-     * Refresh company details (invalidates cache and fetches fresh)
-     * No longer requires page reload!
-     */
-    const refreshCompanyDetails = useCallback(async (): Promise<void> => {
-        setLoading(true);
-        setError(null);
-
-        try {
-            // Invalidate memory cache
-            CompanyDataService.invalidateCache();
-
-            // Fetch fresh from API
-            const profile = await CompanyDataService.fetchFromAPI();
-
-            if (profile) {
-                setCompanyDetails(profile);
-            }
-        } catch (err) {
-            console.error('[useCompanyDetails] Error refreshing:', err);
-            setError(err as Error);
-        } finally {
-            setLoading(false);
-        }
-    }, []);
+    const refreshCompanyDetails = useCallback(async () => {
+        await refreshCompanyData();
+    }, [refreshCompanyData]);
 
     return { companyDetails, loading, error, refreshCompanyDetails };
 };

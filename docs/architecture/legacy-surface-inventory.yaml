@@ -1,5 +1,5 @@
 schema_version: 1
-snapshot_date: "2026-08-19"
+snapshot_date: "2026-08-25"
 canonical_repository: vikasgargbear/production-infra
 
 retired:
@@ -89,13 +89,34 @@ retired:
       source_callers: 0
     replacement: /api/calculations/invoice through invoiceCalculationService
 
-pending_review:
-  - id: loyalty.route_contract
-    backend_surface: backend/app/api/routes/loyalty/routes.py
-    frontend_surface: frontend/src/services/api/modules/sales/loyaltyPoints.api.ts
-    reason: Backend is mounted with duplicate /loyalty prefixes while the frontend targets incompatible /loyalty-points paths.
-    action: Measure production consumers and choose one versioned canonical contract before changing or deleting either surface.
+  - id: frontend.expenses_api
+    surface: frontend/src/services/api/modules/finance/expenses.api.ts
+    kind: frontend_api_client
+    reason: Targeted retired expense list, detail and type routes that are absent from the mounted FastAPI route graph and exposed dead legacy write methods; ExpenseClaimsFlow uses the reviewed canonical command client directly.
+    targeted_routes:
+      - /api/expense-claims
+      - /api/expense-claims/{claim_id}
+      - /api/expense-claims/expense-types
+    evidence:
+      backend_route_registered: false
+      frontend_exported: false
+      source_retired: true
+    replacement: frontend/src/services/api/modules/finance/canonicalExpenseClaims.api.ts and /api/web/actions/expense-claims
 
+  - id: loyalty.route_contract
+    surface: backend loyalty router and frontend loyaltyPointsApi client
+    kind: backend_route_and_frontend_api_client
+    reason: Neither a loyalty backend endpoint nor loyaltyPointsApi is present in the mounted application contract; loyalty remains deferred rather than preserving incompatible route aliases.
+    targeted_routes:
+      - /api/loyalty
+      - /api/loyalty-points
+    evidence:
+      backend_route_registered: false
+      frontend_exported: false
+      source_retired: true
+    replacement: none until a versioned canonical loyalty aggregate is reviewed
+
+pending_review:
   - id: invoice.calculation_preview
     backend_surface: /api/calculations/invoice
     frontend_surface: frontend/src/services/api/modules/sales/calculations.api.ts

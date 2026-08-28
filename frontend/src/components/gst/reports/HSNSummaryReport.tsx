@@ -1,178 +1,37 @@
 /**
- * HSN Summary Report - Product/HSN-wise GST
+ * The current backend HSN endpoint groups by mutable product-master facts and
+ * derives an effective rate. Do not present that projection as statutory data.
  */
 
-import React, { useState, useEffect } from 'react';
-import { Loader2, AlertCircle, Package } from 'lucide-react';
-import { DataTable } from '../../global';
+import React, { useEffect } from 'react';
+import { AlertCircle } from 'lucide-react';
 import type { DateRange } from '../types';
-import { formatCurrency } from '../utils';
-import { invoicesApi, gstApi } from '../../../services/api';
 
 interface HSNSummaryReportProps {
     dateRange: DateRange;
     refreshTrigger: number;
     onRefresh?: () => void;
     showTaxBreakdown?: boolean;
-    onDataReady?: (data: any) => void;
+    onDataReady?: (data: unknown) => void;
     onExport?: () => void;
 }
 
-interface HSNItem {
-    hsn_code: string;
-    description: string;
-    quantity: number;
-    taxable_value: number;
-    tax_rate: number;
-    tax_amount: number;
-}
-
-const HSNSummaryReport: React.FC<HSNSummaryReportProps> = ({ dateRange, refreshTrigger, onDataReady }) => {
-    const [data, setData] = useState<HSNItem[]>([]);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [totals, setTotals] = useState({ quantity: 0, taxable: 0, tax: 0 });
-
-    useEffect(() => {
-        const loadData = async () => {
-            setLoading(true);
-            setError(null);
-
-            try {
-                // Try API first
-                try {
-                    const response = await gstApi.reports.hsnSummary({
-                        from_date: dateRange.from,
-                        to_date: dateRange.to
-                    });
-                    const responseData = response?.data || response;
-
-                    if (responseData?.hsn_summary) {
-                        setData(responseData.hsn_summary);
-                        onDataReady?.(responseData.hsn_summary);
-                        return;
-                    }
-                } catch {
-                    // Fall back to computing from invoices
-                }
-
-                // Compute from invoices
-                const invoiceRes = await invoicesApi.getAll({
-                    from_date: dateRange.from,
-                    to_date: dateRange.to,
-                    limit: 5000
-                });
-                const invoiceData = invoiceRes?.data || invoiceRes;
-                const invoices = Array.isArray(invoiceData) ? invoiceData : invoiceData?.invoices || [];
-
-                const hsnGroups: Record<string, HSNItem> = {};
-
-                invoices.forEach((inv: any) => {
-                    const items = inv.items || [];
-                    items.forEach((item: any) => {
-                        const hsn = item.hsn_code || item.hsn || item.product_hsn || 'N/A';
-                        const qty = item.quantity || 0;
-                        const unit_price = item.unit_price || item.unit_price || 0;
-                        const taxableValue = qty * unit_price;
-                        const taxRate = item.tax_percent || item.gst_percent || 18;
-                        const taxAmount = (taxableValue * taxRate) / 100;
-
-                        if (!hsnGroups[hsn]) {
-                            hsnGroups[hsn] = {
-                                hsn_code: hsn,
-                                description: item.product_name || 'Product',
-                                quantity: 0,
-                                taxable_value: 0,
-                                tax_rate: taxRate,
-                                tax_amount: 0
-                            };
-                        }
-
-                        hsnGroups[hsn].quantity += qty;
-                        hsnGroups[hsn].taxable_value += taxableValue;
-                        hsnGroups[hsn].tax_amount += taxAmount;
-                    });
-                });
-
-                const hsnArray = Object.values(hsnGroups).sort((a, b) => b.taxable_value - a.taxable_value);
-                setData(hsnArray);
-                onDataReady?.(hsnArray);
-
-                const totalQty = hsnArray.reduce((s, h) => s + h.quantity, 0);
-                const totalTaxable = hsnArray.reduce((s, h) => s + h.taxable_value, 0);
-                const totalTax = hsnArray.reduce((s, h) => s + h.tax_amount, 0);
-                setTotals({ quantity: totalQty, taxable: totalTaxable, tax: totalTax });
-
-            } catch (err) {
-                setError('Failed to load HSN summary');
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        loadData();
-    }, [dateRange.from, dateRange.to, refreshTrigger]);
-
-    if (loading) {
-        return (
-            <div className="flex items-center justify-center h-64">
-                <Loader2 className="w-8 h-8 animate-spin text-amber-600" />
-                <span className="ml-2">Loading HSN summary...</span>
-            </div>
-        );
-    }
-
-    if (error) {
-        return (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                <AlertCircle className="h-5 w-5 text-red-600 inline mr-2" />
-                <span className="text-red-800">{error}</span>
-            </div>
-        );
-    }
+const HSNSummaryReport: React.FC<HSNSummaryReportProps> = ({ onDataReady }) => {
+    useEffect(() => onDataReady?.(null), [onDataReady]);
 
     return (
-        <div className="space-y-6">
-            {/* Summary */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="bg-white p-4 rounded-lg border">
-                    <div className="text-sm text-gray-600">HSN Codes</div>
-                    <div className="text-2xl font-bold">{data.length}</div>
-                </div>
-                <div className="bg-white p-4 rounded-lg border">
-                    <div className="text-sm text-gray-600">Total Quantity</div>
-                    <div className="text-2xl font-bold">{totals.quantity.toLocaleString()}</div>
-                </div>
-                <div className="bg-white p-4 rounded-lg border">
-                    <div className="text-sm text-gray-600">Taxable Value</div>
-                    <div className="text-2xl font-bold">{formatCurrency(totals.taxable)}</div>
-                </div>
-                <div className="bg-white p-4 rounded-lg border">
-                    <div className="text-sm text-gray-600">Total Tax</div>
-                    <div className="text-2xl font-bold">{formatCurrency(totals.tax)}</div>
+        <section aria-labelledby="hsn-unavailable-title" className="rounded-lg border border-amber-200 bg-amber-50 p-5">
+            <div className="flex items-start gap-3">
+                <AlertCircle aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
+                <div>
+                    <h2 id="hsn-unavailable-title" className="font-semibold text-amber-950">HSN summary unavailable</h2>
+                    <p className="mt-1 text-sm text-amber-900">
+                        The API does not yet publish a date-bounded HSN projection from immutable invoice-line classification
+                        and tax-version facts. Current product-master values are not shown as a substitute.
+                    </p>
                 </div>
             </div>
-
-            {/* HSN Table */}
-            <div className="bg-white rounded-lg border">
-                <div className="p-4 border-b flex items-center">
-                    <Package className="h-5 w-5 text-amber-600 mr-2" />
-                    <h3 className="text-lg font-semibold">HSN-wise Summary</h3>
-                </div>
-                <DataTable
-                    data={data}
-                    keyField="hsn_code"
-                    columns={[
-                        { key: 'hsn_code', header: 'HSN Code' },
-                        { key: 'description', header: 'Description' },
-                        { key: 'quantity', header: 'Quantity', render: (v) => v.toLocaleString() },
-                        { key: 'taxable_value', header: 'Taxable Value', render: (v) => formatCurrency(v) },
-                        { key: 'tax_rate', header: 'Tax Rate', render: (v) => `${v}%` },
-                        { key: 'tax_amount', header: 'Tax Amount', render: (v) => formatCurrency(v) }
-                    ]}
-                />
-            </div>
-        </div>
+        </section>
     );
 };
 

@@ -2,32 +2,75 @@
 
 import type { AxiosResponse } from 'axios';
 import { apiHelpers } from '../../apiClient';
-import type { InvoiceCalculationResponse } from '../sales/calculations.api';
+import type {
+    CalculationDecimalString,
+    CalculationEntityId,
+} from '../sales/calculations.api';
 
 
 export interface PurchaseCalculationRequest {
-    supplier_id?: number;
+    supplier_id?: CalculationEntityId;
     gst_type?: 'CGST/SGST' | 'IGST';
     items: Array<{
-        product_id: number;
+        product_id: CalculationEntityId;
         product_name?: string;
-        quantity: number;
-        free_quantity?: number;
-        unit_price: number;
-        mrp?: number;
-        discount_percent?: number;
-        tax_percent?: number;
-        gst_percent?: number;
+        quantity: CalculationDecimalString;
+        free_quantity?: CalculationDecimalString;
+        unit_price: CalculationDecimalString;
+        mrp?: CalculationDecimalString;
+        discount_percent?: CalculationDecimalString;
+        tax_percent?: CalculationDecimalString;
     }>;
-    freight_charges?: number;
-    insurance_charges?: number;
-    other_charges?: number;
+    freight_charges?: CalculationDecimalString;
+    insurance_charges?: CalculationDecimalString;
+    other_charges?: CalculationDecimalString;
+}
+
+export interface PurchaseCalculationPreviewLine {
+    product_id?: CalculationEntityId;
+    product_name?: string;
+    quantity: CalculationDecimalString;
+    unit_price: CalculationDecimalString;
+    discount_percent: CalculationDecimalString;
+    discount_amount: CalculationDecimalString;
+    tax_percent: CalculationDecimalString;
+    taxable_amount: CalculationDecimalString;
+    cgst_amount: CalculationDecimalString;
+    sgst_amount: CalculationDecimalString;
+    igst_amount: CalculationDecimalString;
+    tax_amount: CalculationDecimalString;
+    line_total: CalculationDecimalString;
+    mrp: CalculationDecimalString;
+}
+
+export interface PurchaseCalculationPreviewTotals {
+    subtotal_amount: CalculationDecimalString;
+    discount_amount: CalculationDecimalString;
+    taxable_amount: CalculationDecimalString;
+    cgst_amount: CalculationDecimalString;
+    sgst_amount: CalculationDecimalString;
+    igst_amount: CalculationDecimalString;
+    tax_amount: CalculationDecimalString;
+    freight_charges: CalculationDecimalString;
+    insurance_charges: CalculationDecimalString;
+    other_charges: CalculationDecimalString;
+    round_off_amount: CalculationDecimalString;
+    total_amount: CalculationDecimalString;
+    invoice_total: CalculationDecimalString;
+}
+
+export interface PurchaseCalculationResponse {
+    success: true;
+    line_items: PurchaseCalculationPreviewLine[];
+    totals: PurchaseCalculationPreviewTotals;
+    calculation_timestamp: number;
+    gst_type: 'CGST/SGST' | 'IGST';
 }
 
 export const purchaseCalculationsApi = {
     preview: (
         data: PurchaseCalculationRequest
-    ): Promise<AxiosResponse<InvoiceCalculationResponse>> => {
-        return apiHelpers.post<InvoiceCalculationResponse>('/calculations/purchase-order', data);
+    ): Promise<AxiosResponse<PurchaseCalculationResponse>> => {
+        return apiHelpers.post<PurchaseCalculationResponse>('/calculations/purchase-order', data);
     }
 };

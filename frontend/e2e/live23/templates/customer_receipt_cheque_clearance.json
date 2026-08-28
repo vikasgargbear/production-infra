@@ -1,0 +1,39 @@
+{
+  "template_schema": "aasopharma.live23.ui-variant-template.v1",
+  "scenario_id": "customer_receipt_cheque_clearance",
+  "operation_id": "customer_receipt",
+  "lifecycle_mode": "combined_actor_confirmation",
+  "steps": {
+    "missing_required_steps": [
+      {"actor":"requester","action":"goto","value":"/#/payment/payment-entry"},
+      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Required: select a customer, positive receipt amount, payment method, settlement account, reference, and allocation.","exact":true},"value":"Required: select a customer, positive receipt amount, payment method, settlement account, reference, and allocation."},
+      {"actor":"requester","action":"expectDisabled","locator":{"kind":"role","role":"button","name":"Continue","exact":true}}
+    ],
+    "prepare_steps": [
+      {"actor":"requester","action":"goto","value":"/#/payment/payment-entry"},
+      {"actor":"requester","action":"fill","locator":{"kind":"placeholder","name":"Search customer by name, phone, or code...","exact":true},"value":"{{fact.display.customer_code}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"testId","name":"entity-search-option-{{fact.identity.customer_account_id}}"}},
+      {"actor":"requester","action":"fill","locator":{"kind":"placeholder","name":"0","exact":true},"value":"{{fact.choice.customer_receipt_cheque_clearance_amount}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Cheque","exact":true}},
+      {"actor":"requester","action":"select","locator":{"kind":"label","name":"Receipt purpose","exact":true},"value":"customer_advance"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Verified evidence ID","exact":true},"value":"{{fact.identity.customer_receipt_evidence_attachment_id}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Approved goods order ID","exact":true},"value":"{{resource_sales_order}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Order branch ID","exact":true},"value":"{{fact.identity.branch_id}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Instrument number","exact":true},"value":"LIVE23-CLR-{{run_token}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Instrument date","exact":true},"value":"{{fact.clock.business_date}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Drawee bank","exact":true},"value":"Reviewed customer bank"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"checkbox","name":"Account-payee confirmed","exact":true}},
+      {"actor":"requester","action":"fill","locator":{"kind":"placeholder","name":"Enter bank, UPI, or gateway reference","exact":true},"value":"LIVE23-CHEQUE-CLR-{{run_token}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Continue","exact":true}},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Post Receipt","exact":true}}
+    ],
+    "approval_steps": [
+      {"actor":"requester","action":"expectText","locator":{"kind":"role","role":"dialog","name":"Approve customer receipt","exact":true},"value":"{{command_request_id}}"},
+      {"actor":"requester","action":"expectText","locator":{"kind":"testId","name":"canonical-immutable-preview"},"value":"{{fact.choice.customer_receipt_cheque_clearance_amount}}"}
+    ],
+    "execute_steps": [
+      {"actor":"requester","action":"expectText","locator":{"kind":"role","role":"dialog","name":"Approve customer receipt","exact":true},"value":"{{command_request_id}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Approve & Post Receipt","exact":true}}
+    ]
+  }
+}

@@ -1,0 +1,236 @@
+{
+  "audit_bindings": [
+    "automation.agent_grant_capabilities",
+    "automation.agent_grants",
+    "automation.command_approvals",
+    "automation.command_requests",
+    "calculation.artifacts",
+    "catalog.categories",
+    "catalog.commercial_charge_tax_profiles",
+    "catalog.product_ingredients",
+    "catalog.products",
+    "catalog.uom_conversions",
+    "compliance.controlled_substance_entries",
+    "compliance.destructions",
+    "compliance.licenses",
+    "compliance.recall_batches",
+    "compliance.recalls",
+    "compliance.storage_rule_versions",
+    "compliance.temperature_readings",
+    "core.access_grants",
+    "core.attachments",
+    "core.branches",
+    "core.data_retention_cases",
+    "core.document_sequences",
+    "core.idempotency_keys",
+    "core.memberships",
+    "core.organizations",
+    "core.outbox_events",
+    "core.role_permissions",
+    "core.roles",
+    "core.settings",
+    "core.users",
+    "finance.accounting_events",
+    "finance.accounts",
+    "finance.adjustment_note_lines",
+    "finance.adjustment_notes",
+    "finance.allocations",
+    "finance.bank_accounts",
+    "finance.bank_statement_lines",
+    "finance.bank_statements",
+    "finance.expense_claim_lines",
+    "finance.expense_claims",
+    "finance.journal_entries",
+    "finance.journal_lines",
+    "finance.open_items",
+    "finance.payments",
+    "finance.reconciliation_matches",
+    "hr.departments",
+    "hr.employees",
+    "inventory.batches",
+    "inventory.inventory_document_lines",
+    "inventory.inventory_documents",
+    "inventory.locations",
+    "inventory.reservations",
+    "inventory.stock_ledger_entries",
+    "parties.addresses",
+    "parties.contacts",
+    "parties.customer_accounts",
+    "parties.parties",
+    "parties.supplier_accounts",
+    "parties.tax_registrations",
+    "procurement.goods_receipt_lines",
+    "procurement.goods_receipts",
+    "procurement.purchase_order_advance_allocations",
+    "procurement.purchase_order_lines",
+    "procurement.purchase_orders",
+    "procurement.purchase_return_lines",
+    "procurement.purchase_returns",
+    "procurement.supplier_invoice_lines",
+    "procurement.supplier_invoice_receipt_allocations",
+    "procurement.supplier_invoices",
+    "sales.dispatch_lines",
+    "sales.dispatches",
+    "sales.invoice_dispatch_allocations",
+    "sales.invoice_lines",
+    "sales.invoices",
+    "sales.order_lines",
+    "sales.orders",
+    "sales.return_lines",
+    "sales.returns",
+    "tax.documents",
+    "tax.einvoices",
+    "tax.eway_bills",
+    "tax.organization_fiscal_tax_facts",
+    "tax.portal_document_lines",
+    "tax.portal_documents",
+    "tax.reconciliation_items",
+    "tax.reconciliation_runs",
+    "tax.registration_branches",
+    "tax.registrations",
+    "tax.return_documents",
+    "tax.return_periods",
+    "tax.returns",
+    "tax.withholding_basis_lines",
+    "tax.withholding_certificate_lines",
+    "tax.withholding_certificates",
+    "tax.withholding_deposit_lines",
+    "tax.withholding_deposits",
+    "tax.withholding_statement_lines",
+    "tax.withholding_statements",
+    "tax.withholdings"
+  ],
+  "audit_exclusions": {
+    "core.audit_events": "audit chain cannot trigger itself",
+    "inventory.stock_balances": "rebuildable projection is evidenced by its stock ledger source"
+  },
+  "catalog_sha256": "6c88d9a0f93158f126abc8d87057b8fcebb287ba332ef36fd37b802cadc29c31",
+  "hash_contract": "pg-jsonb-sha256-v1",
+  "immutable_bindings": [
+    "automation.command_approvals",
+    "compliance.controlled_substance_entries",
+    "compliance.temperature_readings",
+    "core.attachments",
+    "core.audit_events",
+    "finance.accounting_events",
+    "finance.allocations",
+    "finance.bank_statement_lines",
+    "finance.reconciliation_matches",
+    "inventory.stock_ledger_entries",
+    "procurement.supplier_invoice_receipt_allocations",
+    "sales.invoice_dispatch_allocations",
+    "tax.documents",
+    "tax.portal_document_lines",
+    "tax.reconciliation_items",
+    "tax.return_documents",
+    "tax.withholding_certificates",
+    "tax.withholding_deposits",
+    "tax.withholding_statements"
+  ],
+  "manifest_version": "1.0.0",
+  "mapping_sha256": "8e51d8f35b159035cd1c48298d645818e9a319f0dc66892538f6d97af281deb1",
+  "outbox_bindings": {
+    "automation.command_requests": {
+      "aggregate_type": "command",
+      "statuses": [
+        "succeeded",
+        "failed"
+      ]
+    },
+    "compliance.recalls": {
+      "aggregate_type": "recall",
+      "statuses": [
+        "in_progress",
+        "closed",
+        "cancelled"
+      ]
+    },
+    "finance.journal_entries": {
+      "aggregate_type": "journal_entry",
+      "statuses": [
+        "posted",
+        "reversed"
+      ]
+    },
+    "finance.payments": {
+      "aggregate_type": "payment",
+      "statuses": [
+        "posted",
+        "reversed",
+        "cancelled"
+      ]
+    },
+    "inventory.inventory_documents": {
+      "aggregate_type": "inventory_document",
+      "statuses": [
+        "posted",
+        "reversed"
+      ]
+    },
+    "procurement.purchase_returns": {
+      "aggregate_type": "purchase_return",
+      "statuses": [
+        "posted",
+        "reversed"
+      ]
+    },
+    "procurement.supplier_invoices": {
+      "aggregate_type": "supplier_invoice",
+      "statuses": [
+        "posted",
+        "reversed"
+      ]
+    },
+    "sales.invoices": {
+      "aggregate_type": "sales_invoice",
+      "statuses": [
+        "posted",
+        "reversed"
+      ]
+    },
+    "sales.returns": {
+      "aggregate_type": "sales_return",
+      "statuses": [
+        "posted",
+        "reversed"
+      ]
+    },
+    "tax.einvoices": {
+      "aggregate_type": "einvoice",
+      "statuses": [
+        "generated",
+        "failed",
+        "cancelled"
+      ]
+    },
+    "tax.eway_bills": {
+      "aggregate_type": "eway_bill",
+      "statuses": [
+        "generated",
+        "failed",
+        "cancelled",
+        "expired"
+      ]
+    },
+    "tax.returns": {
+      "aggregate_type": "tax_return",
+      "statuses": [
+        "filed",
+        "rejected",
+        "superseded"
+      ]
+    },
+    "tax.withholdings": {
+      "aggregate_type": "withholding",
+      "statuses": [
+        "deducted",
+        "reversed"
+      ]
+    }
+  },
+  "resolved_blockers": [
+    "trigger_plumbing:audit",
+    "trigger_plumbing:immutability",
+    "trigger_plumbing:outbox"
+  ]
+}

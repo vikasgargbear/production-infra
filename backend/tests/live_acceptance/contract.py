@@ -1,0 +1,311 @@
+"""Strict loader for the 18-operation registry and its release-ready scope."""
+
+from __future__ import annotations
+
+import json
+import re
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+
+MATRIX_PATH = Path(__file__).with_name("operation_matrix.json")
+READINESS_PATH = Path(__file__).resolve().parents[3] / "docs/testing/live18-ui-template-readiness.json"
+OPERATION_RE = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+\.prepare$")
+TOOL_RE = re.compile(r"^erp_[a-z0-9_]+$")
+RELATION_RE = re.compile(
+    r"^(?:sales|procurement|finance|inventory|tax|compliance|automation|core)"
+    r"\.[a-z][a-z0-9_]*$"
+)
+APPROVAL_POLICIES = {"actor_confirmation", "separate_approver"}
+AVAILABILITY = {"published", "blocked"}
+CERTIFICATION_STATUS = {"ready", "blocked", "deferred"}
+
+# Minimum persisted effects that Live18 must reconcile for each operation.  This
+# is deliberately narrower than the authority matrix (which also includes
+# locked inputs and command metadata), but it may never be weakened by merely
+# omitting an expected downstream relation from operation_matrix.json.
+REQUIRED_DATABASE_RELATIONS: dict[str, frozenset[str]] = {
+    "sales_invoice": frozenset({
+        "sales.invoices", "sales.invoice_lines", "inventory.inventory_documents",
+        "inventory.inventory_document_lines", "inventory.stock_ledger_entries",
+        "inventory.stock_balances", "tax.documents", "finance.open_items",
+        "finance.accounting_events", "finance.journal_entries", "finance.journal_lines",
+    }),
+    "sales_order": frozenset({"sales.orders", "sales.order_lines"}),
+    "delivery_challan": frozenset({
+        "sales.dispatches", "sales.dispatch_lines", "inventory.inventory_documents",
+        "inventory.inventory_document_lines", "inventory.stock_ledger_entries",
+        "inventory.stock_balances", "finance.accounting_events",
+        "finance.journal_entries", "finance.journal_lines",
+    }),
+    "purchase_order": frozenset({
+        "procurement.purchase_orders", "procurement.purchase_order_lines",
+    }),
+    "supplier_advance": frozenset({
+        "finance.payments", "procurement.purchase_order_advance_allocations",
+        "finance.open_items", "finance.accounting_events", "finance.journal_entries",
+        "finance.journal_lines",
+    }),
+    "goods_receipt": frozenset({
+        "procurement.goods_receipts", "procurement.goods_receipt_lines",
+        "inventory.batches", "inventory.inventory_documents",
+        "inventory.inventory_document_lines", "inventory.stock_ledger_entries",
+        "inventory.stock_balances",
+    }),
+    "supplier_invoice": frozenset({
+        "procurement.supplier_invoices", "procurement.supplier_invoice_lines",
+        "procurement.supplier_invoice_receipt_allocations", "finance.open_items",
+        "finance.accounting_events", "finance.journal_entries", "finance.journal_lines",
+        "tax.documents",
+    }),
+    "customer_receipt": frozenset({
+        "finance.payments", "finance.allocations", "finance.open_items",
+        "finance.accounting_events", "finance.journal_entries", "finance.journal_lines",
+    }),
+    "supplier_payment": frozenset({
+        "finance.payments", "finance.allocations", "finance.open_items",
+        "finance.accounting_events", "finance.journal_entries", "finance.journal_lines",
+    }),
+    "sales_return": frozenset({
+        "sales.returns", "sales.return_lines", "inventory.inventory_documents",
+        "inventory.inventory_document_lines", "inventory.stock_ledger_entries",
+        "inventory.stock_balances", "finance.adjustment_notes",
+        "finance.adjustment_note_lines", "finance.accounting_events",
+        "finance.journal_entries", "finance.journal_lines", "finance.allocations",
+        "finance.open_items", "tax.documents",
+    }),
+    "purchase_return": frozenset({
+        "procurement.purchase_returns", "procurement.purchase_return_lines",
+        "inventory.inventory_documents", "inventory.inventory_document_lines",
+        "inventory.stock_ledger_entries", "inventory.stock_balances",
+        "finance.adjustment_notes", "finance.adjustment_note_lines",
+        "finance.accounting_events", "finance.journal_entries", "finance.journal_lines",
+        "finance.allocations", "finance.open_items", "tax.documents",
+    }),
+    "stock_adjustment": frozenset({
+        "inventory.inventory_documents", "inventory.inventory_document_lines",
+        "inventory.stock_ledger_entries", "inventory.stock_balances",
+        "finance.journal_entries", "finance.journal_lines",
+    }),
+    "stock_transfer": frozenset({
+        "inventory.inventory_documents", "inventory.inventory_document_lines",
+        "inventory.stock_balances",
+    }),
+    "destruction": frozenset({
+        "compliance.destructions", "inventory.inventory_documents",
+        "inventory.inventory_document_lines", "inventory.stock_ledger_entries",
+        "inventory.stock_balances", "tax.input_credit_applications",
+        "tax.input_credit_reversal_events", "finance.accounting_events",
+        "finance.journal_entries", "finance.journal_lines",
+    }),
+    "customer_credit_note": frozenset({
+        "finance.adjustment_notes", "finance.adjustment_note_lines", "finance.open_items",
+        "finance.allocations", "finance.accounting_events", "finance.journal_entries",
+        "finance.journal_lines", "tax.documents",
+    }),
+    "supplier_debit_note": frozenset({
+        "finance.adjustment_notes", "finance.adjustment_note_lines", "finance.open_items",
+        "finance.allocations", "finance.accounting_events", "finance.journal_entries",
+        "finance.journal_lines", "tax.documents",
+    }),
+    "bank_reconciliation": frozenset({
+        "finance.reconciliation_matches", "finance.bank_statement_lines",
+        "finance.journal_entries", "finance.journal_lines",
+    }),
+    "expense_claim": frozenset({
+        "finance.expense_claims", "finance.expense_claim_lines", "core.attachments",
+        "finance.accounts", "finance.accounting_events", "finance.journal_entries",
+        "finance.journal_lines",
+    }),
+}
+
+
+class MatrixContractError(ValueError):
+    """The checked-in live-acceptance matrix is incomplete or ambiguous."""
+
+
+@dataclass(frozen=True)
+class OperationContract:
+    id: str
+    command_operation: str | None
+    prepare_tool: str | None
+    approval_policy: str
+    rest_readback: str | None
+    mcp_readback_tool: str | None
+    database_relations: tuple[str, ...]
+    scenario_steps: tuple[str, ...]
+    availability: str
+    blocker: str | None = None
+    certification_status: str = "ready"
+    certification_blocker_code: str | None = None
+    certification_blocker: str | None = None
+
+
+def _required_text(row: dict[str, Any], field: str) -> str:
+    value = row.get(field)
+    if not isinstance(value, str) or not value.strip():
+        raise MatrixContractError(f"{row.get('id', '<unknown>')}: {field} must be non-empty text")
+    return value
+
+
+def load_operation_matrix(path: Path = MATRIX_PATH) -> tuple[OperationContract, ...]:
+    raw = json.loads(path.read_text())
+    rows = raw.get("operations")
+    operation_count = raw.get("operation_count")
+    required_count = raw.get("required_operation_count")
+    deferred_rows = raw.get("deferred_operations")
+    if (
+        not isinstance(rows, list)
+        or operation_count != 18
+        or len(rows) != operation_count
+        or not isinstance(required_count, int)
+        or isinstance(required_count, bool)
+        or not isinstance(deferred_rows, list)
+    ):
+        raise MatrixContractError(
+            "live acceptance must declare 18 business operations and an explicit ready scope"
+        )
+    deferred: dict[str, tuple[str, str]] = {}
+    for row in deferred_rows:
+        if not isinstance(row, dict) or row.get("status") != "deferred":
+            raise MatrixContractError("every deferred operation must declare deferred status")
+        operation_id = _required_text(row, "id")
+        blocker_code = _required_text(row, "blocker_code")
+        blocker = _required_text(row, "blocker")
+        if operation_id in deferred or not re.fullmatch(r"[A-Z][A-Z0-9_]+", blocker_code):
+            raise MatrixContractError("deferred operation identity or blocker code is invalid")
+        deferred[operation_id] = (blocker_code, blocker)
+    if required_count != operation_count - len(deferred):
+        raise MatrixContractError(
+            "required operation count must equal the catalog minus explicit deferrals"
+        )
+
+    contracts: list[OperationContract] = []
+    seen: set[str] = set()
+    for row in rows:
+        if not isinstance(row, dict):
+            raise MatrixContractError("every operation entry must be an object")
+        operation_id = _required_text(row, "id")
+        if operation_id in seen:
+            raise MatrixContractError(f"duplicate operation id: {operation_id}")
+        seen.add(operation_id)
+        availability = _required_text(row, "availability")
+        approval = _required_text(row, "approval_policy")
+        if availability not in AVAILABILITY or approval not in APPROVAL_POLICIES:
+            raise MatrixContractError(f"{operation_id}: invalid availability or approval policy")
+
+        command = row.get("command_operation")
+        prepare_tool = row.get("prepare_tool")
+        rest_readback = row.get("rest_readback")
+        mcp_readback = row.get("mcp_readback_tool")
+        blocker = row.get("blocker")
+        relations = row.get("database_relations")
+        steps = row.get("scenario_steps")
+        if not isinstance(relations, list) or not relations or not all(
+            isinstance(value, str) and RELATION_RE.fullmatch(value) for value in relations
+        ):
+            raise MatrixContractError(f"{operation_id}: canonical database relations are required")
+        if not isinstance(steps, list) or not all(isinstance(value, str) and value for value in steps):
+            raise MatrixContractError(f"{operation_id}: scenario_steps must be a string list")
+
+        if availability == "published":
+            if not isinstance(command, str) or not OPERATION_RE.fullmatch(command):
+                raise MatrixContractError(f"{operation_id}: published command is invalid")
+            if not isinstance(prepare_tool, str) or not TOOL_RE.fullmatch(prepare_tool):
+                raise MatrixContractError(f"{operation_id}: published prepare tool is invalid")
+            if not isinstance(mcp_readback, str) or not TOOL_RE.fullmatch(mcp_readback):
+                raise MatrixContractError(f"{operation_id}: published MCP readback is invalid")
+            if not isinstance(rest_readback, str) or not rest_readback.startswith("/api/"):
+                raise MatrixContractError(f"{operation_id}: published REST readback is invalid")
+            if not steps:
+                raise MatrixContractError(f"{operation_id}: published operation lacks a live scenario")
+            if blocker is not None:
+                raise MatrixContractError(f"{operation_id}: published operation cannot carry a blocker")
+        else:
+            if any(value is not None for value in (command, prepare_tool, rest_readback, mcp_readback)):
+                raise MatrixContractError(f"{operation_id}: blocked operation must not invent contracts")
+            if steps:
+                raise MatrixContractError(f"{operation_id}: blocked operation cannot claim a scenario")
+            if not isinstance(blocker, str) or not blocker.strip():
+                raise MatrixContractError(f"{operation_id}: blocked operation requires an exact blocker")
+
+        contracts.append(OperationContract(
+            id=operation_id,
+            command_operation=command,
+            prepare_tool=prepare_tool,
+            approval_policy=approval,
+            rest_readback=rest_readback,
+            mcp_readback_tool=mcp_readback,
+            database_relations=tuple(relations),
+            scenario_steps=tuple(steps),
+            availability=availability,
+            blocker=blocker,
+            certification_status=(
+                "blocked" if availability == "blocked"
+                else "deferred" if operation_id in deferred
+                else "ready"
+            ),
+            certification_blocker_code=(
+                deferred[operation_id][0] if operation_id in deferred else None
+            ),
+            certification_blocker=(
+                deferred[operation_id][1] if operation_id in deferred else None
+            ),
+        ))
+    if set(deferred) - seen:
+        raise MatrixContractError("deferred operation is absent from the operation catalog")
+    ready_count = sum(item.certification_status == "ready" for item in contracts)
+    if ready_count != required_count:
+        raise MatrixContractError("matrix ready scope does not match required operation count")
+    return tuple(contracts)
+
+
+def load_ready_operation_matrix(
+    matrix_path: Path = MATRIX_PATH,
+    readiness_path: Path = READINESS_PATH,
+) -> tuple[OperationContract, ...]:
+    contracts = load_operation_matrix(matrix_path)
+    readiness = json.loads(readiness_path.read_text())
+    rows = readiness.get("operations")
+    ready_count = readiness.get("ready_count")
+    if not isinstance(rows, list) or not isinstance(ready_count, int):
+        raise MatrixContractError("live18 UI readiness registry is invalid")
+    contract_ids = {item.id for item in contracts}
+    readiness_ids = [row.get("id") for row in rows if isinstance(row, dict)]
+    if (
+        len(readiness_ids) != len(contracts)
+        or len(set(readiness_ids)) != len(readiness_ids)
+        or set(readiness_ids) != contract_ids
+    ):
+        raise MatrixContractError(
+            "live18 UI readiness registry must cover the exact operation matrix"
+        )
+    ready_ids = {row["id"] for row in rows if row.get("status") == "ready"}
+    if len(ready_ids) != ready_count:
+        raise MatrixContractError(
+            "live18 UI readiness count does not match its ready operations"
+        )
+    unknown_status = [
+        row.get("id") for row in rows if row.get("status") not in CERTIFICATION_STATUS
+    ]
+    if unknown_status:
+        raise MatrixContractError(
+            f"live18 UI readiness has invalid status: {unknown_status}"
+        )
+    status_by_id = {row["id"]: row.get("status") for row in rows}
+    for item in contracts:
+        if status_by_id[item.id] != item.certification_status:
+            raise MatrixContractError(
+                f"{item.id}: UI readiness differs from authoritative certification status"
+            )
+        if item.certification_status == "deferred":
+            row = next(value for value in rows if value["id"] == item.id)
+            if (
+                row.get("blocker_code") != item.certification_blocker_code
+                or row.get("blocker") != item.certification_blocker
+            ):
+                raise MatrixContractError(
+                    f"{item.id}: deferred blocker differs from authoritative matrix"
+                )
+    return tuple(item for item in contracts if item.id in ready_ids)

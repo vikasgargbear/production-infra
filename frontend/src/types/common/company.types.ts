@@ -12,7 +12,7 @@
 export interface BankAccount {
     id: number | string;
     bank_name: string;
-    account_number: string;
+    account_number?: string;
     ifsc_code: string;
     branch_name?: string;
     account_name?: string;

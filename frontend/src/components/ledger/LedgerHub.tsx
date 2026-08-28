@@ -1,17 +1,26 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
-  DollarSign, TrendingUp,
+  DollarSign,
   AlertTriangle, FileText,
-  Archive, Loader2, RefreshCw, AlertCircle
+  Archive
 } from 'lucide-react';
 import { ModuleHub } from '../global';
 import PartyLedger from './PartyLedger';
 import Outstanding from './Outstanding';
 import CollectionCenter from './CollectionCenter';
 
+export const LEDGER_SUBPAGE_IDS = [
+  'party-statement',
+  'outstanding',
+  'collection-center',
+] as const;
+export type LedgerSubpage = typeof LEDGER_SUBPAGE_IDS[number];
+
 interface LedgerHubProps {
   open?: boolean;
   onClose?: () => void;
+  initialSubpage?: string | null;
+  onSubpageChange?: (subpage: string | null) => void;
 }
 
 interface LedgerModule {
@@ -24,20 +33,29 @@ interface LedgerModule {
   component: React.ComponentType<any>;
 }
 
-const LedgerHub: React.FC<LedgerHubProps> = ({ open = true, onClose }) => {
-  // API data states
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
-
+const LedgerHub: React.FC<LedgerHubProps> = ({
+  open = true,
+  onClose,
+  initialSubpage,
+  onSubpageChange,
+}) => {
+  const resolvedDefault: LedgerSubpage = initialSubpage
+    && (LEDGER_SUBPAGE_IDS as readonly string[]).includes(initialSubpage)
+    ? initialSubpage as LedgerSubpage
+    : 'party-statement';
   // Navigation state for switching between modules
-  const [activeModule, setActiveModule] = useState<string>('party-statement');
+  const [activeModule, setActiveModule] = useState<LedgerSubpage>(resolvedDefault);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    setActiveModule(resolvedDefault);
+  }, [resolvedDefault]);
 
   const handleCustomerClick = (customer: any) => {
     // Store customer ID and switch to Outstanding module (shows invoice-level aging)
     setSelectedCustomerId(customer.customer_id);
     setActiveModule('outstanding');
+    onSubpageChange?.('outstanding');
   };
 
   const ledgerModules: LedgerModule[] = [
@@ -48,13 +66,7 @@ const LedgerHub: React.FC<LedgerHubProps> = ({ open = true, onClose }) => {
       description: 'View transaction history',
       icon: FileText,
       color: 'blue',
-      component: (props: any) => (
-        <PartyLedger
-          {...props}
-          initialCustomerId={selectedCustomerId}
-          onCustomerChange={() => setSelectedCustomerId(null)}
-        />
-      )
+      component: (props: any) => <PartyLedger {...props} />
     },
     {
       id: 'outstanding',
@@ -87,32 +99,6 @@ const LedgerHub: React.FC<LedgerHubProps> = ({ open = true, onClose }) => {
     }
   ];
 
-  useEffect(() => {
-    // Load initial data if needed
-    loadInitialData();
-  }, []);
-
-  const loadInitialData = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      // Here you would load any initial ledger data
-      // For now, we'll just set a default state
-
-    } catch (error) {
-      setError('Failed to load initial ledger data');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    await loadInitialData();
-    setRefreshing(false);
-  };
-
   return (
     <ModuleHub
       open={open}
@@ -122,6 +108,7 @@ const LedgerHub: React.FC<LedgerHubProps> = ({ open = true, onClose }) => {
       icon={Archive}
       modules={ledgerModules}
       defaultModule={activeModule}
+      onActiveModuleChange={onSubpageChange}
     />
   );
 };

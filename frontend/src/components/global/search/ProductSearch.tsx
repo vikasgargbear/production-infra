@@ -1,30 +1,50 @@
-import React, { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle, KeyboardEvent, MouseEvent } from 'react';
+import React, { useState, useEffect, useRef, useMemo, forwardRef, useImperativeHandle, KeyboardEvent } from 'react';
 import { Search, Package } from 'lucide-react';
 import { productsApi } from '../../../services/api';
 import BatchSelector from '../selector/BatchSelector';
 import { debounce } from '../../../utils/debounce';
+import {
+    compareExactDecimals,
+    formatExactDecimal,
+    normalizeAuthoritativeDecimal,
+} from '../../../utils/exactDecimal';
 
-import localSearchService from '../../../services/offline/search/localSearchService';
-import { mapProductToCanonical } from '../../../utils/productMapper';
 import { Product } from '../../../types/models/product';
 
 // ==================== TYPE DEFINITIONS ====================
 
 
 
-interface ProductWithBatch extends Product {
+type ExactSearchProduct = Omit<Product,
+    'gst_percent' | 'total_quantity_available' | 'total_stock' | 'mrp' | 'sale_price' | 'cost_per_unit'
+> & {
+    gst_percent: string;
+    total_quantity_available: string;
+    total_stock: string;
+    mrp?: string;
+    sale_price?: string;
+    cost_per_unit?: string;
+};
+
+interface ProductWithBatch extends ExactSearchProduct {
     batch_id?: number | string;
     batch_number?: string;
     expiry_date?: string;
-    quantity?: number;
-    unit_price?: number;
+    quantity?: string;
+    free_quantity?: string;
+    unit_price?: string;
 }
+
+const quantityOptions = { scale: 6, maximumWholeDigits: 14 } as const;
+const rateOptions = { scale: 6, maximumWholeDigits: 4 } as const;
 
 interface ProductSearchProps {
     onAddItem: (product: ProductWithBatch) => void;
     onCreateProduct?: (productName: string) => void;
     showBatchSelection?: boolean;
+    enforceFefo?: boolean;
     placeholder?: string;
+    disabled?: boolean;
     className?: string;
     tabIndex?: number;
 }
@@ -36,17 +56,35 @@ export interface ProductSearchRef {
 // ==================== COMPONENT ====================
 
 const ProductSearch = forwardRef<ProductSearchRef, ProductSearchProps>(
-    ({ onAddItem, onCreateProduct, showBatchSelection = true, tabIndex }, ref) => {
+    ({
+        onAddItem,
+        onCreateProduct,
+        showBatchSelection = true,
+        enforceFefo = false,
+        placeholder = 'Search products by name, code, or HSN...',
+        disabled = false,
+        tabIndex,
+    }, ref) => {
         const [searchQuery, setSearchQuery] = useState<string>('');
-        const [searchResults, setSearchResults] = useState<Product[]>([]);
+        const [searchResults, setSearchResults] = useState<ExactSearchProduct[]>([]);
         const [loading, setLoading] = useState<boolean>(false);
         const [showDropdown, setShowDropdown] = useState<boolean>(false);
         const [showBatchModal, setShowBatchModal] = useState<boolean>(false);
-        const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+        const [selectedProduct, setSelectedProduct] = useState<ExactSearchProduct | null>(null);
         const [highlightedIndex, setHighlightedIndex] = useState<number>(-1);
         const searchInputRef = useRef<HTMLInputElement>(null);
         const dropdownRef = useRef<HTMLDivElement>(null);
-        const resultRefs = useRef<(HTMLDivElement | null)[]>([]);
+        const resultRefs = useRef<(HTMLButtonElement | null)[]>([]);
+        const searchRequestRef = useRef(0);
+
+        useEffect(() => {
+            if (!disabled) return;
+            searchRequestRef.current += 1;
+            setSearchQuery('');
+            setSearchResults([]);
+            setShowDropdown(false);
+            setHighlightedIndex(-1);
+        }, [disabled]);
 
         // Expose focus method to parent
         useImperativeHandle(ref, () => ({
@@ -57,11 +95,9 @@ const ProductSearch = forwardRef<ProductSearchRef, ProductSearchProps>(
             }
         }));
 
-        // localSearchService auto-initializes on first use, no explicit init needed
-
-        // Instant search using local-first service
-        const searchProducts = useCallback(
-            debounce(async (query: string): Promise<void> => {
+        // Search the canonical API; no device cache or fallback authority.
+        const searchProducts = useMemo(
+            () => debounce(async (query: string, requestId: number): Promise<void> => {
                 if (!query || query.length < 2) {
                     setSearchResults([]);
                     setHighlightedIndex(-1);
@@ -71,10 +107,42 @@ const ProductSearch = forwardRef<ProductSearchRef, ProductSearchProps>(
                 setLoading(true);
 
                 try {
-                    const results = await localSearchService.searchProducts(query, { limit: 20 });
-
-                    // Map results to canonical format to ensure consistency
-                    const transformedResults: Product[] = results.map(mapProductToCanonical);
+                    const response = await productsApi.search(query, { limit: 20 });
+                    if (requestId !== searchRequestRef.current) return;
+                    const rows = response?.data;
+                    if (!Array.isArray(rows)) {
+                        throw new Error('Product search returned an invalid canonical response');
+                    }
+                    const transformedResults: ExactSearchProduct[] = rows.map((row: any, index: number) => {
+                        if (typeof row?.product_id !== 'string' || typeof row?.product_name !== 'string') {
+                            throw new Error(`Product search row ${index + 1} is missing identity`);
+                        }
+                        const gstPercent = normalizeAuthoritativeDecimal(
+                            row.gst_percent,
+                            `Product search row ${index + 1} GST rate`,
+                            rateOptions,
+                        );
+                        const currentStock = normalizeAuthoritativeDecimal(
+                            row.current_stock,
+                            `Product search row ${index + 1} current stock`,
+                            quantityOptions,
+                        );
+                        return {
+                            product_id: row.product_id,
+                            product_code: typeof row.product_code === 'string' ? row.product_code : '',
+                            product_name: row.product_name,
+                            product_type: typeof row.product_type === 'string' ? row.product_type : 'medicine',
+                            generic_name: typeof row.generic_name === 'string' ? row.generic_name : undefined,
+                            manufacturer: typeof row.manufacturer === 'string' ? row.manufacturer : undefined,
+                            hsn_code: typeof row.hsn_code === 'string' ? row.hsn_code : undefined,
+                            category: typeof row.category === 'string' ? row.category : undefined,
+                            uom_conversion_id: typeof row.uom_conversion_id === 'string' ? row.uom_conversion_id : undefined,
+                            gst_percent: gstPercent,
+                            requires_prescription: row.requires_prescription === true,
+                            total_quantity_available: currentStock,
+                            total_stock: currentStock,
+                        } as ExactSearchProduct;
+                    });
 
                     setSearchResults(transformedResults);
 
@@ -84,24 +152,32 @@ const ProductSearch = forwardRef<ProductSearchRef, ProductSearchProps>(
                         setHighlightedIndex(-1);
                     }
                 } catch (error) {
+                    if (requestId !== searchRequestRef.current) return;
                     console.error('Product search failed:', error);
                     setSearchResults([]);
                     setHighlightedIndex(-1);
                 } finally {
-                    setLoading(false);
+                    if (requestId === searchRequestRef.current) setLoading(false);
                 }
             }, 100),
             []
         );
 
         useEffect(() => {
-            searchProducts(searchQuery);
-        }, [searchQuery, searchProducts]);
+            if (disabled) {
+                searchProducts.cancel();
+                return undefined;
+            }
+            const requestId = ++searchRequestRef.current;
+            searchProducts(searchQuery, requestId);
+            return () => searchProducts.cancel();
+        }, [disabled, searchQuery, searchProducts]);
 
         // Auto-scroll to highlighted item
         useEffect(() => {
-            if (highlightedIndex >= 0 && resultRefs.current[highlightedIndex]) {
-                resultRefs.current[highlightedIndex]?.scrollIntoView({
+            const highlighted = resultRefs.current[highlightedIndex];
+            if (highlightedIndex >= 0 && typeof highlighted?.scrollIntoView === 'function') {
+                highlighted.scrollIntoView({
                     behavior: 'smooth',
                     block: 'nearest'
                 });
@@ -120,7 +196,7 @@ const ProductSearch = forwardRef<ProductSearchRef, ProductSearchProps>(
             return () => document.removeEventListener('mousedown', handleClickOutside);
         }, []);
 
-        const handleProductSelect = (product: Product): void => {
+        const handleProductSelect = (product: ExactSearchProduct): void => {
             if (showBatchSelection) {
                 setSelectedProduct(product);
                 setShowBatchModal(true);
@@ -184,13 +260,16 @@ const ProductSearch = forwardRef<ProductSearchRef, ProductSearchProps>(
                             <input
                                 ref={searchInputRef}
                                 type="text"
-                                placeholder="Search products by name, code, or HSN..."
+                                placeholder={placeholder}
+                                disabled={disabled}
+                                aria-disabled={disabled}
                                 value={searchQuery}
                                 onChange={(e) => {
+                                    if (disabled) return;
                                     setSearchQuery(e.target.value);
                                     setShowDropdown(true);
                                 }}
-                                onFocus={() => setShowDropdown(true)}
+                                onFocus={() => { if (!disabled) setShowDropdown(true); }}
                                 tabIndex={tabIndex}
                                 className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             />
@@ -207,11 +286,15 @@ const ProductSearch = forwardRef<ProductSearchRef, ProductSearchProps>(
                                 ) : searchResults.length > 0 ? (
                                     <>
                                         {searchResults.map((product, index) => (
-                                            <div
+                                            <button
+                                                type="button"
                                                 key={`product-${product.product_id}-${index}`}
+                                                data-testid={`product-search-option-${product.product_id}`}
                                                 ref={(el) => (resultRefs.current[index] = el)}
                                                 onClick={() => handleProductSelect(product)}
-                                                className={`px-4 py-3 cursor-pointer border-b border-gray-100 ${index === highlightedIndex
+                                                role="option"
+                                                aria-selected={index === highlightedIndex}
+                                                className={`block w-full min-h-11 px-4 py-3 text-left cursor-pointer border-b border-gray-100 ${index === highlightedIndex
                                                     ? 'bg-blue-50 border-l-4 border-l-blue-500'
                                                     : 'hover:bg-gray-50'
                                                     }`}
@@ -225,13 +308,19 @@ const ProductSearch = forwardRef<ProductSearchRef, ProductSearchProps>(
                                                         </div>
                                                     </div>
                                                     <div className="text-right">
-                                                        <div className={`font-medium ${(product.total_stock || 0) > 0 ? 'text-green-600' : 'text-red-500'}`}>
-                                                            Stock: {product.total_stock || 0}
+                                                        <div className={`font-medium ${compareExactDecimals(
+                                                            product.total_stock ?? '0', '0', 'Product stock', quantityOptions,
+                                                        ) > 0 ? 'text-green-600' : 'text-red-500'}`}>
+                                                            Stock: {formatExactDecimal(
+                                                                product.total_stock ?? '0', 'Product stock', quantityOptions,
+                                                            )}
                                                         </div>
-                                                        <div className="text-xs text-gray-500">GST {product.gst_percent || 0}%</div>
+                                                        <div className="text-xs text-gray-500">GST {formatExactDecimal(
+                                                            product.gst_percent ?? '0', 'Product GST rate', rateOptions,
+                                                        )}%</div>
                                                     </div>
                                                 </div>
-                                            </div>
+                                            </button>
                                         ))}
                                         {/* Create Product option */}
                                         {onCreateProduct && searchQuery.length >= 2 && (
@@ -282,6 +371,7 @@ const ProductSearch = forwardRef<ProductSearchRef, ProductSearchProps>(
                         show={showBatchModal}
                         product={selectedProduct as any}
                         mode="modal"
+                        enforceFefo={enforceFefo}
                         onClose={() => {
                             setShowBatchModal(false);
                             setSelectedProduct(null);

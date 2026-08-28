@@ -9,19 +9,19 @@ export interface PurchaseOrder {
     po_date: string;
     supplier_id: string;
     supplier_name: string;
-    total_amount: number;
-    paid_amount: number;
-    pending_amount: number;
-    payment_status: 'paid' | 'partial' | 'pending' | 'overdue';
-    status: 'draft' | 'confirmed' | 'received' | 'cancelled';
+    total_amount: string | null;
+    paid_amount: string | null;
+    pending_amount: string | null;
+    payment_status: 'paid' | 'partial' | 'pending' | 'overdue' | 'cancelled' | null;
+    status: string;
     items_count: number;
-    created_at: string;
-    updated_at: string;
+    created_at?: string;
+    updated_at?: string;
 }
 
 export interface PurchaseListHistoryProps {
     onClose?: () => void;
-    onRecordReceipt?: (poId: number) => void;
+    onRecordReceipt?: (poId: string) => void;
 }
 
 export interface PurchaseFiltersProps {
@@ -60,6 +60,8 @@ export interface PurchaseListHistoryState {
         searchQuery: string;
         dateFilter: string;
         statusFilter: string;
+        dateFrom: string;
+        dateTo: string;
     };
     ui: {
         showFilters: boolean;

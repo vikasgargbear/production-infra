@@ -1,0 +1,17 @@
+.env
+.env.*
+.git
+.railway
+.venv*
+**/__pycache__
+**/.mypy_cache
+**/.pytest_cache
+**/.ruff_cache
+**/node_modules
+backend/coverage.xml
+backend/htmlcov
+frontend/build
+frontend/coverage
+frontend/playwright-report
+frontend/test-results
+output

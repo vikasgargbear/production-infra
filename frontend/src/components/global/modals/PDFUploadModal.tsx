@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { X, FileText, Loader, Upload, CheckCircle, AlertCircle, Trash2 } from 'lucide-react';
 import { purchasesApi } from '../../../services/api';
+import { validatePurchasePDF } from '../../../utils/purchaseUploadValidation';
 
 interface PDFUploadModalProps {
   isOpen: boolean;
@@ -13,24 +14,25 @@ interface ExtractedItem {
   hsn_code?: string;
   batch_number?: string;
   expiry_date?: string;
-  quantity: number;
-  free_quantity?: number;
-  mrp?: number;
-  unit_price: number;
-  selling_price?: number;
-  discount_percent?: number;
-  tax_percent?: number;
-  pack_size?: number;
+  quantity: number | string;
+  free_quantity?: number | string;
+  mrp?: number | string;
+  unit_price: number | string;
+  selling_price?: number | string;
+  discount_percent?: number | string;
+  tax_percent?: number | string;
+  pack_size?: number | string;
   pack_type?: string;
-  total_units?: number;
-  amount?: number;
-  cost_per_unit?: number;
+  total_units?: number | string;
+  amount?: number | string;
+  cost_per_unit?: number | string;
   // Alias properties for PDF extraction compatibility
   product_id?: string | number | null;
+  uom_conversion_id?: string;
   name?: string;  // alias for product_name
   manufacturing_date?: string;
-  sale_price?: number;  // alias for selling_price
-  gst_percent?: number;  // alias for tax_percent
+  sale_price?: number | string;  // alias for selling_price
+  gst_percent?: number | string;  // alias for tax_percent
 }
 
 interface ExtractedData {
@@ -43,16 +45,16 @@ interface ExtractedData {
   invoice_date?: string;
   supplier_exists?: boolean;
   items?: ExtractedItem[];
-  subtotal?: number;
-  tax_amount?: number;
-  discount_amount?: number;
-  total_amount?: number;
+  subtotal?: number | string;
+  tax_amount?: number | string;
+  discount_amount?: number | string;
+  total_amount?: number | string;
   // Vendor aliases (for PDF extraction compatibility)
   supplier_id?: string | number | null;
   vendor_name?: string;
   vendor_gst_number?: string;
   vendor_address?: string;
-  gross_amount?: number;
+  gross_amount?: number | string;
 }
 
 const PDFUploadModal: React.FC<PDFUploadModalProps> = ({ isOpen, onClose, onDataExtracted }) => {
@@ -61,32 +63,31 @@ const PDFUploadModal: React.FC<PDFUploadModalProps> = ({ isOpen, onClose, onData
   const [extractedData, setExtractedData] = useState<ExtractedData | null>(null);
   const [error, setError] = useState('');
   const [editedData, setEditedData] = useState<ExtractedData | null>(null);
-  const [forceRender, setForceRender] = useState(0);
-
-  // Debug state changes
-  useEffect(() => {
-  }, [extractedData]);
-
-  useEffect(() => {
-  }, [editedData]);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const wasOpenRef = useRef(false);
 
   // Reset state only when modal is opened fresh (not when closing)
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && !wasOpenRef.current) {
       // Don't reset if we have extracted data to show
       if (!extractedData && !file) {
         setError('');
       }
     }
-  }, [isOpen]);
+    wasOpenRef.current = isOpen;
+  }, [extractedData, file, isOpen]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0];
-    if (selectedFile && selectedFile.type === 'application/pdf') {
+    const selectedFile = e.target.files?.[0] || null;
+    const validation = validatePurchasePDF(selectedFile);
+    if (validation.valid && selectedFile) {
       setFile(selectedFile);
       setError('');
     } else {
-      setError('Please select a PDF file');
+      setFile(null);
+      setError(validation.error || 'Please select a PDF file');
+      e.target.value = '';
     }
   };
 
@@ -170,7 +171,7 @@ const PDFUploadModal: React.FC<PDFUploadModalProps> = ({ isOpen, onClose, onData
     setError('');
   };
 
-  const handleClose = () => {
+  const handleClose = useCallback(() => {
     // Don't reset extracted data when closing - keep it for review
     // Only reset if user hasn't extracted data yet
     if (!extractedData) {
@@ -178,7 +179,39 @@ const PDFUploadModal: React.FC<PDFUploadModalProps> = ({ isOpen, onClose, onData
       setError('');
     }
     onClose();
-  };
+  }, [extractedData, onClose]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    closeButtonRef.current?.focus();
+
+    const handleDialogKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        handleClose();
+        return;
+      }
+      if (event.key !== 'Tab' || !dialogRef.current) return;
+
+      const focusable = Array.from(dialogRef.current.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
+      )).filter(element => element.getClientRects().length > 0 || element.classList.contains('sr-only'));
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener('keydown', handleDialogKeyDown, true);
+    return () => document.removeEventListener('keydown', handleDialogKeyDown, true);
+  }, [handleClose, isOpen]);
 
   const handleReset = () => {
     setEditedData(JSON.parse(JSON.stringify(extractedData)));
@@ -188,54 +221,35 @@ const PDFUploadModal: React.FC<PDFUploadModalProps> = ({ isOpen, onClose, onData
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100]">
-      <div className="bg-white rounded-lg p-6 max-w-7xl w-full max-h-[95vh] overflow-hidden flex flex-col">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="purchase-pdf-upload-title"
+        className="bg-white rounded-lg p-6 max-w-7xl w-full max-h-[95vh] overflow-hidden flex flex-col"
+      >
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-xl font-semibold flex items-center gap-2">
+          <h3 id="purchase-pdf-upload-title" className="text-xl font-semibold flex items-center gap-2">
             <FileText className="w-5 h-5 text-blue-600" />
             Upload Purchase Invoice
           </h3>
           <button
+            ref={closeButtonRef}
             onClick={handleClose}
-            className="p-1 hover:bg-gray-100 rounded"
+            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg hover:bg-gray-100"
+            aria-label="Close PDF upload"
+            title="Close PDF upload"
           >
             <X size={24} />
           </button>
         </div>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
+          <div role="alert" className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
             <AlertCircle className="w-5 h-5" />
             {error}
           </div>
         )}
-
-        {/* Debug: Show current state */}
-        <div className="mb-2 p-2 bg-yellow-50 text-xs border border-yellow-300">
-          <div>Debug: extractedData is {extractedData ? 'SET' : 'NULL'}, items: {extractedData?.items?.length || 0}</div>
-          <div>Force render count: {forceRender}</div>
-          <button
-            onClick={() => {
-              setForceRender(prev => prev + 1);
-            }}
-            className="mt-1 px-2 py-1 bg-blue-500 text-white text-xs rounded mr-2"
-          >
-            Force Re-render
-          </button>
-          <button
-            onClick={() => {
-              const testData: ExtractedData = {
-                supplier_name: 'TEST SUPPLIER',
-                invoice_number: 'TEST-001',
-                items: [{ product_name: 'Test Product', quantity: 1, unit_price: 100 }]
-              };
-              setExtractedData(testData);
-              setEditedData(testData);
-            }}
-            className="mt-1 px-2 py-1 bg-green-500 text-white text-xs rounded"
-          >
-            Set Test Data
-          </button>
-        </div>
 
         {!extractedData ? (
           <div className="space-y-4">
@@ -243,14 +257,14 @@ const PDFUploadModal: React.FC<PDFUploadModalProps> = ({ isOpen, onClose, onData
               <FileText size={48} className="mx-auto text-gray-400 mb-4" />
               <input
                 type="file"
-                accept=".pdf"
+                accept=".pdf,application/pdf"
                 onChange={handleFileSelect}
-                className="hidden"
+                className="sr-only"
                 id="pdf-upload"
               />
               <label
                 htmlFor="pdf-upload"
-                className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                className="cursor-pointer inline-flex min-h-11 items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
               >
                 <Upload className="w-5 h-5" />
                 Select PDF Invoice
@@ -286,8 +300,8 @@ const PDFUploadModal: React.FC<PDFUploadModalProps> = ({ isOpen, onClose, onData
                 <li>• Upload pharmaceutical invoice PDF</li>
                 <li>• System extracts supplier & product details</li>
                 <li>• Review and edit extracted data</li>
-                <li>• Missing batch numbers are auto-generated</li>
-                <li>• Missing expiry dates default to 2 years</li>
+                <li>• Missing batch, expiry, quantity, price, pack and GST facts remain blank</li>
+                <li>• Explicit line verification is required before any purchase calculation</li>
               </ul>
             </div>
           </div>
@@ -399,13 +413,13 @@ const PDFUploadModal: React.FC<PDFUploadModalProps> = ({ isOpen, onClose, onData
                       hsn_code: '',
                       batch_number: '',
                       expiry_date: '',
-                      quantity: 1,
-                      free_quantity: 0,
-                      mrp: 0,
-                      unit_price: 0,
-                      selling_price: 0,
-                      discount_percent: 0,
-                      tax_percent: 12
+                      quantity: '',
+                      free_quantity: '',
+                      mrp: '',
+                      unit_price: '',
+                      selling_price: '',
+                      discount_percent: '',
+                      tax_percent: ''
                     };
                     editedData && setEditedData({
                       ...editedData,
@@ -419,24 +433,24 @@ const PDFUploadModal: React.FC<PDFUploadModalProps> = ({ isOpen, onClose, onData
               </div>
               <div className="space-y-2">
                 {editedData?.items && editedData.items.map((item, index) => {
-                  // Spread item first, apply defaults only for missing values
+                  // Missing extracted business facts stay blank for explicit verification.
                   const safeItem = {
                     ...item,
                     product_name: item.product_name ?? '',
                     hsn_code: item.hsn_code ?? '',
                     batch_number: item.batch_number ?? '',
                     expiry_date: item.expiry_date ?? '',
-                    unit_price: item.unit_price ?? 0,
-                    selling_price: item.selling_price ?? 0,
-                    quantity: item.quantity ?? 0,
-                    free_quantity: item.free_quantity ?? 0,
-                    pack_size: item.pack_size ?? 1,
-                    pack_type: item.pack_type ?? 'STRIP',
-                    total_units: item.total_units ?? 0,
-                    mrp: item.mrp ?? 0,
-                    cost_per_unit: item.cost_per_unit ?? 0,
-                    tax_percent: item.tax_percent ?? 12,
-                    amount: item.amount ?? 0
+                    unit_price: item.unit_price ?? '',
+                    selling_price: item.selling_price ?? '',
+                    quantity: item.quantity ?? '',
+                    free_quantity: item.free_quantity ?? '',
+                    pack_size: item.pack_size ?? '',
+                    pack_type: item.pack_type ?? '',
+                    total_units: item.total_units ?? '',
+                    mrp: item.mrp ?? '',
+                    cost_per_unit: item.cost_per_unit ?? '',
+                    tax_percent: item.tax_percent ?? '',
+                    amount: item.amount ?? ''
                   };
                   return (
                     <div key={index} className="bg-white p-2 rounded border border-gray-200">
@@ -444,7 +458,7 @@ const PDFUploadModal: React.FC<PDFUploadModalProps> = ({ isOpen, onClose, onData
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-sm font-medium text-gray-700">#{index + 1}</span>
                         <div className="flex items-center gap-2">
-                          <span className="text-sm text-green-600 font-medium">₹{safeItem.amount || 0}</span>
+                          <span className="text-sm text-green-600 font-medium">{safeItem.amount === '' ? 'Amount unavailable' : `₹${safeItem.amount}`}</span>
                           <button
                             onClick={() => handleItemDelete(index)}
                             className="text-red-600 hover:text-white hover:bg-red-600 p-1.5 border border-red-600 rounded transition-all"
@@ -485,7 +499,7 @@ const PDFUploadModal: React.FC<PDFUploadModalProps> = ({ isOpen, onClose, onData
                             value={safeItem.batch_number || ''}
                             onChange={(e) => handleItemEdit(index, 'batch_number', e.target.value)}
                             className="w-full p-1 border rounded text-xs"
-                            placeholder="Auto"
+                            placeholder="Required batch identity"
                           />
                         </div>
                         <div>
@@ -501,7 +515,7 @@ const PDFUploadModal: React.FC<PDFUploadModalProps> = ({ isOpen, onClose, onData
                           <label className="text-gray-500 text-xs">Qty</label>
                           <input
                             type="number"
-                            value={safeItem.quantity || ''}
+                            value={safeItem.quantity}
                             onChange={(e) => handleItemEdit(index, 'quantity', e.target.value)}
                             className="w-full p-1 border rounded text-xs"
                           />
@@ -510,7 +524,7 @@ const PDFUploadModal: React.FC<PDFUploadModalProps> = ({ isOpen, onClose, onData
                           <label className="text-gray-500 text-xs">Free</label>
                           <input
                             type="number"
-                            value={safeItem.free_quantity || ''}
+                            value={safeItem.free_quantity}
                             onChange={(e) => handleItemEdit(index, 'free_quantity', e.target.value)}
                             className="w-full p-1 border rounded text-xs"
                             placeholder="0"
@@ -519,10 +533,11 @@ const PDFUploadModal: React.FC<PDFUploadModalProps> = ({ isOpen, onClose, onData
                         <div>
                           <label className="text-gray-500 text-xs">Pack</label>
                           <select
-                            value={safeItem.pack_type || 'STRIP'}
+                            value={safeItem.pack_type}
                             onChange={(e) => handleItemEdit(index, 'pack_type', e.target.value)}
                             className="w-full p-1 border rounded text-xs"
                           >
+                            <option value="">Select pack type</option>
                             <option value="STRIP">Strip</option>
                             <option value="BOX">Box</option>
                             <option value="BOTTLE">Bottle</option>
@@ -536,17 +551,17 @@ const PDFUploadModal: React.FC<PDFUploadModalProps> = ({ isOpen, onClose, onData
                           <label className="text-gray-500 text-xs">Pack Size</label>
                           <input
                             type="number"
-                            value={safeItem.pack_size || ''}
+                            value={safeItem.pack_size}
                             onChange={(e) => handleItemEdit(index, 'pack_size', e.target.value)}
                             className="w-full p-1 border rounded text-xs"
-                            placeholder="1"
+                            placeholder="Pack size"
                           />
                         </div>
                         <div>
                           <label className="text-gray-500 text-xs">Total Units</label>
                           <input
                             type="number"
-                            value={safeItem.total_units || ''}
+                            value={safeItem.total_units}
                             onChange={(e) => handleItemEdit(index, 'total_units', e.target.value)}
                             className="w-full p-1 border rounded text-xs"
                             readOnly
@@ -556,7 +571,7 @@ const PDFUploadModal: React.FC<PDFUploadModalProps> = ({ isOpen, onClose, onData
                           <label className="text-gray-500 text-xs">Cost</label>
                           <input
                             type="number"
-                            value={safeItem.unit_price || safeItem.cost_per_unit || safeItem.unit_price || 0}
+                            value={safeItem.unit_price || safeItem.cost_per_unit || ''}
                             onChange={(e) => handleItemEdit(index, 'unit_price', e.target.value)}
                             className="w-full p-1 border rounded text-xs"
                             step="0.01"
@@ -587,7 +602,7 @@ const PDFUploadModal: React.FC<PDFUploadModalProps> = ({ isOpen, onClose, onData
                           <label className="text-gray-500 text-xs">Tax %</label>
                           <input
                             type="number"
-                            value={safeItem.tax_percent || 12}
+                            value={safeItem.tax_percent}
                             onChange={(e) => handleItemEdit(index, 'tax_percent', e.target.value)}
                             className="w-full p-1 border rounded text-xs"
                             step="0.01"
@@ -605,41 +620,40 @@ const PDFUploadModal: React.FC<PDFUploadModalProps> = ({ isOpen, onClose, onData
               <div className="space-y-2">
                 <div className="flex justify-between">
                   <span>Subtotal:</span>
-                  <span className="font-medium">₹{editedData?.subtotal || 0}</span>
+                  <span className="font-medium">{editedData?.subtotal === '' || editedData?.subtotal === null || editedData?.subtotal === undefined ? 'Unavailable' : `₹${editedData.subtotal}`}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Tax:</span>
-                  <span className="font-medium">₹{editedData?.tax_amount || 0}</span>
+                  <span className="font-medium">{editedData?.tax_amount === '' || editedData?.tax_amount === null || editedData?.tax_amount === undefined ? 'Unavailable' : `₹${editedData.tax_amount}`}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Discount:</span>
-                  <span className="font-medium">₹{editedData?.discount_amount || 0}</span>
+                  <span className="font-medium">{editedData?.discount_amount === '' || editedData?.discount_amount === null || editedData?.discount_amount === undefined ? 'Unavailable' : `₹${editedData.discount_amount}`}</span>
                 </div>
                 <div className="flex justify-between font-semibold text-lg">
                   <span>Total:</span>
-                  <span>₹{editedData?.total_amount || 0}</span>
+                  <span>{editedData?.total_amount === '' || editedData?.total_amount === null || editedData?.total_amount === undefined ? 'Unavailable' : `₹${editedData.total_amount}`}</span>
                 </div>
               </div>
             </div>
 
-            {/* Note about auto-generation */}
-            <div className="bg-blue-50 p-3 rounded-lg text-sm">
-              <p className="text-blue-700">💡 <strong>Tip:</strong> Leave batch number empty for automatic generation (AUTO-YYYYMMDD-PRODUCTID-XXXX)</p>
-              <p className="text-blue-700">💡 Empty expiry dates will default to 2 years from today</p>
+            {/* Verification boundary */}
+            <div className="bg-gray-50 border border-gray-200 p-3 rounded-lg text-sm">
+              <p className="text-gray-700"><strong>Verification required:</strong> Missing batch, expiry, quantity, cost, pack and GST facts stay blank. The next step must resolve them from the invoice or authoritative product data.</p>
             </div>
 
             {/* Actions */}
             <div className="flex gap-3 pt-4">
               <button
                 onClick={handleConfirm}
-                className="flex-1 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center justify-center gap-2"
+                className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg bg-blue-600 py-3 text-white hover:bg-blue-700"
               >
                 <CheckCircle className="w-5 h-5" />
-                Create Purchase Order
+                Continue to Line Verification
               </button>
               <button
                 onClick={handleClose}
-                className="px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50"
+                className="min-h-11 px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50"
               >
                 Cancel
               </button>

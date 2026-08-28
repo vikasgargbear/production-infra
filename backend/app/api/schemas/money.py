@@ -20,63 +20,6 @@ MoneyJSON = Annotated[
 ]
 
 
-class GSTCalculationResponse(BaseModel):
-    taxableAmount: MoneyJSON
-    gstRate: float
-    gstType: str
-    cgst: MoneyJSON
-    sgst: MoneyJSON
-    igst: MoneyJSON
-    totalTax: MoneyJSON
-    total: MoneyJSON
-
-
-class GSTR2BUploadStatusItem(BaseModel):
-    upload_id: str
-    return_period: str
-    gstin: str
-    file_name: str
-    uploaded_at: Optional[str] = None
-    total_invoices: int
-    total_itc_available: MoneyJSON
-    total_suppliers: int
-    status: str
-    reconciled: bool
-    matched: int
-    mismatched: int
-    missing: int
-    match_rate: float
-
-
-class GSTR2BStatusResponse(BaseModel):
-    uploads: List[GSTR2BUploadStatusItem]
-    error: Optional[str] = None
-
-
-class GSTR2BMismatchItem(BaseModel):
-    id: str
-    return_period: str
-    supplier_gstin: str
-    supplier_name: Optional[str] = None
-    invoice_number: str
-    invoice_date: Optional[str] = None
-    invoice_value: MoneyJSON
-    itc_available: MoneyJSON
-    match_status: str
-    mismatch_type: Optional[str] = None
-    mismatch_details: Optional[str] = None
-    our_invoice_number: Optional[str] = None
-    our_invoice_amount: Optional[MoneyJSON] = None
-    amount_difference: Optional[MoneyJSON] = None
-
-
-class GSTR2BMismatchResponse(BaseModel):
-    invoices: List[GSTR2BMismatchItem]
-    total_count: int = 0
-    total_itc_at_risk: MoneyJSON = "0.00"
-    error: Optional[str] = None
-
-
 class CollectionDailyPoint(BaseModel):
     date: str
     amount: MoneyJSON

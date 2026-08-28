@@ -1,0 +1,55 @@
+{
+  "schema": "aasopharma.live23.ui-variant-readiness.v1",
+  "required_variant_count": 5,
+  "ready_count": 4,
+  "variants": [
+    {
+      "id": "sales_invoice_inter",
+      "operation_id": "sales_invoice",
+      "status": "ready",
+      "exact_sha_required": true,
+      "template": "frontend/e2e/live23/templates/sales_invoice_inter.json",
+      "depends_on_scenarios": [],
+      "blocker": null
+    },
+    {
+      "id": "sales_invoice_sez_with_igst",
+      "operation_id": "sales_invoice",
+      "status": "ready",
+      "exact_sha_required": true,
+      "template": "frontend/e2e/live23/templates/sales_invoice_sez_with_igst.json",
+      "depends_on_scenarios": [],
+      "blocker": null
+    },
+    {
+      "id": "sales_return_final",
+      "operation_id": "sales_return",
+      "status": "ready",
+      "exact_sha_required": true,
+      "template": "frontend/e2e/live23/templates/sales_return_final.json",
+      "depends_on_scenarios": ["sales_invoice_mixed", "sales_return_partial"],
+      "blocker": null
+    },
+    {
+      "id": "sales_return_commercial_only",
+      "operation_id": "sales_return",
+      "status": "blocked",
+      "exact_sha_required": true,
+      "template": null,
+      "depends_on_scenarios": ["sales_invoice_inter"],
+      "blocker": {
+        "code": "COMMERCIAL_RETURN_RULE_AUTHORITY_MISSING",
+        "missing_authority": "No reviewed active sales-return adjustment rule publishes tax_effect commercial_only, so the canonical return context cannot offer a commercial-only choice without fabricating tax policy."
+      }
+    },
+    {
+      "id": "purchase_return_final",
+      "operation_id": "purchase_return",
+      "status": "ready",
+      "exact_sha_required": true,
+      "template": "frontend/e2e/live23/templates/purchase_return_final.json",
+      "depends_on_scenarios": ["supplier_invoice_mixed", "purchase_return_partial"],
+      "blocker": null
+    }
+  ]
+}

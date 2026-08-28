@@ -1,0 +1,30 @@
+{
+  "format_version": 1,
+  "revision": "20260825_0013",
+  "source_sql_sha256": "5a5f637c11acaea29c5ed427a730a7d715c6afd310f07e085611d680e8838016",
+  "authority_change": "official_effective_gst_jurisdiction_catalog_v1",
+  "record_count": 39,
+  "official_sources": [
+    {
+      "authority": "Goods and Services Tax Network (GSTN)",
+      "authority_catalog_uri": "https://einvoice1.gst.gov.in/Others/MasterCodes",
+      "uri": "https://tutorial.gst.gov.in/downloads/news/monthly_gst_data_for_mar_2026_for_publishing_final.pdf",
+      "publication_date": "2026-03-31",
+      "retrieved_at": "2026-08-25T15:50:00+05:30",
+      "sha256": "3d4dd97c535b9ad022326b98ff293d50428fb0e423c8f49eeecb4daa4d5b1b2a"
+    },
+    {
+      "authority": "Central Board of Indirect Taxes and Customs (CBIC), hosted by GSTN-authorized IRIS IRP",
+      "authority_catalog_uri": "https://einvoice6.gst.gov.in/content/kb/tools/",
+      "uri": "https://einvoice6.gst.gov.in/content/wp-content/uploads/2022/07/notification-60-central-tax-english-2020.pdf",
+      "publication_date": "2020-07-30",
+      "retrieved_at": "2026-08-25T15:50:00+05:30",
+      "sha256": "502304afd71e4d54b0b5fbbed425b8c7b707e78121d50d75763777fe8ad52305"
+    }
+  ],
+  "special_code_policy": {
+    "96": "place_of_supply only; export/import only; never an address or GSTIN prefix",
+    "97": "GSTIN registration and inter-state place_of_supply only; never a physical address",
+    "99": "OIDAR GSTIN registration only; never an address or place_of_supply"
+  }
+}

@@ -1,13 +1,22 @@
 import React from 'react';
-import { RotateCcw, ShoppingCart, Package, List } from 'lucide-react';
+import { RotateCcw, ShoppingCart, Package, List, ShieldCheck, Send, Undo2 } from 'lucide-react';
 import { ModuleHub } from '../global';
 import SalesReturnFlow from './SalesReturnFlow';
 import PurchaseReturnFlow from './PurchaseReturnFlow';
 import ReturnsListHistory from './ReturnsListHistory';
+import ReturnApprovalInbox from './ReturnApprovalInbox';
+import ReturnRequesterInbox from './ReturnRequesterInbox';
+import CommercialReversalFlow from './CommercialReversalFlow';
+import { RETURN_SUBPAGE_IDS, ReturnSubpage } from './returnsNavigation';
+
+export { RETURN_SUBPAGE_IDS } from './returnsNavigation';
+export type { ReturnSubpage } from './returnsNavigation';
 
 interface ReturnsHubProps {
   open?: boolean;
   onClose?: () => void;
+  initialSubpage?: string | null;
+  onSubpageChange?: (subpage: string | null) => void;
 }
 
 interface ReturnsModule {
@@ -20,7 +29,16 @@ interface ReturnsModule {
   component: React.ComponentType<any>;
 }
 
-const ReturnsHub: React.FC<ReturnsHubProps> = ({ open = true, onClose }) => {
+const ReturnsHub: React.FC<ReturnsHubProps> = ({
+  open = true,
+  onClose,
+  initialSubpage,
+  onSubpageChange,
+}) => {
+  const resolvedDefault: ReturnSubpage = initialSubpage
+    && (RETURN_SUBPAGE_IDS as readonly string[]).includes(initialSubpage)
+    ? initialSubpage as ReturnSubpage
+    : 'sales-return';
   const returnsModules: ReturnsModule[] = [
     {
       id: 'sales-return',
@@ -41,6 +59,15 @@ const ReturnsHub: React.FC<ReturnsHubProps> = ({ open = true, onClose }) => {
       component: PurchaseReturnFlow
     },
     {
+      id: 'commercial-reversal',
+      label: 'Correct Posted',
+      fullLabel: 'Compensating Return / Note Reversal',
+      description: 'Correct an erroneous posted return or note',
+      icon: Undo2,
+      color: 'amber',
+      component: CommercialReversalFlow
+    },
+    {
       id: 'returns-history',
       label: 'All Returns',
       fullLabel: 'Returns History',
@@ -48,6 +75,24 @@ const ReturnsHub: React.FC<ReturnsHubProps> = ({ open = true, onClose }) => {
       icon: List,
       color: 'gray',
       component: ReturnsListHistory
+    },
+    {
+      id: 'approval-inbox',
+      label: 'Approvals',
+      fullLabel: 'Return Approval Inbox',
+      description: 'Approve another member’s immutable return',
+      icon: ShieldCheck,
+      color: 'blue',
+      component: ReturnApprovalInbox
+    },
+    {
+      id: 'resume-post',
+      label: 'Resume / Post',
+      fullLabel: 'My Prepared Returns',
+      description: 'Resume approved returns and post once',
+      icon: Send,
+      color: 'green',
+      component: ReturnRequesterInbox
     }
   ];
 
@@ -59,7 +104,8 @@ const ReturnsHub: React.FC<ReturnsHubProps> = ({ open = true, onClose }) => {
       subtitle="Process sales and purchase returns"
       icon={RotateCcw}
       modules={returnsModules}
-      defaultModule="sales-return"
+      defaultModule={resolvedDefault}
+      onActiveModuleChange={onSubpageChange}
     />
   );
 };

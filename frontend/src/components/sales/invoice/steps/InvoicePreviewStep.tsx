@@ -1,12 +1,14 @@
 import React from 'react';
-import { FileText, AlertCircle, FileInput } from 'lucide-react';
+import { addExactDecimals } from '../../../../utils/exactDecimal';
+import { FileText, AlertCircle } from 'lucide-react';
 
 // Global Components
 import { ModuleHeader, DocumentFooter, PrintUtility } from '../../../global';
 import InvoicePreview from '../ui/InvoicePreviewEnterprise';
 
 // Shared Types
-import { Customer, Invoice, InvoiceItem, InvoiceTotals, CompanyInfo } from '../types/invoiceTypes';
+import { Customer, Invoice, CompanyInfo } from '../types/invoiceTypes';
+import { canonicalInvoicePreviewUnavailableReason } from '../../utils/canonicalSalesPreviewFacts';
 
 // ==================== COMPONENT PROPS ====================
 
@@ -35,8 +37,26 @@ const InvoicePreviewStep: React.FC<InvoicePreviewStepProps> = ({
     onThermalPrint,
     saving
 }) => {
+    const previewUnavailableReason = canonicalInvoicePreviewUnavailableReason(invoice);
+    if (previewUnavailableReason) {
+        return (
+            <div className="flex h-full flex-col bg-gray-50">
+                <ModuleHeader title="Invoice Preview" documentNumber={invoice.invoice_number}
+                    status="unavailable" icon={FileText} iconColor="text-amber-600" onClose={onClose}
+                    additionalActions={[{ label: '← Back to Details', onClick: () => onBack(2), variant: 'secondary' }]} />
+                <div className="m-auto max-w-xl rounded-lg border border-amber-200 bg-amber-50 p-6 text-amber-900" role="alert">
+                    <div className="flex items-start gap-3">
+                        <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
+                        <div><h2 className="font-semibold">Authoritative preview unavailable</h2>
+                            <p className="mt-1 text-sm">{previewUnavailableReason} Return to the items step and refresh the live calculation.</p></div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+    const totals = invoice.totals!;
     return (
-        <div className="h-full bg-blue-50">
+        <div className="h-full bg-gray-50">
             <div className="h-full flex flex-col">
 
                 {/* Header - Using Global ModuleHeader */}
@@ -57,7 +77,7 @@ const InvoicePreviewStep: React.FC<InvoicePreviewStepProps> = ({
                 />
 
                 {/* Content */}
-                <div className="flex-1 overflow-y-auto bg-blue-50">
+                <div className="flex-1 overflow-y-auto bg-gray-50">
                     <div className="max-w-6xl mx-auto px-6 py-6">
 
                         {/* Invoice Preview */}
@@ -76,22 +96,24 @@ const InvoicePreviewStep: React.FC<InvoicePreviewStepProps> = ({
                                     hsn_code: item.hsn_code,
                                     batch_number: item.batch_number || item.batch_number,
                                     quantity: item.quantity,
-                                    free_quantity: item.free_quantity || 0,
-                                    unit_price: item.unit_price || item.selling_price,
-                                    discount_percent: item.discount_percent || 0,
-                                    gst_percent: item.gst_percent || item.tax_percent || 0,
+                                    free_quantity: item.free_quantity,
+                                    unit_price: item.unit_price,
+                                    discount_percent: item.discount_percent,
+                                    gst_percent: item.gst_percent,
                                     total: item.total || item.line_total
-                                })),
+                                })) as any,
                                 totals: {
-                                    subtotal: invoice.subtotal_amount || invoice.gross_amount,
-                                    discount: invoice.discount_amount || 0,
-                                    tax_amount: invoice.tax_amount || invoice.total_tax,
-                                    cgst_amount: invoice.cgst_amount || ((invoice.tax_amount || 0) / 2),
-                                    sgst_amount: invoice.sgst_amount || ((invoice.tax_amount || 0) / 2),
-                                    igst_amount: invoice.igst_amount || 0,
-                                    total_amount: invoice.final_amount || invoice.totals?.final_amount,
-                                    paid_amount: invoice.paid_amount || 0,
-                                    balance_amount: invoice.balance_amount || invoice.final_amount
+                                    subtotal: totals.taxable_amount,
+                                    discount: addExactDecimals(
+                                        [totals.discount_amount, totals.scheme_discount],
+                                        'Invoice preview discounts',
+                                        { scale: 2, maximumWholeDigits: 20 },
+                                    ),
+                                    tax_amount: totals.total_tax_amount,
+                                    cgst_amount: totals.cgst_amount,
+                                    sgst_amount: totals.sgst_amount,
+                                    igst_amount: totals.igst_amount,
+                                    total_amount: totals.final_amount,
                                 },
                                 addresses: {
                                     billing: invoice.billing_address,
@@ -144,148 +166,9 @@ const InvoicePreviewStep: React.FC<InvoicePreviewStepProps> = ({
                             </div>
                         </div>
 
-                        {/* E-invoice Section */}
-                        {selectedCustomer?.gst_number && parseFloat(String(invoice.final_amount || 0)) >= 500 && (
-                            <div className="w-full mt-4 mb-4">
-                                <div className="bg-orange-50 rounded-lg border border-orange-200 p-3">
-                                    <div className="flex items-center justify-between mb-3">
-                                        <div className="flex items-center">
-                                            <FileInput className="w-4 h-4 text-orange-600 mr-2" />
-                                            <label className="text-xs font-medium text-orange-800">E-Invoice Generation</label>
-                                        </div>
-                                        <label className="flex items-center">
-                                            <input
-                                                type="checkbox"
-                                                checked={invoice.e_invoice_applicable || false}
-                                                onChange={(e) => setInvoice(prev => ({ ...prev, e_invoice_applicable: e.target.checked }))}
-                                                className="mr-2 w-3.5 h-3.5 text-orange-600 rounded focus:ring-orange-500"
-                                            />
-                                            <span className="text-xs text-orange-700">Generate E-Invoice</span>
-                                        </label>
-                                    </div>
-
-                                    {invoice.e_invoice_applicable && (
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                    E-Invoice Number
-                                                </label>
-                                                <input
-                                                    type="text"
-                                                    value={invoice.e_invoice_number || ''}
-                                                    onChange={(e) => setInvoice(prev => ({ ...prev, e_invoice_number: e.target.value }))}
-                                                    className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                                    placeholder="Auto-generated after submission"
-                                                    readOnly
-                                                />
-                                            </div>
-
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                    IRN (Invoice Reference Number)
-                                                </label>
-                                                <input
-                                                    type="text"
-                                                    value={invoice.irn || ''}
-                                                    onChange={(e) => setInvoice(prev => ({ ...prev, irn: e.target.value }))}
-                                                    className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                                    placeholder="Generated by GST Portal"
-                                                    readOnly
-                                                />
-                                            </div>
-
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                    Acknowledgment Number
-                                                </label>
-                                                <input
-                                                    type="text"
-                                                    value={invoice.ack_no || ''}
-                                                    onChange={(e) => setInvoice(prev => ({ ...prev, ack_no: e.target.value }))}
-                                                    className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                                    placeholder="From GST Portal"
-                                                    readOnly
-                                                />
-                                            </div>
-
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                    Acknowledgment Date
-                                                </label>
-                                                <input
-                                                    type="datetime-local"
-                                                    value={invoice.ack_date || ''}
-                                                    onChange={(e) => setInvoice(prev => ({ ...prev, ack_date: e.target.value }))}
-                                                    className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                                    readOnly
-                                                />
-                                            </div>
-
-                                            <div className="md:col-span-2">
-                                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                    QR Code Data
-                                                </label>
-                                                <textarea
-                                                    value={invoice.qr_code || ''}
-                                                    onChange={(e) => setInvoice(prev => ({ ...prev, qr_code: e.target.value }))}
-                                                    className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                                                    rows={2}
-                                                    placeholder="QR code data from GST Portal"
-                                                    readOnly
-                                                />
-                                            </div>
-
-                                            {/* E-way Bill Section */}
-                                            <div className="md:col-span-2 border-t pt-2 mt-2">
-                                                <div className="text-xs font-medium text-orange-700 mb-2">E-way Bill Details (Auto-generated for distance &gt; 50km)</div>
-                                                <div className="grid grid-cols-3 gap-3">
-                                                    <div>
-                                                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                            E-way Bill Number
-                                                        </label>
-                                                        <input
-                                                            type="text"
-                                                            value={invoice.eway_bill_number || ''}
-                                                            onChange={(e) => setInvoice(prev => ({ ...prev, eway_bill_number: e.target.value }))}
-                                                            className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                                            placeholder="Auto-generated"
-                                                            readOnly
-                                                        />
-                                                    </div>
-                                                    <div>
-                                                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                            E-way Bill Date
-                                                        </label>
-                                                        <input
-                                                            type="date"
-                                                            value={invoice.eway_bill_date || ''}
-                                                            onChange={(e) => setInvoice(prev => ({ ...prev, eway_bill_date: e.target.value }))}
-                                                            className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                                            readOnly
-                                                        />
-                                                    </div>
-                                                    <div>
-                                                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                            Valid Upto
-                                                        </label>
-                                                        <input
-                                                            type="date"
-                                                            value={invoice.eway_bill_valid_upto || ''}
-                                                            onChange={(e) => setInvoice(prev => ({ ...prev, eway_bill_valid_upto: e.target.value }))}
-                                                            className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                                            readOnly
-                                                        />
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    <div className="mt-2 text-xs text-orange-600">
-                                        <AlertCircle className="w-3 h-3 inline mr-1" />
-                                        E-Invoice is mandatory for B2B transactions above ₹500 with registered businesses
-                                    </div>
-                                </div>
+                        {selectedCustomer?.gst_number && (
+                            <div className="mt-4 w-full rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                                GST e-invoice applicability, IRN, acknowledgment, QR code, and e-way-bill evidence are not part of this canonical sales-invoice command. No compliance status is inferred in the browser.
                             </div>
                         )}
 
@@ -295,11 +178,15 @@ const InvoicePreviewStep: React.FC<InvoicePreviewStepProps> = ({
                 {/* Footer - Print options disabled in preview (only available after generation via success modal) */}
                 <DocumentFooter
                     totalItems={(invoice.items || []).length}
-                    totalAmount={parseFloat(String(invoice.totals?.final_amount || invoice.final_amount)) || 0}
-                    subtotalAmount={parseFloat(String(invoice.totals?.taxable_amount || 0))}
-                    taxAmount={parseFloat(String(invoice.totals?.total_tax_amount || 0))}
-                    discountAmount={parseFloat(String(invoice.totals?.total_discount || 0)) + parseFloat(String(invoice.totals?.scheme_discount || 0))}
-                    grandTotal={parseFloat(String(invoice.totals?.final_amount || invoice.final_amount || 0))}
+                    totalAmount={totals.final_amount}
+                    subtotalAmount={totals.taxable_amount}
+                    taxAmount={totals.total_tax_amount}
+                    discountAmount={addExactDecimals(
+                        [totals.discount_amount, totals.scheme_discount],
+                        'Invoice total discounts',
+                        { scale: 2, maximumWholeDigits: 20, allowNegative: true },
+                    )}
+                    grandTotal={totals.final_amount}
                     onCancel={() => onBack(2)}
                     onSave={onSave}
                     onGenerate={onSave}

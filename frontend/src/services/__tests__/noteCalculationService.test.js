@@ -2,57 +2,43 @@
 jest.mock('../api/modules/finance/noteCalculations.api', () => ({
   noteCalculationsApi: { preview: jest.fn() }
 }));
-jest.mock('../enterpriseCalculator', () => ({
-  __esModule: true,
-  default: { calculateNoteTotals: jest.fn() }
-}));
 
-import EnterpriseCalculator from '../enterpriseCalculator';
 import { noteCalculationsApi } from '../api/modules/finance/noteCalculations.api';
 import { calculateNotePreview } from '../calculations/noteCalculationService';
+import { exactNoteResponse } from './exactCalculationFixtures';
 
+const items = [{
+  product_id: '10000000-0000-7000-8000-000000000002',
+  quantity: '0.123456', unit_price: '9007199254740993.000000', discount_percent: '0', tax_percent: '18',
+}];
 
-const items = [{ quantity: 2, unit_price: 100, discount_percent: 10, tax_percent: 18 }];
+beforeEach(() => jest.clearAllMocks());
 
-test('uses authenticated backend note preview online', async () => {
-  noteCalculationsApi.preview.mockResolvedValue({
-    data: {
-      success: true,
-      gst_type: 'CGST/SGST',
-      calculation_timestamp: 1,
-      line_items: [{ taxable_amount: 180, tax_amount: 32.4, total_amount: 212.4 }],
-      totals: { taxable_amount: 180, tax_amount: 32.4, total_amount: 212.4 }
-    }
-  });
-
+test('uses only authenticated API calculation and preserves exact strings', async () => {
+  noteCalculationsApi.preview.mockResolvedValue({ data: exactNoteResponse({
+    line_items: [{ ...exactNoteResponse().line_items[0], quantity: '0.123456' }],
+  }) });
   const result = await calculateNotePreview(items, {
-    noteType: 'credit',
-    partyId: 5,
-    includeGst: true,
-    isOnline: true
+    noteType: 'credit', partyId: '10000000-0000-7000-8000-000000000001', includeGst: true, isOnline: true,
   });
-
   expect(noteCalculationsApi.preview).toHaveBeenCalledWith(expect.objectContaining({
-    note_type: 'credit',
-    party_id: 5,
-    items: [expect.objectContaining({ gst_percent: 18 })]
+    items: [expect.objectContaining({ quantity: '0.123456', unit_price: '9007199254740993.000000' })],
   }));
-  expect(EnterpriseCalculator.calculateNoteTotals).not.toHaveBeenCalled();
-  expect(result).toEqual(expect.objectContaining({ subtotal: 180, taxAmount: 32.4, grandTotal: 212.4 }));
+  expect(result).toEqual(expect.objectContaining({ subtotal: '0.10', taxAmount: '0.02', grandTotal: '0.12' }));
 });
 
-test('uses local note calculator only when explicitly offline', async () => {
-  EnterpriseCalculator.calculateNoteTotals.mockReturnValue({
-    items: [],
-    totals: { subtotal_amount: 100, tax_amount: 18, total_amount: 118 }
-  });
+test.each([1, '0.1234567'])('rejects invalid authoritative quantity %p', async quantity => {
+  noteCalculationsApi.preview.mockResolvedValue({ data: exactNoteResponse({
+    line_items: [{ ...exactNoteResponse().line_items[0], quantity }],
+  }) });
+  await expect(calculateNotePreview([{ ...items[0], quantity: '1.000000' }], {
+    noteType: 'debit', includeGst: true, isOnline: true,
+  })).rejects.toThrow(/exact decimal string|precision/);
+});
 
-  const result = await calculateNotePreview(items, {
-    noteType: 'debit',
-    includeGst: true,
-    isOnline: false
-  });
-
-  expect(result.grandTotal).toBe(118);
+test('fails closed offline instead of using the retired local calculator', async () => {
+  await expect(calculateNotePreview(items, {
+    noteType: 'debit', includeGst: true, isOnline: false,
+  })).rejects.toThrow('live ERP API');
   expect(noteCalculationsApi.preview).not.toHaveBeenCalled();
 });

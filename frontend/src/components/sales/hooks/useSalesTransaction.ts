@@ -11,10 +11,16 @@
 import { useState, useEffect, useCallback, useRef, RefObject } from 'react';
 import { employeesApi, apiClient } from '../../../services/api';
 import { BaseEmployee, BaseCustomer, BaseLineItem } from '../types/salesSharedTypes';
+import {
+    addExactDecimals,
+    normalizeAuthoritativeDecimal,
+    normalizeExactDecimal,
+} from '../../../utils/exactDecimal';
+import { clientUuid } from '../../../utils/clientUuid';
 
 // ==================== CONFIGURATION ====================
 
-export interface UseSalesTransactionConfig<TDoc, TCustomer extends BaseCustomer, TItem extends BaseLineItem> {
+export interface UseSalesTransactionConfig<TDoc> {
     /** Initial document state */
     getInitialDocument: () => TDoc;
     /** Document type identifier */
@@ -31,7 +37,7 @@ export interface UseSalesTransactionConfig<TDoc, TCustomer extends BaseCustomer,
 
 // ==================== RETURN TYPE ====================
 
-export interface UseSalesTransactionReturn<TDoc, TCustomer extends BaseCustomer, TItem extends BaseLineItem> {
+export interface UseSalesTransactionReturn<TDoc, TCustomer extends BaseCustomer> {
     // Document State
     document: TDoc;
     setDocument: React.Dispatch<React.SetStateAction<TDoc>>;
@@ -59,8 +65,7 @@ export interface UseSalesTransactionReturn<TDoc, TCustomer extends BaseCustomer,
     handleProductSelect: (product: unknown) => void;
     updateItem: (index: number, field: string, value: unknown) => void;
     removeItem: (indexOrId: number | string) => void;
-    recalculateTotals: (items: TItem[]) => { totalQuantity: number; totalAmount: number };
-    fetchCustomerAddress: (customerId: string | number) => Promise<{ address: string; city: string; state: string; pincode: string } | null>;
+    fetchCustomerAddress: (customerId: string | number) => Promise<{ address: string; city: string; stateCode: string; pincode: string } | null>;
 
     // Utilities
     resetDocument: () => void;
@@ -73,10 +78,10 @@ export function useSalesTransaction<
     TCustomer extends BaseCustomer = BaseCustomer,
     TItem extends BaseLineItem = BaseLineItem
 >(
-    config: UseSalesTransactionConfig<TDoc, TCustomer, TItem>
-): UseSalesTransactionReturn<TDoc, TCustomer, TItem> {
+    config: UseSalesTransactionConfig<TDoc>
+): UseSalesTransactionReturn<TDoc, TCustomer> {
 
-    const { getInitialDocument, documentType, priceField = 'sale_price', includeGst = false, onClose } = config;
+    const { getInitialDocument, documentType, priceField = 'sale_price', includeGst = false } = config;
 
     // ==================== STATE ====================
     const [document, setDocument] = useState<TDoc>(getInitialDocument());
@@ -84,7 +89,7 @@ export function useSalesTransaction<
     const [employees, setEmployees] = useState<BaseEmployee[]>([]);
     const [selectedMR, setSelectedMR] = useState<BaseEmployee | null>(null);
     const [loadingEmployees, setLoadingEmployees] = useState(false);
-    const [saving, setSaving] = useState(false);
+    const saving = false;
     const [fetchingAddress, setFetchingAddress] = useState(false);
 
     // ==================== REFS ====================
@@ -95,10 +100,8 @@ export function useSalesTransaction<
     const loadEmployees = useCallback(async () => {
         setLoadingEmployees(true);
         try {
-            const response = await employeesApi.getAll({ is_active: true, limit: 100 }) as unknown as { success?: boolean; data?: BaseEmployee[] };
-            if (response.success || response.data) {
-                setEmployees(response.data || []);
-            }
+            const response = await employeesApi.getAll({ limit: 100 });
+            setEmployees(response.data.employees as BaseEmployee[]);
         } catch (error) {
             console.error(`[useSalesTransaction:${documentType}] Failed to load employees:`, error);
         } finally {
@@ -115,18 +118,16 @@ export function useSalesTransaction<
         try {
             const response = await apiClient.get(`/customers/${customerId}/addresses`);
 
-            if (response.data?.success && response.data.data?.length > 0) {
-                const addresses = response.data.data;
-                const billingAddr = addresses.find((addr: any) => addr.address_type === 'billing' && addr.is_default);
-                const shippingAddr = addresses.find((addr: any) => addr.address_type === 'shipping' && addr.is_default);
-                const anyDefaultAddr = addresses.find((addr: any) => addr.is_default);
-                const preferredAddr = billingAddr || shippingAddr || anyDefaultAddr || addresses[0];
-
+            if (response.data?.success && Array.isArray(response.data.data)) {
+                const billingAddress = response.data.data.find((address: Record<string, unknown>) =>
+                    address.address_type === 'billing' && address.is_default === true);
+                const stateCode = String(billingAddress?.state_code ?? '').trim();
+                if (!billingAddress || !/^\d{2}$/.test(stateCode)) return null;
                 return {
-                    address: preferredAddr.address_line1 || '',
-                    city: preferredAddr.city || '',
-                    state: preferredAddr.state || preferredAddr.state || '',
-                    pincode: preferredAddr.pincode || ''
+                    address: String(billingAddress.address_line1 ?? '').trim(),
+                    city: String(billingAddress.city ?? '').trim(),
+                    stateCode,
+                    pincode: String(billingAddress.pincode ?? '').trim(),
                 };
             }
             return null;
@@ -135,18 +136,6 @@ export function useSalesTransaction<
             return null;
         }
     }, [documentType]);
-
-    // ==================== RECALCULATE TOTALS ====================
-    const recalculateTotals = useCallback((items: TItem[]) => {
-        const totalQuantity = items.reduce((sum, item) => sum + (parseFloat(String(item.quantity)) || 0), 0);
-        const totalAmount = items.reduce((sum, item) => {
-            const quantity = parseFloat(String(item.quantity)) || 0;
-            const unitPrice = parseFloat(String(item.unit_price)) || 0;
-            return sum + (quantity * unitPrice);
-        }, 0);
-
-        return { totalQuantity, totalAmount };
-    }, []);
 
     // ==================== HANDLE CUSTOMER SELECT ====================
     const handleCustomerSelect = useCallback(async (customer: TCustomer | null) => {
@@ -161,31 +150,21 @@ export function useSalesTransaction<
             return;
         }
 
-        let address = customer.address || customer.address_line1 || '';
-        let city = customer.city || '';
-        let state = customer.state || customer.state || '';
-        let pincode = customer.pincode || customer.pincode || customer.pincode || '';
+        setFetchingAddress(true);
+        const addressData = customer.customer_id
+            ? await fetchCustomerAddress(customer.customer_id)
+            : null;
+        setFetchingAddress(false);
 
-        // Fetch address if not available locally
-        if (!address && !city && customer.customer_id) {
-            setFetchingAddress(true);
-            const addressData = await fetchCustomerAddress(customer.customer_id);
-            if (addressData) {
-                address = addressData.address;
-                city = addressData.city;
-                state = addressData.state;
-                pincode = addressData.pincode;
-            }
-            setFetchingAddress(false);
-        }
-
-        const billingAddressParts = [address, city, state, pincode].filter(p => p && p.trim());
+        const billingAddressParts = addressData
+            ? [addressData.address, addressData.city, addressData.stateCode, addressData.pincode]
+            : [];
         const billingAddress = billingAddressParts.join(', ');
 
         setDocument(prev => ({
             ...prev,
-            customer_id: customer.customer_id || '',
-            customer_name: customer.customer_name || '',
+            customer_id: customer.customer_id ?? '',
+            customer_name: customer.customer_name ?? '',
             billing_address: billingAddress
         } as TDoc));
 
@@ -193,31 +172,70 @@ export function useSalesTransaction<
 
     // ==================== HANDLE PRODUCT SELECT ====================
     const handleProductSelect = useCallback((product: any) => {
+        if (typeof product?.quantity !== 'string' || typeof product?.free_quantity !== 'string') {
+            throw new Error('Selected sales item requires exact billed and free decimal strings.');
+        }
+        const billedQuantity = normalizeExactDecimal(
+            product.quantity,
+            'Selected sales item billed quantity',
+            { scale: 6, maximumWholeDigits: 14 },
+        );
+        const freeQuantity = normalizeExactDecimal(
+            product.free_quantity,
+            'Selected sales item free quantity',
+            { scale: 6, maximumWholeDigits: 14 },
+        );
         const existingIndex = document.items.findIndex(item => item.product_id === product.product_id);
 
         if (existingIndex >= 0) {
-            // Increment quantity if product already exists
+            // Re-selecting the same product preserves the selector's complete
+            // billed/free intent; it never manufactures an increment.
             const updatedItems = document.items.map((item, index) =>
-                index === existingIndex ? { ...item, quantity: item.quantity + 1 } : item
+                index === existingIndex ? {
+                    ...item,
+                    quantity: addExactDecimals(
+                        [item.quantity, billedQuantity],
+                        'Sales item billed quantity',
+                        { scale: 6, maximumWholeDigits: 14 },
+                    ),
+                    free_quantity: addExactDecimals(
+                        [item.free_quantity, freeQuantity],
+                        'Sales item free quantity',
+                        { scale: 6, maximumWholeDigits: 14 },
+                    ),
+                } : item
             );
             setDocument(prev => ({ ...prev, items: updatedItems } as TDoc));
         } else {
             // Add new item
-            const quantity = 1;
-            const unitPrice = product[priceField] || product.sale_price || product.mrp || 0;
-            const total = quantity * unitPrice;
+            if (!product.batch_id || typeof product[priceField] !== 'string') {
+                console.error(`[useSalesTransaction:${documentType}] Canonical batch price is unavailable`);
+                return;
+            }
+            const unitPrice = normalizeAuthoritativeDecimal(
+                product[priceField],
+                'Selected batch unit rate',
+                { scale: 4, maximumWholeDigits: 16 },
+            );
 
             const newItem: TItem = {
-                id: Date.now(),
+                id: clientUuid(),
                 product_id: product.product_id,
                 product_name: product.product_name,
                 hsn_code: product.hsn_code,
-                quantity,
+                batch_id: product.batch_id,
+                batch_number: product.batch_number,
+                branch_id: product.branch_id,
+                location_id: product.location_id,
+                uom_conversion_id: product.uom_conversion_id,
+                quantity: billedQuantity,
+                free_quantity: freeQuantity,
+                free_supply_tax_treatment: product.free_supply_tax_treatment,
                 unit: product.unit || product.base_uom || product.uom_code || '',
-                mrp: product.mrp || 0,
+                mrp: product.mrp,
                 unit_price: unitPrice,  // ✅ CANONICAL
-                gst_percent: includeGst ? (product.gst_percent || 0) : undefined
-            } as TItem;
+                gst_percent: includeGst ? product.gst_percent : undefined
+            } as unknown as TItem;
 
             const updatedItems = [...document.items, newItem];
             setDocument(prev => ({ ...prev, items: updatedItems } as TDoc));
@@ -229,7 +247,7 @@ export function useSalesTransaction<
                 }
             }, 150);
         }
-    }, [document.items, priceField, includeGst]);
+    }, [document.items, documentType, priceField, includeGst]);
 
     // ==================== UPDATE ITEM ====================
     const updateItem = useCallback((index: number, field: string, value: unknown) => {
@@ -237,11 +255,24 @@ export function useSalesTransaction<
             if (i === index) {
                 const updatedItem = { ...item, [field]: value };
 
-                // Recalculate line total if quantity or price changes
-                if (field === 'quantity' || field === 'unit_price' || field === 'unit_price') {
-                    const quantity = parseFloat(field === 'quantity' ? String(value) : String(item.quantity)) || 0;
-                    const unitPrice = parseFloat(field === 'unit_price' ? String(value) : String(item.unit_price)) || 0;
-                    updatedItem.unit_price = unitPrice;
+                if (field === 'quantity' || field === 'free_quantity') {
+                    if (typeof value !== 'string') {
+                        throw new Error(`Sales item ${field} must remain an exact decimal string.`);
+                    }
+                    updatedItem[field] = normalizeExactDecimal(
+                        value,
+                        `Sales item ${field}`,
+                        { scale: 6, maximumWholeDigits: 14 },
+                    );
+                } else if (field === 'unit_price') {
+                    if (typeof value !== 'string') {
+                        throw new Error('Sales item unit price must remain an exact decimal string.');
+                    }
+                    updatedItem.unit_price = normalizeExactDecimal(
+                        value,
+                        'Sales item unit price',
+                        { scale: 4, maximumWholeDigits: 16 },
+                    );
                 }
                 return updatedItem;
             }
@@ -296,7 +327,6 @@ export function useSalesTransaction<
         handleProductSelect,
         updateItem,
         removeItem,
-        recalculateTotals,
         fetchCustomerAddress,
 
         // Utilities

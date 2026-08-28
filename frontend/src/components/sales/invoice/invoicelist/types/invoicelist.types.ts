@@ -7,17 +7,23 @@
 // Core Entity Types
 // ============================================================================
 
+export type SalesHistoryDocumentType = 'invoice' | 'challan' | 'sales_order';
+
 export interface Invoice {
     id: string;
+    document_type: SalesHistoryDocumentType;
+    document_status: string;
     invoice_number: string;
     invoice_date: string;
-    due_date: string;
+    due_date: string | null;
     customer_id: string;
     customer_name: string;
-    total_amount: number;
-    paid_amount: number;
-    pending_amount: number;
-    payment_status: 'paid' | 'partial' | 'pending' | 'overdue' | 'cancelled';
+    customer_phone?: string;
+    customer_email?: string;
+    total_amount: string | null;
+    paid_amount: string | null;
+    pending_amount: string | null;
+    payment_status: 'paid' | 'partial' | 'pending' | 'overdue' | 'cancelled' | null;
     items_count: number;
     created_at: string;
     updated_at: string;
@@ -54,20 +60,16 @@ export interface InvoiceFiltersProps {
 
 export interface InvoiceTableProps {
     invoices: Invoice[];
+    documentType: SalesHistoryDocumentType;
     selectedIds: Set<string>;
     isAllSelected: boolean;
     loading: boolean;
     onToggleSelect: (id: string) => void;
     onToggleSelectAll: () => void;
-    onViewInvoice: (invoice: Invoice) => void;
-    onPrintInvoice: (invoice: Invoice) => void;
-    onCancelInvoice?: (invoice: Invoice) => void;
 }
 
 export interface InvoiceBulkActionsProps {
     selectedCount: number;
-    onMarkPaid: () => void;
-    onSendReminder: () => void;
     onExport: () => void;
     onClear: () => void;
 }
@@ -88,6 +90,8 @@ export interface InvoicePaginationProps {
 export interface InvoiceFilters {
     searchQuery: string;
     dateFilter: string;
+    dateFrom: string;
+    dateTo: string;
     statusFilter: string;
 }
 

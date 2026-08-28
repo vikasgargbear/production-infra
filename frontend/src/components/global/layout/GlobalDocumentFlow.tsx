@@ -1,9 +1,9 @@
-import React, { useState, useEffect, ReactNode, SetStateAction, Dispatch } from 'react';
+import React, { useState, useEffect, useCallback, ReactNode, SetStateAction, Dispatch } from 'react';
 import { LucideIcon } from 'lucide-react';
 import ModuleHeader, { ModuleHeaderAction } from '../ui/ModuleHeader';
 import DocumentFooter from '../ui/display/DocumentFooter';
-import documentNumberGenerator from '../../../services/offline/documents/documentNumberGenerator';
 import { useToast } from '../ui/feedback/Toast';
+import type { EditableDecimalValue } from '../../../utils/exactDecimal';
 
 // ==================== TYPE DEFINITIONS ====================
 
@@ -36,25 +36,17 @@ interface Shortcut {
 
 interface FooterTotals {
     itemCount?: number;
-    totalAmount?: number;
-    subtotal?: number;
-    tax?: number;
-    roundOff?: number;
-    grandTotal?: number;
+    totalAmount?: EditableDecimalValue;
+    subtotal?: EditableDecimalValue;
+    tax?: EditableDecimalValue;
+    roundOff?: EditableDecimalValue;
+    grandTotal?: EditableDecimalValue;
 }
 
 interface DocumentData {
     documentNumber?: string;
     status?: string;
     [key: string]: unknown;
-}
-
-interface AdditionalAction {
-    label: string;
-    onClick: () => void;
-    variant?: string;
-    className?: string;
-    icon?: React.ComponentType<{ className?: string }>;
 }
 
 export interface GlobalDocumentFlowProps {
@@ -85,9 +77,11 @@ export interface GlobalDocumentFlowProps {
 
     // Validation & Actions
     canProceedToReview?: () => boolean;
+    onProceedToReview?: () => boolean | Promise<boolean>;
     onSave?: () => void;
     onPrint?: () => void;
     isSaving?: boolean;
+    saveDisabled?: boolean;
     saveLabel?: string;
 
     // Footer Configuration
@@ -109,7 +103,7 @@ export interface GlobalDocumentFlowProps {
  * 
  * Features:
  * - Two-step flow: Create → Review
- * - Auto document number generation
+ * - Backend-authoritative document numbers
  * - Consistent keyboard shortcuts
  * - Universal layout and footer
  * - Progress tracking
@@ -119,10 +113,6 @@ const GlobalDocumentFlow: React.FC<GlobalDocumentFlowProps> = ({
     documentType = 'invoice',
     title,
     documentData,
-    onDocumentUpdate,
-
-    // Auto-generation
-    autoGenerateNumber = true,
 
     // Header Configuration  
     icon,
@@ -142,9 +132,11 @@ const GlobalDocumentFlow: React.FC<GlobalDocumentFlowProps> = ({
 
     // Validation & Actions
     canProceedToReview,
+    onProceedToReview,
     onSave,
     onPrint,
     isSaving = false,
+    saveDisabled = false,
     saveLabel,
 
     // Footer Configuration
@@ -159,9 +151,8 @@ const GlobalDocumentFlow: React.FC<GlobalDocumentFlowProps> = ({
 }) => {
     const toast = useToast();
 
-    const [generatedNumber, setGeneratedNumber] = useState<string>('');
     const [localStep, setLocalStep] = useState<number>(currentStep);
-    const [isGenerating, setIsGenerating] = useState<boolean>(false);
+    const [isPreparingReview, setIsPreparingReview] = useState(false);
 
     // Document type configurations
     const documentConfigs: Record<DocumentType, DocumentConfig> = {
@@ -259,92 +250,40 @@ const GlobalDocumentFlow: React.FC<GlobalDocumentFlowProps> = ({
 
     const config = documentConfigs[documentType] || documentConfigs['invoice'];
     const finalTitle = title || config.title;
-    const finalColor = config.color;
-    const finalIconColor = iconColor || `text-${config.color}-600`;
+    const finalIconColor = iconColor || 'text-blue-600';
 
     // Handle step changes
-    const handleStepChange = (newStep: number): void => {
+    const handleStepChange = useCallback((newStep: number): void => {
         setLocalStep(newStep);
         onStepChange?.(newStep);
-    };
-
-    // Auto-generate document number - only once on mount
-    const [hasGeneratedNumber, setHasGeneratedNumber] = useState<boolean>(false);
-
-    useEffect(() => {
-        // Only generate once when component mounts and conditions are met
-        if (autoGenerateNumber && !documentData?.documentNumber && !hasGeneratedNumber) {
-            const generateNumber = async (): Promise<void> => {
-                try {
-                    setIsGenerating(true);
-                    setHasGeneratedNumber(true);
-
-                    const serviceMethod = config.serviceMethod;
-                    let number: string | null = null;
-
-                    // Try to use the service if it exists
-                    if (documentNumberGenerator && (documentNumberGenerator as any)[serviceMethod]) {
-                        try {
-                            number = await (documentNumberGenerator as any)[serviceMethod]();
-                        } catch (serviceError) {
-                            // Service failed, use fallback
-                        }
-                    }
-
-                    // Use fallback if service didn't provide a number
-                    if (!number) {
-                        number = `${config.prefix}-${Date.now().toString().slice(-8)}`;
-                    }
-
-                    setGeneratedNumber(number);
-                    if (onDocumentUpdate) {
-                        onDocumentUpdate(prev => ({ ...prev, documentNumber: number }));
-                    }
-                } catch (error) {
-                    // Even on error, mark as generated to prevent infinite retries
-                    setHasGeneratedNumber(true);
-                } finally {
-                    setIsGenerating(false);
-                }
-            };
-
-            generateNumber();
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [autoGenerateNumber]);
+    }, [onStepChange]);
 
     // Default keyboard shortcuts per step
     const defaultShortcuts: Record<number, Shortcut[]> = {
         1: [
-            { key: 'Ctrl+N', action: 'Add Customer' },
-            { key: 'Ctrl+F', action: 'Search Products' },
-            { key: 'Ctrl+S', action: 'Save Draft' },
             { key: 'Esc', action: 'Close' }
         ],
         2: [
-            { key: 'Ctrl+S', action: `Save ${config.title}` },
-            { key: 'Ctrl+P', action: 'Print' },
-            { key: 'Esc', action: 'Close' }
+            ...(onSave && !saveDisabled ? [{ key: 'Ctrl+S', action: `Save ${config.title}` }] : []),
+            { key: 'Esc', action: 'Back to Edit' }
         ]
     };
 
     const currentShortcuts = keyboardShortcuts[localStep] || defaultShortcuts[localStep] || [];
-    const displayNumber = documentData?.documentNumber || generatedNumber || (isGenerating ? 'Generating...' : `${config.prefix}-DRAFT`);
+    // Final document numbers are assigned only by a successful backend command.
+    const displayNumber = documentData?.documentNumber || `${config.prefix}-DRAFT`;
 
     // Handle keyboard shortcuts
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent): void => {
+            if (e.defaultPrevented) return;
+            if (e.key === 'Escape' && document.querySelector('[role="dialog"][aria-modal="true"]')) return;
             // Ctrl+S - Save
-            if (e.ctrlKey && e.key === 's') {
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
                 e.preventDefault();
-                if (localStep === 2 && onSave) {
+                if (localStep === 2 && onSave && !saveDisabled) {
                     onSave();
                 }
-            }
-
-            // Ctrl+P - Prevent browser print dialog (print only available after generation)
-            if (e.ctrlKey && e.key === 'p') {
-                e.preventDefault();
             }
 
             // Escape - Close or go back
@@ -359,15 +298,21 @@ const GlobalDocumentFlow: React.FC<GlobalDocumentFlowProps> = ({
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [localStep, onSave, onPrint, onClose]);
+    }, [handleStepChange, localStep, onSave, onClose, saveDisabled]);
 
     // Handle proceed to review
-    const handleProceedToReview = (): void => {
+    const handleProceedToReview = async (): Promise<void> => {
         if (canProceedToReview?.() === false) {
             toast?.error?.('Please complete all required fields');
             return;
         }
-        handleStepChange(2);
+        setIsPreparingReview(true);
+        try {
+            if (await onProceedToReview?.() === false) return;
+            handleStepChange(2);
+        } finally {
+            setIsPreparingReview(false);
+        }
     };
 
     // Additional actions for header based on step
@@ -382,7 +327,7 @@ const GlobalDocumentFlow: React.FC<GlobalDocumentFlowProps> = ({
     ] : additionalActions;
 
     return (
-        <div className={`h-full bg-${finalColor}-50`}>
+        <div className="h-full bg-gray-50">
             <div className="h-full flex flex-col">
 
                 {/* Header - Consistent across all modules */}
@@ -395,15 +340,13 @@ const GlobalDocumentFlow: React.FC<GlobalDocumentFlowProps> = ({
                     onClose={onClose}
                     historyType={config.historyType}
                     additionalActions={stepActions}
-                    showSaveDraft={localStep === 1}
-                    onSaveDraft={() => {
-                        // TODO: Implement draft saving
-                    }}
+                    // Draft persistence is not implemented. Do not present a no-op action.
+                    showSaveDraft={false}
                 />
 
                 {/* Keyboard Shortcuts Help */}
                 {currentShortcuts.length > 0 && (
-                    <div className={`bg-${finalColor}-50 px-4 py-2 text-xs text-${finalColor}-700 border-b border-${finalColor}-200`}>
+                    <div className="hidden bg-white px-4 py-2 text-xs text-gray-600 border-b border-gray-200 sm:block">
                         Keyboard shortcuts: {currentShortcuts.map((shortcut, index) => (
                             <span key={index}>
                                 <strong>{shortcut.key}</strong> - {shortcut.action}
@@ -414,8 +357,8 @@ const GlobalDocumentFlow: React.FC<GlobalDocumentFlowProps> = ({
                 )}
 
                 {/* Content Area - Step-based */}
-                <div className={`flex-1 overflow-y-auto bg-${finalColor}-50`}>
-                    <div className={`${maxWidth} mx-auto px-6 py-6 ${className}`}>
+                <div className="flex-1 overflow-y-auto bg-gray-50">
+                    <div className={`${maxWidth} mx-auto px-3 py-4 sm:px-6 sm:py-6 ${className}`}>
                         {localStep === 1 ? createContent : reviewContent}
                     </div>
                 </div>
@@ -429,8 +372,8 @@ const GlobalDocumentFlow: React.FC<GlobalDocumentFlowProps> = ({
                         onContinue={handleProceedToReview}
                         cancelLabel="Reset"
                         continueLabel="Continue"
-                        continueDisabled={canProceedToReview?.() === false}
-                        continueButtonColor={finalColor as 'blue' | 'green' | 'purple' | 'orange' | 'red'}
+                        continueDisabled={isPreparingReview || canProceedToReview?.() === false}
+                        continueButtonColor="blue"
                     />
                 ) : (
                     <DocumentFooter
@@ -443,7 +386,8 @@ const GlobalDocumentFlow: React.FC<GlobalDocumentFlowProps> = ({
                         showPrintOptions={false}
                         onSave={onSave}
                         isSaving={isSaving}
-                        saveLabel={config.saveLabel || saveLabel || 'Save'}
+                        saveDisabled={saveDisabled}
+                        saveLabel={saveLabel || config.saveLabel || 'Save'}
                     />
                 )}
 

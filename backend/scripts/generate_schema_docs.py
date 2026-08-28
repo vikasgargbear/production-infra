@@ -11,12 +11,15 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from sqlalchemy import create_engine, text
+from sqlalchemy.engine import make_url
 
-# Get database URL from environment
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://postgres:password@localhost:5432/pharma"
-)
+
+def configured_database_url() -> str:
+    """Return the explicitly configured URL without providing a hidden fallback."""
+    database_url = os.getenv("DATABASE_URL", "").strip()
+    if not database_url:
+        raise RuntimeError("DATABASE_URL is required for schema documentation")
+    return database_url
 
 def get_table_columns(engine, schema: str, table: str):
     """Get all columns for a table with their types and descriptions"""
@@ -75,10 +78,15 @@ def generate_markdown_for_table(schema: str, table: str, columns: list) -> str:
     return "\n".join(lines)
 
 def main():
-    print(f"[SchemaGen] Connecting to database...")
-    print(f"[SchemaGen] Using DATABASE_URL: {DATABASE_URL[:50]}...")
-    
-    engine = create_engine(DATABASE_URL)
+    database_url = configured_database_url()
+    safe_endpoint = make_url(database_url).render_as_string(hide_password=True)
+    print("[SchemaGen] Connecting to database")
+    print(f"[SchemaGen] Endpoint: {safe_endpoint}")
+
+    engine = create_engine(
+        database_url,
+        connect_args={"options": "-c default_transaction_read_only=on"},
+    )
     
     # Get all tables grouped by schema
     tables = get_all_schemas_and_tables(engine)

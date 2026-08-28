@@ -2,76 +2,72 @@
 jest.mock('../api/modules/sales/calculations.api', () => ({
   salesOrderCalculationsApi: { preview: jest.fn() }
 }));
-jest.mock('../enterpriseCalculator', () => ({
-  __esModule: true,
-  default: { calculateSalesOrder: jest.fn() }
-}));
 
-import EnterpriseCalculator from '../enterpriseCalculator';
+import {
+  calculateSalesOrderPreview,
+  isSalesOrderPreviewReady,
+} from '../calculations/salesOrderCalculationService';
 import { salesOrderCalculationsApi } from '../api/modules/sales/calculations.api';
-import { calculateSalesOrderPreview } from '../calculations/salesOrderCalculationService';
-
+import { exactInvoiceResponse, exactSalesLine } from './exactCalculationFixtures';
 
 const order = {
-  customer_id: 5,
-  order_date: '2026-08-19',
-  gst_type: 'IGST',
-  delivery_charges: 12,
+  customer_id: '10000000-0000-7000-8000-000000000001',
+  order_date: '2026-08-25',
+  gst_type: 'CGST/SGST',
+  delivery_charges: 0,
   other_charges: 0,
+  document_discount_amount: '0.00',
+  discount_amount: '17.25',
   items: [{
-    product_id: 11,
-    quantity: 2,
-    free_quantity: 0,
-    unit_price: 100,
-    discount_percent: 5,
-    gst_percent: 18
-  }]
+    product_id: '10000000-0000-7000-8000-000000000002',
+    branch_id: '10000000-0000-7000-8000-000000000003',
+    quantity: '0.123456', free_quantity: '0', unit_price: '9007199254740993.000000',
+    discount_percent: '0', gst_percent: '18', free_supply_tax_treatment: 'excluded_from_taxable_value',
+  }],
 };
 
+beforeEach(() => jest.clearAllMocks());
 
-test('uses authenticated backend preview when online', async () => {
-  salesOrderCalculationsApi.preview.mockResolvedValue({
-    data: {
-      success: true,
-      gst_type: 'IGST',
-      calculation_timestamp: 1,
-      line_items: [{
-        taxable_amount: 190,
-        total_tax_amount: 34.2,
-        line_total: 224.2
-      }],
-      totals: {
-        subtotal_amount: 200,
-        discount_amount: 10,
-        total_tax_amount: 34.2,
-        round_off_amount: -0.2,
-        final_amount: 236
-      }
-    }
-  });
-
+test('preserves UUIDs, six-place quantities and >2^53 rates into exact API strings', async () => {
+  salesOrderCalculationsApi.preview.mockResolvedValue({ data: exactInvoiceResponse({
+    line_items: [exactSalesLine({ quantity: '0.123456' })],
+  }) });
   const result = await calculateSalesOrderPreview(order, true);
-
   expect(salesOrderCalculationsApi.preview).toHaveBeenCalledWith(expect.objectContaining({
-    customer_id: 5,
-    delivery_charges: 12,
-    items: [expect.objectContaining({ tax_percent: 18 })]
+    branch_id: order.items[0].branch_id,
+    customer_id: order.customer_id,
+    discount_amount: '0.00',
+    items: [expect.objectContaining({ quantity: '0.123456', unit_price: '9007199254740993.000000' })],
   }));
-  expect(EnterpriseCalculator.calculateSalesOrder).not.toHaveBeenCalled();
-  expect(result.items[0]).toEqual(expect.objectContaining({ tax_amount: 34.2, total: 224.2 }));
-  expect(result.totals).toEqual(expect.objectContaining({ tax_amount: 34.2, total_amount: 236 }));
+  expect(salesOrderCalculationsApi.preview.mock.calls[0][0].items[0]).not.toHaveProperty('tax_percent');
+  expect(result.totals.final_amount).toBe('0.12');
 });
 
-
-test('uses deterministic local calculation only when explicitly offline', async () => {
-  EnterpriseCalculator.calculateSalesOrder.mockReturnValue({
-    items: [{ total_amount: 224.2 }],
-    totals: { final_amount: 224 }
-  });
-
-  const result = await calculateSalesOrderPreview(order, false);
-
-  expect(EnterpriseCalculator.calculateSalesOrder).toHaveBeenCalledWith(order);
+test('rejects blank customer sentinel before transport', async () => {
+  await expect(calculateSalesOrderPreview({ ...order, customer_id: 0 }, true)).rejects.toThrow(/canonical UUID/);
   expect(salesOrderCalculationsApi.preview).not.toHaveBeenCalled();
-  expect(result.gst_type).toBe('IGST');
+});
+
+test('keeps zero billed-quantity drafts out of the calculation transport', async () => {
+  const zeroQuantityOrder = {
+    ...order,
+    items: [{ ...order.items[0], quantity: '0.000000', free_quantity: '0.000000' }],
+  };
+
+  expect(isSalesOrderPreviewReady(zeroQuantityOrder)).toBe(false);
+  await expect(calculateSalesOrderPreview(zeroQuantityOrder, true)).rejects.toThrow(
+    'Sales order calculation items[0].quantity must be greater than zero.',
+  );
+  expect(salesOrderCalculationsApi.preview).not.toHaveBeenCalled();
+});
+
+test('recognizes a complete positive sales-order draft as preview-ready', () => {
+  expect(isSalesOrderPreviewReady(order)).toBe(true);
+});
+
+test('rejects numeric authoritative response decimals', async () => {
+  salesOrderCalculationsApi.preview.mockResolvedValue({ data: exactInvoiceResponse({
+    line_items: [exactSalesLine({ quantity: 0.123456 })],
+  }) });
+  await expect(calculateSalesOrderPreview(order, true)).rejects.toThrow('exact decimal string');
 });

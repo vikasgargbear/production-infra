@@ -6,7 +6,7 @@
 
 export interface Customer {
   // Primary fields - NOT NULL in DB
-  customer_id: number;  // NOT NULL
+  customer_id: number | string;
   customer_code: string;  // NOT NULL in DB (was incorrectly optional!)
   customer_name: string;  // NOT NULL
   customer_type: string;  // NOT NULL (was incorrectly optional!)
@@ -22,6 +22,7 @@ export interface Customer {
 
   // GST and compliance (all nullable in DB)
   gst_number?: string;
+  place_of_supply_state_code?: string;
   pan_number?: string;
   drug_license_number?: string;
   drug_license_validity?: string | Date;
@@ -36,7 +37,6 @@ export interface Customer {
   route_id?: number;
   area_code?: string;
   assigned_salesperson_id?: number;
-  price_list_id?: number;
   discount_group_id?: number;
 
   // Credit management (all nullable)
@@ -72,10 +72,6 @@ export interface Customer {
   blacklisted?: boolean;
   blacklist_reason?: string;
   blacklist_date?: string | Date;
-
-  // Loyalty (nullable)
-  loyalty_points?: number;
-  loyalty_tier?: string;
 
   // Notes (nullable)
   internal_notes?: string;
@@ -119,11 +115,14 @@ export interface Customer {
     billing_city?: string;
     billing_state?: string;
     billing_pincode?: string;
+    shipping_address?: string;
+    shipping_city?: string;
+    shipping_state?: string;
+    shipping_pincode?: string;
   };
 }
 
 export interface CustomerCreateInput {
-  customer_code?: string; // Auto-generated if not provided
   customer_name: string;
   customer_type: Customer['customer_type'];
   contact_info: {

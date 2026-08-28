@@ -32,7 +32,6 @@ export type {
     ImportData,
     CreatedChallanData,
     CompanyInfo,
-    TransportDetails,
     UseChallanLogicReturn
 } from './types/challanTypes';
 

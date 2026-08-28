@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { X, Settings, HelpCircle, ChevronRight, Activity, LucideIcon, Lock, Unlock } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { X, Home, LucideIcon, Lock, Unlock } from 'lucide-react';
 import { useSidebar } from '../../../contexts/SidebarContext';
 
 // TypeScript interface for module configuration
@@ -24,6 +24,12 @@ interface ModuleHubProps {
   modules?: Module[];
   defaultModule?: string | null;
   layout?: 'sidebar' | 'centered';
+  /**
+   * Called whenever the user switches to a different sub-module.
+   * Used by parent hubs (e.g. StockHub) to propagate sub-module state to the
+   * URL hash for stable deep-linking.
+   */
+  onActiveModuleChange?: (moduleId: string | null) => void;
 }
 
 /**
@@ -37,15 +43,41 @@ const ModuleHub: React.FC<ModuleHubProps> = ({
   icon: HubIcon,
   modules = [] as Module[],
   defaultModule = null,
-  layout = 'sidebar'
+  layout = 'sidebar',
+  onActiveModuleChange,
 }) => {
+  const availableModules = useMemo(
+    () => modules.filter(module => Boolean(module.component)),
+    [modules]
+  );
+  const availableModuleIds = availableModules.map(module => module.id).join('\u0000');
   const [activeModule, setActiveModule] = useState(
-    defaultModule || (layout === 'centered' ? '' : (modules[0]?.id || ''))
+    defaultModule || (layout === 'centered' ? '' : (availableModules[0]?.id || ''))
   );
 
   // Sidebar collapse/expand state (must be called before any conditional returns)
   const { settings: sidebarSettings, setIsHovering, toggleLockExpanded } = useSidebar();
   const { isExpanded, lockExpanded } = sidebarSettings;
+
+  /** Switch sub-module and notify parent (for URL sync). */
+  const handleSetActiveModule = (id: string) => {
+    setActiveModule(id);
+    onActiveModuleChange?.(id || null);
+  };
+
+  useEffect(() => {
+    const moduleIds = availableModuleIds ? availableModuleIds.split('\u0000') : [];
+    if (defaultModule && moduleIds.includes(defaultModule)) {
+      setActiveModule(defaultModule);
+    }
+  }, [defaultModule, availableModuleIds]);
+
+  useEffect(() => {
+    if (layout === 'centered' && activeModule === '') return;
+    if (!availableModules.some(module => module.id === activeModule)) {
+      setActiveModule(availableModules[0]?.id || '');
+    }
+  }, [activeModule, availableModules, layout]);
 
   // Color mapping for consistent styling and good contrast
   const colorStyles = {
@@ -118,8 +150,8 @@ const ModuleHub: React.FC<ModuleHubProps> = ({
       if ((e.ctrlKey || e.metaKey) && e.key >= '1' && e.key <= '9') {
         e.preventDefault();
         const index = parseInt(e.key) - 1;
-        if (modules[index]) {
-          setActiveModule(modules[index].id);
+        if (availableModules[index]) {
+          handleSetActiveModule(availableModules[index].id);
         }
       }
     };
@@ -128,13 +160,13 @@ const ModuleHub: React.FC<ModuleHubProps> = ({
       window.addEventListener('keydown', handleKeyPress);
       return () => window.removeEventListener('keydown', handleKeyPress);
     }
-  }, [open, modules]);
+  }, [open, availableModules]);
 
   if (!open) return null;
 
   // Render the appropriate module
   const renderModule = () => {
-    const activeModuleConfig = modules.find(m => m.id === activeModule);
+    const activeModuleConfig = availableModules.find(m => m.id === activeModule);
 
     if (activeModuleConfig && activeModuleConfig.component) {
       const Component = activeModuleConfig.component;
@@ -147,19 +179,11 @@ const ModuleHub: React.FC<ModuleHubProps> = ({
       );
     }
 
-    // Placeholder for modules not yet implemented
-    const moduleInfo = modules.find(m => m.id === activeModule);
-    const Icon = moduleInfo?.icon;
-
     return (
       <div className="flex-1 flex items-center justify-center">
-        <div className="text-center">
-          {Icon && <Icon className={`w-16 h-16 text-${moduleInfo?.color || 'gray'}-400 mx-auto mb-4`} />}
-          <h2 className="text-xl font-semibold text-gray-700 mb-2">
-            {moduleInfo?.fullLabel || 'Module'}
-          </h2>
-          <p className="text-gray-500 mb-4">{moduleInfo?.description || 'Module description'}</p>
-          <p className="text-sm text-gray-400">Coming soon...</p>
+        <div className="max-w-sm px-6 text-center">
+          <h2 className="mb-2 text-xl font-semibold text-gray-800">No modules available</h2>
+          <p className="text-sm text-gray-500">Your role does not currently have an available module in this section.</p>
         </div>
       </div>
     );
@@ -169,12 +193,13 @@ const ModuleHub: React.FC<ModuleHubProps> = ({
   if (layout === 'centered') {
     const isGrid = !activeModule;
     return (
-      <div className="fixed inset-0 bg-gray-50 z-50 flex flex-col">
+      <div className="fixed inset-0 z-50 flex flex-col bg-gray-50 pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0">
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 z-10 p-2 bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow"
+          className="absolute top-4 right-4 z-10 min-h-11 min-w-11 flex items-center justify-center p-2 bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow"
           title="Close (Esc)"
+          aria-label="Close"
         >
           <X className="w-6 h-6 text-gray-600" />
         </button>
@@ -182,9 +207,10 @@ const ModuleHub: React.FC<ModuleHubProps> = ({
         {/* Back Button when a module is active */}
         {!isGrid && (
           <button
-            onClick={() => setActiveModule('')}
-            className="absolute top-4 left-4 z-10 px-3 py-2 bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow text-sm text-gray-700"
+            onClick={() => handleSetActiveModule('')}
+            className="absolute top-4 left-4 z-10 min-h-11 px-3 py-2 bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow text-sm text-gray-700"
             title="Back to modules"
+            aria-label="Back to modules"
           >
             ← Modules
           </button>
@@ -193,14 +219,15 @@ const ModuleHub: React.FC<ModuleHubProps> = ({
         <div className="flex-1 flex items-center justify-center p-6">
           {isGrid ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 max-w-5xl w-full">
-              {modules.map((module) => {
+              {availableModules.map((module) => {
                 const Icon = module.icon;
                 const colors = colorStyles[module.color] || colorStyles.gray;
                 return (
                   <button
                     key={module.id}
-                    onClick={() => setActiveModule(module.id)}
+                    onClick={() => handleSetActiveModule(module.id)}
                     className="group relative bg-white/80 backdrop-blur border border-gray-200 rounded-2xl p-6 text-left shadow-sm hover:shadow-md transition-all hover:-translate-y-0.5"
+                    aria-label={module.fullLabel}
                   >
                     <div className="flex items-center">
                       <div className={`p-3 rounded-xl mr-4 ${colors.inactive} group-hover:${colors.hover} transition-colors`}>
@@ -229,10 +256,53 @@ const ModuleHub: React.FC<ModuleHubProps> = ({
 
   // Sidebar layout - Clean minimal design (no internal horizontal borders — alignment comes from border-r only)
   return (
-    <div className="fixed inset-0 bg-gray-100 z-50 flex">
+    <div className="fixed inset-0 z-50 flex flex-col bg-gray-100 pb-[calc(4rem+env(safe-area-inset-bottom))] md:flex-row md:pb-0">
+      {/* Labeled mobile module selector. Global app navigation remains at the bottom. */}
+      <div className="flex-none border-b border-gray-200 bg-white md:hidden">
+        <div className="flex h-14 items-center justify-between gap-3 px-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50">
+              {HubIcon && <HubIcon className="h-5 w-5 text-blue-600" />}
+            </div>
+            <span className="truncate text-sm font-semibold text-gray-900">{title}</span>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-11 items-center gap-1.5 rounded-xl border border-gray-300 px-3 text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            aria-label="Back to Home"
+          >
+            <Home className="h-4 w-4" />
+            Home
+          </button>
+        </div>
+        <nav aria-label={`${title} modules`} className="flex gap-2 overflow-x-auto px-3 pb-3">
+          {availableModules.map(module => {
+            const Icon = module.icon;
+            const isActive = activeModule === module.id;
+            return (
+              <button
+                key={module.id}
+                type="button"
+                onClick={() => handleSetActiveModule(module.id)}
+                aria-current={isActive ? 'page' : undefined}
+                className={`flex min-h-11 shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                  isActive
+                    ? 'border-blue-200 bg-blue-50 text-blue-700'
+                    : 'border-gray-200 bg-white text-gray-600'
+                }`}
+              >
+                <Icon className="h-4 w-4" />
+                {module.label || module.fullLabel}
+              </button>
+            );
+          })}
+        </nav>
+      </div>
+
       {/* Sidebar — continuous strip, no header/footer borders (like Figma/Linear) */}
       <div
-        className={`${isExpanded ? 'w-52' : 'w-14'} h-full bg-white border-r border-gray-200 flex flex-col transition-all duration-300 ease-in-out flex-shrink-0`}
+        className={`${isExpanded ? 'w-52' : 'w-14'} hidden h-full flex-shrink-0 flex-col border-r border-gray-200 bg-white transition-all duration-300 ease-in-out md:flex`}
         onMouseEnter={() => setIsHovering(true)}
         onMouseLeave={() => setIsHovering(false)}
       >
@@ -252,9 +322,11 @@ const ModuleHub: React.FC<ModuleHubProps> = ({
           </div>
           {isExpanded && (
             <button
+              type="button"
               onClick={toggleLockExpanded}
-              className={`p-1.5 rounded transition-colors ${lockExpanded ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}
+              className={`flex min-h-11 min-w-11 items-center justify-center rounded-md transition-colors ${lockExpanded ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}
               title={lockExpanded ? 'Unlock sidebar' : 'Lock sidebar open'}
+              aria-label={lockExpanded ? 'Unlock sidebar' : 'Lock sidebar open'}
             >
               {lockExpanded ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
             </button>
@@ -262,11 +334,11 @@ const ModuleHub: React.FC<ModuleHubProps> = ({
         </div>
 
         {/* Module Navigation */}
-        <nav className={`flex-1 overflow-y-auto px-1.5 pt-2`}>
-          {modules.map((module, index) => {
+        <nav aria-label={`${title} module navigation`} className={`flex-1 overflow-y-auto px-1.5 pt-2`}>
+          {availableModules.map((module, index) => {
             const Icon = module.icon;
             const isActive = activeModule === module.id;
-            const prevGroup = index > 0 ? modules[index - 1].group : null;
+            const prevGroup = index > 0 ? availableModules[index - 1].group : null;
             const showGroupHeader = module.group && module.group !== prevGroup;
 
             return (
@@ -280,7 +352,7 @@ const ModuleHub: React.FC<ModuleHubProps> = ({
                   <div className="mx-2 my-2 border-t border-gray-100" />
                 )}
                 <button
-                  onClick={() => setActiveModule(module.id)}
+                  onClick={() => handleSetActiveModule(module.id)}
                   className={`
                     w-full mb-1 rounded-lg flex items-center transition-all duration-150
                     ${isExpanded ? 'px-3 py-2.5 gap-3' : 'p-3 justify-center'}
@@ -290,6 +362,8 @@ const ModuleHub: React.FC<ModuleHubProps> = ({
                     }
                   `}
                   title={!isExpanded ? (module.label || module.fullLabel) : undefined}
+                  aria-label={module.label || module.fullLabel}
+                  aria-current={isActive ? 'page' : undefined}
                 >
                   <Icon className={`w-6 h-6 flex-shrink-0 ${isActive ? 'text-blue-600' : ''}`} />
                   {isExpanded && (
@@ -309,21 +383,22 @@ const ModuleHub: React.FC<ModuleHubProps> = ({
           })}
         </nav>
 
-        {/* Bottom Actions */}
+        {/* Persistent way home; avoids trapping users inside a hub. */}
         <div className={`pb-4 pt-2 ${isExpanded ? 'px-3' : 'px-1.5'}`}>
-          <button className={`w-full rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors flex items-center ${isExpanded ? 'px-3 py-2.5 gap-3' : 'p-3 justify-center'}`}>
-            <Settings className="w-5 h-5" />
-            {isExpanded && <span className="text-sm">Settings</span>}
-          </button>
-          <button className={`w-full rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors flex items-center ${isExpanded ? 'px-3 py-2.5 gap-3' : 'p-3 justify-center'}`}>
-            <HelpCircle className="w-5 h-5" />
-            {isExpanded && <span className="text-sm">Help</span>}
+          <button
+            onClick={onClose}
+            className={`w-full rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors flex items-center ${isExpanded ? 'px-3 py-2.5 gap-3' : 'p-3 justify-center'}`}
+            title="Back to Home"
+            aria-label="Back to Home"
+          >
+            <Home className="w-5 h-5" />
+            {isExpanded && <span className="text-sm font-medium">Home</span>}
           </button>
         </div>
       </div>
 
       {/* Main Content Area — scaled to 90% for compact, information-dense UI */}
-      <div className="flex-1 h-full overflow-hidden" style={{ zoom: 0.9 }}>
+      <div className="h-full flex-1 overflow-hidden md:[zoom:0.9]">
         {renderModule()}
       </div>
     </div>

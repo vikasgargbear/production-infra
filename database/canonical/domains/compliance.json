@@ -1,0 +1,2167 @@
+{
+  "domain": "compliance",
+  "table_count": 8,
+  "tables": [
+    {
+      "name": "compliance.licenses",
+      "fact_owner": "Versioned regulatory license for exactly one legal or operating subject",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "mutable_regulatory_evidence",
+      "lifecycle": {
+        "state_column": "status",
+        "states": [
+          "pending",
+          "active",
+          "suspended",
+          "expired",
+          "revoked"
+        ],
+        "initial": "pending",
+        "terminal": [
+          "expired",
+          "revoked"
+        ],
+        "transitions": [
+          "pending->active",
+          "pending->revoked",
+          "active->suspended",
+          "suspended->active",
+          "active->expired",
+          "suspended->expired",
+          "active->revoked",
+          "suspended->revoked"
+        ]
+      },
+      "rls": {
+        "class": "tenant_membership",
+        "force": true,
+        "write_permission": "compliance.license.manage"
+      },
+      "retention": {
+        "class": "regulatory_license",
+        "minimum": "permanent",
+        "hard_delete": false
+      },
+      "columns": [
+        [
+          "org_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "id",
+          "uuid",
+          false,
+          "gen_random_uuid()",
+          "internal"
+        ],
+        [
+          "organization_subject_id",
+          "uuid",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "branch_id",
+          "uuid",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "membership_id",
+          "uuid",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "employee_id",
+          "uuid",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "party_id",
+          "uuid",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "license_type_code",
+          "varchar(64)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "license_number",
+          "varchar(128)",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "issuing_authority",
+          "text",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "jurisdiction_code",
+          "varchar(32)",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "issued_on",
+          "date",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "valid_from",
+          "date",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "valid_until",
+          "date",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "next_verification_due_on",
+          "date",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "conditions_text",
+          "text",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "evidence_attachment_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "status",
+          "text",
+          false,
+          "'pending'::text",
+          "internal"
+        ],
+        [
+          "verified_at",
+          "timestamptz",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "verified_by_membership_id",
+          "uuid",
+          true,
+          null,
+          "personal"
+        ],
+        [
+          "created_at",
+          "timestamptz",
+          false,
+          "transaction_timestamp()",
+          "internal"
+        ],
+        [
+          "created_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "personal"
+        ],
+        [
+          "updated_at",
+          "timestamptz",
+          false,
+          "transaction_timestamp()",
+          "internal"
+        ],
+        [
+          "updated_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "personal"
+        ],
+        [
+          "row_version",
+          "bigint",
+          false,
+          "1",
+          "internal"
+        ]
+      ],
+      "primary_key": [
+        "org_id",
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "licenses_org_fk",
+          "columns": [
+            "org_id"
+          ],
+          "references": "core.organizations",
+          "referenced_columns": [
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "licenses_organization_subject_fk",
+          "columns": [
+            "organization_subject_id"
+          ],
+          "references": "core.organizations",
+          "referenced_columns": [
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "licenses_branch_fk",
+          "columns": [
+            "org_id",
+            "branch_id"
+          ],
+          "references": "core.branches",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "licenses_membership_fk",
+          "columns": [
+            "org_id",
+            "membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "licenses_employee_fk",
+          "columns": [
+            "org_id",
+            "employee_id"
+          ],
+          "references": "hr.employees",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "licenses_party_fk",
+          "columns": [
+            "org_id",
+            "party_id"
+          ],
+          "references": "parties.parties",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "licenses_attachment_fk",
+          "columns": [
+            "org_id",
+            "evidence_attachment_id"
+          ],
+          "references": "core.attachments",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "licenses_verified_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "verified_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "licenses_created_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "created_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "licenses_updated_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "updated_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        }
+      ],
+      "uniques": [
+        {
+          "name": "licenses_number_uq",
+          "columns": [
+            "org_id",
+            "license_type_code",
+            "license_number"
+          ],
+          "where": null
+        }
+      ],
+      "checks": [
+        {
+          "name": "licenses_exact_subject_ck",
+          "expression": "num_nonnulls(organization_subject_id,branch_id,membership_id,employee_id,party_id) = 1 AND (organization_subject_id IS NULL OR organization_subject_id = org_id)"
+        },
+        {
+          "name": "licenses_type_ck",
+          "expression": "license_type_code IN ('drug_wholesale_form_20b','drug_wholesale_form_21b','drug_schedule_x_wholesale_form_20g','state_pharmacist_registration')"
+        },
+        {
+          "name": "licenses_type_subject_ck",
+          "expression": "(license_type_code IN ('drug_wholesale_form_20b','drug_wholesale_form_21b','drug_schedule_x_wholesale_form_20g') AND (organization_subject_id IS NOT NULL OR branch_id IS NOT NULL OR party_id IS NOT NULL)) OR (license_type_code = 'state_pharmacist_registration' AND (membership_id IS NOT NULL OR employee_id IS NOT NULL))"
+        },
+        {
+          "name": "licenses_dates_ck",
+          "expression": "valid_from >= issued_on AND (valid_until IS NULL OR valid_until >= valid_from) AND (next_verification_due_on IS NULL OR next_verification_due_on >= valid_from)"
+        },
+        {
+          "name": "licenses_perpetual_review_ck",
+          "expression": "license_type_code NOT IN ('drug_wholesale_form_20b','drug_wholesale_form_21b','drug_schedule_x_wholesale_form_20g') OR (valid_until IS NULL AND next_verification_due_on IS NOT NULL)"
+        },
+        {
+          "name": "licenses_verified_ck",
+          "expression": "status NOT IN ('active','suspended','expired') OR (verified_at IS NOT NULL AND verified_by_membership_id IS NOT NULL)"
+        },
+        {
+          "name": "licenses_status_ck",
+          "expression": "status IN ('pending','active','suspended','expired','revoked')"
+        },
+        {
+          "name": "licenses_row_version_ck",
+          "expression": "row_version > 0"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "licenses_subject_branch_idx",
+          "columns": [
+            "org_id",
+            "branch_id",
+            "license_type_code",
+            "valid_until",
+            "id"
+          ],
+          "unique": false,
+          "where": "branch_id IS NOT NULL AND status IN ('active','suspended')",
+          "purpose": "branch license lookup"
+        },
+        {
+          "name": "licenses_expiry_idx",
+          "columns": [
+            "org_id",
+            "valid_until",
+            "license_type_code",
+            "id"
+          ],
+          "unique": false,
+          "where": "status IN ('active','suspended')",
+          "purpose": "license expiry alerting"
+        }
+      ],
+      "cross_row_invariants": [{"name": "licenses_cross_row_guard", "enforcement": "exclusion_constraint", "rule": "The database CHECK is the executable v1 vocabulary; adding a license type requires a reviewed schema migration rather than an unverified string or absent lookup. Prohibit overlapping active licenses for the same subject/type/authority. Drug wholesale Forms 20B, 21B and 20G are perpetual unless suspended/cancelled, so require a next verification date instead of fabricating expiry; evidence and subject are immutable after activation."}]
+    },
+    {
+      "name": "compliance.recalls",
+      "fact_owner": "Regulatory product recall decision and execution lifecycle",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "regulated_workflow",
+      "lifecycle": {
+        "state_column": "status",
+        "states": [
+          "initiated",
+          "in_progress",
+          "closed",
+          "cancelled"
+        ],
+        "initial": "initiated",
+        "terminal": [
+          "closed",
+          "cancelled"
+        ],
+        "transitions": [
+          "initiated->in_progress",
+          "initiated->cancelled",
+          "in_progress->closed"
+        ]
+      },
+      "rls": {
+        "class": "tenant_membership",
+        "force": true,
+        "write_permission": "compliance.recall.manage"
+      },
+      "retention": {
+        "class": "product_recall",
+        "minimum": "permanent",
+        "hard_delete": false
+      },
+      "columns": [
+        [
+          "org_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "id",
+          "uuid",
+          false,
+          "gen_random_uuid()",
+          "internal"
+        ],
+        [
+          "recall_number",
+          "varchar(64)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "product_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "recall_class",
+          "text",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "scope",
+          "text",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "reason_code",
+          "varchar(64)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "reason",
+          "text",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "authority_reference",
+          "text",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "initiated_on",
+          "date",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "response_due_on",
+          "date",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "closed_on",
+          "date",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "closure_summary",
+          "text",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "status",
+          "text",
+          false,
+          "'initiated'::text",
+          "internal"
+        ],
+        [
+          "initiated_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "personal"
+        ],
+        [
+          "closed_by_membership_id",
+          "uuid",
+          true,
+          null,
+          "personal"
+        ],
+        [
+          "created_at",
+          "timestamptz",
+          false,
+          "transaction_timestamp()",
+          "internal"
+        ],
+        [
+          "created_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "personal"
+        ],
+        [
+          "updated_at",
+          "timestamptz",
+          false,
+          "transaction_timestamp()",
+          "internal"
+        ],
+        [
+          "updated_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "personal"
+        ],
+        [
+          "row_version",
+          "bigint",
+          false,
+          "1",
+          "internal"
+        ]
+      ],
+      "primary_key": [
+        "org_id",
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "recalls_org_fk",
+          "columns": [
+            "org_id"
+          ],
+          "references": "core.organizations",
+          "referenced_columns": [
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "recalls_product_fk",
+          "columns": [
+            "org_id",
+            "product_id"
+          ],
+          "references": "catalog.products",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "recalls_initiated_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "initiated_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "recalls_closed_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "closed_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "recalls_created_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "created_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "recalls_updated_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "updated_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        }
+      ],
+      "uniques": [
+        {
+          "name": "recalls_number_uq",
+          "columns": [
+            "org_id",
+            "recall_number"
+          ],
+          "where": null
+        }
+      ],
+      "checks": [
+        {
+          "name": "recalls_class_ck",
+          "expression": "recall_class IN ('class_i','class_ii','class_iii','market_withdrawal')"
+        },
+        {
+          "name": "recalls_scope_ck",
+          "expression": "scope IN ('batch','product','market')"
+        },
+        {
+          "name": "recalls_dates_ck",
+          "expression": "response_due_on IS NULL OR response_due_on >= initiated_on"
+        },
+        {
+          "name": "recalls_close_ck",
+          "expression": "status <> 'closed' OR (closed_on IS NOT NULL AND closed_by_membership_id IS NOT NULL AND closure_summary IS NOT NULL)"
+        },
+        {
+          "name": "recalls_status_ck",
+          "expression": "status IN ('initiated','in_progress','closed','cancelled')"
+        },
+        {
+          "name": "recalls_row_version_ck",
+          "expression": "row_version > 0"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "recalls_product_idx",
+          "columns": [
+            "org_id",
+            "product_id",
+            "initiated_on",
+            "id"
+          ],
+          "unique": false,
+          "where": null,
+          "purpose": "product recall history"
+        },
+        {
+          "name": "recalls_active_idx",
+          "columns": [
+            "org_id",
+            "status",
+            "response_due_on",
+            "id"
+          ],
+          "unique": false,
+          "where": "status IN ('initiated','in_progress')",
+          "purpose": "active recall operations"
+        }
+      ],
+      "cross_row_invariants": [{"name": "recalls_cross_row_guard", "enforcement": "constraint_trigger", "rule": "A recall cannot close until every recall_batch is terminal and reconciled; cancellation is prohibited after any quarantine/recovery/destruction quantity is recorded."}]
+    },
+    {
+      "name": "compliance.recall_batches",
+      "fact_owner": "M:N affected-batch scope and recovered quantity evidence for a recall",
+      "tenant_class": "tenant_association",
+      "mutation_class": "mutable_regulated_association",
+      "lifecycle": {
+        "state_column": "status",
+        "states": [
+          "identified",
+          "quarantined",
+          "recovered",
+          "destroyed",
+          "released"
+        ],
+        "initial": "identified",
+        "terminal": [
+          "recovered",
+          "destroyed",
+          "released"
+        ],
+        "transitions": [
+          "identified->quarantined",
+          "quarantined->recovered",
+          "quarantined->destroyed",
+          "quarantined->released"
+        ]
+      },
+      "rls": {
+        "class": "tenant_membership",
+        "force": true,
+        "write_permission": "compliance.recall.execute"
+      },
+      "retention": {
+        "class": "product_recall",
+        "minimum": "permanent",
+        "hard_delete": false
+      },
+      "columns": [
+        [
+          "org_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "recall_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "batch_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "affected_quantity",
+          "numeric(20,6)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "quarantined_quantity",
+          "numeric(20,6)",
+          false,
+          "0",
+          "internal"
+        ],
+        [
+          "recovered_quantity",
+          "numeric(20,6)",
+          false,
+          "0",
+          "internal"
+        ],
+        [
+          "destroyed_quantity",
+          "numeric(20,6)",
+          false,
+          "0",
+          "internal"
+        ],
+        [
+          "released_quantity",
+          "numeric(20,6)",
+          false,
+          "0",
+          "internal"
+        ],
+        [
+          "first_action_at",
+          "timestamptz",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "last_action_at",
+          "timestamptz",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "status",
+          "text",
+          false,
+          "'identified'::text",
+          "internal"
+        ],
+        [
+          "created_at",
+          "timestamptz",
+          false,
+          "transaction_timestamp()",
+          "internal"
+        ],
+        [
+          "created_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "personal"
+        ],
+        [
+          "updated_at",
+          "timestamptz",
+          false,
+          "transaction_timestamp()",
+          "internal"
+        ],
+        [
+          "updated_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "personal"
+        ],
+        [
+          "row_version",
+          "bigint",
+          false,
+          "1",
+          "internal"
+        ]
+      ],
+      "primary_key": [
+        "org_id",
+        "recall_id",
+        "batch_id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "recall_batches_org_fk",
+          "columns": [
+            "org_id"
+          ],
+          "references": "core.organizations",
+          "referenced_columns": [
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "recall_batches_recall_fk",
+          "columns": [
+            "org_id",
+            "recall_id"
+          ],
+          "references": "compliance.recalls",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "recall_batches_batch_fk",
+          "columns": [
+            "org_id",
+            "batch_id"
+          ],
+          "references": "inventory.batches",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "recall_batches_created_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "created_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "recall_batches_updated_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "updated_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        }
+      ],
+      "uniques": [],
+      "checks": [
+        {
+          "name": "recall_batches_quantities_ck",
+          "expression": "affected_quantity > 0 AND quarantined_quantity >= 0 AND recovered_quantity >= 0 AND destroyed_quantity >= 0 AND released_quantity >= 0 AND recovered_quantity + destroyed_quantity + released_quantity <= affected_quantity AND quarantined_quantity <= affected_quantity"
+        },
+        {
+          "name": "recall_batches_action_ck",
+          "expression": "last_action_at IS NULL OR (first_action_at IS NOT NULL AND last_action_at >= first_action_at)"
+        },
+        {
+          "name": "recall_batches_status_ck",
+          "expression": "status IN ('identified','quarantined','recovered','destroyed','released')"
+        },
+        {
+          "name": "recall_batches_row_version_ck",
+          "expression": "row_version > 0"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "recall_batches_batch_idx",
+          "columns": [
+            "org_id",
+            "batch_id",
+            "recall_id"
+          ],
+          "unique": false,
+          "where": null,
+          "purpose": "batch recall exposure"
+        },
+        {
+          "name": "recall_batches_active_idx",
+          "columns": [
+            "org_id",
+            "recall_id",
+            "status",
+            "batch_id"
+          ],
+          "unique": false,
+          "where": "status IN ('identified','quarantined')",
+          "purpose": "recall execution queue"
+        }
+      ],
+      "cross_row_invariants": [{"name": "recall_batches_cross_row_guard", "enforcement": "transaction_guard", "rule": "Under batch and recall locks, cap affected/quarantined quantities by ledger-derived stock exposure; recovered/destroyed/released totals derive from posted inventory movements and cannot be manually inflated."}]
+    },
+    {
+      "name": "compliance.temperature_readings",
+      "fact_owner": "Immutable measured temperature at one inventory location and optional batch",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "append_only_sensor_fact",
+      "lifecycle": {
+        "state_column": null,
+        "states": [],
+        "initial": null,
+        "terminal": [],
+        "transitions": []
+      },
+      "rls": {
+        "class": "tenant_membership",
+        "force": true,
+        "write_permission": "internal.temperature.ingest"
+      },
+      "retention": {
+        "class": "cold_chain_evidence",
+        "minimum": "permanent",
+        "hard_delete": false
+      },
+      "columns": [
+        [
+          "org_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "id",
+          "uuid",
+          false,
+          "gen_random_uuid()",
+          "internal"
+        ],
+        [
+          "location_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "batch_id",
+          "uuid",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "product_storage_rule_version_id",
+          "uuid",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "location_storage_rule_version_id",
+          "uuid",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "sensor_id",
+          "varchar(128)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "measured_at",
+          "timestamptz",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "temperature_celsius",
+          "numeric(9,4)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "humidity_percent",
+          "numeric(9,4)",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "minimum_allowed_celsius",
+          "numeric(9,4)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "maximum_allowed_celsius",
+          "numeric(9,4)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "is_excursion",
+          "boolean",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "provider_name",
+          "varchar(64)",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "provider_event_id",
+          "varchar(128)",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "payload_media_type",
+          "varchar(128)",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "payload_bytes",
+          "bytea",
+          true,
+          null,
+          "secret_ciphertext"
+        ],
+        [
+          "payload_sha256",
+          "bytea",
+          true,
+          null,
+          "secret_ciphertext"
+        ],
+        [
+          "created_at",
+          "timestamptz",
+          false,
+          "transaction_timestamp()",
+          "internal"
+        ],
+        [
+          "created_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "personal"
+        ]
+      ],
+      "primary_key": [
+        "org_id",
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "temperature_readings_org_fk",
+          "columns": [
+            "org_id"
+          ],
+          "references": "core.organizations",
+          "referenced_columns": [
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "temperature_readings_location_fk",
+          "columns": [
+            "org_id",
+            "location_id"
+          ],
+          "references": "inventory.locations",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "temperature_readings_batch_fk",
+          "columns": [
+            "org_id",
+            "batch_id"
+          ],
+          "references": "inventory.batches",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "temperature_readings_product_rule_fk",
+          "columns": ["org_id", "product_storage_rule_version_id"],
+          "references": "compliance.storage_rule_versions",
+          "referenced_columns": ["org_id", "id"],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "temperature_readings_location_rule_fk",
+          "columns": ["org_id", "location_storage_rule_version_id"],
+          "references": "compliance.storage_rule_versions",
+          "referenced_columns": ["org_id", "id"],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "temperature_readings_created_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "created_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        }
+      ],
+      "uniques": [],
+      "checks": [
+        {
+          "name": "temperature_readings_range_ck",
+          "expression": "maximum_allowed_celsius > minimum_allowed_celsius AND is_excursion = (temperature_celsius < minimum_allowed_celsius OR temperature_celsius > maximum_allowed_celsius)"
+        },
+        {
+          "name": "temperature_readings_humidity_ck",
+          "expression": "humidity_percent IS NULL OR humidity_percent BETWEEN 0 AND 100"
+        },
+        {
+          "name": "temperature_readings_payload_ck",
+          "expression": "(payload_bytes IS NULL AND payload_media_type IS NULL AND payload_sha256 IS NULL) OR (payload_bytes IS NOT NULL AND payload_media_type IS NOT NULL AND octet_length(payload_sha256) = 32)"
+        },
+        {
+          "name": "temperature_readings_provider_ck",
+          "expression": "provider_event_id IS NULL OR provider_name IS NOT NULL"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "temperature_readings_provider_uq",
+          "columns": [
+            "org_id",
+            "provider_name",
+            "provider_event_id"
+          ],
+          "unique": true,
+          "where": "provider_event_id IS NOT NULL",
+          "purpose": "sensor event idempotency"
+        },
+        {
+          "name": "temperature_readings_location_time_idx",
+          "columns": [
+            "org_id",
+            "location_id",
+            "measured_at",
+            "id"
+          ],
+          "unique": false,
+          "where": null,
+          "purpose": "cold-chain timeline"
+        },
+        {
+          "name": "temperature_readings_excursion_idx",
+          "columns": [
+            "org_id",
+            "measured_at",
+            "location_id",
+            "id"
+          ],
+          "unique": false,
+          "where": "is_excursion",
+          "purpose": "excursion response queue"
+        }
+      ],
+      "cross_row_invariants": [{"name": "temperature_readings_cross_row_guard", "enforcement": "constraint_trigger", "rule": "Ingestion must select the exact active location storage rule covering measured_at and, when batch_id is present, the exact active product storage rule; persist both selected rule ids and their intersected permitted range, verify the provider envelope hash, atomically block affected released stock when is_excursion is true, and block UPDATE/DELETE. Corrections append superseding evidence rather than rewriting this fact."}]
+    },
+    {
+      "name": "compliance.controlled_substance_entries",
+      "fact_owner": "Immutable statutory controlled-substance register entry tied to stock movement",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "append_only_regulatory_register",
+      "lifecycle": {
+        "state_column": null,
+        "states": [],
+        "initial": null,
+        "terminal": [],
+        "transitions": []
+      },
+      "rls": {
+        "class": "tenant_membership",
+        "force": true,
+        "write_permission": "compliance.controlled_substance.post"
+      },
+      "retention": {
+        "class": "controlled_substance_register",
+        "minimum": "permanent",
+        "hard_delete": false
+      },
+      "columns": [
+        [
+          "org_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "id",
+          "uuid",
+          false,
+          "gen_random_uuid()",
+          "internal"
+        ],
+        [
+          "register_number",
+          "varchar(64)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "entry_date",
+          "date",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "batch_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "stock_ledger_entry_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "rule_version_id",
+          "uuid",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "organization_license_id",
+          "uuid",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "entry_type",
+          "text",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "direction",
+          "text",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "quantity",
+          "numeric(20,6)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "counterparty_party_id",
+          "uuid",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "counterparty_license_number",
+          "varchar(128)",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "counterparty_license_id",
+          "uuid",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "prescription_evidence_attachment_id",
+          "uuid",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "authority_document_number",
+          "varchar(128)",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "authority_document_date",
+          "date",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "remarks",
+          "text",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "handled_by_membership_id",
+          "uuid",
+          false,
+          null,
+          "personal"
+        ],
+        [
+          "created_at",
+          "timestamptz",
+          false,
+          "transaction_timestamp()",
+          "internal"
+        ],
+        [
+          "created_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "personal"
+        ]
+      ],
+      "primary_key": [
+        "org_id",
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "controlled_substance_entries_org_fk",
+          "columns": [
+            "org_id"
+          ],
+          "references": "core.organizations",
+          "referenced_columns": [
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "controlled_substance_entries_batch_fk",
+          "columns": [
+            "org_id",
+            "batch_id"
+          ],
+          "references": "inventory.batches",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "controlled_substance_entries_ledger_fk",
+          "columns": [
+            "org_id",
+            "stock_ledger_entry_id"
+          ],
+          "references": "inventory.stock_ledger_entries",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "1:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "controlled_substance_entries_rule_fk",
+          "columns": ["rule_version_id"],
+          "references": "compliance.controlled_movement_rule_versions",
+          "referenced_columns": ["id"],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "controlled_substance_entries_org_license_fk",
+          "columns": ["org_id", "organization_license_id"],
+          "references": "compliance.licenses",
+          "referenced_columns": ["org_id", "id"],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "controlled_substance_entries_party_fk",
+          "columns": [
+            "org_id",
+            "counterparty_party_id"
+          ],
+          "references": "parties.parties",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "controlled_substance_entries_counterparty_license_fk",
+          "columns": ["org_id", "counterparty_license_id"],
+          "references": "compliance.licenses",
+          "referenced_columns": ["org_id", "id"],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "controlled_substance_entries_prescription_fk",
+          "columns": ["org_id", "prescription_evidence_attachment_id"],
+          "references": "core.attachments",
+          "referenced_columns": ["org_id", "id"],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "controlled_substance_entries_handled_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "handled_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "controlled_substance_entries_created_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "created_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        }
+      ],
+      "uniques": [
+        {
+          "name": "controlled_substance_entries_number_uq",
+          "columns": [
+            "org_id",
+            "register_number"
+          ],
+          "where": null
+        },
+        {
+          "name": "controlled_substance_entries_ledger_uq",
+          "columns": [
+            "org_id",
+            "stock_ledger_entry_id"
+          ],
+          "where": null
+        }
+      ],
+      "checks": [
+        {
+          "name": "controlled_substance_entries_type_ck",
+          "expression": "entry_type IN ('receipt','dispatch','return_in','return_out','transfer_in','transfer_out','adjustment','destruction')"
+        },
+        {
+          "name": "controlled_substance_entries_direction_ck",
+          "expression": "direction IN ('in','out')"
+        },
+        {
+          "name": "controlled_substance_entries_quantity_ck",
+          "expression": "quantity > 0"
+        },
+        {
+          "name": "controlled_substance_entries_authority_ck",
+          "expression": "(authority_document_number IS NULL AND authority_document_date IS NULL) OR (authority_document_number IS NOT NULL AND authority_document_date IS NOT NULL)"
+        },
+        {
+          "name": "controlled_substance_entries_counterparty_license_ck",
+          "expression": "(counterparty_license_id IS NULL AND counterparty_license_number IS NULL) OR (counterparty_license_id IS NOT NULL AND btrim(counterparty_license_number)<>'')"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "controlled_substance_entries_batch_idx",
+          "columns": [
+            "org_id",
+            "batch_id",
+            "entry_date",
+            "register_number",
+            "id"
+          ],
+          "unique": false,
+          "where": null,
+          "purpose": "statutory batch register"
+        },
+        {
+          "name": "controlled_substance_entries_party_idx",
+          "columns": [
+            "org_id",
+            "counterparty_party_id",
+            "entry_date",
+            "id"
+          ],
+          "unique": false,
+          "where": "counterparty_party_id IS NOT NULL",
+          "purpose": "licensed counterparty audit"
+        }
+      ],
+      "cross_row_invariants": [{"name": "controlled_substance_entries_cross_row_guard", "enforcement": "constraint_trigger", "rule": "Require batch to be controlled, quantity/direction to equal the immutable stock-ledger entry, and any counterparty to hold a valid applicable license on entry_date; block UPDATE/DELETE."}]
+    },
+    {
+      "name": "compliance.destructions",
+      "fact_owner": "Approved destruction evidence linked one-to-one to a posted inventory document",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "approval_then_immutable",
+      "lifecycle": {
+        "state_column": "status",
+        "states": [
+          "draft",
+          "submitted",
+          "approved",
+          "posted",
+          "cancelled"
+        ],
+        "initial": "draft",
+        "terminal": [
+          "posted",
+          "cancelled"
+        ],
+        "transitions": [
+          "draft->submitted",
+          "draft->cancelled",
+          "submitted->approved",
+          "submitted->cancelled",
+          "approved->posted",
+          "approved->cancelled"
+        ]
+      },
+      "rls": {
+        "class": "tenant_membership",
+        "force": true,
+        "write_permission": "compliance.destruction.manage"
+      },
+      "retention": {
+        "class": "destruction_evidence",
+        "minimum": "permanent",
+        "hard_delete": false
+      },
+      "columns": [
+        [
+          "org_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "id",
+          "uuid",
+          false,
+          "gen_random_uuid()",
+          "internal"
+        ],
+        [
+          "destruction_number",
+          "varchar(64)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "inventory_document_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "destruction_date",
+          "date",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "method_code",
+          "varchar(64)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "reason_code",
+          "varchar(64)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "reason",
+          "text",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "authority_reference",
+          "text",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "witness_name",
+          "text",
+          false,
+          null,
+          "personal"
+        ],
+        [
+          "witness_credential",
+          "text",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "certificate_attachment_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "status",
+          "text",
+          false,
+          "'draft'::text",
+          "internal"
+        ],
+        [
+          "approved_at",
+          "timestamptz",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "approved_by_membership_id",
+          "uuid",
+          true,
+          null,
+          "personal"
+        ],
+        [
+          "posted_at",
+          "timestamptz",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "posted_by_membership_id",
+          "uuid",
+          true,
+          null,
+          "personal"
+        ],
+        [
+          "created_at",
+          "timestamptz",
+          false,
+          "transaction_timestamp()",
+          "internal"
+        ],
+        [
+          "created_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "personal"
+        ],
+        [
+          "updated_at",
+          "timestamptz",
+          false,
+          "transaction_timestamp()",
+          "internal"
+        ],
+        [
+          "updated_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "personal"
+        ],
+        [
+          "row_version",
+          "bigint",
+          false,
+          "1",
+          "internal"
+        ]
+      ],
+      "primary_key": [
+        "org_id",
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "destructions_org_fk",
+          "columns": [
+            "org_id"
+          ],
+          "references": "core.organizations",
+          "referenced_columns": [
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "destructions_inventory_document_fk",
+          "columns": [
+            "org_id",
+            "inventory_document_id"
+          ],
+          "references": "inventory.inventory_documents",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "1:1",
+          "on_delete": "RESTRICT",
+          "deferrable": "INITIALLY_DEFERRED"
+        },
+        {
+          "name": "destructions_certificate_fk",
+          "columns": [
+            "org_id",
+            "certificate_attachment_id"
+          ],
+          "references": "core.attachments",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "destructions_approved_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "approved_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "destructions_posted_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "posted_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "destructions_created_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "created_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "destructions_updated_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "updated_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        }
+      ],
+      "uniques": [
+        {
+          "name": "destructions_number_uq",
+          "columns": [
+            "org_id",
+            "destruction_number"
+          ],
+          "where": null
+        },
+        {
+          "name": "destructions_inventory_document_uq",
+          "columns": [
+            "org_id",
+            "inventory_document_id"
+          ],
+          "where": null
+        }
+      ],
+      "checks": [
+        {
+          "name": "destructions_approval_ck",
+          "expression": "status NOT IN ('approved','posted') OR (approved_at IS NOT NULL AND approved_by_membership_id IS NOT NULL)"
+        },
+        {
+          "name": "destructions_posted_ck",
+          "expression": "status <> 'posted' OR (posted_at IS NOT NULL AND posted_by_membership_id IS NOT NULL)"
+        },
+        {
+          "name": "destructions_separation_ck",
+          "expression": "approved_by_membership_id IS NULL OR approved_by_membership_id <> created_by_membership_id"
+        },
+        {
+          "name": "destructions_status_ck",
+          "expression": "status IN ('draft','submitted','approved','posted','cancelled')"
+        },
+        {
+          "name": "destructions_row_version_ck",
+          "expression": "row_version > 0"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "destructions_date_idx",
+          "columns": [
+            "org_id",
+            "destruction_date",
+            "destruction_number",
+            "id"
+          ],
+          "unique": false,
+          "where": "status = 'posted'",
+          "purpose": "statutory destruction register"
+        }
+      ],
+      "cross_row_invariants": [{"name": "destructions_cross_row_guard", "enforcement": "transaction_guard", "rule": "Approval requires a distinct authorized actor and verified certificate. Posting requires the linked inventory document be type destruction, posted, and line quantities/batches match approval; this table never mutates stock and is frozen after posting."}]
+    },
+    {
+      "name": "compliance.controlled_movement_rule_versions",
+      "population_mode": "regulated_import",
+      "fact_owner": "One effective reviewed statutory evidence rule for a Drugs Rules schedule, NDPS scope and stock-movement kind",
+      "tenant_class": "global_reference",
+      "mutation_class": "migration_owned_regulatory_reference",
+      "cross_row_invariants": [{"name": "controlled_movement_rule_versions_release_authority", "enforcement": "transaction_guard", "rule": "Only the isolated regulatory importer inserts the exact canonical row set of a verified controlled_movement_rules release. Applicability, required organization/counterparty license types, prescription and authority-document requirements are immutable; active effective periods for one rule dimension cannot overlap and release supersession retires the prior set atomically."}],
+      "lifecycle": {"state_column": "status", "states": ["active", "retired"], "initial": "active", "terminal": ["retired"], "transitions": ["active->retired"]},
+      "rls": {"class": "global_reference_read_only", "force": false, "write_permission": null},
+      "retention": {"class": "statutory_rule_release", "minimum": "permanent", "hard_delete": false},
+      "columns": [
+        ["id", "uuid", false, null, "public_reference"], ["release_id", "uuid", false, null, "public_reference"], ["rule_code", "varchar(64)", false, null, "public_reference"], ["rule_version", "varchar(32)", false, null, "public_reference"],
+        ["drug_schedule", "text", false, null, "regulated"], ["ndps_scope", "text", false, null, "regulated"], ["entry_type", "text", false, null, "regulated"],
+        ["organization_license_type_code", "varchar(64)", false, null, "regulated"], ["counterparty_required", "boolean", false, "false", "regulated"], ["counterparty_license_type_code", "varchar(64)", true, null, "regulated"],
+        ["prescription_evidence_required", "boolean", false, "false", "regulated"], ["authority_document_required", "boolean", false, "false", "regulated"],
+        ["effective_from", "date", false, null, "regulated"], ["effective_to", "date", true, null, "regulated"], ["status", "text", false, "'active'::text", "public_reference"], ["created_at", "timestamptz", false, "transaction_timestamp()", "internal"]
+      ],
+      "primary_key": ["id"],
+      "foreign_keys": [{"name": "controlled_movement_rule_versions_release_fk", "columns": ["release_id"], "references": "core.reference_data_releases", "referenced_columns": ["id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false}],
+      "uniques": [{"name": "controlled_movement_rule_versions_identity_uq", "columns": ["release_id", "rule_code", "rule_version"], "where": null}],
+      "checks": [
+        {"name": "controlled_movement_rule_versions_schedule_ck", "expression": "drug_schedule IN ('ANY','NONE','G','H','H1','X')"},
+        {"name": "controlled_movement_rule_versions_ndps_ck", "expression": "ndps_scope IN ('any','regulated','not_regulated')"},
+        {"name": "controlled_movement_rule_versions_entry_ck", "expression": "entry_type IN ('receipt','dispatch','return_in','return_out','transfer_in','transfer_out','adjustment','destruction')"},
+        {"name": "controlled_movement_rule_versions_counterparty_ck", "expression": "(counterparty_required AND btrim(COALESCE(counterparty_license_type_code,''))<>'') OR (NOT counterparty_required AND counterparty_license_type_code IS NULL)"},
+        {"name": "controlled_movement_rule_versions_dates_ck", "expression": "effective_to IS NULL OR effective_to>=effective_from"},
+        {"name": "controlled_movement_rule_versions_status_ck", "expression": "status IN ('active','retired')"}
+      ],
+      "indexes": [{"name": "controlled_movement_rule_versions_effective_idx", "columns": ["drug_schedule", "ndps_scope", "entry_type", "effective_from", "id"], "unique": false, "where": "status='active'", "purpose": "deterministic controlled movement rule selection"}]
+    },
+    {
+      "name": "compliance.storage_rule_versions",
+      "fact_owner": "Reviewed effective product or location environmental storage range with immutable evidence",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "temporal_regulatory_evidence",
+      "cross_row_invariants": [{"name": "storage_rule_versions_effective_guard", "enforcement": "exclusion_constraint", "rule": "Exactly one typed product or location subject owns each rule. Verified retained evidence and a distinct authorized reviewer are required; active effective periods cannot overlap for the same subject, and referenced rules are immutable and retired only by a superseding reviewed version."}],
+      "lifecycle": {"state_column": "status", "states": ["active", "retired"], "initial": "active", "terminal": ["retired"], "transitions": ["active->retired"]},
+      "rls": {"class": "tenant_membership", "force": true, "write_permission": "compliance.license.manage"},
+      "retention": {"class": "cold_chain_rule_evidence", "minimum": "permanent", "hard_delete": false},
+      "columns": [
+        ["org_id", "uuid", false, null, "internal"], ["id", "uuid", false, "gen_random_uuid()", "internal"], ["subject_kind", "text", false, null, "regulated"], ["product_id", "uuid", true, null, "regulated"], ["location_id", "uuid", true, null, "regulated"],
+        ["minimum_celsius", "numeric(9,4)", false, null, "regulated"], ["maximum_celsius", "numeric(9,4)", false, null, "regulated"], ["minimum_humidity_percent", "numeric(9,4)", true, null, "regulated"], ["maximum_humidity_percent", "numeric(9,4)", true, null, "regulated"],
+        ["effective_from", "date", false, null, "regulated"], ["effective_to", "date", true, null, "regulated"], ["evidence_attachment_id", "uuid", false, null, "regulated"], ["reviewed_at", "timestamptz", false, null, "regulated"], ["reviewed_by_membership_id", "uuid", false, null, "personal"],
+        ["status", "text", false, "'active'::text", "internal"], ["created_at", "timestamptz", false, "transaction_timestamp()", "internal"], ["created_by_membership_id", "uuid", false, "current_setting('app.membership_id')::uuid", "personal"]
+      ],
+      "primary_key": ["org_id", "id"],
+      "foreign_keys": [
+        {"name": "storage_rule_versions_org_fk", "columns": ["org_id"], "references": "core.organizations", "referenced_columns": ["id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "storage_rule_versions_product_fk", "columns": ["org_id", "product_id"], "references": "catalog.products", "referenced_columns": ["org_id", "id"], "cardinality": "M:0..1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "storage_rule_versions_location_fk", "columns": ["org_id", "location_id"], "references": "inventory.locations", "referenced_columns": ["org_id", "id"], "cardinality": "M:0..1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "storage_rule_versions_evidence_fk", "columns": ["org_id", "evidence_attachment_id"], "references": "core.attachments", "referenced_columns": ["org_id", "id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "storage_rule_versions_reviewer_fk", "columns": ["org_id", "reviewed_by_membership_id"], "references": "core.memberships", "referenced_columns": ["org_id", "id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "storage_rule_versions_created_by_fk", "columns": ["org_id", "created_by_membership_id"], "references": "core.memberships", "referenced_columns": ["org_id", "id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false}
+      ],
+      "uniques": [{"name": "storage_rule_versions_evidence_uq", "columns": ["org_id", "evidence_attachment_id"], "where": null}],
+      "checks": [
+        {"name": "storage_rule_versions_subject_ck", "expression": "num_nonnulls(product_id,location_id)=1 AND ((subject_kind='product' AND product_id IS NOT NULL) OR (subject_kind='location' AND location_id IS NOT NULL))"},
+        {"name": "storage_rule_versions_range_ck", "expression": "maximum_celsius>minimum_celsius AND ((minimum_humidity_percent IS NULL AND maximum_humidity_percent IS NULL) OR (minimum_humidity_percent BETWEEN 0 AND 100 AND maximum_humidity_percent BETWEEN 0 AND 100 AND maximum_humidity_percent>minimum_humidity_percent))"},
+        {"name": "storage_rule_versions_dates_ck", "expression": "effective_to IS NULL OR effective_to>=effective_from"},
+        {"name": "storage_rule_versions_status_ck", "expression": "status IN ('active','retired')"}
+      ],
+      "indexes": [
+        {"name": "storage_rule_versions_product_idx", "columns": ["org_id", "product_id", "effective_from", "id"], "unique": false, "where": "product_id IS NOT NULL AND status='active'", "purpose": "effective product cold-chain rule"},
+        {"name": "storage_rule_versions_location_idx", "columns": ["org_id", "location_id", "effective_from", "id"], "unique": false, "where": "location_id IS NOT NULL AND status='active'", "purpose": "effective location cold-chain rule"}
+      ]
+    }
+  ],
+  "unresolved_design_choices": []
+}

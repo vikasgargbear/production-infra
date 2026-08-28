@@ -1,0 +1,91 @@
+import { expect } from '@playwright/test';
+import type { Page, Response } from '@playwright/test';
+
+import type { Live18BrowserConfig } from './config';
+
+export interface CapturedSession {
+  token: string;
+  userId: string;
+  orgId: string;
+  branchIds: string[];
+  branchScope: 'all' | 'multi' | 'single';
+}
+
+const decodeClaims = (token: string): Record<string, unknown> => {
+  const encoded = token.split('.')[1];
+  if (!encoded) throw new Error('ERP session token is not a JWT.');
+  return JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8')) as Record<string, unknown>;
+};
+
+export function sessionIdentityFromToken(token: string): Omit<CapturedSession, 'token'> {
+  const claims = decodeClaims(token);
+  const branchScope = String(claims.branch_scope || '');
+  if (!['all', 'multi', 'single'].includes(branchScope)) {
+    throw new Error('ERP session token omitted its canonical branch scope.');
+  }
+  const branchIds = Array.isArray(claims.branch_ids)
+    ? claims.branch_ids.map(String)
+    : claims.branch_id ? [String(claims.branch_id)] : [];
+  return {
+    userId: String(claims.user_id || claims.sub || ''),
+    orgId: String(claims.org_id || claims.organization_id || ''),
+    branchIds,
+    branchScope: branchScope as CapturedSession['branchScope'],
+  };
+}
+
+export function isExpectedSessionExchange(
+  responseUrl: string,
+  method: string,
+  apiOrigin: string,
+): boolean {
+  const response = new URL(responseUrl);
+  return method === 'POST'
+    && response.origin === new URL(apiOrigin).origin
+    && response.pathname === '/api/auth/oauth/supabase/session';
+}
+
+export async function loginAndCaptureSession(
+  page: Page,
+  appOrigin: string,
+  apiOrigin: string,
+  credentials: { email: string; password: string },
+): Promise<CapturedSession> {
+  await page.goto(appOrigin);
+  const exchange = page.waitForResponse((response: Response) => isExpectedSessionExchange(
+    response.url(), response.request().method(), apiOrigin,
+  ), { timeout: 45_000 });
+  await page.locator('input[type="email"]').fill(credentials.email);
+  await page.locator('input[type="password"]').fill(credentials.password);
+  await page.getByRole('button', { name: 'Sign In', exact: true }).click();
+  const response = await exchange;
+  expect(response.status(), await response.text()).toBe(200);
+  const body = await response.json() as { access_token?: string };
+  if (!body.access_token) throw new Error('ERP session exchange omitted its access token.');
+  await expect(
+    page.getByText('Core Operations', { exact: true }),
+    'successful session exchange must finish rendering the authenticated ERP before navigation',
+  ).toBeVisible({ timeout: 45_000 });
+  const identity = sessionIdentityFromToken(body.access_token);
+  return {
+    token: body.access_token,
+    ...identity,
+  };
+}
+
+export function assertSessionIsolation(
+  config: Live18BrowserConfig,
+  requester: CapturedSession,
+  reviewer: CapturedSession,
+): void {
+  expect(requester.userId).not.toBe(reviewer.userId);
+  expect(requester.orgId).toBe(config.expectedOrgId);
+  expect(reviewer.orgId).toBe(config.expectedOrgId);
+  for (const session of [requester, reviewer]) {
+    if (session.branchScope === 'all') {
+      expect(session.branchIds).toEqual([]);
+    } else {
+      expect(session.branchIds).toContain(config.expectedBranchId);
+    }
+  }
+}

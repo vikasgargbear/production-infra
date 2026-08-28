@@ -1,135 +1,159 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import {
-  Download, FileText, ChevronDown,
-  ChevronUp, Printer
+  ChevronDown, ChevronUp, Printer
 } from 'lucide-react';
 import { Line } from 'react-chartjs-2';
-import { format, subDays } from 'date-fns';
 import apiClient from '../../services/api/apiClient';
 import { formatCurrency } from '../../utils/formatters';
+import { isValidReportDateRange } from './utils/reportDateRange';
+import { useCanonicalBusinessDate } from '../../hooks/useCanonicalBusinessDate';
+import { addCalendarDays, formatCalendarDate, requireCalendarDate } from '../../utils/calendarDate';
 
 interface SalesMetric {
   label: string;
   value: string;
-  trend: number;
+  trend: number | null;
   comparison: string;
 }
 
+const requiredNumberFact = (record: Record<string, unknown>, field: string): number => {
+  const value = record[field];
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new Error(`Sales report is missing canonical ${field}.`);
+  }
+  return value;
+};
+
+const optionalNumberFact = (record: Record<string, unknown>, field: string): number | null => {
+  const value = record[field];
+  if (value === null || value === undefined) return null;
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new Error(`Sales report has invalid canonical ${field}.`);
+  }
+  return value;
+};
+
+interface SalesDailyRow {
+  date: string;
+  invoiceCount: number;
+  customerCount: number;
+  totalSales: number;
+  averageInvoiceValue: number;
+}
+
+const requiredCountFact = (record: Record<string, unknown>, field: string): number => {
+  const value = requiredNumberFact(record, field);
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new Error(`Sales report has invalid canonical ${field}.`);
+  }
+  return value;
+};
+
+export const projectSalesDailyRows = (payload: unknown): SalesDailyRow[] => {
+  if (!Array.isArray(payload)) throw new Error('Sales daily projection is not a list.');
+  return payload.map((item, index) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      throw new Error(`Sales daily row ${index + 1} is invalid.`);
+    }
+    const row = item as Record<string, unknown>;
+    return {
+      date: requireCalendarDate(row.date, `Sales daily row ${index + 1} date`),
+      invoiceCount: requiredCountFact(row, 'invoice_count'),
+      customerCount: requiredCountFact(row, 'customer_count'),
+      totalSales: requiredNumberFact(row, 'total_sales'),
+      averageInvoiceValue: requiredNumberFact(row, 'avg_order_value'),
+    };
+  });
+};
+
 const SalesReport: React.FC = () => {
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
-  const [reportType, setReportType] = useState('summary');
-  const [groupBy, setGroupBy] = useState('day');
   const [metrics, setMetrics] = useState<SalesMetric[]>([]);
   const [chartData, setChartData] = useState<any>(null);
   const [tableData, setTableData] = useState<any[]>([]);
-  const [filters, setFilters] = useState({
-    customer: '',
-    product: '',
-    category: '',
-    paymentStatus: 'all'
-  });
+  const { businessDate, loading: businessDateLoading, error: businessDateError } = useCanonicalBusinessDate();
 
   useEffect(() => {
-    // Set default date range to last 30 days
-    const end = new Date();
-    const start = subDays(end, 30);
+    if (!businessDate) return;
     setDateRange({
-      start: format(start, 'yyyy-MM-dd'),
-      end: format(end, 'yyyy-MM-dd')
+      start: addCalendarDays(businessDate, -29),
+      end: businessDate,
     });
-  }, []);
+  }, [businessDate]);
 
-  useEffect(() => {
-    if (dateRange.start && dateRange.end) {
-      loadSalesData();
-    }
-  }, [dateRange, reportType, groupBy, filters]);
+  const dateRangeInvalid = Boolean(
+    dateRange.start &&
+    dateRange.end &&
+    !isValidReportDateRange(dateRange.start, dateRange.end)
+  );
 
-  const loadSalesData = async () => {
+  const loadSalesData = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
-      // Fetch real sales data from multiple endpoints
       const [salesSummary, salesTrend, salesByDate] = await Promise.all([
-        // Get sales summary metrics
         apiClient.get('/sales/analytics/summary', {
           params: {
             date_from: dateRange.start,
             date_to: dateRange.end,
-            report_type: reportType,
-            group_by: groupBy
           }
         }),
-        // Get sales trend data for chart
         apiClient.get('/sales/analytics/trend', {
           params: {
             date_from: dateRange.start,
             date_to: dateRange.end,
-            group_by: groupBy
           }
         }),
-        // Get detailed sales data for table
         apiClient.get('/sales/analytics/by-date', {
           params: {
             date_from: dateRange.start,
             date_to: dateRange.end,
-            customer: filters.customer || undefined,
-            product: filters.product || undefined,
-            category: filters.category || undefined,
-            payment_status: filters.paymentStatus !== 'all' ? filters.paymentStatus : undefined
           }
         })
       ]);
 
       // Process metrics from API response
-      const summaryData = salesSummary.data || {};
+      const summaryData: Record<string, unknown> = salesSummary.data;
       const calculatedMetrics: SalesMetric[] = [
         {
           label: 'Total Sales',
-          value: formatCurrency(summaryData.total_sales || 0),
-          trend: summaryData.sales_growth || 0,
+          value: formatCurrency(requiredNumberFact(summaryData, 'total_sales')),
+          trend: optionalNumberFact(summaryData, 'sales_growth'),
           comparison: 'vs last period'
         },
         {
-          label: 'Total Orders',
-          value: String(summaryData.total_orders || 0),
-          trend: summaryData.orders_growth || 0,
+          label: 'Total Invoices',
+          value: String(requiredNumberFact(summaryData, 'total_invoices')),
+          trend: optionalNumberFact(summaryData, 'invoices_growth'),
           comparison: 'vs last period'
         },
         {
-          label: 'Average Order Value',
-          value: formatCurrency(summaryData.avg_order_value || 0),
-          trend: summaryData.aov_growth || 0,
+          label: 'Average Invoice Value',
+          value: formatCurrency(requiredNumberFact(summaryData, 'avg_invoice_value')),
+          trend: optionalNumberFact(summaryData, 'average_invoice_growth'),
           comparison: 'vs last period'
         },
         {
           label: 'Unique Customers',
-          value: String(summaryData.unique_customers || 0),
-          trend: summaryData.customers_growth || 0,
+          value: String(requiredNumberFact(summaryData, 'unique_customers')),
+          trend: optionalNumberFact(summaryData, 'customers_growth'),
           comparison: 'vs last period'
         }
       ];
       setMetrics(calculatedMetrics);
 
-      // Process chart data from API response
-      const trendData = salesTrend.data || [];
+      const trendData = projectSalesDailyRows(salesTrend.data);
       if (trendData.length > 0) {
-        const labels = trendData.map((item: any) => {
-          if (groupBy === 'day') {
-            return format(new Date(item.date || item.period), 'MMM dd');
-          } else if (groupBy === 'week') {
-            return `Week ${item.week || item.period}`;
-          } else {
-            return item.month || item.period;
-          }
-        });
+        const labels = trendData.map(item => formatCalendarDate(item.date));
 
         setChartData({
           labels,
           datasets: [
             {
               label: 'Sales Amount',
-              data: trendData.map((item: any) => item.total_sales || item.revenue || 0),
+              data: trendData.map(item => item.totalSales),
               borderColor: 'rgb(59, 130, 246)',
               backgroundColor: 'rgba(59, 130, 246, 0.1)',
               yAxisID: 'y',
@@ -138,7 +162,7 @@ const SalesReport: React.FC = () => {
             },
             {
               label: 'Order Count',
-              data: trendData.map((item: any) => item.order_count || item.orders || 0),
+              data: trendData.map(item => item.invoiceCount),
               borderColor: 'rgb(156, 163, 175)',
               backgroundColor: 'rgba(156, 163, 175, 0.1)',
               yAxisID: 'y1',
@@ -152,44 +176,36 @@ const SalesReport: React.FC = () => {
         setChartData(null);
       }
 
-      // Process table data from API response
-      const detailedData = salesByDate.data || [];
-      const processedTableData = detailedData.map((item: any) => ({
-        date: item.date || item.invoice_date,
-        orders: item.order_count || item.invoice_count || 0,
-        sales: formatCurrency(item.total_sales || item.total_amount || 0),
-        customers: item.customer_count || item.unique_customers || 0,
-        avgOrder: formatCurrency(item.avg_order_value ||
-          ((item.total_sales || item.total_amount || 0) / (item.order_count || 1)))
+      const detailedData = projectSalesDailyRows(salesByDate.data);
+      const processedTableData = detailedData.map(item => ({
+        date: formatCalendarDate(item.date),
+        orders: item.invoiceCount,
+        sales: formatCurrency(item.totalSales),
+        customers: item.customerCount,
+        avgOrder: formatCurrency(item.averageInvoiceValue),
       }));
       setTableData(processedTableData);
 
     } catch (error) {
       console.error('Error loading sales data:', error);
-      // Set empty state on error
+      setError(error instanceof Error ? error.message : 'Canonical sales report is unavailable.');
       setMetrics([]);
       setChartData(null);
       setTableData([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, [dateRange.end, dateRange.start]);
 
-  const generateDateLabels = () => {
-    const days = parseInt((new Date(dateRange.end).getTime() - new Date(dateRange.start).getTime()) / (1000 * 60 * 60 * 24) + '');
-    
-    if (groupBy === 'day' && days <= 31) {
-      return Array.from({ length: Math.min(days, 31) }, (_, i) => 
-        format(subDays(new Date(dateRange.end), days - i - 1), 'MMM dd')
-      );
-    } else if (groupBy === 'week') {
-      return ['Week 1', 'Week 2', 'Week 3', 'Week 4'];
-    } else if (groupBy === 'month') {
-      return ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
+  useEffect(() => {
+    if (dateRange.start && dateRange.end && isValidReportDateRange(dateRange.start, dateRange.end)) {
+      loadSalesData();
+    } else if (dateRange.start && dateRange.end) {
+      setMetrics([]);
+      setChartData(null);
+      setTableData([]);
     }
-    return [];
-  };
-
+  }, [dateRange.end, dateRange.start, loadSalesData]);
 
   const chartOptions = {
     responsive: true,
@@ -233,10 +249,6 @@ const SalesReport: React.FC = () => {
     },
   };
 
-  const handleExport = (format: 'pdf' | 'excel' | 'csv') => {
-    // Implement export functionality
-  };
-
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
       {/* Header */}
@@ -248,20 +260,6 @@ const SalesReport: React.FC = () => {
           </div>
           <div className="flex gap-2">
             <button
-              onClick={() => handleExport('pdf')}
-              className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2"
-            >
-              <FileText className="h-4 w-4" />
-              PDF
-            </button>
-            <button
-              onClick={() => handleExport('excel')}
-              className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2"
-            >
-              <Download className="h-4 w-4" />
-              Excel
-            </button>
-            <button
               onClick={() => window.print()}
               className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2"
             >
@@ -272,10 +270,11 @@ const SalesReport: React.FC = () => {
         </div>
 
         {/* Filters */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+            <label htmlFor="sales-report-start-date" className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
             <input
+              id="sales-report-start-date"
               type="date"
               value={dateRange.start}
               onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
@@ -283,73 +282,72 @@ const SalesReport: React.FC = () => {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+            <label htmlFor="sales-report-end-date" className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
             <input
+              id="sales-report-end-date"
               type="date"
               value={dateRange.end}
               onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
             />
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Report Type</label>
-            <select
-              value={reportType}
-              onChange={(e) => setReportType(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="summary">Summary</option>
-              <option value="detailed">Detailed</option>
-              <option value="by-customer">By Customer</option>
-              <option value="by-product">By Product</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Group By</label>
-            <select
-              value={groupBy}
-              onChange={(e) => setGroupBy(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="day">Day</option>
-              <option value="week">Week</option>
-              <option value="month">Month</option>
-            </select>
-          </div>
         </div>
+        {dateRangeInvalid && (
+          <p role="alert" className="mt-3 text-sm font-medium text-red-700">
+            Start date must be on or before end date.
+          </p>
+        )}
       </div>
 
+      {(businessDateError || error) && (
+        <div role="alert" className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-red-800">
+          {businessDateError || error}
+        </div>
+      )}
+
+      {(businessDateLoading || loading) && (
+        <div role="status" className="mb-6 rounded-lg border border-gray-200 bg-white p-4 text-gray-600">
+          Loading canonical sales report…
+        </div>
+      )}
+
       {/* Metrics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+      {!error && !businessDateError && <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         {metrics.map((metric, index) => (
           <div key={index} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
             <p className="text-sm text-gray-600">{metric.label}</p>
             <p className="text-2xl font-bold text-gray-900 mt-1">{metric.value}</p>
             <div className="flex items-center mt-2">
-              {metric.trend > 0 ? (
-                <ChevronUp className="h-4 w-4 text-green-600" />
+              {metric.trend === null ? (
+                <span className="text-xs text-gray-500">Comparison unavailable</span>
               ) : (
-                <ChevronDown className="h-4 w-4 text-red-600" />
+                <>
+                  {metric.trend >= 0 ? (
+                    <ChevronUp className="h-4 w-4 text-green-600" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-red-600" />
+                  )}
+                  <span className={`text-sm font-medium ${metric.trend >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {Math.abs(metric.trend)}%
+                  </span>
+                  <span className="text-xs text-gray-500 ml-2">{metric.comparison}</span>
+                </>
               )}
-              <span className={`text-sm font-medium ${metric.trend > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                {Math.abs(metric.trend)}%
-              </span>
-              <span className="text-xs text-gray-500 ml-2">{metric.comparison}</span>
             </div>
           </div>
         ))}
-      </div>
+      </div>}
 
       {/* Chart */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+      {!error && !businessDateError && <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Sales Trend</h3>
         <div style={{ height: '400px' }}>
           {chartData && <Line data={chartData} options={chartOptions} />}
         </div>
-      </div>
+      </div>}
 
       {/* Data Table */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+      {!error && !businessDateError && <div className="bg-white rounded-lg shadow-sm border border-gray-200">
         <div className="p-6 border-b border-gray-200">
           <h3 className="text-lg font-semibold text-gray-900">Sales Data</h3>
         </div>
@@ -397,7 +395,7 @@ const SalesReport: React.FC = () => {
             </tbody>
           </table>
         </div>
-      </div>
+      </div>}
     </div>
   );
 };

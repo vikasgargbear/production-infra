@@ -2,28 +2,29 @@ import React, { RefObject, useEffect, useCallback } from 'react';
 import { FileText, User, Package, FileInput, AlertCircle, X } from 'lucide-react';
 
 // Global Components
-import { ModuleHeader, StandardDatePicker, CustomerSearch, ProductSearch, ItemsTableKeyboard, DocumentFooter } from '../../../global';
+import { ModuleHeader, StandardDatePicker, CustomerSearch, ProductSearch, ItemsTableKeyboard } from '../../../global';
 import KeyboardShortcuts, { SHORTCUT_SETS } from '../../../global/ui/KeyboardShortcuts';
 
 // Modals
 import CustomerCreation from '../../../global/creation/CustomerCreation';
-import { ProductCreationModal, GSTCalculator, DocumentImportModal } from '../../../global';
-import BillDiscountModal from '../../modals/BillDiscountModal';
-import TaxDetailModal from '../../modals/TaxDetailModal';
-import CashCalculatorModal from '../../modals/CashCalculatorModal';
-import LastDealModal from '../../modals/LastDealModal';
-import ItemProfitModal from '../../modals/ItemProfitModal';
+import { ProductCreationModal, DocumentImportModal } from '../../../global';
 
 // Utils
 import { toast } from 'react-toastify';
-import { searchCache } from '../../../../utils/searchCache';
-
+import { challansApi } from '../../../../services/api';
+import { extractDocumentDetail } from '../../utils/documentImport';
+import {
+    freeSupplyTreatmentAfterQuantityEdit,
+    invoiceBatchAllocationValidationError,
+} from '../utils/canonicalInvoiceCommand';
 // Shared Types
-import { Customer, Invoice, InvoiceItem, InvoiceTotals, Employee, ProductForLastDeal } from '../types/invoiceTypes';
+import { Customer, Invoice, Employee } from '../types/invoiceTypes';
+import InvoiceItemsFooter from './InvoiceItemsFooter';
 
 interface InvoiceItemsStepProps {
     invoice: Invoice;
     setInvoice: React.Dispatch<React.SetStateAction<Invoice>>;
+    maximumInvoiceDate: string;
     selectedCustomer: Customer | null;
     setSelectedCustomer: React.Dispatch<React.SetStateAction<Customer | null>>;
     employees: Employee[];
@@ -34,6 +35,7 @@ interface InvoiceItemsStepProps {
     setError: React.Dispatch<React.SetStateAction<string | null>>;
 
     onClose: () => void;
+    onReset: () => void;
     onContinue: () => void;
     // Refs
     productSearchRef: RefObject<HTMLInputElement>;
@@ -41,35 +43,22 @@ interface InvoiceItemsStepProps {
     // Handlers
     handleCustomerSelect: (customer: Customer) => void;
     handleAddItem: (product: unknown) => void;
-    handleUpdateItem: (index: number, updates: Partial<InvoiceItem>) => void;
+    handleUpdateItem: (index: number, field: string, value: unknown) => void;
     handleRemoveItem: (index: number) => void;
     handleImport: (data: unknown) => void;
-    handleApplyBillDiscount: (discount: number) => void;
     // Modal states
     showCustomerModal: boolean;
     setShowCustomerModal: React.Dispatch<React.SetStateAction<boolean>>;
     showProductModal: boolean;
     setShowProductModal: React.Dispatch<React.SetStateAction<boolean>>;
-    showGSTCalculator: boolean;
-    setShowGSTCalculator: React.Dispatch<React.SetStateAction<boolean>>;
     showImportModal: boolean;
     setShowImportModal: React.Dispatch<React.SetStateAction<boolean>>;
-    showBillDiscountModal: boolean;
-    setShowBillDiscountModal: React.Dispatch<React.SetStateAction<boolean>>;
-    showTaxDetailModal: boolean;
-    setShowTaxDetailModal: React.Dispatch<React.SetStateAction<boolean>>;
-    showCashCalculatorModal: boolean;
-    setShowCashCalculatorModal: React.Dispatch<React.SetStateAction<boolean>>;
-    showLastDealModal: boolean;
-    setShowLastDealModal: React.Dispatch<React.SetStateAction<boolean>>;
-    selectedProductForLastDeal: ProductForLastDeal | null;
-    showItemProfitModal: boolean;
-    setShowItemProfitModal: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
     invoice,
     setInvoice,
+    maximumInvoiceDate,
     selectedCustomer,
     setSelectedCustomer,
     employees,
@@ -80,6 +69,7 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
     setError,
 
     onClose,
+    onReset,
     onContinue,
     // Refs
     productSearchRef,
@@ -90,30 +80,18 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
     handleUpdateItem,
     handleRemoveItem,
     handleImport,
-    handleApplyBillDiscount,
     // Modal states
     showCustomerModal,
     setShowCustomerModal,
     showProductModal,
     setShowProductModal,
-    showGSTCalculator,
-    setShowGSTCalculator,
     showImportModal,
     setShowImportModal,
-    showBillDiscountModal,
-    setShowBillDiscountModal,
-    showTaxDetailModal,
-    setShowTaxDetailModal,
-    showCashCalculatorModal,
-    setShowCashCalculatorModal,
-    showLastDealModal,
-    setShowLastDealModal,
-    selectedProductForLastDeal,
-    showItemProfitModal,
-    setShowItemProfitModal
 }) => {
     // Ctrl+Enter → Continue shortcut
-    const continueDisabled = !selectedCustomer || !invoice.items || invoice.items.length === 0;
+    const batchAllocationError = invoiceBatchAllocationValidationError(invoice as any);
+    const continueDisabled = isLoading || !selectedCustomer || !invoice.items || invoice.items.length === 0
+        || Boolean(batchAllocationError);
     const handleGlobalKeyDown = useCallback((e: KeyboardEvent) => {
         if (e.ctrlKey && e.key === 'Enter' && !continueDisabled) {
             e.preventDefault();
@@ -126,8 +104,22 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
         return () => document.removeEventListener('keydown', handleGlobalKeyDown);
     }, [handleGlobalKeyDown]);
 
+    const handleCanonicalItemUpdate = useCallback((
+        index: number,
+        field: string,
+        value: unknown,
+    ) => {
+        handleUpdateItem(index, field, value);
+        if (field !== 'free_quantity') return;
+        handleUpdateItem(
+            index,
+            'free_supply_tax_treatment',
+            freeSupplyTreatmentAfterQuantityEdit(value),
+        );
+    }, [handleUpdateItem]);
+
     return (
-        <div className="h-full bg-blue-50">
+        <div className="h-full bg-gray-50">
             <div className="h-full flex flex-col">
 
                 {/* Header - Using Global ModuleHeader */}
@@ -140,7 +132,7 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                     onClose={onClose}
                     additionalActions={[
                         {
-                            label: 'Import from Order/Challan',
+                            label: 'Import posted delivery challan',
                             icon: FileInput,
                             onClick: () => setShowImportModal(true),
                             variant: 'secondary'
@@ -166,10 +158,12 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                 )}
 
                 {/* Content - Consistent max-width like Purchase */}
-                <div className="flex-1 overflow-y-auto bg-blue-50">
+                <div className="flex-1 overflow-y-auto bg-gray-50">
                     <div className="max-w-6xl mx-auto px-6 py-6">
 
-
+                        <p className="mb-6 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+                            Required: select a customer, exact saved delivery address, product batch, billed and free quantities, free-supply tax treatment when free quantity is positive, and direct-issue distance.
+                        </p>
 
                         {/* Date Section */}
                         <div className="grid grid-cols-3 gap-4 mb-6">
@@ -177,6 +171,7 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                                 label="Invoice Date"
                                 value={invoice.invoice_date}
                                 onChange={(value: string) => setInvoice(prev => ({ ...prev, invoice_date: value }))}
+                                max={maximumInvoiceDate || undefined}
                                 required
                                 tabIndex={1}
                                 autoFocus
@@ -263,6 +258,7 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                             <ProductSearch
                                 onAddItem={handleAddItem}
                                 onCreateProduct={() => setShowProductModal(true)}
+                                enforceFefo
                                 ref={productSearchRef}
                                 tabIndex={5}
                             />
@@ -281,26 +277,33 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                                 <ItemsTableKeyboard
                                     ref={itemsTableRef as any}
                                     items={(invoice.items || []) as any}
-                                    onUpdateItem={handleUpdateItem as any}
+                                    onUpdateItem={handleCanonicalItemUpdate}
                                     onRemoveItem={handleRemoveItem}
                                     productSearchRef={productSearchRef as any}
                                     currencySymbol="₹"
+                                    preserveExactDecimals
+                                    showFreeSupplyTaxTreatment
                                 />
+                                {batchAllocationError && (
+                                    <div
+                                        role="alert"
+                                        className="mt-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+                                    >
+                                        {batchAllocationError}
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>
                 </div>
 
                 {/* Footer */}
-                <DocumentFooter
-                    totalItems={invoice.items?.length || 0}
+                <InvoiceItemsFooter
+                    totalItems={invoice.items?.length ?? 0}
                     totalAmount={invoice.final_amount || invoice.totals?.final_amount}
-                    onCancel={onClose}
+                    onReset={onReset}
                     onContinue={onContinue}
-                    cancelLabel="Reset"
-                    continueLabel="Continue"
                     continueDisabled={continueDisabled}
-                    continueButtonColor="blue"
                 />
 
             </div>
@@ -312,7 +315,6 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                     onCustomerCreated={(customer: Customer) => {
                         handleCustomerSelect(customer);
                         setShowCustomerModal(false);
-                        toast.success('Customer created successfully');
                     }}
                 />
             )}
@@ -321,26 +323,10 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                 <ProductCreationModal
                     show={showProductModal}
                     onClose={() => setShowProductModal(false)}
-                    onProductCreated={(product: unknown) => {
+                    onProductCreated={(product) => {
                         setShowProductModal(false);
-                        // Toast is already shown in ProductCreationModal
-
-                        // Add the created product to search cache immediately
-                        searchCache.addItem('products', product);
-
-                        // Optionally auto-add the product to invoice
-                        if (product && typeof handleAddItem === 'function') {
-                            handleAddItem(product);
-                        }
+                        toast.info(`Product ${product.product_code} is a draft and was not added. Complete classification and activation before invoicing it.`);
                     }}
-                />
-            )}
-
-            {showGSTCalculator && (
-                <GSTCalculator
-                    orderData={invoice as any}
-                    onCalculationComplete={() => setShowGSTCalculator(false)}
-                    showDetails={true}
                 />
             )}
 
@@ -350,44 +336,21 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                     isOpen={showImportModal}
                     onClose={() => setShowImportModal(false)}
                     onImport={handleImport}
-                    documentTypes={[]}
+                    documentTypes={[
+                        {
+                            value: 'challan',
+                            label: 'Delivery Challans',
+                            loadFunction: async (searchQuery?: string) => {
+                                return challansApi.listPostedForInvoice(searchQuery);
+                            },
+                            resolveDocument: async (document: any) => {
+                                const response = await challansApi.getById(document.challan_id || document.id);
+                                return extractDocumentDetail(response, ['challan', 'delivery_challan']);
+                            },
+                        }
+                    ]}
                 />
             )}
-
-            {/* Marg ERP Style Shortcut Modals */}
-            <BillDiscountModal
-                isOpen={showBillDiscountModal}
-                onClose={() => setShowBillDiscountModal(false)}
-                currentDiscount={invoice.bill_discount || 0}
-                billAmount={invoice.totals?.subtotal || 0}
-                onApply={handleApplyBillDiscount}
-            />
-
-            <TaxDetailModal
-                isOpen={showTaxDetailModal}
-                onClose={() => setShowTaxDetailModal(false)}
-                invoice={invoice}
-            />
-
-            <CashCalculatorModal
-                isOpen={showCashCalculatorModal}
-                onClose={() => setShowCashCalculatorModal(false)}
-                billAmount={invoice.totals?.total_amount || 0}
-            />
-
-            <LastDealModal
-                isOpen={showLastDealModal}
-                onClose={() => setShowLastDealModal(false)}
-                productId={typeof selectedProductForLastDeal?.id === 'number' ? selectedProductForLastDeal.id : undefined}
-                productName={selectedProductForLastDeal?.name}
-                customerId={typeof selectedCustomer?.id === 'number' ? selectedCustomer.id : undefined}
-            />
-
-            <ItemProfitModal
-                isOpen={showItemProfitModal}
-                onClose={() => setShowItemProfitModal(false)}
-                items={invoice.items}
-            />
 
         </div>
     );

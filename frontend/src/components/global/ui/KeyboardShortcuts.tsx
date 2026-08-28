@@ -36,8 +36,8 @@ const KeyboardShortcuts: React.FC<KeyboardShortcutsProps> = ({
     const variantClasses: Record<ShortcutVariant, string> = {
         default: 'bg-blue-50 text-blue-700 border-b border-blue-200',
         compact: 'bg-gray-50 text-gray-600 border-b border-gray-200',
-        expanded: 'bg-gradient-to-r from-blue-50 to-green-50 text-blue-700 border-b border-blue-200',
-        dark: 'bg-gray-800 text-gray-300 border-b border-gray-700'
+        expanded: 'bg-white text-gray-700 border-b border-gray-200',
+        dark: 'bg-gray-100 text-gray-700 border-b border-gray-200'
     };
 
     return (
@@ -68,7 +68,7 @@ export const SHORTCUT_SETS: Record<string, Shortcut[]> = {
     CREATE: [
         { key: 'Ctrl+N', action: 'Add Customer' },
         { key: 'Ctrl+F', action: 'Search Products' },
-        { key: 'Ctrl+S', action: 'Save Draft' },
+        { key: 'Ctrl+S', action: 'Proceed to Review' },
         { key: 'Esc', action: 'Close' }
     ],
     REVIEW: [

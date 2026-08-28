@@ -6,26 +6,33 @@
 
 import React, { useMemo, useRef, useCallback } from 'react';
 import { Trash2, Package } from 'lucide-react';
-import { ProductSearch, EditableCell } from '../../global';
+import { EditableCell } from '../../global';
 import type { ReturnItemsTableProps } from '../types/return.types';
+import { exactDecimalUnits } from '../../../utils/exactDecimal';
+import { formatReturnMoney } from '../utils/returnDecimal';
+import { formatCalendarDate } from '../../../utils/calendarDate';
+
+const EDITABLE_FIELDS: string[] = ['return_paid_qty', 'return_free_qty'];
+
+const isPositiveQuantity = (value: unknown): boolean => {
+    try {
+        return exactDecimalUnits(value, 'Return quantity', { scale: 6, maximumWholeDigits: 14 }) > 0n;
+    } catch {
+        return false;
+    }
+};
 
 export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
     items,
     selectedInvoice,
-    showManualEntry,
-    availableBatches,
     onUpdateItem,
-    onAddManualItem,
     onRemoveItem,
-    onBackToInvoice
 }) => {
     const selectedItems = useMemo(() =>
         items.filter(item => item.selected),
         [items]
     );
 
-    // Editable fields for keyboard navigation
-    const EDITABLE_FIELDS = ['return_paid_qty', 'return_free_qty', 'unit_price'];
     const fieldRefs = useRef<Record<string, any>>({});
 
     const setFieldRef = (rowIndex: number, fieldName: string, element: any): void => {
@@ -73,18 +80,20 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
         }
     }, [items.length]);
 
-    // Calculate totals for an item
-    const calculateItemTotal = (item: any): number => {
-        return Number(item.total_amount || item.line_total || 0);
+    const displayItemTotal = (item: any): string => {
+        try {
+            const amount = item.total_amount ?? item.line_total;
+            if (amount === '' || amount === null || amount === undefined) return 'Pending canonical preview';
+            return formatReturnMoney(amount, `Return total for ${item.product_name || 'item'}`);
+        } catch {
+            return 'Invalid amount';
+        }
     };
 
     const formatExpiry = (dateStr: string | undefined): string => {
         if (!dateStr) return '-';
-        try {
-            return new Date(dateStr).toLocaleDateString('en-IN', { month: 'short', year: '2-digit' });
-        } catch {
-            return '-';
-        }
+        try { return formatCalendarDate(dateStr); }
+        catch { return 'Unavailable'; }
     };
 
     return (
@@ -95,33 +104,14 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                     <Package className="w-4 h-4 mr-2" />
                     RETURN ITEMS ({selectedItems.length})
                 </h3>
-                {onBackToInvoice && (
-                    <button
-                        onClick={onBackToInvoice}
-                        className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center"
-                    >
-                        ← Back to Invoice Selection
-                    </button>
-                )}
             </div>
-
-            {/* Product Search for Manual Entry */}
-            {showManualEntry && (
-                <div className="mb-4">
-                    <ProductSearch
-                        onAddItem={onAddManualItem}
-                        placeholder="Search products by name, code, or HSN..."
-                        showBatchSelection={true}
-                    />
-                </div>
-            )}
 
             {items.length > 0 ? (
                 <div className="overflow-x-auto">
                     <table className="w-full border-collapse">
                         <thead>
                             <tr className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b-2 border-blue-200">
-                                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">#</th>
+                                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Return</th>
                                 <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Product</th>
                                 <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Pack</th>
                                 <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Expiry</th>
@@ -145,29 +135,68 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                         </thead>
                         <tbody>
                             {items.map((row, index) => {
-                                const originalPaidQty = parseFloat(String(row.paid_quantity || 0));
-                                const originalFreeQty = parseFloat(String(row.free_quantity || 0));
-                                const isFromInvoice = !row.is_manual && !!selectedInvoice;
-                                const total = calculateItemTotal(row);
+                                const originalPaidQty = row.paid_quantity;
+                                const originalFreeQty = row.free_quantity;
+                                const isFromInvoice = !!selectedInvoice;
+                                const total = displayItemTotal(row);
 
                                 return (
                                     <tr
                                         key={index}
                                         className="border-b border-gray-200 hover:bg-gray-50 transition-colors"
                                     >
-                                        {/* Row Number */}
-                                        <td className="px-3 py-2 text-sm text-gray-600 text-left">{index + 1}</td>
+                                        <td className="px-3 py-2 text-left">
+                                            <input
+                                                type="checkbox"
+                                                aria-label={`Return ${row.product_name}`}
+                                                checked={Boolean(row.selected)}
+                                                onChange={(event) => onUpdateItem(index, 'selected', event.target.checked)}
+                                                className="h-5 w-5 rounded border-gray-300"
+                                            />
+                                        </td>
 
                                         {/* Product Info */}
                                         <td className="px-3 py-2">
                                             <div className="text-sm font-medium text-gray-900">{row.product_name}</div>
-                                            <div className="text-xs text-gray-500">{row.batch_number || 'No Batch'}</div>
+                                            <div className="text-xs text-gray-500">{row.batch_number || 'Batch unavailable'}</div>
+                                            {isFromInvoice && (
+                                                <div className="mt-2 grid gap-2">
+                                                    <select
+                                                        aria-label={`Return condition for ${row.product_name}`}
+                                                        value={String((row as any).return_condition || '')}
+                                                        onChange={(event) => onUpdateItem(index, 'return_condition', event.target.value)}
+                                                        className="min-h-11 rounded border border-gray-300 bg-white px-2 text-xs"
+                                                    >
+                                                        <option value="">Select condition</option>
+                                                        <option value="sealed_resaleable">Sealed / resaleable</option>
+                                                        <option value="opened">Opened</option>
+                                                        <option value="damaged">Damaged</option>
+                                                        <option value="expired">Expired</option>
+                                                        <option value="recalled">Recalled</option>
+                                                        <option value="quality_hold">Quality hold</option>
+                                                        <option value="quality_hold">Quality hold</option>
+                                                    </select>
+                                                    <select
+                                                        aria-label={`Quarantine location for ${row.product_name}`}
+                                                        value={String((row as any).to_location_id || '')}
+                                                        onChange={(event) => onUpdateItem(index, 'to_location_id', event.target.value)}
+                                                        className="min-h-11 rounded border border-gray-300 bg-white px-2 text-xs"
+                                                    >
+                                                        <option value="">Select quarantine location</option>
+                                                        {((row as any).quarantine_locations || []).map((location: any) => (
+                                                            <option key={location.id} value={location.id}>{location.code} · {location.name}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            )}
                                         </td>
 
                                         {/* Pack Info */}
                                         <td className="px-3 py-2 text-center">
                                             <div className="text-sm text-gray-700">
-                                                {`${row.packages_per_box || 1}*${row.units_per_pack || 1}`}
+                                                {row.packages_per_box !== undefined && row.units_per_pack !== undefined
+                                                    ? `${row.packages_per_box} × ${row.units_per_pack}`
+                                                    : 'Unavailable'}
                                             </div>
                                         </td>
 
@@ -180,8 +209,8 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                                         {selectedInvoice && (
                                             <td className="px-3 py-2 text-center">
                                                 <div className="text-sm text-gray-900 font-medium">
-                                                    {originalPaidQty}
-                                                    {originalFreeQty > 0 && (
+                                                    {originalPaidQty === '' || originalPaidQty === undefined ? 'Unavailable' : originalPaidQty}
+                                                    {originalFreeQty !== '' && originalFreeQty !== undefined && isPositiveQuantity(originalFreeQty) && (
                                                         <span className="text-green-600 ml-1">+{originalFreeQty}</span>
                                                     )}
                                                 </div>
@@ -193,13 +222,12 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                                             <div className="flex justify-center">
                                                 <EditableCell
                                                     ref={(el: any) => setFieldRef(index, 'return_paid_qty', el)}
-                                                    value={row.return_paid_qty ?? row.return_quantity ?? 0}
+                                                    value={row.return_paid_qty ?? ''}
+                                                    ariaLabel={`Billed quantity for ${row.product_name}`}
                                                     type="number"
-                                                    min={0}
-                                                    max={isFromInvoice ? originalPaidQty : undefined}
-                                                    step={1}
-                                                    decimalPlaces={0}
-                                                    onSave={(val: string | number) => onUpdateItem(index, 'return_paid_qty', Number(val))}
+                                                    maxDecimalPlaces={6}
+                                                    preserveDecimalString
+                                                    onSave={(val: string | number) => onUpdateItem(index, 'return_paid_qty', String(val))}
                                                     onNavigate={(dir: string) => handleNavigate(index, 'return_paid_qty', dir)}
                                                     selectOnFocus={true}
                                                     className="w-16"
@@ -212,13 +240,12 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                                             <div className="flex justify-center">
                                                 <EditableCell
                                                     ref={(el: any) => setFieldRef(index, 'return_free_qty', el)}
-                                                    value={row.return_free_qty ?? 0}
+                                                    value={row.return_free_qty ?? ''}
+                                                    ariaLabel={`Free quantity for ${row.product_name}`}
                                                     type="number"
-                                                    min={0}
-                                                    max={isFromInvoice ? originalFreeQty : undefined}
-                                                    step={1}
-                                                    decimalPlaces={0}
-                                                    onSave={(val: string | number) => onUpdateItem(index, 'return_free_qty', Number(val))}
+                                                    maxDecimalPlaces={6}
+                                                    preserveDecimalString
+                                                    onSave={(val: string | number) => onUpdateItem(index, 'return_free_qty', String(val))}
                                                     onNavigate={(dir: string) => handleNavigate(index, 'return_free_qty', dir)}
                                                     selectOnFocus={true}
                                                     className="w-14"
@@ -229,18 +256,11 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                                         {/* Rate */}
                                         <td className="px-3 py-2">
                                             <div className="flex justify-center">
-                                                <EditableCell
-                                                    ref={(el: any) => setFieldRef(index, 'unit_price', el)}
-                                                    value={row.unit_price || 0}
-                                                    type="number"
-                                                    min={0}
-                                                    decimalPlaces={2}
-                                                    prefix="₹"
-                                                    onSave={(val: string | number) => onUpdateItem(index, 'unit_price', Number(val))}
-                                                    onNavigate={(dir: string) => handleNavigate(index, 'unit_price', dir)}
-                                                    selectOnFocus={true}
-                                                    className="w-20"
-                                                />
+                                                <span className="text-sm text-gray-900">
+                                                    {row.unit_price === '' || row.unit_price === null || row.unit_price === undefined
+                                                        ? 'Unavailable'
+                                                        : `₹${row.unit_price}`}
+                                                </span>
                                             </div>
                                         </td>
 
@@ -249,13 +269,15 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                                         {/* Tax % (read-only) */}
                                         <td className="px-3 py-2 text-center">
                                             <span className="text-sm text-gray-900 font-medium" title="Tax from product (read-only)">
-                                                {row.tax_percent || 0}%
+                                                {row.tax_percent === '' || row.tax_percent === null || row.tax_percent === undefined
+                                                    ? 'Unavailable'
+                                                    : `${row.tax_percent}%`}
                                             </span>
                                         </td>
 
                                         {/* Total */}
                                         <td className="px-3 py-2 text-right">
-                                            <div className="text-sm font-semibold text-gray-900">₹{total.toFixed(2)}</div>
+                                            <div className="text-sm font-semibold text-gray-900">{total}</div>
                                         </td>
 
                                         {/* Actions */}
@@ -290,10 +312,8 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                         <p className="text-sm">No items added yet</p>
                         {selectedInvoice ? (
                             <p className="text-xs text-gray-400 mt-1">Invoice items will appear here</p>
-                        ) : showManualEntry ? (
-                            <p className="text-xs text-gray-400 mt-1">Search and select products to add</p>
                         ) : (
-                            <p className="text-xs text-gray-400 mt-1">Select an invoice or use manual entry</p>
+                            <p className="text-xs text-gray-400 mt-1">Select a posted invoice with exact dispatch allocation lineage</p>
                         )}
                     </div>
                 </div>

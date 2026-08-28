@@ -37,10 +37,10 @@ const ProductEditModal: FC<ProductEditModalProps> = ({
                     onSave(savedProduct as unknown as Product);
                 }
             }}
+            product={product as Partial<Product> | null}
             initialProductName={product?.product_name || ''}
         />
     );
 };
 
 export default ProductEditModal;
-

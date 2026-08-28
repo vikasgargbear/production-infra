@@ -1,0 +1,8 @@
+{
+  "format_version": 1,
+  "revision": "20260825_0018",
+  "source_sql_sha256": "0aac2c7c0893644ebc54802567799a939e68a8b66a73c03457106e515898a159",
+  "authority_change": "sales_invoice_fefo_uom_alias_v1",
+  "scope": "canonical_sales_invoice_prepare_only",
+  "seed_policy": "no_data_or_business_defaults"
+}

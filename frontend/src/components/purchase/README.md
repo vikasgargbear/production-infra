@@ -1,119 +1,38 @@
-# Purchase Module
+# Purchase module
 
-**Status:** ✅ Modernized (Jan 2026)
+The desktop purchase UI uses reviewed canonical commands and exact readbacks.
+It does not submit the retired combined purchase-entry write.
 
-Production-ready purchase module with hook-based architecture. No context providers - each flow manages its own state.
+## Authoritative workflow
 
----
+1. Create and approve a purchase order.
+2. From **Purchase History → Purchase Orders**, choose **Receipt**.
+3. Review and post `procurement.goods_receipt.prepare`.
+   This posts inventory and valuation evidence only.
+4. Open **Supplier Invoice** after the supplier tax document has a unique parsed
+   GSTR-2B match.
+5. Review and post `procurement.supplier_invoice.prepare`.
+   This posts the payable, GST/ITC, receipt allocations, and balanced journal.
 
-## 🏗️ Architecture
+The two writes are intentionally separate. A browser-side combined operation
+could leave an ambiguous partial result and would require facts that do not
+exist until the receipt has posted.
 
-```
-purchase/
-├── hooks/                              # Shared hooks
-│   ├── usePurchaseItems.ts            # Item CRUD operations
-│   ├── useDraftAutoSave.ts            # Draft persistence
-│   ├── usePurchaseTransaction.ts      # Transaction state management
-│   └── index.ts
-├── purchase-entry/                     # Purchase Entry (~840 lines)
-│   ├── PurchaseEntryFlow.tsx          # UI component
-│   └── hooks/
-│       ├── usePurchaseEntryLogic.ts   # State & handlers (~560 lines)
-│       └── index.ts
-├── purchase-order/                     # Purchase Order (~700 lines)
-│   ├── PurchaseOrderFlow.tsx          # UI component
-│   └── hooks/
-│       ├── usePurchaseOrderLogic.ts   # State & handlers (~365 lines)
-│       └── index.ts
-├── grn/                                # Goods Receipt Note
-│   └── GRNFlow.tsx
-├── ui/                                 # Shared UI (props-based)
-│   ├── SupplierSelector.tsx
-│   ├── PurchaseHeader.tsx
-│   └── PurchaseSummary.tsx
-├── types/                              # purchaseSharedTypes.ts
-├── utils/                              # purchaseCalculations.ts
-└── PurchaseHub.tsx                     # Entry point (NO context wrapper)
-```
+## Active surfaces
 
----
+- `PurchaseHub.tsx`: navigation and PO-to-receipt context loading.
+- `purchase-order/PurchaseOrderFlow.tsx`: reviewed purchase-order command.
+- `grn/CanonicalGoodsReceiptForm.tsx`: explicit receipt, QC, batch, expiry,
+  MRP-conversion, and location evidence.
+- `grn/GRNFlow.tsx`: canonical receipt history and exact stock readback.
+- `purchase-entry/CanonicalPurchaseWorkflow.tsx`: two-step workflow guidance.
+- `purchase-entry/CanonicalSupplierInvoiceFlow.tsx`: receipt/GSTR-2B matching,
+  reviewed supplier-invoice command, and finance readback.
+- `PurchaseListHistory.tsx`: canonical supplier-invoice, PO, and GRN history.
 
-## 🎯 Key Improvements
+## Failure policy
 
-### Code Organization
-- **3 sub-modules** for different purchase flows
-- **Shared infrastructure** eliminates 80%+ duplication
-- **Clean separation** of concerns
-
-### Shared Infrastructure
-- **Types**: BasePurchaseItem, PurchaseOrder, PurchaseEntry, GRN
-- **Hooks**: usePurchaseItems, useDraftAutoSave
-- **Utils**: productItemTransform, purchaseCalculations
-
----
-
-## 🚀 Usage
-
-### Using Shared Product Transform
-```typescript
-import { prepareItemForPurchaseOrder } from '../utils';
-
-const poItem = prepareItemForPurchaseOrder(product);
-```
-
-### Using Item Management Hook
-```typescript
-import { usePurchaseItems } from '../hooks';
-
-const { items, handleAddItem, handleUpdateItem, handleRemoveItem } = 
-  usePurchaseItems<PurchaseOrderItem>([]);
-```
-
-### Using Draft Auto-Save
-```typescript
-import { useDraftAutoSave, PURCHASE_DRAFT_KEYS } from '../hooks';
-
-useDraftAutoSave({
-  data: purchaseOrder,
-  storageKey: PURCHASE_DRAFT_KEYS.PURCHASE_ORDER,
-  shouldSave: (po) => po.items.length > 0
-});
-```
-
----
-
-## 📋 Sub-Modules
-
-### Purchase Order
-Creates purchase orders to request goods from suppliers.  
-**Endpoint**: `/purchase-orders/`  
-**File**: `purchase-order/PurchaseOrderFlow.tsx`
-
-### Purchase Entry  
-Records received supplier invoices and updates inventory.  
-**Endpoint**: `/purchases/`  
-**File**: `purchase-entry/PurchaseEntryFlow.tsx`  
-**Features**: PDF upload, batch/expiry tracking
-
-### GRN (Goods Receipt Note)
-Records receipt of goods against purchase orders.  
-**Endpoint**: `/grn/`  
-**File**: `grn/GRNFlow.tsx`
-
----
-
-## 🔧 Development
-
-### Running TypeScript Check
-```bash
-npx tsc --noEmit src/components/purchase/**/*.ts
-```
-
-### File Structure
-- Each sub-module has its own folder
-- Shared code lives at top level
-- Module-specific code stays in sub-module folders
-
----
-
-**Last Updated:** January 4, 2026
+Missing PO identity, location, MRP conversion, receipt allocation, supplier tax
+registration, GSTR-2B evidence, or command readback fails closed. The UI does
+not infer those facts, call a legacy endpoint, queue an offline write, or show a
+success state before the canonical resource reconciles.

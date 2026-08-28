@@ -1,0 +1,64 @@
+{
+  "schema_version": 2,
+  "evidence_state": "incomplete",
+  "source_disposition": {
+    "state": "missing",
+    "strategy": null,
+    "source_identifier": null,
+    "artifact": null,
+    "artifact_sha256": null
+  },
+  "route_graph": {
+    "state": "missing",
+    "analyzer_kind": "mounted_route_graph",
+    "reachable_retired_dependency_count": null,
+    "artifact": null,
+    "artifact_sha256": null
+  },
+  "migration_head": {
+    "state": "missing",
+    "expected_head": null,
+    "observed_head": null,
+    "artifact": null,
+    "artifact_sha256": null
+  },
+  "runtime_tenant_isolation": {
+    "state": "missing",
+    "runtime_role_non_owner": null,
+    "runtime_role_no_bypassrls": null,
+    "forced_rls_verified": null,
+    "tenant_positive_test": null,
+    "cross_tenant_denial_test": null,
+    "artifact": null,
+    "artifact_sha256": null
+  },
+  "reconciliation_backup": {
+    "state": "missing",
+    "source_target_counts_reconciled": null,
+    "exact_totals_reconciled": null,
+    "table_content_digests_reconciled": null,
+    "backup_verified": null,
+    "restore_tested": null,
+    "artifact": null,
+    "artifact_sha256": null
+  },
+  "live18_acceptance": {
+    "state": "missing",
+    "operation_count": null,
+    "artifact": null,
+    "artifact_sha256": null
+  },
+  "rollback_decommission": {
+    "state": "missing",
+    "rollback_artifact": null,
+    "rollback_artifact_sha256": null,
+    "decommission_artifact": null,
+    "decommission_artifact_sha256": null
+  },
+  "review": {
+    "state": "missing",
+    "reviewer": null,
+    "reviewed_at": null,
+    "git_commit": null
+  }
+}

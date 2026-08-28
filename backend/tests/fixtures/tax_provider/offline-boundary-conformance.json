@@ -1,0 +1,57 @@
+{
+  "fixture_version": "1.0.0",
+  "scope": "provider-neutral boundary only; not official NIC/GSP sandbox evidence",
+  "completion_cases": [
+    {
+      "contract_version": "1.0.0",
+      "worker_request_id": "10000000-0000-4000-8000-000000000001",
+      "organization_id": "20000000-0000-4000-8000-000000000001",
+      "artifact_id": "30000000-0000-4000-8000-000000000001",
+      "artifact_kind": "einvoice",
+      "adapter_name": "nic_irp_v1",
+      "provider_request_id": "offline-irp-request-1",
+      "canonical_request_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "verification": {
+        "adapter_contract_version": "1.0.0",
+        "official_schema_version": "offline-fixture-only",
+        "response_validation_status": "validated",
+        "conformance_profile_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      },
+      "outcome": "generated",
+      "response_media_type": "application/json",
+      "response_base64": "eyJBY2tObyI6IjExMjIzMzQ0NTU2Njc3OCIsIklybiI6ImFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEiLCJTdGF0dXMiOiJBQ1QifQ==",
+      "response_sha256": "00f867060e6c290986a848c94c41ee180e89ece8f59e41885ca56151feae920b",
+      "irn": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "acknowledgement_number": "112233445566778",
+      "acknowledged_at": "2026-08-20T12:00:00+05:30",
+      "signed_qr_base64": "c2lnbmVkLXFyLW9mZmxpbmUtZml4dHVyZQ==",
+      "signed_qr_sha256": "c08b610ac74f65dc80168351f3c3ad25be49d7af6ffc6bcda21c1f6e96496f22"
+    },
+    {
+      "contract_version": "1.0.0",
+      "worker_request_id": "10000000-0000-4000-8000-000000000002",
+      "organization_id": "20000000-0000-4000-8000-000000000001",
+      "artifact_id": "30000000-0000-4000-8000-000000000002",
+      "artifact_kind": "eway_bill",
+      "adapter_name": "licensed_gsp_eway_v1",
+      "provider_request_id": "offline-eway-request-1",
+      "canonical_request_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "verification": {
+        "adapter_contract_version": "1.0.0",
+        "official_schema_version": "offline-fixture-only",
+        "response_validation_status": "validated",
+        "conformance_profile_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      },
+      "outcome": "generated",
+      "response_media_type": "application/json",
+      "response_base64": "eyJFd2JObyI6IjEyMzQ1Njc4OTAxMiIsIlZhbGlkVXB0byI6IjIwMjYtMDgtMjFUMTI6MDA6MDArMDU6MzAifQ==",
+      "response_sha256": "d4cd130c0388796a8809019f17d1e1c7969ec79e5f66e1884f5041659cc11c01",
+      "eway_bill_number": "123456789012",
+      "transport_mode": "road",
+      "vehicle_number": "DL01AB1234",
+      "transporter_id": "07AAAAA0000A1Z5",
+      "valid_from_at": "2026-08-20T12:00:00+05:30",
+      "valid_until_at": "2026-08-21T12:00:00+05:30"
+    }
+  ]
+}

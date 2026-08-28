@@ -10,7 +10,7 @@ export interface ProceedToReviewComponentProps {
     onProceed?: () => void;
     onReset?: () => void;
     totalItems?: number;
-    totalAmount?: number;
+    totalAmount?: number | string;
     proceedText?: string;
     resetText?: string;
     backText?: string;
@@ -44,6 +44,9 @@ const ProceedToReviewComponent: React.FC<ProceedToReviewComponentProps> = ({
 }) => {
     const defaultProceedText = currentStep === 1 ? "Continue" : "Save";
     const finalProceedText = proceedText || defaultProceedText;
+    const formattedTotalAmount = typeof totalAmount === 'string'
+        ? totalAmount
+        : totalAmount.toFixed(2);
 
     return (
         <div className={`border-t border-gray-200 bg-white px-6 py-4 ${className}`}>
@@ -52,11 +55,11 @@ const ProceedToReviewComponent: React.FC<ProceedToReviewComponentProps> = ({
                 <div className="text-sm text-gray-600">
                     {currentStep === 1 && showTotals ? (
                         <>
-                            Total Items: {totalItems} | Total Amount: <span className="text-2xl font-bold text-gray-900">₹{totalAmount.toFixed(2)}</span>
+                            Total Items: {totalItems} | Total Amount: <span className="text-2xl font-bold text-gray-900">₹{formattedTotalAmount}</span>
                         </>
                     ) : currentStep > 1 && showTotals ? (
                         <>
-                            Total Amount: <span className="text-2xl font-bold text-gray-900">₹{totalAmount.toFixed(2)}</span>
+                            Total Amount: <span className="text-2xl font-bold text-gray-900">₹{formattedTotalAmount}</span>
                         </>
                     ) : (
                         <div></div>

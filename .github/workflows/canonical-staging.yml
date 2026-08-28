@@ -1,0 +1,1660 @@
+name: Canonical free staging baseline
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type DEPLOY_FREE_CANONICAL_STAGING
+        required: true
+        type: string
+      rotate_role_passwords:
+        description: Explicitly rotate isolated database role passwords
+        required: false
+        default: false
+        type: boolean
+      provision_demo_data:
+        description: Provision and exercise the disposable synthetic demo organization
+        required: false
+        default: false
+        type: boolean
+      deploy_render_pilot:
+        description: Deploy and verify the reviewed application SHA on all three Render pilot services
+        required: false
+        default: true
+        type: boolean
+      reset_disposable_data:
+        description: Clear canonical data while preserving schemas, Alembic head, roles, and credentials
+        required: false
+        default: false
+        type: boolean
+      restart_staging_database:
+        description: Restart the pinned free staging project before database verification
+        required: false
+        default: false
+        type: boolean
+      render_deploy_sha:
+        description: Reviewed application commit to deploy; defaults to this workflow commit
+        required: false
+        default: ""
+        type: string
+      recover_render_suspension:
+        description: Explicitly adopt a reviewed pre-existing Render suspension from a failed certification run
+        required: false
+        default: false
+        type: boolean
+  workflow_call:
+    inputs:
+      confirmation:
+        description: Exact free-staging deployment confirmation
+        required: true
+        type: string
+      rotate_role_passwords:
+        description: Explicit isolated-role credential rotation
+        required: false
+        default: false
+        type: boolean
+      provision_demo_data:
+        description: Provision and exercise the disposable synthetic demo organization
+        required: false
+        default: false
+        type: boolean
+      deploy_render_pilot:
+        description: Deploy and verify the reviewed application SHA on all three Render pilot services
+        required: false
+        default: false
+        type: boolean
+      reset_disposable_data:
+        description: Clear canonical data while preserving schemas, Alembic head, roles, and credentials
+        required: false
+        default: false
+        type: boolean
+      restart_staging_database:
+        description: Restart the pinned free staging project before database verification
+        required: false
+        default: false
+        type: boolean
+      render_deploy_sha:
+        description: Reviewed application commit to deploy; defaults to this workflow commit
+        required: false
+        default: ""
+        type: string
+      recover_render_suspension:
+        description: Explicitly adopt a reviewed pre-existing Render suspension from a failed certification run
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: canonical-free-staging
+  cancel-in-progress: false
+
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    # The reviewed worst case is about 326 minutes: 18 rollback fixtures with
+    # three 180-second attempts (167m), dependency-ordered Render polling (90m),
+    # public readiness (9m), demo exercise (26m), and 34m for migrations,
+    # restarts, and OAuth. The 360-minute bound preserves a 34-minute reserve
+    # for fail-closed Render re-quiescence and evidence upload.
+    timeout-minutes: 360
+    environment: canonical-staging
+    env:
+      CANONICAL_BASELINE_APPROVED_SHA256: ${{ vars.CANONICAL_BASELINE_APPROVED_SHA256 }}
+      CANONICAL_STAGING_PROJECT_REF: ${{ vars.CANONICAL_STAGING_PROJECT_REF }}
+      CANONICAL_PRODUCTION_PROJECT_REFS: ${{ vars.CANONICAL_PRODUCTION_PROJECT_REFS }}
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      ERP_RUNTIME_PASSWORD: ${{ secrets.ERP_RUNTIME_PASSWORD }}
+      ERP_CALCULATOR_PASSWORD: ${{ secrets.ERP_CALCULATOR_PASSWORD }}
+      ERP_TAX_PROVIDER_PASSWORD: ${{ secrets.ERP_TAX_PROVIDER_PASSWORD }}
+      ERP_REGULATORY_IMPORTER_PASSWORD: ${{ secrets.ERP_REGULATORY_IMPORTER_PASSWORD }}
+      JWT_SECRET_KEY: ${{ secrets.JWT_SECRET_KEY }}
+      MCP_INTERNAL_SERVICE_TOKEN: ${{ secrets.MCP_INTERNAL_SERVICE_TOKEN }}
+      MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS: ${{ vars.MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS }}
+      MCP_ALLOWED_ORIGINS: ${{ vars.MCP_ALLOWED_ORIGINS }}
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      SUPABASE_OAUTH_ISSUER: ${{ vars.SUPABASE_OAUTH_ISSUER }}
+      SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+      EVIDENCE_STORAGE_EXPECTED_PROJECT_REF: ${{ vars.CANONICAL_STAGING_PROJECT_REF }}
+      CANONICAL_STAGING_WEB_TEST_AUTH_USER_ID: ${{ vars.CANONICAL_STAGING_WEB_TEST_AUTH_USER_ID }}
+      TAX_PROVIDER_INTERNAL_HMAC_SECRET: ${{ secrets.TAX_PROVIDER_INTERNAL_HMAC_SECRET }}
+      TAX_PROVIDER_INTERNAL_SERVICE_TOKEN: ${{ secrets.TAX_PROVIDER_INTERNAL_SERVICE_TOKEN }}
+      RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+      RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
+      RAILWAY_ENVIRONMENT_ID: ${{ vars.RAILWAY_ENVIRONMENT_ID }}
+      RAILWAY_API_SERVICE: ${{ vars.RAILWAY_API_SERVICE }}
+      RAILWAY_MCP_SERVICE: ${{ vars.RAILWAY_MCP_SERVICE }}
+      RAILWAY_FRONTEND_SERVICE: ${{ vars.RAILWAY_FRONTEND_SERVICE }}
+      RAILWAY_API_SERVICE_ID: ${{ vars.RAILWAY_API_SERVICE_ID }}
+      RAILWAY_MCP_SERVICE_ID: ${{ vars.RAILWAY_MCP_SERVICE_ID }}
+      RAILWAY_FRONTEND_SERVICE_ID: ${{ vars.RAILWAY_FRONTEND_SERVICE_ID }}
+      RAILWAY_API_URL: ${{ vars.RAILWAY_API_URL }}
+      RAILWAY_MCP_URL: ${{ vars.RAILWAY_MCP_URL }}
+      RAILWAY_FRONTEND_URL: ${{ vars.RAILWAY_FRONTEND_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install the reviewed migration toolchain
+        run: pip install -r backend/requirements.txt
+
+      - name: Diagnose deployment configuration before mutation
+        env:
+          REVIEWED_DEPLOY_SHA: ${{ inputs.render_deploy_sha || github.sha }}
+        run: |
+          set -euo pipefail
+          requirements=(
+            --require-env CANONICAL_BASELINE_APPROVED_SHA256
+            --require-env CANONICAL_PRODUCTION_PROJECT_REFS
+            --require-env CANONICAL_STAGING_PROJECT_REF
+            --require-env CANONICAL_STAGING_WEB_TEST_AUTH_USER_ID
+            --require-env SUPABASE_ACCESS_TOKEN
+            --require-env SUPABASE_DB_PASSWORD
+          )
+          if [ '${{ inputs.deploy_render_pilot }}' = true ]; then
+            requirements+=(
+              --require-env RENDER_API_KEY
+              --require-env RAILWAY_API_TOKEN
+              --require-env RAILWAY_PROJECT_ID
+              --require-env RAILWAY_ENVIRONMENT_ID
+              --require-env RAILWAY_API_SERVICE_ID
+              --require-env RAILWAY_MCP_SERVICE_ID
+              --require-env RAILWAY_FRONTEND_SERVICE_ID
+              --require-env RAILWAY_API_URL
+              --require-env RAILWAY_MCP_URL
+              --require-env RAILWAY_FRONTEND_URL
+            )
+          fi
+          python backend/scripts/deployment_control.py preflight \
+            --expected-sha "$REVIEWED_DEPLOY_SHA" \
+            --repository "$GITHUB_REPOSITORY" \
+            "${requirements[@]}"
+          if [ '${{ inputs.deploy_render_pilot }}' = true ]; then
+            python backend/scripts/deployment_control.py \
+              assert-active-provider render
+          fi
+
+      - uses: actions/setup-node@v4
+        if: inputs.deploy_render_pilot == true
+        with:
+          node-version: "22"
+
+      - name: Install the pinned Railway authority client
+        if: inputs.deploy_render_pilot == true
+        run: npm install --global @railway/cli@5.43.4
+
+      - name: Refuse any target except the reviewed free staging project
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          test "$CONFIRMATION" = DEPLOY_FREE_CANONICAL_STAGING
+          test -n "$CANONICAL_STAGING_PROJECT_REF"
+          test -n "$CANONICAL_PRODUCTION_PROJECT_REFS"
+          test -n "$SUPABASE_ACCESS_TOKEN"
+          test -n "$CANONICAL_STAGING_WEB_TEST_AUTH_USER_ID"
+          test -n "$SUPABASE_DB_PASSWORD"
+          case ",$CANONICAL_PRODUCTION_PROJECT_REFS," in
+            *",$CANONICAL_STAGING_PROJECT_REF,"*)
+              echo "staging project appears in the production denylist" >&2
+              exit 2
+              ;;
+          esac
+
+          project_ready=false
+          for attempt in $(seq 1 20); do
+            project_json=$(curl --fail --silent --show-error \
+              --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+              "https://api.supabase.com/v1/projects/$CANONICAL_STAGING_PROJECT_REF")
+            test "$(jq -r .id <<<"$project_json")" = "$CANONICAL_STAGING_PROJECT_REF"
+            test "$(jq -r .region <<<"$project_json")" = ap-south-1
+            project_status=$(jq -er .status <<<"$project_json")
+            case "$project_status" in
+              ACTIVE_HEALTHY)
+                project_ready=true
+                break
+                ;;
+              COMING_UP|GOING_DOWN|RESTARTING|UPGRADING)
+                test "$attempt" -lt 20
+                sleep 15
+                ;;
+              *)
+                echo "::error title=Canonical staging unavailable::Project is not in a reviewed healthy or transitional state"
+                exit 2
+                ;;
+            esac
+          done
+          test "$project_ready" = true
+
+          PYTHONPATH=backend python3 - <<'PY'
+          from scripts.canonical_staging_database import load_direct_database_contract
+
+          contract = load_direct_database_contract()
+          if contract.project_ref != "rgihahbmkrmhitjdjvev":
+              raise SystemExit("canonical direct database authority targets the wrong project")
+          print("Canonical staging target matches the manifest-owned direct IPv4 authority")
+          PY
+
+      - name: Prove runner-only Supabase Auth Admin authority before mutation
+        run: |
+          set -euo pipefail
+          python3 backend/scripts/verify_supabase_auth_admin_secret.py \
+            --project-ref "$CANONICAL_STAGING_PROJECT_REF"
+
+      - name: Validate the reviewed Render deployment transaction
+        env:
+          REVIEWED_RENDER_DEPLOY_SHA: ${{ inputs.render_deploy_sha }}
+        run: |
+          set -euo pipefail
+          lifecycle_change=false
+          if [ '${{ inputs.restart_staging_database }}' = true ] || \
+             [ '${{ inputs.reset_disposable_data }}' = true ] || \
+             [ '${{ inputs.rotate_role_passwords }}' = true ]; then
+            lifecycle_change=true
+          fi
+          if [ "$lifecycle_change" = true ] && \
+             [ '${{ inputs.deploy_render_pilot }}' != true ]; then
+            echo "Database lifecycle changes require an exact-SHA Render deployment" >&2
+            exit 2
+          fi
+          if [ '${{ inputs.deploy_render_pilot }}' = true ]; then
+            deploy_sha="$REVIEWED_RENDER_DEPLOY_SHA"
+            if [ -z "$deploy_sha" ]; then
+              deploy_sha="$GITHUB_SHA"
+            fi
+            test "${#deploy_sha}" = 40
+            case "$deploy_sha" in
+              *[!0-9a-f]*) echo "Render deploy SHA must be lowercase hexadecimal" >&2; exit 2 ;;
+            esac
+            test "$deploy_sha" = "$GITHUB_SHA"
+            git cat-file -e "$deploy_sha^{commit}"
+            echo "CANONICAL_RENDER_DEPLOY_SHA=$deploy_sha" >> "$GITHUB_ENV"
+          fi
+
+      - name: Prove the competing Railway authority is retired before lifecycle changes
+        if: inputs.deploy_render_pilot == true
+        run: |
+          set -euo pipefail
+          mkdir -p staging-evidence
+          test -n "$RAILWAY_API_TOKEN"
+          test -n "$RAILWAY_PROJECT_ID"
+          test -n "$RAILWAY_ENVIRONMENT_ID"
+          test -n "$RAILWAY_API_SERVICE_ID"
+          test -n "$RAILWAY_MCP_SERVICE_ID"
+          test -n "$RAILWAY_FRONTEND_SERVICE_ID"
+          railway_state=$(mktemp)
+          railway status \
+            --project "$RAILWAY_PROJECT_ID" \
+            --environment "$RAILWAY_ENVIRONMENT_ID" \
+            --json >"$railway_state"
+          python3 backend/scripts/verify_retired_railway_authority.py \
+            --status-json "$railway_state" \
+            --project-id "$RAILWAY_PROJECT_ID" \
+            --environment-id "$RAILWAY_ENVIRONMENT_ID" \
+            --commit-sha "$GITHUB_SHA" \
+            --service "$RAILWAY_API_SERVICE_ID=$RAILWAY_API_SERVICE=$RAILWAY_API_URL" \
+            --service "$RAILWAY_MCP_SERVICE_ID=$RAILWAY_MCP_SERVICE=$RAILWAY_MCP_URL" \
+            --service "$RAILWAY_FRONTEND_SERVICE_ID=$RAILWAY_FRONTEND_SERVICE=$RAILWAY_FRONTEND_URL" \
+            --receipt staging-evidence/railway-authority-retired-before-close.json
+
+      - name: Quiesce reviewed Render clients before deployment or database lifecycle changes
+        if: >-
+          inputs.deploy_render_pilot == true ||
+          inputs.restart_staging_database == true ||
+          inputs.reset_disposable_data == true ||
+          inputs.rotate_role_passwords == true
+        run: |
+          set -euo pipefail
+          test -n "$RENDER_API_KEY"
+          mkdir -p staging-evidence
+          recovery_args=()
+          if [ '${{ inputs.recover_render_suspension }}' = true ]; then
+            recovery_args+=(--adopt-preexisting)
+          fi
+          python3 backend/scripts/manage_render_pilot_lifecycle.py quiesce \
+            --commit-sha "$GITHUB_SHA" \
+            --receipt staging-evidence/render-pilot-lifecycle.json \
+            --require-active \
+            "${recovery_args[@]}"
+
+      - name: Restart the pinned free staging database
+        if: inputs.restart_staging_database == true
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error \
+            -X POST \
+            --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            "https://api.supabase.com/v1/projects/$CANONICAL_STAGING_PROJECT_REF/restart" \
+            >/dev/null
+          # Managed restarts can remain in COMING_UP for several minutes even
+          # after the restart request is accepted. Bound the control-plane wait
+          # independently from the subsequent direct database verification.
+          for attempt in $(seq 1 20); do
+            status=$(curl --fail --silent --show-error \
+              --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+              "https://api.supabase.com/v1/projects/$CANONICAL_STAGING_PROJECT_REF" \
+              | jq -er .status)
+            if [ "$status" = ACTIVE_HEALTHY ]; then
+              break
+            fi
+            test "$attempt" -lt 20
+            sleep 15
+          done
+
+      - name: Verify generated authority before network writes
+        run: |
+          python3 backend/scripts/check_canonical_artifacts.py
+          python3 backend/scripts/package_canonical_baseline_migration.py
+          python3 backend/scripts/generate_canonical_command_definition_migration.py --check
+          python3 backend/scripts/generate_canonical_data_dictionary.py \
+            --check docs/architecture/canonical-field-dictionary.json
+          python3 backend/scripts/validate_canonical_model.py
+          python3 database/canonical/domains/validate_domain_catalog.py
+
+      - name: Build and mask the staging bootstrap connection
+        run: python3 backend/scripts/verify_staging_direct_roles.py --bootstrap-only
+
+      - name: Close canonical writes before the disposable data reset
+        if: inputs.reset_disposable_data == true
+        run: |
+          set -euo pipefail
+          mkdir -p staging-evidence
+          bash backend/scripts/run_canonical_write_fence.sh \
+            close "$GITHUB_SHA" \
+            staging-evidence/canonical-write-fence-closed.json
+          jq -e --arg sha "$GITHUB_SHA" \
+            '.state == "closed" and .commit_sha == $sha' \
+            staging-evidence/canonical-write-fence-closed.json >/dev/null
+
+      - name: Provision restricted evidence cleanup authority before the disposable reset
+        if: inputs.reset_disposable_data == true
+        run: |
+          set -euo pipefail
+          test "$CANONICAL_STAGING_PROJECT_REF" = "$EVIDENCE_STORAGE_EXPECTED_PROJECT_REF"
+          test "$SUPABASE_URL" = "https://${CANONICAL_STAGING_PROJECT_REF}.supabase.co"
+          hook_exists=$(psql -X -Atqc \
+            "SELECT to_regprocedure('erp_security.canonical_evidence_storage_access_token_hook(jsonb)') IS NOT NULL" \
+            "$PSYCOPG_DATABASE_URL")
+          if [ "$hook_exists" = t ]; then
+            python3 backend/scripts/verify_supabase_auth_admin_secret.py \
+              --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
+              >staging-evidence/canonical-auth-admin-preflight.json
+            jq -e --arg project_ref "$CANONICAL_STAGING_PROJECT_REF" \
+              '.state == "verified"
+               and .project_ref == $project_ref
+               and .modern_secret_shape_verified == true
+               and .list_verified == true
+               and .readback_verified == true
+               and .mutation_performed == false' \
+              staging-evidence/canonical-auth-admin-preflight.json >/dev/null
+            identity_log=$(mktemp)
+            if ! python3 backend/scripts/provision_canonical_evidence_storage_identity.py \
+                --phase prepare \
+                --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
+                --reviewed-sha "$GITHUB_SHA" \
+                --github-env "$GITHUB_ENV" \
+                --receipt staging-evidence/canonical-evidence-storage-identity.json \
+                >staging-evidence/canonical-evidence-storage-identity-summary.json \
+                2>"$identity_log"; then
+              python3 backend/scripts/safe_ci_log_summary.py --label evidence-identity "$identity_log"
+              exit 1
+            fi
+            echo "EVIDENCE_STORAGE_IDENTITY_READY=true" >> "$GITHUB_ENV"
+          else
+            # The first 0029 deployment has no hook yet. It may proceed only
+            # when the private bucket is absent or empty, so no old credential
+            # is needed and no evidence is silently abandoned.
+            object_count=$(psql -X -Atqc \
+              "SELECT CASE WHEN to_regclass('storage.objects') IS NULL THEN 0 ELSE (SELECT count(*) FROM storage.objects WHERE bucket_id='canonical-evidence-private-v1') END" \
+              "$PSYCOPG_DATABASE_URL")
+            test "$object_count" = 0
+            echo "EVIDENCE_STORAGE_IDENTITY_READY=false" >> "$GITHUB_ENV"
+          fi
+
+      - name: Remove reconciled unprotected evidence objects before the disposable reset
+        if: inputs.reset_disposable_data == true
+        run: |
+          set -euo pipefail
+          cleanup_log=$(mktemp)
+          if ! PYTHONPATH=backend python3 backend/scripts/cleanup_staging_evidence_storage.py \
+              --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
+              --database-url-env PSYCOPG_DATABASE_URL \
+              --receipt staging-evidence/canonical-evidence-storage-reset-cleanup.json \
+              >"$cleanup_log" 2>&1; then
+            python3 backend/scripts/safe_ci_log_summary.py --label evidence-cleanup "$cleanup_log"
+            exit 1
+          fi
+          jq -e --arg project_ref "$CANONICAL_STAGING_PROJECT_REF" \
+            '.contract_version == "canonical-evidence-reset-cleanup-v2"
+             and .state == "empty"
+             and .project_ref == $project_ref
+             and .bucket == "canonical-evidence-private-v1"
+             and .remaining_object_count == 0
+             and .legal_hold_count == 0
+             and .evidence_writer_membership_open == false
+             and ((.evidence_writer_role_installed == true
+                   and .evidence_writer_role_absence_verified == false)
+                  or (.evidence_writer_role_installed == false
+                      and .evidence_writer_role_absence_verified == true))
+             and (.observed_authenticator_session_count | type) == "number"
+             and .observed_authenticator_session_count >= 0
+             and (.terminated_authenticator_session_count | type) == "number"
+             and .terminated_authenticator_session_count >= 0
+             and .terminated_authenticator_session_count <= .observed_authenticator_session_count
+             and .remaining_preclosure_authenticator_session_count == 0
+             and (.evidence_writer_closed_at | type) == "string"
+             and (.retention_in_force_deleted_count | type) == "number"
+             and .retention_in_force_deleted_count >= 0' \
+            staging-evidence/canonical-evidence-storage-reset-cleanup.json >/dev/null
+
+      - name: Apply or verify the approved canonical migration head
+        run: |
+          set -euo pipefail
+          export PGOPTIONS='-c statement_timeout=120000 -c lock_timeout=15000'
+          package_hash=$(python3 backend/scripts/package_canonical_baseline_migration.py --print-sha256)
+          test "$package_hash" = "$CANONICAL_BASELINE_APPROVED_SHA256"
+          python3 backend/scripts/canonical_migration_contract.py
+          canonical_head=$(python3 backend/scripts/canonical_migration_contract.py --print-head)
+          canonical_table_count=$(python3 backend/scripts/canonical_migration_contract.py --print-table-count)
+          echo "CANONICAL_ALEMBIC_HEAD=$canonical_head" >> "$GITHUB_ENV"
+          echo "CANONICAL_TABLE_COUNT=$canonical_table_count" >> "$GITHUB_ENV"
+          log_file=$(mktemp)
+          baseline_applied=false
+          baseline_state=$(mktemp)
+          baseline_query=$(cat <<'SQL'
+          SELECT revision.version_num,
+                 (SELECT count(*)::integer
+                    FROM information_schema.tables
+                   WHERE table_schema IN (
+                     'core','parties','catalog','hr','inventory','sales',
+                     'procurement','finance','tax','compliance','automation','calculation'
+                   ) AND table_type='BASE TABLE') AS table_count,
+                 (SELECT count(*)::integer FROM pg_catalog.pg_roles
+                   WHERE rolname IN (
+                     'erp_runtime','erp_calculator','erp_tax_provider',
+                     'erp_regulatory_importer'
+                   )) AS isolated_role_count,
+                 (SELECT count(*)::integer FROM pg_catalog.pg_roles
+                   WHERE rolname IN (
+                     'erp_runtime','erp_calculator','erp_tax_provider',
+                     'erp_regulatory_importer'
+                   ) AND (rolsuper OR rolcreaterole OR rolbypassrls)
+                 ) AS unsafe_role_count
+            FROM public.alembic_version AS revision
+           WHERE revision.version_num='__CANONICAL_ALEMBIC_HEAD__'
+          SQL
+          )
+          baseline_query=${baseline_query/__CANONICAL_ALEMBIC_HEAD__/$canonical_head}
+          if curl --fail --silent --show-error \
+            --request POST \
+            --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            --header 'Content-Type: application/json' \
+            --data "$(jq -nc --arg query "$baseline_query" '{query:$query}')" \
+            "https://api.supabase.com/v1/projects/$CANONICAL_STAGING_PROJECT_REF/database/query/read-only" \
+            >"$baseline_state" \
+            && jq -e --arg revision "$canonical_head" --arg table_count "$canonical_table_count" \
+              '.. | objects | select(.version_num? == $revision and ((.table_count? // "") | tostring) == $table_count and ((.isolated_role_count? // "") | tostring) == "4" and ((.unsafe_role_count? // "") | tostring) == "0")' \
+              "$baseline_state" >/dev/null; then
+            echo "Control plane verified exact canonical revision and topology; Alembic is already current"
+            baseline_applied=true
+          fi
+          if [ "$baseline_applied" != true ]; then
+            cleanup_alembic_membership() {
+              bash backend/scripts/revoke_staging_postgres_set_roles.sh \
+                migration-owner
+            }
+            cleanup_alembic_on_exit() {
+              local prior_status=$?
+              trap - EXIT
+              if ! cleanup_alembic_membership; then
+                echo "::error title=Canonical staging role cleanup failed::postgres retained unverified migration-owner delegation"
+                exit 1
+              fi
+              exit "$prior_status"
+            }
+            trap cleanup_alembic_on_exit EXIT
+            for attempt in $(seq 1 3); do
+              if (
+                version_table_exists=$(psql -X -Atqc \
+                  "SELECT to_regclass('public.alembic_version') IS NOT NULL" \
+                  "$PSYCOPG_DATABASE_URL")
+                if [ "$version_table_exists" = f ]; then
+                  cd backend
+                  alembic -c alembic.ini upgrade 20260820_0001
+                  cd ..
+                elif [ "$version_table_exists" = t ]; then
+                  current_revision=$(psql -X -Atqc \
+                    'SELECT version_num FROM public.alembic_version' \
+                    "$PSYCOPG_DATABASE_URL")
+                  python3 backend/scripts/canonical_migration_contract.py \
+                    --validate-current "$current_revision" >/dev/null
+                else
+                  echo "Could not classify the deployed Alembic version table" >&2
+                  exit 2
+                fi
+                psql -X -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" \
+                  -c 'GRANT erp_migration_owner TO postgres WITH SET TRUE, INHERIT FALSE' >/dev/null
+                cd backend
+                alembic -c alembic.ini upgrade head
+                alembic -c alembic.ini upgrade head
+              ) >"$log_file" 2>&1; then
+                baseline_applied=true
+                echo "Canonical Alembic migration reached the reviewed head"
+                break
+              fi
+              if ! grep -Eqi \
+                'OperationalError|econnrefused|connection refused|server closed the connection unexpectedly|server didn.t return client encoding|canceling statement due to (lock|statement) timeout' \
+                "$log_file"; then
+                break
+              fi
+              if [ "$attempt" -lt 3 ]; then
+                echo "Direct staging database unavailable; retrying baseline connection ($attempt/3)"
+                sleep 20
+              fi
+            done
+            if ! cleanup_alembic_membership; then
+              trap - EXIT
+              echo "::error title=Canonical staging role cleanup failed::postgres retained unverified migration-owner delegation"
+              exit 1
+            fi
+            trap - EXIT
+          fi
+          if [ "$baseline_applied" != true ]; then
+            python3 - "$log_file" <<'PY'
+          import pathlib
+          import re
+          import sys
+
+          text = pathlib.Path(sys.argv[1]).read_text(errors="replace")
+          classes = (
+              ("insufficient_privilege", r"InsufficientPrivilege|permission denied|must be owner"),
+              ("lock_timeout", r"canceling statement due to lock timeout"),
+              ("statement_timeout", r"canceling statement due to statement timeout"),
+              ("connection_unavailable", r"OperationalError|econnrefused|connection refused|server closed the connection unexpectedly"),
+              ("migration_contract_failure", r"CanonicalBaselineError|hash mismatch|requires an online reviewed principal"),
+          )
+          failure_class = next(
+              (name for name, pattern in classes if re.search(pattern, text, re.IGNORECASE)),
+              "unclassified_migration_failure",
+          )
+          diagnostic_lines = []
+          safe_prefix = re.compile(
+              r"^(?:psycopg2\.errors\.[A-Za-z]+:|sqlalchemy\.exc\.[A-Za-z]+:|"
+              r"migration_support\.[A-Za-z0-9_.]+:|DETAIL:|CONTEXT:)"
+          )
+          for raw_line in text.splitlines():
+              line = raw_line.strip()
+              if safe_prefix.match(line):
+                  line = re.sub(r"postgres(?:ql)?://\S+", "<redacted-database-url>", line)
+                  diagnostic_lines.append(line[:500])
+          diagnostic = " | ".join(diagnostic_lines[-4:]) or "allowlisted diagnostic unavailable"
+          diagnostic = diagnostic.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          print(
+              "::error title=Canonical free staging migration failure::"
+              f"class={failure_class}; diagnostic={diagnostic}; "
+              "raw migration output retained only inside the job"
+          )
+          PY
+            exit 1
+          fi
+
+      - name: Reset canonical data on the pinned disposable project
+        if: inputs.reset_disposable_data == true
+        run: |
+          set -euo pipefail
+          mkdir -p staging-evidence
+          reset_log=$(mktemp)
+          if ! psql -X --echo-errors -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" >"$reset_log" 2>&1 <<'SQL'
+          SELECT pg_catalog.pg_terminate_backend(activity.pid)
+            FROM pg_catalog.pg_stat_activity AS activity
+           WHERE activity.pid <> pg_catalog.pg_backend_pid()
+             AND activity.usename IN (
+               'erp_runtime', 'erp_calculator', 'erp_regulatory_importer',
+               'erp_tax_provider'
+             );
+          SQL
+          then
+            python3 backend/scripts/safe_ci_log_summary.py --label reset "$reset_log"
+            exit 1
+          fi
+
+          cleanup_role_membership() {
+            bash backend/scripts/revoke_staging_postgres_set_roles.sh migration-owner
+          }
+          cleanup_role_membership_on_exit() {
+            local prior_status=$?
+            trap - EXIT
+            if ! cleanup_role_membership; then
+              echo "::error title=Canonical staging role cleanup failed::postgres retained unverified migration-owner delegation"
+              exit 1
+            fi
+            exit "$prior_status"
+          }
+          trap cleanup_role_membership_on_exit EXIT
+
+          psql -X -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" \
+            -c 'GRANT erp_migration_owner TO postgres WITH SET TRUE, INHERIT FALSE' \
+            >/dev/null
+          if ! python3 backend/scripts/canonical_data_reset_authority.py \
+              --execute-reset \
+              --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
+              --database-url-env PSYCOPG_DATABASE_URL \
+              --expected-evidence-object-count 0 \
+              --receipt staging-evidence/canonical-data-reset-facts.json \
+              >"$reset_log" 2>&1; then
+            python3 backend/scripts/safe_ci_log_summary.py --label reset "$reset_log"
+            exit 1
+          fi
+          if ! cleanup_role_membership; then
+            trap - EXIT
+            echo "::error title=Canonical staging role cleanup failed::postgres retained unverified migration-owner delegation"
+            exit 1
+          fi
+          trap - EXIT
+
+          if ! python3 backend/scripts/canonical_data_reset_authority.py \
+              --verify-role-cleanup \
+              --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
+              --database-url-env PSYCOPG_DATABASE_URL \
+              --receipt staging-evidence/canonical-post-reset-role-facts.json \
+              >>"$reset_log" 2>&1; then
+            python3 backend/scripts/safe_ci_log_summary.py --label reset-role-cleanup "$reset_log"
+            exit 1
+          fi
+
+          reviewed_deploy_sha='${{ inputs.render_deploy_sha }}'
+          if [ -z "$reviewed_deploy_sha" ]; then
+            reviewed_deploy_sha="$GITHUB_SHA"
+          fi
+          reset_completed_at=$(jq -er '.completed_at' \
+            staging-evidence/canonical-data-reset-facts.json)
+          python3 backend/scripts/audit/application_promotion_evidence.py \
+            reset-attestation \
+            --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
+            --git-commit "$GITHUB_SHA" \
+            --reviewed-deploy-sha "$reviewed_deploy_sha" \
+            --workflow-repository "$GITHUB_REPOSITORY" \
+            --workflow-run-id "$GITHUB_RUN_ID" \
+            --workflow-run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --reset-facts staging-evidence/canonical-data-reset-facts.json \
+            --role-cleanup-facts staging-evidence/canonical-post-reset-role-facts.json \
+            --evidence-cleanup-facts staging-evidence/canonical-evidence-storage-reset-cleanup.json \
+            --reset-completed-at "$reset_completed_at" \
+            --output staging-evidence/canonical-staging-reset.json
+
+      - name: Provision isolated staging login credentials
+        if: inputs.rotate_role_passwords == true
+        run: |
+          python3 - <<'PY'
+          import os
+          import psycopg2
+          import re
+          from psycopg2 import sql
+
+          roles = {
+              "erp_runtime": os.environ["ERP_RUNTIME_PASSWORD"],
+              "erp_calculator": os.environ["ERP_CALCULATOR_PASSWORD"],
+              "erp_tax_provider": os.environ["ERP_TAX_PROVIDER_PASSWORD"],
+              "erp_regulatory_importer": os.environ["ERP_REGULATORY_IMPORTER_PASSWORD"],
+          }
+          for role, password in roles.items():
+              if not re.fullmatch(r"[A-Za-z0-9_-]{48,96}", password):
+                  raise RuntimeError(f"{role} secret is not a valid generated staging credential")
+
+          with psycopg2.connect(os.environ["PSYCOPG_DATABASE_URL"]) as connection:
+              with connection.cursor() as cursor:
+                  for role, password in roles.items():
+                      cursor.execute(
+                          "SELECT rolcanlogin FROM pg_catalog.pg_roles WHERE rolname=%s",
+                          (role,),
+                      )
+                      posture = cursor.fetchone()
+                      if posture is None:
+                          raise RuntimeError(f"reviewed staging role is missing: {role}")
+                      cursor.execute(
+                          sql.SQL("ALTER ROLE {} LOGIN PASSWORD %s").format(
+                              sql.Identifier(role)
+                          ),
+                          (password,),
+                      )
+          print("Rotated isolated roles atomically through direct IPv4 transport")
+          PY
+
+      - name: Verify Alembic-owned canonical command definitions
+        run: |
+          set -euo pipefail
+          definition_state=$(mktemp)
+          definition_query=$(cat <<'SQL'
+          SELECT position('pg_catalog.greatest(' IN pg_catalog.pg_get_functiondef('erp_core_commands.allocate_document_number(uuid,uuid,bytea,timestamptz)'::regprocedure))=0 AS core_current,
+                 position('pg_catalog.least(' IN pg_catalog.pg_get_functiondef('erp_automation_commands.execute_approved_command(uuid,uuid)'::regprocedure))=0
+                   AND position('exact_execute_aggregate_bindings_v2' IN pg_catalog.pg_get_functiondef('erp_automation_commands.execute_approved_command(uuid,uuid)'::regprocedure))>0
+                   AND position('''purchase_order'',purchase_order.id,purchase_order.row_version' IN pg_catalog.pg_get_functiondef('erp_automation_commands.execute_approved_command(uuid,uuid)'::regprocedure))>0
+                   AND position('''supplier_invoice'',supplier_invoice.id,supplier_invoice.row_version' IN pg_catalog.pg_get_functiondef('erp_automation_commands.execute_approved_command(uuid,uuid)'::regprocedure))>0
+                   AND position('''sales_invoice'',sales_invoice.id,sales_invoice.row_version' IN pg_catalog.pg_get_functiondef('erp_automation_commands.execute_approved_command(uuid,uuid)'::regprocedure))>0
+                   AND position('''sales_return'',sales_return.id,sales_return.row_version' IN pg_catalog.pg_get_functiondef('erp_automation_commands.execute_approved_command(uuid,uuid)'::regprocedure))>0
+                   AND position('''purchase_return'',purchase_return.id,purchase_return.row_version' IN pg_catalog.pg_get_functiondef('erp_automation_commands.execute_approved_command(uuid,uuid)'::regprocedure))>0 AS automation_current,
+                 position('terminal_response_body' IN pg_catalog.pg_get_functiondef('erp_trade_commands.finish_claim(uuid,uuid,character varying,uuid)'::regprocedure))>0 AS trade_current,
+                 position('v_purchase_order_id' IN pg_catalog.pg_get_functiondef('erp_trade_commands.post_goods_receipt(uuid,uuid,uuid,uuid,bytea,bytea,timestamptz)'::regprocedure))>0 AS goods_receipt_post_current,
+                 position('supplier_invoice_lines tax_line JOIN' IN pg_catalog.pg_get_functiondef('erp_commercial_commands.post_supplier_invoice(uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,character varying,uuid,uuid,uuid,bytea,bytea,bytea,bytea,timestamp with time zone)'::regprocedure))>0 AS commercial_supplier_post_current,
+                 position('sales.invoice_lines tax_line JOIN' IN pg_catalog.pg_get_functiondef('erp_commercial_commands.post_sales_invoice(uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,character varying,uuid,uuid,uuid,bytea,bytea,timestamp with time zone)'::regprocedure))>0
+                   AND position('sales.invoice_lines invoice_product_line' IN pg_catalog.pg_get_functiondef('erp_commercial_commands.post_sales_invoice(uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,character varying,uuid,uuid,uuid,bytea,bytea,timestamp with time zone)'::regprocedure))>0 AS commercial_sales_post_current,
+                 (SELECT count(*)=2 AND pg_catalog.bool_and(position('round(' IN pg_catalog.pg_get_constraintdef(constraint_row.oid))=0)
+                    FROM pg_catalog.pg_constraint AS constraint_row
+                   WHERE constraint_row.conname IN ('ck_sales_returns_rounding_policy','ck_procurement_purchase_returns_rounding_policy')) AS return_rounding_current,
+                 position('header.status=''posted'' THEN header.row_version-1' IN pg_catalog.pg_get_functiondef('erp_commercial_commands.assert_sales_invoice_artifact(uuid,uuid,jsonb,jsonb)'::regprocedure))>0
+                   AND position('header.status=''posted'' THEN header.row_version-1' IN pg_catalog.pg_get_functiondef('erp_commercial_commands.assert_supplier_invoice_artifact(uuid,uuid,jsonb,jsonb)'::regprocedure))>0 AS commercial_invoice_artifacts_current,
+                 position('header.status=''posted'' THEN header.row_version-1' IN pg_catalog.pg_get_functiondef('erp_commercial_commands.assert_sales_return_artifact(uuid,uuid,jsonb,jsonb)'::regprocedure))>0
+                   AND position('header.status=''posted'' THEN header.row_version-1' IN pg_catalog.pg_get_functiondef('erp_commercial_commands.assert_purchase_return_artifact(uuid,uuid,jsonb,jsonb)'::regprocedure))>0
+                   AND position('header.status NOT IN (''draft'',''submitted'',''approved'',''posted'')' IN pg_catalog.pg_get_functiondef('erp_commercial_commands.assert_purchase_return_artifact(uuid,uuid,jsonb,jsonb)'::regprocedure))>0 AS commercial_return_artifacts_current,
+                 NOT EXISTS (
+                   SELECT 1 FROM pg_catalog.pg_trigger
+                    WHERE tgrelid='tax.portal_documents'::regclass
+                      AND tgname='tax_portal_documents_immutable_trg'
+                      AND NOT tgisinternal
+                 ) AS portal_parser_ownership_current,
+                 position('target_document_id uuid:=portal_document_id' IN pg_catalog.pg_get_functiondef('erp_finance_commands.parse_portal_document(uuid,uuid,jsonb)'::regprocedure))>0
+                   AND position('existing_line.portal_document_id=target_document_id' IN pg_catalog.pg_get_functiondef('erp_finance_commands.parse_portal_document(uuid,uuid,jsonb)'::regprocedure))>0 AS portal_parser_scope_current,
+                 position('terminal_response_body' IN pg_catalog.pg_get_functiondef('erp_compliance_commands.finish_claim(uuid,uuid,character varying,uuid)'::regprocedure))>0 AS compliance_current,
+                 position('outbox_aggregate_id' IN pg_catalog.pg_get_functiondef('erp_plumbing.enqueue_state_outbox()'::regprocedure))>0 AS plumbing_current,
+                 position('SECURITY DEFINER' IN pg_catalog.pg_get_functiondef('erp_trade_commands_v2.guard_source_inventory_ownership()'::regprocedure))>0
+                   AND position('SECURITY DEFINER' IN pg_catalog.pg_get_functiondef('erp_trade_commands_v2.guard_posted_landed_allocation()'::regprocedure))>0 AS trade_trigger_helpers_current,
+                 position('controlled_batched_movement' IN pg_catalog.pg_get_functiondef('erp_automation_commands.resolve_inventory_adjustment_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)'::regprocedure))=0
+                   AND position('conversion.row_version' IN pg_catalog.pg_get_functiondef('erp_automation_commands.resolve_inventory_adjustment_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)'::regprocedure))=0
+                   AND position('effective_from<=adjustment_date' IN pg_catalog.pg_get_functiondef('erp_automation_commands.resolve_inventory_adjustment_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)'::regprocedure))=0
+                   AND position('conversion_version_hash' IN pg_catalog.pg_get_functiondef('erp_automation_commands.resolve_inventory_adjustment_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)'::regprocedure))>0
+                   AND position('stock_balance.branch_id=branch.id' IN pg_catalog.pg_get_functiondef('erp_automation_commands.resolve_inventory_adjustment_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)'::regprocedure))>0
+                   AND position('stock_balance.location_id=location.id' IN pg_catalog.pg_get_functiondef('erp_automation_commands.resolve_inventory_adjustment_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)'::regprocedure))>0 AS inventory_adjustment_risk_current,
+                 position('pg_catalog.session_user' IN pg_catalog.pg_get_functiondef('erp_automation_commands.persist_inventory_adjustment_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,uuid,uuid,uuid,bytea,bytea,bytea,bytea,bytea,bytea,timestamp with time zone)'::regprocedure))=0
+                   AND position('SESSION_USER<>''erp_runtime''' IN pg_catalog.pg_get_functiondef('erp_automation_commands.persist_inventory_adjustment_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,uuid,uuid,uuid,bytea,bytea,bytea,bytea,bytea,bytea,timestamp with time zone)'::regprocedure))>0 AS inventory_adjustment_persist_current,
+                 position('pg_catalog.current_date' IN pg_catalog.pg_get_functiondef('erp_automation_commands.resolve_goods_receipt_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)'::regprocedure))=0
+                   AND position('order_line.row_version' IN pg_catalog.pg_get_functiondef('erp_automation_commands.resolve_goods_receipt_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)'::regprocedure))=0
+                   AND position('mrp_conversion.row_version' IN pg_catalog.pg_get_functiondef('erp_automation_commands.resolve_goods_receipt_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)'::regprocedure))=0
+                   AND position('order_line_version_hash' IN pg_catalog.pg_get_functiondef('erp_automation_commands.resolve_goods_receipt_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)'::regprocedure))>0
+                   AND position('mrp_conversion_version_hash' IN pg_catalog.pg_get_functiondef('erp_automation_commands.resolve_goods_receipt_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)'::regprocedure))>0 AS goods_receipt_date_current,
+                 position('aggregate_version_hash' IN pg_catalog.pg_get_functiondef('erp_automation_commands.persist_purchase_order_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,uuid,uuid,uuid,bytea,bytea,bytea,bytea,bytea,bytea,bytea,timestamp with time zone)'::regprocedure))>0 AS purchase_order_binding_current,
+                 position('requested.requested_batch_id=eligible_lot.eligible_batch_id' IN pg_catalog.pg_get_functiondef('erp_automation_commands.resolve_sales_dispatch_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)'::regprocedure))>0
+                   AND position('JOIN inventory.batches AS eligible_batch' IN pg_catalog.pg_get_functiondef('erp_automation_commands.resolve_sales_dispatch_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)'::regprocedure))>0 AS dispatch_fefo_current,
+                 position('SELECT * INTO STRICT revenue_account FROM finance.accounts AS resolved_revenue_account' IN pg_catalog.pg_get_functiondef('erp_automation_commands.resolve_sales_invoice_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)'::regprocedure))>0
+                   AND position('sales_invoice_fefo_expiry_date_equivalence_v3' IN pg_catalog.pg_get_functiondef('erp_automation_commands.resolve_sales_invoice_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)'::regprocedure))>0
+                   AND position('ORDER BY batch_row.expires_on,stock.batch_id' IN pg_catalog.pg_get_functiondef('erp_automation_commands.resolve_sales_invoice_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)'::regprocedure))=0 AS sales_invoice_revenue_account_current,
+                 position('(resolved_document->>''branch_id'')::uuid,false,''sales_return_receipt''' IN pg_catalog.pg_get_functiondef('erp_automation_commands.persist_sales_return_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,bytea,bytea,bytea,bytea,bytea,bytea,bytea,timestamp with time zone)'::regprocedure))>0 AS sales_return_receipt_current,
+                 position('persisted_return.id=(expected_line->>''line_id'')::uuid' IN pg_catalog.pg_get_functiondef('erp_automation_commands.assert_sales_return_draft(uuid,uuid,uuid,jsonb)'::regprocedure))>0
+                   AND position('sales-return draft line cardinality changed' IN pg_catalog.pg_get_functiondef('erp_automation_commands.assert_sales_return_draft(uuid,uuid,uuid,jsonb)'::regprocedure))>0 AS sales_return_draft_current,
+                 position('tax_document.supplier_invoice_id=invoice.id' IN pg_catalog.pg_get_functiondef('erp_automation_commands.resolve_purchase_return_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)'::regprocedure))>0
+                   AND position('artifact.supplier_invoice_id=invoice.id' IN pg_catalog.pg_get_functiondef('erp_automation_commands.resolve_purchase_return_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)'::regprocedure))>0
+                   AND position('invoice_line.supplier_invoice_id=invoice.id' IN pg_catalog.pg_get_functiondef('erp_automation_commands.resolve_purchase_return_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,jsonb)'::regprocedure))>0
+                   AND position('persisted_return.id=(expected_line->>''line_id'')::uuid' IN pg_catalog.pg_get_functiondef('erp_automation_commands.assert_purchase_return_draft(uuid,uuid,uuid,jsonb)'::regprocedure))>0
+                   AND position('purchase-return draft line cardinality changed' IN pg_catalog.pg_get_functiondef('erp_automation_commands.assert_purchase_return_draft(uuid,uuid,uuid,jsonb)'::regprocedure))>0
+                   AND position('purchase-return submission transition lost its draft' IN pg_catalog.pg_get_functiondef('erp_automation_commands.persist_purchase_return_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,bytea,bytea,bytea,bytea,bytea,bytea,bytea,timestamp with time zone)'::regprocedure))>0
+                   AND position('movement_started_at,document_type,document_number' IN pg_catalog.pg_get_functiondef('erp_automation_commands.persist_purchase_return_prepare(uuid,uuid,uuid,uuid,uuid,character varying,uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,bytea,bytea,bytea,bytea,bytea,bytea,bytea,timestamp with time zone)'::regprocedure))>0
+                   AND position('purchase-return approval transition lost its submitted state' IN pg_catalog.pg_get_functiondef('erp_automation_commands.execute_approved_command(uuid,uuid)'::regprocedure))>0
+                   AND position('purchase return is not submitted' IN pg_catalog.pg_get_functiondef('erp_calculation_authority.issue_artifact(uuid,uuid,character varying,character varying,uuid,bigint,uuid,uuid,uuid,bytea,bytea,bytea,character varying,character varying,character varying,timestamp with time zone)'::regprocedure))>0 AS purchase_return_resolution_current,
+                 position('FROM sales.return_lines return_adjustment_line' IN pg_catalog.pg_get_functiondef('erp_commercial_commands.post_sales_return(uuid,uuid,uuid,uuid,uuid,uuid,uuid,character varying,uuid,uuid,character varying,uuid,uuid,uuid,uuid,bytea,bytea,timestamp with time zone)'::regprocedure))>0
+                   AND position('FROM procurement.purchase_return_lines return_adjustment_line' IN pg_catalog.pg_get_functiondef('erp_commercial_commands.post_purchase_return(uuid,uuid,uuid,uuid,uuid,uuid,uuid,character varying,uuid,uuid,character varying,uuid,uuid,uuid,uuid,bytea,bytea,timestamp with time zone)'::regprocedure))>0 AS commercial_return_post_current,
+                 position('TG_TABLE_NAME = ''inventory_documents'' AND TG_OP <> ''DELETE'' THEN' IN pg_catalog.pg_get_functiondef('erp_trade_invariants.guard_direct_invoice_issue()'::regprocedure))>0
+                   AND position('TG_TABLE_NAME = ''inventory_documents'' AND TG_OP <> ''DELETE'' AND NEW.sales_invoice_id' IN pg_catalog.pg_get_functiondef('erp_trade_invariants.guard_direct_invoice_issue()'::regprocedure))=0 AS trade_direct_invoice_current,
+                 position('NEW.capability_code IN (' IN pg_catalog.pg_get_functiondef('erp_automation_commands.guard_command_request_match()'::regprocedure))>0 AS calculated_guard_current,
+                 (SELECT count(*)=5 AND pg_catalog.bool_and(position('set_config(''app.request_id''' IN pg_catalog.pg_get_functiondef(proc.oid))>0)
+                    FROM pg_catalog.pg_proc AS proc
+                    JOIN pg_catalog.pg_namespace AS namespace ON namespace.oid=proc.pronamespace
+                   WHERE namespace.nspname='erp_automation_commands'
+                     AND proc.proname IN ('persist_supplier_invoice_prepare','persist_inventory_adjustment_prepare',
+                                          'persist_supplier_payment_prepare','persist_supplier_advance_prepare',
+                                          'persist_customer_receipt_prepare')) AS runtime_prepare_context_current
+          SQL
+          )
+          if ! curl --fail --silent --show-error \
+            --request POST \
+            --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            --header 'Content-Type: application/json' \
+            --data "$(jq -nc --arg query "$definition_query" '{query:$query}')" \
+            "https://api.supabase.com/v1/projects/$CANONICAL_STAGING_PROJECT_REF/database/query/read-only" \
+            >"$definition_state"; then
+            echo "::error title=Canonical definition verification failed::Control-plane read failed"
+            exit 1
+          fi
+          if ! jq -e \
+            '([.. | objects | select(has("core_current"))]) as $rows | ($rows | length) == 1 and ($rows[0] | to_entries | all(.value == true))' \
+            "$definition_state" >/dev/null; then
+            failed_definitions=$(jq -r \
+              '([.. | objects | select(has("core_current"))]) as $rows |
+               if ($rows | length) != 1 then
+                 "unexpected-definition-row-count=" + (($rows | length) | tostring)
+               else
+                 [$rows[0] | to_entries[] | select(.value != true) | .key] | join(",")
+               end' \
+              "$definition_state")
+            echo "::error title=Canonical definition verification failed::Alembic head verification failed for: $failed_definitions"
+            exit 1
+          fi
+          echo "Control plane verified Alembic-owned command definitions are current"
+
+      - name: Verify baseline topology and isolated role posture
+        id: verify_direct_roles
+        env:
+          ROLE_POSTURE_QUERY: |
+            SELECT role.rolname,
+                   role.rolcanlogin,
+                   role.rolpassword IS NOT NULL AS password_present,
+                   role.rolvaliduntil IS NULL OR role.rolvaliduntil > now() AS password_unexpired,
+                   pg_has_role(role.oid,'erp_app','MEMBER') AS erp_app_member
+              FROM pg_catalog.pg_roles AS role
+             WHERE role.rolname IN (
+               'erp_runtime','erp_calculator','erp_tax_provider',
+               'erp_regulatory_importer'
+             )
+             ORDER BY role.rolname
+        run: |
+          set -euo pipefail
+          posture_response=$(mktemp)
+          curl --fail --silent --show-error \
+            --request POST \
+            --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            --header 'Content-Type: application/json' \
+            --data "$(jq -nc --arg query "$ROLE_POSTURE_QUERY" '{query:$query}')" \
+            "https://api.supabase.com/v1/projects/$CANONICAL_STAGING_PROJECT_REF/database/query/read-only" \
+            >"$posture_response"
+          jq -e '[.. | objects | select(.rolname?)] | length == 4' "$posture_response" >/dev/null
+          jq -e '[.. | objects | select(.rolname?)] | all(
+            .rolcanlogin == true and .password_present == true and .password_unexpired == true and
+            ((.rolname == "erp_runtime" and .erp_app_member == true) or
+             (.rolname != "erp_runtime" and .erp_app_member == false)))' \
+            "$posture_response" >/dev/null
+          posture=$(jq -c '[.. | objects | select(.rolname?)]' "$posture_response")
+          posture=${posture//'%'/'%25'}
+          posture=${posture//$'\r'/'%0D'}
+          posture=${posture//$'\n'/'%0A'}
+          echo "::notice title=Canonical isolated role posture::$posture"
+
+          python3 backend/scripts/verify_staging_direct_roles.py
+
+      - name: Run canonical rollback fixtures on live free staging
+        run: |
+          set -euo pipefail
+          export PGCONNECT_TIMEOUT=15
+          export PGOPTIONS='-c statement_timeout=120000 -c lock_timeout=15000'
+          cleanup_role_membership() {
+            bash backend/scripts/revoke_staging_postgres_set_roles.sh \
+              migration-owner-runtime
+          }
+          cleanup_fixture_roles_on_exit() {
+            local prior_status=$?
+            trap - EXIT
+            if ! cleanup_role_membership; then
+              echo "::error title=Canonical staging role cleanup failed::postgres retained unverified fixture role delegation"
+              exit 1
+            fi
+            exit "$prior_status"
+          }
+          trap cleanup_fixture_roles_on_exit EXIT
+          psql -X -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" \
+            -c 'GRANT erp_migration_owner, erp_runtime TO postgres WITH SET TRUE, INHERIT FALSE' \
+            >/dev/null
+
+          mapfile -t canonical_fixtures < <(
+            find database/canonical -type f \
+              \( -name 'test_*.sql' -o -name 'head_test_*.sql' \) \
+              | LC_ALL=C sort
+          )
+          test "${#canonical_fixtures[@]}" -gt 0
+          fixture_count=0
+          for fixture in "${canonical_fixtures[@]}"; do
+            if ! grep -q '^BEGIN;' "$fixture"; then
+              test "$fixture" = \
+                database/canonical/invariants_finance/test_finance_invariants.sql
+            else
+              grep -q '^ROLLBACK;' "$fixture"
+            fi
+            echo "running live rollback fixture: $fixture"
+            fixture_passed=false
+            fixture_log=$(mktemp)
+            for attempt in 1 2 3; do
+              : >"$fixture_log"
+              set +e
+              timeout --signal=TERM 180s \
+                psql -X -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" \
+                  -f "$fixture" >"$fixture_log" 2>&1
+              fixture_status=$?
+              set -e
+              if test "$fixture_status" = 0; then
+                fixture_passed=true
+                break
+              fi
+              if test "$attempt" -lt 3 && {
+                test "$fixture_status" = 124 ||
+                grep -Eq \
+                  'SSL connection has been closed unexpectedly|server closed the connection unexpectedly|connection to server was lost|connection timed out|timeout expired|could not connect to server' \
+                  "$fixture_log"
+              }; then
+                echo "transient staging connection failure for $fixture; retrying attempt $((attempt + 1))/3"
+                sleep $((attempt * 5))
+                continue
+              fi
+              break
+            done
+            if test "$fixture_passed" != true; then
+              python3 backend/scripts/safe_ci_log_summary.py --label fixture "$fixture_log"
+              exit 1
+            fi
+            fixture_count=$((fixture_count + 1))
+          done
+          test "$fixture_count" = "${#canonical_fixtures[@]}"
+
+          if ! cleanup_role_membership; then
+            trap - EXIT
+            echo "::error title=Canonical staging role cleanup failed::postgres retained unverified fixture role delegation"
+            exit 1
+          fi
+          trap - EXIT
+          mkdir -p staging-evidence
+          jq -n \
+            --argjson fixture_count "$fixture_count" \
+            --arg database_engine "Supabase PostgreSQL 17" \
+            '{
+              fixture_count: $fixture_count,
+              database_engine: $database_engine,
+              mutation_boundary: "BEGIN_ROLLBACK_or_read_only",
+              result: "all_canonical_sql_fixtures_passed"
+            }' > staging-evidence/canonical-staging-sql-fixtures.json
+
+      - name: Build and mask isolated service connections
+        run: |
+          set -euo pipefail
+          host="$SUPABASE_DIRECT_DATABASE_HOST"
+          port="$SUPABASE_DIRECT_DATABASE_PORT"
+          runtime_password=$(jq -nr --arg value "$ERP_RUNTIME_PASSWORD" '$value|@uri')
+          calculator_password=$(jq -nr --arg value "$ERP_CALCULATOR_PASSWORD" '$value|@uri')
+          provider_password=$(jq -nr --arg value "$ERP_TAX_PROVIDER_PASSWORD" '$value|@uri')
+          runtime_url="postgresql://erp_runtime:${runtime_password}@${host}:${port}/postgres?sslmode=require&gssencmode=disable&connect_timeout=15&application_name=aasopharma_api_pilot"
+          calculator_url="postgresql://erp_calculator:${calculator_password}@${host}:${port}/postgres?sslmode=require&gssencmode=disable&connect_timeout=15&application_name=aasopharma_calculator_pilot"
+          provider_url="postgresql://erp_tax_provider:${provider_password}@${host}:${port}/postgres?sslmode=require&gssencmode=disable&connect_timeout=15&application_name=aasopharma_tax_provider_pilot"
+          echo "::add-mask::$runtime_url"
+          echo "::add-mask::$calculator_url"
+          echo "::add-mask::$provider_url"
+          {
+            echo "DATABASE_URL=$runtime_url"
+            echo "ERP_CALCULATOR_DATABASE_URL=$calculator_url"
+            echo "TAX_PROVIDER_DATABASE_URL=$provider_url"
+          } >> "$GITHUB_ENV"
+
+      - name: Provision canonical private evidence storage
+        if: inputs.deploy_render_pilot == true
+        run: |
+          set -euo pipefail
+          test "$CANONICAL_STAGING_PROJECT_REF" = "$EVIDENCE_STORAGE_EXPECTED_PROJECT_REF"
+          test "$SUPABASE_URL" = "https://${CANONICAL_STAGING_PROJECT_REF}.supabase.co"
+          mkdir -p staging-evidence
+          psql -X -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" \
+            -f database/09-deployment/canonical-evidence-storage.sql >/dev/null
+          evidence_role=$(psql -X -Atqc \
+            "SELECT rolname FROM pg_catalog.pg_roles WHERE rolname='erp_evidence_storage' AND NOT rolcanlogin AND NOT rolsuper AND NOT rolbypassrls" \
+            "$PSYCOPG_DATABASE_URL")
+          test "$evidence_role" = erp_evidence_storage
+          test "$(psql -X -Atqc \
+            "SELECT pg_has_role('authenticator','erp_evidence_storage','MEMBER')" \
+            "$PSYCOPG_DATABASE_URL")" = t
+          test "$(psql -X -Atqc \
+            "SELECT count(*) FROM storage.buckets WHERE id='canonical-evidence-private-v1' AND public=false AND file_size_limit=10485760 AND allowed_mime_types=ARRAY['application/pdf']::text[]" \
+            "$PSYCOPG_DATABASE_URL")" = 1
+          test "$(psql -X -Atqc \
+            "SELECT count(*) FROM pg_catalog.pg_policy WHERE polrelid='storage.objects'::regclass AND polname IN ('canonical_evidence_server_select','canonical_evidence_server_insert','canonical_evidence_server_delete')" \
+            "$PSYCOPG_DATABASE_URL")" = 3
+          DATABASE_URL="$PSYCOPG_DATABASE_URL" PYTHONPATH=backend \
+            python3 backend/tests/postgres/check_evidence_storage_auth_hook.py
+          if [ "${EVIDENCE_STORAGE_IDENTITY_READY:-false}" != true ]; then
+            identity_log=$(mktemp)
+            if ! python3 backend/scripts/provision_canonical_evidence_storage_identity.py \
+                --phase prepare \
+                --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
+                --reviewed-sha "$GITHUB_SHA" \
+                --github-env "$GITHUB_ENV" \
+                --receipt staging-evidence/canonical-evidence-storage-identity.json \
+                >staging-evidence/canonical-evidence-storage-identity-summary.json \
+                2>"$identity_log"; then
+              python3 backend/scripts/safe_ci_log_summary.py --label render "$identity_log"
+              exit 1
+            fi
+            echo "EVIDENCE_STORAGE_IDENTITY_READY=true" >> "$GITHUB_ENV"
+          fi
+
+      - name: Prove canonical evidence storage least privilege
+        if: inputs.deploy_render_pilot == true
+        run: |
+          set -euo pipefail
+          test "$EVIDENCE_STORAGE_ENABLED" = true
+          test "$EVIDENCE_STORAGE_SERVICE_AUTH_USER_ID" = d3000000-0000-4000-8000-0000000000e1
+          test "$EVIDENCE_STORAGE_SERVICE_EMAIL" = canonical-evidence-storage@service.aasopharma.invalid
+          test -n "$EVIDENCE_STORAGE_SERVICE_PASSWORD"
+          PYTHONPATH=backend python3 backend/scripts/verify_canonical_evidence_storage.py \
+            --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
+            --receipt staging-evidence/canonical-evidence-storage-canary.json
+
+      - name: Capture and audit exact-SHA transaction integrity
+        run: |
+          set -euo pipefail
+          test "$CANONICAL_STAGING_PROJECT_REF" = rgihahbmkrmhitjdjvev
+          mkdir -p staging-evidence
+          python3 backend/scripts/audit/capture_transaction_integrity_evidence.py \
+            --runtime-database-url "$DATABASE_URL" \
+            --admin-database-url "$PSYCOPG_DATABASE_URL" \
+            --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
+            --git-commit "$GITHUB_SHA" \
+            --output staging-evidence/canonical-transaction-integrity.json
+          python3 backend/scripts/audit/transaction_integrity_audit.py \
+            --live-evidence staging-evidence/canonical-transaction-integrity.json \
+            --expected-git-sha "$GITHUB_SHA"
+
+      - name: Bind the reviewed staging MCP OAuth client
+        env:
+          CANONICAL_DEMO_EVIDENCE_DIR: staging-evidence
+        run: |
+          set -euo pipefail
+          test "$CANONICAL_STAGING_PROJECT_REF" = rgihahbmkrmhitjdjvev
+          test "$SUPABASE_URL" = https://rgihahbmkrmhitjdjvev.supabase.co
+          test -n "$SUPABASE_ACCESS_TOKEN"
+          python3 backend/scripts/provision_staging_mcp_oauth.py --mode client-only
+
+      - name: Close canonical writes before Render promotion
+        if: inputs.deploy_render_pilot == true
+        run: |
+          set -euo pipefail
+          mkdir -p staging-evidence
+          bash backend/scripts/run_canonical_write_fence.sh \
+            close "$GITHUB_SHA" \
+            staging-evidence/canonical-write-fence-closed.json
+          jq -e --arg sha "$GITHUB_SHA" \
+            '.state == "closed" and .commit_sha == $sha' \
+            staging-evidence/canonical-write-fence-closed.json >/dev/null
+
+      - name: Reconcile and deploy the free Render pilot
+        if: inputs.deploy_render_pilot == true
+        run: |
+          set -euo pipefail
+          test -n "$RENDER_API_KEY"
+          test -n "$JWT_SECRET_KEY"
+          test -n "$SUPABASE_ANON_KEY"
+          test -n "$MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS"
+          test "$MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS" != disabled-unissued-canonical-staging
+          mkdir -p staging-evidence
+          test -f staging-evidence/render-pilot-lifecycle.json
+          deploy_sha="$CANONICAL_RENDER_DEPLOY_SHA"
+          # Reconcile configuration while every old application process is
+          # stopped. This prevents environment/config changes from racing the
+          # exact-SHA deploy immediately after resume.
+          config_log=$(mktemp)
+          if ! python3 backend/scripts/provision_render_pilot.py \
+              --apply \
+              --evidence-credential-cutover-phase prepare \
+              --branch "$GITHUB_REF_NAME" \
+              > staging-evidence/render-pilot-config.json 2>"$config_log"; then
+            python3 backend/scripts/safe_ci_log_summary.py --label render "$config_log"
+            exit 1
+          fi
+          deploy_one_service() {
+            local service_name="$1"
+            local receipt_name="$2"
+            local provision_log
+            local service_id
+            local deploy_id
+            local deploy_response
+            local deploy_status
+            local deployed_sha
+            local request_ok
+
+            # Dependency order is API, MCP, frontend. The database write fence
+            # remains closed while each service briefly resumes its old
+            # artifact and Render replaces it with the exact reviewed SHA.
+            python3 backend/scripts/manage_render_pilot_lifecycle.py resume-owned \
+              --commit-sha "$GITHUB_SHA" \
+              --receipt staging-evidence/render-pilot-lifecycle.json \
+              --service "$service_name"
+            provision_log=$(mktemp)
+            if ! python3 backend/scripts/provision_render_pilot.py \
+                --apply \
+                --deploy \
+                --evidence-credential-cutover-phase prepare \
+                --deploy-service "$service_name" \
+                --cancel-stale-deploys \
+                --branch "$GITHUB_REF_NAME" \
+                --commit-id "$deploy_sha" \
+                >"staging-evidence/$receipt_name" 2>"$provision_log"; then
+              python3 backend/scripts/safe_ci_log_summary.py \
+                --label render "$provision_log"
+              exit 1
+            fi
+            service_id=$(jq -er --arg service "$service_name" \
+              '.services[$service].id' "staging-evidence/$receipt_name")
+            deploy_id=$(jq -er --arg service "$service_name" \
+              '.deployed[$service].id' "staging-evidence/$receipt_name")
+            deploy_response=$(mktemp)
+            local deploy_deadline=$((SECONDS + 1800))
+            while (( SECONDS < deploy_deadline )); do
+              request_ok=false
+              if curl --fail --silent --show-error --max-time 15 \
+                  --header "Authorization: Bearer $RENDER_API_KEY" \
+                  "https://api.render.com/v1/services/$service_id/deploys/$deploy_id" \
+                  >"$deploy_response"; then
+                request_ok=true
+              fi
+              if [ "$request_ok" = true ]; then
+                deploy_status=$(jq -er '.status' "$deploy_response")
+                deployed_sha=$(jq -er \
+                  '.commit.id | select(type == "string" and test("^[0-9a-f]{40}$"))' \
+                  "$deploy_response")
+                if [ "$deployed_sha" != "$deploy_sha" ]; then
+                  echo "::error title=Render deploy provenance mismatch::$service_name did not report the reviewed commit"
+                  exit 1
+                fi
+                printf '%s deploy %s status: %s\n' \
+                  "$service_name" "$deploy_id" "$deploy_status"
+                case "$deploy_status" in
+                  live) return 0 ;;
+                  build_failed|update_failed|pre_deploy_failed|canceled|deactivated)
+                    echo "::error title=Render deploy failed::$service_name deploy $deploy_id ended as $deploy_status"
+                    exit 1
+                    ;;
+                esac
+              fi
+              remaining=$((deploy_deadline - SECONDS))
+              if (( remaining > 0 )); then
+                sleep_for=15
+                if (( remaining < sleep_for )); then sleep_for=$remaining; fi
+                sleep "$sleep_for"
+              fi
+            done
+            echo "::error title=Render deploy timeout::$service_name did not become exact-SHA live within the 30-minute wall-clock deadline"
+            exit 1
+          }
+
+          deploy_one_service aasopharma-api-pilot render-pilot-api.json
+          deploy_one_service aasopharma-mcp-pilot render-pilot-mcp.json
+          deploy_one_service aasopharma-erp-pilot render-pilot-frontend.json
+          jq -s '
+            .[0] as $config |
+            {
+              mode: $config.mode,
+              services: $config.services,
+              deployed: (reduce .[1:][] as $receipt ({}; . + $receipt.deployed))
+            }
+          ' \
+            staging-evidence/render-pilot-config.json \
+            staging-evidence/render-pilot-api.json \
+            staging-evidence/render-pilot-mcp.json \
+            staging-evidence/render-pilot-frontend.json \
+            > staging-evidence/render-pilot.json
+
+          PYTHONPATH=backend python3 backend/scripts/verify_render_pilot_sha.py \
+            --commit-sha "$deploy_sha" \
+            > staging-evidence/render-pilot-evidence.json
+          jq -e --slurpfile readback staging-evidence/render-pilot-evidence.json '
+            . as $provision |
+            .mode == "applied" and
+            (.services | keys) == [
+              "aasopharma-api-pilot",
+              "aasopharma-erp-pilot",
+              "aasopharma-mcp-pilot"
+            ] and
+            (.deployed | keys) == [
+              "aasopharma-api-pilot",
+              "aasopharma-erp-pilot",
+              "aasopharma-mcp-pilot"
+            ] and
+            ($readback | length) == 1 and
+            ($readback[0].services | keys) == (.services | keys) and
+            all($readback[0].services | to_entries[];
+              .value.deploy_id == $provision.deployed[.key].id)
+          ' staging-evidence/render-pilot.json >/dev/null
+
+      - name: Verify public exact-SHA provenance before opening canonical writes
+        if: inputs.deploy_render_pilot == true
+        run: |
+          set -euo pipefail
+          api_url=$(jq -er '.services["aasopharma-api-pilot"].url' staging-evidence/render-pilot-evidence.json)
+          frontend_url=$(jq -er '.services["aasopharma-erp-pilot"].url' staging-evidence/render-pilot-evidence.json)
+          mcp_url=$(jq -er '.services["aasopharma-mcp-pilot"].url' staging-evidence/render-pilot-evidence.json)
+          for url in "$api_url" "$frontend_url" "$mcp_url"; do
+            echo "::add-mask::$url"
+          done
+
+          provenance_evidence=$(mktemp)
+          all_live=false
+          for _attempt in 1 2 3 4 5; do
+            : >"$provenance_evidence"
+            if PYTHONPATH=backend python3 backend/scripts/verify_pre_fence_deployment_sha.py \
+              --provider render \
+              --commit-sha "$CANONICAL_RENDER_DEPLOY_SHA" \
+              --frontend-origin "$frontend_url" \
+              --api-origin "$api_url" \
+              --mcp-origin "$mcp_url" \
+              >"$provenance_evidence" 2>/dev/null; then
+              all_live=true
+              break
+            fi
+            sleep 30
+          done
+          test "$all_live" = true
+          mv "$provenance_evidence" staging-evidence/render-pilot-provenance-evidence.json
+
+      - name: Open canonical writes after exact-SHA verification
+        if: inputs.deploy_render_pilot == true
+        run: |
+          set -euo pipefail
+          test -f staging-evidence/render-pilot-provenance-evidence.json
+          test -n "$RAILWAY_API_TOKEN"
+          test -n "$RAILWAY_PROJECT_ID"
+          test -n "$RAILWAY_ENVIRONMENT_ID"
+          test -n "$RAILWAY_API_SERVICE_ID"
+          test -n "$RAILWAY_MCP_SERVICE_ID"
+          test -n "$RAILWAY_FRONTEND_SERVICE_ID"
+          railway_state=$(mktemp)
+          railway status \
+            --project "$RAILWAY_PROJECT_ID" \
+            --environment "$RAILWAY_ENVIRONMENT_ID" \
+            --json >"$railway_state"
+          python3 backend/scripts/verify_retired_railway_authority.py \
+            --status-json "$railway_state" \
+            --project-id "$RAILWAY_PROJECT_ID" \
+            --environment-id "$RAILWAY_ENVIRONMENT_ID" \
+            --commit-sha "$GITHUB_SHA" \
+            --service "$RAILWAY_API_SERVICE_ID=$RAILWAY_API_SERVICE=$RAILWAY_API_URL" \
+            --service "$RAILWAY_MCP_SERVICE_ID=$RAILWAY_MCP_SERVICE=$RAILWAY_MCP_URL" \
+            --service "$RAILWAY_FRONTEND_SERVICE_ID=$RAILWAY_FRONTEND_SERVICE=$RAILWAY_FRONTEND_URL" \
+            --receipt staging-evidence/railway-authority-retired-before-open.json
+          bash backend/scripts/run_canonical_write_fence.sh \
+            open "$GITHUB_SHA" \
+            staging-evidence/canonical-write-fence-opened.json
+          jq -e --arg sha "$GITHUB_SHA" \
+            '.state == "open" and .commit_sha == $sha' \
+            staging-evidence/canonical-write-fence-opened.json >/dev/null
+
+      - name: Verify full public readiness after opening canonical writes
+        if: inputs.deploy_render_pilot == true
+        run: |
+          set -euo pipefail
+          test -f staging-evidence/canonical-write-fence-opened.json
+          api_url=$(jq -er '.services["aasopharma-api-pilot"].url' staging-evidence/render-pilot-evidence.json)
+          frontend_url=$(jq -er '.services["aasopharma-erp-pilot"].url' staging-evidence/render-pilot-evidence.json)
+          mcp_url=$(jq -er '.services["aasopharma-mcp-pilot"].url' staging-evidence/render-pilot-evidence.json)
+          for url in "$api_url" "$frontend_url" "$mcp_url"; do
+            echo "::add-mask::$url"
+          done
+
+          public_evidence=$(mktemp)
+          all_ready=false
+          for _attempt in 1 2 3 4 5; do
+            : >"$public_evidence"
+            if PYTHONPATH=backend python3 backend/scripts/verify_live18_deployment_sha.py \
+              --provider render \
+              --commit-sha "$CANONICAL_RENDER_DEPLOY_SHA" \
+              --frontend-origin "$frontend_url" \
+              --api-origin "$api_url" \
+              --mcp-origin "$mcp_url" \
+              >"$public_evidence" 2>/dev/null; then
+              all_ready=true
+              break
+            fi
+            sleep 30
+          done
+          test "$all_ready" = true
+          mv "$public_evidence" staging-evidence/render-pilot-public-evidence.json
+
+      - name: Verify and exercise the reviewed hosted OAuth server boundary
+        if: inputs.deploy_render_pilot == true
+        env:
+          CANONICAL_DEMO_EVIDENCE_DIR: staging-evidence
+          CANONICAL_STAGING_MCP_EXERCISE_MODE: boundary_only
+        run: |
+          set -euo pipefail
+          test "$CANONICAL_STAGING_PROJECT_REF" = rgihahbmkrmhitjdjvev
+          test "$SUPABASE_URL" = https://rgihahbmkrmhitjdjvev.supabase.co
+          frontend_url=$(jq -er '.services["aasopharma-erp-pilot"].url' staging-evidence/render-pilot.json)
+          test "$frontend_url" = https://aasopharma-erp-pilot.onrender.com
+
+          discovery_url="$SUPABASE_URL/.well-known/oauth-authorization-server/auth/v1"
+          discovery=''
+          for attempt in 1 2 3 4 5; do
+            if discovery=$(curl --fail --silent --show-error --max-time 15 "$discovery_url"); then
+              break
+            fi
+            if [ "$attempt" -eq 5 ]; then
+              echo 'OAuth discovery did not become available after five bounded checks' >&2
+              exit 1
+            fi
+            sleep 3
+          done
+          jq -e --arg issuer "$SUPABASE_URL/auth/v1" '
+            .issuer == $issuer and
+            .authorization_endpoint == ($issuer + "/oauth/authorize") and
+            .token_endpoint == ($issuer + "/oauth/token") and
+            (.code_challenge_methods_supported | index("S256")) != null
+          ' <<<"$discovery" >/dev/null
+          curl --fail --silent --show-error --max-time 15 \
+            "$frontend_url/oauth/consent?authorization_id=invalid_contract_probe" \
+            >/dev/null
+          jq -n \
+            --arg project_ref "$CANONICAL_STAGING_PROJECT_REF" \
+            --arg hosted_consent_origin "$frontend_url" \
+            --arg discovery_url "$discovery_url" \
+            --arg commit_sha "$CANONICAL_RENDER_DEPLOY_SHA" \
+            --arg verified_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{
+              project_ref: $project_ref,
+              hosted_consent_origin: $hosted_consent_origin,
+              authorization_path: "/oauth/consent",
+              dynamic_client_registration: false,
+              discovery_url: $discovery_url,
+              discovery_verified: true,
+              hosted_consent_route_verified: true,
+              commit_sha: $commit_sha,
+              verified_at: $verified_at
+            }' > staging-evidence/canonical-staging-oauth.json
+          python3 backend/scripts/exercise_staging_mcp_oauth.py
+
+      - name: Provision and exercise the disposable demo organization
+        if: inputs.provision_demo_data == true
+        env:
+          CANONICAL_DEMO_WRITE_ACK: PROVISION_DISPOSABLE_DEMO
+          CANONICAL_DEMO_EVIDENCE_DIR: staging-evidence
+          CANONICAL_DEMO_EXPENSE_RECEIPT_BASE64: ${{ secrets.CANONICAL_DEMO_EXPENSE_RECEIPT_BASE64 }}
+          CANONICAL_DEMO_EXPENSE_RECEIPT_SHA256: ${{ secrets.CANONICAL_DEMO_EXPENSE_RECEIPT_SHA256 }}
+          LIVE18_REVIEWED_SCALARS_JSON: ${{ secrets.LIVE18_REVIEWED_SCALARS_JSON }}
+          PYTHONUNBUFFERED: "1"
+          PGOPTIONS: -c statement_timeout=120000 -c lock_timeout=15000 -c idle_in_transaction_session_timeout=180000
+        run: |
+          set -euo pipefail
+          test -n "$ERP_REGULATORY_IMPORTER_PASSWORD"
+          test -n "$CANONICAL_DEMO_EXPENSE_RECEIPT_BASE64"
+          test -n "$CANONICAL_DEMO_EXPENSE_RECEIPT_SHA256"
+          test -n "$LIVE18_REVIEWED_SCALARS_JSON"
+          [[ "$CANONICAL_DEMO_EXPENSE_RECEIPT_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          expense_receipt_path="$RUNNER_TEMP/live18-reviewed-expense-receipt.pdf"
+          umask 077
+          printf '%s' "$CANONICAL_DEMO_EXPENSE_RECEIPT_BASE64" \
+            | base64 --decode > "$expense_receipt_path"
+          test "$(sha256sum "$expense_receipt_path" | cut -d' ' -f1)" \
+            = "$CANONICAL_DEMO_EXPENSE_RECEIPT_SHA256"
+          export CANONICAL_DEMO_EXPENSE_RECEIPT_PATH="$expense_receipt_path"
+          cleanup_demo_role_membership() {
+            bash backend/scripts/revoke_staging_postgres_set_roles.sh \
+              migration-owner
+          }
+          cleanup_demo_role_on_exit() {
+            local prior_status=$?
+            trap - EXIT
+            if ! cleanup_demo_role_membership; then
+              echo "::error title=Canonical staging role cleanup failed::postgres retained unverified demo role delegation"
+              exit 1
+            fi
+            exit "$prior_status"
+          }
+          trap cleanup_demo_role_on_exit EXIT
+          psql -X -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" \
+            -c 'GRANT erp_migration_owner TO postgres WITH SET TRUE, INHERIT FALSE' >/dev/null
+
+          importer_password=$(jq -nr --arg value "$ERP_REGULATORY_IMPORTER_PASSWORD" '$value|@uri')
+          importer_url="postgresql://erp_regulatory_importer:${importer_password}@${SUPABASE_DIRECT_DATABASE_HOST}:${SUPABASE_DIRECT_DATABASE_PORT}/postgres?sslmode=require&gssencmode=disable&connect_timeout=15&application_name=canonical_demo_importer"
+          echo "::add-mask::$importer_url"
+          export ERP_REGULATORY_IMPORTER_DATABASE_URL="$importer_url"
+
+          runtime_password=$(jq -nr --arg value "$ERP_RUNTIME_PASSWORD" '$value|@uri')
+          runtime_url="postgresql://erp_runtime:${runtime_password}@${SUPABASE_DIRECT_DATABASE_HOST}:${SUPABASE_DIRECT_DATABASE_PORT}/postgres?sslmode=require&gssencmode=disable&connect_timeout=15&application_name=canonical_demo_runtime"
+          echo "::add-mask::$runtime_url"
+          export ERP_RUNTIME_DATABASE_URL="$runtime_url"
+          expected_alembic_head=$(python3 backend/scripts/canonical_migration_contract.py --print-head)
+          test "$(psql -X -Atqc 'SELECT erp_security.deployed_canonical_revision()' "$runtime_url")" = "$expected_alembic_head"
+          runtime_can_read_alembic=$(psql -X -Atqc \
+            "SELECT has_table_privilege(CURRENT_USER, 'public.alembic_version', 'SELECT')" \
+            "$runtime_url")
+          test "$runtime_can_read_alembic" = f
+          export CANONICAL_DEMO_API_URL=http://127.0.0.1:8090
+          if [ '${{ inputs.deploy_render_pilot }}' != true ]; then
+            echo "CANONICAL_RENDER_DEPLOY_SHA=not_deployed_ci_api" >> "$GITHUB_ENV"
+          fi
+
+          api_log=$(mktemp)
+          PYTHONPATH=backend PORT=8090 python3 -m uvicorn app.main:app \
+            --host 127.0.0.1 --port 8090 --workers 1 \
+            --timeout-graceful-shutdown 15 \
+            >"$api_log" 2>&1 &
+          api_pid=$!
+          cleanup_demo_api() {
+            kill "$api_pid" >/dev/null 2>&1 || true
+            wait "$api_pid" >/dev/null 2>&1 || true
+          }
+          cleanup_demo_on_exit() {
+            local prior_status=$?
+            trap - EXIT
+            cleanup_demo_api
+            if ! cleanup_demo_role_membership; then
+              echo "::error title=Canonical staging role cleanup failed::postgres retained unverified demo role delegation"
+              exit 1
+            fi
+            exit "$prior_status"
+          }
+          trap cleanup_demo_on_exit EXIT
+          api_ready=false
+          for attempt in 1 2 3 4 5; do
+            if curl --fail --silent --show-error --max-time 10 \
+              "$CANONICAL_DEMO_API_URL/health" >/dev/null \
+              && curl --fail --silent --show-error --max-time 10 \
+                "$CANONICAL_DEMO_API_URL/ready" >/dev/null; then
+              api_ready=true
+              break
+            fi
+            echo "Canonical demo API readiness attempt $attempt did not complete" >&2
+            sleep 3
+          done
+          if [ "$api_ready" != true ]; then
+            python3 backend/scripts/safe_ci_log_summary.py --label readiness "$api_log"
+            exit 1
+          fi
+
+          demo_log=$(mktemp)
+          if ! timeout --signal=TERM --kill-after=30s 25m \
+            python3 -u backend/scripts/provision_canonical_demo.py 2>&1 \
+            | tee "$demo_log"; then
+            python3 - "$demo_log" <<'PY'
+          import pathlib
+          import json
+          import re
+          import sys
+
+          raw = pathlib.Path(sys.argv[1]).read_text(errors="replace")
+          headlines = re.findall(r"(?m)^canonical demo provisioning failed: (\{.*\})$", raw)
+          detail = "canonical demo failure summary unavailable"
+          if headlines:
+              try:
+                  candidate = json.loads(headlines[-1])
+                  allowed_error_codes = {
+                      "AUTH_REQUIRED", "SCOPE_DENIED", "BRANCH_DENIED", "AMBIGUOUS_REFERENCE",
+                      "VALIDATION_FAILED", "STALE_VERSION", "PREVIEW_EXPIRED", "PREVIEW_CHANGED",
+                      "APPROVAL_REQUIRED", "IDEMPOTENCY_CONFLICT", "PERIOD_CLOSED",
+                      "INSUFFICIENT_STOCK", "BATCH_BLOCKED", "POLICY_BLOCKED",
+                  }
+                  allowed_operations = {
+                      "sales.order.prepare", "sales.dispatch.prepare", "sales.invoice.prepare",
+                      "sales.return.prepare", "procurement.purchase_order.prepare",
+                      "procurement.goods_receipt.prepare", "procurement.supplier_invoice.prepare",
+                      "procurement.purchase_return.prepare", "finance.customer_receipt.prepare",
+                      "finance.supplier_advance.prepare", "finance.supplier_payment.prepare",
+                      "finance.adjustment_note.prepare", "inventory.adjustment.prepare",
+                      "inventory.transfer.prepare", "inventory.destruction.prepare",
+                      "finance.bank_reconciliation.prepare", "finance.expense_claim.prepare",
+                      "automation.command.approve", "automation.command.execute",
+                      "automation.command.review",
+                  }
+                  allowed_reasons = {
+                      "CALCULATOR_DATABASE_UNAVAILABLE", "CANONICAL_BASELINE_UNVERIFIED",
+                      "CANONICAL_DATABASE_POLICY_REJECTED", "COMMAND_ADAPTER_UNAVAILABLE",
+                      "FEFO_ALLOCATION_REQUIRED", "INSUFFICIENT_LOCKED_STOCK",
+                      "INVALID_CANONICAL_PREVIEW_HASH", "RUNTIME_DATABASE_PRINCIPAL_INVALID",
+                      "RUNTIME_DATABASE_UNAVAILABLE",
+                  }
+                  allowed_sqlstates = {
+                      "0A000", "21000", "22023", "22P02", "23502", "23503",
+                      "23505", "23514", "40001", "42501", "55000", "P0002",
+                  }
+                  allowed_status_codes = {"400", "401", "403", "404", "409", "422", "429", "500", "503"}
+                  expected_keys = {"exception_type", "fingerprint_sha256"}
+                  field_sets = {
+                      "error_code": allowed_error_codes,
+                      "operation": allowed_operations,
+                      "reason": allowed_reasons,
+                      "sqlstate": allowed_sqlstates,
+                      "status_code": allowed_status_codes,
+                  }
+                  values_are_safe = (
+                      set(candidate).issubset(expected_keys | set(field_sets))
+                      and all(
+                          key in expected_keys
+                          or (isinstance(value, str) and value in field_sets[key])
+                          for key, value in candidate.items()
+                      )
+                  )
+                  if (
+                      values_are_safe
+                      and re.fullmatch(r"[0-9a-f]{64}", candidate.get("fingerprint_sha256", ""))
+                      and re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,63}", candidate.get("exception_type", ""))
+                  ):
+                      detail = "canonical demo provisioning failed: " + json.dumps(
+                          candidate, sort_keys=True, separators=(",", ":")
+                      )
+              except (json.JSONDecodeError, RecursionError, TypeError, ValueError):
+                  pass
+          detail = detail.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          print(f"::error title=Canonical demo provisioning failed::{detail}")
+          PY
+            python3 backend/scripts/safe_ci_log_summary.py --label runtime "$api_log"
+            exit 1
+          fi
+          cleanup_demo_api
+          if ! cleanup_demo_role_membership; then
+            trap - EXIT
+            echo "::error title=Canonical staging role cleanup failed::postgres retained unverified demo role delegation"
+            exit 1
+          fi
+          trap - EXIT
+
+      - name: Publish exact-run Render demo receipt
+        if: inputs.provision_demo_data == true && inputs.deploy_render_pilot == true
+        run: |
+          set -euo pipefail
+          python3 backend/scripts/build_live18_render_demo_receipt.py \
+            --summary staging-evidence/canonical-demo-summary.json \
+            --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
+            --commit-sha "$GITHUB_SHA" \
+            --deployed-sha "$CANONICAL_RENDER_DEPLOY_SHA" \
+            --run-id "$GITHUB_RUN_ID" \
+            --run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --output staging-evidence/live18-render-demo-receipt.json
+
+      - name: Exercise hosted OAuth and MCP against the provisioned demo
+        if: inputs.provision_demo_data == true && inputs.deploy_render_pilot == true
+        env:
+          CANONICAL_DEMO_EVIDENCE_DIR: staging-evidence
+          CANONICAL_STAGING_MCP_EXERCISE_MODE: business_flow
+        run: |
+          set -euo pipefail
+          test "$CANONICAL_STAGING_PROJECT_REF" = rgihahbmkrmhitjdjvev
+          test "$SUPABASE_URL" = https://rgihahbmkrmhitjdjvev.supabase.co
+          cleanup_oauth_role_membership() {
+            bash backend/scripts/revoke_staging_postgres_set_roles.sh migration-owner
+          }
+          cleanup_oauth_role_on_exit() {
+            local prior_status=$?
+            trap - EXIT
+            if ! cleanup_oauth_role_membership; then
+              echo "::error title=Canonical staging role cleanup failed::postgres retained unverified OAuth role delegation"
+              exit 1
+            fi
+            exit "$prior_status"
+          }
+          trap cleanup_oauth_role_on_exit EXIT
+          python3 backend/scripts/provision_staging_mcp_oauth.py --mode bind-existing-demo
+          if ! cleanup_oauth_role_membership; then
+            trap - EXIT
+            echo "::error title=Canonical staging role cleanup failed::postgres retained unverified OAuth role delegation"
+            exit 1
+          fi
+          trap - EXIT
+          python3 backend/scripts/exercise_staging_mcp_oauth.py
+
+      - name: Publish staging baseline evidence
+        run: |
+          mkdir -p staging-evidence
+          jq -n \
+            --arg project_ref "$CANONICAL_STAGING_PROJECT_REF" \
+            --arg revision "$CANONICAL_ALEMBIC_HEAD" \
+            --argjson canonical_table_count "$CANONICAL_TABLE_COUNT" \
+            --arg approved_sha256 "$CANONICAL_BASELINE_APPROVED_SHA256" \
+            --arg commit_sha "$GITHUB_SHA" \
+            --arg render_deploy_sha "$CANONICAL_RENDER_DEPLOY_SHA" \
+            --arg database_transport "$CANONICAL_DATABASE_TRANSPORT" \
+            '{
+              project_ref: $project_ref,
+              revision: $revision,
+               approved_sha256: $approved_sha256,
+               commit_sha: $commit_sha,
+               render_deploy_sha: $render_deploy_sha,
+               database_transport: $database_transport,
+              canonical_table_count: $canonical_table_count,
+              result: "baseline_and_isolated_roles_verified"
+            }' > staging-evidence/canonical-staging-baseline.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: canonical-staging-baseline-${{ github.run_id }}
+          path: staging-evidence/*
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Close canonical writes after failed certification
+        if: >-
+          always() && !success() &&
+          hashFiles('staging-evidence/canonical-write-fence-closed.json') != ''
+        run: |
+          set -euo pipefail
+          bash backend/scripts/run_canonical_write_fence.sh \
+            close "$GITHUB_SHA" \
+            staging-evidence/canonical-write-fence-failure-closed.json
+
+      - name: Re-quiesce run-owned Render services after failure
+        if: >-
+          always() && !success() &&
+          hashFiles('staging-evidence/render-pilot-lifecycle.json') != ''
+        run: |
+          set -euo pipefail
+          python3 backend/scripts/manage_render_pilot_lifecycle.py requiesce-owned \
+            --commit-sha "$GITHUB_SHA" \
+            --receipt staging-evidence/render-pilot-lifecycle.json
+
+      - name: Preserve bounded staging evidence on failure
+        if: >-
+          always() && !success() &&
+          hashFiles('staging-evidence/*') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: canonical-staging-failure-${{ github.run_id }}
+          path: staging-evidence/*
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Preserve Render lifecycle receipt on failure
+        if: always() && hashFiles('staging-evidence/render-pilot-lifecycle.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: render-pilot-lifecycle-${{ github.run_id }}
+          path: staging-evidence/render-pilot-lifecycle.json
+          if-no-files-found: error
+          retention-days: 14

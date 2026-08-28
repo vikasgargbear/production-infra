@@ -22,7 +22,7 @@ def test_gate_detects_shared_runtime_conflicts_from_sdk_metadata():
         },
         (
             "pydantic>=2.12.0",
-            "PyJWT[crypto]>=2.10.1",
+            "PyJWT[crypto]>=2.13.0",
             "python-multipart>=0.0.9",
             "uvicorn>=0.31.1",
             "unrelated>=1",
@@ -37,14 +37,23 @@ def test_gate_detects_shared_runtime_conflicts_from_sdk_metadata():
     }
 
 
-def test_gate_reads_exactly_the_reviewed_read_only_tool_names():
-    assert set(gate.registry_tool_names(gate.REGISTRY_SOURCE)) == gate.EXPECTED_TOOLS
+def test_gate_reads_exactly_the_reviewed_core_read_tool_names():
+    assert (
+        set(gate.registry_tool_names(gate.REGISTRY_SOURCE))
+        == gate.EXPECTED_CORE_READ_TOOLS
+    )
 
 
-def test_non_sdk_report_remains_fail_closed():
+def test_non_sdk_report_describes_the_implemented_isolated_transport_honestly():
     report = gate.build_report(probe_sdk=False)
 
-    assert report["mcp_transport_implemented"] is False
-    assert report["write_tools_exported"] is False
-    assert set(report["registry_tools"]) == gate.EXPECTED_TOOLS
+    assert report["mcp_transport_implemented"] is True
+    assert report["write_tools_exported"] is True
+    assert set(report["registry_tools"]) == gate.expected_runtime_tools()
     assert report["official_sdk_version"] is None
+    assert report["transport"] == "official_sdk_streamable_http_stateless"
+    assert any(
+        "DCR" in item and "disabled" in item
+        for item in report["remaining_blockers"]
+    )
+    assert not any("adapter" in item for item in report["remaining_blockers"])

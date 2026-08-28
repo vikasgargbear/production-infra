@@ -11,6 +11,7 @@ import ChallanDetailsStep from './steps/ChallanDetailsStep';
 import ChallanPreviewStep from './steps/ChallanPreviewStep';
 import { useEnterAsTab } from '../../../hooks/useEnterAsTab';
 import useEscapeKey from '../../../hooks/useEscapeKey';
+import CanonicalSalesCommandReview from '../CanonicalSalesCommandReview';
 
 interface ChallanFlowProps {
     open?: boolean;
@@ -125,6 +126,7 @@ const ChallanFlow: React.FC<ChallanFlowProps> = ({ open = true, onClose }) => {
                 // State
                 challan={logic.challan}
                 setChallan={logic.setChallan}
+                maximumDispatchDate={logic.businessDate}
                 selectedCustomer={logic.selectedCustomer}
                 employees={logic.employees}
                 selectedMR={logic.selectedMR}
@@ -137,6 +139,7 @@ const ChallanFlow: React.FC<ChallanFlowProps> = ({ open = true, onClose }) => {
                 setShowCreateProduct={logic.setShowCreateProduct}
                 showImportModal={logic.showImportModal}
                 setShowImportModal={logic.setShowImportModal}
+                approvedOrderImportUnavailableReason={logic.approvedOrderImportUnavailableReason}
                 newProductName={logic.newProductName}
                 setNewProductName={logic.setNewProductName}
 
@@ -161,12 +164,15 @@ const ChallanFlow: React.FC<ChallanFlowProps> = ({ open = true, onClose }) => {
 
     // Step 2: Preview & Save
     return (
+        <>
         <ChallanPreviewStep
             // State
             challan={logic.challan}
             setChallan={logic.setChallan}
             selectedCustomer={logic.selectedCustomer}
+            documentPolicy={logic.documentPolicy}
             saving={logic.saving}
+            submissionUnavailableReason={logic.submissionUnavailableReason}
             sameAsBilling={logic.sameAsBilling}
             setSameAsBilling={logic.setSameAsBilling}
             showSuccessModal={logic.showSuccessModal}
@@ -183,6 +189,15 @@ const ChallanFlow: React.FC<ChallanFlowProps> = ({ open = true, onClose }) => {
             onClose={onClose}
             onBack={() => logic.setCurrentStep(1)}
         />
+        <CanonicalSalesCommandReview
+            title="Review exact delivery dispatch"
+            preview={logic.preparedPreview}
+            open={logic.reviewOpen}
+            posting={logic.saving}
+            onBack={logic.closeChallanReview}
+            onPost={logic.confirmPreparedChallan}
+        />
+        </>
     );
 };
 

@@ -6,7 +6,7 @@ from typing import Optional, List, Annotated
 from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
-from pydantic import BaseModel, Field, field_validator, ConfigDict, EmailStr
+from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict, EmailStr
 import re
 
 
@@ -157,6 +157,42 @@ class SupplierBase(BaseModel):
 class SupplierCreate(SupplierBase):
     """Schema for creating a new supplier"""
     pass
+
+
+class CanonicalSupplierCreate(BaseModel):
+    """Reviewed supplier-account creation contract used by the live ERP UI."""
+
+    supplier_name: str = Field(min_length=1, max_length=200)
+    primary_phone: Optional[str] = Field(default=None, pattern=r"^\d{10}$")
+    primary_email: Optional[EmailStr] = None
+    contact_person: Optional[str] = Field(default=None, max_length=100)
+    address_line1: Optional[str] = Field(default=None, max_length=255)
+    address_line2: Optional[str] = Field(default=None, max_length=255)
+    city: Optional[str] = Field(default=None, max_length=100)
+    state_code: Optional[str] = Field(default=None, pattern=r"^[0-9]{2}$")
+    pincode: Optional[str] = Field(default=None, pattern=r"^\d{6}$")
+    gst_number: Optional[str] = Field(default=None, min_length=15, max_length=15)
+    pan_number: Optional[str] = Field(default=None, min_length=10, max_length=10)
+    payment_days: int = Field(ge=0, le=180)
+
+    @field_validator("gst_number")
+    @classmethod
+    def validate_gst_number(cls, value: Optional[str]) -> Optional[str]:
+        return SupplierBase.validate_gst_number(value)
+
+    @field_validator("pan_number")
+    @classmethod
+    def validate_pan_number(cls, value: Optional[str]) -> Optional[str]:
+        return SupplierBase.validate_pan_number(value)
+
+    @model_validator(mode="after")
+    def require_complete_address(self):
+        address = (self.address_line1, self.city, self.state_code, self.pincode)
+        if any(address) and not all(address):
+            raise ValueError("Address line, city, state code, and pincode must be supplied together")
+        return self
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
 
 class SupplierUpdate(BaseModel):

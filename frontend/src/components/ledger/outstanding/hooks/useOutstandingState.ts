@@ -8,8 +8,7 @@ import { useReducer } from 'react';
 import type {
     OutstandingState,
     OutstandingFilters,
-    PartyOutstanding,
-    AllocationModalState
+    PartyOutstanding
 } from '../types/outstanding.types';
 
 // ============================================================================
@@ -23,9 +22,6 @@ type OutstandingAction =
     | { type: 'SET_SELECTED_PARTY'; party: PartyOutstanding | null }
     | { type: 'TOGGLE_DETAILS_VIEW' }
     | { type: 'SET_DETAILS_VIEW'; show: boolean }
-    | { type: 'SET_ALLOCATION_MODAL'; modal: Partial<AllocationModalState> }
-    | { type: 'OPEN_ALLOCATION_MODAL'; customerId: number; customerName: string }
-    | { type: 'CLOSE_ALLOCATION_MODAL' }
     | { type: 'RESET' };
 
 // ============================================================================
@@ -42,12 +38,7 @@ const initialState: OutstandingState = {
         viewMode: 'summary',
         showDetailsView: false
     },
-    selectedParty: null,
-    allocationModal: {
-        isOpen: false,
-        customerId: null,
-        customerName: ''
-    }
+    selectedParty: null
 };
 
 // ============================================================================
@@ -102,32 +93,6 @@ function outstandingReducer(
                 ui: { ...state.ui, showDetailsView: action.show }
             };
 
-        case 'SET_ALLOCATION_MODAL':
-            return {
-                ...state,
-                allocationModal: { ...state.allocationModal, ...action.modal }
-            };
-
-        case 'OPEN_ALLOCATION_MODAL':
-            return {
-                ...state,
-                allocationModal: {
-                    isOpen: true,
-                    customerId: action.customerId,
-                    customerName: action.customerName
-                }
-            };
-
-        case 'CLOSE_ALLOCATION_MODAL':
-            return {
-                ...state,
-                allocationModal: {
-                    isOpen: false,
-                    customerId: null,
-                    customerName: ''
-                }
-            };
-
         case 'RESET':
             return initialState;
 
@@ -150,7 +115,6 @@ export function useOutstandingState() {
         expandedParties: state.expandedParties,
         filters: state.filters,
         ui: state.ui,
-        selectedParty: state.selectedParty,
-        allocationModal: state.allocationModal
+        selectedParty: state.selectedParty
     };
 }

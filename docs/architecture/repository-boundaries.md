@@ -105,14 +105,15 @@ fails CI.
 Exit: REST and tests call the same operations that MCP will call; no business
 calculation is duplicated in the frontend.
 
-### Phase 3: add read-only MCP deployable
+### Phase 3: add bounded MCP deployable
 
 - Create the separate MCP service with its own credentials and deployment.
 - Generate its backend client from the pinned contract.
-- Export only the reviewed allowlist in `mcp-readiness.md`.
+- Export only the reviewed read and approval-gated write allowlist in
+  `mcp-readiness.md`.
 - Run tenant-isolation and adversarial tests through the deployed MCP transport.
 
-Exit: read-only pilot is observable, rate-limited, revocable, and audited.
+Exit: the bounded pilot is observable, rate-limited, revocable, and audited.
 
 ### Phase 4: split repositories
 

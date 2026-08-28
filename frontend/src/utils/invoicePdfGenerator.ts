@@ -1,128 +1,147 @@
 /**
  * Invoice PDF Generator using HTML/CSS
- * Generates beautiful invoice documents for print and download
+ * Renders authoritative canonical invoice facts for print and download.
  */
+
+import { jsPDF } from 'jspdf';
+import {
+    addExactDecimals,
+    compareExactDecimals,
+    formatExactCurrency,
+    formatExactDecimal,
+    normalizeAuthoritativeDecimal,
+} from './exactDecimal';
+import type { CanonicalInvoiceDetail } from '../services/api/modules/sales/canonicalSalesDocuments.types';
 
 // ==================== TYPE DEFINITIONS ====================
 
 export interface InvoiceItem {
-    product_name?: string;
-    batch_number?: string;
-    hsn_code?: string;
-    pack_type?: string;
-    pack_size?: number;
-    pack_unit?: string;
-    units_per_pack?: number;  // Backend standard: units in one pack
-    packages_per_box?: number;  // Backend standard: packs in one box
-    sale_unit?: string;
-    quantity?: number;
-    mrp?: number;
-    unit_price?: number;
-    tax_percent?: number;
-    gst_percent?: number;
-    line_total?: number;
-    total?: number;
+    product_name: string;
+    batch_number: string | null;
+    hsn_code: string;
+    sale_unit: string;
+    quantity: string;
+    unit_price: string;
+    gst_percent: string;
+    line_total: string;
 }
 
 export interface InvoiceData {
-    invoice_number?: string;
-    order_number?: string;
-    invoice_date?: string;
-    order_date?: string;
-    org_name?: string;
-    customer_name?: string;
+    invoice_number: string;
+    invoice_date: string;
+    status: string;
+    seller_legal_name: string;
+    seller_gstin: string;
+    seller_address: string;
+    customer_name: string;
     customer_phone?: string;
     customer_gst_number?: string;
-    billing_address?: string;
-    shipping_address?: string;
-    shipping_contact_name?: string;
-    shipping_phone?: string;
-    is_same_address?: boolean;
-    items?: InvoiceItem[];
-    subtotal_amount?: number;
-    cgst_amount?: number | string;
-    sgst_amount?: number | string;
-    igst_amount?: number | string;
-    round_off_amount?: number | string;
-    final_amount?: number | string;
-    total_amount?: number | string;
+    billing_address: string;
+    shipping_address: string;
+    items: InvoiceItem[];
+    taxable_amount: string;
+    cgst_amount: string;
+    sgst_amount: string;
+    igst_amount: string;
+    cess_amount: string;
+    total_amount: string;
 }
+
+export const printableCanonicalInvoice = (detail: CanonicalInvoiceDetail): InvoiceData => ({
+    invoice_number: detail.invoice_number,
+    invoice_date: detail.invoice_date,
+    status: detail.status,
+    seller_legal_name: detail.seller_legal_name,
+    seller_gstin: detail.seller_gstin,
+    seller_address: detail.seller_address,
+    customer_name: detail.customer_name,
+    customer_phone: detail.customer_phone ?? undefined,
+    customer_gst_number: detail.customer_gst_number ?? undefined,
+    billing_address: detail.billing_address,
+    shipping_address: detail.shipping_address,
+    items: detail.items.map(item => ({
+        product_name: item.product_name,
+        batch_number: item.batch_number,
+        hsn_code: item.hsn_code,
+        sale_unit: item.unit,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        gst_percent: item.gst_percent,
+        line_total: item.line_total,
+    })),
+    taxable_amount: detail.taxable_amount,
+    cgst_amount: detail.cgst_amount,
+    sgst_amount: detail.sgst_amount,
+    igst_amount: detail.igst_amount,
+    cess_amount: detail.cess_amount,
+    total_amount: detail.total_amount,
+});
 
 // ==================== HELPER FUNCTIONS ====================
 
-/**
- * Convert number to words (Indian numbering system)
- */
-const numberToWords = (num: number): string => {
-    const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine'];
-    const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
-    const teens = ['Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
-
-    const convertHundreds = (n: number): string => {
-        let str = '';
-        if (n > 99) {
-            str += ones[Math.floor(n / 100)] + ' Hundred ';
-            n %= 100;
-        }
-        if (n > 19) {
-            str += tens[Math.floor(n / 10)] + ' ';
-            n %= 10;
-        } else if (n >= 10) {
-            str += teens[n - 10] + ' ';
-            return str;
-        }
-        if (n > 0) {
-            str += ones[n] + ' ';
-        }
-        return str;
-    };
-
-    const convertToWords = (n: number): string => {
-        if (n === 0) return 'Zero';
-        let str = '';
-        if (n >= 10000000) {
-            str += convertHundreds(Math.floor(n / 10000000)) + 'Crore ';
-            n %= 10000000;
-        }
-        if (n >= 100000) {
-            str += convertHundreds(Math.floor(n / 100000)) + 'Lakh ';
-            n %= 100000;
-        }
-        if (n >= 1000) {
-            str += convertHundreds(Math.floor(n / 1000)) + 'Thousand ';
-            n %= 1000;
-        }
-        if (n > 0) {
-            str += convertHundreds(n);
-        }
-        return str.trim();
-    };
-
-    const amount = Math.floor(num);
-    const paise = Math.round((num - amount) * 100);
-    let words = convertToWords(amount) + ' Rupees';
-    if (paise > 0) {
-        words += ' and ' + convertToWords(paise) + ' Paise';
-    }
-    words += ' Only';
-    return words;
+const requiredText = (value: unknown, label: string): string => {
+    if (typeof value !== 'string' || !value.trim()) throw new Error(`${label} is unavailable.`);
+    return value;
 };
+
+const escapeHTML = (value: unknown): string => requiredText(value, 'Printable text')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+
+const money = (value: unknown, label: string): string => formatExactCurrency(
+    normalizeAuthoritativeDecimal(value, label, {
+        scale: 2, maximumWholeDigits: 20, allowNegative: true,
+    }),
+    label,
+);
+
+const quantity = (value: unknown, label: string): string => formatExactDecimal(value, label, {
+    scale: 6, maximumWholeDigits: 20, allowNegative: false,
+});
+
+const rate = (value: unknown, label: string): string => formatExactDecimal(value, label, {
+    scale: 4, maximumWholeDigits: 20, allowNegative: false,
+}, 2);
+
+const addressLines = (value: string): string => {
+    const lines = requiredText(value, 'Printable address').split('\n')
+        .map(line => line.trim()).filter(Boolean);
+    if (lines.length === 0) throw new Error('Printable address is unavailable.');
+    return lines.map(line => `<p class="customer-detail">${escapeHTML(line)}</p>`).join('');
+};
+
+const percent = (value: unknown, label: string): string => formatExactDecimal(value, label, {
+    scale: 6, maximumWholeDigits: 3, allowNegative: false,
+});
 
 // ==================== HTML GENERATION ====================
 
 /**
  * Generate HTML content for invoice
  */
-const generateInvoiceHTML = (invoiceData: InvoiceData): string => {
-    const totalAmount = parseFloat(String(invoiceData.final_amount || 0));
-    const cgstAmt = parseFloat(String(invoiceData.cgst_amount || 0));
-    const sgstAmt = parseFloat(String(invoiceData.sgst_amount || 0));
-    const igstAmt = parseFloat(String(invoiceData.igst_amount || 0));
-    const totalGst = cgstAmt + sgstAmt + igstAmt;
-    const isIGST = igstAmt > 0;
-
-    const documentTitle = invoiceData.invoice_number ? 'INVOICE' : 'SALES ORDER';
-    const documentNumber = invoiceData.invoice_number || invoiceData.order_number || 'DOC-' + Date.now();
+export const generateInvoiceHTML = (invoiceData: InvoiceData): string => {
+    const documentNumber = requiredText(invoiceData.invoice_number, 'Invoice number');
+    requiredText(invoiceData.invoice_date, 'Invoice date');
+    requiredText(invoiceData.status, 'Invoice status');
+    requiredText(invoiceData.seller_legal_name, 'Seller legal name');
+    requiredText(invoiceData.seller_gstin, 'Seller GSTIN');
+    requiredText(invoiceData.seller_address, 'Seller address');
+    requiredText(invoiceData.customer_name, 'Customer legal name');
+    requiredText(invoiceData.billing_address, 'Customer billing address');
+    requiredText(invoiceData.shipping_address, 'Customer shipping address');
+    if (!Array.isArray(invoiceData.items) || invoiceData.items.length === 0) {
+        throw new Error('Invoice lines are unavailable.');
+    }
+    const totalGst = addExactDecimals([
+        invoiceData.cgst_amount,
+        invoiceData.sgst_amount,
+        invoiceData.igst_amount,
+        invoiceData.cess_amount,
+    ], 'Invoice total tax', { scale: 2, maximumWholeDigits: 20, allowNegative: false });
+    const isIGST = compareExactDecimals(invoiceData.igst_amount, '0.00', 'Invoice IGST', {
+        scale: 2, maximumWholeDigits: 20, allowNegative: false,
+    }) > 0;
+    const documentTitle = 'TAX INVOICE';
 
     return `
 <!DOCTYPE html>
@@ -515,22 +534,18 @@ const generateInvoiceHTML = (invoiceData: InvoiceData): string => {
     <div class="print-container">
         <!-- Header -->
         <div class="print-header">
-            <div class="company-logo">🛒</div>
-            <h1 class="company-name">${invoiceData.org_name || 'Your Company Name'}</h1>
+            <h1 class="company-name">${escapeHTML(invoiceData.seller_legal_name)}</h1>
+            <p class="document-number">GSTIN: ${escapeHTML(invoiceData.seller_gstin)}</p>
+            ${addressLines(invoiceData.seller_address)}
             <h2 class="document-title">${documentTitle}</h2>
-            <p class="document-number">${documentNumber}</p>
-            <p class="document-date">Date: ${invoiceData.invoice_date || invoiceData.order_date || new Date().toLocaleDateString('en-IN')}</p>
+            <p class="document-number">${escapeHTML(documentNumber)}</p>
+            <p class="document-date">Date: ${escapeHTML(invoiceData.invoice_date)}</p>
         </div>
 
-        <!-- Essential Details Only -->
         <div class="order-details">
             <div class="detail-item">
                 <p class="detail-label">Document Status</p>
-                <p class="detail-value">CONFIRMED</p>
-            </div>
-            <div class="detail-item">
-                <p class="detail-label">Payment Terms</p>
-                <p class="detail-value">Credit</p>
+                <p class="detail-value">${escapeHTML(invoiceData.status).toUpperCase()}</p>
             </div>
         </div>
 
@@ -538,61 +553,47 @@ const generateInvoiceHTML = (invoiceData: InvoiceData): string => {
         <div class="customer-section">
             <div>
                 <h3 class="section-title">Bill To</h3>
-                <p class="customer-name">${invoiceData.customer_name || 'Customer Name'}</p>
-                ${invoiceData.billing_address ? invoiceData.billing_address.split('\n').map(line => `<p class="customer-detail">${line}</p>`).join('') : ''}
-                ${invoiceData.customer_phone ? `<p class="customer-detail">Phone: ${invoiceData.customer_phone}</p>` : ''}
-                ${invoiceData.customer_gst_number ? `<p class="customer-detail">GSTIN: ${invoiceData.customer_gst_number}</p>` : ''}
+                <p class="customer-name">${escapeHTML(invoiceData.customer_name)}</p>
+                ${addressLines(invoiceData.billing_address)}
+                ${invoiceData.customer_phone ? `<p class="customer-detail">Phone: ${escapeHTML(invoiceData.customer_phone)}</p>` : ''}
+                ${invoiceData.customer_gst_number ? `<p class="customer-detail">GSTIN: ${escapeHTML(invoiceData.customer_gst_number)}</p>` : ''}
             </div>
             <div>
                 <h3 class="section-title">Ship To</h3>
-                ${invoiceData.is_same_address !== false ?
-            `<p class="customer-detail" style="color: #10b981; font-weight: 500;">✓ Same as billing</p>
-                   <p class="customer-name">${invoiceData.customer_name || 'Customer Name'}</p>
-                   ${invoiceData.billing_address ? invoiceData.billing_address.split('\n').map(line => `<p class="customer-detail">${line}</p>`).join('') : ''}
-                   ${invoiceData.customer_phone ? `<p class="customer-detail">Phone: ${invoiceData.customer_phone}</p>` : ''}` :
-            `<p class="customer-name">${invoiceData.shipping_contact_name || invoiceData.customer_name || 'Customer Name'}</p>
-                   ${invoiceData.shipping_address ? invoiceData.shipping_address.split('\n').map(line => `<p class="customer-detail">${line}</p>`).join('') : ''}
-                   ${invoiceData.shipping_phone ? `<p class="customer-detail">Phone: ${invoiceData.shipping_phone}</p>` : ''}`}
+                <p class="customer-name">${escapeHTML(invoiceData.customer_name)}</p>
+                ${addressLines(invoiceData.shipping_address)}
+                ${invoiceData.customer_phone ? `<p class="customer-detail">Phone: ${escapeHTML(invoiceData.customer_phone)}</p>` : ''}
             </div>
         </div>
 
         <!-- Items Section -->
         <div class="items-section">
-            <h3 class="section-title">Order Items</h3>
+            <h3 class="section-title">Invoice Items</h3>
             <table class="print-table">
                 <thead>
                     <tr>
                         <th>Item Details</th>
                         <th style="text-align: center;">HSN</th>
-                        <th style="text-align: center;">Pack</th>
+                        <th style="text-align: center;">Unit</th>
                         <th style="text-align: center;">Qty</th>
-                        <th style="text-align: right;">MRP</th>
                         <th style="text-align: right;">Rate</th>
                         <th style="text-align: right;">GST %</th>
                         <th style="text-align: right;">Amount</th>
                     </tr>
                 </thead>
                 <tbody>
-                    ${(invoiceData.items || []).map((item: InvoiceItem) => `
+                    ${invoiceData.items.map((item: InvoiceItem, index) => `
                         <tr>
                             <td>
-                                <div class="product-name">${item.product_name || 'Unknown Product'}</div>
-                                <div class="product-batch">Batch: ${item.batch_number || item.batch_number || 'N/A'}</div>
+                                <div class="product-name">${escapeHTML(requiredText(item.product_name, `Invoice line ${index + 1} product name`))}</div>
+                                ${item.batch_number ? `<div class="product-batch">Batch: ${escapeHTML(item.batch_number)}</div>` : ''}
                             </td>
-                            <td style="text-align: center;">${item.hsn_code || '3004'}</td>
-                            <td style="text-align: center;">
-                                <span class="pack-info">
-                                    ${item.pack_type ||
-                (item.pack_size && item.pack_unit ? `1×${item.pack_size}${item.pack_unit}` : '') ||
-                (item.units_per_pack && item.packages_per_box ? `${item.units_per_pack}×${item.packages_per_box}` : '') ||
-                (item.sale_unit ? item.sale_unit : '-')}
-                                </span>
-                            </td>
-                            <td style="text-align: center;">${item.quantity || 1}</td>
-                            <td style="text-align: right;">₹${(item.mrp || item.unit_price || 0).toFixed(2)}</td>
-                            <td style="text-align: right;">₹${(item.unit_price || 0).toFixed(2)}</td>
-                            <td style="text-align: right;">${item.tax_percent || item.gst_percent || 0}%</td>
-                            <td style="text-align: right; font-weight: 500;">₹${(item.line_total || item.total || 0).toFixed(2)}</td>
+                            <td style="text-align: center;">${escapeHTML(requiredText(item.hsn_code, `Invoice line ${index + 1} HSN`))}</td>
+                            <td style="text-align: center;">${escapeHTML(requiredText(item.sale_unit, `Invoice line ${index + 1} unit`))}</td>
+                            <td style="text-align: center;">${quantity(item.quantity, `Invoice line ${index + 1} quantity`)}</td>
+                            <td style="text-align: right;">₹${rate(item.unit_price, `Invoice line ${index + 1} rate`)}</td>
+                            <td style="text-align: right;">${percent(item.gst_percent, `Invoice line ${index + 1} GST rate`)}%</td>
+                            <td style="text-align: right; font-weight: 500;">${money(item.line_total, `Invoice line ${index + 1} total`)}</td>
                         </tr>
                     `).join('')}
                 </tbody>
@@ -606,62 +607,47 @@ const generateInvoiceHTML = (invoiceData: InvoiceData): string => {
                 ${isIGST ? `
                 <div class="summary-item">
                     <span>IGST</span>
-                    <span>₹${igstAmt.toFixed(2)}</span>
+                    <span>${money(invoiceData.igst_amount, 'Invoice IGST')}</span>
                 </div>
                 ` : `
                 <div class="summary-item">
                     <span>CGST</span>
-                    <span>₹${cgstAmt.toFixed(2)}</span>
+                    <span>${money(invoiceData.cgst_amount, 'Invoice CGST')}</span>
                 </div>
                 <div class="summary-item">
                     <span>SGST</span>
-                    <span>₹${sgstAmt.toFixed(2)}</span>
+                    <span>${money(invoiceData.sgst_amount, 'Invoice SGST')}</span>
                 </div>
                 `}
                 <div class="summary-item total">
                     <span>Total GST</span>
-                    <span>₹${totalGst.toFixed(2)}</span>
+                    <span>${money(totalGst, 'Invoice total GST')}</span>
                 </div>
             </div>
             
             <div class="summary-box">
-                <h4 class="summary-title">Order Summary</h4>
+                <h4 class="summary-title">Invoice Summary</h4>
                 <div class="summary-item">
                     <span>Sub Total</span>
-                    <span>₹${(invoiceData.subtotal_amount || 0).toFixed(2)}</span>
+                    <span>${money(invoiceData.taxable_amount, 'Invoice taxable amount')}</span>
                 </div>
                 <div class="summary-item">
                     <span>Total GST</span>
-                    <span>₹${totalGst.toFixed(2)}</span>
+                    <span>${money(totalGst, 'Invoice total GST')}</span>
                 </div>
-                ${invoiceData.round_off_amount ? `
+                ${compareExactDecimals(invoiceData.cess_amount, '0.00', 'Invoice cess', {
+                    scale: 2, maximumWholeDigits: 20, allowNegative: false,
+                }) > 0 ? `
                 <div class="summary-item">
-                    <span>Round Off</span>
-                    <span>₹${invoiceData.round_off_amount}</span>
+                    <span>Cess</span>
+                    <span>${money(invoiceData.cess_amount, 'Invoice cess')}</span>
                 </div>
                 ` : ''}
                 <div class="summary-item total">
                     <span>Grand Total</span>
-                    <span>₹${totalAmount.toFixed(2)}</span>
+                    <span>${money(invoiceData.total_amount, 'Invoice grand total')}</span>
                 </div>
             </div>
-        </div>
-
-        <!-- Amount in Words -->
-        <div class="amount-words">
-            <strong>Amount in Words:</strong> ${numberToWords(totalAmount)}
-        </div>
-
-        <!-- Terms & Conditions -->
-        <div class="terms-section">
-            <h4 class="summary-title">Terms & Conditions</h4>
-            <ol class="terms-list">
-                <li>Goods once sold will not be taken back or exchanged</li>
-                <li>Interest @ 36% p.a will be charged if payment is not made within the stipulated time</li>
-                <li>Subject to our standard terms of credit</li>
-                <li>All disputes are subject to local jurisdiction only</li>
-                <li>E.&O.E.</li>
-            </ol>
         </div>
 
         <!-- Signatures -->
@@ -673,15 +659,14 @@ const generateInvoiceHTML = (invoiceData: InvoiceData): string => {
             </div>
             <div class="signature-box">
                 <div class="signature-line"></div>
-                <p class="signature-label">For ${invoiceData.org_name || 'Your Company Name'}</p>
+                <p class="signature-label">For ${escapeHTML(invoiceData.seller_legal_name)}</p>
                 <p class="signature-sublabel">Authorized Signatory</p>
             </div>
         </div>
 
         <!-- Footer -->
         <div class="footer">
-            <p class="footer-text">Thank you for your business!</p>
-            <p class="footer-subtext">${invoiceData.org_name || 'Your Company Name'} | Your trusted healthcare partner</p>
+            <p class="footer-subtext">${escapeHTML(invoiceData.seller_legal_name)}</p>
             <p class="footer-brand">Powered by AASO ERP</p>
         </div>
     </div>
@@ -699,8 +684,7 @@ export const printInvoice = (invoiceData: InvoiceData): void => {
 
     const printWindow = window.open('', '_blank', 'width=800,height=600');
     if (!printWindow) {
-        console.error('Could not open print window');
-        return;
+        throw new Error('The browser blocked the invoice print window.');
     }
 
     printWindow.document.write(invoiceHTML);
@@ -716,75 +700,24 @@ export const printInvoice = (invoiceData: InvoiceData): void => {
 /**
  * Download invoice as PDF file
  */
-export const downloadInvoicePDF = (invoiceData: InvoiceData): void => {
+export const downloadInvoicePDF = async (invoiceData: InvoiceData): Promise<void> => {
     const invoiceHTML = generateInvoiceHTML(invoiceData);
-
-    const iframe = document.createElement('iframe');
-    iframe.style.position = 'absolute';
-    iframe.style.left = '-10000px';
-    iframe.style.top = '-10000px';
-    document.body.appendChild(iframe);
-
-    const iframeDoc = iframe.contentWindow?.document;
-    if (!iframeDoc) {
-        document.body.removeChild(iframe);
-        console.error('Could not access iframe document');
-        return;
+    const container = document.createElement('div');
+    container.style.position = 'absolute';
+    container.style.left = '-10000px';
+    container.innerHTML = invoiceHTML;
+    document.body.appendChild(container);
+    try {
+        const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+        await pdf.html(container, {
+            autoPaging: 'text',
+            html2canvas: { scale: 0.75, useCORS: true },
+            margin: [8, 8, 8, 8],
+            windowWidth: 794,
+        });
+        const safeInvoiceNumber = invoiceData.invoice_number.replace(/[^A-Za-z0-9._-]/g, '-');
+        pdf.save(`${safeInvoiceNumber}.pdf`);
+    } finally {
+        document.body.removeChild(container);
     }
-
-    iframeDoc.open();
-    iframeDoc.write(invoiceHTML);
-    iframeDoc.close();
-
-    iframe.onload = () => {
-        setTimeout(() => {
-            try {
-                iframe.contentWindow?.focus();
-                iframe.contentWindow?.print();
-
-                setTimeout(() => {
-                    document.body.removeChild(iframe);
-                }, 1000);
-            } catch (error) {
-                // Fallback to new window approach
-                const printWindow = window.open('', '_blank');
-                if (printWindow) {
-                    printWindow.document.write(invoiceHTML);
-                    printWindow.document.close();
-                    printWindow.onload = () => {
-                        printWindow.focus();
-                        printWindow.print();
-                        printWindow.close();
-                    };
-                }
-                document.body.removeChild(iframe);
-            }
-        }, 500);
-    };
 };
-
-/**
- * Generate invoice PDF blob (for backward compatibility)
- */
-export const generateInvoicePDF = (invoiceData: InvoiceData): Blob => {
-    downloadInvoicePDF(invoiceData);
-    return new Blob([''], { type: 'application/pdf' });
-};
-
-/**
- * Get invoice PDF as base64 (for backward compatibility)
- */
-export const getInvoicePDFBase64 = async (invoiceData: InvoiceData): Promise<string> => {
-    downloadInvoicePDF(invoiceData);
-    return '';
-};
-
-// Default export for backward compatibility
-const invoicePdfGenerator = {
-    printInvoice,
-    downloadInvoicePDF,
-    generateInvoicePDF,
-    getInvoicePDFBase64
-};
-
-export default invoicePdfGenerator;

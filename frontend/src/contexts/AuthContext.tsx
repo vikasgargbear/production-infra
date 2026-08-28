@@ -4,25 +4,28 @@ import React, {
     useCallback,
     useContext,
     useEffect,
+    useRef,
     useState,
 } from 'react';
 import { getApiBaseUrl } from '../config/apiBase';
 import { getSupabaseClient } from '../services/auth/supabaseClient';
+import { googleAuthReturnUrl } from '../services/auth/oauthConsentClient';
 import {
     clearErpSessionStorage,
     removeLegacyErpSessionKeys,
     saveErpSession,
 } from '../services/auth/erpSessionStorage';
-import { salesSyncService } from '../services/offline/modules/sales';
 
 
 export interface User {
-    user_id: number;
+    user_id: number | string;
     email: string;
     org_id: string;
-    role_id: number | null;
-    branch_id?: number;
+    role_id: number | string | null;
+    branch_id?: number | string;
     permissions: Record<string, boolean>;
+    is_admin?: boolean;
+    data_access_level?: string;
     auth_provider?: string;
 }
 
@@ -31,12 +34,17 @@ export interface AuthState {
     token: string | null;
     isAuthenticated: boolean;
     isLoading: boolean;
+    onboardingRequired: boolean;
 }
 
 export interface LoginResult {
     success: boolean;
     user?: User;
     error?: string;
+    authorizationFailure?: boolean;
+    onboardingRequired?: boolean;
+    maintenanceFailure?: boolean;
+    superseded?: boolean;
 }
 
 export interface AuthContextValue extends AuthState {
@@ -47,21 +55,94 @@ export interface AuthContextValue extends AuthState {
     getOrgId: () => string | null;
     getToken: () => string | null;
     isOnline: boolean;
+    hasCloudSession: boolean;
+    sessionExchangeError: string | null;
+    retrySessionExchange: () => Promise<LoginResult>;
+    createOrganization: (input: CreateOrganizationInput) => Promise<LoginResult>;
+    acceptInvitation: (invitationToken: string) => Promise<LoginResult>;
+}
+
+export interface CreateOrganizationInput {
+    legal_name: string;
+    trade_name: string;
+    address_line1: string;
+    city: string;
+    state_code: string;
+    postal_code: string;
 }
 
 interface JWTPayload {
-    user_id: number;
+    user_id: number | string;
     email: string;
     org_id: string;
-    role_id: number | null;
-    branch_id?: number;
+    role_id: number | string | null;
+    branch_id?: number | string;
     branch_ids?: Array<number | string>;
     permissions?: Record<string, boolean>;
+    is_admin?: boolean;
+    data_access_level?: string;
     auth_provider?: string;
     exp?: number;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+const SESSION_EXCHANGE_RETRY_DELAYS_MS = [0, 1500, 3000] as const;
+const SESSION_EXCHANGE_TIMEOUT_MS = 12000;
+const TRANSIENT_SESSION_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504]);
+
+const wait = (delayMs: number): Promise<void> => (
+    new Promise((resolve) => window.setTimeout(resolve, delayMs))
+);
+
+interface ErpSessionResponse {
+    response: Response;
+    data: any;
+}
+
+function isErpMaintenance(data: any): boolean {
+    return data?.detail?.error === 'erp_maintenance';
+}
+
+
+function isOnboardingRequired(response: Response, data: any): boolean {
+    return response.status === 403 && data?.detail?.error === 'onboarding_required';
+}
+
+async function requestErpSession(accessToken: string): Promise<ErpSessionResponse> {
+    let networkError: unknown;
+
+    for (const [attempt, delayMs] of SESSION_EXCHANGE_RETRY_DELAYS_MS.entries()) {
+        if (delayMs > 0) await wait(delayMs);
+        const controller = new AbortController();
+        const timeoutId = window.setTimeout(
+            () => controller.abort(),
+            SESSION_EXCHANGE_TIMEOUT_MS,
+        );
+        try {
+            const response = await fetch(`${getApiBaseUrl()}/api/auth/oauth/supabase/session`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${accessToken}` },
+                signal: controller.signal,
+            });
+            const data = await response.json().catch(() => ({}));
+            const finalAttempt = attempt === SESSION_EXCHANGE_RETRY_DELAYS_MS.length - 1;
+            if (
+                isErpMaintenance(data)
+                || !TRANSIENT_SESSION_STATUSES.has(response.status)
+                || finalAttempt
+            ) {
+                return { response, data };
+            }
+        } catch (error) {
+            networkError = error;
+        } finally {
+            window.clearTimeout(timeoutId);
+        }
+    }
+
+    throw networkError;
+}
+
 function decodeToken(token: string): JWTPayload | null {
     try {
         const encodedPayload = token.replace(/^Bearer\s+/i, '').split('.')[1];
@@ -96,47 +177,136 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         token: null,
         isAuthenticated: false,
         isLoading: true,
+        onboardingRequired: false,
     });
     const [isOnline, setIsOnline] = useState(navigator.onLine);
+    const [hasCloudSession, setHasCloudSession] = useState(false);
+    const [sessionExchangeError, setSessionExchangeError] = useState<string | null>(null);
+    const pendingExchange = useRef<{
+        accessToken: string;
+        promise: Promise<LoginResult>;
+    } | null>(null);
+    const exchangeGeneration = useRef(0);
 
     const clearErpSession = useCallback(() => {
-        salesSyncService.stop();
+        exchangeGeneration.current += 1;
+        pendingExchange.current = null;
         clearErpSessionStorage();
-        setState({ user: null, token: null, isAuthenticated: false, isLoading: false });
+        setHasCloudSession(false);
+        setSessionExchangeError(null);
+        setState({
+            user: null,
+            token: null,
+            isAuthenticated: false,
+            isLoading: false,
+            onboardingRequired: false,
+        });
     }, []);
 
-    const exchangeSupabaseSession = useCallback(async (accessToken: string): Promise<LoginResult> => {
-        const response = await fetch(`${getApiBaseUrl()}/api/auth/oauth/supabase/session`, {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${accessToken}` },
+    const preserveCloudSessionFailure = useCallback((result: LoginResult) => {
+        setHasCloudSession(true);
+        setSessionExchangeError(result.error || 'The ERP session could not be established.');
+        setState((previous) => {
+            if (result.maintenanceFailure) {
+                clearErpSessionStorage();
+                return {
+                    user: null,
+                    token: null,
+                    isAuthenticated: false,
+                    isLoading: false,
+                    onboardingRequired: false,
+                };
+            }
+            if (previous.isAuthenticated && !result.authorizationFailure) {
+                return { ...previous, isLoading: false };
+            }
+            clearErpSessionStorage();
+            return {
+                user: null,
+                token: null,
+                isAuthenticated: false,
+                isLoading: false,
+                onboardingRequired: result.onboardingRequired === true,
+            };
         });
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok) {
-            return { success: false, error: errorMessage(data, 'ERP access is not authorized') };
-        }
-
-        const payload = decodeToken(data.access_token);
-        if (!payload) {
-            return { success: false, error: 'The ERP session response was invalid' };
-        }
-        const primaryBranch = payload.branch_id ?? Number(payload.branch_ids?.[0]);
-        const user: User = {
-            user_id: payload.user_id,
-            email: payload.email,
-            org_id: payload.org_id,
-            role_id: payload.role_id,
-            branch_id: Number.isFinite(primaryBranch) ? primaryBranch : undefined,
-            permissions: payload.permissions || {},
-            auth_provider: payload.auth_provider,
-        };
-
-        saveErpSession(data.access_token, user);
-        setState({ user, token: data.access_token, isAuthenticated: true, isLoading: false });
-        Promise.resolve(salesSyncService.performInitialSync()).catch((error: Error) => {
-            console.warn('[Auth] Initial sync failed:', error.message);
-        });
-        return { success: true, user };
     }, []);
+
+    const exchangeSupabaseSession = useCallback((accessToken: string): Promise<LoginResult> => {
+        if (pendingExchange.current?.accessToken === accessToken) {
+            return pendingExchange.current.promise;
+        }
+
+        const generation = exchangeGeneration.current + 1;
+        exchangeGeneration.current = generation;
+        const promise = (async (): Promise<LoginResult> => {
+            const applyFailure = (result: LoginResult): LoginResult => {
+                if (exchangeGeneration.current !== generation) {
+                    return { success: false, superseded: true };
+                }
+                preserveCloudSessionFailure(result);
+                return result;
+            };
+            try {
+                const { response, data } = await requestErpSession(accessToken);
+                if (!response.ok) {
+                    const onboardingRequired = isOnboardingRequired(response, data);
+                    return applyFailure({
+                        success: false,
+                        error: errorMessage(data, 'ERP access is not authorized'),
+                        authorizationFailure: response.status === 401 || response.status === 403,
+                        onboardingRequired,
+                        maintenanceFailure: isErpMaintenance(data),
+                    });
+                }
+
+                const payload = decodeToken(data.access_token);
+                if (!payload) {
+                    return applyFailure({
+                        success: false,
+                        error: 'The ERP session response was invalid',
+                    });
+                }
+                if (exchangeGeneration.current !== generation) {
+                    return { success: false, superseded: true };
+                }
+                const primaryBranch = payload.branch_id ?? payload.branch_ids?.[0];
+                const user: User = {
+                    user_id: payload.user_id,
+                    email: payload.email,
+                    org_id: payload.org_id,
+                    role_id: payload.role_id,
+                    branch_id: primaryBranch,
+                    permissions: payload.permissions || {},
+                    is_admin: payload.is_admin === true,
+                    data_access_level: payload.data_access_level,
+                    auth_provider: payload.auth_provider,
+                };
+
+                saveErpSession(data.access_token, user);
+                setHasCloudSession(true);
+                setSessionExchangeError(null);
+                setState({
+                    user,
+                    token: data.access_token,
+                    isAuthenticated: true,
+                    isLoading: false,
+                    onboardingRequired: false,
+                });
+                return { success: true, user };
+            } catch {
+                return applyFailure({
+                    success: false,
+                    error: 'The ERP service is starting. Please try signing in again in a moment.',
+                });
+            }
+        })();
+
+        pendingExchange.current = { accessToken, promise };
+        void promise.then(() => {
+            if (pendingExchange.current?.promise === promise) pendingExchange.current = null;
+        });
+        return promise;
+    }, [preserveCloudSessionFailure]);
 
     const login = useCallback(async (email: string, password: string): Promise<LoginResult> => {
         if (!navigator.onLine) {
@@ -149,9 +319,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             });
             if (error) return { success: false, error: error.message };
             if (!data.session) return { success: false, error: 'Email verification is required' };
-            const result = await exchangeSupabaseSession(data.session.access_token);
-            if (!result.success) await getSupabaseClient().auth.signOut();
-            return result;
+            setHasCloudSession(true);
+            return exchangeSupabaseSession(data.session.access_token);
         } catch (error) {
             return { success: false, error: error instanceof Error ? error.message : 'Login failed' };
         }
@@ -165,7 +334,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             const { error } = await getSupabaseClient().auth.signInWithOAuth({
                 provider: 'google',
                 options: {
-                    redirectTo: window.location.origin,
+                    redirectTo: googleAuthReturnUrl(window.location),
                     queryParams: { prompt: 'select_account' },
                 },
             });
@@ -184,6 +353,91 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         clearErpSession();
     }, [clearErpSession]);
 
+    const retrySessionExchange = useCallback(async (): Promise<LoginResult> => {
+        if (!navigator.onLine) {
+            const result = { success: false, error: 'An internet connection is required to connect to ERP.' };
+            setSessionExchangeError(result.error);
+            return result;
+        }
+        try {
+            const { data, error } = await getSupabaseClient().auth.getSession();
+            if (error || !data.session) {
+                const result = { success: false, error: error?.message || 'Your cloud session has ended. Please sign in again.' };
+                clearErpSession();
+                return result;
+            }
+            setHasCloudSession(true);
+            setSessionExchangeError(null);
+            setState((previous) => ({ ...previous, isLoading: !previous.isAuthenticated }));
+            return exchangeSupabaseSession(data.session.access_token);
+        } catch (error) {
+            const result = {
+                success: false,
+                error: error instanceof Error ? error.message : 'Unable to reconnect to ERP.',
+            };
+            preserveCloudSessionFailure(result);
+            return result;
+        }
+    }, [clearErpSession, exchangeSupabaseSession, preserveCloudSessionFailure]);
+
+    const completeOnboarding = useCallback(async (
+        path: string,
+        payload: object,
+    ): Promise<LoginResult> => {
+        if (!navigator.onLine) {
+            return { success: false, error: 'An internet connection is required to continue.' };
+        }
+        try {
+            const { data, error } = await getSupabaseClient().auth.getSession();
+            const accessToken = data.session?.access_token;
+            if (error || !accessToken) {
+                const result = {
+                    success: false,
+                    error: error?.message || 'Your Google session has ended. Please sign in again.',
+                };
+                clearErpSession();
+                return result;
+            }
+            const response = await fetch(`${getApiBaseUrl()}${path}`, {
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${accessToken}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(payload),
+            });
+            const body = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                return {
+                    success: false,
+                    error: errorMessage(body, 'Organization onboarding could not be completed.'),
+                };
+            }
+            setSessionExchangeError(null);
+            return exchangeSupabaseSession(accessToken);
+        } catch (error) {
+            return {
+                success: false,
+                error: error instanceof Error
+                    ? error.message
+                    : 'Organization onboarding could not be completed.',
+            };
+        }
+    }, [clearErpSession, exchangeSupabaseSession]);
+
+    const createOrganization = useCallback((input: CreateOrganizationInput) => (
+        completeOnboarding('/api/auth/onboarding/organizations', {
+            ...input,
+            trade_name: input.trade_name.trim() || null,
+        })
+    ), [completeOnboarding]);
+
+    const acceptInvitation = useCallback((invitationToken: string) => (
+        completeOnboarding('/api/auth/onboarding/invitations/accept', {
+            invitation_token: invitationToken.trim(),
+        })
+    ), [completeOnboarding]);
+
     useEffect(() => {
         removeLegacyErpSessionKeys();
 
@@ -201,10 +455,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 clearErpSession();
                 return;
             }
-            const result = await exchangeSupabaseSession(data.session.access_token);
-            if (active && !result.success) clearErpSession();
+            setHasCloudSession(true);
+            await exchangeSupabaseSession(data.session.access_token);
         }).catch(() => {
-            if (active) clearErpSession();
+            if (active) {
+                const result = { success: false, error: 'Unable to read the cloud session. Please retry.' };
+                preserveCloudSessionFailure(result);
+            }
         });
 
         const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
@@ -214,6 +471,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 return;
             }
             if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+                setHasCloudSession(true);
                 void exchangeSupabaseSession(session.access_token);
             }
         });
@@ -222,7 +480,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             active = false;
             listener.subscription.unsubscribe();
         };
-    }, [clearErpSession, exchangeSupabaseSession]);
+    }, [clearErpSession, exchangeSupabaseSession, preserveCloudSessionFailure]);
 
     useEffect(() => {
         const handleOnline = () => setIsOnline(true);
@@ -244,6 +502,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         getOrgId: () => state.user?.org_id || null,
         getToken: () => state.token,
         isOnline,
+        hasCloudSession,
+        sessionExchangeError,
+        retrySessionExchange,
+        createOrganization,
+        acceptInvitation,
     };
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -5,15 +5,14 @@
  */
 
 import React from 'react';
-import { CreditCard } from 'lucide-react';
-import { formatCurrency } from '../../../../utils/formatters';
+import { formatExactCurrency } from '../../../../utils/exactDecimal';
 import type { OutstandingTableProps } from '../types/outstanding.types';
+import { hasPositiveMoney } from '../canonicalLedgerProjection';
 
 export const OutstandingTable = React.memo<OutstandingTableProps>(({
     parties,
     partyType,
-    onPartyClick,
-    onAllocateClick
+    onPartyClick
 }) => {
     if (parties.length === 0) {
         return (
@@ -44,10 +43,6 @@ export const OutstandingTable = React.memo<OutstandingTableProps>(({
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                     {parties.map((party) => {
-                        const netPosition = (party as any).customer_net_position ||
-                            ((party as any).total_advance || 0) - party.total_outstanding;
-                        const isCredit = netPosition <= 0;
-
                         return (
                             <tr
                                 key={party.party_id}
@@ -58,15 +53,15 @@ export const OutstandingTable = React.memo<OutstandingTableProps>(({
                                     <div className="font-medium">{party.party_name}</div>
                                 </td>
                                 <td className="px-6 py-3 text-right">
-                                    <div className={`font-semibold ${isCredit ? 'text-green-600' : 'text-red-600'}`}>
-                                        {formatCurrency(Math.abs(netPosition))}
+                                    <div className="font-semibold text-red-600">
+                                        {formatExactCurrency(party.total_outstanding, 'Party outstanding')}
                                         <span className="ml-1 text-xs">
-                                            {isCredit ? 'Adv' : 'Due'}
+                                            Due
                                         </span>
                                     </div>
                                 </td>
                                 <td className="px-6 py-3 text-center">
-                                    {party.total_overdue > 0 ? (
+                                    {hasPositiveMoney(party.total_overdue, 'Party overdue') ? (
                                         <span className="px-2 py-1 text-xs rounded-full bg-red-100 text-red-700">
                                             Overdue
                                         </span>
@@ -78,13 +73,12 @@ export const OutstandingTable = React.memo<OutstandingTableProps>(({
                                 </td>
                                 <td className="px-6 py-3 text-center">
                                     <button
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            onAllocateClick(party);
-                                        }}
-                                        className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+                                        type="button"
+                                        disabled
+                                        title="Payment allocation requires the canonical customer-receipt command"
+                                        className="cursor-not-allowed rounded border border-gray-200 bg-gray-100 px-3 py-2 text-xs text-gray-500"
                                     >
-                                        Allocate Payment
+                                        Allocation unavailable
                                     </button>
                                 </td>
                             </tr>

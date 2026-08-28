@@ -3,6 +3,7 @@
  */
 
 import { apiHelpers } from '../../apiClient';
+import { rejectCanonicalWrite } from '../../canonicalWritePolicy';
 import type { AxiosResponse } from 'axios';
 
 // ============================================
@@ -10,10 +11,14 @@ import type { AxiosResponse } from 'axios';
 // ============================================
 
 export interface PurchaseParams {
-    supplier_id?: number;
+    supplier_id?: number | string;
     status?: string;
+    payment_status?: string;
+    search?: string;
     from_date?: string;
     to_date?: string;
+    date_from?: string;
+    date_to?: string;
     dateFrom?: string;  // Alias for GST reports
     dateTo?: string;    // Alias for GST reports
     limit?: number;
@@ -48,7 +53,7 @@ const ENDPOINTS = {
     BY_SUPPLIER: (id: number) => `/purchases/supplier/${id}`,
     APPROVE: (id: number) => `/purchases/${id}/approve`,
     RECEIVE: (id: number) => `/purchases/${id}/receive`,
-    FOR_ENTRY: (id: number) => `/purchases/${id}/for-entry`
+    FOR_ENTRY: (id: string | number) => `/purchases/${id}/for-entry`
 } as const;
 
 // ============================================
@@ -68,42 +73,34 @@ export const purchasesApi = {
         return apiHelpers.get(ENDPOINTS.BY_SUPPLIER(supplierId), { params });
     },
 
-    create: (data: PurchaseOrderData): Promise<AxiosResponse> => {
-        return apiHelpers.post(ENDPOINTS.BASE, data);
-    },
+    create: (_data: PurchaseOrderData): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Legacy purchase-order creation'),
 
     // Create purchase entry (supplier invoice + batches + auto-GRN)
-    createEntry: (data: any): Promise<AxiosResponse> => {
-        return apiHelpers.post(ENDPOINTS.PURCHASE_ENTRY, data);
-    },
+    createEntry: (_data: any): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Legacy purchase-entry creation'),
 
-    update: (poId: number, data: Partial<PurchaseOrderData>): Promise<AxiosResponse> => {
-        return apiHelpers.put(`${ENDPOINTS.BASE}/${poId}`, data);
-    },
+    update: (_poId: number, _data: Partial<PurchaseOrderData>): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Legacy purchase-order editing'),
 
-    delete: (poId: number): Promise<AxiosResponse> => {
-        return apiHelpers.delete(`${ENDPOINTS.BASE}/${poId}`);
-    },
+    delete: (_poId: number): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Legacy purchase-order deletion'),
 
-    approve: (poId: number): Promise<AxiosResponse> => {
-        return apiHelpers.post(ENDPOINTS.APPROVE(poId));
-    },
+    approve: (_poId: number): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Legacy purchase-order approval'),
 
-    receive: (poId: number, receivedItems: any[]): Promise<AxiosResponse> => {
-        return apiHelpers.post(ENDPOINTS.RECEIVE(poId), { items: receivedItems });
-    },
+    receive: (_poId: number, _receivedItems: any[]): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Legacy purchase-order receipt'),
 
     print: (poId: number): Promise<AxiosResponse> => {
         return apiHelpers.get(`${ENDPOINTS.BASE}/${poId}/print`, { responseType: 'blob' });
     },
 
     parseInvoice: (formData: FormData): Promise<AxiosResponse> => {
-        return apiHelpers.post('/purchase-orders/parse-invoice', formData, {
-            headers: { 'Content-Type': 'multipart/form-data' }
-        });
+        return apiHelpers.post('/purchase-upload/parse-invoice-safe', formData);
     },
     getReturnableInvoices: (params: { supplier_id: number | string }): Promise<AxiosResponse> => {
-        return apiHelpers.get(`${ENDPOINTS.BASE}/returnable`, { params });
+        return apiHelpers.get('/supplier-invoices/returnable/', { params });
     },
 
     // Search purchase orders
@@ -112,7 +109,7 @@ export const purchasesApi = {
     },
 
     // Get PO data formatted for Purchase Entry pre-fill
-    getForEntry: (poId: number): Promise<AxiosResponse> => {
+    getForEntry: (poId: string | number): Promise<AxiosResponse> => {
         return apiHelpers.get(ENDPOINTS.FOR_ENTRY(poId));
     },
 

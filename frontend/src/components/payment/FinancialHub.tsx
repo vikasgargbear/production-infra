@@ -1,18 +1,32 @@
 import React from 'react';
 import {
   CreditCard, FileText, Calculator, Receipt,
-  RefreshCw
+  RefreshCw, History
 } from 'lucide-react';
 import { ModuleHub } from '../global';
 import ModularPaymentEntry from './entry/ModularPaymentEntry';
+import PaymentMade from './entry/PaymentMade';
+import SupplierAdvance from './entry/SupplierAdvance';
 import FinancialJournalFlow from './flows/FinancialJournalFlow';
 import ExpenseClaimsFlow from './flows/ExpenseClaimsFlow';
 import BankReconciliationFlow from './flows/BankReconciliationFlow';
+import PaymentHistory from './tracking/PaymentHistory';
+import CustomerChequeLifecycleFlow from './entry/CustomerChequeLifecycleFlow';
 
 
 interface FinancialHubProps {
   open?: boolean;
   onClose?: () => void;
+  /**
+   * Deep-link sub-module to open on mount (e.g. "journal-entry").
+   * Comes from the URL hash (#/payment/<subpage>).
+   */
+  initialSubpage?: string | null;
+  /**
+   * Called when the user switches sub-modules inside the hub.
+   * The parent (App) uses this to keep the URL hash in sync.
+   */
+  onSubpageChange?: (subpage: string | null) => void;
 }
 
 interface FinancialModule {
@@ -25,16 +39,60 @@ interface FinancialModule {
   component: React.ComponentType<any>;
 }
 
-const FinancialHub: React.FC<FinancialHubProps> = ({ open = true, onClose }) => {
+const FinancialHub: React.FC<FinancialHubProps> = ({ open = true, onClose, initialSubpage, onSubpageChange }) => {
+  /** All valid sub-module IDs for deep-linking into FinancialHub. */
+  const PAYMENT_SUBPAGE_IDS = ['payment-entry', 'supplier-payment', 'supplier-advance', 'cheque-actions', 'payment-history', 'journal-entry', 'expense-claims', 'bank-reconciliation'] as const;
+
+  const resolvedDefault =
+    initialSubpage && PAYMENT_SUBPAGE_IDS.includes(initialSubpage as any)
+      ? initialSubpage
+      : 'payment-entry';
+
   const financialModules: FinancialModule[] = [
     {
       id: 'payment-entry',
-      label: 'New Payment',
-      fullLabel: 'Payment Entry',
-      description: 'Record customer & supplier payments',
+      label: 'Customer Receipt',
+      fullLabel: 'Customer Receipt',
+      description: 'Receive and allocate customer payments',
       icon: CreditCard,
       color: 'green',
       component: ModularPaymentEntry
+    },
+    {
+      id: 'supplier-payment',
+      label: 'Supplier Payment',
+      fullLabel: 'Supplier Payment',
+      description: 'Pay posted supplier invoice balances',
+      icon: CreditCard,
+      color: 'green',
+      component: PaymentMade
+    },
+    {
+      id: 'supplier-advance',
+      label: 'Supplier Advance',
+      fullLabel: 'Supplier Advance',
+      description: 'Prepay one approved supplier PO line',
+      icon: CreditCard,
+      color: 'blue',
+      component: SupplierAdvance
+    },
+    {
+      id: 'cheque-actions',
+      label: 'Cheque Actions',
+      fullLabel: 'Customer Cheque Clearance / Bounce',
+      description: 'Review and post one terminal action for an exact cheque receipt',
+      icon: RefreshCw,
+      color: 'blue',
+      component: CustomerChequeLifecycleFlow
+    },
+    {
+      id: 'payment-history',
+      label: 'History',
+      fullLabel: 'Posted Payment History',
+      description: 'Verify posted allocations and balanced journals',
+      icon: History,
+      color: 'blue',
+      component: PaymentHistory
     },
     {
       id: 'journal-entry',
@@ -73,7 +131,8 @@ const FinancialHub: React.FC<FinancialHubProps> = ({ open = true, onClose }) => 
       subtitle="Payments, journals, and expense management"
       icon={Calculator}
       modules={financialModules}
-      defaultModule="payment-entry"
+      defaultModule={resolvedDefault}
+      onActiveModuleChange={onSubpageChange}
     />
   );
 };

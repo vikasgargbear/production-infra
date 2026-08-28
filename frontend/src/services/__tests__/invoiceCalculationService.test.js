@@ -1,51 +1,85 @@
+/* eslint-disable import/first */
 jest.mock('../api/modules/sales/calculations.api', () => ({
   invoiceCalculationsApi: { preview: jest.fn() }
 }));
 
-import { normalizeInvoicePreview } from '../calculations/invoiceCalculationService';
+import { calculateInvoicePreview, normalizeInvoicePreview } from '../calculations/invoiceCalculationService';
+import { invoiceCalculationsApi } from '../api/modules/sales/calculations.api';
+import { exactInvoiceResponse, exactSalesLine } from './exactCalculationFixtures';
 
+const customerId = '10000000-0000-7000-8000-000000000001';
+const productId = '10000000-0000-7000-8000-000000000002';
+const branchId = '10000000-0000-7000-8000-000000000003';
+const invoice = (items = [{ product_id: productId, quantity: '1.000000', unit_price: '0.100000', gst_percent: '18.000000' }]) => ({
+  customer_details: { customer_id: customerId },
+  invoice_date: '2026-08-25',
+  gst_type: 'CGST/SGST',
+  freight_charges: '0.00',
+  discount_type: 'percentage',
+  discount_percent: '0.000000',
+  discount_amount: '0.00',
+  items: items.map(item => ({
+    branch_id: branchId,
+    free_quantity: '0.000000',
+    free_supply_tax_treatment: 'excluded_from_taxable_value',
+    discount_percent: '0.000000',
+    gst_percent: '18.000000',
+    ...item,
+  })),
+});
 
-test('normalizes canonical backend invoice totals for the invoice UI', () => {
-  const result = normalizeInvoicePreview(
-    { items: [{ product_id: 7, quantity: 2, unit_price: 100 }] },
-    {
-      success: true,
-      gst_type: 'IGST',
-      calculation_timestamp: 1,
-      line_items: [{
-        subtotal: 200,
-        discount_amount: 20,
-        taxable_amount: 180,
-        total_tax_amount: 32.4,
-        line_total: 212.4
-      }],
-      totals: {
-        subtotal_amount: 200,
-        discount_amount: 20,
-        scheme_discount: 0,
-        taxable_amount: 180,
-        cgst_amount: 0,
-        sgst_amount: 0,
-        igst_amount: 32.4,
-        total_tax_amount: 32.4,
-        round_off_amount: -0.4,
-        final_amount: 212
-      }
-    }
-  );
+beforeEach(() => jest.clearAllMocks());
 
-  expect(result.gst_type).toBe('IGST');
-  expect(result.items[0]).toEqual(expect.objectContaining({
-    product_id: 7,
-    gst_amount: 32.4,
-    total_amount: 212.4
+test('keeps authoritative 0.10 + 0.20 line totals exact', () => {
+  const response = exactInvoiceResponse({
+    line_items: [
+      exactSalesLine(),
+      exactSalesLine({ subtotal: '0.20', taxable_amount: '0.20', cgst_amount: '0.02', sgst_amount: '0.02', total_tax: '0.04', total_tax_amount: '0.04', line_total: '0.24' }),
+    ],
+    totals: {
+      ...exactInvoiceResponse().totals,
+      subtotal_amount: '0.30', taxable_amount: '0.30', cgst_amount: '0.03', sgst_amount: '0.03', total_tax_amount: '0.06', final_amount: '0.36',
+    },
+  });
+  const result = normalizeInvoicePreview(invoice([
+    { product_id: productId, quantity: '1.000000', unit_price: '0.100000' },
+    { product_id: productId, quantity: '1.000000', unit_price: '0.200000' },
+  ]), response);
+  expect(result.totals.subtotal_amount).toBe('0.30');
+  expect(result.totals.final_amount).toBe('0.36');
+});
+
+test('preserves six-place quantity and a rate above 2^53 in the request', async () => {
+  invoiceCalculationsApi.preview.mockResolvedValue({ data: exactInvoiceResponse({
+    line_items: [exactSalesLine({ quantity: '0.123456' })],
+  }) });
+  await calculateInvoicePreview(invoice([{
+    product_id: productId,
+    quantity: '0.123456',
+    unit_price: '9007199254740993.000000',
+    gst_percent: '18.000000',
+  }]), true);
+  expect(invoiceCalculationsApi.preview).toHaveBeenCalledWith(expect.objectContaining({
+    branch_id: branchId,
+    customer_id: customerId,
+    document_date: '2026-08-25',
+    items: [expect.objectContaining({
+      quantity: '0.123456',
+      unit_price: '9007199254740993.000000',
+    })],
   }));
-  expect(result.totals).toEqual(expect.objectContaining({
-    gross_amount: 200,
-    taxable_amount: 180,
-    total_gst: 32.4,
-    igst_total: 32.4,
-    net_amount: 212.4,
-    final_amount: 212
-  }));
+  expect(invoiceCalculationsApi.preview.mock.calls[0][0].items[0]).not.toHaveProperty('gst_percent');
+});
+
+test.each([
+  ['numeric JSON', { ...exactSalesLine(), quantity: 1 }],
+  ['overprecision', { ...exactSalesLine(), quantity: '1.0000001' }],
+])('fails closed on %s authoritative decimals', async (_label, line) => {
+  invoiceCalculationsApi.preview.mockResolvedValue({ data: exactInvoiceResponse({ line_items: [line] }) });
+  await expect(calculateInvoicePreview(invoice(), true)).rejects.toThrow(/exact decimal string|precision/);
+});
+
+test('fails closed offline without transport', async () => {
+  await expect(calculateInvoicePreview(invoice(), false)).rejects.toThrow('live ERP API');
+  expect(invoiceCalculationsApi.preview).not.toHaveBeenCalled();
 });

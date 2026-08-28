@@ -1,56 +1,42 @@
-# Database Readiness Authority
+# Database readiness authority
 
-`database/schema-authority.json` is the machine-readable source for database
-migration readiness. It intentionally declares the repository `unbaselined`.
-That state must not be changed by assuming the legacy numbered DDL matches the
-live database.
+`database/schema-authority.json` declares the repository's database readiness
+state. `backend/alembic` is the sole executable database creation and migration
+authority. The approved strategy is reset-only: there is no conversion,
+backfill, compatibility schema, legacy fallback, or dual read/write phase.
 
-Run the fail-closed audit from the repository root:
+The checked-in state remains `migrating`. Do not change it to
+`production_ready` until exact-SHA canonical staging evidence has been captured,
+hash-bound, and reviewed.
+
+## Checks
+
+Run from the repository root:
 
 ```bash
 python3 backend/scripts/schema_readiness.py
 python3 backend/scripts/schema_readiness.py --json
+python3 backend/scripts/schema_readiness.py --validate-authority
 ```
 
-The normal command exits nonzero until the database is production-ready. CI can
-validate that the authority does not overstate readiness while remediation is in
-progress:
+The default command intentionally exits nonzero while promotion evidence is
+missing. `--validate-authority` proves only that the repository does not contain
+an unclassified competing DDL source, that canonical Alembic/model hashes agree,
+and that the current non-ready claim is honest.
 
-```bash
-python3 backend/scripts/schema_readiness.py --validate-claim
-```
+## Promotion evidence
 
-## Promotion Procedure
+`canonical_transaction_integrity_evidence` remains `null` until a reviewed
+read-only capture exists. Its replacement must bind:
 
-1. Export the live schema, extensions, triggers, policies, grants, and indexes.
-2. Review differences against `database/02-tables` and the raw legacy migration
-   directories. Do not apply legacy bootstrap SQL to the live database.
-3. Create the reviewed baseline in `backend/alembic`, then test both an empty
-   bootstrap and an upgrade from a production-like snapshot.
-4. Resolve every blocker reported by `schema_readiness.py`, including deploy
-   includes, competing DDL, tenant-child isolation, and `FORCE RLS` coverage.
-5. Change `readiness_state` to `production_ready` only in the same change that
-   makes the default audit exit zero.
+- the disposable canonical staging project, not the retired project;
+- the exact 40-character deployed commit and exact Alembic head;
+- an artifact path and recomputed SHA-256;
+- a named reviewer and timezone-aware review time;
+- non-owner/non-`BYPASSRLS` runtime-role behavior, forced RLS and cross-tenant
+  denial;
+- canonical idempotency, allocation ownership, immutable balanced journals, and
+  command-owned order/invoice/GRN/inventory effects.
 
-After the baseline is established, only `backend/alembic` may contain new
-production migrations. Legacy SQL remains evidence for reconciliation until it
-is explicitly archived; it is not an executable migration chain.
-
-## Reviewed Live Capture
-
-The read-only capture from project `jfrairkkzxwkhbtqejnz` on 2026-08-19 is
-summarized in `database/live-schema-evidence.json`. Its artifact hash is checked
-in, while the 0600 raw artifact remains ignored because catalog output may
-contain operational details.
-
-The capture verifies that every column in the 36-query conflict inventory exists
-live. It does not establish a migration baseline: Supabase migration history was
-unavailable, 92 of 175 reviewed business tables had RLS disabled, no reviewed
-business table used `FORCE RLS`, and `system_config.feature_flags` had RLS enabled
-without a policy.
-
-Do not start the backend pilot against live data until the deployed database role
-is proven to be a non-owner without RLS bypass, every request is proven to set
-`app.org_id`, cross-tenant read tests pass with that exact role, and pilot routes
-are restricted to an allowlist of reviewed RLS-protected tables. All live writes
-remain blocked by unresolved trigger ownership and transaction-contract issues.
+Missing, stale, cross-project, unreviewed, or hash-mismatched evidence fails
+closed. No legacy SQL source may be reintroduced as a shortcut.

@@ -1,129 +1,61 @@
 #!/usr/bin/env python3
-"""
-Schema Audit Script - Find all column name mismatches across codebase
+"""Validate backend SQL column references against canonical domain catalogs."""
 
-Scans all Python files for SQL queries and validates them against schema doc.
-Outputs a report of all issues found.
-
-Usage:
-    python scripts/audit_schema.py
-    python scripts/audit_schema.py --fix  # Auto-fix common aliases
-"""
+from __future__ import annotations
 
 import importlib.util
-import sys
 from pathlib import Path
-from typing import Dict, List
-import json
-
-backend_root = Path(__file__).resolve().parent.parent
-validator_path = backend_root / "app" / "core" / "utils" / "schema_validator.py"
-validator_spec = importlib.util.spec_from_file_location("schema_validator", validator_path)
-if validator_spec is None or validator_spec.loader is None:
-    raise RuntimeError(f"Unable to load schema validator at {validator_path}")
-schema_validator = importlib.util.module_from_spec(validator_spec)
-validator_spec.loader.exec_module(schema_validator)
-parse_schema_doc = schema_validator.parse_schema_doc
-validate_module = schema_validator.validate_module
+import sys
+from typing import Any
 
 
-# Common column aliases that should be replaced
-KNOWN_ALIASES = {
-    "gstin": "gst_number",
-    "rate": "unit_price",
-    "sale_price": "unit_price",
-    "selling_price": "unit_price",
-    "discount": "discount_percent",
-    "total": "total_amount",
-    "line_total": "total_amount",
-    "gross_amount": "subtotal_amount",
-    "net_amount": "final_amount",
-}
+BACKEND_ROOT = Path(__file__).resolve().parent.parent
+VALIDATOR_PATH = BACKEND_ROOT / "app/core/utils/schema_validator.py"
+SPEC = importlib.util.spec_from_file_location("schema_validator", VALIDATOR_PATH)
+if SPEC is None or SPEC.loader is None:
+    raise RuntimeError(f"Unable to load schema validator at {VALIDATOR_PATH}")
+schema_validator = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(schema_validator)
 
 
-def scan_directory(directory: Path) -> List[Dict]:
-    """Scan all Python files in directory for schema issues."""
+def scan_directory(directory: Path) -> list[dict[str, Any]]:
     results = []
-    
-    for py_file in directory.rglob("*.py"):
-        # Skip migrations, tests, and venv
-        if any(skip in str(py_file) for skip in ['migrations', '__pycache__', 'venv', '.venv', 'test_']):
+    for path in directory.rglob("*.py"):
+        if any(part in {"migrations", "__pycache__", "venv", ".venv"} for part in path.parts):
             continue
-        
-        result = validate_module(py_file)
-        
+        if path.name.startswith("test_"):
+            continue
+        result = schema_validator.validate_module(path)
         if result.get("errors"):
             results.append(result)
-    
     return results
 
 
-def main():
-    print("=" * 80)
-    print("SCHEMA AUDIT - Validating all SQL queries against schema doc")
-    print("=" * 80)
-    print()
-    
-    # Parse schema first
-    print("📖 Parsing schema doc...")
+def main() -> int:
     try:
-        schema = parse_schema_doc(required=True)
-    except (FileNotFoundError, ValueError) as error:
-        print(f"❌ Schema audit cannot run: {error}")
-        sys.exit(2)
+        catalog = schema_validator.parse_schema_catalog(required=True)
+    except (FileNotFoundError, ValueError, OSError) as exc:
+        print(f"canonical schema audit: BLOCKED: {exc}", file=sys.stderr)
+        return 2
 
-    print(f"✅ Found {len(schema)} tables in schema docs")
-    print()
-    
-    # Scan backend code
-    backend_dir = Path(__file__).parent.parent / "app"
-    
-    print(f"🔍 Scanning {backend_dir}...")
-    results = scan_directory(backend_dir)
-    
-    # Print results
-    print()
-    print("=" * 80)
-    print(f"AUDIT RESULTS: Found {len(results)} files with schema issues")
-    print("=" * 80)
-    print()
-    
-    total_errors = 0
-    
+    results = scan_directory(BACKEND_ROOT / "app")
     for result in results:
-        file_path = result["file"]
-        rel_path = Path(file_path).relative_to(Path.cwd())
-        
-        print(f"\n📄 {rel_path}")
-        print(f"   Queries: {result['total_queries']} | Valid: {result['valid_queries']} | Issues: {len(result['errors'])}")
-        
+        print(result["file"])
         for error in result["errors"]:
-            total_errors += 1
-            print(
-                f"\n   ❌ Query at line {error['line']} "
-                f"(sha256:{error['query_sha256'][:12]}): {error['query']}"
-            )
+            print(f"  line {error['line']} sha256:{error['query_sha256'][:12]}")
             for issue in error["issues"]:
-                print(f"      {issue}")
-    
-    print()
-    print("=" * 80)
-    print(f"SUMMARY: {total_errors} schema errors found across {len(results)} files")
-    print("=" * 80)
-    
-    if total_errors > 0:
-        print()
-        print("🔧 FIX REQUIRED: Review and fix the schema errors above")
-        print()
-        print("Common fixes:")
-        for old, new in KNOWN_ALIASES.items():
-            print(f"  - Replace '{old}' with '{new}'")
-        
-        sys.exit(1)
-    else:
-        print("\n✅ All SQL queries validated successfully!")
-        sys.exit(0)
+                print(f"    {issue}")
+    error_count = sum(len(result["errors"]) for result in results)
+    if error_count:
+        print(
+            f"canonical schema audit: FAILED "
+            f"({error_count} errors across {len(results)} files)",
+            file=sys.stderr,
+        )
+        return 1
+    print(f"canonical schema audit: OK ({len(catalog)} tables)")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

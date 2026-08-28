@@ -1,480 +1,91 @@
-/**
- * UnitMaster Component
- * 
- * Refactored to use useSettingsEntity hook for shared CRUD logic.
- * Reduced from 673 lines to ~350 lines.
- */
-import React, { useEffect } from 'react';
-import {
-    Ruler, Search, Plus, Edit2, Trash2,
-    Loader2, AlertCircle, Check,
-    ArrowRight, X, RefreshCw
-} from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { AlertCircle, Loader2, RefreshCw, Ruler, Search, X } from 'lucide-react';
 import { settingsApi } from '../../../services/api';
-import { useSettingsEntity } from '../hooks';
-
-// ============================================================================
-// Types
-// ============================================================================
+import type { UnitViewDto } from '../../../services/api/modules/settings/settings.api';
+import CanonicalWriteNotice from '../../global/ui/CanonicalWriteNotice';
 
 interface UnitMasterProps {
     open?: boolean;
     onClose?: () => void;
 }
 
-interface Unit {
-    id: number | string;
-    code: string;
-    name: string;
-    symbol: string;
-    category: string;
-    baseUnit: string;
-    isBase: boolean;
-    conversionFactor: number;
-    description?: string;
-    isActive: boolean;
-}
-
-interface UnitFormData {
-    code: string;
-    name: string;
-    symbol: string;
-    category: string;
-    baseUnit: string;
-    conversionFactor: string | number;
-    description: string;
-    isActive: boolean;
-}
-
-// ============================================================================
-// Constants
-// ============================================================================
-
-const UNIT_CATEGORIES = [
-    { value: 'all', label: 'All Categories' },
-    { value: 'quantity', label: 'Quantity' },
-    { value: 'volume', label: 'Volume' },
-    { value: 'weight', label: 'Weight' },
-    { value: 'special', label: 'Special' }
-];
-
-const INITIAL_FORM_DATA: UnitFormData = {
-    code: '',
-    name: '',
-    symbol: '',
-    category: 'quantity',
-    baseUnit: '',
-    conversionFactor: 1,
-    description: '',
-    isActive: true
-};
-
-// ============================================================================
-// Helper Functions
-// ============================================================================
-
-const CATEGORY_STYLES: Record<string, string> = {
-    quantity: 'bg-blue-100 text-blue-800',
-    volume: 'bg-green-100 text-green-800',
-    weight: 'bg-purple-100 text-purple-800',
-    special: 'bg-orange-100 text-orange-800',
-};
-const DEFAULT_CATEGORY_STYLE = 'bg-gray-100 text-gray-800';
-
-const getConversionChain = (unit: Unit, allUnits: Unit[]): Unit[] => {
-    const chain = [unit];
-    let currentUnit = unit;
-
-    while (currentUnit.baseUnit) {
-        const baseUnit = allUnits.find(u => u.code === currentUnit.baseUnit);
-        if (!baseUnit) break;
-        chain.push(baseUnit);
-        currentUnit = baseUnit;
-    }
-
-    return chain.reverse();
-};
-
-// ============================================================================
-// Main Component
-// ============================================================================
-
 const UnitMaster: React.FC<UnitMasterProps> = ({ open, onClose }) => {
-    const {
-        entities: units,
-        filteredEntities,
-        isLoading,
-        error,
-        setError,
-        successMessage,
-        refreshing,
-        searchTerm,
-        setSearchTerm,
-        filterValue,
-        setFilterValue,
-        showModal,
-        setShowModal,
-        editingEntity,
-        formData,
-        loadEntities,
-        handleRefresh,
-        handleInputChange,
-        handleEdit,
-        handleSubmit,
-        handleDelete,
-        handleToggleActive,
-        handleCloseModal,
-        clearError,
-        clearSuccess
-    } = useSettingsEntity<Unit, UnitFormData>({
-        entityName: 'unit',
-        idField: 'id',
-        api: settingsApi.units as any,
-        searchFields: ['name', 'code', 'symbol'],
-        filterField: 'category',
-        initialFormData: INITIAL_FORM_DATA,
-        entityToFormData: (unit) => ({
-            code: unit.code,
-            name: unit.name,
-            symbol: unit.symbol,
-            category: unit.category,
-            baseUnit: unit.baseUnit || '',
-            conversionFactor: unit.conversionFactor,
-            description: unit.description || '',
-            isActive: unit.isActive
-        }),
-        formDataToEntity: (data) => ({
-            ...data,
-            isBase: !data.baseUnit,
-            conversionFactor: parseFloat(String(data.conversionFactor)) || 1
-        }),
-        loadOnOpen: true
-    });
+    const [units, setUnits] = useState<UnitViewDto[]>([]);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [category, setCategory] = useState('all');
+    const [isLoading, setIsLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
-    // Load when opened
+    const loadUnits = useCallback(async () => {
+        setError(null);
+        try {
+            const response = await settingsApi.units.getAll();
+            setUnits(response.data);
+        } catch {
+            setUnits([]);
+            setError('Units could not be loaded from the live canonical API.');
+        } finally {
+            setIsLoading(false);
+        }
+    }, []);
+
     useEffect(() => {
-        if (open) {
-            loadEntities();
-        }
-    }, [open, loadEntities]);
+        if (open) void loadUnits();
+    }, [open, loadUnits]);
 
-    // Helper for available base units in current category
-    const getAvailableBaseUnits = (category: string) =>
-        units.filter(u => u.category === category && u.isActive);
-
-    // Check for dependent units before delete
-    const handleDeleteWithCheck = async (id: string | number) => {
-        const unit = units.find(u => u.id === id);
-        if (!unit) return;
-
-        const dependentUnits = units.filter(u => u.baseUnit === unit.code);
-        if (dependentUnits.length > 0) {
-            setError(`Cannot delete ${unit.name}. ${dependentUnits.length} units depend on it.`);
-            return;
-        }
-
-        await handleDelete(id);
+    const handleRefresh = async () => {
+        setRefreshing(true);
+        await loadUnits();
+        setRefreshing(false);
     };
+
+    const categories = useMemo(
+        () => Array.from(new Set(units.map(item => item.category).filter(Boolean))).sort(),
+        [units],
+    );
+    const visibleUnits = useMemo(() => {
+        const query = searchTerm.trim().toLowerCase();
+        return units.filter(item => {
+            const matchesSearch = !query || [item.name, item.code, item.symbol, item.category]
+                .some(value => value.toLowerCase().includes(query));
+            return matchesSearch && (category === 'all' || item.category === category);
+        });
+    }, [units, searchTerm, category]);
 
     if (!open) return null;
 
     return (
-        <div className="flex-1 flex flex-col bg-gray-50 h-full overflow-hidden">
-            {/* Header */}
-            <div className="bg-white border-b border-gray-200 px-6 py-4">
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                        <Ruler className="w-6 h-6 text-gray-700" />
-                        <h1 className="text-2xl font-bold text-gray-900">Unit Master</h1>
-                        <span className="text-sm text-gray-500">({units.length} units)</span>
+        <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-gray-50">
+            <header className="border-b border-gray-200 bg-white px-4 py-4 sm:px-6">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-3">
+                        <Ruler className="h-6 w-6 shrink-0 text-gray-700" aria-hidden="true" />
+                        <div><h1 className="text-xl font-semibold text-gray-900 sm:text-2xl">Unit Master</h1><p className="text-sm text-gray-500">{units.length} live units of measure</p></div>
                     </div>
-                    <div className="flex items-center space-x-3">
-                        <button
-                            onClick={handleRefresh}
-                            disabled={refreshing}
-                            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 flex items-center space-x-2 disabled:opacity-50"
-                        >
-                            {refreshing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                            <span>{refreshing ? 'Refreshing...' : 'Refresh'}</span>
-                        </button>
-                        <button
-                            onClick={() => setShowModal(true)}
-                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2"
-                        >
-                            <Plus className="w-4 h-4" /><span>Add Unit</span>
-                        </button>
+                    <div className="flex items-center gap-2">
+                        <button type="button" onClick={handleRefresh} disabled={refreshing} className="inline-flex min-h-11 items-center gap-2 border border-gray-300 bg-white px-4 text-sm font-medium text-gray-700 disabled:opacity-50">{refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}Refresh</button>
+                        {onClose && <button type="button" onClick={onClose} aria-label="Close unit master" className="grid h-11 w-11 place-items-center border border-gray-300 bg-white text-gray-600"><X className="h-5 w-5" /></button>}
                     </div>
                 </div>
+            </header>
+
+            <CanonicalWriteNotice action="Changing units" className="mx-4 mt-4 sm:mx-6" />
+
+            <div className="grid gap-3 border-b border-gray-200 bg-white px-4 py-3 sm:grid-cols-[minmax(0,1fr)_14rem] sm:px-6">
+                <label className="relative block"><span className="sr-only">Search units</span><Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" /><input value={searchTerm} onChange={event => setSearchTerm(event.target.value)} placeholder="Search name, code, symbol, or dimension" className="min-h-11 w-full border border-gray-300 bg-white pl-10 pr-3" /></label>
+                <select aria-label="Filter unit dimension" value={category} onChange={event => setCategory(event.target.value)} className="min-h-11 w-full border border-gray-300 bg-white px-3"><option value="all">All dimensions</option>{categories.map(item => <option key={item} value={item}>{item}</option>)}</select>
             </div>
 
-            {/* Filters */}
-            <div className="bg-white border-b border-gray-200 px-6 py-3">
-                <div className="flex items-center space-x-4">
-                    <div className="flex-1 relative">
-                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                        <input
-                            type="text"
-                            placeholder="Search by name, code, or symbol..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                        />
-                    </div>
-                    <select
-                        value={filterValue}
-                        onChange={(e) => setFilterValue(e.target.value)}
-                        className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    >
-                        {UNIT_CATEGORIES.map(cat => (
-                            <option key={cat.value} value={cat.value}>{cat.label}</option>
-                        ))}
-                    </select>
-                </div>
-            </div>
-
-            {/* Messages */}
-            {error && (
-                <div className="mx-6 mt-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center">
-                    <AlertCircle className="w-5 h-5 mr-2" />{error}
-                    <button onClick={clearError} className="ml-auto text-red-400 hover:text-red-600">
-                        <X className="w-4 h-4" />
-                    </button>
-                </div>
-            )}
-            {successMessage && (
-                <div className="mx-6 mt-4 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg flex items-center">
-                    <Check className="w-5 h-5 mr-2" />{successMessage}
-                    <button onClick={clearSuccess} className="ml-auto text-green-400 hover:text-green-600">
-                        <X className="w-4 h-4" />
-                    </button>
-                </div>
-            )}
-
-            {/* Units Table */}
-            <div className="flex-1 overflow-y-auto p-6 min-h-0">
-                {isLoading ? (
-                    <div className="flex items-center justify-center h-64">
-                        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-                        <span className="ml-2 text-gray-600">Loading units...</span>
-                    </div>
-                ) : filteredEntities.length === 0 ? (
-                    <div className="flex items-center justify-center h-64">
-                        <div className="text-center">
-                            <Ruler className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                            <p className="text-gray-600">No units found</p>
-                            {searchTerm && <p className="text-sm text-gray-500 mt-2">Try adjusting your search criteria</p>}
-                        </div>
-                    </div>
-                ) : (
-                    <div className="bg-white rounded-lg border border-gray-200 h-full flex flex-col">
-                        <div className="flex-1 overflow-auto">
-                            <table className="w-full">
-                                <thead className="bg-gray-50 sticky top-0 z-10">
-                                    <tr>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Unit Details</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Conversion</th>
-                                        <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Status</th>
-                                        <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="bg-white divide-y divide-gray-200">
-                                    {filteredEntities.map((unit) => {
-                                        const conversionChain = getConversionChain(unit, units);
-                                        return (
-                                            <tr key={unit.id} className="hover:bg-gray-50">
-                                                <td className="px-6 py-4">
-                                                    <p className="text-sm font-medium text-gray-900">{unit.name} ({unit.symbol})</p>
-                                                    <p className="text-xs text-gray-500">Code: {unit.code}{unit.description && ` • ${unit.description}`}</p>
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    <span className={`px-2 py-1 text-xs rounded-full ${CATEGORY_STYLES[unit.category] || DEFAULT_CATEGORY_STYLE}`}>
-                                                        {unit.category}
-                                                    </span>
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    <div className="text-sm">
-                                                        {unit.isBase ? (
-                                                            <span className="text-gray-500">Base Unit</span>
-                                                        ) : (
-                                                            <div className="flex items-center space-x-1 text-gray-700">
-                                                                {conversionChain.map((u, index) => (
-                                                                    <React.Fragment key={u.id}>
-                                                                        {index > 0 && <ArrowRight className="w-3 h-3 text-gray-400" />}
-                                                                        <span className={index === conversionChain.length - 1 ? 'font-medium' : ''}>
-                                                                            {index === 0 ? '1' : u.conversionFactor} {u.symbol}
-                                                                        </span>
-                                                                    </React.Fragment>
-                                                                ))}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-4 text-center">
-                                                    <button
-                                                        onClick={() => handleToggleActive(unit.id)}
-                                                        className={`px-2 py-1 text-xs rounded-full ${unit.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}
-                                                    >
-                                                        {unit.isActive ? 'Active' : 'Inactive'}
-                                                    </button>
-                                                </td>
-                                                <td className="px-6 py-4 text-center">
-                                                    <div className="flex items-center justify-center space-x-2">
-                                                        <button onClick={() => handleEdit(unit)} className="p-1 text-blue-600 hover:bg-blue-50 rounded">
-                                                            <Edit2 className="w-4 h-4" />
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleDeleteWithCheck(unit.id)}
-                                                            className="p-1 text-red-600 hover:bg-red-50 rounded"
-                                                            disabled={unit.isBase}
-                                                            title={unit.isBase ? 'Cannot delete base unit' : ''}
-                                                        >
-                                                            <Trash2 className="w-4 h-4" />
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
+            <main className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
+                {error && <div role="alert" className="mb-4 flex items-center gap-2 border border-red-200 bg-red-50 p-3 text-sm text-red-800"><AlertCircle className="h-5 w-5 shrink-0" />{error}</div>}
+                {isLoading ? <div className="flex h-48 items-center justify-center text-gray-600"><Loader2 className="mr-2 h-6 w-6 animate-spin" />Loading units…</div> : visibleUnits.length === 0 ? <div className="border border-gray-200 bg-white p-8 text-center text-gray-600">No units match the current filters.</div> : (
+                    <>
+                        <div className="grid gap-3 sm:grid-cols-2 md:hidden">{visibleUnits.map(item => <article key={item.id} className="border border-gray-200 bg-white p-4"><div className="flex items-start justify-between gap-3"><div><h2 className="font-medium text-gray-900">{item.name}</h2><p className="text-sm text-gray-500">{item.code}{item.symbol ? ` · ${item.symbol}` : ''}</p></div><span className="border border-gray-200 px-2 py-1 text-xs">{item.isActive ? 'Active' : item.status || 'Inactive'}</span></div><dl className="mt-3 grid grid-cols-2 gap-3 text-sm"><div><dt className="text-gray-500">Dimension</dt><dd>{item.category || '—'}</dd></div><div><dt className="text-gray-500">Decimals</dt><dd>{item.decimalPlaces}</dd></div></dl></article>)}</div>
+                        <div className="hidden overflow-x-auto border border-gray-200 bg-white md:block"><table className="w-full min-w-[640px] text-sm"><thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500"><tr><th className="px-4 py-3">Unit</th><th className="px-4 py-3">Code</th><th className="px-4 py-3">Symbol</th><th className="px-4 py-3">Dimension</th><th className="px-4 py-3">Decimals</th><th className="px-4 py-3">Status</th></tr></thead><tbody className="divide-y divide-gray-200">{visibleUnits.map(item => <tr key={item.id}><td className="px-4 py-3 font-medium text-gray-900">{item.name}</td><td className="px-4 py-3">{item.code}</td><td className="px-4 py-3">{item.symbol || '—'}</td><td className="px-4 py-3">{item.category || '—'}</td><td className="px-4 py-3">{item.decimalPlaces}</td><td className="px-4 py-3">{item.isActive ? 'Active' : item.status || 'Inactive'}</td></tr>)}</tbody></table></div>
+                    </>
                 )}
-            </div>
-
-            {/* Add/Edit Modal */}
-            {showModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl m-4">
-                        <div className="px-6 py-4 border-b border-gray-200">
-                            <div className="flex items-center justify-between">
-                                <h2 className="text-xl font-semibold text-gray-900">
-                                    {editingEntity ? 'Edit Unit' : 'Add New Unit'}
-                                </h2>
-                                <button onClick={handleCloseModal} className="p-2 hover:bg-gray-100 rounded-lg">
-                                    <X className="w-5 h-5 text-gray-500" />
-                                </button>
-                            </div>
-                        </div>
-
-                        <form onSubmit={handleSubmit} className="p-6">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        Unit Code <span className="text-red-500">*</span>
-                                    </label>
-                                    <input
-                                        type="text"
-                                        required
-                                        value={formData.code}
-                                        onChange={(e) => handleInputChange('code', e.target.value.toUpperCase())}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                        placeholder="e.g., TAB, ML, KG"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        Unit Name <span className="text-red-500">*</span>
-                                    </label>
-                                    <input
-                                        type="text"
-                                        required
-                                        value={formData.name}
-                                        onChange={(e) => handleInputChange('name', e.target.value)}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                        placeholder="e.g., Tablet, Milliliter"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        Symbol <span className="text-red-500">*</span>
-                                    </label>
-                                    <input
-                                        type="text"
-                                        required
-                                        value={formData.symbol}
-                                        onChange={(e) => handleInputChange('symbol', e.target.value)}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                        placeholder="e.g., Tab, ml, kg"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-                                    <select
-                                        value={formData.category}
-                                        onChange={(e) => {
-                                            handleInputChange('category', e.target.value);
-                                            handleInputChange('baseUnit', '');
-                                        }}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                    >
-                                        <option value="quantity">Quantity</option>
-                                        <option value="volume">Volume</option>
-                                        <option value="weight">Weight</option>
-                                        <option value="special">Special</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Base Unit</label>
-                                    <select
-                                        value={formData.baseUnit}
-                                        onChange={(e) => handleInputChange('baseUnit', e.target.value)}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                    >
-                                        <option value="">-- None (This is base unit) --</option>
-                                        {getAvailableBaseUnits(formData.category).map(unit => (
-                                            <option key={unit.id} value={unit.code}>{unit.name} ({unit.symbol})</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Conversion Factor</label>
-                                    <input
-                                        type="number"
-                                        step="0.001"
-                                        value={formData.conversionFactor}
-                                        onChange={(e) => handleInputChange('conversionFactor', e.target.value)}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                        disabled={!formData.baseUnit}
-                                        placeholder="e.g., 10, 1000"
-                                    />
-                                </div>
-                                <div className="md:col-span-2">
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                                    <textarea
-                                        value={formData.description}
-                                        onChange={(e) => handleInputChange('description', e.target.value)}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                        rows={2}
-                                        placeholder="Optional description..."
-                                    />
-                                </div>
-                                <div className="md:col-span-2">
-                                    <label className="flex items-center space-x-2">
-                                        <input
-                                            type="checkbox"
-                                            checked={formData.isActive}
-                                            onChange={(e) => handleInputChange('isActive', e.target.checked)}
-                                            className="rounded border-gray-300"
-                                        />
-                                        <span className="text-sm text-gray-700">Active</span>
-                                    </label>
-                                </div>
-                            </div>
-
-                            <div className="mt-6 flex items-center justify-end space-x-3">
-                                <button type="button" onClick={handleCloseModal} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">
-                                    Cancel
-                                </button>
-                                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-                                    {editingEntity ? 'Update Unit' : 'Add Unit'}
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            )}
+            </main>
         </div>
     );
 };

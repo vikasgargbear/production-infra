@@ -1,359 +1,77 @@
-# PharmaERP - Production Infrastructure
+# AASOPharma ERP
 
-Enterprise-grade Pharmacy Management System with offline-first capabilities, multi-tenancy, and GST compliance.
+Cloud-authoritative pharmaceutical distribution ERP built with React,
+FastAPI, PostgreSQL, and an authenticated MCP runtime.
 
-Built for pharmaceutical distribution, where the domain does not forgive mistakes: batch and expiry tracking for drug compliance, multi-rate GST invoicing where even the order of discounts changes the tax, customer credit ledgers, and split-payment reconciliation. In daily production use. React + FastAPI + PostgreSQL, with web and Electron desktop clients. Roadmap: an MCP layer over the API, so the full ERP can be operated in natural language.
+The maintained business-write path is:
 
-## 🚀 Quick Start (5 Minutes)
+```text
+frontend CTA or MCP tool
+  -> typed operator-action adapter
+  -> PostgreSQL prepare / approve / execute command
+  -> canonical REST and MCP readback
+```
 
-### Prerequisites
+There is no legacy database, offline queue, browser-owned business state, or
+fallback write authority. A missing canonical command or tenant context must
+fail closed.
 
-| Tool | Version | Check Command |
-|------|---------|---------------|
-| Python | 3.11+ | `python3 --version` |
-| Node.js | 18+ | `node --version` |
-| PostgreSQL | 15+ | `psql --version` |
-| npm | 9+ | `npm --version` |
+## Start here
 
-### Clone & Setup
+- [Architecture](docs/architecture/README.md)
+- [18-operation authority matrix](docs/architecture/core-operation-authority-matrix.json)
+- [Runtime business-logic ownership](docs/backend/services/README.md)
+- [Canonical SQL ownership](database/canonical/README.md)
+- [Live18 acceptance](docs/testing/canonical-live18-acceptance.md)
+- [Development](docs/guides/development.md)
+- [Testing](docs/guides/testing.md)
+- [Deployment](docs/deployment/production.md)
+- [Codex/ChatGPT plugin package](plugins/aasopharma-erp/README.md)
+
+Machine-readable contracts and executable gates take precedence over narrative
+documentation. A successful build or healthy endpoint alone does not establish
+production readiness; exact-SHA promotion evidence must validate.
+
+## Repository map
+
+```text
+backend/app/                         FastAPI runtime and typed adapters
+backend/alembic/                     immutable PostgreSQL migration history
+backend/mcp_runtime/                 authenticated MCP server
+backend/tests/                       unit, contract, PostgreSQL, and live gates
+database/canonical/                  reviewed canonical SQL source ownership
+docs/architecture/                   operation and application contracts
+frontend/src/                        React product
+frontend/e2e/                        Playwright acceptance
+plugins/aasopharma-erp/              Codex/ChatGPT plugin package
+deploy/railway/                      service-specific Railway builds
+```
+
+## Fast verification
+
+From the repository root:
 
 ```bash
-# Clone the repository
-git clone https://github.com/vikasgargbear/production-infra.git
-cd production-infra
-```
+PYTHONPATH=backend pytest -q backend/tests/unit
+PYTHONPATH=backend/mcp_runtime pytest -q backend/mcp_runtime/tests
+python3 backend/scripts/check_canonical_artifacts.py
+python3 backend/scripts/schema_readiness.py --validate-authority
 
----
-
-## � Development Workflow
-
-### The Fast Development Loop
-
-```
-┌─────────────────────────────────────────────────────┐
-│  1. EDIT          Make your changes in code        │
-│       ↓                                             │
-│  2. SAVE          Ctrl+S / Cmd+S                   │
-│       ↓                                             │
-│  3. AUTO-RELOAD   Backend/Frontend auto-refreshes  │
-│       ↓                                             │
-│  4. TEST          Check in browser (localhost)     │
-│       ↓                                             │
-│  5. REPEAT        Keep iterating until satisfied   │
-│       ↓                                             │
-│  6. COMMIT        Only when feature is working     │
-└─────────────────────────────────────────────────────┘
-```
-
-Both backend and frontend have **hot reload** - changes appear instantly!
-
-### Local Development URLs
-
-| Service | URL | Description |
-|---------|-----|-------------|
-| Frontend | `http://localhost:5173` | React app |
-| Backend API | `http://localhost:8000` | FastAPI server |
-| API Docs (Swagger) | `http://localhost:8000/docs` | Interactive API testing |
-| API Docs (ReDoc) | `http://localhost:8000/redoc` | API reference |
-
-### Git Branching Strategy
-
-| Branch | Purpose |
-|--------|---------|
-| `main` | Production-ready code |
-| `develop` | Integration branch for features |
-| `feature/*` | New features (e.g., `feature/new-reports`) |
-| `hotfix/*` | Emergency production fixes |
-
-### Local Scratch Space (`.dev/`)
-
-A gitignored folder for your experiments:
-
-```
-.dev/
-├── experiments/    # Test code, prototypes
-├── notes/          # Personal development notes  
-├── sql-queries/    # Test SQL queries
-└── temp/           # Temporary files
-```
-
-Use this for anything you don't want to commit!
-
-### Pro Tips
-
-- **F12** - Open browser DevTools to see console errors
-- **Swagger UI** - Test API endpoints at `/docs`
-- **Split terminal** - One for backend, one for frontend
-- **Commit often** - Small commits are easier to track
-
----
-
-## �🔧 Backend Setup
-
-### 1. Create Virtual Environment
-
-```bash
-cd backend
-python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
-
-### 2. Install Dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-### 3. Environment Variables
-
-Create `.env` file in `backend/`:
-
-```bash
-# Database (PostgreSQL)
-DATABASE_URL=postgresql://user:password@localhost:5432/pharmaerp
-
-# Or use Supabase/Railway
-# DATABASE_URL=postgresql://user:password@host:5432/railway
-
-# JWT Settings
-SECRET_KEY=your-secret-key-min-32-characters
-ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=30
-REFRESH_TOKEN_EXPIRE_DAYS=7
-
-# CORS (for local development)
-CORS_ORIGINS=http://localhost:5173,http://localhost:3000
-
-# Optional: Redis for caching
-# REDIS_URL=redis://localhost:6379
-```
-
-### 4. Run the Backend
-
-```bash
-uvicorn app.main:app --reload --port 8000
-```
-
-**Backend will be available at:**
-- API: `http://localhost:8000`
-- Swagger Docs: `http://localhost:8000/docs`
-- ReDoc: `http://localhost:8000/redoc`
-
----
-
-## 💻 Frontend Setup
-
-### 1. Navigate to Frontend
-
-```bash
 cd frontend
+npm run typecheck
+npm run lint:critical
+npm run test:ci -- --runInBand
+CI=false npm run build
 ```
 
-### 2. Install Dependencies
+PostgreSQL runtime/RLS and live browser tests require their documented
+disposable or deployed environments. Never point destructive fixtures at a
+company database.
 
-```bash
-npm install
-```
+## Release boundary
 
-### 3. Environment Variables
-
-Create `.env.local` in `frontend/`:
-
-```bash
-# API URL
-VITE_API_URL=http://localhost:8000/api
-
-# Feature Flags
-VITE_ENABLE_OFFLINE=true
-VITE_ENABLE_DEBUG=true
-```
-
-### 4. Run the Frontend
-
-```bash
-npm run dev
-```
-
-**Frontend will be available at:** `http://localhost:5173`
-
----
-
-## 🏃 Running Both Services (Local Development)
-
-Open two terminal windows:
-
-```bash
-# Terminal 1: Backend
-cd backend
-source venv/bin/activate
-uvicorn app.main:app --reload --port 8000
-
-# Terminal 2: Frontend
-cd frontend
-npm run dev
-```
-
-Then open `http://localhost:5173` in your browser.
-
----
-
-## 📁 Project Structure
-
-```
-production-infra/
-├── backend/                    # FastAPI Backend
-│   ├── app/
-│   │   ├── api/
-│   │   │   ├── routes/        # API endpoints
-│   │   │   ├── services/      # Business logic
-│   │   │   └── schemas/       # Pydantic models
-│   │   ├── core/              # Config, security, database
-│   │   └── main.py            # App entry point
-│   ├── requirements.txt
-│   └── Dockerfile
-│
-├── frontend/                   # React Frontend
-│   ├── src/
-│   │   ├── components/        # React components
-│   │   │   ├── sales/         # Invoice, challan, orders
-│   │   │   ├── purchase/      # PO, GRN
-│   │   │   ├── inventory/     # Stock management
-│   │   │   ├── ledger/        # Outstanding, payments
-│   │   │   └── global/        # Shared components
-│   │   ├── services/
-│   │   │   ├── api/           # API clients
-│   │   │   └── offline/       # Offline sync services
-│   │   ├── hooks/             # Custom React hooks
-│   │   ├── contexts/          # React Context
-│   │   └── types/             # TypeScript types
-│   ├── docs/                  # Frontend documentation
-│   └── package.json
-│
-├── database/                   # Database migrations & schemas
-│   ├── migrations/
-│   └── schema-docs/
-│
-├── docs/                       # Project documentation
-│   ├── backend/               # API, Architecture docs
-│   │   ├── api/               # API reference
-│   │   ├── architecture/      # System design
-│   │   └── database/          # Schema docs
-│   ├── frontend/              # Frontend docs
-│   │   └── offline/           # Offline architecture
-│   ├── guides/                # Developer guides
-│   └── deployment/            # Deployment docs
-│
-├── docker-compose.yml          # Local Docker setup
-├── railway.json                # Railway deployment config
-└── .github/workflows/          # CI/CD workflows
-```
-
----
-
-## 🧪 Running Tests
-
-### Backend Tests
-
-```bash
-cd backend
-source venv/bin/activate
-pytest
-```
-
-### Frontend Tests
-
-```bash
-cd frontend
-npm test                    # Run tests
-npm run test:coverage       # With coverage
-npm run type-check          # TypeScript check
-npm run lint               # ESLint
-```
-
----
-
-## 🔑 Key Features
-
-| Feature | Description |
-|---------|-------------|
-| **Offline-First** | Full functionality without internet |
-| **Multi-Tenancy** | Organization & branch isolation |
-| **GST Compliance** | Indian tax calculations |
-| **Real-Time Sync** | Delta sync when online |
-| **Role-Based Access** | Owner, Manager, Pharmacist, Salesperson |
-
----
-
-## 📚 Documentation
-
-| Category | Path | Description |
-|----------|------|-------------|
-| **API Reference** | `docs/backend/api/` | All API endpoints |
-| **Architecture** | `docs/backend/architecture/` | System design |
-| **Database Schema** | `docs/backend/database/` | Table structures |
-| **Frontend Docs** | `frontend/docs/` | Components, guides |
-| **Offline System** | `docs/frontend/offline/` | Sync architecture |
-| **Getting Started** | `docs/guides/getting-started.md` | Full setup guide |
-| **Deployment** | `docs/deployment/` | Production deployment |
-
----
-
-## 🚀 Deployment
-
-### Railway (Recommended)
-
-```bash
-# Install Railway CLI
-npm install -g @railway/cli
-
-# Login and link
-railway login
-railway link
-
-# Deploy
-railway up
-```
-
-### Docker
-
-```bash
-docker-compose up -d
-```
-
-See [Deployment Guide](docs/deployment/production.md) for detailed instructions.
-
----
-
-## 🛠️ Development Commands
-
-| Command | Description |
-|---------|-------------|
-| `npm run dev` | Start frontend dev server |
-| `npm run build` | Production build |
-| `npm run lint` | Run ESLint |
-| `npm run type-check` | TypeScript validation |
-| `uvicorn app.main:app --reload` | Start backend (dev) |
-| `pytest` | Run backend tests |
-
----
-
-## 🤝 Contributing
-
-1. Create a feature branch: `git checkout -b feature/my-feature`
-2. Make your changes & test locally
-3. Commit: `git commit -m "feat: add new feature"`
-4. Push: `git push origin feature/my-feature`
-5. Create a Pull Request
-
----
-
-## 📞 Support
-
-- **Documentation**: Check `docs/` folder
-- **Issues**: Create a GitHub issue
-- **Contact**: Frontend/Backend team leads
-
----
-
-**Last Updated**: January 2026  
-**Version**: 1.0.0
+Deployment is an explicit exact-SHA workflow. Do not run an unqualified local `railway up`,
+change readiness fields by hand, or claim a live pass from a different commit.
+See [production deployment](docs/deployment/production.md)
+for the current health, build-metadata, migration, runtime-role, RLS, tenant,
+reconciliation, backup/restore, and browser evidence requirements.

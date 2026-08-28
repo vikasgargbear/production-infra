@@ -1,0 +1,54 @@
+{
+  "application_readiness_blockers": [
+    "No reviewed PAN/fiscal-year AATO profile and effective e-invoice applicability/reporting-window release exists in the canonical catalog; generation and regeneration fail closed."
+  ],
+  "catalog_sha256": "6c88d9a0f93158f126abc8d87057b8fcebb287ba332ef36fd37b802cadc29c31",
+  "catalog_table_count": 110,
+  "database_boundary": {
+    "adapters": {
+      "einvoice": [
+        "nic_irp_v1",
+        "licensed_gsp_irp_v1"
+      ],
+      "eway_bill": [
+        "nic_eway_v1",
+        "licensed_gsp_eway_v1"
+      ]
+    },
+    "application_functions": [
+      "begin_einvoice",
+      "begin_eway_bill"
+    ],
+    "completion_identity": [
+      "artifact_id",
+      "adapter_name",
+      "provider_request_id",
+      "canonical_request_sha256"
+    ],
+    "credentials_embedded": false,
+    "live_access_claimed": false,
+    "provider_functions": [
+      "read_request",
+      "complete_einvoice",
+      "complete_eway_bill"
+    ],
+    "provider_principal": "erp_tax_provider LOGIN NOINHERIT NOBYPASSRLS"
+  },
+  "external_operator_gates": [
+    "Provision NIC/GSP credentials, static Indian egress and provider IP allowlisting outside PostgreSQL.",
+    "Pass official sandbox request, response, signed-QR, cancellation, regeneration and duplicate-request conformance cases against a pinned official provider schema.",
+    "Review the organization e-invoice applicability profile and effective rule release."
+  ],
+  "manifest_version": "1.0.0",
+  "mapping_file": "baseline-tax-provider-command-enforcements.json",
+  "mapping_sha256": "69a5d912cd9fe26a00ffd0a30491ce2d9e37f4f1ef93e06263a3f6ac05f213f6",
+  "official_reference_review": "docs/architecture/india-compliance-rules.md",
+  "resolved_invariants": [
+    "tax.einvoices:einvoices_cross_row_guard",
+    "tax.eway_bills:eway_bills_cross_row_guard",
+    "tax.registration_branches:registration_branches_effective_guard"
+  ],
+  "sql_file": "tax-provider-commands.sql",
+  "sql_sha256": "e890586cd014d5ed45d904037569a888e948f3c3cd88535da86628f6f6e9b1a2",
+  "status": "provider_neutral_worker_boundary_reviewed_external_promotion_blocked"
+}

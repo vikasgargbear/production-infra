@@ -6,7 +6,19 @@
  */
 
 import { apiHelpers } from '../../apiClient';
-import { createCrudApi } from '../../utils/createCrudApi';
+import {
+  productCreateSchema,
+  productUpdateSchema,
+  ProductCreateInput,
+  ProductMutationResponse,
+  ProductUpdateInput,
+} from '../../../../types/models/product';
+import type { AxiosResponse } from 'axios';
+import { decodeCanonicalProductList } from './canonicalMasterReads';
+import {
+  decodeCanonicalProductDraftCreateResponse,
+  masterCreateRequestConfig,
+} from './masterCreationContract';
 
 // ============================================================================
 // TYPES
@@ -23,6 +35,7 @@ export interface ProductParams {
   expired?: boolean;
   expiring_soon?: boolean;
   days?: number;
+  include_inactive?: boolean;
 }
 
 export interface ProductSyncParams {
@@ -36,93 +49,41 @@ export interface ProductSyncParams {
 // API
 // ============================================================================
 
-const crud = createCrudApi({ basePath: '/products' });
-
 export const productsApi = {
-  ...crud,
+  getAll: (params: ProductParams = {}) => apiHelpers.get('/products', { params })
+    .then(response => ({ ...response, data: decodeCanonicalProductList(response.data) })),
+
+  create: (
+    data: ProductCreateInput,
+    idempotencyKey: string,
+  ): Promise<AxiosResponse<ProductMutationResponse>> => {
+    return apiHelpers.post<ProductMutationResponse>(
+      '/products/',
+      productCreateSchema.parse(data),
+      masterCreateRequestConfig(idempotencyKey),
+    ).then(response => ({
+      ...response,
+      data: decodeCanonicalProductDraftCreateResponse(response.data),
+    }));
+  },
+
+  update: (
+    productId: number | string,
+    data: ProductUpdateInput,
+  ): Promise<AxiosResponse<ProductMutationResponse>> => {
+    return apiHelpers.put(`/products/${productId}`, productUpdateSchema.parse(data));
+  },
+
+  delete: (productId: number | string, rowVersion: number) => {
+    return apiHelpers.delete(`/products/${productId}`, {
+      params: { row_version: rowVersion },
+    });
+  },
 
   // Search products
   search: (query: string, params: ProductParams = {}) => {
     return apiHelpers.get('/products', {
       params: { search: query, ...params }
-    });
+    }).then(response => ({ ...response, data: decodeCanonicalProductList(response.data).products }));
   },
-
-  // Search products with embedded batches (OPTIMIZED - single API call)
-  searchWithBatches: (query: string, params: any = {}) => {
-    return apiHelpers.get('/products/search-with-batches', {
-      params: { q: query, ...params }
-    });
-  },
-
-  // Bulk fetch ALL products with batches for offline sync
-  getAllWithBatches: (params: ProductSyncParams = {}) => {
-    return apiHelpers.get('/products/all-with-batches', {
-      params: {
-        page: params.page || 1,
-        page_size: params.pageSize || 100,
-        since: params.since || undefined,
-        include_inactive: params.includeInactive || false
-      }
-    });
-  },
-
-  // Categories & Types
-  getCategories: () => {
-    return apiHelpers.get('/products/categories');
-  },
-
-  getMasterCategories: () => {
-    return apiHelpers.get('/products/master/categories');
-  },
-
-  getProductTypes: () => {
-    return apiHelpers.get('/products/master/types');
-  },
-
-  createCategory: (categoryName: string) => {
-    return apiHelpers.post('/products/master/categories', { category_name: categoryName });
-  },
-
-  createProductType: (typeName: string, defaultBaseUom: string = 'Unit') => {
-    return apiHelpers.post('/products/master/types', {
-      type_name: typeName,
-      default_base_uom: defaultBaseUom
-    });
-  },
-
-  // Stock
-  updateStock: (productId: number | string, data: any) => {
-    return apiHelpers.post('/products/stock-update', {
-      product_id: productId,
-      ...data
-    });
-  },
-
-  getLowStock: (threshold: number = 10) => {
-    return apiHelpers.get('/products', {
-      params: { low_stock: true, threshold }
-    });
-  },
-
-  getExpired: () => {
-    return apiHelpers.get('/products', {
-      params: { expired: true }
-    });
-  },
-
-  getExpiringSoon: (days: number = 30) => {
-    return apiHelpers.get('/products', {
-      params: { expiring_soon: true, days }
-    });
-  },
-
-  // Batch Upload
-  batchUpload: (file: File) => {
-    const formData = new FormData();
-    formData.append('file', file);
-    return apiHelpers.post('/products/batch-upload', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    });
-  }
 };

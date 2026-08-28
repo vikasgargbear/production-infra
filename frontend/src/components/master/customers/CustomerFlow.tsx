@@ -8,89 +8,48 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
     User, Phone, Mail, MapPin, Building, FileText, Shield,
-    Calendar, CreditCard, MessageCircle, AlertCircle,
-    ArrowLeft, Loader2, Save, Users, Percent, Banknote
+    CreditCard, AlertCircle,
+    ArrowLeft, Loader2, Save, Users
 } from 'lucide-react';
 import { customersApi } from '../../../services/api';
 import { useFeatureFlags } from '../../../hooks/useFeatureFlags';
 import useEscapeKey from '../../../hooks/useEscapeKey';
 import { useEnterAsTab } from '../../../hooks/useEnterAsTab';
 import { toast } from 'react-toastify';
+import GSTJurisdictionSelect from '../../global/ui/forms/GSTJurisdictionSelect';
+import { newMasterCreateIdempotencyKey } from '../../../services/api/modules/master/masterCreationContract';
+import type { CanonicalCustomerCreateResponse } from '../../../services/api/modules/master/masterCreationContract';
 
 // ==================== TYPES ====================
 
 interface CustomerFlowProps {
     open?: boolean;
     onClose?: () => void;
-    onCustomerCreated?: (customer: any) => void;
+    onCustomerCreated?: (customer: CanonicalCustomerCreateResponse) => void;
 }
 
 interface CustomerFormData {
     customer_name: string;
     primary_phone: string;
     primary_email: string;
-    whatsapp_number: string;
-    secondary_phone: string;
-    customer_type: string;
+    customer_type: 'individual' | 'organization';
     // Contact Person
     contact_person_name: string;
-    contact_person_phone: string;
     // Compliance
     gst_number: string;
     pan_number: string;
-    drug_license_number: string;
-    drug_license_validity: string;
-    fssai_number: string;
     // Credit
-    credit_limit: number;
-    credit_days: number;
-    credit_rating: string;
-    payment_terms: string;
-    discount_percent: number;
+    credit_limit: string;
+    credit_days: number | '';
     // Address
     address: {
         address_line1: string;
         address_line2: string;
         city: string;
-        state: string;
+        state_code: string;
         pincode: string;
-        country: string;
     };
-    // Notes
-    internal_notes: string;
 }
-
-// ==================== CONSTANTS ====================
-
-const INDIAN_STATES = [
-    'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
-    'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand',
-    'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur',
-    'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab',
-    'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura',
-    'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
-    'Andaman and Nicobar Islands', 'Chandigarh',
-    'Dadra and Nagar Haveli and Daman and Diu', 'Delhi',
-    'Jammu and Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry'
-];
-
-const BUSINESS_TYPES = [
-    { value: 'pharmacy', label: 'Retail Pharmacy' },
-    { value: 'wholesale', label: 'Wholesale' },
-    { value: 'hospital', label: 'Hospital' },
-    { value: 'clinic', label: 'Clinic' },
-    { value: 'institution', label: 'Institution' },
-    { value: 'doctor', label: 'Doctor' },
-    { value: 'distributor', label: 'Distributor' }
-];
-
-const PAYMENT_TERMS = [
-    { value: 'CASH', label: 'Cash' },
-    { value: 'NET15', label: 'Net 15 Days' },
-    { value: 'NET30', label: 'Net 30 Days' },
-    { value: 'NET45', label: 'Net 45 Days' },
-    { value: 'NET60', label: 'Net 60 Days' }
-];
 
 // ==================== COMPONENT ====================
 
@@ -102,12 +61,14 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
     const { customerMode, isB2BOnly, isB2COnly, features } = useFeatureFlags();
 
     const formRef = useRef<HTMLDivElement>(null);
+    const submissionInFlightRef = useRef(false);
+    const idempotencyKeyRef = useRef(newMasterCreateIdempotencyKey('customer'));
     const [saving, setSaving] = useState(false);
     const [errors, setErrors] = useState<string[]>([]);
 
-    const getInitialCustomerType = () => {
+    const getInitialCustomerType = (): CustomerFormData['customer_type'] => {
         if (isB2COnly) return 'individual';
-        return features.default_customer_type || 'pharmacy';
+        return 'organization';
     };
 
     const [isBusinessCustomer, setIsBusinessCustomer] = useState(!isB2COnly);
@@ -115,35 +76,23 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
         customer_name: '',
         primary_phone: '',
         primary_email: '',
-        whatsapp_number: '',
-        secondary_phone: '',
         customer_type: getInitialCustomerType(),
         // Contact Person
         contact_person_name: '',
-        contact_person_phone: '',
         // Compliance
         gst_number: '',
         pan_number: '',
-        drug_license_number: '',
-        drug_license_validity: '',
-        fssai_number: '',
         // Credit
-        credit_limit: 5000,
-        credit_days: 0,
-        credit_rating: 'B',
-        payment_terms: 'CASH',
-        discount_percent: 0,
+        credit_limit: '',
+        credit_days: '',
         // Address
         address: {
             address_line1: '',
             address_line2: '',
             city: '',
-            state: '',
-            pincode: '',
-            country: 'India'
-        },
-        // Notes
-        internal_notes: ''
+            state_code: '',
+            pincode: ''
+        }
     });
 
     useEffect(() => {
@@ -151,7 +100,7 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
             setIsBusinessCustomer(true);
             setFormData(prev => ({
                 ...prev,
-                customer_type: features.default_customer_type || 'pharmacy'
+                customer_type: 'organization'
             }));
         } else if (isB2COnly) {
             setIsBusinessCustomer(false);
@@ -195,7 +144,9 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
         }
         if (!formData.address.address_line1.trim()) newErrors.push('Address is required');
         if (!formData.address.city.trim()) newErrors.push('City is required');
-        if (!formData.address.state) newErrors.push('State is required');
+        if (!/^\d{2}$/.test(formData.address.state_code)) {
+            newErrors.push('GST state code must contain exactly 2 digits');
+        }
         if (!formData.address.pincode.trim()) {
             newErrors.push('Pincode is required');
         } else if (!/^\d{6}$/.test(formData.address.pincode)) {
@@ -203,15 +154,27 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
         }
 
         if (isBusinessCustomer) {
-            if (features.require_drug_license && !formData.drug_license_number.trim()) {
-                newErrors.push('Drug License Number is required');
-            }
             if (features.require_gst_for_b2b && !formData.gst_number.trim()) {
                 newErrors.push('GST Number is required');
             }
             if (formData.gst_number && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(formData.gst_number)) {
                 newErrors.push('Invalid GST number format');
             }
+            if (formData.gst_number && /^\d{2}$/.test(formData.address.state_code)
+                && formData.gst_number.slice(0, 2) !== formData.address.state_code) {
+                newErrors.push('GSTIN state code must match the address GST state code');
+            }
+        }
+        if (formData.credit_limit === '') {
+            newErrors.push('Credit limit is required; enter 0 for no credit');
+        } else if (!/^(?:0|[1-9]\d{0,17})(?:\.\d{1,2})?$/.test(formData.credit_limit)) {
+            newErrors.push('Credit limit must be a non-negative amount with at most 2 decimal places');
+        }
+        if (formData.credit_days === '') {
+            newErrors.push('Credit days are required; enter 0 for immediate payment');
+        } else if (!Number.isInteger(formData.credit_days)
+            || formData.credit_days < 0 || formData.credit_days > 365) {
+            newErrors.push('Credit days must be a whole number from 0 to 365');
         }
 
         setErrors(newErrors);
@@ -223,7 +186,9 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
             toast.error('Please fix the errors');
             return;
         }
+        if (submissionInFlightRef.current) return;
 
+        submissionInFlightRef.current = true;
         setSaving(true);
         setErrors([]);
 
@@ -231,44 +196,33 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
             const customerData = {
                 customer_name: formData.customer_name,
                 primary_phone: formData.primary_phone,
-                whatsapp_number: formData.whatsapp_number || null,
-                secondary_phone: formData.secondary_phone || null,
                 primary_email: formData.primary_email || null,
                 customer_type: formData.customer_type,
                 // Contact Person
                 contact_person_name: formData.contact_person_name || null,
-                contact_person_phone: formData.contact_person_phone || null,
                 // Compliance
                 gst_number: formData.gst_number || null,
                 pan_number: formData.pan_number || null,
-                drug_license_number: formData.drug_license_number || null,
-                drug_license_validity: formData.drug_license_validity || null,
-                fssai_number: formData.fssai_number || null,
                 // Credit
-                credit_limit: parseFloat(String(formData.credit_limit || 0)),
-                credit_days: parseInt(String(formData.credit_days || 0)),
-                credit_rating: formData.credit_rating,
-                payment_terms: formData.payment_terms,
-                discount_percent: parseFloat(String(formData.discount_percent || 0)),
-                // Notes
-                internal_notes: formData.internal_notes || null,
+                credit_limit: formData.credit_limit,
+                credit_days: formData.credit_days,
                 // Address
                 address_line1: formData.address.address_line1,
                 address_line2: formData.address.address_line2 || '',
                 city: formData.address.city,
-                state: formData.address.state,
+                state_code: formData.address.state_code,
                 pincode: formData.address.pincode,
             };
 
-            const response = await customersApi.create(customerData);
+            const response = await customersApi.create(customerData, idempotencyKeyRef.current);
 
             if (response?.data) {
-                toast.success('Customer created!');
+                toast.success(`Customer ${response.data.customer_code} created successfully.`);
+                idempotencyKeyRef.current = newMasterCreateIdempotencyKey('customer');
                 if (onCustomerCreated) onCustomerCreated(response.data);
                 if (onClose) onClose();
             }
         } catch (error: any) {
-            console.error('Error creating customer:', error);
             if (error.response?.data?.detail) {
                 const detail = error.response.data.detail;
                 if (Array.isArray(detail)) {
@@ -281,6 +235,7 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
             }
             toast.error('Failed to create customer');
         } finally {
+            submissionInFlightRef.current = false;
             setSaving(false);
         }
     };
@@ -351,7 +306,7 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                                     type="button"
                                     onClick={() => {
                                         setIsBusinessCustomer(true);
-                                        updateField('customer_type', features.default_customer_type || 'pharmacy');
+                                        updateField('customer_type', 'organization');
                                     }}
                                     className={`px-4 py-1.5 text-sm rounded-md transition-all ${isBusinessCustomer ? 'bg-white shadow text-blue-600 font-medium' : 'text-gray-600'
                                         }`}
@@ -384,6 +339,9 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                                 <User className="w-4 h-4 text-blue-600" />
                                 Basic Information
                             </h3>
+                            <p className="mb-3 text-xs text-gray-500">
+                                Internal customer code is generated automatically after saving.
+                            </p>
 
                             <div className="grid grid-cols-3 gap-3">
                                 <div className="col-span-3 sm:col-span-2">
@@ -401,20 +359,10 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                                     </div>
                                 </div>
 
-                                {isBusinessCustomer && (
-                                    <div>
-                                        <label className={labelClass}>Business Type *</label>
-                                        <select
-                                            value={formData.customer_type}
-                                            onChange={(e) => updateField('customer_type', e.target.value)}
-                                            className={inputNoIconClass}
-                                        >
-                                            {BUSINESS_TYPES.map(type => (
-                                                <option key={type.value} value={type.value}>{type.label}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                )}
+                                <div>
+                                    <label className={labelClass}>Account Type</label>
+                                    <input value={isBusinessCustomer ? 'Organization' : 'Individual'} readOnly className={`${inputNoIconClass} bg-gray-100`} />
+                                </div>
 
                                 <div>
                                     <label className={labelClass}>Phone *</label>
@@ -424,21 +372,6 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                                             type="text"
                                             value={formData.primary_phone}
                                             onChange={(e) => updateField('primary_phone', e.target.value)}
-                                            className={inputClass}
-                                            placeholder="10-digit"
-                                            maxLength={10}
-                                        />
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <label className={labelClass}>WhatsApp</label>
-                                    <div className="relative">
-                                        <MessageCircle className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-green-500" />
-                                        <input
-                                            type="text"
-                                            value={formData.whatsapp_number}
-                                            onChange={(e) => updateField('whatsapp_number', e.target.value)}
                                             className={inputClass}
                                             placeholder="10-digit"
                                             maxLength={10}
@@ -470,7 +403,7 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                                     Contact Person
                                 </h3>
 
-                                <div className="grid grid-cols-2 gap-3">
+                                <div className="grid grid-cols-1 gap-3">
                                     <div>
                                         <label className={labelClass}>Name</label>
                                         <div className="relative">
@@ -485,20 +418,6 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                                         </div>
                                     </div>
 
-                                    <div>
-                                        <label className={labelClass}>Phone</label>
-                                        <div className="relative">
-                                            <Phone className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                                            <input
-                                                type="text"
-                                                value={formData.contact_person_phone}
-                                                onChange={(e) => updateField('contact_person_phone', e.target.value)}
-                                                className={inputClass}
-                                                placeholder="10-digit"
-                                                maxLength={10}
-                                            />
-                                        </div>
-                                    </div>
                                 </div>
                             </div>
                         )}
@@ -523,8 +442,8 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                                     />
                                 </div>
 
-                                {/* Row 2: Address Line 2 + Landmark */}
-                                <div className="grid grid-cols-2 gap-3">
+                                {/* Row 2: Address Line 2 */}
+                                <div className="grid grid-cols-1 gap-3">
                                     <div>
                                         <label className={labelClass}>Address Line 2</label>
                                         <input
@@ -535,17 +454,9 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                                             placeholder="Additional address"
                                         />
                                     </div>
-                                    <div>
-                                        <label className={labelClass}>Landmark</label>
-                                        <input
-                                            type="text"
-                                            className={inputNoIconClass}
-                                            placeholder="Near / Opposite to"
-                                        />
-                                    </div>
                                 </div>
 
-                                {/* Row 3: City, State, Pincode */}
+                                {/* Row 3: City, GST state code, Pincode */}
                                 <div className="grid grid-cols-3 gap-3">
                                     <div>
                                         <label className={labelClass}>City *</label>
@@ -558,17 +469,14 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                                         />
                                     </div>
                                     <div>
-                                        <label className={labelClass}>State *</label>
-                                        <select
-                                            value={formData.address.state}
-                                            onChange={(e) => updateAddress('state', e.target.value)}
+                                        <label htmlFor="customer-state-code" className={labelClass}>GST state code (2 digits) *</label>
+                                        <GSTJurisdictionSelect
+                                            id="customer-state-code"
+                                            value={formData.address.state_code}
+                                            onChange={(stateCode) => updateAddress('state_code', stateCode)}
                                             className={inputNoIconClass}
-                                        >
-                                            <option value="">Select</option>
-                                            {INDIAN_STATES.map(state => (
-                                                <option key={state} value={state}>{state}</option>
-                                            ))}
-                                        </select>
+                                            required
+                                        />
                                     </div>
                                     <div>
                                         <label className={labelClass}>Pincode *</label>
@@ -593,50 +501,7 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                                     Compliance & Licenses
                                 </h3>
 
-                                <div className="grid grid-cols-3 gap-3">
-                                    <div>
-                                        <label className={labelClass}>
-                                            Drug License {features.require_drug_license && '*'}
-                                        </label>
-                                        <div className="relative">
-                                            <Shield className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                                            <input
-                                                type="text"
-                                                value={formData.drug_license_number}
-                                                onChange={(e) => updateField('drug_license_number', e.target.value)}
-                                                className={inputClass}
-                                                placeholder="20B-MH-12345"
-                                            />
-                                        </div>
-                                    </div>
-
-                                    <div>
-                                        <label className={labelClass}>DL Validity</label>
-                                        <div className="relative">
-                                            <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                                            <input
-                                                type="date"
-                                                value={formData.drug_license_validity}
-                                                onChange={(e) => updateField('drug_license_validity', e.target.value)}
-                                                className={inputClass}
-                                            />
-                                        </div>
-                                    </div>
-
-                                    <div>
-                                        <label className={labelClass}>FSSAI License</label>
-                                        <div className="relative">
-                                            <FileText className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                                            <input
-                                                type="text"
-                                                value={formData.fssai_number}
-                                                onChange={(e) => updateField('fssai_number', e.target.value)}
-                                                className={inputClass}
-                                                placeholder="FSSAI number"
-                                            />
-                                        </div>
-                                    </div>
-
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                     <div>
                                         <label className={labelClass}>
                                             GST Number {features.require_gst_for_b2b && '*'}
@@ -669,98 +534,47 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                                         </div>
                                     </div>
                                 </div>
+                                <p className="mt-3 text-xs text-gray-500">
+                                    Drug and FSSAI licenses are verified after the core customer profile is created.
+                                </p>
                             </div>
                         )}
 
-                        {/* Credit & Payment Terms - B2B Only */}
-                        {isBusinessCustomer && (
-                            <div className="bg-gray-50 rounded-lg p-4">
+                        {/* Credit terms are explicit for every canonical customer account. */}
+                        <div className="bg-gray-50 rounded-lg p-4">
                                 <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-1.5 mb-3">
                                     <CreditCard className="w-4 h-4 text-blue-600" />
                                     Credit & Payment Terms
                                 </h3>
 
-                                <div className="grid grid-cols-4 gap-3">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                     <div>
-                                        <label className={labelClass}>Credit Rating</label>
-                                        <select
-                                            value={formData.credit_rating}
-                                            onChange={(e) => updateField('credit_rating', e.target.value)}
-                                            className={inputNoIconClass}
-                                        >
-                                            <option value="A">A - Excellent</option>
-                                            <option value="B">B - Good</option>
-                                            <option value="C">C - Fair</option>
-                                            <option value="D">D - Cash Only</option>
-                                        </select>
-                                    </div>
-
-                                    <div>
-                                        <label className={labelClass}>Credit Limit (₹)</label>
+                                        <label className={labelClass}>Credit Limit (₹) *</label>
                                         <input
                                             type="number"
+                                            inputMode="decimal"
+                                            step="0.01"
                                             value={formData.credit_limit}
-                                            onChange={(e) => updateField('credit_limit', parseInt(e.target.value) || 0)}
+                                            onChange={(e) => updateField('credit_limit', e.target.value)}
                                             className={inputNoIconClass}
                                             placeholder="5000"
                                             min={0}
-                                            disabled={formData.credit_rating === 'D'}
                                         />
                                     </div>
 
                                     <div>
-                                        <label className={labelClass}>Payment Terms</label>
-                                        <select
-                                            value={formData.payment_terms}
-                                            onChange={(e) => {
-                                                updateField('payment_terms', e.target.value);
-                                                // Auto-set credit days based on payment terms
-                                                const days = { CASH: 0, NET15: 15, NET30: 30, NET45: 45, NET60: 60 };
-                                                updateField('credit_days', days[e.target.value as keyof typeof days] || 0);
-                                            }}
+                                        <label className={labelClass}>Credit Days *</label>
+                                        <input
+                                            type="number"
+                                            value={formData.credit_days}
+                                            onChange={(e) => updateField('credit_days', e.target.value === '' ? '' : Number(e.target.value))}
                                             className={inputNoIconClass}
-                                            disabled={formData.credit_rating === 'D'}
-                                        >
-                                            {PAYMENT_TERMS.map(term => (
-                                                <option key={term.value} value={term.value}>{term.label}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-
-                                    <div>
-                                        <label className={labelClass}>Default Discount %</label>
-                                        <div className="relative">
-                                            <Percent className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                                            <input
-                                                type="number"
-                                                value={formData.discount_percent}
-                                                onChange={(e) => updateField('discount_percent', parseFloat(e.target.value) || 0)}
-                                                className={inputClass}
-                                                placeholder="0"
-                                                min={0}
-                                                max={100}
-                                                step={0.5}
-                                            />
-                                        </div>
+                                            min={0}
+                                            max={365}
+                                        />
                                     </div>
                                 </div>
                             </div>
-                        )}
-
-                        {/* Internal Notes */}
-                        <div className="bg-gray-50 rounded-lg p-4">
-                            <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-1.5 mb-3">
-                                <FileText className="w-4 h-4 text-gray-600" />
-                                Internal Notes
-                            </h3>
-                            <textarea
-                                value={formData.internal_notes}
-                                onChange={(e) => updateField('internal_notes', e.target.value)}
-                                className={inputNoIconClass + " h-20 resize-none"}
-                                placeholder="Notes for internal reference (not visible to customer)"
-                                maxLength={1000}
-                            />
-                        </div>
                     </div>
                 </div>
             </div>

@@ -8,19 +8,27 @@ import { calculateInvoicePreview } from '../../../services/calculations/invoiceC
 import InvoiceItemsStepBase from './steps/InvoiceItemsStep';
 import InvoiceDetailsStepBase from './steps/InvoiceDetailsStep';
 import InvoicePreviewStepBase from './steps/InvoicePreviewStep';
-import { useInvoiceLogic, Invoice, CreatedInvoiceData } from './hooks/useInvoiceLogic';
+import {
+    useInvoiceLogic,
+    CreatedInvoiceData,
+    PrefilledData,
+} from './hooks/useInvoiceLogic';
 import { GenericSuccessModal } from '../../global';
 import InvoicePreview from './ui/InvoicePreviewEnterprise';
+import {
+    invoiceBatchAllocationValidationError,
+    invoicePreviewValidationError,
+} from './utils/canonicalInvoiceCommand';
+import CanonicalSalesCommandReview from '../CanonicalSalesCommandReview';
+import { formatExactCurrency } from '../../../utils/exactDecimal';
+import { applyCanonicalInvoicePreview } from './utils/invoicePreviewState';
 
 // ==================== TYPE DEFINITIONS ====================
 
 interface InvoiceFlowProps {
     open?: boolean;  // For modal/panel usage
     onClose?: () => void;
-    prefilledData?: {
-        customer?: unknown;
-        items?: unknown[];
-    } | null;
+    prefilledData?: PrefilledData | null;
 }
 
 interface CompanyInfo {
@@ -55,37 +63,26 @@ const InvoiceFlow: React.FC<InvoiceFlowProps> = ({ open = true, onClose, prefill
         employees,
         selectedMR,
         setSelectedMR,
-        sameAsShipping,
-        setSameAsShipping,
         isLoading,
         isOnline,
         error,
         setError,
+        documentPolicy,
+        businessDate,
         saving,
         showSuccessModal,
         setShowSuccessModal,
         createdInvoiceData,
+        preparedPreview,
+        reviewOpen,
 
         // Modal States
         showCustomerModal,
         setShowCustomerModal,
         showProductModal,
         setShowProductModal,
-        showGSTCalculator,
-        setShowGSTCalculator,
         showImportModal,
         setShowImportModal,
-        showBillDiscountModal,
-        setShowBillDiscountModal,
-        showTaxDetailModal,
-        setShowTaxDetailModal,
-        showCashCalculatorModal,
-        setShowCashCalculatorModal,
-        showLastDealModal,
-        setShowLastDealModal,
-        selectedProductForLastDeal,
-        showItemProfitModal,
-        setShowItemProfitModal,
 
         // Refs
         productSearchRef,
@@ -101,10 +98,12 @@ const InvoiceFlow: React.FC<InvoiceFlowProps> = ({ open = true, onClose, prefill
         handleUpdateItem,
         handleRemoveItem,
         handleImport,
-        handleApplyBillDiscount,
+        resetInvoice,
         handleSaveInvoice,
+        confirmPreparedInvoice,
+        closeInvoiceReview,
 
-    } = useInvoiceLogic(onClose, prefilledData as any);
+    } = useInvoiceLogic(onClose, prefilledData);
 
     // Enable Enter-as-Tab navigation (Marg ERP style)
     useEnterAsTab({
@@ -114,9 +113,7 @@ const InvoiceFlow: React.FC<InvoiceFlowProps> = ({ open = true, onClose, prefill
     });
 
     // ESC key handling for modal hierarchy
-    const anyModalOpen = showGSTCalculator || showCustomerModal || showProductModal || showImportModal ||
-        showBillDiscountModal || showTaxDetailModal || showCashCalculatorModal ||
-        showLastDealModal || showItemProfitModal;
+    const anyModalOpen = showCustomerModal || showProductModal || showImportModal || reviewOpen;
 
     useEscapeKey(
         useCallback(() => {
@@ -182,7 +179,7 @@ const InvoiceFlow: React.FC<InvoiceFlowProps> = ({ open = true, onClose, prefill
             .catch((err: Error) => toast.error(`PDF generation failed: ${err.message}`));
     }, []);
 
-    const handleWhatsAppShare = useCallback((phone: string | undefined, customerName?: string, amount?: number) => {
+    const handleWhatsAppShare = useCallback((phone: string | undefined, customerName?: string, amount?: string) => {
         if (!phone) {
             toast.error('No phone number available for WhatsApp');
             return;
@@ -202,14 +199,15 @@ const InvoiceFlow: React.FC<InvoiceFlowProps> = ({ open = true, onClose, prefill
         const invoiceDate = new Date(invoice.invoice_date).toLocaleDateString('en-IN', {
             day: '2-digit', month: 'short', year: 'numeric'
         });
-        const formattedAmount = amount ? `₹${amount.toLocaleString('en-IN')}` : '';
+        if (!amount || !customerName || !companyInfo?.name) return;
+        const formattedAmount = formatExactCurrency(amount, 'Posted invoice total');
 
-        const whatsappMessage = `Dear ${customerName || 'Customer'},
+        const whatsappMessage = `Dear ${customerName},
 
 Your invoice ${invoice.invoice_number} dated ${invoiceDate} for ${formattedAmount} is ready.
 
 Thank you for your business!
-${companyInfo?.name || 'Your Company'}`;
+${companyInfo.name}`;
 
         const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(whatsappMessage)}`;
         window.open(whatsappUrl, '_blank');
@@ -225,38 +223,53 @@ ${companyInfo?.name || 'Your Company'}`;
             toast.error('Please add at least one item');
             return;
         }
+        const batchAllocationError = invoiceBatchAllocationValidationError(invoice);
+        if (batchAllocationError) {
+            setError(batchAllocationError);
+            toast.error(batchAllocationError);
+            return;
+        }
 
         try {
             const result = await calculateInvoicePreview(invoice, isOnline);
 
             // Update invoice with calculated totals
-            setInvoice(prev => ({
-                ...prev,
-                totals: result.totals as Invoice['totals'],
-                final_amount: result.totals.final_amount || 0
-            }));
+            setInvoice(prev => applyCanonicalInvoicePreview(
+                prev,
+                result,
+                { replaceItems: false },
+            ));
             setCurrentStep(2);
         } catch (calcError) {
             toast.error('Calculation error. Please try again.');
         }
-    }, [selectedCustomer, invoice, isOnline, setInvoice]);
+    }, [selectedCustomer, invoice, isOnline, setError, setInvoice]);
 
     const handleContinueFromStep2 = useCallback(async () => {
+        const validationError = invoicePreviewValidationError(
+            companyInfo as any,
+            invoice,
+            selectedCustomer,
+        );
+        if (validationError) {
+            setError(validationError);
+            toast.error(validationError);
+            return;
+        }
         try {
             const result = await calculateInvoicePreview(invoice, isOnline);
 
             // Update invoice with latest totals
-            setInvoice(prev => ({
-                ...prev,
-                totals: result.totals as Invoice['totals'],
-                final_amount: result.totals.final_amount || 0,
-                items: result.items as unknown as Invoice['items']
-            }));
+            setInvoice(prev => applyCanonicalInvoicePreview(
+                prev,
+                result,
+                { replaceItems: true },
+            ));
             setCurrentStep(3);
         } catch (calcError) {
             toast.error('Calculation error. Please try again.');
         }
-    }, [invoice, isOnline, setInvoice]);
+    }, [companyInfo, invoice, isOnline, selectedCustomer, setError, setInvoice]);
 
     const handleBackFromStep3 = useCallback((targetStep: number | React.MouseEvent = 2) => {
         // CRITICAL FIX: Handle if event object passed instead of number
@@ -269,7 +282,7 @@ ${companyInfo?.name || 'Your Company'}`;
             console.log('✅ [NAVIGATION] setCurrentStep completed');
         } catch (navError) {
             console.error('❌ [NAVIGATION ERROR] during setCurrentStep:', navError);
-            alert('Error navigating back: ' + (navError as Error).message);
+            toast.error('Unable to return to invoice items: ' + (navError as Error).message);
         }
     }, []);
 
@@ -287,6 +300,7 @@ ${companyInfo?.name || 'Your Company'}`;
                 <InvoiceItemsStep
                     invoice={invoice as any}
                     setInvoice={setInvoice as any}
+                    maximumInvoiceDate={businessDate}
                     selectedCustomer={selectedCustomer as any}
                     setSelectedCustomer={setSelectedCustomer as any}
                     employees={employees as any}
@@ -296,6 +310,7 @@ ${companyInfo?.name || 'Your Company'}`;
                     error={error}
                     setError={setError}
                     onClose={onClose as any}
+                    onReset={resetInvoice}
                     onContinue={handleContinueFromStep1}
                     productSearchRef={productSearchRef as any}
                     itemsTableRef={itemsTableRef as any}
@@ -304,26 +319,12 @@ ${companyInfo?.name || 'Your Company'}`;
                     handleUpdateItem={handleUpdateItem as any}
                     handleRemoveItem={handleRemoveItem}
                     handleImport={handleImport as any}
-                    handleApplyBillDiscount={handleApplyBillDiscount as any}
                     showCustomerModal={showCustomerModal}
                     setShowCustomerModal={setShowCustomerModal}
                     showProductModal={showProductModal}
                     setShowProductModal={setShowProductModal}
-                    showGSTCalculator={showGSTCalculator}
-                    setShowGSTCalculator={setShowGSTCalculator}
                     showImportModal={showImportModal}
                     setShowImportModal={setShowImportModal}
-                    showBillDiscountModal={showBillDiscountModal}
-                    setShowBillDiscountModal={setShowBillDiscountModal}
-                    showTaxDetailModal={showTaxDetailModal}
-                    setShowTaxDetailModal={setShowTaxDetailModal}
-                    showCashCalculatorModal={showCashCalculatorModal}
-                    setShowCashCalculatorModal={setShowCashCalculatorModal}
-                    showLastDealModal={showLastDealModal}
-                    setShowLastDealModal={setShowLastDealModal}
-                    selectedProductForLastDeal={selectedProductForLastDeal as any}
-                    showItemProfitModal={showItemProfitModal}
-                    setShowItemProfitModal={setShowItemProfitModal}
                 />
             )}
 
@@ -333,6 +334,7 @@ ${companyInfo?.name || 'Your Company'}`;
                     invoice={invoice as any}
                     setInvoice={setInvoice as any}
                     selectedCustomer={selectedCustomer as any}
+                    documentPolicy={documentPolicy}
                     onClose={onClose as any}
                     onContinue={handleContinueFromStep2}
                     onBack={handleBackFromStep2}
@@ -358,6 +360,15 @@ ${companyInfo?.name || 'Your Company'}`;
                     saving={saving}
                 />
             )}
+
+            <CanonicalSalesCommandReview
+                title="Review exact sales invoice"
+                preview={preparedPreview}
+                open={reviewOpen}
+                posting={saving}
+                onBack={closeInvoiceReview}
+                onPost={confirmPreparedInvoice}
+            />
 
             {/* Success Modal - Stays open for print/whatsapp actions */}
             {showSuccessModal && createdInvoiceData && (
@@ -417,10 +428,8 @@ ${companyInfo?.name || 'Your Company'}`;
                             },
                             shipping_address: invoice.shipping_address,
                             is_same_address: invoice.billing_address === invoice.shipping_address,
-                            items: createdInvoiceData.items || invoice.items,
-                            net_amount: createdInvoiceData.totalAmount || invoice.final_amount,
-                            payment_status: invoice.payment_status || 'Paid',
-                            totals: invoice.totals || undefined
+                            items: createdInvoiceData.items,
+                            totals: invoice.totals ?? undefined
                         } as any}
                         companyInfo={companyInfo as any}
                         showAddresses={true}

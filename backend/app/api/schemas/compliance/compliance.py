@@ -1,5 +1,5 @@
 """
-Compliance schemas for drug licenses, audits, and regulatory inspections
+Compliance schemas for drug licenses and regulatory documents
 """
 from typing import List, Optional
 from datetime import date, datetime
@@ -25,21 +25,6 @@ class LicenseStatus(str, Enum):
     EXPIRED = "expired"
     SUSPENDED = "suspended"
     PENDING_RENEWAL = "pending_renewal"
-
-
-class AuditType(str, Enum):
-    """Audit types"""
-    INTERNAL = "internal"
-    EXTERNAL = "external"
-    REGULATORY = "regulatory"
-
-
-class AuditStatus(str, Enum):
-    """Audit status"""
-    SCHEDULED = "scheduled"
-    IN_PROGRESS = "in_progress"
-    COMPLETED = "completed"
-    FOLLOW_UP = "follow_up"
 
 
 # =============================================================================
@@ -91,85 +76,6 @@ class DrugLicenseListResponse(BaseModel):
 
 
 # =============================================================================
-# AUDIT SCHEMAS
-# =============================================================================
-
-class ComplianceAuditCreate(BaseModel):
-    """Schema for creating compliance audit record"""
-    
-    audit_date: date
-    audit_type: AuditType
-    auditor_name: str = Field(..., max_length=100)
-    auditor_organization: Optional[str] = Field(None, max_length=200)
-    scope: Optional[str] = Field(None, max_length=500)
-    findings: Optional[str] = Field(None, max_length=2000)
-    recommendations: Optional[str] = Field(None, max_length=2000)
-    corrective_actions: Optional[str] = Field(None, max_length=2000)
-    status: AuditStatus = AuditStatus.SCHEDULED
-    next_audit_date: Optional[date] = None
-
-    model_config = ConfigDict(str_strip_whitespace=True)
-
-
-class ComplianceAuditResponse(BaseModel):
-    """Schema for audit response"""
-    
-    audit_id: int
-    audit_date: date
-    audit_type: str
-    auditor_name: str
-    auditor_organization: Optional[str] = None
-    scope: Optional[str] = None
-    findings: Optional[str] = None
-    recommendations: Optional[str] = None
-    corrective_actions: Optional[str] = None
-    status: str
-    next_audit_date: Optional[date] = None
-    created_at: datetime
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-# =============================================================================
-# INSPECTOR VISIT SCHEMAS
-# =============================================================================
-
-class InspectorVisitCreate(BaseModel):
-    """Schema for recording inspector visit"""
-    
-    visit_date: date
-    inspector_name: str = Field(..., max_length=100)
-    inspector_designation: Optional[str] = Field(None, max_length=100)
-    inspector_id: Optional[str] = Field(None, max_length=50)
-    department: str = Field(..., max_length=100)
-    purpose: str = Field(..., max_length=500)
-    observations: Optional[str] = Field(None, max_length=2000)
-    action_required: Optional[str] = Field(None, max_length=1000)
-    follow_up_date: Optional[date] = None
-    status: str = Field(default="completed")
-
-    model_config = ConfigDict(str_strip_whitespace=True)
-
-
-class InspectorVisitResponse(BaseModel):
-    """Schema for inspector visit response"""
-    
-    visit_id: int
-    visit_date: date
-    inspector_name: str
-    inspector_designation: Optional[str] = None
-    department: str
-    purpose: str
-    observations: Optional[str] = None
-    action_required: Optional[str] = None
-    follow_up_date: Optional[date] = None
-    status: str
-    created_at: datetime
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-# =============================================================================
 # DOCUMENT SCHEMAS
 # =============================================================================
 
@@ -215,11 +121,4 @@ class ComplianceDashboard(BaseModel):
     expiring_licenses: int = 0
     expired_licenses: int = 0
     
-    pending_audits: int = 0
-    completed_audits: int = 0
-    
-    recent_visits: int = 0
-    pending_actions: int = 0
-    
     license_alerts: List[dict] = Field(default_factory=list)
-    upcoming_audits: List[dict] = Field(default_factory=list)

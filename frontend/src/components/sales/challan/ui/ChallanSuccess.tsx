@@ -1,5 +1,6 @@
 import React from 'react';
 import { CheckCircle, Printer, Share2, Plus, Home, FileText } from 'lucide-react';
+import { toast } from 'react-toastify';
 
 interface ChallanSuccessProps {
     challanId: string;
@@ -20,8 +21,12 @@ const ChallanSuccess: React.FC<ChallanSuccessProps> = ({ challanId, onNewChallan
             }
         } else {
             // Fallback - copy to clipboard
-            await navigator.clipboard.writeText(`Delivery Challan ${challanId} created`);
-            alert('Challan details copied to clipboard!');
+            try {
+                await navigator.clipboard.writeText(`Delivery Challan ${challanId} created`);
+                toast.success('Challan details copied to clipboard.');
+            } catch {
+                toast.error('Unable to copy challan details. Nothing was shared.');
+            }
         }
     };
 

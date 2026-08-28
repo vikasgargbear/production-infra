@@ -30,15 +30,15 @@ export const formatDate = (date: string | Date | null | undefined, locale: strin
  * @returns Formatted currency string
  */
 export const formatCurrency = (amount: number | string | null | undefined, decimals: number = 2): string => {
-    if (amount === null || amount === undefined) return '₹0.00';
+    if (amount === null || amount === undefined || amount === '') return '—';
 
     try {
         const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
-        if (isNaN(numAmount)) return '₹0.00';
+        if (!Number.isFinite(numAmount)) return '—';
 
         return `₹${numAmount.toFixed(decimals).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
     } catch {
-        return '₹0.00';
+        return '—';
     }
 };
 
@@ -72,15 +72,15 @@ export const formatPhone = (phone: string | null | undefined): string => {
  * @returns Formatted percentage string
  */
 export const formatPercentage = (value: number | string | null | undefined, decimals: number = 2): string => {
-    if (value === null || value === undefined) return '0%';
+    if (value === null || value === undefined || value === '') return '—';
 
     try {
         const numValue = typeof value === 'string' ? parseFloat(value) : value;
-        if (isNaN(numValue)) return '0%';
+        if (!Number.isFinite(numValue)) return '—';
 
         return `${numValue.toFixed(decimals)}%`;
     } catch {
-        return '0%';
+        return '—';
     }
 };
 
@@ -91,15 +91,15 @@ export const formatPercentage = (value: number | string | null | undefined, deci
  * @returns Formatted number string
  */
 export const formatNumber = (value: number | string | null | undefined, decimals: number = 0): string => {
-    if (value === null || value === undefined) return '0';
+    if (value === null || value === undefined || value === '') return '—';
 
     try {
         const numValue = typeof value === 'string' ? parseFloat(value) : value;
-        if (isNaN(numValue)) return '0';
+        if (!Number.isFinite(numValue)) return '—';
 
         return numValue.toFixed(decimals).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
     } catch {
-        return '0';
+        return '—';
     }
 };
 

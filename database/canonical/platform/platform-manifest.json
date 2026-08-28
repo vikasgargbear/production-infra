@@ -1,0 +1,155 @@
+{
+  "baseline_mapping_sha256": "7fcce7363749b305e79a7ebdd771fb112b6ecd05b6beff8ad049f0af28f99c1e",
+  "catalog_sha256": "53f8d74584d02f2062796ef87649f07ad94dc72457c4ed4652a7d0e168a7c7c6",
+  "manifest_version": "1.0.0",
+  "resolved_platform_blocker_count": 15,
+  "resolved_platform_blockers": {
+    "global_reference_seed": 2,
+    "preflight": 13
+  },
+  "seed_authorities": {
+    "catalog.ingredients": {
+      "authority": "reviewed ingredient release import",
+      "baseline_rows": 0,
+      "population_mode": "regulated_import"
+    },
+    "catalog.units_of_measure": {
+      "authority": "canonical-uom-v1.1.0",
+      "authority_kind": "application_bootstrap_vocabulary",
+      "dataset_sha256": "7a907a2d402da9686049cbbd8b834be8755b6b156a758b04220ed1ef2d76078a",
+      "exact_codes": [
+        "EA",
+        "PK",
+        "KG",
+        "G",
+        "MG",
+        "MCG",
+        "L",
+        "ML",
+        "M",
+        "CM",
+        "MM"
+      ],
+      "row_count": 11
+    },
+    "core.permissions": {
+      "authority": "canonical-permissions-v1.0.0",
+      "authority_kind": "application_contract",
+      "dataset_sha256": "be9ed65968b2a08795b0deca44e69ccfdf7e65a2da6db9964a1e77a31985571d",
+      "exact_codes": [
+        "automation.agent_grant.manage",
+        "automation.command.approve",
+        "automation.command.execute",
+        "automation.command.view",
+        "catalog.category.manage",
+        "catalog.product.manage",
+        "compliance.controlled_substance.post",
+        "compliance.destruction.manage",
+        "compliance.license.manage",
+        "compliance.recall.execute",
+        "compliance.recall.manage",
+        "core.access.manage",
+        "core.attachment.manage",
+        "core.branch.manage",
+        "core.organization.manage",
+        "core.retention.manage",
+        "core.settings.manage",
+        "core.user.manage",
+        "finance.account.manage",
+        "finance.adjustment_note.edit",
+        "finance.adjustment_note.manage",
+        "finance.bank_account.manage",
+        "finance.bank_reconcile",
+        "finance.bank_statement.import",
+        "finance.customer_receipt.create",
+        "finance.expense.edit",
+        "finance.expense.manage",
+        "finance.journal.edit",
+        "finance.journal.post",
+        "finance.payment.allocate",
+        "finance.payment.manage",
+        "finance.supplier_advance.create",
+        "finance.supplier_payment.create",
+        "hr.department.manage",
+        "hr.employee.manage",
+        "internal.accounting.post",
+        "internal.audit.append",
+        "internal.bank_statement.parse",
+        "internal.idempotency.claim",
+        "internal.open_item.post",
+        "internal.outbox.deliver",
+        "internal.sequence.allocate",
+        "internal.tax.portal.parse",
+        "internal.tax.reconciliation.write",
+        "internal.tax_document.post",
+        "internal.temperature.ingest",
+        "inventory.adjustment.create",
+        "inventory.batch.manage",
+        "inventory.destruction.create",
+        "inventory.document.post",
+        "inventory.location.manage",
+        "inventory.projector.write",
+        "inventory.reservation.manage",
+        "inventory.transfer.create",
+        "parties.customer.manage",
+        "parties.party.manage",
+        "parties.supplier.manage",
+        "parties.tax_registration.manage",
+        "procurement.invoice.post",
+        "procurement.order.manage",
+        "procurement.purchase_return.create",
+        "procurement.receipt.post",
+        "procurement.return.post",
+        "procurement.supplier_invoice.create",
+        "sales.dispatch.create",
+        "sales.dispatch.post",
+        "sales.invoice.create",
+        "sales.invoice.post",
+        "sales.order.create",
+        "sales.order.manage",
+        "sales.return.create",
+        "sales.return.post",
+        "tax.einvoice.generate",
+        "tax.eway_bill.generate",
+        "tax.portal.import",
+        "tax.reconciliation.run",
+        "tax.registration.manage",
+        "tax.return.compose",
+        "tax.return.file",
+        "tax.return_period.manage",
+        "tax.withholding.manage"
+      ],
+      "row_count": 81
+    },
+    "core.reference_data_releases": {
+      "authority": "erp_regulatory_commands import ledger",
+      "baseline_rows": 0,
+      "population_mode": "regulated_import"
+    },
+    "tax.tax_code_versions": {
+      "authority": "reviewed HSN/SAC tax release import",
+      "baseline_rows": 0,
+      "population_mode": "regulated_import"
+    }
+  },
+  "trigger_foundations": {
+    "audit_helper": null,
+    "binding_registry": "erp_plumbing.trigger_bindings",
+    "immutability_helper": "erp_plumbing.reject_row_mutation()",
+    "installed_bindings": 0,
+    "mapping_status": "no_trigger_plumbing_blockers_resolved",
+    "outbox_helper": "erp_plumbing.enqueue_outbox_event(...) SECURITY INVOKER"
+  },
+  "unresolved_platform_blocker_count": 3,
+  "unresolved_platform_blockers": {
+    "trigger_plumbing:audit": {
+      "reason": "core.audit_events has no explicit before_hash/after_hash fields or reviewed canonical row-serialization and tenant-chain concurrency contract."
+    },
+    "trigger_plumbing:immutability": {
+      "reason": "The generic rejection helper exists, but the exact catalog-audited trigger binding registry is intentionally empty until invariant mappings are reviewed."
+    },
+    "trigger_plumbing:outbox": {
+      "reason": "The transactional idempotent enqueue helper exists, but owned event types and aggregate-version bindings are not yet declared in the canonical catalog."
+    }
+  }
+}

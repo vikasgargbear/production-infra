@@ -31,7 +31,7 @@ const Card: React.FC<CardProps> = ({
   subtitle,
   actions,
   padding = 'md',
-  shadow = 'sm',
+  shadow = 'none',
   className = '',
   headerClassName = '',
   bodyClassName = '',

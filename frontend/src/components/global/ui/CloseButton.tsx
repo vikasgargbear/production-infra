@@ -30,9 +30,9 @@ const CloseButton: React.FC<CloseButtonProps> = ({
     showTooltip = true
 }) => {
     const sizeClasses: Record<ButtonSize, string> = {
-        sm: 'p-1.5 w-7 h-7',
-        md: 'p-2 w-9 h-9',
-        lg: 'p-2.5 w-10 h-10'
+        sm: 'min-h-11 min-w-11 p-2',
+        md: 'min-h-11 min-w-11 p-2',
+        lg: 'min-h-12 min-w-12 p-2.5'
     };
 
     const iconSizes: Record<ButtonSize, string> = {
@@ -43,20 +43,21 @@ const CloseButton: React.FC<CloseButtonProps> = ({
 
     return (
         <button
+            type="button"
             onClick={onClick}
             className={`
                 ${sizeClasses[size]}
                 text-gray-400 hover:text-gray-600 
                 hover:bg-gray-100 active:bg-gray-200
-                rounded-lg transition-all duration-200 
-                hover:shadow-sm active:scale-95
+                rounded-md transition-colors duration-150
                 flex items-center justify-center
                 focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-opacity-50
                 ${className}
             `}
             title={showTooltip ? "Close (Esc)" : undefined}
+            aria-label="Close"
         >
-            <X className={`${iconSizes[size]} transition-transform duration-200 hover:rotate-90`} />
+            <X className={iconSizes[size]} />
         </button>
     );
 };

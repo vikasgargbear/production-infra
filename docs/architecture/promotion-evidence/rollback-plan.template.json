@@ -1,0 +1,21 @@
+{
+  "state": "draft",
+  "plan_contract_version": "reset-only-v1",
+  "reviewer": null,
+  "reviewed_at": null,
+  "owner": null,
+  "strategy": "fail_closed_reset_redeploy",
+  "scope_project_ref": "rgihahbmkrmhitjdjvev",
+  "data_preservation_required": false,
+  "retained_backup_required": false,
+  "legacy_fallback_prohibited": true,
+  "trigger_conditions": [],
+  "max_recovery_minutes": null,
+  "steps": [],
+  "verification_steps": [],
+  "blockers": [
+    "Name the release owner and triggers, then provide the exact ordered fence, suspend, reset, migrate, credential-rotation, deploy, and pre-reopen commands plus their expected results.",
+    "Provide exact-SHA, migration-head, runtime-role, tenant-isolation, health/readiness, and retired-dependency verification commands.",
+    "This disposable staging plan deliberately has no retained backup and may never fall back to the retired project."
+  ]
+}

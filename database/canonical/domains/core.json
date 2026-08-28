@@ -1,0 +1,438 @@
+{
+  "domain": "core",
+  "table_count": 16,
+  "tables": [
+    {
+      "name": "core.organizations",
+      "fact_owner": "Legal ERP tenant identity and operating defaults",
+      "tenant_class": "global_identity_root",
+      "mutation_class": "mutable_master",
+      "cross_row_invariants": [{"name": "organizations_state_transition", "enforcement": "constraint_trigger", "rule": "Updates permit only declared lifecycle transitions; closed organizations are immutable except legal-retention metadata."}],
+      "lifecycle": {"state_column": "status", "states": ["provisioning", "active", "suspended", "closed"], "initial": "provisioning", "terminal": ["closed"], "transitions": ["provisioning->active", "active->suspended", "suspended->active", "active->closed", "suspended->closed"]},
+      "rls": {"class": "organization_membership", "force": true, "write_permission": "core.organization.manage"},
+      "retention": {"class": "legal_identity", "minimum": "permanent", "hard_delete": false},
+      "columns": [
+        ["id", "uuid", false, "gen_random_uuid()", "internal"],
+        ["legal_name", "text", false, null, "internal"],
+        ["trade_name", "text", true, null, "internal"],
+        ["pan", "varchar(10)", true, null, "regulated"],
+        ["cin", "varchar(21)", true, null, "regulated"],
+        ["base_currency", "char(3)", false, "'INR'::bpchar", "internal"],
+        ["timezone", "text", false, "'Asia/Kolkata'::text", "internal"],
+        ["country_code", "char(2)", false, "'IN'::bpchar", "internal"],
+        ["registered_address_line1", "text", false, null, "regulated"],
+        ["registered_address_line2", "text", true, null, "regulated"],
+        ["registered_city", "text", false, null, "regulated"],
+        ["registered_state_code", "char(2)", false, null, "regulated"],
+        ["registered_postal_code", "varchar(10)", false, null, "regulated"],
+        ["status", "text", false, "'provisioning'::text", "internal"],
+        ["created_at", "timestamptz", false, "transaction_timestamp()", "internal"],
+        ["created_by_membership_id", "uuid", false, null, "internal"],
+        ["updated_at", "timestamptz", false, "transaction_timestamp()", "internal"],
+        ["updated_by_membership_id", "uuid", false, null, "internal"],
+        ["row_version", "bigint", false, "1", "internal"]
+      ],
+      "primary_key": ["id"],
+      "foreign_keys": [
+        {"name": "organizations_created_by_membership_fk", "columns": ["id", "created_by_membership_id"], "references": "core.memberships", "referenced_columns": ["org_id", "id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": "INITIALLY_DEFERRED"},
+        {"name": "organizations_updated_by_membership_fk", "columns": ["id", "updated_by_membership_id"], "references": "core.memberships", "referenced_columns": ["org_id", "id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": "INITIALLY_DEFERRED"}
+      ],
+      "uniques": [{"name": "organizations_pan_uq", "columns": ["pan"], "where": "pan IS NOT NULL"}],
+      "checks": [
+        {"name": "organizations_status_ck", "expression": "status IN ('provisioning','active','suspended','closed')"},
+        {"name": "organizations_pan_ck", "expression": "pan IS NULL OR pan ~ '^[A-Z]{5}[0-9]{4}[A-Z]$'"},
+        {"name": "organizations_currency_ck", "expression": "base_currency = 'INR'"},
+        {"name": "organizations_row_version_ck", "expression": "row_version > 0"}
+      ],
+      "indexes": [{"name": "organizations_status_idx", "columns": ["status", "id"], "unique": false, "where": "status <> 'closed'", "purpose": "membership bootstrap organization lookup"}]
+    },
+    {
+      "name": "core.branches",
+      "fact_owner": "Tenant branch and place-of-business identity",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "mutable_master",
+      "cross_row_invariants": [{"name": "branches_state_transition", "enforcement": "constraint_trigger", "rule": "Updates permit only declared lifecycle transitions and reject reactivation of a closed branch."}],
+      "lifecycle": {"state_column": "status", "states": ["active", "inactive", "closed"], "initial": "active", "terminal": ["closed"], "transitions": ["active->inactive", "inactive->active", "active->closed", "inactive->closed"]},
+      "rls": {"class": "tenant_membership", "force": true, "write_permission": "core.branch.manage"},
+      "retention": {"class": "legal_identity", "minimum": "permanent", "hard_delete": false},
+      "columns": [
+        ["org_id", "uuid", false, null, "internal"], ["id", "uuid", false, "gen_random_uuid()", "internal"],
+        ["code", "varchar(32)", false, null, "internal"], ["name", "text", false, null, "internal"],
+        ["address_line1", "text", false, null, "regulated"], ["address_line2", "text", true, null, "regulated"],
+        ["city", "text", false, null, "regulated"], ["state_code", "char(2)", false, null, "regulated"], ["postal_code", "varchar(10)", false, null, "regulated"],
+        ["phone", "varchar(32)", true, null, "personal"], ["email", "text", true, null, "personal"], ["status", "text", false, "'active'::text", "internal"],
+        ["created_at", "timestamptz", false, "transaction_timestamp()", "internal"], ["created_by_membership_id", "uuid", false, "current_setting('app.membership_id')::uuid", "internal"],
+        ["updated_at", "timestamptz", false, "transaction_timestamp()", "internal"], ["updated_by_membership_id", "uuid", false, "current_setting('app.membership_id')::uuid", "internal"], ["row_version", "bigint", false, "1", "internal"]
+      ],
+      "primary_key": ["org_id", "id"],
+      "foreign_keys": [
+        {"name": "branches_org_fk", "columns": ["org_id"], "references": "core.organizations", "referenced_columns": ["id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "branches_created_by_fk", "columns": ["org_id", "created_by_membership_id"], "references": "core.memberships", "referenced_columns": ["org_id", "id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": "INITIALLY_DEFERRED"},
+        {"name": "branches_updated_by_fk", "columns": ["org_id", "updated_by_membership_id"], "references": "core.memberships", "referenced_columns": ["org_id", "id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": "INITIALLY_DEFERRED"}
+      ],
+      "uniques": [{"name": "branches_code_uq", "columns": ["org_id", "code"], "where": null}],
+      "checks": [{"name": "branches_status_ck", "expression": "status IN ('active','inactive','closed')"}, {"name": "branches_row_version_ck", "expression": "row_version > 0"}],
+      "indexes": [{"name": "branches_active_name_idx", "columns": ["org_id", "name", "id"], "unique": false, "where": "status = 'active'", "purpose": "active branch selector"}]
+    },
+    {
+      "name": "core.users",
+      "fact_owner": "Global ERP profile mapped one-to-zero-or-one to Supabase Auth",
+      "tenant_class": "global_identity_root",
+      "mutation_class": "mutable_identity_profile",
+      "cross_row_invariants": [{"name": "users_state_transition", "enforcement": "constraint_trigger", "rule": "Updates permit only declared lifecycle transitions; anonymized profiles cannot be restored or remapped to Auth."}],
+      "lifecycle": {"state_column": "status", "states": ["active", "disabled", "anonymized"], "initial": "active", "terminal": ["anonymized"], "transitions": ["active->disabled", "disabled->active", "active->anonymized", "disabled->anonymized"]},
+      "rls": {"class": "user_shared_membership", "force": true, "write_permission": "core.user.manage"},
+      "retention": {"class": "identity_evidence", "minimum": "life_of_memberships_plus_8_years", "hard_delete": false},
+      "columns": [
+        ["id", "uuid", false, "gen_random_uuid()", "internal"], ["auth_user_id", "uuid", true, null, "personal"],
+        ["display_name", "text", false, null, "personal"], ["phone", "varchar(32)", true, null, "personal"], ["locale", "varchar(16)", false, "'en-IN'::text", "internal"],
+        ["status", "text", false, "'active'::text", "internal"], ["last_seen_at", "timestamptz", true, null, "personal"],
+        ["created_at", "timestamptz", false, "transaction_timestamp()", "internal"], ["updated_at", "timestamptz", false, "transaction_timestamp()", "internal"], ["row_version", "bigint", false, "1", "internal"]
+      ],
+      "primary_key": ["id"],
+      "foreign_keys": [{"name": "users_auth_user_fk", "columns": ["auth_user_id"], "references": "auth.users", "referenced_columns": ["id"], "cardinality": "1:0..1", "on_delete": "SET NULL", "deferrable": false}],
+      "uniques": [{"name": "users_auth_user_uq", "columns": ["auth_user_id"], "where": "auth_user_id IS NOT NULL"}],
+      "checks": [{"name": "users_status_ck", "expression": "status IN ('active','disabled','anonymized')"}, {"name": "users_row_version_ck", "expression": "row_version > 0"}],
+      "indexes": [{"name": "users_status_idx", "columns": ["status", "id"], "unique": false, "where": "status = 'active'", "purpose": "authorized profile resolution"}]
+    },
+    {
+      "name": "core.memberships",
+      "fact_owner": "A user's durable membership in one organization",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "mutable_authorization",
+      "cross_row_invariants": [{"name": "memberships_state_transition", "enforcement": "constraint_trigger", "rule": "Updates permit only declared lifecycle transitions; revoked memberships never reactivate and retain actor evidence."}],
+      "lifecycle": {"state_column": "status", "states": ["invited", "active", "suspended", "revoked"], "initial": "invited", "terminal": ["revoked"], "transitions": ["invited->active", "invited->revoked", "active->suspended", "suspended->active", "active->revoked", "suspended->revoked"]},
+      "rls": {"class": "tenant_membership", "force": true, "write_permission": "core.access.manage"},
+      "retention": {"class": "actor_evidence", "minimum": "permanent", "hard_delete": false},
+      "columns": [
+        ["org_id", "uuid", false, null, "internal"], ["id", "uuid", false, "gen_random_uuid()", "internal"], ["user_id", "uuid", false, null, "personal"],
+        ["status", "text", false, "'invited'::text", "internal"], ["joined_at", "timestamptz", true, null, "internal"], ["revoked_at", "timestamptz", true, null, "internal"], ["revocation_reason", "text", true, null, "internal"],
+        ["created_at", "timestamptz", false, "transaction_timestamp()", "internal"], ["created_by_membership_id", "uuid", false, null, "internal"],
+        ["updated_at", "timestamptz", false, "transaction_timestamp()", "internal"], ["updated_by_membership_id", "uuid", false, null, "internal"], ["row_version", "bigint", false, "1", "internal"]
+      ],
+      "primary_key": ["org_id", "id"],
+      "foreign_keys": [
+        {"name": "memberships_org_fk", "columns": ["org_id"], "references": "core.organizations", "referenced_columns": ["id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "memberships_user_fk", "columns": ["user_id"], "references": "core.users", "referenced_columns": ["id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "memberships_created_by_fk", "columns": ["org_id", "created_by_membership_id"], "references": "core.memberships", "referenced_columns": ["org_id", "id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": "INITIALLY_DEFERRED"},
+        {"name": "memberships_updated_by_fk", "columns": ["org_id", "updated_by_membership_id"], "references": "core.memberships", "referenced_columns": ["org_id", "id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": "INITIALLY_DEFERRED"}
+      ],
+      "uniques": [{"name": "memberships_user_uq", "columns": ["org_id", "user_id"], "where": null}],
+      "checks": [
+        {"name": "memberships_status_ck", "expression": "status IN ('invited','active','suspended','revoked')"},
+        {"name": "memberships_dates_ck", "expression": "(status = 'invited' AND joined_at IS NULL AND revoked_at IS NULL) OR (status IN ('active','suspended') AND joined_at IS NOT NULL AND revoked_at IS NULL) OR (status = 'revoked' AND revoked_at IS NOT NULL)"},
+        {"name": "memberships_revocation_ck", "expression": "status <> 'revoked' OR (revoked_at IS NOT NULL AND revocation_reason IS NOT NULL)"},
+        {"name": "memberships_row_version_ck", "expression": "row_version > 0"}
+      ],
+      "indexes": [{"name": "memberships_active_user_idx", "columns": ["org_id", "user_id", "id"], "unique": false, "where": "status = 'active'", "purpose": "request identity resolution"}]
+    },
+    {
+      "name": "core.roles",
+      "fact_owner": "Tenant role definition",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "mutable_authorization",
+      "cross_row_invariants": [],
+      "lifecycle": {"state_column": "status", "states": ["active", "disabled"], "initial": "active", "terminal": [], "transitions": ["active->disabled", "disabled->active"]},
+      "rls": {"class": "tenant_membership", "force": true, "write_permission": "core.access.manage"},
+      "retention": {"class": "authorization_evidence", "minimum": "8_years_after_disable", "hard_delete": false},
+      "columns": [
+        ["org_id", "uuid", false, null, "internal"], ["id", "uuid", false, "gen_random_uuid()", "internal"], ["code", "varchar(64)", false, null, "internal"], ["name", "text", false, null, "internal"], ["description", "text", true, null, "internal"], ["is_system", "boolean", false, "false", "internal"], ["status", "text", false, "'active'::text", "internal"],
+        ["created_at", "timestamptz", false, "transaction_timestamp()", "internal"], ["created_by_membership_id", "uuid", false, "current_setting('app.membership_id')::uuid", "internal"], ["updated_at", "timestamptz", false, "transaction_timestamp()", "internal"], ["updated_by_membership_id", "uuid", false, "current_setting('app.membership_id')::uuid", "internal"], ["row_version", "bigint", false, "1", "internal"]
+      ],
+      "primary_key": ["org_id", "id"],
+      "foreign_keys": [
+        {"name": "roles_org_fk", "columns": ["org_id"], "references": "core.organizations", "referenced_columns": ["id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "roles_created_by_fk", "columns": ["org_id", "created_by_membership_id"], "references": "core.memberships", "referenced_columns": ["org_id", "id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "roles_updated_by_fk", "columns": ["org_id", "updated_by_membership_id"], "references": "core.memberships", "referenced_columns": ["org_id", "id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false}
+      ],
+      "uniques": [{"name": "roles_code_uq", "columns": ["org_id", "code"], "where": null}],
+      "checks": [{"name": "roles_status_ck", "expression": "status IN ('active','disabled')"}, {"name": "roles_row_version_ck", "expression": "row_version > 0"}],
+      "indexes": [{"name": "roles_active_name_idx", "columns": ["org_id", "name", "id"], "unique": false, "where": "status = 'active'", "purpose": "active role administration"}]
+    },
+    {
+      "name": "core.permissions",
+      "population_mode": "application_seed",
+      "fact_owner": "Version-controlled global capability vocabulary",
+      "tenant_class": "global_reference",
+      "mutation_class": "migration_owned_reference",
+      "cross_row_invariants": [],
+      "lifecycle": {"state_column": "status", "states": ["active", "retired"], "initial": "active", "terminal": ["retired"], "transitions": ["active->retired"]},
+      "rls": {"class": "global_reference_read_only", "force": false, "write_permission": null},
+      "retention": {"class": "authorization_reference", "minimum": "permanent", "hard_delete": false},
+      "columns": [
+        ["code", "varchar(128)", false, null, "public_reference"], ["domain", "varchar(64)", false, null, "public_reference"], ["action", "varchar(64)", false, null, "public_reference"], ["risk_class", "text", false, null, "public_reference"], ["description", "text", false, null, "public_reference"], ["status", "text", false, "'active'::text", "public_reference"], ["created_at", "timestamptz", false, "transaction_timestamp()", "internal"]
+      ],
+      "primary_key": ["code"], "foreign_keys": [],
+      "uniques": [],
+      "checks": [{"name": "permissions_status_ck", "expression": "status IN ('active','retired')"}, {"name": "permissions_risk_ck", "expression": "risk_class IN ('read_only','reversible_write','consequential_write','regulated_external','access_administration')"}],
+      "indexes": [{"name": "permissions_domain_action_idx", "columns": ["domain", "action", "code"], "unique": false, "where": "status = 'active'", "purpose": "permission catalog lookup"}]
+    },
+    {
+      "name": "core.role_permissions",
+      "fact_owner": "Permission membership of a tenant role",
+      "tenant_class": "tenant_association",
+      "mutation_class": "replaceable_authorization_link",
+      "cross_row_invariants": [],
+      "lifecycle": {"state_column": null, "states": [], "initial": null, "terminal": [], "transitions": []},
+      "rls": {"class": "tenant_membership", "force": true, "write_permission": "core.access.manage"},
+      "retention": {"class": "authorization_current_state", "minimum": "audit_event_on_change", "hard_delete": true},
+      "columns": [
+        ["org_id", "uuid", false, null, "internal"], ["role_id", "uuid", false, null, "internal"], ["permission_code", "varchar(128)", false, null, "internal"], ["created_at", "timestamptz", false, "transaction_timestamp()", "internal"], ["created_by_membership_id", "uuid", false, "current_setting('app.membership_id')::uuid", "internal"]
+      ],
+      "primary_key": ["org_id", "role_id", "permission_code"],
+      "foreign_keys": [
+        {"name": "role_permissions_org_fk", "columns": ["org_id"], "references": "core.organizations", "referenced_columns": ["id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "role_permissions_role_fk", "columns": ["org_id", "role_id"], "references": "core.roles", "referenced_columns": ["org_id", "id"], "cardinality": "M:1", "on_delete": "CASCADE", "deferrable": false},
+        {"name": "role_permissions_permission_fk", "columns": ["permission_code"], "references": "core.permissions", "referenced_columns": ["code"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "role_permissions_actor_fk", "columns": ["org_id", "created_by_membership_id"], "references": "core.memberships", "referenced_columns": ["org_id", "id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false}
+      ],
+      "uniques": [], "checks": [],
+      "indexes": [{"name": "role_permissions_permission_idx", "columns": ["org_id", "permission_code", "role_id"], "unique": false, "where": null, "purpose": "permission-to-role audit"}]
+    },
+    {
+      "name": "core.access_grants",
+      "fact_owner": "Assignment of one role to one membership at organization or branch scope",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "mutable_authorization",
+      "cross_row_invariants": [{"name": "access_grants_state_transition", "enforcement": "constraint_trigger", "rule": "Only active grants may transition to revoked or expired; terminal grants cannot reactivate and expiry is evaluated transactionally."}],
+      "lifecycle": {"state_column": "status", "states": ["active", "revoked", "expired"], "initial": "active", "terminal": ["revoked", "expired"], "transitions": ["active->revoked", "active->expired"]},
+      "rls": {"class": "tenant_membership", "force": true, "write_permission": "core.access.manage"},
+      "retention": {"class": "authorization_evidence", "minimum": "8_years_after_end", "hard_delete": false},
+      "columns": [
+        ["org_id", "uuid", false, null, "internal"], ["id", "uuid", false, "gen_random_uuid()", "internal"], ["membership_id", "uuid", false, null, "personal"], ["role_id", "uuid", false, null, "internal"], ["scope_kind", "text", false, "'organization'::text", "internal"], ["branch_id", "uuid", true, null, "internal"], ["valid_from_at", "timestamptz", false, "transaction_timestamp()", "internal"], ["expires_at", "timestamptz", true, null, "internal"], ["status", "text", false, "'active'::text", "internal"], ["revoked_at", "timestamptz", true, null, "internal"], ["revoked_by_membership_id", "uuid", true, null, "internal"], ["revocation_reason", "text", true, null, "internal"], ["created_at", "timestamptz", false, "transaction_timestamp()", "internal"], ["created_by_membership_id", "uuid", false, "current_setting('app.membership_id')::uuid", "internal"], ["row_version", "bigint", false, "1", "internal"]
+      ],
+      "primary_key": ["org_id", "id"],
+      "foreign_keys": [
+        {"name": "access_grants_org_fk", "columns": ["org_id"], "references": "core.organizations", "referenced_columns": ["id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "access_grants_membership_fk", "columns": ["org_id", "membership_id"], "references": "core.memberships", "referenced_columns": ["org_id", "id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "access_grants_role_fk", "columns": ["org_id", "role_id"], "references": "core.roles", "referenced_columns": ["org_id", "id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "access_grants_branch_fk", "columns": ["org_id", "branch_id"], "references": "core.branches", "referenced_columns": ["org_id", "id"], "cardinality": "M:0..1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "access_grants_created_by_fk", "columns": ["org_id", "created_by_membership_id"], "references": "core.memberships", "referenced_columns": ["org_id", "id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "access_grants_revoked_by_fk", "columns": ["org_id", "revoked_by_membership_id"], "references": "core.memberships", "referenced_columns": ["org_id", "id"], "cardinality": "M:0..1", "on_delete": "RESTRICT", "deferrable": false}
+      ],
+      "uniques": [],
+      "checks": [
+        {"name": "access_grants_status_ck", "expression": "status IN ('active','revoked','expired')"},
+        {"name": "access_grants_scope_ck", "expression": "(scope_kind = 'organization' AND branch_id IS NULL) OR (scope_kind = 'branch' AND branch_id IS NOT NULL)"},
+        {"name": "access_grants_expiry_ck", "expression": "expires_at IS NULL OR expires_at > valid_from_at"},
+        {"name": "access_grants_revocation_ck", "expression": "status <> 'revoked' OR (revoked_at IS NOT NULL AND revoked_by_membership_id IS NOT NULL AND revocation_reason IS NOT NULL)"},
+        {"name": "access_grants_row_version_ck", "expression": "row_version > 0"}
+      ],
+      "indexes": [
+        {"name": "access_grants_active_org_uq", "columns": ["org_id", "membership_id", "role_id"], "unique": true, "where": "status = 'active' AND branch_id IS NULL", "purpose": "one active organization-scoped role assignment despite NULL semantics"},
+        {"name": "access_grants_active_branch_uq", "columns": ["org_id", "membership_id", "role_id", "branch_id"], "unique": true, "where": "status = 'active' AND branch_id IS NOT NULL", "purpose": "one active branch-scoped role assignment"},
+        {"name": "access_grants_effective_idx", "columns": ["org_id", "membership_id", "status", "expires_at"], "unique": false, "where": "status = 'active'", "purpose": "effective permission resolution"}
+      ]
+    },
+    {
+      "name": "core.settings",
+      "fact_owner": "Typed tenant configuration value at organization or branch scope",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "mutable_configuration",
+      "cross_row_invariants": [{"name": "settings_state_transition", "enforcement": "constraint_trigger", "rule": "A retired setting version cannot be reactivated; replacement is a new row and is audited."}],
+      "lifecycle": {"state_column": "status", "states": ["active", "retired"], "initial": "active", "terminal": ["retired"], "transitions": ["active->retired"]},
+      "rls": {"class": "tenant_membership", "force": true, "write_permission": "core.settings.manage"},
+      "retention": {"class": "configuration", "minimum": "8_years_via_audit", "hard_delete": false},
+      "columns": [
+        ["org_id", "uuid", false, null, "internal"], ["id", "uuid", false, "gen_random_uuid()", "internal"], ["scope_kind", "text", false, "'organization'::text", "internal"], ["branch_id", "uuid", true, null, "internal"], ["namespace", "varchar(64)", false, null, "internal"], ["key", "varchar(128)", false, null, "internal"], ["value_type", "text", false, null, "internal"], ["value_text", "text", true, null, "internal"], ["value_numeric", "numeric(20,6)", true, null, "internal"], ["value_boolean", "boolean", true, null, "internal"], ["value_date", "date", true, null, "internal"], ["value_timestamptz", "timestamptz", true, null, "internal"], ["status", "text", false, "'active'::text", "internal"], ["created_at", "timestamptz", false, "transaction_timestamp()", "internal"], ["created_by_membership_id", "uuid", false, "current_setting('app.membership_id')::uuid", "internal"], ["updated_at", "timestamptz", false, "transaction_timestamp()", "internal"], ["updated_by_membership_id", "uuid", false, "current_setting('app.membership_id')::uuid", "internal"], ["row_version", "bigint", false, "1", "internal"]
+      ],
+      "primary_key": ["org_id", "id"],
+      "foreign_keys": [
+        {"name": "settings_org_fk", "columns": ["org_id"], "references": "core.organizations", "referenced_columns": ["id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "settings_branch_fk", "columns": ["org_id", "branch_id"], "references": "core.branches", "referenced_columns": ["org_id", "id"], "cardinality": "M:0..1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "settings_created_by_fk", "columns": ["org_id", "created_by_membership_id"], "references": "core.memberships", "referenced_columns": ["org_id", "id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "settings_updated_by_fk", "columns": ["org_id", "updated_by_membership_id"], "references": "core.memberships", "referenced_columns": ["org_id", "id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false}
+      ],
+      "uniques": [],
+      "checks": [
+        {"name": "settings_status_ck", "expression": "status IN ('active','retired')"},
+        {"name": "settings_scope_ck", "expression": "(scope_kind = 'organization' AND branch_id IS NULL) OR (scope_kind = 'branch' AND branch_id IS NOT NULL)"},
+        {"name": "settings_typed_value_ck", "expression": "num_nonnulls(value_text,value_numeric,value_boolean,value_date,value_timestamptz) = 1 AND value_type IN ('text','numeric','boolean','date','timestamptz') AND (value_type = 'text') = (value_text IS NOT NULL) AND (value_type = 'numeric') = (value_numeric IS NOT NULL) AND (value_type = 'boolean') = (value_boolean IS NOT NULL) AND (value_type = 'date') = (value_date IS NOT NULL) AND (value_type = 'timestamptz') = (value_timestamptz IS NOT NULL)"},
+        {"name": "settings_row_version_ck", "expression": "row_version > 0"}
+      ],
+      "indexes": [
+        {"name": "settings_active_org_key_uq", "columns": ["org_id", "namespace", "key"], "unique": true, "where": "status = 'active' AND branch_id IS NULL", "purpose": "one active organization setting despite NULL semantics"},
+        {"name": "settings_active_branch_key_uq", "columns": ["org_id", "branch_id", "namespace", "key"], "unique": true, "where": "status = 'active' AND branch_id IS NOT NULL", "purpose": "one active branch setting"},
+        {"name": "settings_active_lookup_idx", "columns": ["org_id", "namespace", "key", "branch_id"], "unique": false, "where": "status = 'active'", "purpose": "request configuration resolution"}
+      ]
+    },
+    {
+      "name": "core.document_sequences",
+      "fact_owner": "Atomic next document number for one tenant scope and fiscal period",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "atomic_counter",
+      "cross_row_invariants": [{"name": "document_sequences_atomic_allocation", "enforcement": "transaction_guard", "rule": "Allocation locks exactly one active sequence row, increments once after idempotency ownership, never reuses a number, and never reopens a closed sequence."}],
+      "lifecycle": {"state_column": "status", "states": ["active", "closed"], "initial": "active", "terminal": ["closed"], "transitions": ["active->closed"]},
+      "rls": {"class": "tenant_membership", "force": true, "write_permission": "internal.sequence.allocate"},
+      "retention": {"class": "statutory_numbering", "minimum": "permanent", "hard_delete": false},
+      "columns": [
+        ["org_id", "uuid", false, null, "internal"], ["id", "uuid", false, "gen_random_uuid()", "internal"], ["branch_id", "uuid", true, null, "internal"], ["document_type", "varchar(64)", false, null, "regulated"], ["fiscal_year_start", "date", false, null, "regulated"], ["prefix", "varchar(32)", false, "''::text", "regulated"], ["suffix", "varchar(16)", false, "''::text", "regulated"], ["padding", "smallint", false, "6", "internal"], ["next_value", "bigint", false, "1", "regulated"], ["last_allocated_at", "timestamptz", true, null, "regulated"], ["status", "text", false, "'active'::text", "internal"], ["created_at", "timestamptz", false, "transaction_timestamp()", "internal"], ["created_by_membership_id", "uuid", false, "current_setting('app.membership_id')::uuid", "internal"], ["updated_at", "timestamptz", false, "transaction_timestamp()", "internal"], ["updated_by_membership_id", "uuid", false, "current_setting('app.membership_id')::uuid", "internal"], ["row_version", "bigint", false, "1", "internal"]
+      ],
+      "primary_key": ["org_id", "id"],
+      "foreign_keys": [
+        {"name": "document_sequences_org_fk", "columns": ["org_id"], "references": "core.organizations", "referenced_columns": ["id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "document_sequences_branch_fk", "columns": ["org_id", "branch_id"], "references": "core.branches", "referenced_columns": ["org_id", "id"], "cardinality": "M:0..1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "document_sequences_created_by_fk", "columns": ["org_id", "created_by_membership_id"], "references": "core.memberships", "referenced_columns": ["org_id", "id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "document_sequences_updated_by_fk", "columns": ["org_id", "updated_by_membership_id"], "references": "core.memberships", "referenced_columns": ["org_id", "id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false}
+      ],
+      "uniques": [],
+      "checks": [{"name": "document_sequences_status_ck", "expression": "status IN ('active','closed')"}, {"name": "document_sequences_values_ck", "expression": "next_value > 0 AND padding BETWEEN 1 AND 18"}, {"name": "document_sequences_row_version_ck", "expression": "row_version > 0"}],
+      "indexes": [
+        {"name": "document_sequences_org_scope_uq", "columns": ["org_id", "document_type", "fiscal_year_start"], "unique": true, "where": "branch_id IS NULL", "purpose": "one organization sequence despite NULL semantics"},
+        {"name": "document_sequences_branch_scope_uq", "columns": ["org_id", "branch_id", "document_type", "fiscal_year_start"], "unique": true, "where": "branch_id IS NOT NULL", "purpose": "one branch sequence"},
+        {"name": "document_sequences_active_idx", "columns": ["org_id", "document_type", "fiscal_year_start", "branch_id"], "unique": false, "where": "status = 'active'", "purpose": "atomic allocation lookup"}
+      ]
+    },
+    {
+      "name": "core.idempotency_keys",
+      "fact_owner": "Exact request identity and replay response for a mutation scope",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "claim_then_terminal",
+      "cross_row_invariants": [{"name": "idempotency_claim_once", "enforcement": "transaction_guard", "rule": "The scope key is claimed atomically; equal request hashes replay the exact terminal response, different hashes conflict, and terminal rows never transition again."}],
+      "lifecycle": {"state_column": "status", "states": ["claimed", "succeeded", "failed", "expired"], "initial": "claimed", "terminal": ["succeeded", "failed", "expired"], "transitions": ["claimed->succeeded", "claimed->failed", "claimed->expired"]},
+      "rls": {"class": "tenant_membership", "force": true, "write_permission": "internal.idempotency.claim"},
+      "retention": {"class": "mutation_evidence", "minimum": "8_years_for_regulated_operations", "hard_delete": false},
+      "columns": [
+        ["org_id", "uuid", false, null, "internal"], ["id", "uuid", false, "gen_random_uuid()", "internal"], ["actor_membership_id", "uuid", false, null, "personal"], ["operation", "varchar(128)", false, null, "internal"], ["idempotency_key_hash", "bytea", false, null, "secret_ciphertext"], ["request_hash", "bytea", false, null, "secret_ciphertext"], ["status", "text", false, "'claimed'::text", "internal"], ["resource_type", "varchar(64)", true, null, "internal"], ["resource_id", "uuid", true, null, "internal"], ["response_status", "smallint", true, null, "internal"], ["response_media_type", "varchar(128)", true, null, "internal"], ["response_body", "bytea", true, null, "secret_ciphertext"], ["response_hash", "bytea", true, null, "secret_ciphertext"], ["error_code", "varchar(128)", true, null, "internal"], ["claimed_at", "timestamptz", false, "transaction_timestamp()", "internal"], ["completed_at", "timestamptz", true, null, "internal"], ["expires_at", "timestamptz", false, null, "internal"]
+      ],
+      "primary_key": ["org_id", "id"],
+      "foreign_keys": [
+        {"name": "idempotency_keys_org_fk", "columns": ["org_id"], "references": "core.organizations", "referenced_columns": ["id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "idempotency_keys_actor_fk", "columns": ["org_id", "actor_membership_id"], "references": "core.memberships", "referenced_columns": ["org_id", "id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false}
+      ],
+      "uniques": [{"name": "idempotency_keys_scope_uq", "columns": ["org_id", "actor_membership_id", "operation", "idempotency_key_hash"], "where": null}],
+      "checks": [
+        {"name": "idempotency_keys_status_ck", "expression": "status IN ('claimed','succeeded','failed','expired')"},
+        {"name": "idempotency_keys_hashes_ck", "expression": "octet_length(idempotency_key_hash) = 32 AND octet_length(request_hash) = 32 AND (response_hash IS NULL OR octet_length(response_hash) = 32)"},
+        {"name": "idempotency_keys_expiry_ck", "expression": "expires_at > claimed_at"},
+        {"name": "idempotency_keys_terminal_ck", "expression": "status = 'claimed' OR completed_at IS NOT NULL"},
+        {"name": "idempotency_keys_response_ck", "expression": "response_body IS NULL OR (response_status BETWEEN 100 AND 599 AND response_media_type IS NOT NULL AND response_hash IS NOT NULL)"}
+      ],
+      "indexes": [{"name": "idempotency_keys_expiry_idx", "columns": ["org_id", "expires_at", "id"], "unique": false, "where": "status = 'claimed'", "purpose": "stale claim recovery"}]
+    },
+    {
+      "name": "core.audit_events",
+      "fact_owner": "Immutable security and business mutation audit event",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "append_only_event",
+      "cross_row_invariants": [{"name": "audit_events_append_only", "enforcement": "constraint_trigger", "rule": "Audit events reject UPDATE and DELETE. Serialize the reviewed row fields deterministically, persist SHA-256 before_state_hash and after_state_hash according to mutation_kind, and compute evidence_hash from canonical event fields plus previous_event_hash while holding one organization-scoped chain lock."}],
+      "lifecycle": {"state_column": null, "states": [], "initial": null, "terminal": [], "transitions": []},
+      "rls": {"class": "tenant_membership", "force": true, "write_permission": "internal.audit.append"},
+      "retention": {"class": "regulated_audit", "minimum": "permanent", "hard_delete": false},
+      "columns": [
+        ["org_id", "uuid", false, null, "internal"], ["id", "uuid", false, "gen_random_uuid()", "internal"], ["chain_sequence", "bigint", false, null, "regulated"], ["occurred_at", "timestamptz", false, "transaction_timestamp()", "regulated"], ["actor_membership_id", "uuid", true, null, "personal"], ["actor_kind", "text", false, null, "regulated"], ["event_type", "varchar(128)", false, null, "regulated"], ["resource_type", "varchar(64)", false, null, "regulated"], ["resource_id", "uuid", true, null, "regulated"], ["request_id", "uuid", false, null, "regulated"], ["command_request_id", "uuid", true, null, "regulated"], ["mutation_kind", "text", false, null, "regulated"], ["summary", "text", false, null, "regulated"], ["evidence_version", "varchar(32)", false, null, "regulated"], ["before_state_hash", "bytea", true, null, "secret_ciphertext"], ["after_state_hash", "bytea", true, null, "secret_ciphertext"], ["evidence_hash", "bytea", false, null, "secret_ciphertext"], ["previous_event_hash", "bytea", true, null, "secret_ciphertext"], ["source_ip", "inet", true, null, "personal"], ["user_agent", "text", true, null, "personal"]
+      ],
+      "primary_key": ["org_id", "id"],
+      "foreign_keys": [
+        {"name": "audit_events_org_fk", "columns": ["org_id"], "references": "core.organizations", "referenced_columns": ["id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "audit_events_actor_fk", "columns": ["org_id", "actor_membership_id"], "references": "core.memberships", "referenced_columns": ["org_id", "id"], "cardinality": "M:0..1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "audit_events_command_fk", "columns": ["org_id", "command_request_id"], "references": "automation.command_requests", "referenced_columns": ["org_id", "id"], "cardinality": "M:0..1", "on_delete": "RESTRICT", "deferrable": "INITIALLY_DEFERRED"}
+      ],
+      "uniques": [{"name": "audit_events_chain_sequence_uq", "columns": ["org_id", "chain_sequence"], "where": null}],
+      "checks": [{"name": "audit_events_sequence_ck", "expression": "chain_sequence > 0"}, {"name": "audit_events_actor_ck", "expression": "actor_kind IN ('membership','system','migration') AND (actor_kind = 'membership') = (actor_membership_id IS NOT NULL)"}, {"name": "audit_events_mutation_ck", "expression": "mutation_kind IN ('insert','update','delete','command') AND ((mutation_kind='insert' AND before_state_hash IS NULL AND after_state_hash IS NOT NULL) OR (mutation_kind='update' AND before_state_hash IS NOT NULL AND after_state_hash IS NOT NULL) OR (mutation_kind='delete' AND before_state_hash IS NOT NULL AND after_state_hash IS NULL) OR (mutation_kind='command' AND after_state_hash IS NOT NULL))"}, {"name": "audit_events_hash_ck", "expression": "evidence_version='pg-jsonb-sha256-v1' AND octet_length(evidence_hash) = 32 AND (before_state_hash IS NULL OR octet_length(before_state_hash) = 32) AND (after_state_hash IS NULL OR octet_length(after_state_hash) = 32) AND (previous_event_hash IS NULL OR octet_length(previous_event_hash) = 32)"}],
+      "indexes": [{"name": "audit_events_resource_idx", "columns": ["org_id", "resource_type", "resource_id", "chain_sequence"], "unique": false, "where": null, "purpose": "resource audit timeline"}, {"name": "audit_events_actor_idx", "columns": ["org_id", "actor_membership_id", "chain_sequence"], "unique": false, "where": "actor_membership_id IS NOT NULL", "purpose": "actor audit timeline"}]
+    },
+    {
+      "name": "core.outbox_events",
+      "fact_owner": "Durable delivery state for one canonical integration event",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "append_then_delivery_state",
+      "cross_row_invariants": [{"name": "outbox_delivery_transition", "enforcement": "constraint_trigger", "rule": "Payload and aggregate identity are immutable; only declared delivery-state transitions and monotonic attempt counters are allowed."}],
+      "lifecycle": {"state_column": "status", "states": ["pending", "claimed", "published", "dead_letter"], "initial": "pending", "terminal": ["published", "dead_letter"], "transitions": ["pending->claimed", "claimed->pending", "claimed->published", "claimed->dead_letter"]},
+      "rls": {"class": "tenant_membership", "force": true, "write_permission": "internal.outbox.deliver"},
+      "retention": {"class": "integration_evidence", "minimum": "8_years_for_regulated_events", "hard_delete": false},
+      "columns": [
+        ["org_id", "uuid", false, null, "internal"], ["id", "uuid", false, "gen_random_uuid()", "internal"], ["event_type", "varchar(128)", false, null, "internal"], ["aggregate_type", "varchar(64)", false, null, "internal"], ["aggregate_id", "uuid", false, null, "internal"], ["event_version", "bigint", false, "1", "internal"], ["media_type", "varchar(128)", false, null, "internal"], ["payload_bytes", "bytea", false, null, "secret_ciphertext"], ["payload_hash", "bytea", false, null, "secret_ciphertext"], ["status", "text", false, "'pending'::text", "internal"], ["available_at", "timestamptz", false, "transaction_timestamp()", "internal"], ["claimed_at", "timestamptz", true, null, "internal"], ["published_at", "timestamptz", true, null, "internal"], ["attempt_count", "integer", false, "0", "internal"], ["last_error_code", "varchar(128)", true, null, "internal"], ["last_error_message", "text", true, null, "internal"], ["created_at", "timestamptz", false, "transaction_timestamp()", "internal"]
+      ],
+      "primary_key": ["org_id", "id"],
+      "foreign_keys": [{"name": "outbox_events_org_fk", "columns": ["org_id"], "references": "core.organizations", "referenced_columns": ["id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false}],
+      "uniques": [{"name": "outbox_events_aggregate_version_uq", "columns": ["org_id", "aggregate_type", "aggregate_id", "event_type", "event_version"], "where": null}],
+      "checks": [{"name": "outbox_events_status_ck", "expression": "status IN ('pending','claimed','published','dead_letter')"}, {"name": "outbox_events_hash_ck", "expression": "octet_length(payload_hash) = 32"}, {"name": "outbox_events_version_ck", "expression": "event_version > 0"}, {"name": "outbox_events_attempt_ck", "expression": "attempt_count >= 0"}, {"name": "outbox_events_terminal_ck", "expression": "status <> 'published' OR published_at IS NOT NULL"}],
+      "indexes": [{"name": "outbox_events_delivery_idx", "columns": ["org_id", "available_at", "id"], "unique": false, "where": "status IN ('pending','claimed')", "purpose": "skip-locked delivery polling"}]
+    },
+    {
+      "name": "core.data_retention_cases",
+      "fact_owner": "Reviewed purpose-end, statutory-retention and legal-hold decision for exactly one personal-data subject in one tenant",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "approval_then_terminal_privacy_state_machine",
+      "cross_row_invariants": [{"name": "data_retention_cases_command_guard", "enforcement": "transaction_guard", "rule": "Only the reviewed retention command creates or advances a case. Eligibility requires verified evidence, purpose end, statutory_retention_until in the past, no legal hold, an active authorized reviewer distinct from the subject where the subject is a membership, and exactly one typed subject. Completion pseudonymizes mutable direct identifiers in the typed subject and linked user only when every active membership for that global user is independently eligible; statutory document, ledger, audit and surrogate relationship facts are retained."}],
+      "lifecycle": {"state_column": "status", "states": ["reviewed", "eligible", "completed", "cancelled"], "initial": "reviewed", "terminal": ["completed", "cancelled"], "transitions": ["reviewed->eligible", "reviewed->cancelled", "eligible->completed", "eligible->cancelled"]},
+      "rls": {"class": "tenant_membership", "force": true, "write_permission": "core.retention.manage"},
+      "retention": {"class": "privacy_disposition_evidence", "minimum": "permanent", "hard_delete": false},
+      "columns": [
+        ["org_id", "uuid", false, null, "internal"], ["id", "uuid", false, "gen_random_uuid()", "internal"], ["subject_kind", "text", false, null, "regulated"],
+        ["membership_id", "uuid", true, null, "personal"], ["employee_id", "uuid", true, null, "personal"], ["party_id", "uuid", true, null, "personal"], ["contact_id", "uuid", true, null, "personal"],
+        ["purpose_ended_on", "date", false, null, "regulated"], ["statutory_retention_until", "date", false, null, "regulated"], ["legal_hold", "boolean", false, "false", "regulated"], ["legal_hold_reason", "text", true, null, "regulated"],
+        ["evidence_attachment_id", "uuid", false, null, "regulated"], ["reviewed_at", "timestamptz", false, null, "regulated"], ["reviewed_by_membership_id", "uuid", false, null, "personal"],
+        ["status", "text", false, "'reviewed'::text", "internal"], ["completed_at", "timestamptz", true, null, "regulated"], ["completed_by_membership_id", "uuid", true, null, "personal"],
+        ["created_at", "timestamptz", false, "transaction_timestamp()", "internal"], ["created_by_membership_id", "uuid", false, "current_setting('app.membership_id')::uuid", "personal"]
+      ],
+      "primary_key": ["org_id", "id"],
+      "foreign_keys": [
+        {"name": "data_retention_cases_org_fk", "columns": ["org_id"], "references": "core.organizations", "referenced_columns": ["id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "data_retention_cases_membership_fk", "columns": ["org_id", "membership_id"], "references": "core.memberships", "referenced_columns": ["org_id", "id"], "cardinality": "M:0..1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "data_retention_cases_employee_fk", "columns": ["org_id", "employee_id"], "references": "hr.employees", "referenced_columns": ["org_id", "id"], "cardinality": "M:0..1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "data_retention_cases_party_fk", "columns": ["org_id", "party_id"], "references": "parties.parties", "referenced_columns": ["org_id", "id"], "cardinality": "M:0..1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "data_retention_cases_contact_fk", "columns": ["org_id", "contact_id"], "references": "parties.contacts", "referenced_columns": ["org_id", "id"], "cardinality": "M:0..1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "data_retention_cases_evidence_fk", "columns": ["org_id", "evidence_attachment_id"], "references": "core.attachments", "referenced_columns": ["org_id", "id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "data_retention_cases_reviewer_fk", "columns": ["org_id", "reviewed_by_membership_id"], "references": "core.memberships", "referenced_columns": ["org_id", "id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "data_retention_cases_completed_by_fk", "columns": ["org_id", "completed_by_membership_id"], "references": "core.memberships", "referenced_columns": ["org_id", "id"], "cardinality": "M:0..1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "data_retention_cases_created_by_fk", "columns": ["org_id", "created_by_membership_id"], "references": "core.memberships", "referenced_columns": ["org_id", "id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false}
+      ],
+      "uniques": [
+        {"name": "data_retention_cases_membership_open_uq", "columns": ["org_id", "membership_id"], "where": "membership_id IS NOT NULL AND status IN ('reviewed','eligible')"},
+        {"name": "data_retention_cases_employee_open_uq", "columns": ["org_id", "employee_id"], "where": "employee_id IS NOT NULL AND status IN ('reviewed','eligible')"},
+        {"name": "data_retention_cases_party_open_uq", "columns": ["org_id", "party_id"], "where": "party_id IS NOT NULL AND status IN ('reviewed','eligible')"},
+        {"name": "data_retention_cases_contact_open_uq", "columns": ["org_id", "contact_id"], "where": "contact_id IS NOT NULL AND status IN ('reviewed','eligible')"}
+      ],
+      "checks": [
+        {"name": "data_retention_cases_subject_ck", "expression": "num_nonnulls(membership_id,employee_id,party_id,contact_id)=1 AND ((subject_kind='membership' AND membership_id IS NOT NULL) OR (subject_kind='employee' AND employee_id IS NOT NULL) OR (subject_kind='party' AND party_id IS NOT NULL) OR (subject_kind='contact' AND contact_id IS NOT NULL))"},
+        {"name": "data_retention_cases_dates_ck", "expression": "statutory_retention_until>=purpose_ended_on AND reviewed_at<=created_at"},
+        {"name": "data_retention_cases_hold_ck", "expression": "(legal_hold AND btrim(COALESCE(legal_hold_reason,''))<>'') OR (NOT legal_hold AND legal_hold_reason IS NULL)"},
+        {"name": "data_retention_cases_status_ck", "expression": "status IN ('reviewed','eligible','completed','cancelled')"},
+        {"name": "data_retention_cases_completion_ck", "expression": "(status='completed' AND completed_at IS NOT NULL AND completed_by_membership_id IS NOT NULL) OR (status<>'completed' AND completed_at IS NULL AND completed_by_membership_id IS NULL)"}
+      ],
+      "indexes": [{"name": "data_retention_cases_due_idx", "columns": ["org_id", "statutory_retention_until", "id"], "unique": false, "where": "status='reviewed' AND NOT legal_hold", "purpose": "reviewed privacy disposition queue"}]
+    },
+    {
+      "name": "core.reference_data_releases",
+      "population_mode": "regulated_import",
+      "fact_owner": "Immutable reviewed source and exact-set identity for one deployed global regulatory reference dataset",
+      "tenant_class": "global_reference",
+      "mutation_class": "migration_owned_reference_release",
+      "cross_row_invariants": [{"name": "reference_data_release_import", "enforcement": "transaction_guard", "rule": "Only the isolated regulatory importer may create a staged release. It accepts only a dataset-kind-specific official authority host, verifies supplied source bytes and canonical parsed dataset bytes against their SHA-256 hashes, and records immutable object-storage coordinates for later retrieval. A typed core.users reviewer, exact non-empty row set, prior-product invalidation, prior-release supersession and new activation occur atomically. Release evidence is immutable, there is exactly one active release per dataset_kind, and runtime or MCP principals cannot import or select a ruleset."}],
+      "lifecycle": {"state_column": "status", "states": ["staged", "active", "superseded"], "initial": "staged", "terminal": ["superseded"], "transitions": ["staged->active", "active->superseded"]},
+      "rls": {"class": "global_reference_read_only", "force": false, "write_permission": null},
+      "retention": {"class": "statutory_reference_source", "minimum": "permanent", "hard_delete": false},
+      "columns": [
+        ["id", "uuid", false, null, "public_reference"], ["dataset_kind", "text", false, null, "public_reference"], ["ruleset_version", "varchar(64)", false, null, "public_reference"], ["source_authority", "text", false, null, "public_reference"], ["source_uri", "text", false, null, "public_reference"], ["source_storage_bucket", "text", false, null, "internal"], ["source_storage_object_path", "text", false, null, "internal"], ["source_media_type", "varchar(128)", false, null, "public_reference"], ["source_document_sha256", "bytea", false, null, "public_reference"], ["dataset_storage_bucket", "text", false, null, "internal"], ["dataset_storage_object_path", "text", false, null, "internal"], ["dataset_media_type", "varchar(128)", false, "'application/json'::text", "public_reference"], ["dataset_sha256", "bytea", false, null, "public_reference"], ["record_count", "integer", false, null, "public_reference"], ["publication_date", "date", false, null, "public_reference"], ["effective_from", "date", false, null, "public_reference"], ["effective_to", "date", true, null, "public_reference"], ["supersedes_release_id", "uuid", true, null, "public_reference"], ["reviewed_by_user_id", "uuid", false, null, "regulated"], ["reviewed_at", "timestamptz", false, null, "regulated"], ["status", "text", false, "'staged'::text", "public_reference"], ["created_at", "timestamptz", false, "transaction_timestamp()", "internal"]
+      ],
+      "primary_key": ["id"],
+      "foreign_keys": [{"name": "reference_data_releases_supersedes_fk", "columns": ["supersedes_release_id"], "references": "core.reference_data_releases", "referenced_columns": ["id"], "cardinality": "M:0..1", "on_delete": "RESTRICT", "deferrable": false}, {"name": "reference_data_releases_reviewer_fk", "columns": ["reviewed_by_user_id"], "references": "core.users", "referenced_columns": ["id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false}],
+      "uniques": [{"name": "reference_data_releases_version_uq", "columns": ["dataset_kind", "ruleset_version"], "where": null}, {"name": "reference_data_releases_dataset_hash_uq", "columns": ["dataset_kind", "dataset_sha256"], "where": null}],
+      "checks": [{"name": "reference_data_releases_kind_ck", "expression": "dataset_kind IN ('ingredient_classification','hsn_sac_tax','withholding_rules','controlled_movement_rules','einvoice_rules','gst_adjustment_rules')"}, {"name": "reference_data_releases_authority_ck", "expression": "(dataset_kind='ingredient_classification' AND source_authority='cdsco') OR (dataset_kind='hsn_sac_tax' AND source_authority IN ('gst_portal','gst_council','cbic','gstn')) OR (dataset_kind='withholding_rules' AND source_authority IN ('income_tax_department','cbic')) OR (dataset_kind='controlled_movement_rules' AND source_authority IN ('cdsco','revenue_department')) OR (dataset_kind IN ('einvoice_rules','gst_adjustment_rules') AND source_authority IN ('gst_portal','gst_council','cbic','gstn'))"}, {"name": "reference_data_releases_status_ck", "expression": "status IN ('staged','active','superseded')"}, {"name": "reference_data_releases_hash_ck", "expression": "octet_length(source_document_sha256)=32 AND octet_length(dataset_sha256)=32"}, {"name": "reference_data_releases_count_ck", "expression": "record_count > 0"}, {"name": "reference_data_releases_dates_ck", "expression": "publication_date <= effective_from AND (effective_to IS NULL OR effective_to >= effective_from) AND reviewed_at <= created_at"}, {"name": "reference_data_releases_text_ck", "expression": "btrim(ruleset_version)<>'' AND btrim(source_uri)<>'' AND btrim(source_storage_bucket)<>'' AND btrim(source_storage_object_path)<>'' AND btrim(dataset_storage_bucket)<>'' AND btrim(dataset_storage_object_path)<>''"}],
+      "indexes": [{"name": "reference_data_releases_active_kind_uq", "columns": ["dataset_kind"], "unique": true, "where": "status='active'", "purpose": "one exact active statutory dataset per reference kind"}, {"name": "reference_data_releases_effective_idx", "columns": ["dataset_kind", "effective_from", "id"], "unique": false, "where": "status IN ('active','superseded')", "purpose": "ruleset provenance lookup by effective date"}]
+    },
+    {
+      "name": "core.attachments",
+      "fact_owner": "ERP evidence metadata and integrity hash for one externally stored object",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "immutable_evidence_metadata",
+      "cross_row_invariants": [{"name": "attachments_evidence_immutability", "enforcement": "constraint_trigger", "rule": "After verification, object path, byte size, media type, SHA-256 and evidence kind cannot change; legal hold prevents retirement."}],
+      "lifecycle": {"state_column": "status", "states": ["pending_upload", "verified", "quarantined", "retained"], "initial": "pending_upload", "terminal": ["retained"], "transitions": ["pending_upload->verified", "pending_upload->quarantined", "verified->quarantined", "verified->retained", "quarantined->retained"]},
+      "rls": {"class": "tenant_membership", "force": true, "write_permission": "core.attachment.manage"},
+      "retention": {"class": "evidence_metadata", "minimum": "max(linked_fact_retention,retention_until)", "hard_delete": false},
+      "columns": [
+        ["org_id", "uuid", false, null, "internal"], ["id", "uuid", false, "gen_random_uuid()", "internal"], ["storage_bucket", "text", false, null, "internal"], ["storage_object_path", "text", false, null, "internal"], ["original_filename", "text", false, null, "personal"], ["media_type", "varchar(128)", false, null, "internal"], ["byte_size", "bigint", false, null, "internal"], ["sha256", "bytea", false, null, "secret_ciphertext"], ["evidence_kind", "varchar(64)", false, null, "regulated"], ["document_date", "date", true, null, "regulated"], ["retention_until", "date", true, null, "regulated"], ["legal_hold", "boolean", false, "false", "regulated"], ["status", "text", false, "'pending_upload'::text", "internal"], ["verified_at", "timestamptz", true, null, "regulated"], ["created_at", "timestamptz", false, "transaction_timestamp()", "internal"], ["created_by_membership_id", "uuid", false, "current_setting('app.membership_id')::uuid", "personal"]
+      ],
+      "primary_key": ["org_id", "id"],
+      "foreign_keys": [
+        {"name": "attachments_org_fk", "columns": ["org_id"], "references": "core.organizations", "referenced_columns": ["id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "attachments_actor_fk", "columns": ["org_id", "created_by_membership_id"], "references": "core.memberships", "referenced_columns": ["org_id", "id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false}
+      ],
+      "uniques": [{"name": "attachments_object_uq", "columns": ["org_id", "storage_bucket", "storage_object_path"], "where": null}, {"name": "attachments_hash_uq", "columns": ["org_id", "sha256", "byte_size"], "where": "status IN ('verified','retained')"}],
+      "checks": [{"name": "attachments_status_ck", "expression": "status IN ('pending_upload','verified','quarantined','retained')"}, {"name": "attachments_size_ck", "expression": "byte_size > 0"}, {"name": "attachments_hash_ck", "expression": "octet_length(sha256) = 32"}, {"name": "attachments_verified_ck", "expression": "status NOT IN ('verified','retained') OR verified_at IS NOT NULL"}],
+      "indexes": [{"name": "attachments_kind_date_idx", "columns": ["org_id", "evidence_kind", "document_date", "id"], "unique": false, "where": "status IN ('verified','retained')", "purpose": "evidence selection by owning domain"}]
+    }
+  ]
+}

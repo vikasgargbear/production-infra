@@ -1,53 +1,16 @@
-# Deployment Documentation
+# Backend deployment boundary
 
-Production deployment guides.
+Backend deployment is part of an exact-SHA release, not an independent quick
+deploy. The API, MCP runtime, frontend, Alembic head, runtime role, RLS/tenant
+checks, and build metadata must all reconcile to the reviewed commit.
 
----
+Maintained references:
 
-## Quick Deploy
+- [Production release](../../deployment/production.md)
+- [Docker images](../../deployment/docker.md)
+- [Monitoring](../../deployment/monitoring.md)
+- [Backup and restore](../../deployment/backup.md)
+- [Canonical evidence storage](../../deployment/canonical-evidence-storage.md)
 
-### Docker (Recommended)
-```bash
-docker build -t pharmacy-backend .
-docker run -d -p 8000:8000 --env-file .env.production pharmacy-backend
-```
-
-### Direct
-```bash
-pip install -r requirements.txt
-alembic upgrade head
-python start.py
-```
-
----
-
-## Guides
-
-| Guide | Description |
-|-------|-------------|
-| [Production](production.md) | Full production deployment |
-| [Docker](docker.md) | Docker/Compose setup |
-| [Monitoring](monitoring.md) | Logging & metrics |
-
----
-
-## Environment
-
-```bash
-DATABASE_URL=postgresql://user:pass@host:5432/db
-SECRET_KEY=<32-char-random>
-JWT_SECRET_KEY=<32-char-random>
-```
-
----
-
-## Checklist
-
-- [ ] Database migrations applied
-- [ ] Indexes created (11 total)
-- [ ] Environment variables set
-- [ ] Health check passing (`/health`)
-
----
-
-**See also**: [Backend Overview](../README.md)
+Do not run an unqualified deployment command, print secrets, bypass migration
+or evidence gates, or treat `/health` alone as production readiness.

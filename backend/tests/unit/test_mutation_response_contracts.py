@@ -20,24 +20,7 @@ EXPECTED_MUTATION_RESPONSES = {
     ("post", "/api/payments/customer-receipt"): "CustomerReceiptCreateResponse",
     ("post", "/api/journal-entries"): "JournalEntryCreateResponse",
     ("post", "/api/expense-claims"): "ExpenseClaimCreateResponse",
-    ("post", "/api/payroll/salary-structures"): "SalaryStructureCreateResponse",
-    ("put", "/api/payroll/salary-structures/{structure_id}"): "SalaryStructureUpdateResponse",
-    ("post", "/api/payroll/leave-policies"): "LeavePolicyMutationResponse",
-    ("put", "/api/payroll/leave-policies/{policy_id}"): "LeavePolicyMutationResponse",
-    ("delete", "/api/payroll/leave-policies/{policy_id}"): "LeavePolicyDeleteResponse",
-    ("post", "/api/payroll/attendance"): "AttendanceMutationResponse",
-    ("post", "/api/payroll/attendance/bulk"): "PayrollCountResponse",
-    ("post", "/api/payroll/leave/balances/initialize"): "PayrollCountResponse",
-    ("post", "/api/payroll/leave/applications"): "LeaveApplicationMutationResponse",
-    ("post", "/api/payroll/leave/applications/{application_id}/approve"): "LeaveApplicationMutationResponse",
-    ("post", "/api/payroll/leave/applications/{application_id}/reject"): "LeaveApplicationMutationResponse",
-    ("post", "/api/payroll/calculate"): "PayrollCalculationResponse",
-    ("post", "/api/payroll/generate"): "PayrollRunGenerationResponse",
-    ("post", "/api/payroll/runs/{run_id}/confirm"): "PayrollRunConfirmationResponse",
     ("post", "/api/compliance/compliance/drug-licenses"): "DrugLicenseMutationResponse",
-    ("post", "/api/compliance/compliance/audits"): "ComplianceAuditMutationResponse",
-    ("post", "/api/compliance/compliance/inspector-visits"): "InspectorVisitMutationResponse",
-    ("post", "/api/loyalty/loyalty/programs"): "LoyaltyProgramCreateResponse",
 }
 
 
@@ -68,16 +51,10 @@ def test_mutation_decorators_do_not_publish_generic_dict_responses():
     assert violations == []
 
 
-def test_high_risk_mutations_publish_strict_named_openapi_responses():
+def test_retired_high_risk_legacy_mutations_are_absent_from_openapi():
     from app.main import app
 
     schema = app.openapi()
-    components = schema["components"]["schemas"]
-
-    assert len(EXPECTED_MUTATION_RESPONSES) == 31
-    for (method, path), component_name in EXPECTED_MUTATION_RESPONSES.items():
-        response_schema = schema["paths"][path][method]["responses"]["200"]["content"][
-            "application/json"
-        ]["schema"]
-        assert response_schema == {"$ref": f"#/components/schemas/{component_name}"}
-        assert components[component_name]["additionalProperties"] is False
+    assert len(EXPECTED_MUTATION_RESPONSES) == 14
+    for method, path in EXPECTED_MUTATION_RESPONSES:
+        assert method not in schema["paths"].get(path, {})

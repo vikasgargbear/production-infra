@@ -1,9 +1,6 @@
-"""
-Sales Services Module
-Business logic for sales-related operations
-"""
-from .order.order_service import OrderService
-from .invoice.invoice_service import InvoiceService
+"""Canonical sales calculation services."""
 
-__all__ = ['OrderService', 'InvoiceService']
+from .calculation import calculate_sales_totals
+from .tax_authority import resolve_sales_tax_authority
 
+__all__ = ["calculate_sales_totals", "resolve_sales_tax_authority"]

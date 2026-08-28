@@ -1,50 +1,42 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { X, Search, FileText, Calendar, CheckCircle } from 'lucide-react';
 import { toast } from 'react-toastify';
+import {
+  projectCanonicalImportLines,
+  type CanonicalImportLine,
+} from '../../sales/utils/documentImport';
+import { formatExactCurrency, normalizeAuthoritativeDecimal } from '../../../utils/exactDecimal';
 
-interface DocumentItem {
-  item_id?: number;
-  product_id: string | number;
-  product_name: string;
-  product_code?: string;
-  batch_id?: string;
-  batch_number?: string;
-  hsn_code?: string;
-  expiry_date?: string;
-  quantity: number;
-  dispatched_quantity?: number;
-  mrp?: number;
-  unit_price?: number;
-  sale_price?: number;
-  discount_percent?: number;
-  free_quantity?: number;
-  gst_percent?: number;
-  tax_rate?: number;
-  available_quantity?: number;
-}
-
-interface ImportData {
+export interface ImportData {
   source_type: string;
   source_id: string | number;
   customer_id?: string | number;
   customer_name?: string;
-  items: DocumentItem[];
+  customer_details?: any;
+  customer?: any;
+  billing_address?: string;
+  shipping_address?: string;
+  items: CanonicalImportLine[];
   transport_details?: any;
+  delivery_details?: any;
   payment_details?: any;
   notes?: string;
   reference_number?: string;
+}
+
+export interface DocumentImportType {
+  value: string;
+  label: string;
+  icon?: React.ComponentType<any>;
+  loadFunction: (searchQuery?: string) => Promise<any[]>;
+  resolveDocument?: (document: any) => Promise<any>;
 }
 
 interface DocumentImportModalProps {
   isOpen: boolean;
   onClose: () => void;
   onImport: (data: ImportData) => void;
-  documentTypes?: Array<{
-    value: string;
-    label: string;
-    icon?: React.ComponentType<any>;
-    loadFunction: (searchQuery?: string) => Promise<any[]>;
-  }>;
+  documentTypes?: DocumentImportType[];
   title?: string;
 }
 
@@ -61,19 +53,15 @@ const DocumentImportModal: React.FC<DocumentImportModalProps> = ({
   const [selectedDoc, setSelectedDoc] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
+  const selectedTypeLabel = documentTypes.find(type => type.value === selectedType)?.label
+    || 'documents';
 
-  useEffect(() => {
-    if (isOpen && selectedType) {
-      loadDocuments();
-    }
-  }, [isOpen, selectedType]);
-
-  const loadDocuments = async () => {
+  const loadDocuments = useCallback(async (query: string = '') => {
     setLoading(true);
     try {
       const typeConfig = documentTypes.find(t => t.value === selectedType);
       if (typeConfig && typeConfig.loadFunction) {
-        const results = await typeConfig.loadFunction(searchQuery);
+        const results = await typeConfig.loadFunction(query);
         setDocuments(Array.isArray(results) ? results : []);
       }
     } catch (error) {
@@ -82,13 +70,25 @@ const DocumentImportModal: React.FC<DocumentImportModalProps> = ({
     } finally {
       setLoading(false);
     }
-  };
+  }, [documentTypes, selectedType]);
+
+  useEffect(() => {
+    if (!selectedType && documentTypes[0]?.value) {
+      setSelectedType(documentTypes[0].value);
+    }
+  }, [documentTypes, selectedType]);
+
+  useEffect(() => {
+    if (isOpen && selectedType) {
+      void loadDocuments();
+    }
+  }, [isOpen, selectedType, loadDocuments]);
 
   const handleSearch = () => {
-    loadDocuments();
+    void loadDocuments(searchQuery);
   };
 
-  const handleImport = () => {
+  const handleImport = async () => {
     if (!selectedDoc) {
       toast.warning('Please select a document to import');
       return;
@@ -97,40 +97,52 @@ const DocumentImportModal: React.FC<DocumentImportModalProps> = ({
     setImporting(true);
 
     try {
-      // Format items for import
-      const formattedItems = (selectedDoc.items || []).map((item: any) => ({
-        product_id: item.product_id,
-        product_name: item.product_name || item.name,
-        product_code: item.product_code || item.code,
-        batch_id: item.batch_id,
-        batch_number: item.batch_number || item.batch_number,
-        hsn_code: item.hsn_code,
-        expiry_date: item.expiry_date,
-        quantity: parseFloat(item.quantity || item.dispatched_quantity || '0'),
-        mrp: parseFloat(item.mrp || '0'),
-        unit_price: parseFloat(item.unit_price || item.unit_price || item.sale_price || '0'),
-        discount_percent: parseFloat(item.discount_percent || '0'),
-        free_quantity: parseFloat(item.free_quantity || '0'),
-        tax_rate: parseFloat(item.tax_rate || item.gst_percent || '0')
-      }));
+      const typeConfig = documentTypes.find(type => type.value === selectedType);
+      const sourceDocument = typeConfig?.resolveDocument
+        ? await typeConfig.resolveDocument(selectedDoc)
+        : selectedDoc;
+      const formattedItems = projectCanonicalImportLines(
+        sourceDocument.items || sourceDocument.line_items,
+        { requireBatch: true },
+      );
+
+      const customerDetails = sourceDocument.customer_details
+        || sourceDocument.customer
+        || (sourceDocument.customer_id ? {
+          customer_id: sourceDocument.customer_id,
+          customer_name: sourceDocument.customer_name,
+        } : undefined);
+
+      const sourceId = sourceDocument.id
+        ?? sourceDocument.invoice_id
+        ?? sourceDocument.order_id
+        ?? sourceDocument.challan_id;
+      if (sourceId === undefined || sourceId === null || String(sourceId).trim() === '') {
+        throw new Error('The selected canonical document identity is unavailable.');
+      }
 
       const importData: ImportData = {
         source_type: selectedType,
-        source_id: selectedDoc.id || selectedDoc.invoice_id || selectedDoc.order_id || selectedDoc.challan_id,
-        customer_id: selectedDoc.customer_id,
-        customer_name: selectedDoc.customer_name,
+        source_id: sourceId,
+        customer_id: sourceDocument.customer_id,
+        customer_name: sourceDocument.customer_name,
+        customer_details: customerDetails,
+        customer: customerDetails,
+        billing_address: sourceDocument.billing_address,
+        shipping_address: sourceDocument.shipping_address || sourceDocument.delivery_address,
         items: formattedItems,
-        transport_details: selectedDoc.transport_details,
-        payment_details: selectedDoc.payment_details,
-        notes: selectedDoc.notes,
-        reference_number: selectedDoc.invoice_number || selectedDoc.order_number || selectedDoc.challan_number
+        transport_details: sourceDocument.transport_details,
+        delivery_details: sourceDocument.delivery_details || sourceDocument.transport_details,
+        payment_details: sourceDocument.payment_details,
+        notes: sourceDocument.notes,
+        reference_number: sourceDocument.invoice_number || sourceDocument.order_number || sourceDocument.challan_number
       };
 
       onImport(importData);
       toast.success(`Data imported from ${selectedType}`);
       onClose();
     } catch (error) {
-      toast.error('Failed to import document data');
+      toast.error(error instanceof Error ? error.message : 'Failed to import document data');
     } finally {
       setImporting(false);
     }
@@ -142,9 +154,17 @@ const DocumentImportModal: React.FC<DocumentImportModalProps> = ({
     return date.toLocaleDateString('en-IN');
   };
 
-  const formatCurrency = (amount: number) => {
-    return `₹${(amount || 0).toFixed(2)}`;
+  const authoritativeAmount = (document: Record<string, unknown>): string | null => {
+    const amount = document.total_amount ?? document.net_amount;
+    if (amount === undefined || amount === null) return null;
+    return normalizeAuthoritativeDecimal(amount, 'Imported document amount', {
+      scale: 2, maximumWholeDigits: 20, allowNegative: true,
+    });
   };
+
+  const documentIdentity = (document: Record<string, unknown>): string => String(
+    document.id ?? document.invoice_id ?? document.order_id ?? document.challan_id ?? '',
+  );
 
   if (!isOpen) return null;
 
@@ -199,7 +219,7 @@ const DocumentImportModal: React.FC<DocumentImportModalProps> = ({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-                placeholder={`Search ${selectedType}s by number or customer...`}
+                placeholder={`Search ${selectedTypeLabel.toLowerCase()} by number or customer...`}
                 className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
@@ -220,20 +240,23 @@ const DocumentImportModal: React.FC<DocumentImportModalProps> = ({
             </div>
           ) : documents.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
-              No {selectedType}s found
+              No {selectedTypeLabel.toLowerCase()} found
             </div>
           ) : (
             <div className="space-y-2">
               {documents.map((doc) => (
-                <div
+                <button
+                  type="button"
                   key={doc.id || doc.invoice_id || doc.order_id || doc.challan_id}
+                  data-testid={`import-document-${selectedType}-${documentIdentity(doc)}`}
+                  aria-label={`Select canonical ${selectedType} ${documentIdentity(doc)}`}
+                  aria-pressed={Boolean(
+                    selectedDoc && documentIdentity(selectedDoc) === documentIdentity(doc),
+                  )}
                   onClick={() => setSelectedDoc(doc)}
                   className={`
-                    p-4 border rounded-lg cursor-pointer transition-all
-                    ${selectedDoc?.id === doc.id ||
-                      selectedDoc?.invoice_id === doc.invoice_id ||
-                      selectedDoc?.order_id === doc.order_id ||
-                      selectedDoc?.challan_id === doc.challan_id
+                    w-full p-4 border rounded-lg cursor-pointer text-left transition-all
+                    ${selectedDoc && documentIdentity(selectedDoc) === documentIdentity(doc)
                       ? 'border-blue-500 bg-blue-50'
                       : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                     }
@@ -243,7 +266,7 @@ const DocumentImportModal: React.FC<DocumentImportModalProps> = ({
                     <div>
                       <div className="flex items-center space-x-2">
                         <span className="font-medium text-gray-900">
-                          {doc.invoice_number || doc.order_number || doc.challan_number || `#${doc.id}`}
+                          {doc.invoice_number || doc.order_number || doc.challan_number || 'Document number unavailable'}
                         </span>
                         {doc.status && (
                           <span className={`
@@ -260,7 +283,7 @@ const DocumentImportModal: React.FC<DocumentImportModalProps> = ({
                         )}
                       </div>
                       <div className="mt-1 text-sm text-gray-600">
-                        <span>{doc.customer_name || 'Unknown Customer'}</span>
+                        <span>{doc.customer_name || 'Customer unavailable'}</span>
                         {doc.date && (
                           <span className="ml-3">
                             <Calendar className="w-3 h-3 inline mr-1" />
@@ -270,9 +293,13 @@ const DocumentImportModal: React.FC<DocumentImportModalProps> = ({
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="font-semibold text-gray-900">
-                        {formatCurrency(doc.total_amount || doc.net_amount || 0)}
-                      </div>
+                      {authoritativeAmount(doc) === null ? (
+                        <div className="text-sm text-gray-500">Amount not applicable</div>
+                      ) : (
+                        <div className="font-semibold text-gray-900">
+                          {formatExactCurrency(authoritativeAmount(doc)!, 'Imported document amount')}
+                        </div>
+                      )}
                       {doc.items && (
                         <div className="text-xs text-gray-500 mt-1">
                           {doc.items.length} items
@@ -280,7 +307,7 @@ const DocumentImportModal: React.FC<DocumentImportModalProps> = ({
                       )}
                     </div>
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           )}
@@ -296,7 +323,7 @@ const DocumentImportModal: React.FC<DocumentImportModalProps> = ({
                   <div key={index} className="flex justify-between py-1">
                     <span>{item.product_name || item.name}</span>
                     <span className="text-gray-500">
-                      Qty: {item.quantity || item.dispatched_quantity}
+                      Qty: {item.quantity ?? item.dispatched_quantity ?? 'Unavailable'}
                     </span>
                   </div>
                 ))}

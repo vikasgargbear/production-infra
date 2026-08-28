@@ -26,6 +26,26 @@ user_id_var: ContextVar[str] = ContextVar("user_id", default="")
 org_id_var: ContextVar[str] = ContextVar("org_id", default="")
 
 
+# Only these explicitly reviewed fields may be serialized from LogRecord.extra.
+# Keeping the allowlist here prevents payloads, tokens, SQL text, and arbitrary
+# exception attributes from entering production logs.
+SAFE_STRUCTURED_LOG_FIELDS = (
+    "event_type",
+    "ip",
+    "method",
+    "path",
+    "status_code",
+    "duration_ms",
+    "operation",
+    "outcome",
+    "command_request_id",
+    "command_status",
+    "error_code",
+    "sqlstate",
+    "idempotency_replayed",
+)
+
+
 class JSONFormatter(logging.Formatter):
     """
     Structured JSON log formatter for production use.
@@ -61,10 +81,17 @@ class JSONFormatter(logging.Formatter):
             }
 
         # Add extra fields (e.g., from logger.info("msg", extra={...}))
-        for key in ("event_type", "ip", "method", "path", "status_code", "duration_ms"):
+        for key in SAFE_STRUCTURED_LOG_FIELDS:
             val = getattr(record, key, None)
             if val is not None:
                 log_entry[key] = val
+
+        # A command diagnostic can resolve organization authority after the
+        # request middleware has installed its context. Prefer that reviewed
+        # value when the middleware context was empty.
+        record_org_id = getattr(record, "org_id", None)
+        if record_org_id is not None:
+            log_entry["org_id"] = record_org_id
 
         return json.dumps(log_entry, default=str)
 

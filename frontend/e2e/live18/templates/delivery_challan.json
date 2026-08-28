@@ -1,0 +1,31 @@
+{
+  "template_schema": "aasopharma.live18.ui-template.v1",
+  "operation_id": "delivery_challan",
+  "lifecycle_mode": "combined_actor_confirmation",
+  "steps": {
+    "missing_required_steps": [
+      {"actor":"requester","action":"goto","value":"/#/sales/challan"},
+      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Select an approved sales order. Manual customer, product, price, tax, and batch entry cannot establish canonical dispatch lineage.","exact":true},"value":"Select an approved sales order. Manual customer, product, price, tax, and batch entry cannot establish canonical dispatch lineage."},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Select approved order","exact":true}},
+      {"actor":"requester","action":"expectDisabled","locator":{"kind":"role","role":"button","name":"Import order to challan","exact":true}}
+    ],
+    "prepare_steps": [
+      {"actor":"requester","action":"goto","value":"/#/sales/challan"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Select approved order","exact":true}},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Select canonical sales order {{resource_sales_order}}","exact":true}},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Import order to challan","exact":true}},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Review dispatch","exact":true}},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Exact distance (km)","exact":true},"value":"{{scalar.delivery_challan_distance_km}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Generate Challan","exact":true}}
+    ],
+    "approval_steps": [
+      {"actor":"requester","action":"expectText","locator":{"kind":"role","role":"dialog","name":"Review exact delivery dispatch","exact":true},"value":"{{command_request_id}}"},
+      {"actor":"requester","action":"expectText","locator":{"kind":"testId","name":"canonical-immutable-preview"},"value":"{{scalar.delivery_challan_distance_km}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"checkbox","name":"I reviewed this exact server preview and want to post it.","exact":true}}
+    ],
+    "execute_steps": [
+      {"actor":"requester","action":"expectText","locator":{"kind":"role","role":"dialog","name":"Review exact delivery dispatch","exact":true},"value":"{{command_request_id}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Approve & Post","exact":true}}
+    ]
+  }
+}

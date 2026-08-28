@@ -1,308 +1,230 @@
-"""
-Permission middleware and decorators for role-based access control
-"""
-from functools import wraps
-from typing import List, Optional, Dict, Any
-from fastapi import HTTPException, Depends, status, Header
-from sqlalchemy.orm import Session
-from sqlalchemy import text
-from jose import JWTError
-import json
-import logging
+"""Authorization helpers for canonical ERP access-token claims.
 
+The Supabase session exchange resolves the active membership, role and grants
+once, then signs the resulting canonical permission codes into the ERP JWT.
+Request authorization must use those signed claims instead of querying the
+retired ``master.org_users`` / ``master.roles`` compatibility tables.
+"""
+
+from functools import wraps
+import logging
+from typing import Any, Dict, Iterable, Mapping, Optional, Set
+
+from fastapi import Depends, Header, HTTPException, status
+from jwt import InvalidTokenError as JWTError
+from sqlalchemy.orm import Session
+
+from ..auth.jwt_auth import decode_jwt
+from ..auth.session_authority import require_canonical_session_authority
 from ..database import get_db
-from ..auth.jwt_auth import decode_jwt  # Single source of truth
 from ..env import is_production, is_test_mode_enabled
 
 logger = logging.getLogger(__name__)
 
-# Module definitions
 MODULES = {
-    "SALES": "sales",
-    "PURCHASE": "purchase", 
-    "INVENTORY": "inventory",
-    "PAYMENT": "payment",
-    "REPORTS": "reports",
-    "MASTER": "master",
-    "GST": "gst",
-    "RETURNS": "returns",
-    "LEDGER": "ledger",
-    "NOTES": "notes"
+    "SALES": "sales", "PURCHASE": "purchase", "INVENTORY": "inventory",
+    "PAYMENT": "payment", "REPORTS": "reports", "MASTER": "master",
+    "GST": "gst", "RETURNS": "returns", "LEDGER": "ledger", "NOTES": "notes",
 }
 
-# Permission levels
 PERMISSIONS = {
-    "VIEW": "view",
-    "CREATE": "create",
-    "EDIT": "edit",
-    "DELETE": "delete",
-    "APPROVE": "approve",
-    "EXPORT": "export"
+    "VIEW": "view", "CREATE": "create", "EDIT": "edit", "DELETE": "delete",
+    "APPROVE": "approve", "EXPORT": "export",
 }
+
+# Translate old navigation groups to canonical capability domains. This keeps
+# canonical codes as the only authorization truth while legacy routes retire.
+MODULE_DOMAINS: Dict[str, Set[str]] = {
+    "sales": {"sales"}, "invoices": {"sales"}, "challans": {"sales"},
+    "purchase": {"procurement"}, "purchase_returns": {"procurement"},
+    "inventory": {"inventory"}, "payment": {"finance"}, "finance": {"finance"},
+    "ledger": {"finance"}, "notes": {"finance"}, "gst": {"tax"},
+    "returns": {"sales", "procurement"},
+    "reports": {"sales", "procurement", "inventory", "finance", "tax"},
+    "dashboard": {"sales", "procurement", "inventory", "finance", "tax"},
+    "master": {"catalog", "parties", "hr", "core"}, "settings": {"core"},
+}
+
+ACTION_SUFFIXES: Dict[str, Set[str]] = {
+    "view": set(), "create": {"create", "manage"},
+    "edit": {"edit", "manage"}, "delete": {"manage"},
+    "approve": {"approve", "post", "file", "execute"}, "export": set(),
+}
+
+
+def _active_permission_codes(raw_permissions: Any) -> Set[str]:
+    """Normalize the supported signed-claim representations."""
+    if isinstance(raw_permissions, Mapping):
+        return {str(code).lower() for code, enabled in raw_permissions.items() if enabled is True}
+    if isinstance(raw_permissions, Iterable) and not isinstance(raw_permissions, (str, bytes)):
+        return {str(code).lower() for code in raw_permissions}
+    return set()
+
+
+def canonical_module_access(permission_codes: Set[str], module: Optional[str]) -> bool:
+    if not module:
+        return True
+    domains = MODULE_DOMAINS.get(module.lower(), {module.lower()})
+    return any(code.split(".", 1)[0] in domains for code in permission_codes)
+
+
+def canonical_permission_access(
+    permission_codes: Set[str], module: Optional[str], permission: Optional[str]
+) -> bool:
+    if not canonical_module_access(permission_codes, module):
+        return False
+    if not permission or permission.lower() in {"view", "export"}:
+        return True
+    domains = MODULE_DOMAINS.get((module or "").lower(), {(module or "").lower()})
+    suffixes = ACTION_SUFFIXES.get(permission.lower(), {permission.lower()})
+    return any(
+        code.split(".", 1)[0] in domains
+        and any(code.endswith(f".{suffix}") for suffix in suffixes)
+        for code in permission_codes
+    )
+
+
+def _user_from_claims(payload: Dict[str, Any]) -> Dict[str, Any]:
+    codes = _active_permission_codes(payload.get("permissions"))
+    return {
+        "user_id": payload.get("user_id"), "auth_user_id": payload.get("auth_user_id"),
+        "username": payload.get("email"),
+        "email": payload.get("email"), "org_id": payload.get("org_id"),
+        "is_admin": payload.get("is_admin") is True,
+        "permissions": payload.get("permissions") or {}, "role_id": payload.get("role_id"),
+        "role_code": payload.get("role"), "role_name": payload.get("role"),
+        "role_permissions": payload.get("permissions") or {},
+        "allowed_modules": sorted(
+            module for module in MODULE_DOMAINS if canonical_module_access(codes, module)
+        ),
+        "data_access_level": payload.get("data_access_level", "branch"),
+        "branch_ids": payload.get("branch_ids") or [],
+        "branch_scope": payload.get("branch_scope", "single"),
+        "full_name": payload.get("full_name"),
+    }
+
 
 class PermissionChecker:
-    """
-    Dependency class for checking user permissions
-    """
+    """FastAPI dependency that authorizes from the verified ERP JWT."""
+
     def __init__(self, module: str = None, permission: str = None, require_admin: bool = False):
         self.module = module
         self.permission = permission
         self.require_admin = require_admin
-    
-    async def __call__(self, 
-                       authorization: str = Header(None),
-                       db: Session = Depends(get_db)) -> Dict[str, Any]:
-        """
-        Check if user has required permissions
-        
-        TEST MODE: When TEST_MODE=true, bypass all auth and return test user
-        """
-        import os
-        
-        # TEST MODE: Bypass permission checks for automated testing
-        # SECURITY: Block TEST_MODE in production
+
+    async def __call__(
+        self,
+        authorization: str = Header(None),
+        db: Session = Depends(get_db),
+    ) -> Dict[str, Any]:
         if is_test_mode_enabled():
             if is_production():
                 logger.critical("SECURITY: TEST_MODE=true blocked in production environment")
-                raise HTTPException(
-                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail="Service configuration error"
-                )
-            logger.warning("TEST_MODE enabled in PermissionChecker - bypassing all permission checks")
-            # Return test user with admin permissions
+                raise HTTPException(status_code=503, detail="Service configuration error")
             return {
-                "user_id": 8,
-                "username": "test_mode_user",
-                "email": "test@example.com",
-                "org_id": "e78d6777-35f6-4b19-994f-caaede2f021a",
-                "is_admin": True,  # Grant admin to bypass all permission checks
-                "permissions": {"all": True},
-                "role_id": 1,
-                "role_code": "admin",
-                "role_name": "Test Admin",
-                "role_permissions": {"all": True},
-                "allowed_modules": list(MODULES.values()),
-                "data_access_level": "all"
+                "user_id": "00000000-0000-0000-0000-000000000008",
+                "auth_user_id": "00000000-0000-0000-0000-000000000008",
+                "username": "test_mode_user", "email": "test@example.com",
+                "org_id": "e78d6777-35f6-4b19-994f-caaede2f021a", "is_admin": True,
+                "permissions": {"all": True}, "role_permissions": {"all": True},
+                "allowed_modules": sorted(MODULE_DOMAINS), "data_access_level": "organization",
             }
-        
+
         if not authorization or not authorization.startswith("Bearer "):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Missing or invalid authentication token"
-            )
-        
-        token = authorization.replace("Bearer ", "")
-        
+            raise HTTPException(status_code=401, detail="Missing or invalid authentication token")
+
         try:
-            # Use central decode function (single source of truth)
-            payload = decode_jwt(token)
-            user_id = payload.get("user_id")
-            org_id = payload.get("org_id")
-            
-            if not user_id or not org_id:
+            payload = decode_jwt(authorization.removeprefix("Bearer "))
+            if not payload.get("user_id") or not payload.get("org_id"):
+                raise HTTPException(status_code=401, detail="Invalid token payload")
+            require_canonical_session_authority(db)
+            user = _user_from_claims(payload)
+            if self.require_admin and not user["is_admin"]:
+                raise HTTPException(status_code=403, detail="Admin access required")
+            if user["is_admin"]:
+                return user
+
+            codes = _active_permission_codes(user["permissions"])
+            if self.module and not canonical_module_access(codes, self.module):
+                raise HTTPException(status_code=403, detail=f"Access denied to {self.module} module")
+            if self.permission and not canonical_permission_access(codes, self.module, self.permission):
                 raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Invalid token payload"
+                    status_code=403, detail=f"Permission denied: {self.permission} on {self.module}"
                 )
-            
-            # Get user details with role and permissions
-            result = db.execute(
-                text("""
-                    SELECT 
-                        u.user_id,
-                        u.username,
-                        u.email,
-                        u.org_id,
-                        u.is_admin,
-                        u.permissions as user_permissions,
-                        r.role_id,
-                        r.role_code,
-                        r.role_name,
-                        r.permissions as role_permissions,
-                        r.allowed_modules,
-                        r.data_access_level
-                    FROM master.org_users u
-                    LEFT JOIN master.roles r ON u.role_id = r.role_id
-                    WHERE u.user_id = :user_id 
-                    AND u.org_id = :org_id
-                    AND u.is_active = true
-                """),
-                {"user_id": user_id, "org_id": org_id}
-            )
-            
-            user = result.first()
-            
-            if not user:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Account deactivated or not found"
-                )
-            
-            user_dict = dict(user._mapping)
-            
-            # Check admin requirement
-            if self.require_admin and not user_dict['is_admin']:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Admin access required"
-                )
-            
-            # If no specific permission required, just return user
-            if not self.module and not self.permission:
-                return user_dict
-            
-            # Admin users have all permissions
-            if user_dict['is_admin']:
-                return user_dict
-            
-            # Check module access
-            if self.module:
-                allowed_modules = user_dict.get('allowed_modules') or []
-                if self.module.lower() not in [m.lower() for m in allowed_modules]:
-                    # Check role permissions
-                    if not self._check_permission(user_dict, self.module, self.permission):
-                        raise HTTPException(
-                            status_code=status.HTTP_403_FORBIDDEN,
-                            detail=f"Access denied to {self.module} module"
-                        )
-            
-            # Check specific permission
-            if self.permission and not self._check_permission(user_dict, self.module, self.permission):
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail=f"Permission denied: {self.permission} on {self.module}"
-                )
-            
-            return user_dict
-            
+            return user
         except JWTError:
-            logger.warning(
-                "Permission denied: invalid/expired token",
-                extra={"event_type": "auth_failure"}
-            )
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token expired or invalid"
-            )
-        except HTTPException as he:
-            # Log 401/403 denials for security monitoring
-            if he.status_code in (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN):
-                logger.warning(
-                    f"Access denied ({he.status_code}): {he.detail}",
-                    extra={"event_type": "permission_denied"}
-                )
+            logger.warning("Permission denied: invalid/expired token")
+            raise HTTPException(status_code=401, detail="Token expired or invalid")
+        except HTTPException:
             raise
-        except Exception as e:
-            logger.error(f"Permission check error: {type(e).__name__}", exc_info=True)
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Permission check failed"
-            )
-    
-    def _check_permission(self, user: Dict, module: str, permission: str) -> bool:
-        """
-        Check if user has specific permission for a module.
-        
-        ROLE-FIRST RBAC: Permissions come ONLY from roles.
-        User-level permission overrides have been removed (Dec 2025).
-        """
-        # Get role permissions only (single source of truth)
-        role_perms = user.get('role_permissions') or {}
-        
-        if isinstance(role_perms, str):
-            try:
-                role_perms = json.loads(role_perms)
-            except json.JSONDecodeError:
-                role_perms = {}
-        
-        # Check for "all" permission (admin role)
-        if role_perms.get('all'):
+        except Exception:
+            logger.exception("Permission check failed")
+            raise HTTPException(status_code=500, detail="Permission check failed")
+
+    def _check_permission(self, user: Dict[str, Any], module: str, permission: str) -> bool:
+        if user.get("is_admin"):
             return True
-        
-        # Check module-specific permissions
-        module_lower = module.lower() if module else None
-        perm_lower = permission.lower() if permission else None
-        
-        # Check role permissions
-        if module_lower in role_perms:
-            module_perms = role_perms[module_lower]
-            if isinstance(module_perms, dict):
-                if module_perms.get('all') or module_perms.get(perm_lower):
-                    return True
-            elif isinstance(module_perms, list) and perm_lower in module_perms:
-                return True
-        
-        return False
+        raw = user.get("permissions") or user.get("role_permissions")
+        return canonical_permission_access(_active_permission_codes(raw), module, permission)
+
 
 def require_permission(module: str = None, permission: str = None, require_admin: bool = False):
-    """
-    Decorator for protecting routes with permission checks
-    """
     def decorator(func):
         @wraps(func)
         async def wrapper(*args, **kwargs):
-            # The PermissionChecker will be injected as a dependency
             return await func(*args, **kwargs)
-        
-        # Add the permission checker as a dependency
-        wrapper.__annotations__['current_user'] = Depends(PermissionChecker(module, permission, require_admin))
+        wrapper.__annotations__["current_user"] = Depends(
+            PermissionChecker(module, permission, require_admin)
+        )
         return wrapper
-    
     return decorator
 
-def get_current_user(authorization: str = Header(None), db: Session = Depends(get_db)) -> Dict[str, Any]:
-    """
-    Get current user from JWT token
-    """
-    checker = PermissionChecker()
-    return checker(authorization, db)
 
-def check_module_access(user: Dict, module: str) -> bool:
-    """
-    Check if user has access to a module
-    """
-    if user.get('is_admin'):
-        return True
-    
-    allowed_modules = user.get('allowed_modules') or []
-    if module.lower() in [m.lower() for m in allowed_modules]:
-        return True
-    
-    # Check in permissions
-    checker = PermissionChecker()
-    return checker._check_permission(user, module, 'view')
+async def get_current_user(
+    authorization: str = Header(None),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    return await PermissionChecker()(authorization, db)
 
-def check_permission(user: Dict, module: str, permission: str) -> bool:
-    """
-    Check if user has specific permission for a module
-    """
-    if user.get('is_admin'):
-        return True
-    
-    checker = PermissionChecker()
-    return checker._check_permission(user, module, permission)
 
-# Module-specific permission shortcuts
+def check_module_access(user: Dict[str, Any], module: str) -> bool:
+    if user.get("is_admin"):
+        return True
+    raw = user.get("permissions") or user.get("role_permissions")
+    return canonical_module_access(_active_permission_codes(raw), module)
+
+
+def check_permission(user: Dict[str, Any], module: str, permission: str) -> bool:
+    return PermissionChecker()._check_permission(user, module, permission)
+
+
 def require_sales_permission(permission: str = "view"):
     return require_permission(MODULES["SALES"], permission)
+
 
 def require_purchase_permission(permission: str = "view"):
     return require_permission(MODULES["PURCHASE"], permission)
 
+
 def require_inventory_permission(permission: str = "view"):
     return require_permission(MODULES["INVENTORY"], permission)
+
 
 def require_payment_permission(permission: str = "view"):
     return require_permission(MODULES["PAYMENT"], permission)
 
+
 def require_reports_permission(permission: str = "view"):
     return require_permission(MODULES["REPORTS"], permission)
+
 
 def require_master_permission(permission: str = "view"):
     return require_permission(MODULES["MASTER"], permission)
 
+
 def require_returns_permission(permission: str = "view"):
     return require_permission(MODULES["RETURNS"], permission)
+
 
 def require_admin():
     return require_permission(require_admin=True)

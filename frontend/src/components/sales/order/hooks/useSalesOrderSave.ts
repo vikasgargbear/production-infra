@@ -1,19 +1,19 @@
-/**
- * useSalesOrderSave Hook
- *
- * Thin wrapper around useDocumentSave for sales orders.
- * NO stock deduction (orders are commitments, not dispatches).
- */
-
-import { useDocumentSave } from '../../../global/hooks/useDocumentSave';
-import { apiClient } from '../../../../services/api';
-import { DOC_TYPES } from '../../../../services/offline/documents/documentNumberGenerator';
+import { useCallback, useRef, useState } from 'react';
+import { toast } from 'react-toastify';
 import type { Order, CreatedOrderData } from '../../../../types/models';
+import { ordersApi } from '../../../../services/api/modules/sales/orders.api';
+import { buildCanonicalSalesOrderCommand } from '../../utils/canonicalSalesChainCommand';
+import { clientUuid } from '../../../../utils/clientUuid';
+import type { CanonicalCommandPreview } from '../../../../services/api/canonicalOperatorActions';
+import { normalizeAuthoritativeDecimal } from '../../../../utils/exactDecimal';
+import type { CanonicalDocumentPolicy } from '../../../../services/api/modules/org/canonicalBusinessContext.api';
+import { requireCanonicalPostingDate } from '../../../../utils/canonicalPostingDate';
 
 export interface UseSalesOrderSaveProps {
     order: Order;
-    selectedCustomer: any;
-    isOnline: boolean;
+    selectedCustomer: unknown;
+    documentPolicy: CanonicalDocumentPolicy | null;
+    businessDate: string;
     setOrder: React.Dispatch<React.SetStateAction<Order>>;
     setCreatedOrderData: React.Dispatch<React.SetStateAction<CreatedOrderData | null>>;
     setShowSuccessModal: React.Dispatch<React.SetStateAction<boolean>>;
@@ -23,87 +23,106 @@ export interface UseSalesOrderSaveProps {
 
 export interface UseSalesOrderSaveReturn {
     saving: boolean;
+    submissionUnavailableReason: string;
+    preparedPreview: CanonicalCommandPreview | null;
+    reviewOpen: boolean;
     handleSaveOrder: () => Promise<void>;
+    confirmPreparedOrder: () => Promise<void>;
+    closeOrderReview: () => void;
 }
 
 export function useSalesOrderSave(props: UseSalesOrderSaveProps): UseSalesOrderSaveReturn {
-    const {
-        order,
-        selectedCustomer,
-        isOnline,
-        setOrder,
-        setCreatedOrderData,
-        setShowSuccessModal,
-    } = props;
+    const { order, selectedCustomer, documentPolicy, businessDate, setCreatedOrderData, setShowSuccessModal, setMessage, setMessageType } = props;
+    const [saving, setSaving] = useState(false);
+    const [preparedPreview, setPreparedPreview] = useState<CanonicalCommandPreview | null>(null);
+    const [reviewOpen, setReviewOpen] = useState(false);
+    const executedResourceId = useRef<string | null>(null);
+    const idempotencyKey = useRef(`erp-web-sales-order:${clientUuid()}`);
+    const lifecycleId = useRef(clientUuid());
+    const preparedFingerprint = useRef<string | null>(null);
+    const handleSaveOrder = useCallback(async () => {
+        if (saving) return;
+        try {
+            if (!selectedCustomer) throw new Error('Select a customer before preparing the order');
+            requireCanonicalPostingDate(order.order_date, businessDate, 'Sales order date');
+            setSaving(true);
+            let payload = buildCanonicalSalesOrderCommand(order, idempotencyKey.current, documentPolicy);
+            let fingerprint = JSON.stringify(payload);
+            if (preparedFingerprint.current && preparedFingerprint.current !== fingerprint) {
+                idempotencyKey.current = `erp-web-sales-order:${clientUuid()}`;
+                lifecycleId.current = clientUuid();
+                executedResourceId.current = null;
+                setPreparedPreview(null);
+                payload = buildCanonicalSalesOrderCommand(order, idempotencyKey.current, documentPolicy);
+                fingerprint = JSON.stringify(payload);
+            }
+            if (!preparedPreview || preparedFingerprint.current !== fingerprint) {
+                const prepared = await ordersApi.prepareCanonical(payload);
+                preparedFingerprint.current = fingerprint;
+                setPreparedPreview(prepared.data);
+            }
+            setReviewOpen(true);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Unable to prepare the sales order';
+            setMessage(message); setMessageType('error'); toast.error(message);
+        } finally { setSaving(false); }
+    }, [businessDate, documentPolicy, order, preparedPreview, saving, selectedCustomer, setMessage, setMessageType]);
 
-    const { saving, handleSave } = useDocumentSave({
-        docTypeKey: DOC_TYPES.SALES_ORDER,
-        idbStoreName: 'sales_orders',
-        entityType: 'sales_orders',
-        serverIdField: 'order_id',
-        docNumberField: 'order_number',
-        isOnline,
-
-        validate: () => {
-            if (!order.customer_id) return 'Please select a customer';
-            if (!order.items || order.items.length === 0) return 'Please add at least one item';
-            return null;
-        },
-
-        preparePayload: () => ({
-            customer_id: parseInt(String(order.customer_id)),
-            order_date: order.order_date || new Date().toISOString().split('T')[0],
-            delivery_date: order.expected_delivery_date || order.order_date,
-            order_type: 'sales',
-            payment_terms: 'credit',
-            items: order.items.map(item => {
-                const quantity = parseInt(String(item.quantity)) || 1;
-                const freeQuantity = parseInt(String(item.free_quantity)) || 0;
-                const unitPrice = parseFloat(String(item.unit_price)) || 0;
-                const discountPercent = parseFloat(String(item.discount_percent)) || 0;
-                const taxPercent = parseFloat(String(item.gst_percent)) || 0;
-
-                return {
-                    product_id: parseInt(String(item.product_id)),
-                    product_code: item.product_code || null,
-                    batch_id: item.batch_id ? parseInt(String(item.batch_id)) : null,
-                    batch_number: item.batch_number || null,
-                    quantity,
-                    free_quantity: freeQuantity,
-                    unit_price: unitPrice,
-                    mrp: parseFloat(String(item.mrp)) || unitPrice,
-                    discount_percent: discountPercent,
-                    discount_amount: parseFloat(String(item.discount_amount)) || 0,
-                    tax_percent: taxPercent,
-                    tax_amount: parseFloat(String(item.tax_amount)) || 0,
-                    gst_type: order.gst_type || 'CGST/SGST',
-                    uom: item.uom || null,
-                    pack_type: item.pack_type || null
-                };
-            }),
-            notes: order.notes || '',
-            billing_address: order.billing_address || '',
-            shipping_address: order.shipping_address || '',
-            discount_amount: parseFloat(String(order.discount_amount)) || 0,
-            delivery_charges: parseFloat(String(order.delivery_charges)) || 0,
-            other_charges: parseFloat(String(order.other_charges)) || 0
-        }),
-
-        apiCall: (data: any) => apiClient.post('/sales-orders/', data),
-
-        onSuccess: (tempId: string, docNo: string) => {
-            setOrder(prev => ({ ...prev, order_number: docNo, order_id: tempId as any }));
+    const confirmPreparedOrder = useCallback(async () => {
+        if (!preparedPreview || saving) return;
+        setSaving(true);
+        try {
+            if (!executedResourceId.current) {
+                const executed = await ordersApi.executePreparedCanonical(preparedPreview, lifecycleId.current);
+                executedResourceId.current = String(executed.data.resource_id);
+            }
+            const resourceId = executedResourceId.current;
+            const detail = (await ordersApi.getCanonical(resourceId)).data;
+            if (!detail || String(detail.sales_order_id) !== resourceId) {
+                throw new Error('Order posted, but authoritative readback could not be verified. Refresh history before retrying.');
+            }
+            if (typeof detail.order_number !== 'string' || !detail.order_number.trim()
+                || typeof detail.customer_name !== 'string' || !detail.customer_name.trim()) {
+                throw new Error('Order posted, but authoritative identity readback is incomplete.');
+            }
+            if (detail.requested_delivery_date !== order.expected_delivery_date) {
+                throw new Error('Order posted, but the requested delivery date differs from authoritative readback.');
+            }
             setCreatedOrderData({
-                orderId: tempId,
-                orderNumber: docNo,
-                customerName: selectedCustomer?.customer_name || order.customer_name,
-                totalAmount: order.total_amount || 0
+                orderId: String(detail.sales_order_id),
+                orderNumber: detail.order_number.trim(),
+                customerName: detail.customer_name.trim(),
+                totalAmount: normalizeAuthoritativeDecimal(detail.total_amount, 'Posted order total', {
+                    scale: 2, maximumWholeDigits: 20,
+                }),
             });
             setShowSuccessModal(true);
-        },
-    });
+            setMessage('Sales order posted and verified from the canonical API.');
+            setMessageType('success');
+            executedResourceId.current = null;
+            preparedFingerprint.current = null;
+            idempotencyKey.current = `erp-web-sales-order:${clientUuid()}`;
+            lifecycleId.current = clientUuid();
+            setPreparedPreview(null); setReviewOpen(false);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Unable to post or reconcile the sales order';
+            setMessage(message);
+            setMessageType('error');
+            toast.error(message);
+        } finally {
+            setSaving(false);
+        }
+    }, [order.expected_delivery_date, preparedPreview, saving, setCreatedOrderData, setMessage, setMessageType, setShowSuccessModal]);
 
-    return { saving, handleSaveOrder: handleSave };
+    return {
+        saving,
+        submissionUnavailableReason: '',
+        preparedPreview,
+        reviewOpen,
+        handleSaveOrder,
+        confirmPreparedOrder,
+        closeOrderReview: () => setReviewOpen(false),
+    };
 }
 
 export default useSalesOrderSave;

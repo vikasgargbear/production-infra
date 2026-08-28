@@ -1,0 +1,33 @@
+{
+  "template_schema": "aasopharma.live18.ui-template.v1",
+  "operation_id": "supplier_invoice",
+  "lifecycle_mode": "combined_actor_confirmation",
+  "steps": {
+    "missing_required_steps": [
+      {"actor":"requester","action":"goto","value":"/#/purchase/supplier-invoice"},
+      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Required: select a posted GRN and enter the exact supplier invoice number, invoice date, and received date.","exact":true},"value":"Required: select a posted GRN and enter the exact supplier invoice number, invoice date, and received date."},
+      {"actor":"requester","action":"expectDisabled","locator":{"kind":"role","role":"button","name":"Review server calculation","exact":true}}
+    ],
+    "prepare_steps": [
+      {"actor":"requester","action":"goto","value":"/#/purchase/supplier-invoice"},
+      {"actor":"requester","action":"select","locator":{"kind":"label","name":"Posted GRN","exact":true},"value":"{{resource_goods_receipt}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Supplier invoice number","exact":true},"value":"{{fact.choice.supplier_invoice_number}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Supplier invoice date","exact":true},"value":"{{fact.choice.supplier_invoice_date}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Supplier invoice received date","exact":true},"value":"{{fact.choice.supplier_invoice_received_date}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Load canonical evidence","exact":true}},
+      {"actor":"requester","action":"select","locator":{"kind":"label","name":"Landed-cost basis for {{fact.display.product_name}}","exact":true},"value":"direct"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"checkbox","name":"{{scalar.supplier_invoice_itc_attestation}}","exact":true}},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Review server calculation","exact":true}}
+    ],
+    "approval_steps": [
+      {"actor":"requester","action":"expectText","locator":{"kind":"label","name":"Canonical command ID","exact":true},"value":"{{command_request_id}}"},
+      {"actor":"requester","action":"expectText","locator":{"kind":"testId","name":"canonical-immutable-preview"},"value":"{{fact.display.product_name}}"}
+    ],
+    "execute_steps": [
+      {"actor":"requester","action":"expectText","locator":{"kind":"label","name":"Canonical command ID","exact":true},"value":"{{command_request_id}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Approve and post supplier invoice","exact":true}},
+      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Consumed variance","exact":true},"value":"Consumed variance"},
+      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"GRN remains the only quantity owner. The invoice posted only reviewed zero-quantity value adjustments for exact remaining receipt stock and routed the consumed share through the configured variance account.","exact":true},"value":"GRN remains the only quantity owner. The invoice posted only reviewed zero-quantity value adjustments for exact remaining receipt stock and routed the consumed share through the configured variance account."}
+    ]
+  }
+}

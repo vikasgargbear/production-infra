@@ -1,0 +1,8 @@
+{
+  "format_version": 1,
+  "revision": "20260825_0003",
+  "source_sql_sha256": "0f26b2ea0b243081e12ee87d62aacee91105b3c8b7ce4ce6feba64610a254905",
+  "authority_change": "date_effective_gstr1_reporting_rules_v1",
+  "source_authorities": ["gstn", "gst_portal", "gst_council", "cbic"],
+  "seed_policy": "reviewed_reference_release_required_no_application_default"
+}

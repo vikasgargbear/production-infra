@@ -1,0 +1,5547 @@
+{
+  "domain": "finance",
+  "table_count": 15,
+  "tables": [
+    {
+      "name": "finance.accounts",
+      "fact_owner": "Chart-of-accounts classification and hierarchy",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "mutable_master",
+      "lifecycle": {
+        "state_column": "status",
+        "states": [
+          "active",
+          "inactive"
+        ],
+        "initial": "active",
+        "terminal": [],
+        "transitions": [
+          "active->inactive",
+          "inactive->active"
+        ]
+      },
+      "rls": {
+        "class": "tenant_membership",
+        "force": true,
+        "write_permission": "finance.account.manage"
+      },
+      "retention": {
+        "class": "financial_master",
+        "minimum": "permanent",
+        "hard_delete": false
+      },
+      "columns": [
+        [
+          "org_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "id",
+          "uuid",
+          false,
+          "gen_random_uuid()",
+          "internal"
+        ],
+        [
+          "code",
+          "varchar(32)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "name",
+          "text",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "account_type",
+          "text",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "parent_account_id",
+          "uuid",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "currency_code",
+          "char(3)",
+          false,
+          "'INR'::bpchar",
+          "internal"
+        ],
+        [
+          "allows_party_posting",
+          "boolean",
+          false,
+          "false",
+          "internal"
+        ],
+        [
+          "allows_bank_reconciliation",
+          "boolean",
+          false,
+          "false",
+          "internal"
+        ],
+        [
+          "status",
+          "text",
+          false,
+          "'active'::text",
+          "internal"
+        ],
+        [
+          "created_at",
+          "timestamptz",
+          false,
+          "transaction_timestamp()",
+          "internal"
+        ],
+        [
+          "created_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "personal"
+        ],
+        [
+          "updated_at",
+          "timestamptz",
+          false,
+          "transaction_timestamp()",
+          "internal"
+        ],
+        [
+          "updated_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "personal"
+        ],
+        [
+          "row_version",
+          "bigint",
+          false,
+          "1",
+          "internal"
+        ]
+      ],
+      "primary_key": [
+        "org_id",
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "accounts_org_fk",
+          "columns": [
+            "org_id"
+          ],
+          "references": "core.organizations",
+          "referenced_columns": [
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "accounts_parent_fk",
+          "columns": [
+            "org_id",
+            "parent_account_id"
+          ],
+          "references": "finance.accounts",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": "INITIALLY_DEFERRED"
+        },
+        {
+          "name": "accounts_created_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "created_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "accounts_updated_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "updated_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        }
+      ],
+      "uniques": [
+        {
+          "name": "accounts_code_uq",
+          "columns": [
+            "org_id",
+            "code"
+          ],
+          "where": null
+        }
+      ],
+      "checks": [
+        {
+          "name": "accounts_type_ck",
+          "expression": "account_type IN ('asset','liability','equity','income','expense')"
+        },
+        {
+          "name": "accounts_parent_ck",
+          "expression": "parent_account_id IS NULL OR parent_account_id <> id"
+        },
+        {
+          "name": "accounts_currency_ck",
+          "expression": "currency_code ~ '^[A-Z]{3}$'"
+        },
+        {
+          "name": "accounts_status_ck",
+          "expression": "status IN ('active','inactive')"
+        },
+        {
+          "name": "accounts_row_version_ck",
+          "expression": "row_version > 0"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "accounts_active_name_idx",
+          "columns": [
+            "org_id",
+            "account_type",
+            "name",
+            "id"
+          ],
+          "unique": false,
+          "where": "status = 'active'",
+          "purpose": "posting account lookup"
+        }
+      ],
+      "cross_row_invariants": [
+        {
+          "name": "accounts_cross_row_guard",
+          "enforcement": "constraint_trigger",
+          "rule": "Reject parent cycles and account_type changes that would invalidate descendants."
+        }
+      ]
+    },
+    {
+      "name": "finance.bank_accounts",
+      "fact_owner": "Bank settlement identity mapped to exactly one ledger account",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "mutable_master",
+      "lifecycle": {
+        "state_column": "status",
+        "states": [
+          "active",
+          "inactive",
+          "closed"
+        ],
+        "initial": "active",
+        "terminal": [
+          "closed"
+        ],
+        "transitions": [
+          "active->inactive",
+          "inactive->active",
+          "active->closed",
+          "inactive->closed"
+        ]
+      },
+      "rls": {
+        "class": "tenant_membership",
+        "force": true,
+        "write_permission": "finance.bank_account.manage"
+      },
+      "retention": {
+        "class": "banking_identity",
+        "minimum": "permanent",
+        "hard_delete": false
+      },
+      "columns": [
+        [
+          "org_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "id",
+          "uuid",
+          false,
+          "gen_random_uuid()",
+          "internal"
+        ],
+        [
+          "account_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "party_id",
+          "uuid",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "bank_name",
+          "text",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "account_holder_name",
+          "text",
+          false,
+          null,
+          "financial"
+        ],
+        [
+          "account_number_ciphertext",
+          "bytea",
+          false,
+          null,
+          "secret_ciphertext"
+        ],
+        [
+          "account_number_hash",
+          "bytea",
+          false,
+          null,
+          "secret_ciphertext"
+        ],
+        [
+          "ifsc",
+          "varchar(11)",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "currency_code",
+          "char(3)",
+          false,
+          "'INR'::bpchar",
+          "internal"
+        ],
+        [
+          "status",
+          "text",
+          false,
+          "'active'::text",
+          "internal"
+        ],
+        [
+          "created_at",
+          "timestamptz",
+          false,
+          "transaction_timestamp()",
+          "internal"
+        ],
+        [
+          "created_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "personal"
+        ],
+        [
+          "updated_at",
+          "timestamptz",
+          false,
+          "transaction_timestamp()",
+          "internal"
+        ],
+        [
+          "updated_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "personal"
+        ],
+        [
+          "row_version",
+          "bigint",
+          false,
+          "1",
+          "internal"
+        ]
+      ],
+      "primary_key": [
+        "org_id",
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "bank_accounts_org_fk",
+          "columns": [
+            "org_id"
+          ],
+          "references": "core.organizations",
+          "referenced_columns": [
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "bank_accounts_account_fk",
+          "columns": [
+            "org_id",
+            "account_id"
+          ],
+          "references": "finance.accounts",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "1:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "bank_accounts_party_fk",
+          "columns": [
+            "org_id",
+            "party_id"
+          ],
+          "references": "parties.parties",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "bank_accounts_created_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "created_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "bank_accounts_updated_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "updated_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        }
+      ],
+      "uniques": [
+        {
+          "name": "bank_accounts_ledger_uq",
+          "columns": [
+            "org_id",
+            "account_id"
+          ],
+          "where": null
+        },
+        {
+          "name": "bank_accounts_number_hash_uq",
+          "columns": [
+            "org_id",
+            "account_number_hash"
+          ],
+          "where": "status <> 'closed'"
+        }
+      ],
+      "checks": [
+        {
+          "name": "bank_accounts_hash_ck",
+          "expression": "octet_length(account_number_hash) = 32"
+        },
+        {
+          "name": "bank_accounts_ifsc_ck",
+          "expression": "ifsc ~ '^[A-Z]{4}0[A-Z0-9]{6}$'"
+        },
+        {
+          "name": "bank_accounts_currency_ck",
+          "expression": "currency_code ~ '^[A-Z]{3}$'"
+        },
+        {
+          "name": "bank_accounts_status_ck",
+          "expression": "status IN ('active','inactive','closed')"
+        },
+        {
+          "name": "bank_accounts_row_version_ck",
+          "expression": "row_version > 0"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bank_accounts_active_idx",
+          "columns": [
+            "org_id",
+            "currency_code",
+            "bank_name",
+            "id"
+          ],
+          "unique": false,
+          "where": "status = 'active'",
+          "purpose": "active settlement account selector"
+        }
+      ],
+      "cross_row_invariants": [
+        {
+          "name": "bank_accounts_cross_row_guard",
+          "enforcement": "constraint_trigger",
+          "rule": "Require account_id to reference an active asset account with bank reconciliation enabled."
+        }
+      ]
+    },
+    {
+      "name": "finance.accounting_events",
+      "fact_owner": "Typed, unique bridge from one posted business source to one journal",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "append_only_event",
+      "lifecycle": {
+        "state_column": null,
+        "states": [],
+        "initial": null,
+        "terminal": [],
+        "transitions": []
+      },
+      "rls": {
+        "class": "tenant_membership",
+        "force": true,
+        "write_permission": "internal.accounting.post"
+      },
+      "retention": {
+        "class": "accounting_evidence",
+        "minimum": "permanent",
+        "hard_delete": false
+      },
+      "columns": [
+        [
+          "org_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "id",
+          "uuid",
+          false,
+          "gen_random_uuid()",
+          "internal"
+        ],
+        [
+          "event_type",
+          "varchar(128)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "sales_invoice_id",
+          "uuid",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "supplier_invoice_id",
+          "uuid",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "adjustment_note_id",
+          "uuid",
+          true,
+          null,
+          "internal"
+        ],
+        ["purchase_order_advance_allocation_id", "uuid", true, null, "internal"],
+        [
+          "payment_id",
+          "uuid",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "expense_claim_id",
+          "uuid",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "inventory_document_id",
+          "uuid",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "withholding_id",
+          "uuid",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "journal_entry_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "occurred_at",
+          "timestamptz",
+          false,
+          "transaction_timestamp()",
+          "financial"
+        ],
+        [
+          "source_posted_at",
+          "timestamptz",
+          false,
+          null,
+          "financial"
+        ],
+        [
+          "created_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "personal"
+        ]
+      ],
+      "primary_key": [
+        "org_id",
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "accounting_events_org_fk",
+          "columns": [
+            "org_id"
+          ],
+          "references": "core.organizations",
+          "referenced_columns": [
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "accounting_events_sales_invoice_fk",
+          "columns": [
+            "org_id",
+            "sales_invoice_id"
+          ],
+          "references": "sales.invoices",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "1:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "accounting_events_supplier_invoice_fk",
+          "columns": [
+            "org_id",
+            "supplier_invoice_id"
+          ],
+          "references": "procurement.supplier_invoices",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "1:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "accounting_events_adjustment_note_fk",
+          "columns": [
+            "org_id",
+            "adjustment_note_id"
+          ],
+          "references": "finance.adjustment_notes",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "1:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "accounting_events_payment_fk",
+          "columns": [
+            "org_id",
+            "payment_id"
+          ],
+          "references": "finance.payments",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "1:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {"name":"accounting_events_purchase_advance_fk","columns":["org_id","purchase_order_advance_allocation_id"],"references":"procurement.purchase_order_advance_allocations","referenced_columns":["org_id","id"],"cardinality":"1:0..1","on_delete":"RESTRICT","deferrable":"INITIALLY_DEFERRED"},
+        {
+          "name": "accounting_events_expense_claim_fk",
+          "columns": [
+            "org_id",
+            "expense_claim_id"
+          ],
+          "references": "finance.expense_claims",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "1:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "accounting_events_inventory_document_fk",
+          "columns": [
+            "org_id",
+            "inventory_document_id"
+          ],
+          "references": "inventory.inventory_documents",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "1:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "accounting_events_withholding_fk",
+          "columns": [
+            "org_id",
+            "withholding_id"
+          ],
+          "references": "tax.withholdings",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "1:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": "INITIALLY_DEFERRED"
+        },
+        {
+          "name": "accounting_events_journal_fk",
+          "columns": [
+            "org_id",
+            "journal_entry_id"
+          ],
+          "references": "finance.journal_entries",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "1:1",
+          "on_delete": "RESTRICT",
+          "deferrable": "INITIALLY_DEFERRED"
+        },
+        {
+          "name": "accounting_events_created_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "created_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        }
+      ],
+      "uniques": [],
+      "checks": [
+        {
+          "name": "accounting_events_exact_source_ck",
+          "expression": "num_nonnulls(sales_invoice_id,supplier_invoice_id,adjustment_note_id,purchase_order_advance_allocation_id,payment_id,expense_claim_id,inventory_document_id,withholding_id) = 1"
+        },
+        {
+          "name": "accounting_events_type_source_ck",
+          "expression": "(event_type = 'sales_invoice' AND sales_invoice_id IS NOT NULL) OR (event_type = 'supplier_invoice' AND supplier_invoice_id IS NOT NULL) OR (event_type = 'adjustment_note' AND adjustment_note_id IS NOT NULL) OR (event_type = 'supplier_advance_application' AND purchase_order_advance_allocation_id IS NOT NULL) OR (event_type = 'payment' AND payment_id IS NOT NULL) OR (event_type = 'expense_claim' AND expense_claim_id IS NOT NULL) OR (event_type = 'inventory_valuation' AND inventory_document_id IS NOT NULL) OR (event_type = 'withholding' AND withholding_id IS NOT NULL)"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "accounting_events_journal_uq",
+          "columns": [
+            "org_id",
+            "journal_entry_id"
+          ],
+          "unique": true,
+          "where": null,
+          "purpose": "one accounting event per journal"
+        },
+        {
+          "name": "accounting_events_sales_source_uq",
+          "columns": [
+            "org_id",
+            "sales_invoice_id"
+          ],
+          "unique": true,
+          "where": "sales_invoice_id IS NOT NULL",
+          "purpose": "post each sales invoice once"
+        },
+        {
+          "name": "accounting_events_supplier_source_uq",
+          "columns": [
+            "org_id",
+            "supplier_invoice_id"
+          ],
+          "unique": true,
+          "where": "supplier_invoice_id IS NOT NULL",
+          "purpose": "post each supplier invoice once"
+        },
+        {
+          "name": "accounting_events_adjustment_source_uq",
+          "columns": [
+            "org_id",
+            "adjustment_note_id"
+          ],
+          "unique": true,
+          "where": "adjustment_note_id IS NOT NULL",
+          "purpose": "post each adjustment once"
+        },
+        {
+          "name": "accounting_events_payment_source_uq",
+          "columns": [
+            "org_id",
+            "payment_id"
+          ],
+          "unique": true,
+          "where": "payment_id IS NOT NULL",
+          "purpose": "post each payment once"
+        },
+        {"name":"accounting_events_purchase_advance_source_uq","columns":["org_id","purchase_order_advance_allocation_id"],"unique":true,"where":"purchase_order_advance_allocation_id IS NOT NULL","purpose":"apply each supplier advance to accounting exactly once"},
+        {
+          "name": "accounting_events_expense_source_uq",
+          "columns": [
+            "org_id",
+            "expense_claim_id"
+          ],
+          "unique": true,
+          "where": "expense_claim_id IS NOT NULL",
+          "purpose": "post each approved expense once"
+        },
+        {
+          "name": "accounting_events_withholding_source_uq",
+          "columns": [
+            "org_id",
+            "withholding_id"
+          ],
+          "unique": true,
+          "where": "withholding_id IS NOT NULL",
+          "purpose": "post each withholding once"
+        },
+        {
+          "name": "accounting_events_inventory_source_uq",
+          "columns": [
+            "org_id",
+            "inventory_document_id"
+          ],
+          "unique": true,
+          "where": "inventory_document_id IS NOT NULL",
+          "purpose": "post each valuation document once"
+        }
+      ],
+      "cross_row_invariants": [
+        {
+          "name": "accounting_events_cross_row_guard",
+          "enforcement": "constraint_trigger",
+          "rule": "Reject INSERT unless the typed source and journal are posted, same-tenant, and immutable; block UPDATE and DELETE."
+        }
+      ]
+    },
+    {
+      "name": "finance.journal_entries",
+      "fact_owner": "Balanced accounting journal header and reversal relationship",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "draft_then_immutable",
+      "lifecycle": {
+        "state_column": "status",
+        "states": [
+          "draft",
+          "posted",
+          "reversed",
+          "cancelled"
+        ],
+        "initial": "draft",
+        "terminal": [
+          "reversed",
+          "cancelled"
+        ],
+        "transitions": [
+          "draft->posted",
+          "draft->cancelled",
+          "posted->reversed"
+        ]
+      },
+      "rls": {
+        "class": "tenant_membership",
+        "force": true,
+        "write_permission": "finance.journal.post"
+      },
+      "retention": {
+        "class": "statutory_accounting",
+        "minimum": "permanent",
+        "hard_delete": false
+      },
+      "columns": [
+        [
+          "org_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "id",
+          "uuid",
+          false,
+          "gen_random_uuid()",
+          "internal"
+        ],
+        [
+          "journal_number",
+          "varchar(64)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "posting_date",
+          "date",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "description",
+          "text",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "transaction_currency",
+          "char(3)",
+          false,
+          "'INR'::bpchar",
+          "internal"
+        ],
+        [
+          "functional_currency",
+          "char(3)",
+          false,
+          "'INR'::bpchar",
+          "internal"
+        ],
+        [
+          "fx_rate",
+          "numeric(9,6)",
+          false,
+          "1.000000",
+          "internal"
+        ],
+        [
+          "transaction_debit_total",
+          "numeric(20,2)",
+          false,
+          "0",
+          "internal"
+        ],
+        [
+          "transaction_credit_total",
+          "numeric(20,2)",
+          false,
+          "0",
+          "internal"
+        ],
+        [
+          "functional_debit_total",
+          "numeric(20,2)",
+          false,
+          "0",
+          "internal"
+        ],
+        [
+          "functional_credit_total",
+          "numeric(20,2)",
+          false,
+          "0",
+          "internal"
+        ],
+        [
+          "reversal_of_journal_entry_id",
+          "uuid",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "reversal_reason",
+          "text",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "status",
+          "text",
+          false,
+          "'draft'::text",
+          "internal"
+        ],
+        [
+          "posted_at",
+          "timestamptz",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "posted_by_membership_id",
+          "uuid",
+          true,
+          null,
+          "personal"
+        ],
+        [
+          "created_at",
+          "timestamptz",
+          false,
+          "transaction_timestamp()",
+          "internal"
+        ],
+        [
+          "created_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "personal"
+        ],
+        [
+          "updated_at",
+          "timestamptz",
+          false,
+          "transaction_timestamp()",
+          "internal"
+        ],
+        [
+          "updated_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "personal"
+        ],
+        [
+          "row_version",
+          "bigint",
+          false,
+          "1",
+          "internal"
+        ]
+      ],
+      "primary_key": [
+        "org_id",
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "journal_entries_org_fk",
+          "columns": [
+            "org_id"
+          ],
+          "references": "core.organizations",
+          "referenced_columns": [
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "journal_entries_reversal_fk",
+          "columns": [
+            "org_id",
+            "reversal_of_journal_entry_id"
+          ],
+          "references": "finance.journal_entries",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "1:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": "INITIALLY_DEFERRED"
+        },
+        {
+          "name": "journal_entries_posted_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "posted_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "journal_entries_created_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "created_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "journal_entries_updated_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "updated_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        }
+      ],
+      "uniques": [
+        {
+          "name": "journal_entries_number_uq",
+          "columns": [
+            "org_id",
+            "journal_number"
+          ],
+          "where": null
+        }
+      ],
+      "checks": [
+        {
+          "name": "journal_entries_currency_ck",
+          "expression": "transaction_currency ~ '^[A-Z]{3}$' AND functional_currency ~ '^[A-Z]{3}$'"
+        },
+        {
+          "name": "journal_entries_fx_ck",
+          "expression": "fx_rate > 0 AND ((transaction_currency = functional_currency AND fx_rate = 1.000000) OR transaction_currency <> functional_currency)"
+        },
+        {
+          "name": "journal_entries_balanced_ck",
+          "expression": "transaction_debit_total = transaction_credit_total AND functional_debit_total = functional_credit_total"
+        },
+        {
+          "name": "journal_entries_nonnegative_ck",
+          "expression": "transaction_debit_total >= 0 AND functional_debit_total >= 0"
+        },
+        {
+          "name": "journal_entries_posted_ck",
+          "expression": "status <> 'posted' OR (posted_at IS NOT NULL AND posted_by_membership_id IS NOT NULL AND transaction_debit_total > 0)"
+        },
+        {
+          "name": "journal_entries_reversal_ck",
+          "expression": "(reversal_of_journal_entry_id IS NULL AND reversal_reason IS NULL) OR (reversal_of_journal_entry_id IS NOT NULL AND reversal_reason IS NOT NULL)"
+        },
+        {
+          "name": "journal_entries_status_ck",
+          "expression": "status IN ('draft','posted','reversed','cancelled')"
+        },
+        {
+          "name": "journal_entries_row_version_ck",
+          "expression": "row_version > 0"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "journal_entries_reversal_uq",
+          "columns": [
+            "org_id",
+            "reversal_of_journal_entry_id"
+          ],
+          "unique": true,
+          "where": "reversal_of_journal_entry_id IS NOT NULL",
+          "purpose": "one compensating reversal per journal"
+        },
+        {
+          "name": "journal_entries_posting_idx",
+          "columns": [
+            "org_id",
+            "posting_date",
+            "journal_number",
+            "id"
+          ],
+          "unique": false,
+          "where": "status = 'posted'",
+          "purpose": "general-ledger chronology"
+        }
+      ],
+      "cross_row_invariants": [
+        {
+          "name": "journal_entries_cross_row_guard",
+          "enforcement": "transaction_guard",
+          "rule": "On posting require at least two lines, header totals equal line sums in both currencies, every currency bucket balances, and functional amounts equal rounded transaction amounts times fx_rate; lock entry and lines. Reversal posts sign-inverted lines and atomically marks the original reversed."
+        }
+      ]
+    },
+    {
+      "name": "finance.journal_lines",
+      "fact_owner": "One immutable debit or credit posting line within a journal",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "draft_composition_then_immutable",
+      "lifecycle": {
+        "state_column": null,
+        "states": [],
+        "initial": null,
+        "terminal": [],
+        "transitions": []
+      },
+      "rls": {
+        "class": "tenant_membership",
+        "force": true,
+        "write_permission": "finance.journal.edit"
+      },
+      "retention": {
+        "class": "statutory_accounting",
+        "minimum": "permanent",
+        "hard_delete": false
+      },
+      "columns": [
+        [
+          "org_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "id",
+          "uuid",
+          false,
+          "gen_random_uuid()",
+          "internal"
+        ],
+        [
+          "journal_entry_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "line_number",
+          "integer",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "account_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "branch_id",
+          "uuid",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "party_id",
+          "uuid",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "description",
+          "text",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "transaction_debit",
+          "numeric(20,2)",
+          false,
+          "0",
+          "internal"
+        ],
+        [
+          "transaction_credit",
+          "numeric(20,2)",
+          false,
+          "0",
+          "internal"
+        ],
+        [
+          "functional_debit",
+          "numeric(20,2)",
+          false,
+          "0",
+          "internal"
+        ],
+        [
+          "functional_credit",
+          "numeric(20,2)",
+          false,
+          "0",
+          "internal"
+        ],
+        [
+          "created_at",
+          "timestamptz",
+          false,
+          "transaction_timestamp()",
+          "internal"
+        ],
+        [
+          "created_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "personal"
+        ]
+      ],
+      "primary_key": [
+        "org_id",
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "journal_lines_org_fk",
+          "columns": [
+            "org_id"
+          ],
+          "references": "core.organizations",
+          "referenced_columns": [
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "journal_lines_entry_fk",
+          "columns": [
+            "org_id",
+            "journal_entry_id"
+          ],
+          "references": "finance.journal_entries",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "CASCADE",
+          "deferrable": false
+        },
+        {
+          "name": "journal_lines_account_fk",
+          "columns": [
+            "org_id",
+            "account_id"
+          ],
+          "references": "finance.accounts",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "journal_lines_branch_fk",
+          "columns": [
+            "org_id",
+            "branch_id"
+          ],
+          "references": "core.branches",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "journal_lines_party_fk",
+          "columns": [
+            "org_id",
+            "party_id"
+          ],
+          "references": "parties.parties",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "journal_lines_created_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "created_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        }
+      ],
+      "uniques": [
+        {
+          "name": "journal_lines_number_uq",
+          "columns": [
+            "org_id",
+            "journal_entry_id",
+            "line_number"
+          ],
+          "where": null
+        }
+      ],
+      "checks": [
+        {
+          "name": "journal_lines_number_ck",
+          "expression": "line_number > 0"
+        },
+        {
+          "name": "journal_lines_side_ck",
+          "expression": "(transaction_debit > 0 AND transaction_credit = 0 AND functional_debit > 0 AND functional_credit = 0) OR (transaction_credit > 0 AND transaction_debit = 0 AND functional_credit > 0 AND functional_debit = 0)"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "journal_lines_account_idx",
+          "columns": [
+            "org_id",
+            "account_id",
+            "journal_entry_id",
+            "line_number"
+          ],
+          "unique": false,
+          "where": null,
+          "purpose": "account ledger scan"
+        },
+        {
+          "name": "journal_lines_party_idx",
+          "columns": [
+            "org_id",
+            "party_id",
+            "journal_entry_id",
+            "line_number"
+          ],
+          "unique": false,
+          "where": "party_id IS NOT NULL",
+          "purpose": "party subledger scan"
+        }
+      ],
+      "cross_row_invariants": [
+        {
+          "name": "journal_lines_cross_row_guard",
+          "enforcement": "constraint_trigger",
+          "rule": "Allow composition changes only while the parent journal is draft; prohibit UPDATE/DELETE after posting."
+        }
+      ]
+    },
+    {
+      "name": "finance.payments",
+      "fact_owner": "Approved receipt or disbursement aggregate posted exactly once",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "draft_then_immutable",
+      "lifecycle": {
+        "state_column": "status",
+        "states": [
+          "draft",
+          "submitted",
+          "approved",
+          "rejected",
+          "posted",
+          "reversed",
+          "cancelled"
+        ],
+        "initial": "draft",
+        "terminal": [
+          "rejected",
+          "reversed",
+          "cancelled"
+        ],
+        "transitions": [
+          "draft->submitted",
+          "draft->cancelled",
+          "submitted->approved",
+          "submitted->rejected",
+          "approved->posted",
+          "approved->cancelled",
+          "posted->reversed"
+        ]
+      },
+      "rls": {
+        "class": "tenant_membership",
+        "force": true,
+        "write_permission": "finance.payment.manage"
+      },
+      "retention": {
+        "class": "statutory_payment",
+        "minimum": "permanent",
+        "hard_delete": false
+      },
+      "columns": [
+        [
+          "org_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "id",
+          "uuid",
+          false,
+          "gen_random_uuid()",
+          "internal"
+        ],
+        [
+          "payment_number",
+          "varchar(64)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "payment_date",
+          "date",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "direction",
+          "text",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "party_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "branch_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "bank_account_id",
+          "uuid",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "settlement_account_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "payment_method",
+          "text",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "payment_purpose",
+          "text",
+          false,
+          "'commercial_settlement'::text",
+          "regulated"
+        ],
+        [
+          "currency_code",
+          "char(3)",
+          false,
+          "'INR'::bpchar",
+          "internal"
+        ],
+        [
+          "amount",
+          "numeric(20,2)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "functional_amount",
+          "numeric(20,2)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "fx_rate",
+          "numeric(9,6)",
+          false,
+          "1.000000",
+          "internal"
+        ],
+        [
+          "external_reference",
+          "text",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "related_payment_id",
+          "uuid",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "sales_order_id",
+          "uuid",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "evidence_attachment_id",
+          "uuid",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "instrument_number",
+          "varchar(64)",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "instrument_date",
+          "date",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "drawee_bank_name",
+          "varchar(256)",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "account_payee_confirmed",
+          "boolean",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "memo",
+          "text",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "reversal_of_payment_id",
+          "uuid",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "reversal_reason",
+          "text",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "status",
+          "text",
+          false,
+          "'draft'::text",
+          "internal"
+        ],
+        [
+          "approved_at",
+          "timestamptz",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "approved_by_membership_id",
+          "uuid",
+          true,
+          null,
+          "personal"
+        ],
+        [
+          "rejected_at",
+          "timestamptz",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "rejected_by_membership_id",
+          "uuid",
+          true,
+          null,
+          "personal"
+        ],
+        [
+          "rejection_reason",
+          "text",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "posted_at",
+          "timestamptz",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "posted_by_membership_id",
+          "uuid",
+          true,
+          null,
+          "personal"
+        ],
+        [
+          "created_at",
+          "timestamptz",
+          false,
+          "transaction_timestamp()",
+          "internal"
+        ],
+        [
+          "created_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "personal"
+        ],
+        [
+          "updated_at",
+          "timestamptz",
+          false,
+          "transaction_timestamp()",
+          "internal"
+        ],
+        [
+          "updated_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "personal"
+        ],
+        [
+          "row_version",
+          "bigint",
+          false,
+          "1",
+          "internal"
+        ]
+      ],
+      "primary_key": [
+        "org_id",
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "payments_org_fk",
+          "columns": [
+            "org_id"
+          ],
+          "references": "core.organizations",
+          "referenced_columns": [
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "payments_party_fk",
+          "columns": [
+            "org_id",
+            "party_id"
+          ],
+          "references": "parties.parties",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "payments_branch_fk",
+          "columns": [
+            "org_id",
+            "branch_id"
+          ],
+          "references": "core.branches",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "payments_bank_account_fk",
+          "columns": [
+            "org_id",
+            "bank_account_id"
+          ],
+          "references": "finance.bank_accounts",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "payments_settlement_account_fk",
+          "columns": [
+            "org_id",
+            "settlement_account_id"
+          ],
+          "references": "finance.accounts",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "payments_reversal_fk",
+          "columns": [
+            "org_id",
+            "reversal_of_payment_id"
+          ],
+          "references": "finance.payments",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "1:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": "INITIALLY_DEFERRED"
+        },
+        {
+          "name": "payments_related_payment_fk",
+          "columns": [
+            "org_id",
+            "related_payment_id"
+          ],
+          "references": "finance.payments",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": "INITIALLY_DEFERRED"
+        },
+        {
+          "name": "payments_sales_order_fk",
+          "columns": [
+            "org_id",
+            "sales_order_id"
+          ],
+          "references": "sales.orders",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "payments_evidence_attachment_fk",
+          "columns": [
+            "org_id",
+            "evidence_attachment_id"
+          ],
+          "references": "core.attachments",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "payments_approved_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "approved_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "payments_rejected_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "rejected_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "payments_posted_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "posted_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "payments_created_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "created_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "payments_updated_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "updated_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        }
+      ],
+      "uniques": [
+        {
+          "name": "payments_number_uq",
+          "columns": [
+            "org_id",
+            "payment_number"
+          ],
+          "where": null
+        },
+        {
+          "name": "payments_related_terminal_uq",
+          "columns": [
+            "org_id",
+            "related_payment_id"
+          ],
+          "where": "related_payment_id IS NOT NULL AND status='posted'"
+        }
+      ],
+      "checks": [
+        {
+          "name": "payments_direction_ck",
+          "expression": "direction IN ('receipt','disbursement')"
+        },
+        {
+          "name": "payments_method_ck",
+          "expression": "payment_method IN ('cash','bank_transfer','cheque','card','upi','other')"
+        },
+        {
+          "name": "payments_settlement_identity_ck",
+          "expression": "((payment_method IN ('cash','cheque') AND payment_purpose IN ('commercial_settlement','customer_advance','cheque_bounce') AND bank_account_id IS NULL) OR (payment_method NOT IN ('cash','cheque') AND bank_account_id IS NOT NULL))"
+        },
+        {
+          "name": "payments_purpose_ck",
+          "expression": "payment_purpose IN ('commercial_settlement','customer_advance','supplier_advance','withholding_deposit','cheque_clearance','cheque_bounce')"
+        },
+        {
+          "name": "payments_related_purpose_ck",
+          "expression": "(payment_purpose IN ('cheque_clearance','cheque_bounce') AND related_payment_id IS NOT NULL) OR (payment_purpose NOT IN ('cheque_clearance','cheque_bounce') AND related_payment_id IS NULL)"
+        },
+        {
+          "name": "payments_customer_advance_order_ck",
+          "expression": "(payment_purpose='customer_advance' AND sales_order_id IS NOT NULL) OR (payment_purpose<>'customer_advance' AND sales_order_id IS NULL)"
+        },
+        {
+          "name": "payments_instrument_evidence_ck",
+          "expression": "(payment_method='cheque' AND payment_purpose IN ('commercial_settlement','customer_advance') AND evidence_attachment_id IS NOT NULL AND instrument_number IS NOT NULL AND instrument_date IS NOT NULL AND drawee_bank_name IS NOT NULL AND account_payee_confirmed) OR (NOT (payment_method='cheque' AND payment_purpose IN ('commercial_settlement','customer_advance')) AND instrument_number IS NULL AND instrument_date IS NULL AND drawee_bank_name IS NULL AND account_payee_confirmed IS NULL)"
+        },
+        {
+          "name": "payments_cash_evidence_ck",
+          "expression": "payment_method<>'cash' OR evidence_attachment_id IS NOT NULL"
+        },
+        {
+          "name": "payments_amount_ck",
+          "expression": "amount > 0 AND functional_amount > 0 AND fx_rate > 0"
+        },
+        {
+          "name": "payments_fx_ck",
+          "expression": "(currency_code = 'INR' AND fx_rate = 1.000000 AND functional_amount = amount) OR currency_code <> 'INR'"
+        },
+        {
+          "name": "payments_approval_ck",
+          "expression": "status NOT IN ('approved','posted','reversed') OR (approved_at IS NOT NULL AND approved_by_membership_id IS NOT NULL)"
+        },
+        {
+          "name": "payments_rejection_ck",
+          "expression": "status <> 'rejected' OR (rejected_at IS NOT NULL AND rejected_by_membership_id IS NOT NULL AND rejection_reason IS NOT NULL)"
+        },
+        {
+          "name": "payments_posted_ck",
+          "expression": "status NOT IN ('posted','reversed') OR (posted_at IS NOT NULL AND posted_by_membership_id IS NOT NULL)"
+        },
+        {
+          "name": "payments_reversal_ck",
+          "expression": "(reversal_of_payment_id IS NULL AND reversal_reason IS NULL) OR (reversal_of_payment_id IS NOT NULL AND reversal_reason IS NOT NULL)"
+        },
+        {
+          "name": "payments_status_ck",
+          "expression": "status IN ('draft','submitted','approved','rejected','posted','reversed','cancelled')"
+        },
+        {
+          "name": "payments_row_version_ck",
+          "expression": "row_version > 0"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "payments_reversal_uq",
+          "columns": [
+            "org_id",
+            "reversal_of_payment_id"
+          ],
+          "unique": true,
+          "where": "reversal_of_payment_id IS NOT NULL",
+          "purpose": "one reversal per payment"
+        },
+        {
+          "name": "payments_party_date_idx",
+          "columns": [
+            "org_id",
+            "branch_id",
+            "party_id",
+            "payment_date",
+            "id"
+          ],
+          "unique": false,
+          "where": "status IN ('posted','reversed')",
+          "purpose": "party payment history"
+        },
+        {
+          "name": "payments_bank_date_idx",
+          "columns": [
+            "org_id",
+            "bank_account_id",
+            "payment_date",
+            "id"
+          ],
+          "unique": false,
+          "where": "status = 'posted'",
+          "purpose": "bank ledger matching"
+        }
+      ],
+      "cross_row_invariants": [
+        {
+          "name": "payments_cross_row_guard",
+          "enforcement": "transaction_guard",
+          "rule": "Posting reauthorizes payment.branch_id, locks an active asset settlement_account in the payment currency, and requires every journal line to use the payment branch. A cash payment has no bank_account, while every non-cash payment locks one active bank_account whose account_id exactly equals settlement_account_id. The balanced journal contains exactly one settlement-account line on the directionally correct side for the exact functional amount, then atomically creates exactly one accounting_event and freezes financial fields. A reversal creates a compensating payment, journal, and allocation reversals; it never mutates posted allocations."
+        }
+      ]
+    },
+    {
+      "name": "finance.open_items",
+      "fact_owner": "Receivable or payable principal created by one accounting event",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "append_then_settlement_state",
+      "lifecycle": {
+        "state_column": "status",
+        "states": [
+          "open",
+          "settled",
+          "reversed"
+        ],
+        "initial": "open",
+        "terminal": [
+          "settled",
+          "reversed"
+        ],
+        "transitions": [
+          "open->settled",
+          "open->reversed"
+        ]
+      },
+      "rls": {
+        "class": "tenant_membership",
+        "force": true,
+        "write_permission": "internal.open_item.post"
+      },
+      "retention": {
+        "class": "statutory_subledger",
+        "minimum": "permanent",
+        "hard_delete": false
+      },
+      "columns": [
+        [
+          "org_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "id",
+          "uuid",
+          false,
+          "gen_random_uuid()",
+          "internal"
+        ],
+        [
+          "accounting_event_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "party_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "item_side",
+          "text",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "document_number",
+          "varchar(64)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "document_date",
+          "date",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "due_date",
+          "date",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "currency_code",
+          "char(3)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "principal_amount",
+          "numeric(20,2)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "functional_principal_amount",
+          "numeric(20,2)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "status",
+          "text",
+          false,
+          "'open'::text",
+          "internal"
+        ],
+        [
+          "settled_at",
+          "timestamptz",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "reversed_at",
+          "timestamptz",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "created_at",
+          "timestamptz",
+          false,
+          "transaction_timestamp()",
+          "internal"
+        ],
+        [
+          "created_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "personal"
+        ]
+      ],
+      "primary_key": [
+        "org_id",
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "open_items_org_fk",
+          "columns": [
+            "org_id"
+          ],
+          "references": "core.organizations",
+          "referenced_columns": [
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "open_items_event_fk",
+          "columns": [
+            "org_id",
+            "accounting_event_id"
+          ],
+          "references": "finance.accounting_events",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "open_items_party_fk",
+          "columns": [
+            "org_id",
+            "party_id"
+          ],
+          "references": "parties.parties",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "open_items_created_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "created_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        }
+      ],
+      "uniques": [
+        {
+          "name": "open_items_event_party_uq",
+          "columns": [
+            "org_id",
+            "accounting_event_id",
+            "party_id",
+            "item_side"
+          ],
+          "where": null
+        }
+      ],
+      "checks": [
+        {
+          "name": "open_items_side_ck",
+          "expression": "item_side IN ('receivable','payable')"
+        },
+        {
+          "name": "open_items_amount_ck",
+          "expression": "principal_amount > 0 AND functional_principal_amount > 0"
+        },
+        {
+          "name": "open_items_dates_ck",
+          "expression": "due_date >= document_date"
+        },
+        {
+          "name": "open_items_state_ck",
+          "expression": "(status = 'open' AND settled_at IS NULL AND reversed_at IS NULL) OR (status = 'settled' AND settled_at IS NOT NULL AND reversed_at IS NULL) OR (status = 'reversed' AND reversed_at IS NOT NULL)"
+        },
+        {
+          "name": "open_items_status_ck",
+          "expression": "status IN ('open','settled','reversed')"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "open_items_due_idx",
+          "columns": [
+            "org_id",
+            "item_side",
+            "due_date",
+            "id"
+          ],
+          "unique": false,
+          "where": "status = 'open'",
+          "purpose": "aged receivable/payable query"
+        },
+        {
+          "name": "open_items_party_idx",
+          "columns": [
+            "org_id",
+            "party_id",
+            "document_date",
+            "id"
+          ],
+          "unique": false,
+          "where": null,
+          "purpose": "party subledger history"
+        }
+      ],
+      "cross_row_invariants": [
+        {
+          "name": "open_items_cross_row_guard",
+          "enforcement": "constraint_trigger",
+          "rule": "Derive status from posted allocations under row lock: settled only when unreversed allocation sum equals principal; reject over-allocation and direct financial updates."
+        }
+      ]
+    },
+    {
+      "name": "finance.allocations",
+      "fact_owner": "Immutable settlement or reversal amount from one typed source to one open item",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "append_only_settlement",
+      "lifecycle": {
+        "state_column": "status",
+        "states": [
+          "posted",
+          "reversed"
+        ],
+        "initial": "posted",
+        "terminal": [
+          "reversed"
+        ],
+        "transitions": [
+          "posted->reversed"
+        ]
+      },
+      "rls": {
+        "class": "tenant_membership",
+        "force": true,
+        "write_permission": "finance.payment.allocate"
+      },
+      "retention": {
+        "class": "statutory_settlement",
+        "minimum": "permanent",
+        "hard_delete": false
+      },
+      "columns": [
+        [
+          "org_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "id",
+          "uuid",
+          false,
+          "gen_random_uuid()",
+          "internal"
+        ],
+        [
+          "payment_id",
+          "uuid",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "withholding_id",
+          "uuid",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "adjustment_note_id",
+          "uuid",
+          true,
+          null,
+          "internal"
+        ],
+        ["purchase_order_advance_allocation_id", "uuid", true, null, "internal"],
+        ["source_open_item_id", "uuid", true, null, "internal"],
+        [
+          "open_item_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "allocation_date",
+          "date",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "currency_code",
+          "char(3)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "amount",
+          "numeric(20,2)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "functional_amount",
+          "numeric(20,2)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "fx_rate",
+          "numeric(9,6)",
+          false,
+          "1.000000",
+          "internal"
+        ],
+        [
+          "reversal_of_allocation_id",
+          "uuid",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "reversal_reason",
+          "text",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "status",
+          "text",
+          false,
+          "'posted'::text",
+          "internal"
+        ],
+        [
+          "reversed_at",
+          "timestamptz",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "reversed_by_membership_id",
+          "uuid",
+          true,
+          null,
+          "personal"
+        ],
+        [
+          "created_at",
+          "timestamptz",
+          false,
+          "transaction_timestamp()",
+          "internal"
+        ],
+        [
+          "created_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "personal"
+        ]
+      ],
+      "primary_key": [
+        "org_id",
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "allocations_org_fk",
+          "columns": [
+            "org_id"
+          ],
+          "references": "core.organizations",
+          "referenced_columns": [
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "allocations_payment_fk",
+          "columns": [
+            "org_id",
+            "payment_id"
+          ],
+          "references": "finance.payments",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "allocations_withholding_fk",
+          "columns": [
+            "org_id",
+            "withholding_id"
+          ],
+          "references": "tax.withholdings",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "1:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": "INITIALLY_DEFERRED"
+        },
+        {
+          "name": "allocations_adjustment_note_fk",
+          "columns": [
+            "org_id",
+            "adjustment_note_id"
+          ],
+          "references": "finance.adjustment_notes",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "1:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": "INITIALLY_DEFERRED"
+        },
+        {"name":"allocations_purchase_advance_fk","columns":["org_id","purchase_order_advance_allocation_id"],"references":"procurement.purchase_order_advance_allocations","referenced_columns":["org_id","id"],"cardinality":"M:0..1","on_delete":"RESTRICT","deferrable":false},
+        {
+          "name": "allocations_open_item_fk",
+          "columns": [
+            "org_id",
+            "open_item_id"
+          ],
+          "references": "finance.open_items",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "allocations_source_open_item_fk",
+          "columns": ["org_id", "source_open_item_id"],
+          "references": "finance.open_items",
+          "referenced_columns": ["org_id", "id"],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "allocations_reversal_fk",
+          "columns": [
+            "org_id",
+            "reversal_of_allocation_id"
+          ],
+          "references": "finance.allocations",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "1:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": "INITIALLY_DEFERRED"
+        },
+        {
+          "name": "allocations_reversed_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "reversed_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "allocations_created_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "created_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        }
+      ],
+      "uniques": [],
+      "checks": [
+        {
+          "name": "allocations_exact_source_ck",
+          "expression": "num_nonnulls(payment_id,withholding_id,adjustment_note_id,purchase_order_advance_allocation_id,source_open_item_id) = 1"
+        },
+        {
+          "name": "allocations_amount_ck",
+          "expression": "amount > 0 AND functional_amount > 0 AND fx_rate > 0"
+        },
+        {
+          "name": "allocations_reversal_ck",
+          "expression": "(reversal_of_allocation_id IS NULL AND reversal_reason IS NULL AND status = 'posted') OR (reversal_of_allocation_id IS NOT NULL AND reversal_reason IS NOT NULL)"
+        },
+        {
+          "name": "allocations_state_ck",
+          "expression": "status <> 'reversed' OR (reversed_at IS NOT NULL AND reversed_by_membership_id IS NOT NULL)"
+        },
+        {
+          "name": "allocations_status_ck",
+          "expression": "status IN ('posted','reversed')"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "allocations_reversal_uq",
+          "columns": [
+            "org_id",
+            "reversal_of_allocation_id"
+          ],
+          "unique": true,
+          "where": "reversal_of_allocation_id IS NOT NULL",
+          "purpose": "one reversal per allocation"
+        },
+        {
+          "name": "allocations_open_item_idx",
+          "columns": [
+            "org_id",
+            "open_item_id",
+            "allocation_date",
+            "id"
+          ],
+          "unique": false,
+          "where": null,
+          "purpose": "settlement total and history"
+        },
+        {
+          "name": "allocations_payment_idx",
+          "columns": [
+            "org_id",
+            "payment_id",
+            "allocation_date",
+            "id"
+          ],
+          "unique": false,
+          "where": "payment_id IS NOT NULL",
+          "purpose": "payment application history"
+        },
+        {
+          "name": "allocations_source_open_item_idx",
+          "columns": ["org_id", "source_open_item_id", "allocation_date", "id"],
+          "unique": false,
+          "where": "source_open_item_id IS NOT NULL",
+          "purpose": "residual adjustment-note application lineage"
+        },
+        {
+          "name": "allocations_withholding_uq",
+          "columns": [
+            "org_id",
+            "withholding_id"
+          ],
+          "unique": true,
+          "where": "withholding_id IS NOT NULL AND reversal_of_allocation_id IS NULL",
+          "purpose": "one original settlement allocation per withholding deduction; the reversal lineage index owns one compensating row"
+        },
+        {"name":"allocations_purchase_advance_idx","columns":["org_id","purchase_order_advance_allocation_id","allocation_date","id"],"unique":false,"where":"purchase_order_advance_allocation_id IS NOT NULL","purpose":"supplier-prepayment application and residual"},
+        {
+          "name": "allocations_adjustment_note_uq",
+          "columns": [
+            "org_id",
+            "adjustment_note_id"
+          ],
+          "unique": true,
+          "where": "adjustment_note_id IS NOT NULL AND reversal_of_allocation_id IS NULL",
+          "purpose": "one original-open-item application per posted adjustment note; reversal lineage owns the compensating row"
+        }
+      ],
+      "cross_row_invariants": [
+        {
+          "name": "allocations_cross_row_guard",
+          "enforcement": "transaction_guard",
+          "rule": "Lock the exact settlement source (posted payment, deducted withholding, posted adjustment note, supplier advance, or opposite-side adjustment residual open item) and target open item; require source/target compatibility, same party and currency, and total active allocations not above either source amount or target principal. A withholding or original adjustment source targets its declared open item. Any adjustment residual becomes a new opposite-side open item owned by the adjustment accounting event and may later be paired directly to a target with no second journal. Reversal rows copy settlement facts while original evidence remains immutable."
+        }
+      ]
+    },
+    {
+      "name": "finance.adjustment_notes",
+      "fact_owner": "Typed sales/purchase debit or credit adjustment header",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "draft_then_immutable",
+      "lifecycle": {
+        "state_column": "status",
+        "states": [
+          "draft",
+          "approved",
+          "posted",
+          "reversed",
+          "cancelled"
+        ],
+        "initial": "draft",
+        "terminal": [
+          "reversed",
+          "cancelled"
+        ],
+        "transitions": [
+          "draft->approved",
+          "draft->cancelled",
+          "approved->posted",
+          "approved->cancelled",
+          "posted->reversed"
+        ]
+      },
+      "rls": {
+        "class": "tenant_membership",
+        "force": true,
+        "write_permission": "finance.adjustment_note.manage"
+      },
+      "retention": {
+        "class": "statutory_adjustment",
+        "minimum": "permanent",
+        "hard_delete": false
+      },
+      "columns": [
+        [
+          "org_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "id",
+          "uuid",
+          false,
+          "gen_random_uuid()",
+          "internal"
+        ],
+        [
+          "note_number",
+          "varchar(64)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "note_date",
+          "date",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "side",
+          "text",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "direction",
+          "text",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "party_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "sales_invoice_id",
+          "uuid",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "supplier_invoice_id",
+          "uuid",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "sales_return_id",
+          "uuid",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "purchase_return_id",
+          "uuid",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "adjusts_open_item_id",
+          "uuid",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "counterparty_portal_document_line_id",
+          "uuid",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "gst_adjustment_rule_version_id",
+          "uuid",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "gst_tax_treatment",
+          "text",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "recipient_itc_reversal_evidence_attachment_id",
+          "uuid",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "recipient_itc_reversal_confirmed_at",
+          "timestamptz",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "zero_rated_payment_mode",
+          "text",
+          false,
+          "'not_applicable'::text",
+          "internal"
+        ],
+        [
+          "tax_charge_mechanism",
+          "text",
+          false,
+          "'normal'::text",
+          "internal"
+        ],
+        [
+          "currency_code",
+          "char(3)",
+          false,
+          "'INR'::bpchar",
+          "internal"
+        ],
+        ["document_effect", "text", false, null, "regulated"],
+        ["rounding_policy", "text", false, null, "regulated"],
+        ["document_discount_kind", "text", false, null, "regulated"],
+        ["document_discount_basis", "text", false, null, "regulated"],
+        ["document_discount_value", "numeric(20,6)", false, null, "financial"],
+        ["calculation_ruleset_version", "varchar(64)", false, null, "regulated"],
+        [
+          "gross_price_amount",
+          "numeric(20,2)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "discount_amount",
+          "numeric(20,2)",
+          false,
+          "0",
+          "internal"
+        ],
+        [
+          "net_value_amount",
+          "numeric(20,2)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "gst_taxable_value",
+          "numeric(20,2)",
+          false,
+          null,
+          "internal"
+        ],
+        ["cgst_amount", "numeric(20,2)", false, "0", "internal"],
+        ["sgst_amount", "numeric(20,2)", false, "0", "internal"],
+        ["igst_amount", "numeric(20,2)", false, "0", "internal"],
+        ["cess_amount", "numeric(20,2)", false, "0", "internal"],
+        ["recipient_assessed_tax_amount", "numeric(20,2)", false, "0", "internal"],
+        [
+          "rounding_adjustment",
+          "numeric(20,2)",
+          false,
+          "0",
+          "internal"
+        ],
+        [
+          "counterparty_payable_amount",
+          "numeric(20,2)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "reason_code",
+          "varchar(64)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "reason",
+          "text",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "reversal_of_adjustment_note_id",
+          "uuid",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "status",
+          "text",
+          false,
+          "'draft'::text",
+          "internal"
+        ],
+        [
+          "approved_at",
+          "timestamptz",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "approved_by_membership_id",
+          "uuid",
+          true,
+          null,
+          "personal"
+        ],
+        [
+          "posted_at",
+          "timestamptz",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "posted_by_membership_id",
+          "uuid",
+          true,
+          null,
+          "personal"
+        ],
+        [
+          "created_at",
+          "timestamptz",
+          false,
+          "transaction_timestamp()",
+          "internal"
+        ],
+        [
+          "created_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "personal"
+        ],
+        [
+          "updated_at",
+          "timestamptz",
+          false,
+          "transaction_timestamp()",
+          "internal"
+        ],
+        [
+          "updated_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "personal"
+        ],
+        [
+          "row_version",
+          "bigint",
+          false,
+          "1",
+          "internal"
+        ]
+      ],
+      "primary_key": [
+        "org_id",
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "adjustment_notes_org_fk",
+          "columns": [
+            "org_id"
+          ],
+          "references": "core.organizations",
+          "referenced_columns": [
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "adjustment_notes_party_fk",
+          "columns": [
+            "org_id",
+            "party_id"
+          ],
+          "references": "parties.parties",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "adjustment_notes_open_item_fk",
+          "columns": [
+            "org_id",
+            "adjusts_open_item_id"
+          ],
+          "references": "finance.open_items",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "adjustment_notes_counterparty_portal_line_fk",
+          "columns": ["org_id", "counterparty_portal_document_line_id"],
+          "references": "tax.portal_document_lines",
+          "referenced_columns": ["org_id", "id"],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "adjustment_notes_gst_rule_version_fk",
+          "columns": ["gst_adjustment_rule_version_id"],
+          "references": "tax.gst_adjustment_rule_versions",
+          "referenced_columns": ["id"],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "adjustment_notes_itc_reversal_evidence_fk",
+          "columns": ["org_id", "recipient_itc_reversal_evidence_attachment_id"],
+          "references": "core.attachments",
+          "referenced_columns": ["org_id", "id"],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "adjustment_notes_sales_invoice_fk",
+          "columns": [
+            "org_id",
+            "sales_invoice_id"
+          ],
+          "references": "sales.invoices",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "adjustment_notes_supplier_invoice_fk",
+          "columns": [
+            "org_id",
+            "supplier_invoice_id"
+          ],
+          "references": "procurement.supplier_invoices",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "adjustment_notes_sales_return_fk",
+          "columns": [
+            "org_id",
+            "sales_return_id"
+          ],
+          "references": "sales.returns",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "0..1:1",
+          "on_delete": "RESTRICT",
+          "deferrable": "INITIALLY_DEFERRED"
+        },
+        {
+          "name": "adjustment_notes_purchase_return_fk",
+          "columns": [
+            "org_id",
+            "purchase_return_id"
+          ],
+          "references": "procurement.purchase_returns",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "0..1:1",
+          "on_delete": "RESTRICT",
+          "deferrable": "INITIALLY_DEFERRED"
+        },
+        {
+          "name": "adjustment_notes_reversal_fk",
+          "columns": [
+            "org_id",
+            "reversal_of_adjustment_note_id"
+          ],
+          "references": "finance.adjustment_notes",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "1:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": "INITIALLY_DEFERRED"
+        },
+        {
+          "name": "adjustment_notes_approved_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "approved_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "adjustment_notes_posted_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "posted_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "adjustment_notes_created_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "created_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "adjustment_notes_updated_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "updated_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        }
+      ],
+      "uniques": [
+        {
+          "name": "adjustment_notes_number_uq",
+          "columns": [
+            "org_id",
+            "note_number"
+          ],
+          "where": null
+        }
+      ],
+      "checks": [
+        {
+          "name": "adjustment_notes_side_ck",
+          "expression": "num_nonnulls(sales_return_id,purchase_return_id)<=1 AND ((side='sales' AND sales_invoice_id IS NOT NULL AND supplier_invoice_id IS NULL AND purchase_return_id IS NULL AND adjusts_open_item_id IS NOT NULL) OR (side='purchase' AND sales_invoice_id IS NULL AND sales_return_id IS NULL AND ((purchase_return_id IS NULL AND supplier_invoice_id IS NOT NULL AND adjusts_open_item_id IS NOT NULL) OR purchase_return_id IS NOT NULL)))"
+        },
+        {
+          "name": "adjustment_notes_direction_ck",
+          "expression": "direction IN ('credit','debit')"
+        },
+        {
+          "name": "adjustment_notes_effect_ck",
+          "expression": "document_effect IN ('increase','decrease') AND ((side='sales' AND direction='credit' AND document_effect='decrease') OR (side='sales' AND direction='debit' AND document_effect='increase') OR (side='purchase' AND direction='debit' AND document_effect='decrease') OR (side='purchase' AND direction='credit' AND document_effect='increase'))"
+        },
+        {
+          "name": "adjustment_notes_calculation_policy_ck",
+          "expression": "rounding_policy IN ('none','nearest_rupee') AND document_discount_kind IN ('none','percent','amount') AND document_discount_basis IN ('taxable_value','price_value') AND ((document_discount_kind='none' AND document_discount_value=0) OR (document_discount_kind='percent' AND document_discount_value BETWEEN 0 AND 100) OR (document_discount_kind='amount' AND document_discount_value>=0 AND document_discount_value=round(document_discount_value,2))) AND btrim(calculation_ruleset_version)<>''"
+        },
+        {
+          "name": "adjustment_notes_totals_ck",
+          "expression": "gross_price_amount >= 0 AND discount_amount >= 0 AND net_value_amount >= 0 AND gst_taxable_value >= 0 AND gst_taxable_value <= net_value_amount AND cgst_amount >= 0 AND sgst_amount >= 0 AND igst_amount >= 0 AND cess_amount >= 0 AND counterparty_payable_amount >= 0"
+        },
+        {
+          "name": "adjustment_notes_charge_mechanism_ck",
+          "expression": "tax_charge_mechanism IN ('normal','reverse_charge') AND ((tax_charge_mechanism = 'normal' AND recipient_assessed_tax_amount = 0 AND counterparty_payable_amount = net_value_amount + cgst_amount + sgst_amount + igst_amount + cess_amount + rounding_adjustment) OR (tax_charge_mechanism = 'reverse_charge' AND recipient_assessed_tax_amount = cgst_amount + sgst_amount + igst_amount + cess_amount AND counterparty_payable_amount = net_value_amount + rounding_adjustment))"
+        },
+        {
+          "name": "adjustment_notes_zero_rated_ck",
+          "expression": "zero_rated_payment_mode IN ('not_applicable','without_payment','with_igst') AND (zero_rated_payment_mode <> 'without_payment' OR (cgst_amount = 0 AND sgst_amount = 0 AND igst_amount = 0 AND cess_amount = 0)) AND (zero_rated_payment_mode <> 'with_igst' OR (cgst_amount = 0 AND sgst_amount = 0 AND igst_amount > 0 AND cess_amount = 0))"
+        },
+        {
+          "name": "adjustment_notes_gst_treatment_ck",
+          "expression": "gst_tax_treatment IN ('statutory','commercial_only') AND ((gst_tax_treatment='commercial_only' AND counterparty_portal_document_line_id IS NULL AND recipient_itc_reversal_evidence_attachment_id IS NULL AND recipient_itc_reversal_confirmed_at IS NULL AND gst_taxable_value=0 AND cgst_amount=0 AND sgst_amount=0 AND igst_amount=0 AND cess_amount=0 AND recipient_assessed_tax_amount=0) OR (gst_tax_treatment='statutory' AND ((side='sales' AND ((document_effect='decrease' AND recipient_itc_reversal_evidence_attachment_id IS NOT NULL AND recipient_itc_reversal_confirmed_at IS NOT NULL) OR (document_effect='increase' AND recipient_itc_reversal_evidence_attachment_id IS NULL AND recipient_itc_reversal_confirmed_at IS NULL))) OR (side='purchase' AND (document_effect<>'decrease' OR counterparty_portal_document_line_id IS NOT NULL)))))"
+        },
+        {
+          "name": "adjustment_notes_posted_ck",
+          "expression": "status NOT IN ('posted','reversed') OR (approved_at IS NOT NULL AND approved_by_membership_id IS NOT NULL AND posted_at IS NOT NULL AND posted_by_membership_id IS NOT NULL)"
+        },
+        {
+          "name": "adjustment_notes_status_ck",
+          "expression": "status IN ('draft','approved','posted','reversed','cancelled')"
+        },
+        {
+          "name": "adjustment_notes_row_version_ck",
+          "expression": "row_version > 0"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "adjustment_notes_sales_return_uq",
+          "columns": [
+            "org_id",
+            "sales_return_id"
+          ],
+          "unique": true,
+          "where": "sales_return_id IS NOT NULL",
+          "purpose": "one compensating adjustment per sales return"
+        },
+        {
+          "name": "adjustment_notes_purchase_return_uq",
+          "columns": [
+            "org_id",
+            "purchase_return_id"
+          ],
+          "unique": true,
+          "where": "purchase_return_id IS NOT NULL",
+          "purpose": "one compensating adjustment per purchase return"
+        },
+        {
+          "name": "adjustment_notes_reversal_uq",
+          "columns": [
+            "org_id",
+            "reversal_of_adjustment_note_id"
+          ],
+          "unique": true,
+          "where": "reversal_of_adjustment_note_id IS NOT NULL",
+          "purpose": "one reversal note"
+        },
+        {
+          "name": "adjustment_notes_party_date_idx",
+          "columns": [
+            "org_id",
+            "party_id",
+            "note_date",
+            "id"
+          ],
+          "unique": false,
+          "where": "status IN ('posted','reversed')",
+          "purpose": "party adjustment history"
+        }
+      ],
+      "cross_row_invariants": [
+        {
+          "name": "adjustment_notes_cross_row_guard",
+          "enforcement": "transaction_guard",
+          "rule": "Posting consumes exactly one typed calculation artifact after comparing the fixed rounding/document-discount policy and every persisted line input/output. It selects and persists the exact active GST adjustment rule for note_date, validates statutory eligibility/deadline and retained evidence, and never permits commercial-only adjustments to reduce GST. Sales statutory decreases require verified recipient ITC-reversal evidence no later than the confirmation timestamp; purchase statutory decreases require an exact verified supplier credit-note portal line. A generic note locks its typed original invoice lines, original tax document and original open item; document_effect records increase/decrease and cumulative decreased quantities, values and GST components cannot exceed the original plus posted increases. Posting creates one signed tax document when statutory, balanced journal, accounting event, and exact allocation/new open-item effects atomically, then locks header and lines. An uninvoiced purchase return has no supplier invoice, tax document, open-item adjustment or allocation and reverses the configured goods-received-not-invoiced liability at the exact locked goods-receipt cost. A return-owned note has exactly one immutable sales_return_id or purchase_return_id, matches that return and its original invoice when invoiced, and is unique for the typed return. For sales reverse charge, recipient-assessed tax is not organization self-assessed; for purchase reverse charge it is. Reversal must be a linked compensating note and cumulative component reversals cannot exceed the original."
+        }
+      ]
+    },
+    {
+      "name": "finance.adjustment_note_lines",
+      "fact_owner": "Calculation and GST snapshot line owned by an adjustment note",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "draft_composition_then_immutable",
+      "lifecycle": {
+        "state_column": null,
+        "states": [],
+        "initial": null,
+        "terminal": [],
+        "transitions": []
+      },
+      "rls": {
+        "class": "tenant_membership",
+        "force": true,
+        "write_permission": "finance.adjustment_note.edit"
+      },
+      "retention": {
+        "class": "statutory_adjustment",
+        "minimum": "permanent",
+        "hard_delete": false
+      },
+      "columns": [
+        [
+          "org_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "id",
+          "uuid",
+          false,
+          "gen_random_uuid()",
+          "internal"
+        ],
+        [
+          "adjustment_note_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "line_number",
+          "integer",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "line_kind",
+          "text",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "product_id",
+          "uuid",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "account_id",
+          "uuid",
+          true,
+          null,
+          "internal"
+        ],
+        ["sales_invoice_line_id", "uuid", true, null, "regulated"],
+        ["supplier_invoice_line_id", "uuid", true, null, "regulated"],
+        ["charge_code", "text", true, null, "regulated"],
+        ["quoted_amount", "numeric(20,2)", true, null, "financial"],
+        [
+          "description",
+          "text",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "uom_code",
+          "varchar(16)",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "billed_quantity",
+          "numeric(20,6)",
+          true,
+          null,
+          "internal"
+        ],
+        ["free_quantity", "numeric(20,6)", true, null, "regulated"],
+        ["uom_conversion_factor", "numeric(20,6)", true, null, "regulated"],
+        ["base_billed_quantity", "numeric(20,6)", true, null, "regulated"],
+        ["base_free_quantity", "numeric(20,6)", true, null, "regulated"],
+        ["free_supply_tax_treatment", "text", true, null, "regulated"],
+        [
+          "quoted_unit_rate",
+          "numeric(20,4)",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "price_basis",
+          "text",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "gross_amount",
+          "numeric(20,2)",
+          false,
+          null,
+          "internal"
+        ],
+        ["line_discount_kind", "text", false, null, "regulated"],
+        ["line_discount_basis", "text", false, null, "regulated"],
+        ["line_discount_value", "numeric(20,6)", false, null, "financial"],
+        ["document_discount_eligible", "boolean", false, null, "regulated"],
+        ["line_discount_amount", "numeric(20,2)", false, null, "financial"],
+        ["line_taxable_discount_amount", "numeric(20,2)", false, null, "financial"],
+        ["document_discount_amount", "numeric(20,2)", false, null, "financial"],
+        ["document_taxable_discount_amount", "numeric(20,2)", false, null, "financial"],
+        ["final_residual", "boolean", false, null, "regulated"],
+        ["gst_tax_treatment", "text", false, null, "regulated"],
+        [
+          "discount_amount",
+          "numeric(20,2)",
+          false,
+          "0",
+          "internal"
+        ],
+        [
+          "net_value_amount",
+          "numeric(20,2)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "gst_taxable_value",
+          "numeric(20,2)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "hsn_sac_code",
+          "varchar(16)",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "tax_code_version_id",
+          "uuid",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "taxability_snapshot",
+          "text",
+          false,
+          null,
+          "internal"
+        ],
+        ["inventory_cost_treatment", "text", true, null, "regulated"],
+        ["itc_eligibility", "text", true, null, "regulated"],
+        [
+          "tax_charge_mechanism",
+          "text",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "cgst_rate",
+          "numeric(9,6)",
+          false,
+          "0",
+          "internal"
+        ],
+        [
+          "sgst_rate",
+          "numeric(9,6)",
+          false,
+          "0",
+          "internal"
+        ],
+        [
+          "igst_rate",
+          "numeric(9,6)",
+          false,
+          "0",
+          "internal"
+        ],
+        [
+          "cess_rate",
+          "numeric(9,6)",
+          false,
+          "0",
+          "internal"
+        ],
+        [
+          "cgst_amount",
+          "numeric(20,2)",
+          false,
+          "0",
+          "internal"
+        ],
+        [
+          "sgst_amount",
+          "numeric(20,2)",
+          false,
+          "0",
+          "internal"
+        ],
+        [
+          "igst_amount",
+          "numeric(20,2)",
+          false,
+          "0",
+          "internal"
+        ],
+        [
+          "cess_amount",
+          "numeric(20,2)",
+          false,
+          "0",
+          "internal"
+        ],
+        [
+          "recipient_assessed_tax_amount",
+          "numeric(20,2)",
+          false,
+          "0",
+          "internal"
+        ],
+        [
+          "line_total",
+          "numeric(20,2)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "tax_ruleset_version",
+          "varchar(64)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "created_at",
+          "timestamptz",
+          false,
+          "transaction_timestamp()",
+          "internal"
+        ],
+        [
+          "created_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "personal"
+        ]
+      ],
+      "primary_key": [
+        "org_id",
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "adjustment_note_lines_org_fk",
+          "columns": [
+            "org_id"
+          ],
+          "references": "core.organizations",
+          "referenced_columns": [
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "adjustment_note_lines_note_fk",
+          "columns": [
+            "org_id",
+            "adjustment_note_id"
+          ],
+          "references": "finance.adjustment_notes",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "CASCADE",
+          "deferrable": false
+        },
+        {
+          "name": "adjustment_note_lines_product_fk",
+          "columns": [
+            "org_id",
+            "product_id"
+          ],
+          "references": "catalog.products",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "adjustment_note_lines_account_fk",
+          "columns": [
+            "org_id",
+            "account_id"
+          ],
+          "references": "finance.accounts",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "adjustment_note_lines_sales_invoice_line_fk",
+          "columns": ["org_id", "sales_invoice_line_id"],
+          "references": "sales.invoice_lines",
+          "referenced_columns": ["org_id", "id"],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "adjustment_note_lines_supplier_invoice_line_fk",
+          "columns": ["org_id", "supplier_invoice_line_id"],
+          "references": "procurement.supplier_invoice_lines",
+          "referenced_columns": ["org_id", "id"],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "adjustment_note_lines_uom_fk",
+          "columns": [
+            "uom_code"
+          ],
+          "references": "catalog.units_of_measure",
+          "referenced_columns": [
+            "code"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "adjustment_note_lines_tax_code_fk",
+          "columns": [
+            "tax_code_version_id"
+          ],
+          "references": "tax.tax_code_versions",
+          "referenced_columns": [
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "adjustment_note_lines_created_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "created_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        }
+      ],
+      "uniques": [
+        {
+          "name": "adjustment_note_lines_number_uq",
+          "columns": [
+            "org_id",
+            "adjustment_note_id",
+            "line_number"
+          ],
+          "where": null
+        }
+      ],
+      "checks": [
+        {
+          "name": "adjustment_note_lines_kind_ck",
+          "expression": "(line_kind = 'product' AND product_id IS NOT NULL AND account_id IS NULL AND charge_code IS NULL AND quoted_amount IS NULL AND billed_quantity >= 0 AND free_quantity >= 0 AND billed_quantity+free_quantity>0 AND quoted_unit_rate >= 0 AND uom_code IS NOT NULL AND uom_conversion_factor>0 AND base_billed_quantity=round(billed_quantity*uom_conversion_factor,6) AND base_free_quantity=round(free_quantity*uom_conversion_factor,6) AND free_supply_tax_treatment IN ('excluded_from_taxable_value','included_at_unit_rate')) OR (line_kind='charge' AND account_id IS NOT NULL AND product_id IS NULL AND charge_code IN ('freight','packing','insurance','handling','other') AND quoted_amount>=0 AND billed_quantity IS NULL AND free_quantity IS NULL AND uom_conversion_factor IS NULL AND base_billed_quantity IS NULL AND base_free_quantity IS NULL AND free_supply_tax_treatment IS NULL AND quoted_unit_rate IS NULL)"
+        },
+        {
+          "name": "adjustment_note_lines_original_line_ck",
+          "expression": "num_nonnulls(sales_invoice_line_id,supplier_invoice_line_id)<=1"
+        },
+        {
+          "name": "adjustment_note_lines_discount_policy_ck",
+          "expression": "line_discount_kind IN ('none','percent','amount') AND line_discount_basis IN ('taxable_value','price_value') AND (line_kind<>'charge' OR line_discount_kind='none') AND ((line_discount_kind='none' AND line_discount_value=0) OR (line_discount_kind='percent' AND line_discount_value BETWEEN 0 AND 100) OR (line_discount_kind='amount' AND line_discount_value>=0 AND line_discount_value=round(line_discount_value,2))) AND line_discount_amount>=0 AND line_taxable_discount_amount>=0 AND document_discount_amount>=0 AND document_taxable_discount_amount>=0 AND discount_amount=line_discount_amount+document_discount_amount"
+        },
+        {
+          "name": "adjustment_note_lines_purchase_treatment_ck",
+          "expression": "(supplier_invoice_line_id IS NULL AND inventory_cost_treatment IS NULL AND itc_eligibility IS NULL) OR (supplier_invoice_line_id IS NOT NULL AND inventory_cost_treatment IN ('capitalize','expense') AND itc_eligibility IN ('eligible','ineligible','blocked','deferred'))"
+        },
+        {
+          "name": "adjustment_note_lines_amount_ck",
+          "expression": "gross_amount >= 0 AND discount_amount >= 0 AND discount_amount <= gross_amount AND net_value_amount >= 0 AND gst_taxable_value >= 0 AND gst_taxable_value <= net_value_amount AND line_total >= 0"
+        },
+        {
+          "name": "adjustment_note_lines_price_taxability_ck",
+          "expression": "gst_tax_treatment IN ('statutory','commercial_only') AND price_basis IN ('tax_exclusive','tax_inclusive') AND taxability_snapshot IN ('taxable','zero_rated','exempt','nil_rated','non_gst') AND ((gst_tax_treatment='commercial_only' AND gst_taxable_value=0 AND cgst_amount=0 AND sgst_amount=0 AND igst_amount=0 AND cess_amount=0 AND recipient_assessed_tax_amount=0) OR (gst_tax_treatment='statutory' AND ((taxability_snapshot IN ('taxable','zero_rated') AND gst_taxable_value = net_value_amount) OR (taxability_snapshot IN ('exempt','nil_rated','non_gst') AND gst_taxable_value = 0 AND cgst_amount = 0 AND sgst_amount = 0 AND igst_amount = 0 AND cess_amount = 0))))"
+        },
+        {
+          "name": "adjustment_note_lines_charge_mechanism_ck",
+          "expression": "tax_charge_mechanism IN ('normal','reverse_charge') AND ((tax_charge_mechanism = 'normal' AND recipient_assessed_tax_amount = 0 AND line_total = net_value_amount + cgst_amount + sgst_amount + igst_amount + cess_amount) OR (tax_charge_mechanism = 'reverse_charge' AND price_basis = 'tax_exclusive' AND recipient_assessed_tax_amount = cgst_amount + sgst_amount + igst_amount + cess_amount AND line_total = net_value_amount))"
+        },
+        {
+          "name": "adjustment_note_lines_tax_ck",
+          "expression": "cgst_rate >= 0 AND sgst_rate >= 0 AND igst_rate >= 0 AND cess_rate >= 0 AND cgst_amount >= 0 AND sgst_amount >= 0 AND igst_amount >= 0 AND cess_amount >= 0"
+        },
+        {
+          "name": "adjustment_note_lines_supply_ck",
+          "expression": "igst_amount = 0 OR (cgst_amount = 0 AND sgst_amount = 0)"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "adjustment_note_lines_product_idx",
+          "columns": [
+            "org_id",
+            "product_id",
+            "adjustment_note_id",
+            "line_number"
+          ],
+          "unique": false,
+          "where": "product_id IS NOT NULL",
+          "purpose": "product adjustment trace"
+        },
+        {
+          "name": "adjustment_note_lines_sales_source_uq",
+          "columns": ["org_id", "adjustment_note_id", "sales_invoice_line_id"],
+          "unique": true,
+          "where": "sales_invoice_line_id IS NOT NULL",
+          "purpose": "one signed adjustment fact per original sales invoice line and note"
+        },
+        {
+          "name": "adjustment_note_lines_supplier_source_uq",
+          "columns": ["org_id", "adjustment_note_id", "supplier_invoice_line_id"],
+          "unique": true,
+          "where": "supplier_invoice_line_id IS NOT NULL",
+          "purpose": "one signed adjustment fact per original supplier invoice line and note"
+        }
+      ],
+      "cross_row_invariants": [
+        {
+          "name": "adjustment_note_lines_cross_row_guard",
+          "enforcement": "constraint_trigger",
+          "rule": "Allow changes only before the parent is posted. Every generic product/charge line has exactly one side-compatible original invoice-line FK and persists billed/free/base quantities, UOM factor, free-supply treatment, price and discount policies, gst_tax_treatment, all calculator outputs, final_residual, tax snapshot, and purchase ITC/cost treatment. The artifact-bound canonical Decimal calculator result must match every field; commercial_only treats quoted prices as gross financial-credit bases and has zero GST adjustment while retaining original HSN/rate lineage. Cumulative signed quantities, financial credits and GST components are locked and checked against original plus increases before header, line and tax facts freeze. Return-owned uninvoiced lines are the only posting path without invoice-line lineage."
+        }
+      ]
+    },
+    {
+      "name": "finance.expense_claims",
+      "fact_owner": "Employee/member expense claim approval and posting aggregate",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "approval_then_immutable",
+      "lifecycle": {
+        "state_column": "status",
+        "states": [
+          "draft",
+          "submitted",
+          "approved",
+          "rejected",
+          "posted",
+          "reversed",
+          "cancelled"
+        ],
+        "initial": "draft",
+        "terminal": [
+          "rejected",
+          "reversed",
+          "cancelled"
+        ],
+        "transitions": [
+          "draft->submitted",
+          "draft->cancelled",
+          "submitted->approved",
+          "submitted->rejected",
+          "approved->posted",
+          "approved->cancelled",
+          "posted->reversed"
+        ]
+      },
+      "rls": {
+        "class": "tenant_membership",
+        "force": true,
+        "write_permission": "finance.expense.manage"
+      },
+      "retention": {
+        "class": "expense_evidence",
+        "minimum": "8_years_after_fiscal_year",
+        "hard_delete": false
+      },
+      "columns": [
+        [
+          "org_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "id",
+          "uuid",
+          false,
+          "gen_random_uuid()",
+          "internal"
+        ],
+        [
+          "claim_number",
+          "varchar(64)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "claimant_membership_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "claim_date",
+          "date",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "period_start",
+          "date",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "period_end",
+          "date",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "currency_code",
+          "char(3)",
+          false,
+          "'INR'::bpchar",
+          "internal"
+        ],
+        [
+          "claimed_amount",
+          "numeric(20,2)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "approved_amount",
+          "numeric(20,2)",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "purpose",
+          "text",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "status",
+          "text",
+          false,
+          "'draft'::text",
+          "internal"
+        ],
+        [
+          "submitted_at",
+          "timestamptz",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "approved_at",
+          "timestamptz",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "approved_by_membership_id",
+          "uuid",
+          true,
+          null,
+          "personal"
+        ],
+        [
+          "rejected_at",
+          "timestamptz",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "rejected_by_membership_id",
+          "uuid",
+          true,
+          null,
+          "personal"
+        ],
+        [
+          "decision_reason",
+          "text",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "posted_at",
+          "timestamptz",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "posted_by_membership_id",
+          "uuid",
+          true,
+          null,
+          "personal"
+        ],
+        [
+          "created_at",
+          "timestamptz",
+          false,
+          "transaction_timestamp()",
+          "internal"
+        ],
+        [
+          "created_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "personal"
+        ],
+        [
+          "updated_at",
+          "timestamptz",
+          false,
+          "transaction_timestamp()",
+          "internal"
+        ],
+        [
+          "updated_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "personal"
+        ],
+        [
+          "row_version",
+          "bigint",
+          false,
+          "1",
+          "internal"
+        ]
+      ],
+      "primary_key": [
+        "org_id",
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "expense_claims_org_fk",
+          "columns": [
+            "org_id"
+          ],
+          "references": "core.organizations",
+          "referenced_columns": [
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "expense_claims_claimant_membership_id_fk",
+          "columns": [
+            "org_id",
+            "claimant_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "expense_claims_approved_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "approved_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "expense_claims_rejected_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "rejected_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "expense_claims_posted_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "posted_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "expense_claims_created_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "created_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "expense_claims_updated_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "updated_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        }
+      ],
+      "uniques": [
+        {
+          "name": "expense_claims_number_uq",
+          "columns": [
+            "org_id",
+            "claim_number"
+          ],
+          "where": null
+        }
+      ],
+      "checks": [
+        {
+          "name": "expense_claims_period_ck",
+          "expression": "period_end >= period_start"
+        },
+        {
+          "name": "expense_claims_amount_ck",
+          "expression": "claimed_amount > 0 AND (approved_amount IS NULL OR (approved_amount >= 0 AND approved_amount <= claimed_amount))"
+        },
+        {
+          "name": "expense_claims_approval_ck",
+          "expression": "status NOT IN ('approved','posted','reversed') OR (approved_amount IS NOT NULL AND approved_at IS NOT NULL AND approved_by_membership_id IS NOT NULL)"
+        },
+        {
+          "name": "expense_claims_rejection_ck",
+          "expression": "status <> 'rejected' OR (rejected_at IS NOT NULL AND rejected_by_membership_id IS NOT NULL AND decision_reason IS NOT NULL)"
+        },
+        {
+          "name": "expense_claims_separation_ck",
+          "expression": "approved_by_membership_id IS NULL OR approved_by_membership_id <> claimant_membership_id"
+        },
+        {
+          "name": "expense_claims_posted_ck",
+          "expression": "status NOT IN ('posted','reversed') OR (posted_at IS NOT NULL AND posted_by_membership_id IS NOT NULL)"
+        },
+        {
+          "name": "expense_claims_status_ck",
+          "expression": "status IN ('draft','submitted','approved','rejected','posted','reversed','cancelled')"
+        },
+        {
+          "name": "expense_claims_row_version_ck",
+          "expression": "row_version > 0"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "expense_claims_claimant_idx",
+          "columns": [
+            "org_id",
+            "claimant_membership_id",
+            "claim_date",
+            "id"
+          ],
+          "unique": false,
+          "where": null,
+          "purpose": "claimant history"
+        },
+        {
+          "name": "expense_claims_approval_queue_idx",
+          "columns": [
+            "org_id",
+            "submitted_at",
+            "id"
+          ],
+          "unique": false,
+          "where": "status = 'submitted'",
+          "purpose": "approval queue"
+        }
+      ],
+      "cross_row_invariants": [
+        {
+          "name": "expense_claims_cross_row_guard",
+          "enforcement": "transaction_guard",
+          "rule": "Submission and approval recalculate line sums; approval requires a distinct authorized membership. Only approved claims may post, and posting creates exactly one accounting event before locking header/lines."
+        }
+      ]
+    },
+    {
+      "name": "finance.expense_claim_lines",
+      "fact_owner": "One evidenced expense amount categorized by a ledger account",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "draft_composition_then_immutable",
+      "lifecycle": {
+        "state_column": null,
+        "states": [],
+        "initial": null,
+        "terminal": [],
+        "transitions": []
+      },
+      "rls": {
+        "class": "tenant_membership",
+        "force": true,
+        "write_permission": "finance.expense.edit"
+      },
+      "retention": {
+        "class": "expense_evidence",
+        "minimum": "8_years_after_fiscal_year",
+        "hard_delete": false
+      },
+      "columns": [
+        [
+          "org_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "id",
+          "uuid",
+          false,
+          "gen_random_uuid()",
+          "internal"
+        ],
+        [
+          "expense_claim_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "line_number",
+          "integer",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "expense_date",
+          "date",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "expense_account_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "counterparty_party_id",
+          "uuid",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "withholding_nature_code",
+          "varchar(64)",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "withholding_contract_reference",
+          "varchar(64)",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "description",
+          "text",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "merchant_name",
+          "text",
+          true,
+          null,
+          "personal"
+        ],
+        [
+          "receipt_attachment_id",
+          "uuid",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "claimed_amount",
+          "numeric(20,2)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "approved_amount",
+          "numeric(20,2)",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "taxable_amount",
+          "numeric(20,2)",
+          false,
+          "0",
+          "internal"
+        ],
+        [
+          "tax_amount",
+          "numeric(20,2)",
+          false,
+          "0",
+          "internal"
+        ],
+        [
+          "created_at",
+          "timestamptz",
+          false,
+          "transaction_timestamp()",
+          "internal"
+        ],
+        [
+          "created_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "personal"
+        ]
+      ],
+      "primary_key": [
+        "org_id",
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "expense_claim_lines_org_fk",
+          "columns": [
+            "org_id"
+          ],
+          "references": "core.organizations",
+          "referenced_columns": [
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "expense_claim_lines_claim_fk",
+          "columns": [
+            "org_id",
+            "expense_claim_id"
+          ],
+          "references": "finance.expense_claims",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "CASCADE",
+          "deferrable": false
+        },
+        {
+          "name": "expense_claim_lines_account_fk",
+          "columns": [
+            "org_id",
+            "expense_account_id"
+          ],
+          "references": "finance.accounts",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "expense_claim_lines_receipt_fk",
+          "columns": [
+            "org_id",
+            "receipt_attachment_id"
+          ],
+          "references": "core.attachments",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "expense_claim_lines_counterparty_fk",
+          "columns": [
+            "org_id",
+            "counterparty_party_id"
+          ],
+          "references": "parties.parties",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "expense_claim_lines_created_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "created_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        }
+      ],
+      "uniques": [
+        {
+          "name": "expense_claim_lines_number_uq",
+          "columns": [
+            "org_id",
+            "expense_claim_id",
+            "line_number"
+          ],
+          "where": null
+        }
+      ],
+      "checks": [
+        {
+          "name": "expense_claim_lines_number_ck",
+          "expression": "line_number > 0"
+        },
+        {
+          "name": "expense_claim_lines_amount_ck",
+          "expression": "claimed_amount > 0 AND taxable_amount >= 0 AND tax_amount >= 0 AND taxable_amount + tax_amount <= claimed_amount AND (approved_amount IS NULL OR (approved_amount >= 0 AND approved_amount <= claimed_amount))"
+        },
+        {
+          "name": "expense_claim_lines_withholding_classification_ck",
+          "expression": "(withholding_nature_code IS NULL OR btrim(withholding_nature_code)<>'') AND (withholding_contract_reference IS NULL OR btrim(withholding_contract_reference)<>'')"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "expense_claim_lines_account_idx",
+          "columns": [
+            "org_id",
+            "expense_account_id",
+            "expense_date",
+            "id"
+          ],
+          "unique": false,
+          "where": null,
+          "purpose": "expense account analysis"
+        }
+      ],
+      "cross_row_invariants": [
+        {
+          "name": "expense_claim_lines_cross_row_guard",
+          "enforcement": "constraint_trigger",
+          "rule": "Allow changes only while claim is draft; submission requires evidence under policy and line sums equal header claimed amount; approval freezes approved amounts."
+        }
+      ]
+    },
+    {
+      "name": "finance.bank_statements",
+      "fact_owner": "Integrity-checked bank statement import and reconciliation state",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "import_then_close",
+      "lifecycle": {
+        "state_column": "status",
+        "states": [
+          "imported",
+          "reconciling",
+          "reconciled",
+          "closed"
+        ],
+        "initial": "imported",
+        "terminal": [
+          "closed"
+        ],
+        "transitions": [
+          "imported->reconciling",
+          "reconciling->reconciled",
+          "reconciled->closed",
+          "reconciling->imported"
+        ]
+      },
+      "rls": {
+        "class": "tenant_membership",
+        "force": true,
+        "write_permission": "finance.bank_statement.import"
+      },
+      "retention": {
+        "class": "bank_statement_evidence",
+        "minimum": "permanent",
+        "hard_delete": false
+      },
+      "columns": [
+        [
+          "org_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "id",
+          "uuid",
+          false,
+          "gen_random_uuid()",
+          "internal"
+        ],
+        [
+          "bank_account_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "statement_reference",
+          "varchar(128)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "period_start",
+          "date",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "period_end",
+          "date",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "currency_code",
+          "char(3)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "opening_balance",
+          "numeric(20,2)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "closing_balance",
+          "numeric(20,2)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "source_attachment_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "source_sha256",
+          "bytea",
+          false,
+          null,
+          "secret_ciphertext"
+        ],
+        [
+          "status",
+          "text",
+          false,
+          "'imported'::text",
+          "internal"
+        ],
+        [
+          "reconciled_at",
+          "timestamptz",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "reconciled_by_membership_id",
+          "uuid",
+          true,
+          null,
+          "personal"
+        ],
+        [
+          "created_at",
+          "timestamptz",
+          false,
+          "transaction_timestamp()",
+          "internal"
+        ],
+        [
+          "created_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "personal"
+        ],
+        [
+          "updated_at",
+          "timestamptz",
+          false,
+          "transaction_timestamp()",
+          "internal"
+        ],
+        [
+          "updated_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "personal"
+        ],
+        [
+          "row_version",
+          "bigint",
+          false,
+          "1",
+          "internal"
+        ]
+      ],
+      "primary_key": [
+        "org_id",
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "bank_statements_org_fk",
+          "columns": [
+            "org_id"
+          ],
+          "references": "core.organizations",
+          "referenced_columns": [
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "bank_statements_account_fk",
+          "columns": [
+            "org_id",
+            "bank_account_id"
+          ],
+          "references": "finance.bank_accounts",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "bank_statements_attachment_fk",
+          "columns": [
+            "org_id",
+            "source_attachment_id"
+          ],
+          "references": "core.attachments",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "bank_statements_reconciled_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "reconciled_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "bank_statements_created_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "created_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "bank_statements_updated_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "updated_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        }
+      ],
+      "uniques": [
+        {
+          "name": "bank_statements_reference_uq",
+          "columns": [
+            "org_id",
+            "bank_account_id",
+            "statement_reference"
+          ],
+          "where": null
+        },
+        {
+          "name": "bank_statements_hash_uq",
+          "columns": [
+            "org_id",
+            "bank_account_id",
+            "source_sha256"
+          ],
+          "where": null
+        }
+      ],
+      "checks": [
+        {
+          "name": "bank_statements_period_ck",
+          "expression": "period_end >= period_start"
+        },
+        {
+          "name": "bank_statements_hash_ck",
+          "expression": "octet_length(source_sha256) = 32"
+        },
+        {
+          "name": "bank_statements_reconciled_ck",
+          "expression": "status NOT IN ('reconciled','closed') OR (reconciled_at IS NOT NULL AND reconciled_by_membership_id IS NOT NULL)"
+        },
+        {
+          "name": "bank_statements_status_ck",
+          "expression": "status IN ('imported','reconciling','reconciled','closed')"
+        },
+        {
+          "name": "bank_statements_row_version_ck",
+          "expression": "row_version > 0"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bank_statements_period_idx",
+          "columns": [
+            "org_id",
+            "bank_account_id",
+            "period_start",
+            "period_end",
+            "id"
+          ],
+          "unique": false,
+          "where": null,
+          "purpose": "statement chronology"
+        }
+      ],
+      "cross_row_invariants": [
+        {
+          "name": "bank_statements_cross_row_guard",
+          "enforcement": "constraint_trigger",
+          "rule": "Verify opening plus signed line amounts equals closing balance before reconciliation; closed statements and lines are immutable."
+        }
+      ]
+    },
+    {
+      "name": "finance.bank_statement_lines",
+      "fact_owner": "Immutable normalized transaction line from a bank statement",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "immutable_import_line",
+      "lifecycle": {
+        "state_column": null,
+        "states": [],
+        "initial": null,
+        "terminal": [],
+        "transitions": []
+      },
+      "rls": {
+        "class": "tenant_membership",
+        "force": true,
+        "write_permission": "internal.bank_statement.parse"
+      },
+      "retention": {
+        "class": "bank_statement_evidence",
+        "minimum": "permanent",
+        "hard_delete": false
+      },
+      "columns": [
+        [
+          "org_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "id",
+          "uuid",
+          false,
+          "gen_random_uuid()",
+          "internal"
+        ],
+        [
+          "bank_statement_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "line_number",
+          "integer",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "transaction_date",
+          "date",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "value_date",
+          "date",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "direction",
+          "text",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "amount",
+          "numeric(20,2)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "running_balance",
+          "numeric(20,2)",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "bank_reference",
+          "text",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "description",
+          "text",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "counterparty_name",
+          "text",
+          true,
+          null,
+          "personal"
+        ],
+        [
+          "counterparty_account_hash",
+          "bytea",
+          true,
+          null,
+          "secret_ciphertext"
+        ],
+        [
+          "created_at",
+          "timestamptz",
+          false,
+          "transaction_timestamp()",
+          "internal"
+        ],
+        [
+          "created_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "personal"
+        ]
+      ],
+      "primary_key": [
+        "org_id",
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "bank_statement_lines_org_fk",
+          "columns": [
+            "org_id"
+          ],
+          "references": "core.organizations",
+          "referenced_columns": [
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "bank_statement_lines_statement_fk",
+          "columns": [
+            "org_id",
+            "bank_statement_id"
+          ],
+          "references": "finance.bank_statements",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "CASCADE",
+          "deferrable": false
+        },
+        {
+          "name": "bank_statement_lines_created_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "created_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        }
+      ],
+      "uniques": [
+        {
+          "name": "bank_statement_lines_number_uq",
+          "columns": [
+            "org_id",
+            "bank_statement_id",
+            "line_number"
+          ],
+          "where": null
+        }
+      ],
+      "checks": [
+        {
+          "name": "bank_statement_lines_number_ck",
+          "expression": "line_number > 0"
+        },
+        {
+          "name": "bank_statement_lines_direction_ck",
+          "expression": "direction IN ('credit','debit')"
+        },
+        {
+          "name": "bank_statement_lines_amount_ck",
+          "expression": "amount > 0"
+        },
+        {
+          "name": "bank_statement_lines_hash_ck",
+          "expression": "counterparty_account_hash IS NULL OR octet_length(counterparty_account_hash) = 32"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "bank_statement_lines_date_idx",
+          "columns": [
+            "org_id",
+            "transaction_date",
+            "bank_statement_id",
+            "line_number"
+          ],
+          "unique": false,
+          "where": null,
+          "purpose": "reconciliation candidate lookup"
+        },
+        {
+          "name": "bank_statement_lines_reference_idx",
+          "columns": [
+            "org_id",
+            "bank_reference",
+            "transaction_date",
+            "id"
+          ],
+          "unique": false,
+          "where": "bank_reference IS NOT NULL",
+          "purpose": "bank reference matching"
+        }
+      ],
+      "cross_row_invariants": [
+        {
+          "name": "bank_statement_lines_cross_row_guard",
+          "enforcement": "constraint_trigger",
+          "rule": "Insert only during verified import; preserve source order, validate optional running-balance sequence, and block UPDATE/DELETE once imported."
+        }
+      ]
+    },
+    {
+      "name": "finance.reconciliation_matches",
+      "fact_owner": "Reversible M:N amount match between bank lines and posted journals",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "append_only_reconciliation",
+      "lifecycle": {
+        "state_column": "status",
+        "states": [
+          "matched",
+          "reversed"
+        ],
+        "initial": "matched",
+        "terminal": [
+          "reversed"
+        ],
+        "transitions": [
+          "matched->reversed"
+        ]
+      },
+      "rls": {
+        "class": "tenant_membership",
+        "force": true,
+        "write_permission": "finance.bank_reconcile"
+      },
+      "retention": {
+        "class": "bank_reconciliation_evidence",
+        "minimum": "permanent",
+        "hard_delete": false
+      },
+      "columns": [
+        [
+          "org_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "id",
+          "uuid",
+          false,
+          "gen_random_uuid()",
+          "internal"
+        ],
+        [
+          "bank_statement_line_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "journal_entry_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "matched_amount",
+          "numeric(20,2)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "currency_code",
+          "char(3)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "match_method",
+          "text",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "matched_at",
+          "timestamptz",
+          false,
+          "transaction_timestamp()",
+          "internal"
+        ],
+        [
+          "matched_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "personal"
+        ],
+        [
+          "reversal_of_match_id",
+          "uuid",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "reversal_reason",
+          "text",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "status",
+          "text",
+          false,
+          "'matched'::text",
+          "internal"
+        ],
+        [
+          "created_at",
+          "timestamptz",
+          false,
+          "transaction_timestamp()",
+          "internal"
+        ],
+        [
+          "created_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "personal"
+        ]
+      ],
+      "primary_key": [
+        "org_id",
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "reconciliation_matches_org_fk",
+          "columns": [
+            "org_id"
+          ],
+          "references": "core.organizations",
+          "referenced_columns": [
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "reconciliation_matches_line_fk",
+          "columns": [
+            "org_id",
+            "bank_statement_line_id"
+          ],
+          "references": "finance.bank_statement_lines",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "reconciliation_matches_journal_fk",
+          "columns": [
+            "org_id",
+            "journal_entry_id"
+          ],
+          "references": "finance.journal_entries",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "reconciliation_matches_reversal_fk",
+          "columns": [
+            "org_id",
+            "reversal_of_match_id"
+          ],
+          "references": "finance.reconciliation_matches",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "1:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": "INITIALLY_DEFERRED"
+        },
+        {
+          "name": "reconciliation_matches_matched_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "matched_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "reconciliation_matches_created_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "created_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        }
+      ],
+      "uniques": [],
+      "checks": [
+        {
+          "name": "reconciliation_matches_amount_ck",
+          "expression": "matched_amount > 0"
+        },
+        {
+          "name": "reconciliation_matches_method_ck",
+          "expression": "match_method IN ('manual','reference_exact','amount_date','provider_reference')"
+        },
+        {
+          "name": "reconciliation_matches_reversal_ck",
+          "expression": "(reversal_of_match_id IS NULL AND reversal_reason IS NULL AND status = 'matched') OR (reversal_of_match_id IS NOT NULL AND reversal_reason IS NOT NULL)"
+        },
+        {
+          "name": "reconciliation_matches_status_ck",
+          "expression": "status IN ('matched','reversed')"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "reconciliation_matches_reversal_uq",
+          "columns": [
+            "org_id",
+            "reversal_of_match_id"
+          ],
+          "unique": true,
+          "where": "reversal_of_match_id IS NOT NULL",
+          "purpose": "one reversal per match"
+        },
+        {
+          "name": "reconciliation_matches_line_idx",
+          "columns": [
+            "org_id",
+            "bank_statement_line_id",
+            "matched_at",
+            "id"
+          ],
+          "unique": false,
+          "where": null,
+          "purpose": "bank line matched total"
+        },
+        {
+          "name": "reconciliation_matches_journal_idx",
+          "columns": [
+            "org_id",
+            "journal_entry_id",
+            "matched_at",
+            "id"
+          ],
+          "unique": false,
+          "where": null,
+          "purpose": "journal matched total"
+        }
+      ],
+      "cross_row_invariants": [
+        {
+          "name": "reconciliation_matches_cross_row_guard",
+          "enforcement": "transaction_guard",
+          "rule": "Lock both owners; require posted journal in the bank account ledger/currency and prevent active matched sums from exceeding either bank-line amount or journal bank-line amount. Reversal is compensating evidence, never deletion."
+        }
+      ]
+    }
+  ],
+  "unresolved_design_choices": []
+}

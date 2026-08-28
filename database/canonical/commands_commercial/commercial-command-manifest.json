@@ -1,0 +1,560 @@
+{
+  "account_role_settings": {
+    "namespace": "finance.account_roles",
+    "required_roles": {
+      "accounts_payable": "active liability account with allows_party_posting",
+      "accounts_receivable": "active asset account with allows_party_posting",
+      "cash_on_hand": "active asset account without party posting",
+      "cheques_in_hand": "active asset account without party posting",
+      "cost_of_goods_sold": "active expense account",
+      "customer_advance": "active liability account with allows_party_posting",
+      "goods_received_not_invoiced": "active liability account",
+      "gst_tds_payable": "active liability account",
+      "income_tax_tds_payable": "active liability account",
+      "input_cess": "active asset account",
+      "input_cgst": "active asset account",
+      "input_igst": "active asset account",
+      "input_sgst": "active asset account",
+      "inventory_asset": "active asset account",
+      "inventory_count_gain": "active income account without party posting",
+      "inventory_count_loss": "active expense account without party posting",
+      "output_cess": "active liability account",
+      "output_cgst": "active liability account",
+      "output_igst": "active liability account",
+      "output_sgst": "active liability account",
+      "purchase_price_variance": "active expense account without party posting",
+      "purchase_return_inventory_variance": "active expense account",
+      "rcm_cess_payable": "active liability account",
+      "rcm_cgst_payable": "active liability account",
+      "rcm_igst_payable": "active liability account",
+      "rcm_sgst_payable": "active liability account",
+      "rounding_gain": "active income account",
+      "rounding_loss": "active expense account",
+      "sales_revenue": "active income account without party posting",
+      "supplier_prepayment": "active asset account with allows_party_posting"
+    },
+    "resolution": "active branch setting first, then active organization setting; value_type='text' UUID"
+  },
+  "atomic_posting_order": [
+    "assert tenant, active actor, exact branch permissions and request context",
+    "claim the operation/idempotency key and lock the typed aggregate plus originals in UUID order",
+    "parse fixed calculation input/output bytes and compare every persisted calculation field",
+    "validate effective tax-code versions, registrations, account mappings and line accounts",
+    "post required typed inventory command and lock its ledger entries",
+    "derive COGS/inventory value only from the posted ledger, never from request payloads",
+    "consume the calculation artifact exactly once",
+    "freeze the source and lines, then insert tax document, balanced journal and accounting event",
+    "insert receivable/payable open item or typed compensating adjustment",
+    "verify one-to-one companion ownership and finish the idempotency claim"
+  ],
+  "blocked_count": 0,
+  "blocked_invariants": {},
+  "catalog_sha256": "6c88d9a0f93158f126abc8d87057b8fcebb287ba332ef36fd37b802cadc29c31",
+  "generic_adjustment_tax_boundary": {
+    "blocked_count": 0,
+    "blocked_invariants": {},
+    "catalog_changes": [
+      {
+        "add_columns": [
+          [
+            "adjustment_note_id",
+            "uuid",
+            true
+          ]
+        ],
+        "authority_change": "Issue and consume adjustment_note artifacts only for the reviewed note operation and exact approved row_version.",
+        "checks": [
+          "typed aggregate XOR includes adjustment_note_id"
+        ],
+        "foreign_keys": [
+          "(org_id,adjustment_note_id) -> finance.adjustment_notes(org_id,id) RESTRICT"
+        ],
+        "table": "calculation.artifacts"
+      },
+      {
+        "add_columns": [
+          [
+            "document_effect",
+            "text",
+            false
+          ],
+          [
+            "rounding_policy",
+            "text",
+            false
+          ],
+          [
+            "document_discount_kind",
+            "text",
+            false
+          ],
+          [
+            "document_discount_basis",
+            "text",
+            false
+          ],
+          [
+            "document_discount_value",
+            "numeric(20,6)",
+            false
+          ],
+          [
+            "calculation_ruleset_version",
+            "varchar(64)",
+            false
+          ],
+          [
+            "gst_adjustment_rule_version_id",
+            "uuid",
+            false
+          ],
+          [
+            "gst_tax_treatment",
+            "text",
+            false
+          ],
+          [
+            "counterparty_portal_document_line_id",
+            "uuid",
+            true
+          ],
+          [
+            "recipient_itc_reversal_evidence_attachment_id",
+            "uuid",
+            true
+          ],
+          [
+            "recipient_itc_reversal_confirmed_at",
+            "timestamptz",
+            true
+          ]
+        ],
+        "checks": [
+          "rounding and discount policy use the same fixed calculation vocabulary as invoices"
+        ],
+        "table": "finance.adjustment_notes"
+      },
+      {
+        "add_columns": [
+          [
+            "sales_invoice_line_id",
+            "uuid",
+            true
+          ],
+          [
+            "supplier_invoice_line_id",
+            "uuid",
+            true
+          ],
+          [
+            "charge_code",
+            "text",
+            true
+          ],
+          [
+            "quoted_amount",
+            "numeric(20,2)",
+            true
+          ],
+          [
+            "free_quantity",
+            "numeric(20,6)",
+            true
+          ],
+          [
+            "uom_conversion_factor",
+            "numeric(20,6)",
+            true
+          ],
+          [
+            "base_billed_quantity",
+            "numeric(20,6)",
+            true
+          ],
+          [
+            "base_free_quantity",
+            "numeric(20,6)",
+            true
+          ],
+          [
+            "free_supply_tax_treatment",
+            "text",
+            true
+          ],
+          [
+            "line_discount_kind",
+            "text",
+            false
+          ],
+          [
+            "line_discount_basis",
+            "text",
+            false
+          ],
+          [
+            "line_discount_value",
+            "numeric(20,6)",
+            false
+          ],
+          [
+            "document_discount_eligible",
+            "boolean",
+            false
+          ],
+          [
+            "line_discount_amount",
+            "numeric(20,2)",
+            false
+          ],
+          [
+            "line_taxable_discount_amount",
+            "numeric(20,2)",
+            false
+          ],
+          [
+            "document_discount_amount",
+            "numeric(20,2)",
+            false
+          ],
+          [
+            "document_taxable_discount_amount",
+            "numeric(20,2)",
+            false
+          ],
+          [
+            "final_residual",
+            "boolean",
+            false
+          ],
+          [
+            "gst_tax_treatment",
+            "text",
+            false
+          ],
+          [
+            "inventory_cost_treatment",
+            "text",
+            true
+          ],
+          [
+            "itc_eligibility",
+            "text",
+            true
+          ]
+        ],
+        "checks": [
+          "decrease lines require exactly the side-compatible typed original line"
+        ],
+        "foreign_keys": [
+          "(org_id,sales_invoice_line_id) -> sales.invoice_lines(org_id,id) RESTRICT",
+          "(org_id,supplier_invoice_line_id) -> procurement.supplier_invoice_lines(org_id,id) RESTRICT"
+        ],
+        "table": "finance.adjustment_note_lines"
+      },
+      {
+        "deferred_scope": "Multi-rate service advances require a future reviewed typed taxable-advance aggregate; finance.payments is not tax evidence.",
+        "remove_columns": [
+          [
+            "taxable_advance_payment_id",
+            "uuid"
+          ]
+        ],
+        "remove_source_classes": [
+          "taxable_advance"
+        ],
+        "table": "tax.documents"
+      }
+    ],
+    "implementation_status": "implemented",
+    "resolved_count": 3,
+    "resolved_invariants": [
+      "finance.adjustment_note_lines:adjustment_note_lines_cross_row_guard",
+      "finance.adjustment_notes:adjustment_notes_cross_row_guard",
+      "tax.documents:documents_cross_row_guard"
+    ],
+    "workflow_limitations": [
+      "A return after a posted generic adjustment is rejected until the reversal artifact can encode the adjusted original monetary basis.",
+      "Adjustment-note and adjustment-allocation reversal are rejected until a reviewed compensating-note command owns those effects.",
+      "Multi-rate service-advance tax is deferred until a typed taxable-advance aggregate exists; finance.payments is not tax evidence."
+    ]
+  },
+  "implementation_status": "implemented",
+  "inventory_value_authority": {
+    "cogs_formula": "sum(-value_delta) for locked posted issue entries",
+    "prohibition": "request, invoice price and mutable stock-balance values are not COGS evidence",
+    "source": "inventory.stock_ledger_entries"
+  },
+  "manifest_version": "1.0.0",
+  "mapping_file": "baseline-commercial-command-enforcements.json",
+  "mapping_sha256": "d9919544def7df8f58d5d7be262513d35a5701c609a235eee1afaf53f650c7eb",
+  "postgresql": "15+",
+  "prohibitions": [
+    "No dynamic SQL.",
+    "No invented account IDs or fallback suspense account.",
+    "No inferred ITC eligibility.",
+    "No UUID-equality convention in place of a foreign key.",
+    "No enforcement entry while any allowed catalog path is unprovable."
+  ],
+  "required_catalog_changes": [
+    {
+      "add_columns": [
+        [
+          "sales_return_id",
+          "uuid",
+          true
+        ],
+        [
+          "purchase_return_id",
+          "uuid",
+          true
+        ],
+        [
+          "adjusts_open_item_id",
+          "uuid",
+          true
+        ],
+        [
+          "gst_adjustment_rule_version_id",
+          "uuid",
+          false
+        ],
+        [
+          "gst_tax_treatment",
+          "text",
+          false
+        ],
+        [
+          "counterparty_portal_document_line_id",
+          "uuid",
+          true
+        ],
+        [
+          "recipient_itc_reversal_evidence_attachment_id",
+          "uuid",
+          true
+        ],
+        [
+          "recipient_itc_reversal_confirmed_at",
+          "timestamptz",
+          true
+        ]
+      ],
+      "checks": [
+        "num_nonnulls(sales_return_id,purchase_return_id)<=1",
+        "side='sales' requires sales_invoice_id, forbids supplier_invoice_id/purchase_return_id",
+        "invoiced purchase adjustments require supplier_invoice_id and adjusts_open_item_id; uninvoiced purchase returns require neither"
+      ],
+      "foreign_keys": [
+        {
+          "columns": [
+            "org_id",
+            "sales_return_id"
+          ],
+          "deferrable": "INITIALLY_DEFERRED",
+          "on_delete": "RESTRICT",
+          "references": "sales.returns(org_id,id)"
+        },
+        {
+          "columns": [
+            "org_id",
+            "purchase_return_id"
+          ],
+          "deferrable": "INITIALLY_DEFERRED",
+          "on_delete": "RESTRICT",
+          "references": "procurement.purchase_returns(org_id,id)"
+        }
+      ],
+      "invariant_change": "A return-owned adjustment copies the locked original invoice, calculation artifact and return; its typed return link is immutable and owns exactly one tax document and accounting event.",
+      "partial_unique_indexes": [
+        "(org_id,sales_return_id) WHERE sales_return_id IS NOT NULL",
+        "(org_id,purchase_return_id) WHERE purchase_return_id IS NOT NULL"
+      ],
+      "table": "finance.adjustment_notes"
+    },
+    {
+      "add_columns": [
+        [
+          "return_source_kind",
+          "text",
+          false
+        ],
+        [
+          "supplier_invoice_id",
+          "uuid",
+          true
+        ],
+        [
+          "supplier_credit_note_portal_line_id",
+          "uuid",
+          true
+        ],
+        [
+          "gst_adjustment_rule_version_id",
+          "uuid",
+          false
+        ],
+        [
+          "gst_tax_treatment",
+          "text",
+          false
+        ]
+      ],
+      "checks": [
+        "return_source_kind IN ('invoiced','uninvoiced')",
+        "(return_source_kind='invoiced')=(supplier_invoice_id IS NOT NULL)"
+      ],
+      "foreign_keys": [
+        {
+          "columns": [
+            "org_id",
+            "supplier_invoice_id"
+          ],
+          "deferrable": false,
+          "on_delete": "RESTRICT",
+          "references": "procurement.supplier_invoices(org_id,id)"
+        }
+      ],
+      "invariant_change": "Invoiced lines require allocations from the one supplier invoice. Uninvoiced lines forbid those allocations, reverse exact goods-receipt cost only, and cannot create a GST adjustment.",
+      "table": "procurement.purchase_returns"
+    },
+    {
+      "add_columns": [
+        [
+          "final_residual",
+          "boolean",
+          false
+        ],
+        [
+          "gst_tax_treatment",
+          "text",
+          false
+        ]
+      ],
+      "checks": [],
+      "invariant_change": "The immutable flag must equal the consumed reversal artifact for this line.",
+      "table": "sales.return_lines"
+    },
+    {
+      "add_columns": [
+        [
+          "final_residual",
+          "boolean",
+          false
+        ],
+        [
+          "gst_tax_treatment",
+          "text",
+          false
+        ]
+      ],
+      "checks": [],
+      "invariant_change": "The immutable flag must equal the consumed reversal artifact for this line.",
+      "table": "procurement.purchase_return_lines"
+    },
+    {
+      "add_columns": [
+        [
+          "gst_adjustment_rule_version_id",
+          "uuid",
+          false
+        ],
+        [
+          "gst_tax_treatment",
+          "text",
+          false
+        ],
+        [
+          "recipient_itc_reversal_evidence_attachment_id",
+          "uuid",
+          true
+        ],
+        [
+          "recipient_itc_reversal_confirmed_at",
+          "timestamptz",
+          true
+        ]
+      ],
+      "checks": [
+        "statutory sales decreases require retained recipient ITC-reversal evidence; commercial_only has zero GST"
+      ],
+      "invariant_change": "The effective reviewed GST rule chooses statutory tax reduction or a financial-only credit.",
+      "table": "sales.returns"
+    },
+    {
+      "add_columns": [
+        [
+          "revenue_account_id",
+          "uuid",
+          false
+        ]
+      ],
+      "foreign_keys": [
+        {
+          "columns": [
+            "org_id",
+            "revenue_account_id"
+          ],
+          "deferrable": false,
+          "on_delete": "RESTRICT",
+          "references": "finance.accounts(org_id,id)"
+        }
+      ],
+      "invariant_change": "Posting locks an active income account in the invoice currency for every line.",
+      "table": "sales.invoice_lines"
+    },
+    {
+      "add_columns": [
+        [
+          "net_value_account_id",
+          "uuid",
+          false
+        ],
+        [
+          "itc_eligibility",
+          "text",
+          false
+        ]
+      ],
+      "checks": [
+        "itc_eligibility IN ('eligible','ineligible','blocked','deferred')",
+        "inventory_cost_treatment='capitalize' requires an asset net-value account",
+        "inventory_cost_treatment='expense' requires an expense net-value account"
+      ],
+      "foreign_keys": [
+        {
+          "columns": [
+            "org_id",
+            "net_value_account_id"
+          ],
+          "deferrable": false,
+          "on_delete": "RESTRICT",
+          "references": "finance.accounts(org_id,id)"
+        }
+      ],
+      "invariant_change": "Eligible GST posts to configured ITC assets; noncreditable GST is routed using inventory_cost_treatment and the explicit account. RCM posts the configured liability and the eligibility-directed debit.",
+      "table": "procurement.supplier_invoice_lines"
+    },
+    {
+      "invariant_change": "Credit and debit notes are exclusively finance.adjustment_notes.",
+      "replace_check": "invoice_type IN ('tax_invoice','bill_of_supply')",
+      "table": "sales.invoices"
+    }
+  ],
+  "resolved_count": 11,
+  "resolved_invariants": [
+    "finance.adjustment_note_lines:adjustment_note_lines_cross_row_guard",
+    "finance.adjustment_notes:adjustment_notes_cross_row_guard",
+    "procurement.purchase_return_lines:procurement_purchase_return_lines_invariant_1",
+    "procurement.purchase_returns:procurement_purchase_returns_invariant_1",
+    "procurement.supplier_invoice_lines:procurement_supplier_invoice_lines_invariant_1",
+    "procurement.supplier_invoices:procurement_supplier_invoices_invariant_1",
+    "sales.invoice_lines:sales_invoice_lines_invariant_1",
+    "sales.invoices:sales_invoices_invariant_1",
+    "sales.return_lines:sales_return_lines_invariant_1",
+    "sales.returns:sales_returns_invariant_1",
+    "tax.documents:documents_cross_row_guard"
+  ],
+  "source_manifest": "commands_trade_v2/trade-posting-manifest.json",
+  "source_manifest_sha256": "8faf673d7eed7d6b80509dfa5122f7251e4993f8395adec9254491ed901328f1",
+  "target_resolved_count_after_catalog_correction": 11
+}

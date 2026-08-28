@@ -1,0 +1,171 @@
+{
+  "model_version": "1.2.0-canonical-authority",
+  "scope": {
+    "excluded_managed_schemas": [
+      "auth"
+    ],
+    "canonical_physical_tables": 110,
+    "tenant_primary_key": "Addressable tenant resources: (org_id,id); pure associations and rebuildable projections: org_id-leading natural composite key without id",
+    "global_primary_key": "id or controlled code"
+  },
+  "feature_contract": {
+    "product_scope": "india_pharma_wholesale_core",
+    "retained_despite_missing_live_tables": [],
+    "retained_mounted_modules": [
+      "expense_claims"
+    ],
+    "deferred_and_must_remain_unmounted": [
+      "payroll_attendance_leave_salary_runs_and_slips",
+      "loyalty_programs_tiers_and_points",
+      "sales_schemes_and_promotions",
+      "price_lists_and_price_history",
+      "quality_control_and_regulatory_inspection_workflows",
+      "configurable_analytics_and_report_builder",
+      "purchase_requisitions_quotations_and_budgets",
+      "field_sales_routes_visits_and_targets",
+      "competitor_pricing_and_alerts",
+      "generic_workflow_scheduler_and_notification_inbox"
+    ],
+    "externally_owned": {
+      "identity_credentials_sessions_and_oauth_clients": "Supabase auth schema",
+      "object_blobs": "Supabase storage schema; core.attachments owns ERP evidence metadata only",
+      "observability": "Render/logging platform, not canonical ERP tables"
+    }
+  },
+  "canonical_tables": {
+    "core": [
+      "core.organizations",
+      "core.branches",
+      "core.users",
+      "core.memberships",
+      "core.roles",
+      "core.permissions",
+      "core.role_permissions",
+      "core.access_grants",
+      "core.settings",
+      "core.document_sequences",
+      "core.idempotency_keys",
+      "core.audit_events",
+      "core.outbox_events",
+      "core.attachments",
+      "core.reference_data_releases",
+      "core.data_retention_cases"
+    ],
+    "parties": [
+      "parties.parties",
+      "parties.customer_accounts",
+      "parties.supplier_accounts",
+      "parties.contacts",
+      "parties.addresses",
+      "parties.tax_registrations"
+    ],
+    "catalog": [
+      "catalog.products",
+      "catalog.categories",
+      "catalog.units_of_measure",
+      "catalog.uom_conversions",
+      "catalog.commercial_charge_tax_profiles",
+      "catalog.ingredients",
+      "catalog.product_ingredients"
+    ],
+    "inventory": [
+      "inventory.locations",
+      "inventory.batches",
+      "inventory.inventory_documents",
+      "inventory.inventory_document_lines",
+      "inventory.stock_ledger_entries",
+      "inventory.stock_balances",
+      "inventory.reservations"
+    ],
+    "sales": [
+      "sales.orders",
+      "sales.order_lines",
+      "sales.dispatches",
+      "sales.dispatch_lines",
+      "sales.invoices",
+      "sales.invoice_lines",
+      "sales.invoice_dispatch_allocations",
+      "sales.returns",
+      "sales.return_lines"
+    ],
+    "procurement": [
+      "procurement.purchase_orders",
+      "procurement.purchase_order_lines",
+      "procurement.goods_receipts",
+      "procurement.goods_receipt_lines",
+      "procurement.supplier_invoices",
+      "procurement.supplier_invoice_lines",
+      "procurement.supplier_invoice_receipt_allocations",
+      "procurement.purchase_returns",
+      "procurement.purchase_return_lines",
+      "procurement.purchase_order_advance_allocations"
+    ],
+    "finance": [
+      "finance.accounts",
+      "finance.bank_accounts",
+      "finance.accounting_events",
+      "finance.journal_entries",
+      "finance.journal_lines",
+      "finance.payments",
+      "finance.open_items",
+      "finance.allocations",
+      "finance.adjustment_notes",
+      "finance.adjustment_note_lines",
+      "finance.expense_claims",
+      "finance.expense_claim_lines",
+      "finance.bank_statements",
+      "finance.bank_statement_lines",
+      "finance.reconciliation_matches"
+    ],
+    "tax": [
+      "tax.registrations",
+      "tax.registration_branches",
+      "tax.tax_code_versions",
+      "tax.documents",
+      "tax.withholdings",
+      "tax.withholding_rule_versions",
+      "tax.organization_fiscal_tax_facts",
+      "tax.withholding_basis_lines",
+      "tax.withholding_deposits",
+      "tax.withholding_deposit_lines",
+      "tax.withholding_statements",
+      "tax.withholding_statement_lines",
+      "tax.withholding_certificates",
+      "tax.withholding_certificate_lines",
+      "tax.return_periods",
+      "tax.returns",
+      "tax.return_documents",
+      "tax.portal_documents",
+      "tax.portal_document_lines",
+      "tax.reconciliation_runs",
+      "tax.reconciliation_items",
+      "tax.eway_bills",
+      "tax.einvoices",
+      "tax.einvoice_rule_versions",
+      "tax.gst_adjustment_rule_versions"
+    ],
+    "compliance": [
+      "compliance.licenses",
+      "compliance.recalls",
+      "compliance.recall_batches",
+      "compliance.temperature_readings",
+      "compliance.controlled_substance_entries",
+      "compliance.destructions",
+      "compliance.controlled_movement_rule_versions",
+      "compliance.storage_rule_versions"
+    ],
+    "hr": [
+      "hr.departments",
+      "hr.employees"
+    ],
+    "automation": [
+      "automation.agent_grants",
+      "automation.agent_grant_capabilities",
+      "automation.command_requests",
+      "automation.command_approvals"
+    ],
+    "calculation": [
+      "calculation.artifacts"
+    ]
+  }
+}

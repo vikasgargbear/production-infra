@@ -9,6 +9,14 @@
  *          InvoiceSelector, EnterprisePaymentEntry, CustomerCreationModal, etc.
  */
 
+import type {
+    CanonicalAllocationSourceKind,
+    CanonicalSourceDocumentKind,
+    FreeSupplyTaxTreatment as SharedFreeSupplyTaxTreatment,
+} from '../../types/salesSharedTypes';
+import type { CanonicalImportLine } from '../../utils/documentImport';
+import type { EditableDecimalValue, ExactDecimalString } from '../../../../utils/exactDecimal';
+
 // ==================== BASE TYPES ====================
 
 /** Payment method types supported by the system */
@@ -25,6 +33,10 @@ export type DeliveryType = 'local' | 'courier' | 'self_pickup' | 'transport' | '
 
 /** GST type - intra-state vs inter-state */
 export type GstType = 'CGST/SGST' | 'IGST';
+export type ZeroRatedPaymentMode = 'not_applicable' | 'with_igst';
+
+/** Whether free units contribute to the taxable line value. */
+export type FreeSupplyTaxTreatment = SharedFreeSupplyTaxTreatment;
 
 // ==================== BANK ACCOUNT ====================
 
@@ -41,11 +53,16 @@ export interface BankAccount {
 
 /** Customer address structure - used in Customer and elsewhere */
 export interface CustomerAddress {
+    address_id?: string | number;
+    id?: string | number;
+    row_version?: string | number;
+    address_type?: string;
     address_line1?: string;
     address_line2?: string;
     street?: string;
     city?: string;
     state?: string;
+    state_code?: string;
     pincode?: string;
     country?: string;
 }
@@ -123,12 +140,10 @@ export interface Customer {
     is_active?: boolean;
     customer_code?: string;
 
-    // Business & Loyalty
+    // Business
     business_type?: string;
     customer_category?: string;
     total_business_amount?: number;
-    loyalty_tier?: string;
-    loyalty_points?: number;
 
     // Additional Documents/Details
     drug_license_validity?: string;
@@ -191,45 +206,64 @@ export interface InvoiceItem {
     name?: string;
     product_code?: string;
     hsn_code?: string;
+    product_type?: string;
+    requires_prescription?: boolean;
 
     // Batch info
     batch_number?: string;
     batch_id?: number | string;
+    location_id?: string;
+    branch_id?: string;
+    uom_conversion_id?: string;
     expiry_date?: string;
     manufacturing_date?: string;
 
     // Quantities
-    quantity?: number;
-    free_quantity?: number;
-    ordered_quantity?: number;
-    dispatched_quantity?: number;
+    quantity?: number | string;
+    free_quantity?: number | string;
+    free_supply_tax_treatment?: FreeSupplyTaxTreatment;
+    source_line_id?: string | number;
+    source_document_kind?: CanonicalSourceDocumentKind;
+    source_allocation_kind?: CanonicalAllocationSourceKind;
+    allocation_id?: string;
+    command_request_id?: string | null;
+    inventory_document_id?: string;
+    inventory_document_line_id?: string;
+    invoice_dispatch_allocation_id?: string | null;
+    dispatch_id?: string | null;
+    dispatch_line_id?: string | null;
+    base_billed_quantity?: number | string;
+    base_free_quantity?: number | string;
+    source_billed_quantity?: number | string;
+    source_free_quantity?: number | string;
+    ordered_quantity?: number | string;
+    dispatched_quantity?: number | string;
 
     // Pricing - CANONICAL ONLY
-    unit_price?: number;  // CANONICAL: selling price per unit
+    unit_price?: number | string;  // Exact string is preserved through the canonical posting boundary
     cost_per_unit?: number;
 
     // Discounts - CANONICAL ONLY
-    discount_percent?: number;  // CANONICAL: % discount on item
-    discount_amount?: number;   // CANONICAL: calculated discount amount
+    discount_percent?: number | string;  // Exact string is preserved through the canonical posting boundary
+    discount_amount?: EditableDecimalValue;
 
     // Taxes
-    gst_percent?: number;
-    tax_percent?: number;
+    gst_percent?: number | string;
     cgst_percent?: number;
     sgst_percent?: number;
     igst_percent?: number;
     cgst_rate?: number;
     sgst_rate?: number;
     igst_rate?: number;
-    cgst_amount?: number;
-    sgst_amount?: number;
-    igst_amount?: number;
-    tax_amount?: number;
+    cgst_amount?: EditableDecimalValue;
+    sgst_amount?: EditableDecimalValue;
+    igst_amount?: EditableDecimalValue;
+    tax_amount?: EditableDecimalValue;
 
     // Totals
-    amount?: number;
-    total?: number;
-    line_total?: number;
+    amount?: EditableDecimalValue;
+    total?: EditableDecimalValue;
+    line_total?: EditableDecimalValue;
 
     // Pack info (for pharma) - using backend-standard names
     pack_type?: string;
@@ -248,34 +282,34 @@ export interface InvoiceItem {
 /** Calculated totals for an invoice */
 export interface InvoiceTotals {
     // Subtotal before discounts
-    subtotal?: number;
-    gross_amount?: number;
+    subtotal?: EditableDecimalValue;
+    gross_amount?: EditableDecimalValue;
 
     // Discounts
-    total_discount?: number;
-    discount_amount?: number;
-    additional_discount?: number;
+    total_discount?: EditableDecimalValue;
+    discount_amount?: EditableDecimalValue;
+    additional_discount?: EditableDecimalValue;
 
     // Taxable
-    taxable_amount?: number;
+    taxable_amount?: EditableDecimalValue;
 
     // Tax amounts
-    tax_amount?: number;
-    total_tax?: number;
-    cgst_amount?: number;
-    sgst_amount?: number;
-    igst_amount?: number;
+    tax_amount?: EditableDecimalValue;
+    total_tax?: EditableDecimalValue;
+    cgst_amount?: EditableDecimalValue;
+    sgst_amount?: EditableDecimalValue;
+    igst_amount?: EditableDecimalValue;
 
     // Delivery
-    delivery_charges?: number;
+    delivery_charges?: EditableDecimalValue;
 
     // Rounding
-    round_off?: number;
+    round_off?: EditableDecimalValue;
 
     // Final totals
-    net_amount?: number;
-    total_amount?: number;
-    final_amount?: number;
+    net_amount?: EditableDecimalValue;
+    total_amount?: EditableDecimalValue;
+    final_amount?: EditableDecimalValue;
 
     // Payment tracking
     paid_amount?: number;
@@ -326,6 +360,7 @@ export interface Invoice {
 
     // Dates - DB: invoice_date is date NOT NULL
     invoice_date: string;  // REQUIRED - DB: date NOT NULL
+    zero_rated_payment_mode?: ZeroRatedPaymentMode;
     order_date?: string;
     due_date?: string;
 
@@ -360,6 +395,8 @@ export interface Invoice {
 
     // Delivery
     delivery_type?: string;
+    distance_km?: string | number;
+    freight_charges?: string | number;
     transport_company?: string;
     vehicle_number?: string;
     driver_phone?: string;
@@ -393,7 +430,6 @@ export interface Invoice {
     // Sales info
     salesperson_id?: number | null;
     org_name?: string;
-    company_name?: string;
 
     // GST
     gst_type?: GstType | string;
@@ -485,24 +521,27 @@ export interface ProductInput {
     product_code?: string;
     batch_id?: number | string | null;
     batch_number?: string;  // Alias used by some search results
+    branch_id?: string;
+    location_id?: string;
+    uom_conversion_id?: string;
     expiry_date?: string;
     manufacturing_date?: string;
     // Pricing - batch level uses _per_unit suffix
-    sale_price_per_unit?: number; // Backend field - maps to unit_price
-    unit_price?: number;  // CANONICAL: selling price
-    mrp_per_unit?: number;
-    mrp?: number;
+    sale_price_per_unit?: ExactDecimalString; // Backend field - maps to unit_price
+    unit_price?: ExactDecimalString;  // CANONICAL: selling price
+    mrp_per_unit?: ExactDecimalString;
+    mrp?: ExactDecimalString;
     // Tax
-    gst_percent?: number;
-    tax_rate?: number;  // Alias from product search
+    gst_percent?: ExactDecimalString;
     hsn_code?: string;
     // Quantities
-    quantity?: number;
-    free_quantity?: number;
-    quantity_available?: number;
-    available_quantity?: number;
-    total_quantity_available?: number;  // Alias from product search
-    discount_percent?: number;
+    quantity: ExactDecimalString;
+    free_quantity: ExactDecimalString;
+    free_supply_tax_treatment?: FreeSupplyTaxTreatment;
+    quantity_available?: ExactDecimalString;
+    available_quantity?: ExactDecimalString;
+    total_quantity_available?: ExactDecimalString;  // Alias from product search
+    discount_percent?: ExactDecimalString;
 }
 
 // ==================== WORKFLOW TYPES ====================
@@ -516,7 +555,7 @@ export interface PrefilledData {
 /** Import data from order/challan */
 export interface ImportData {
     customer?: Customer;
-    items?: ProductInput[];
+    items?: CanonicalImportLine[];
     delivery_details?: {
         delivery_type?: string;
         delivery_charges?: number;
@@ -526,13 +565,6 @@ export interface ImportData {
     source?: string;
 }
 
-/** Discount configuration */
-export interface DiscountData {
-    type: 'percentage' | 'fixed';
-    amount?: number;
-    percentage?: number;
-}
-
 /** Data returned after invoice creation */
 export interface CreatedInvoiceData {
     invoiceId: string | number;
@@ -540,7 +572,7 @@ export interface CreatedInvoiceData {
     customerName: string;
     customerPhone: string;
     customerEmail: string;
-    totalAmount: number;
+    totalAmount: string;
     items: InvoiceItem[];
     isOffline: boolean;
 }
@@ -554,12 +586,4 @@ export interface InvoiceDisplay {
     amount: string;
     status?: string;
     itemCount: number;
-}
-
-/** Product for last deal lookup */
-export interface ProductForLastDeal {
-    id?: number;
-    name?: string;
-    product_id?: number | string;
-    product_name?: string;
 }

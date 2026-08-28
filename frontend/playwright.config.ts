@@ -6,18 +6,31 @@ const browserChannel = process.env.PLAYWRIGHT_USE_SYSTEM_CHROME === 'true' ? 'ch
 
 export default defineConfig({
   testDir: './e2e',
+  outputDir: 'test-results/artifacts',
   timeout: 60_000,
   expect: {
-    timeout: 10_000
+    timeout: 15_000
   },
   fullyParallel: false,
+  forbidOnly: Boolean(process.env.CI),
+  workers: process.env.CI ? 1 : undefined,
+  maxFailures: process.env.CI ? 10 : undefined,
   retries: process.env.CI ? 1 : 0,
-  reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
+  reporter: process.env.CI
+    ? [
+        ['line'],
+        ['html', { open: 'never', outputFolder: 'playwright-report' }],
+        ['junit', { outputFile: 'test-results/e2e-junit.xml' }]
+      ]
+    : [['list'], ['html', { open: 'never', outputFolder: 'playwright-report' }]],
   use: {
     baseURL,
+    actionTimeout: 15_000,
+    navigationTimeout: 30_000,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
-    video: browserChannel ? 'off' : 'retain-on-failure'
+    video: 'retain-on-failure',
+    testIdAttribute: 'data-testid'
   },
   webServer: process.env.PLAYWRIGHT_SKIP_WEB_SERVER === 'true'
     ? undefined
@@ -29,9 +42,18 @@ export default defineConfig({
       },
   projects: [
     {
-      name: 'chromium',
+      name: 'desktop-chrome',
+      testMatch: /(?:live-production-smoke|live-canonical-core-api|live-canonical-core-ui|live-canonical-stock-transfer|live-sales-chain-api|live-sales-chain-ui|live-two-user-approval|live-history-gst-readonly|live-stock-hub-ui)\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
+        ...(browserChannel ? { channel: browserChannel } : {})
+      }
+    },
+    {
+      name: 'mobile-chrome',
+      testMatch: /(?:mobile-navigation|live-production-smoke)\.spec\.ts/,
+      use: {
+        ...devices['Pixel 7'],
         ...(browserChannel ? { channel: browserChannel } : {})
       }
     }

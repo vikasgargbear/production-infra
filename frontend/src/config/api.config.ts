@@ -85,7 +85,6 @@ export const API_CONFIG: APIConfig = {
       UPDATE: (id) => `invoices/${id}/`,
       DELETE: (id) => `invoices/${id}/`,
       DETAILS: (id) => `invoices/${id}`,
-      GENERATE_NUMBER: 'invoices/generate-number/',
       DRAFTS: 'invoices/drafts/',
       PDF: (id) => `invoices/${id}/pdf/`,
       WHATSAPP: (id) => `invoices/${id}/whatsapp/`,
@@ -123,67 +122,6 @@ export const API_CONFIG: APIConfig = {
       CONVERT_TO_CHALLAN: (id) => `/sales-orders/${id}/convert-to-challan/`,  // Added trailing slash
     },
 
-    // Inventory
-    INVENTORY: {
-      BATCHES: '/batches/',  // Added trailing slash
-      MOVEMENTS: '/inventory-movements/',  // Added trailing slash
-      STOCK_LEVELS: '/inventory/stock-levels/',  // Added trailing slash
-      ADJUSTMENTS: '/inventory/adjustments/',  // Added trailing slash
-      REPORTS: '/inventory/reports/',  // Added trailing slash
-    },
-
-    // Payments
-    PAYMENTS: {
-      BASE: '/payments/',  // Added trailing slash
-      RECONCILE: '/payments/reconcile/',  // Added trailing slash
-      PENDING: '/payments/pending/',  // Added trailing slash
-      METHODS: '/payments/methods/',  // Added trailing slash
-    },
-
-    // Returns
-    RETURNS: {
-      BASE: '/returns/',  // Restored trailing slash for proper Django URL handling
-      APPROVE: (id) => `/returns/${id}/approve/`,  // Restored trailing slash
-      REJECT: (id) => `/returns/${id}/reject/`,  // Restored trailing slash
-      // Sales returns (from customers)
-      SALES: '/sale-returns/',  // Matches backend: sales_returns_router prefix
-      SALES_BY_ID: (id) => `/sale-returns/${id}/`,
-      SALES_RETURNABLE_INVOICES: '/sale-returns/returnable-invoices/',
-      SALES_INVOICE_ITEMS: (invoiceId) => `/sale-returns/invoice/${invoiceId}/items/`,
-      SALES_RETURNABLE_ITEMS: (invoiceId) => `/sale-returns/invoice/${invoiceId}/returnable-items/`,
-      // Purchase returns (to suppliers)
-      PURCHASE: '/purchase-returns/',  // Matches backend: purchase_returns_router prefix
-      PURCHASE_BY_ID: (id) => `/purchase-returns/${id}/`,
-      REASONS: '/metadata/return-reasons/',  // Use metadata endpoint
-    },
-
-    // Party Ledger
-    LEDGER: {
-      BASE: '/ledger/',  // Added trailing slash
-      PARTY: (partyId) => `/ledger/party/${partyId}/`,  // Added trailing slash
-      STATEMENTS: '/ledger/statements/',  // Added trailing slash
-      OUTSTANDING: '/ledger/outstanding/',  // Added trailing slash
-      AGING: '/ledger/aging/',  // Added trailing slash
-    },
-
-    // Credit/Debit Notes
-    NOTES: {
-      CREDIT: '/credit-notes/',  // Added trailing slash
-      DEBIT: '/debit-notes/',  // Added trailing slash
-      APPROVE: (type, id) => `/${type}-notes/${id}/approve/`,  // Added trailing slash
-      CANCEL: (type, id) => `/${type}-notes/${id}/cancel/`,  // Added trailing slash
-    },
-
-    // Stock Movement
-    STOCK: {
-      BASE: '/stock/',  // Added trailing slash
-      MOVEMENTS: '/stock-movements/',  // Added trailing slash
-      RECEIVE: '/stock-movements/receive/',  // Added trailing slash
-      ISSUE: '/stock-movements/issue/',  // Added trailing slash
-      TRANSFER: '/stock-movements/transfer/',  // Added trailing slash
-      ADJUST: '/stock-movements/adjust/',  // Added trailing slash
-    },
-
     // Reports & Analytics
     REPORTS: {
       DASHBOARD: '/dashboard/',  // Added trailing slash
@@ -201,8 +139,6 @@ export const API_CONFIG: APIConfig = {
     SETTINGS: {
       COMPANY: '/settings/company/',  // Added trailing slash
       PREFERENCES: '/settings/preferences/',  // Added trailing slash
-      USERS: '/users/',  // Added trailing slash
-      ROLES: '/roles/',  // Added trailing slash
       PERMISSIONS: '/permissions/',  // Added trailing slash
     },
 

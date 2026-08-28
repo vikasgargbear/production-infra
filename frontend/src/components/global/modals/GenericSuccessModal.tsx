@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { CheckCircle, X, Printer, Download, Copy, Share2, Mail, MessageCircle, FileText, LucideIcon } from 'lucide-react';
+import { CheckCircle, X, Printer, Download, Copy, Mail, FileText, LucideIcon } from 'lucide-react';
+import WhatsAppIcon from '../../icons/WhatsAppIcon';
+import { canonicalContactEmail, indianContactDigits } from '../../../utils/contactDestinations';
 
 // ==================== TYPE DEFINITIONS ====================
 
@@ -42,7 +44,7 @@ interface GenericSuccessModalProps {
     documentId?: string | number;
     documentType?: string;
     customerName?: string;
-    totalAmount?: number;
+    totalAmount?: number | string;
     onPrint?: () => void;
     onDownload?: () => void;
     onWhatsApp?: () => void;
@@ -85,15 +87,70 @@ const GenericSuccessModal: React.FC<GenericSuccessModalProps> = ({
     additionalActions = [],
     showCopy = true,
     autoCloseDelay = null,
-    enableShare = true,
     partyDetails = null,
     companyInfo = {},
     documentData = {},
     showQuickActions = true
 }) => {
     const [copied, setCopied] = useState<boolean>(false);
-    const [showShareModal, setShowShareModal] = useState<boolean>(false);
     const printUtilityRef = useRef<PrintUtilityRef>(null);
+    const dialogRef = useRef<HTMLDivElement>(null);
+    const previousFocusRef = useRef<HTMLElement | null>(null);
+    const formattedTotalAmount = (() => {
+        if (totalAmount === undefined) return undefined;
+        if (typeof totalAmount === 'number') return totalAmount.toFixed(2);
+        const match = /^(?:0|[1-9]\d*)(?:\.(\d{1,2}))?$/.exec(totalAmount.trim());
+        if (!match) return undefined;
+        const [whole, fraction = ''] = totalAmount.trim().split('.');
+        return `${whole}.${fraction.padEnd(2, '0')}`;
+    })();
+    const whatsappDigits = indianContactDigits(
+        partyDetails?.phone || documentData.customerPhone,
+    );
+    const emailAddress = canonicalContactEmail(
+        partyDetails?.email || documentData.customerEmail,
+    );
+    const recipientName = customerName || partyDetails?.name || 'customer';
+    const shareSubject = `${documentType.charAt(0).toUpperCase() + documentType.slice(1)} #${documentNumber || ''}`.trim();
+    const shareBody = `Dear ${recipientName},\n\nPlease find the ${documentType} details:\n\nDocument Number: ${documentNumber || ''}\nAmount: ₹${formattedTotalAmount || '0.00'}\n\nThank you for your business!\n\nBest regards,\n${companyInfo.name || 'Company'}`;
+
+    // Focus trap: capture trigger element, trap focus inside dialog, restore on close.
+    useEffect(() => {
+        if (isOpen) {
+            previousFocusRef.current = document.activeElement as HTMLElement;
+            // Move focus into the dialog on the next tick so the DOM has rendered.
+            const raf = requestAnimationFrame(() => {
+                const firstFocusable = dialogRef.current?.querySelector<HTMLElement>(
+                    'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+                );
+                firstFocusable?.focus();
+            });
+
+            const handleKeyDown = (e: KeyboardEvent) => {
+                if (e.key !== 'Tab' || !dialogRef.current) return;
+                const focusable = Array.from(
+                    dialogRef.current.querySelectorAll<HTMLElement>(
+                        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+                    )
+                );
+                if (focusable.length === 0) return;
+                const first = focusable[0];
+                const last = focusable[focusable.length - 1];
+                if (e.shiftKey) {
+                    if (document.activeElement === first) { e.preventDefault(); last.focus(); }
+                } else {
+                    if (document.activeElement === last) { e.preventDefault(); first.focus(); }
+                }
+            };
+
+            document.addEventListener('keydown', handleKeyDown);
+            return () => {
+                cancelAnimationFrame(raf);
+                document.removeEventListener('keydown', handleKeyDown);
+                previousFocusRef.current?.focus();
+            };
+        }
+    }, [isOpen]);
 
     useEffect(() => {
         if (isOpen && autoCloseDelay) {
@@ -163,8 +220,13 @@ const GenericSuccessModal: React.FC<GenericSuccessModalProps> = ({
     const config = getDocumentTypeConfig(documentType);
 
     return (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full transform transition-all duration-300 scale-100">
+        <div
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="generic-success-modal-title"
+        >
+            <div ref={dialogRef} className="bg-white rounded-2xl shadow-2xl max-w-md w-full transform transition-all duration-300 scale-100">
                 {/* Header with dynamic gradient */}
                 <div className={`relative px-6 py-6 bg-gradient-to-r ${config.gradient} rounded-t-2xl`}>
                     <div className="flex items-center justify-between">
@@ -173,13 +235,14 @@ const GenericSuccessModal: React.FC<GenericSuccessModalProps> = ({
                                 <CheckCircle className="w-6 h-6 text-white" />
                             </div>
                             <div>
-                                <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
+                                <h3 id="generic-success-modal-title" className="text-lg font-semibold text-gray-900">{title}</h3>
                                 <p className="text-sm text-gray-600 capitalize">{documentType.replace('-', ' ')} created successfully</p>
                             </div>
                         </div>
                         <button
                             onClick={onClose}
-                            className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+                            className="min-h-11 min-w-11 flex items-center justify-center p-2 hover:bg-white/20 rounded-lg transition-colors"
+                            aria-label="Close"
                         >
                             <X className="w-5 h-5 text-gray-600" />
                         </button>
@@ -190,6 +253,12 @@ const GenericSuccessModal: React.FC<GenericSuccessModalProps> = ({
                 <div className="px-6 py-6 space-y-4">
                     {/* Document Details */}
                     <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+                        {documentId && (
+                            <div className="flex items-start justify-between gap-4">
+                                <span className="text-sm font-medium text-gray-700">Canonical resource ID:</span>
+                                <span className="break-all text-right font-mono text-xs text-gray-900">{documentId}</span>
+                            </div>
+                        )}
                         {documentNumber && (
                             <div className="flex items-center justify-between">
                                 <span className="text-sm font-medium text-gray-700">
@@ -202,6 +271,7 @@ const GenericSuccessModal: React.FC<GenericSuccessModalProps> = ({
                                             onClick={copyDocumentNumber}
                                             className="p-1 hover:bg-gray-200 rounded transition-colors"
                                             title="Copy number"
+                                            aria-label={copied ? 'Copied' : 'Copy document number'}
                                         >
                                             {copied ? (
                                                 <CheckCircle className="w-4 h-4 text-green-600" />
@@ -221,10 +291,10 @@ const GenericSuccessModal: React.FC<GenericSuccessModalProps> = ({
                             </div>
                         )}
 
-                        {totalAmount !== undefined && (
+                        {formattedTotalAmount !== undefined && (
                             <div className="flex items-center justify-between">
                                 <span className="text-sm font-medium text-gray-700">Amount:</span>
-                                <span className="text-sm font-semibold text-gray-900">₹{totalAmount.toFixed(2)}</span>
+                                <span className="text-sm font-semibold text-gray-900">₹{formattedTotalAmount}</span>
                             </div>
                         )}
                     </div>
@@ -234,39 +304,53 @@ const GenericSuccessModal: React.FC<GenericSuccessModalProps> = ({
                         <div className="space-y-3">
                             <div className="grid grid-cols-2 gap-2">
                                 <button
+                                    type="button"
+                                    disabled={!whatsappDigits}
                                     onClick={() => {
+                                        if (!whatsappDigits) return;
                                         if (onWhatsApp) {
                                             onWhatsApp();
-                                        } else {
-                                            const phone = partyDetails?.phone || documentData.customerPhone || '';
-                                            const message = `${documentType.charAt(0).toUpperCase() + documentType.slice(1)} #${documentNumber}\nAmount: ₹${totalAmount?.toFixed(2) || '0'}\nFor: ${customerName}`;
-                                            const formattedPhone = phone.replace(/^\+91|^91/, '');
-                                            const whatsappUrl = `https://wa.me/91${formattedPhone}?text=${encodeURIComponent(message)}`;
-                                            window.open(whatsappUrl, '_blank');
+                                            return;
                                         }
+                                        const message = `${shareSubject}\nAmount: ₹${formattedTotalAmount || '0.00'}\nFor: ${recipientName}`;
+                                        window.open(
+                                            `https://wa.me/${whatsappDigits}?text=${encodeURIComponent(message)}`,
+                                            '_blank',
+                                            'noopener,noreferrer',
+                                        );
                                     }}
-                                    className="flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white rounded-xl transition-all transform hover:scale-105 shadow-lg hover:shadow-xl"
+                                    title={whatsappDigits ? `Open WhatsApp for ${recipientName}` : 'Valid WhatsApp number unavailable'}
+                                    className="min-h-[44px] flex items-center justify-center gap-2 px-4 py-3 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-xl transition-colors disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400"
+                                    aria-label={whatsappDigits ? `Open WhatsApp for ${recipientName}` : 'Valid WhatsApp number unavailable'}
                                 >
-                                    <MessageCircle className="w-5 h-5" />
+                                    <WhatsAppIcon className={`w-5 h-5 ${whatsappDigits ? 'text-green-600' : 'text-gray-300'}`} />
                                     <span className="font-medium">WhatsApp</span>
                                 </button>
 
-                                <button
-                                    onClick={() => {
-                                        const email = partyDetails?.email || documentData.customerEmail || '';
-                                        const subject = `${documentType.charAt(0).toUpperCase() + documentType.slice(1)} #${documentNumber}`;
-                                        const body = `Dear ${customerName},\n\nPlease find the ${documentType} details:\n\nDocument Number: ${documentNumber}\nAmount: ₹${totalAmount?.toFixed(2) || '0'}\n\nThank you for your business!\n\nBest regards,\n${companyInfo.name || 'Company'}`;
-                                        const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(email)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-                                        window.open(gmailUrl, '_blank');
-                                    }}
-                                    className="flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-xl transition-all transform hover:scale-105 shadow-lg hover:shadow-xl"
-                                >
-                                    <Mail className="w-5 h-5" />
-                                    <span className="font-medium">Email</span>
-                                </button>
+                                {emailAddress ? (
+                                    <a
+                                        href={`mailto:${encodeURIComponent(emailAddress)}?subject=${encodeURIComponent(shareSubject)}&body=${encodeURIComponent(shareBody)}`}
+                                        className="min-h-[44px] flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-colors"
+                                        aria-label={`Email ${recipientName}`}
+                                    >
+                                        <Mail className="w-5 h-5" />
+                                        <span className="font-medium">Email</span>
+                                    </a>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        disabled
+                                        title="Valid email address unavailable"
+                                        className="min-h-[44px] flex cursor-not-allowed items-center justify-center gap-2 rounded-xl bg-gray-100 px-4 py-3 text-gray-400"
+                                        aria-label="Valid email address unavailable"
+                                    >
+                                        <Mail className="w-5 h-5" />
+                                        <span className="font-medium">Email</span>
+                                    </button>
+                                )}
                             </div>
 
-                            <div className="grid grid-cols-3 gap-2">
+                            <div className={`grid gap-2 ${onDownload ? 'grid-cols-3' : 'grid-cols-2'}`}>
                                 <button
                                     onClick={() => {
                                         if (onPrint) {
@@ -323,35 +407,16 @@ const GenericSuccessModal: React.FC<GenericSuccessModalProps> = ({
                                     </div>
                                 </div>
 
-                                <button
-                                    onClick={() => {
-                                        if (onDownload) {
-                                            onDownload();
-                                        } else {
-                                            alert('PDF download will be implemented');
-                                        }
-                                    }}
-                                    className="flex flex-col items-center justify-center gap-1.5 px-3 py-3 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl transition-all group"
-                                >
-                                    <Download className="w-5 h-5 text-gray-600 group-hover:text-gray-800" />
-                                    <span className="text-xs font-medium text-gray-600 group-hover:text-gray-800">Download</span>
-                                </button>
+                                {onDownload && (
+                                    <button
+                                        onClick={onDownload}
+                                        className="flex flex-col items-center justify-center gap-1.5 px-3 py-3 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl transition-all group"
+                                    >
+                                        <Download className="w-5 h-5 text-gray-600 group-hover:text-gray-800" />
+                                        <span className="text-xs font-medium text-gray-600 group-hover:text-gray-800">Download</span>
+                                    </button>
+                                )}
                             </div>
-                        </div>
-                    )}
-
-                    {/* Legacy Action Buttons */}
-                    {!showQuickActions && (
-                        <div className="grid grid-cols-2 gap-3">
-                            {enableShare && (
-                                <button
-                                    onClick={() => setShowShareModal(true)}
-                                    className="flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-lg transition-all transform hover:scale-105 col-span-2"
-                                >
-                                    <Share2 className="w-4 h-4" />
-                                    Share Document
-                                </button>
-                            )}
                         </div>
                     )}
 
@@ -389,14 +454,6 @@ const GenericSuccessModal: React.FC<GenericSuccessModalProps> = ({
                 {/* PrintUtility removed for now - using direct callbacks */}
             </div>
 
-            {/* TODO: ShareDocument component was removed - replace with ShareModal if sharing is needed */}
-            {/* enableShare && (
-                <ShareModal
-                    show={showShareModal}
-                    onClose={() => setShowShareModal(false)}
-                    ...
-                />
-            ) */}
         </div>
     );
 };

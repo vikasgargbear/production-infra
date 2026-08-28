@@ -6,6 +6,13 @@
 
 import { prepareItemForTransaction, ProductInput } from '../../utils/productItemTransform';
 import type { InvoiceItem } from '../hooks/useInvoiceLogic';
+import { normalizeExactDecimal } from '../../../../utils/exactDecimal';
+import type { CanonicalImportLine } from '../../utils/documentImport';
+
+type SelectedProductInput = Omit<ProductInput, 'quantity' | 'free_quantity'> & {
+    quantity: string;
+    free_quantity: string;
+};
 
 /**
  * Prepare a product for invoice item format
@@ -16,3 +23,63 @@ import type { InvoiceItem } from '../hooks/useInvoiceLogic';
 export const prepareItemForInvoice = (product: ProductInput): InvoiceItem => {
     return prepareItemForTransaction<InvoiceItem>(product);
 };
+
+/** UI selections must carry the operator's exact billed/free quantity intent. */
+export const prepareSelectedProductForInvoice = (
+    product: SelectedProductInput,
+): InvoiceItem => {
+    if (typeof product.quantity !== 'string' || typeof product.free_quantity !== 'string') {
+        throw new Error('Selected product billed and free quantities must remain exact decimal strings.');
+    }
+    return prepareItemForInvoice(product);
+};
+
+/** Canonical imports must carry both quantities explicitly; no UI defaults apply. */
+export const prepareImportedItemsForInvoice = (
+    products: Array<ProductInput | CanonicalImportLine>,
+): InvoiceItem[] => products.map((product, index) => {
+    if (product.free_supply_tax_treatment !== 'excluded_from_taxable_value'
+        && product.free_supply_tax_treatment !== 'included_at_unit_rate') {
+        throw new Error(
+            `Imported item ${index + 1} is missing its canonical free-supply tax treatment.`,
+        );
+    }
+    const exact = product as Record<string, unknown>;
+    const optionalQuantity = (value: unknown, label: string): string | undefined =>
+        value === undefined || value === null || value === ''
+            ? undefined
+            : normalizeExactDecimal(value, label, { scale: 6 });
+    const billedQuantity = normalizeExactDecimal(
+        exact.quantity,
+        `Imported item ${index + 1} billed quantity`,
+        { scale: 6 },
+    );
+    const freeQuantity = normalizeExactDecimal(
+        exact.free_quantity,
+        `Imported item ${index + 1} free quantity`,
+        { scale: 6 },
+    );
+    const unitPrice = normalizeExactDecimal(
+        exact.unit_price ?? exact.sale_price,
+        `Imported item ${index + 1} unit rate`,
+        { scale: 4 },
+    );
+    const mapped = prepareItemForInvoice({
+        ...product as ProductInput,
+        quantity: billedQuantity,
+        free_quantity: freeQuantity,
+        unit_price: unitPrice,
+    });
+    return {
+        ...mapped,
+        quantity: billedQuantity,
+        free_quantity: freeQuantity,
+        unit_price: unitPrice,
+        discount_percent: normalizeExactDecimal(exact.discount_percent, `Imported item ${index + 1} discount`, { scale: 6 }),
+        available_quantity: optionalQuantity(exact.available_quantity, `Imported item ${index + 1} availability`),
+        base_billed_quantity: optionalQuantity(exact.base_billed_quantity, `Imported item ${index + 1} base billed quantity`),
+        base_free_quantity: optionalQuantity(exact.base_free_quantity, `Imported item ${index + 1} base free quantity`),
+        source_billed_quantity: optionalQuantity(exact.source_billed_quantity, `Imported item ${index + 1} source billed quantity`),
+        source_free_quantity: optionalQuantity(exact.source_free_quantity, `Imported item ${index + 1} source free quantity`),
+    } as unknown as InvoiceItem;
+});

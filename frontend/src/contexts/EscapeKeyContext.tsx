@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
+import { createRuntimeIdCounter } from '../utils/runtimeId';
 
 /**
  * ESC Key Management Context
@@ -23,6 +24,7 @@ interface EscapeKeyContextValue {
 }
 
 const EscapeKeyContext = createContext<EscapeKeyContextValue | null>(null);
+const nextEscapeHandlerId = createRuntimeIdCounter();
 
 export const useEscapeKey = (): EscapeKeyContextValue => {
     const context = useContext(EscapeKeyContext);
@@ -67,7 +69,7 @@ export const EscapeKeyProvider: React.FC<EscapeKeyProviderProps> = ({ children }
 
     // Register a new ESC handler (adds to top of stack)
     const registerEscHandler = useCallback((callback: () => void, name: string = ''): number => {
-        const id = Date.now() + Math.random();
+        const id = nextEscapeHandlerId();
         const handler: EscHandler = { id, callback, name };
 
         setHandlers(prev => [...prev, handler]);

@@ -8,173 +8,142 @@
  * - Cleaner, more maintainable code structure
  */
 
-import React, { useEffect, useCallback, useState } from 'react';
+import React, { useEffect, useCallback, useRef, useState } from 'react';
 import {
-  Download, Eye, Edit, Printer, Package, Search, RefreshCw, CheckCircle, MessageCircle, Mail, MoreVertical,
+  Download, Package, RefreshCw, MessageCircle, Mail,
   FileText, ClipboardList, Truck
 } from 'lucide-react';
 import { Button, StatusBadge, DataTable, Pagination, ModuleHeader, InlineFilterPanel } from '../global';
-import { supplierInvoicesApi, purchasesApi, grnApi } from '../../services/api';
-import { formatCurrency } from '../../utils/formatters';
-import { useCompany } from '../../contexts/CompanyContext';
-import { toast } from 'react-toastify';
+import { canonicalDocumentHistoryApi, requireCanonicalHistoryAmount } from '../../services/api';
+import { canonicalGoodsReceiptsApi } from '../../services/api/modules/purchase/canonicalGoodsReceipts.api';
+import { formatExactCurrency } from '../../utils/exactDecimal';
+import { formatCalendarDate } from '../../utils/calendarDate';
+import { isCanonicalUuid } from '../../utils/canonicalUuid';
 
 // Import hooks and types
 import { usePurchaseListHistoryState } from './purchaselisthistory/hooks/usePurchaseListHistoryState';
 import type { PurchaseListHistoryProps, PurchaseOrder } from './purchaselisthistory/types/purchasehistory.types';
+import {
+  buildPurchaseHistoryParams,
+  purchaseHistoryCsv,
+  PurchaseDocumentType,
+} from './purchaselisthistory/utils/purchaseHistoryProjection';
+import { canRecordCanonicalReceipt } from './grn/canonicalReceiptCommand';
 
 // Document type configuration
-type DocumentType = 'supplier_invoice' | 'purchase_order' | 'grn';
+type DocumentType = PurchaseDocumentType;
 
 const documentTypeConfig = {
   supplier_invoice: {
     label: 'Supplier Invoices',
+    singular: 'supplier invoice',
+    numberLabel: 'Supplier Invoice #',
     icon: FileText,
     activeClass: 'bg-blue-50 text-blue-700 border-blue-200',
     iconColor: 'text-blue-600'
   },
   purchase_order: {
     label: 'Purchase Orders',
+    singular: 'purchase order',
+    numberLabel: 'Purchase Order #',
     icon: ClipboardList,
-    activeClass: 'bg-purple-50 text-purple-700 border-purple-200',
-    iconColor: 'text-purple-600'
+    activeClass: 'bg-blue-50 text-blue-700 border-blue-200',
+    iconColor: 'text-blue-600'
   },
   grn: {
     label: 'GRN',
+    singular: 'goods receipt',
+    numberLabel: 'GRN #',
     icon: Truck,
-    activeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    iconColor: 'text-emerald-600'
+    activeClass: 'bg-blue-50 text-blue-700 border-blue-200',
+    iconColor: 'text-blue-600'
   }
 };
 
 const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRecordReceipt }) => {
   // Use centralized state management (replaces 15 useState!)
   const { state, dispatch, purchases, selectedIds, filters, ui, pagination, loading } = usePurchaseListHistoryState();
+  const searchTimerRef = useRef<number | undefined>();
+  const requestSequenceRef = useRef(0);
+  const businessDateRef = useRef<string | null>(null);
 
   // Document type state - default to supplier_invoice
   const [documentType, setDocumentType] = useState<DocumentType>('supplier_invoice');
 
   // Fetch documents from backend based on document type
   const fetchDocuments = useCallback(async (page = 1, searchFilters: any = {}, docType: DocumentType = documentType) => {
+    const requestSequence = ++requestSequenceRef.current;
     dispatch({ type: 'SET_LOADING', loading: true });
     dispatch({ type: 'SET_ERROR', error: null });
 
     try {
-      const searchParams: any = {
-        limit: pagination.per_page,
-        offset: (page - 1) * pagination.per_page,
-        ...searchFilters
-      };
-
-      if (searchFilters.search?.trim()) {
-        searchParams.search = searchFilters.search.trim();
+      const exactPurchaseOrderId = onRecordReceipt && docType === 'purchase_order'
+        && typeof searchFilters.search === 'string'
+        && isCanonicalUuid(searchFilters.search)
+        ? searchFilters.search.trim()
+        : null;
+      if (exactPurchaseOrderId) {
+        const context = (await canonicalGoodsReceiptsApi.getPurchaseOrderContext(
+          exactPurchaseOrderId,
+        )).data;
+        if (requestSequence !== requestSequenceRef.current) return;
+        dispatch({ type: 'SET_PURCHASES', purchases: [{
+          id: context.purchase_order_id,
+          po_number: context.purchase_order_number,
+          po_date: context.order_date,
+          supplier_id: context.supplier_account_id,
+          supplier_name: context.supplier_name,
+          total_amount: context.total_amount,
+          paid_amount: null,
+          pending_amount: null,
+          payment_status: null,
+          status: context.status,
+          items_count: context.lines.length,
+        }] });
+        dispatch({ type: 'SET_PAGINATION', pagination: {
+          total: 1, page: 1, total_pages: 1,
+        } });
+        return;
       }
-
-      let response;
-      let transformedData: PurchaseOrder[] = [];
-
-      if (docType === 'supplier_invoice') {
-        response = await supplierInvoicesApi.getAll(searchParams);
-        const responseData = response?.data;
-        console.log('[Supplier Invoice API] Raw response:', responseData);
-
-        const invoicesData = Array.isArray(responseData) ? responseData :
-          (responseData?.invoices || []);
-
-        transformedData = invoicesData.map((invoice: any) => ({
-          id: String(invoice.supplier_invoice_id),
-          po_number: invoice.invoice_number,
-          po_date: invoice.invoice_date,
-          supplier_id: String(invoice.supplier_id),
-          supplier_name: invoice.supplier_name,
-          total_amount: Number(invoice.invoice_total || invoice.total_amount || 0),
-          paid_amount: Number(invoice.paid_amount || 0),
-          pending_amount: Number((invoice.invoice_total || invoice.total_amount || 0) - (invoice.paid_amount || 0)),
-          payment_status: invoice.payment_status || 'pending',
-          status: invoice.status || 'confirmed',
-          items_count: invoice.items_count || 0,
-          created_at: invoice.created_at,
-          updated_at: invoice.updated_at
-        }));
-
-        const total = responseData?.total || transformedData.length;
-        dispatch({ type: 'SET_PURCHASES', purchases: transformedData });
-        dispatch({
-          type: 'SET_PAGINATION',
-          pagination: { total, page, total_pages: Math.ceil(total / pagination.per_page) }
-        });
-
-      } else if (docType === 'purchase_order') {
-        response = await purchasesApi.getOrders(searchParams);
-        const responseData = response?.data;
-        console.log('[Purchase Order API] Raw response:', responseData);
-
-        const ordersData = Array.isArray(responseData) ? responseData :
-          (responseData?.orders || responseData?.purchases || []);
-
-        transformedData = ordersData.map((order: any) => ({
-          id: String(order.po_id || order.purchase_order_id),
-          po_number: order.po_number || order.order_number,
-          po_date: order.po_date || order.order_date,
-          supplier_id: String(order.supplier_id),
-          supplier_name: order.supplier_name,
-          total_amount: Number(order.total_amount || order.final_amount || 0),
-          paid_amount: Number(order.paid_amount || 0),
-          pending_amount: Number(order.pending_amount || 0),
-          payment_status: order.payment_status || 'pending',
-          status: order.status || order.po_status || 'draft',
-          items_count: order.items_count || order.items?.length || 0,
-          created_at: order.created_at,
-          updated_at: order.updated_at
-        }));
-
-        const total = responseData?.total || transformedData.length;
-        dispatch({ type: 'SET_PURCHASES', purchases: transformedData });
-        dispatch({
-          type: 'SET_PAGINATION',
-          pagination: { total, page, total_pages: Math.ceil(total / pagination.per_page) }
-        });
-
-      } else if (docType === 'grn') {
-        response = await grnApi.getAll(searchParams);
-        const responseData = response?.data;
-        console.log('[GRN API] Raw response:', responseData);
-
-        const grnData = Array.isArray(responseData) ? responseData :
-          (responseData?.grns || responseData?.data || []);
-
-        transformedData = grnData.map((grn: any) => ({
-          id: String(grn.grn_id),
-          po_number: grn.grn_number,
-          po_date: grn.grn_date,
-          supplier_id: String(grn.supplier_id),
-          supplier_name: grn.supplier_name,
-          total_amount: Number(grn.total_amount || 0),
-          paid_amount: 0,
-          pending_amount: Number(grn.total_amount || 0),
-          payment_status: 'received',
-          status: grn.status || 'completed',
-          items_count: grn.items_count || grn.items?.length || 0,
-          created_at: grn.created_at,
-          updated_at: grn.updated_at
-        }));
-
-        const total = responseData?.total || transformedData.length;
-        dispatch({ type: 'SET_PURCHASES', purchases: transformedData });
-        dispatch({
-          type: 'SET_PAGINATION',
-          pagination: { total, page, total_pages: Math.ceil(total / pagination.per_page) }
-        });
-      }
+      const response = await canonicalDocumentHistoryApi.get({
+        document_kind: docType === 'grn' ? 'goods_receipt' : docType,
+        page,
+        page_size: pagination.per_page,
+        ...searchFilters,
+      });
+      const transformedData: PurchaseOrder[] = response.items.map(row => ({
+        id: row.document_id,
+        po_number: row.document_number,
+        po_date: row.document_date,
+        supplier_id: row.party_account_id,
+        supplier_name: row.party_name,
+        total_amount: requireCanonicalHistoryAmount(row.total_amount, `${row.document_kind} total`),
+        paid_amount: row.paid_amount,
+        pending_amount: row.outstanding_amount,
+        payment_status: row.payment_status,
+        status: row.status,
+        items_count: row.line_count,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+      }));
+      if (requestSequence !== requestSequenceRef.current) return;
+      businessDateRef.current = response.business_date;
+      dispatch({ type: 'SET_PURCHASES', purchases: transformedData });
+      dispatch({ type: 'SET_PAGINATION', pagination: {
+        total: response.total, page, total_pages: Math.ceil(response.total / pagination.per_page),
+      } });
 
     } catch (error) {
+      if (requestSequence !== requestSequenceRef.current) return;
       console.error(`Failed to fetch ${docType}:`, error);
       dispatch({ type: 'SET_ERROR', error: `Failed to fetch ${documentTypeConfig[docType].label}. Please try again.` });
       dispatch({ type: 'SET_PURCHASES', purchases: [] });
     } finally {
-      dispatch({ type: 'SET_LOADING', loading: false });
+      if (requestSequence === requestSequenceRef.current) {
+        dispatch({ type: 'SET_LOADING', loading: false });
+      }
     }
-  }, [dispatch, pagination.per_page, documentType]);
+  }, [dispatch, pagination.per_page, documentType, onRecordReceipt]);
 
   // Alias for backward compatibility
   const fetchPurchases = fetchDocuments;
@@ -182,55 +151,72 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
   // Load documents on mount and when document type changes
   useEffect(() => {
     fetchDocuments(1, {}, documentType);
+    return () => {
+      if (searchTimerRef.current !== undefined) window.clearTimeout(searchTimerRef.current);
+      requestSequenceRef.current += 1;
+    };
   }, [documentType]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Handle document type change
   const handleDocumentTypeChange = (type: DocumentType) => {
     setDocumentType(type);
     dispatch({ type: 'CLEAR_SELECTION' });
+    dispatch({ type: 'SET_FILTERS', filters: {
+      searchQuery: '', statusFilter: 'all', dateFilter: 'all', dateFrom: '', dateTo: ''
+    } });
   };
 
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && onClose) {
-        onClose();
-        return;
-      }
-
-      if ((event.altKey && event.key.toLowerCase() === 'r') || event.key === 'F5') {
-        event.preventDefault();
-        handleRefresh();
-        return;
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
-
-  // Event handlers
-  const handleRefresh = async () => {
-    dispatch({ type: 'SET_REFRESHING', refreshing: true });
-
+  const buildSearchParams = useCallback((overrides: Partial<typeof filters> = {}) => {
     try {
-      await fetchDocuments(pagination.page, buildSearchParams(), documentType);
+      return buildPurchaseHistoryParams(
+        { ...filters, ...overrides },
+        documentType,
+        businessDateRef.current || undefined,
+      );
+    } catch (error) {
+      dispatch({
+        type: 'SET_ERROR',
+        error: error instanceof Error ? error.message : 'Organization business date is unavailable.',
+      });
+      return null;
+    }
+  }, [dispatch, filters, documentType]);
+
+  const handleRefresh = useCallback(async () => {
+    if (searchTimerRef.current !== undefined) {
+      window.clearTimeout(searchTimerRef.current);
+      searchTimerRef.current = undefined;
+    }
+    const params = buildSearchParams();
+    if (!params) return;
+    dispatch({ type: 'SET_REFRESHING', refreshing: true });
+    try {
+      await fetchDocuments(pagination.page, params, documentType);
     } finally {
       dispatch({ type: 'SET_REFRESHING', refreshing: false });
     }
-  };
+  }, [buildSearchParams, dispatch, documentType, fetchDocuments, pagination.page]);
 
-  const buildSearchParams = useCallback(() => ({
-    search: filters.searchQuery,
-    payment_status: filters.statusFilter === 'all' ? undefined : filters.statusFilter,
-    dateFilter: filters.dateFilter
-  }), [filters]);
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && onClose) onClose();
+      if ((event.altKey && event.key.toLowerCase() === 'r') || event.key === 'F5') {
+        event.preventDefault();
+        handleRefresh();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [handleRefresh, onClose]);
 
   const handleSearchChange = (query: string) => {
     dispatch({ type: 'SET_FILTERS', filters: { searchQuery: query } });
-
-    setTimeout(() => {
-      fetchDocuments(1, { ...buildSearchParams(), search: query }, documentType);
+    if (searchTimerRef.current !== undefined) window.clearTimeout(searchTimerRef.current);
+    requestSequenceRef.current += 1;
+    searchTimerRef.current = window.setTimeout(() => {
+      searchTimerRef.current = undefined;
+      const params = buildSearchParams({ searchQuery: query });
+      if (params) fetchDocuments(1, params, documentType);
     }, 500);
   };
 
@@ -243,30 +229,32 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
     dispatch({ type: 'TOGGLE_SELECT_ALL', purchaseIds });
   };
 
-  const handleExport = () => {
-    const selected = purchases.filter(p => selectedIds.has(p.id));
-    const csvData = [
-      ['PO Number', 'Supplier', 'Date', 'Amount', 'Paid', 'Pending', 'Status'],
-      ...selected.map(p => [
-        p.po_number,
-        p.supplier_name,
-        p.po_date,
-        p.total_amount.toString(),
-        p.paid_amount.toString(),
-        p.pending_amount.toString(),
-        p.payment_status
-      ])
-    ];
-
-    const csvContent = csvData.map(row => row.join(',')).join('\n');
+  const exportRows = (rows: PurchaseOrder[], selected: boolean) => {
+    if (rows.length === 0) return;
+    const csvContent = purchaseHistoryCsv(
+      rows,
+      documentTypeConfig[documentType].numberLabel,
+    );
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `purchases-${new Date().toISOString().split('T')[0]}.csv`;
+    if (!businessDateRef.current) {
+      URL.revokeObjectURL(url);
+      dispatch({ type: 'SET_ERROR', error: 'Organization business date is unavailable.' });
+      return;
+    }
+    const scope = selected ? 'selected' : 'page';
+    link.download = `${documentTypeConfig[documentType].label.toLowerCase().replace(/\s+/g, '-')}-${scope}-${businessDateRef.current}.csv`;
     link.click();
     URL.revokeObjectURL(url);
   };
+
+  const handleExportPage = () => exportRows(purchases, false);
+  const handleExportSelected = () => exportRows(
+    purchases.filter(purchase => selectedIds.has(purchase.id)),
+    true,
+  );
 
   const filteredPurchases = purchases;
   const isAllSelected = filteredPurchases.length > 0 && filteredPurchases.every(p => selectedIds.has(p.id));
@@ -299,18 +287,14 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
       header: 'Date',
       render: (_: any, purchase: PurchaseOrder) => (
         <div className="text-gray-700">
-          {purchase.po_date ? new Date(purchase.po_date).toLocaleDateString('en-IN', {
-            day: '2-digit',
-            month: 'short',
-            year: 'numeric'
-          }) : '-'}
+          {purchase.po_date ? formatCalendarDate(purchase.po_date) : '-'}
         </div>
       ),
       width: '110px'
     },
     {
       key: 'po_number',
-      header: 'Purchase #',
+      header: documentTypeConfig[documentType].numberLabel,
       render: (_: any, purchase: PurchaseOrder) => (
         <div className="text-sm text-gray-600">{purchase.po_number}</div>
       ),
@@ -332,16 +316,37 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
       header: 'Status',
       align: 'center' as const,
       render: (_: any, purchase: PurchaseOrder) => {
+        if (documentType !== 'supplier_invoice') {
+          const documentStatus = String(purchase.status || 'unknown');
+          const statusTone = ['posted', 'received', 'approved'].includes(documentStatus)
+            ? 'success'
+            : ['cancelled', 'rejected', 'reversed'].includes(documentStatus) ? 'error' : 'info';
+          return <StatusBadge status={statusTone} label={documentStatus.replace(/_/g, ' ')} />;
+        }
         const statusMap: Record<string, any> = {
           paid: { status: 'success', label: 'Paid' },
           partial: { status: 'warning', label: 'Partial' },
           pending: { status: 'info', label: 'Pending' },
-          overdue: { status: 'error', label: 'Overdue' }
+          overdue: { status: 'error', label: 'Overdue' },
+          cancelled: { status: 'error', label: 'Cancelled' }
         };
-        const config = statusMap[purchase.payment_status] || { status: 'default', label: purchase.payment_status };
+        const config = purchase.payment_status
+          ? statusMap[purchase.payment_status] || { status: 'default', label: purchase.payment_status }
+          : { status: 'default', label: purchase.status };
         return <StatusBadge status={config.status} label={config.label} />;
       },
       width: '100px'
+    },
+    {
+      key: 'total_amount',
+      header: 'Amount',
+      align: 'right' as const,
+      render: (_: any, purchase: PurchaseOrder) => (
+        <span className="font-medium text-gray-900">
+          {purchase.total_amount === null ? 'Not available' : formatExactCurrency(purchase.total_amount, 'Purchase history amount')}
+        </span>
+      ),
+      width: '120px'
     },
     {
       key: 'actions',
@@ -349,61 +354,56 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
       align: 'center' as const,
       render: (_: any, purchase: PurchaseOrder) => (
         <div className="flex items-center justify-center space-x-1">
-          {/* Record Receipt button - only for PO documents with receivable status */}
+          {/* Canonical receipt is available only after PO approval and until fully received. */}
           {documentType === 'purchase_order' && onRecordReceipt &&
-            ['draft', 'pending', 'partial', 'confirmed', 'approved'].includes(purchase.status) && (
+            canRecordCanonicalReceipt(purchase.status) && (
             <button
-              onClick={() => onRecordReceipt(parseInt(purchase.id))}
-              className="px-2 py-1 text-xs font-medium text-white bg-green-600 hover:bg-green-700 rounded transition-colors"
-              title="Record Receipt (Create Purchase Entry from this PO)"
+              onClick={() => onRecordReceipt(purchase.id)}
+              aria-label={`Record canonical receipt for purchase order ${purchase.id}`}
+              className="min-h-11 px-3 py-2 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+              title={`Record canonical receipt for ${purchase.po_number}`}
             >
               <Package className="w-3.5 h-3.5 inline mr-1" />
               Receipt
             </button>
           )}
           <button
-            onClick={() => toast.info(`Opening purchase ${purchase.po_number} - Feature coming soon`)}
-            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
-            title="View Purchase"
-          >
-            <Eye className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => toast.info(`Print purchase ${purchase.po_number} - Feature coming soon`)}
-            className="p-1.5 text-gray-600 hover:bg-gray-50 rounded transition-colors"
-            title="Print"
-          >
-            <Printer className="w-4 h-4" />
-          </button>
-          <button
             onClick={() => {
-              const message = `Dear ${purchase.supplier_name},\n\nYour purchase order ${purchase.po_number}\nAmount: ₹${purchase.total_amount.toLocaleString('en-IN')}\n\nThank you!`;
-              window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank');
+              const noun = documentTypeConfig[documentType].singular;
+              const amount = purchase.total_amount === null
+                ? '' : `\nAmount: ${formatExactCurrency(purchase.total_amount, 'Purchase history amount')}`;
+              const message = `Dear ${purchase.supplier_name},\n\n${noun[0].toUpperCase()}${noun.slice(1)} ${purchase.po_number}${amount}\n\nThank you!`;
+              window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer');
             }}
-            className="p-1.5 text-green-600 hover:bg-green-50 rounded transition-colors"
+            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
             title="Share via WhatsApp"
+            aria-label={`Share ${purchase.po_number} via WhatsApp`}
           >
             <MessageCircle className="w-4 h-4" />
           </button>
           <button
             onClick={() => {
-              const subject = `Purchase Order ${purchase.po_number}`;
-              const body = `Dear ${purchase.supplier_name},\n\nYour purchase order ${purchase.po_number}\nAmount: ₹${purchase.total_amount.toLocaleString('en-IN')}\n\nThank you!`;
+              const noun = documentTypeConfig[documentType].singular;
+              const subject = `${noun[0].toUpperCase()}${noun.slice(1)} ${purchase.po_number}`;
+              const amount = purchase.total_amount === null
+                ? '' : `\nAmount: ${formatExactCurrency(purchase.total_amount, 'Purchase history amount')}`;
+              const body = `Dear ${purchase.supplier_name},\n\n${subject}${amount}\n\nThank you!`;
               window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
             }}
-            className="p-1.5 text-orange-600 hover:bg-orange-50 rounded transition-colors"
+            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
             title="Send via Email"
+            aria-label={`Email ${purchase.po_number}`}
           >
             <Mail className="w-4 h-4" />
           </button>
         </div>
       ),
-      width: '220px'
+      width: '170px'
     }
   ];
 
   return (
-    <div className="h-full bg-blue-50">
+    <div className="h-full bg-gray-50">
       <div className="h-full flex flex-col">
 
         {/* Header - Using Global ModuleHeader */}
@@ -427,10 +427,10 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
               className: ui.refreshing ? "animate-spin" : ""
             },
             {
-              label: "Export All",
-              onClick: handleExport,
-              variant: "default",
-              className: "bg-gray-900 hover:bg-gray-800 text-white"
+              label: "Export Page",
+              onClick: handleExportPage,
+              variant: "secondary",
+              disabled: purchases.length === 0
             }
           ] as any}
         />
@@ -468,6 +468,8 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
 
             {/* Filters */}
             <InlineFilterPanel
+              searchPlaceholder={`Search ${documentTypeConfig[documentType].label.toLowerCase()} by number, canonical UUID, or supplier...`}
+              searchQuery={filters.searchQuery}
               filters={[
                 {
                   key: 'date_preset',
@@ -488,12 +490,19 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
                   key: 'payment_status',
                   label: 'Status',
                   type: 'select',
-                  options: [
-                    { value: 'all', label: 'All Status' },
-                    { value: 'paid', label: 'Paid' },
-                    { value: 'partial', label: 'Partial' },
-                    { value: 'pending', label: 'Pending' },
-                    { value: 'overdue', label: 'Overdue' }
+                  options: documentType === 'supplier_invoice' ? [
+                    { value: 'all', label: 'All Status' }, { value: 'paid', label: 'Paid' },
+                    { value: 'partial', label: 'Partial' }, { value: 'pending', label: 'Pending' },
+                    { value: 'overdue', label: 'Overdue' }, { value: 'cancelled', label: 'Cancelled' }
+                  ] : documentType === 'purchase_order' ? [
+                    { value: 'all', label: 'All Status' }, { value: 'submitted', label: 'Submitted' },
+                    { value: 'approved', label: 'Approved' },
+                    { value: 'partially_received', label: 'Partially Received' },
+                    { value: 'received', label: 'Received' }, { value: 'cancelled', label: 'Cancelled' }
+                  ] : [
+                    { value: 'all', label: 'All Status' }, { value: 'posted', label: 'Posted' },
+                    { value: 'cancelled', label: 'Cancelled' },
+                    { value: 'reversed', label: 'Reversed' }
                   ],
                 },
                 {
@@ -508,14 +517,23 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
                 }
               ]}
               onFilterChange={(newFilters) => {
-                dispatch({ type: 'SET_FILTERS', filters: newFilters });
-                const searchParams = {
-                  search: filters.searchQuery,
-                  payment_status: newFilters.payment_status === 'all' ? undefined : newFilters.payment_status
+                if (searchTimerRef.current !== undefined) {
+                  window.clearTimeout(searchTimerRef.current);
+                  searchTimerRef.current = undefined;
+                }
+                const nextFilters = {
+                  dateFilter: String(newFilters.date_preset || 'all'),
+                  statusFilter: String(newFilters.payment_status || 'all'),
+                  dateFrom: String(newFilters.dateFrom || ''),
+                  dateTo: String(newFilters.dateTo || ''),
                 };
-                fetchPurchases(1, searchParams);
+                dispatch({ type: 'SET_FILTERS', filters: nextFilters });
+                const params = buildSearchParams(nextFilters);
+                if (params) fetchPurchases(1, params, documentType);
               }}
               onSearchChange={handleSearchChange}
+              showFilters={ui.showFilters}
+              onToggleFilters={() => dispatch({ type: 'TOGGLE_SHOW_FILTERS' })}
             />
 
             {/* Bulk Actions */}
@@ -525,15 +543,20 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
                   <span className="text-sm font-medium text-blue-900">
                     {selectedCount} purchase{selectedCount > 1 ? 's' : ''} selected
                   </span>
-                  <Button variant="outline" size="sm" onClick={handleExport}>
+                  <Button variant="outline" size="sm" onClick={handleExportSelected}>
                     <Download className="w-4 h-4 mr-2" />
-                    Export
+                    Export Selected
                   </Button>
                 </div>
               </div>
             )}
 
             {/* Table */}
+            {state.error && (
+              <div className="mb-4 border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">
+                {state.error}
+              </div>
+            )}
             <div className="bg-white rounded-lg shadow-sm">
               <DataTable
                 columns={columns}
@@ -550,12 +573,24 @@ const PurchaseListHistory: React.FC<PurchaseListHistoryProps> = ({ onClose, onRe
                 <Pagination
                   currentPage={pagination.page}
                   totalPages={pagination.total_pages}
-                  onPageChange={(page) => fetchPurchases(page, buildSearchParams())}
+                  onPageChange={(page) => {
+                    if (searchTimerRef.current !== undefined) {
+                      window.clearTimeout(searchTimerRef.current);
+                      searchTimerRef.current = undefined;
+                    }
+                    const params = buildSearchParams();
+                    if (params) fetchPurchases(page, params);
+                  }}
                   itemsPerPage={pagination.per_page}
                   totalItems={pagination.total}
                   onItemsPerPageChange={(perPage) => {
+                    if (searchTimerRef.current !== undefined) {
+                      window.clearTimeout(searchTimerRef.current);
+                      searchTimerRef.current = undefined;
+                    }
                     dispatch({ type: 'SET_PAGINATION', pagination: { per_page: perPage, page: 1 } });
-                    fetchPurchases(1, buildSearchParams());
+                    const params = buildSearchParams();
+                    if (params) fetchPurchases(1, params);
                   }}
                 />
               </div>

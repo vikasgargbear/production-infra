@@ -1,0 +1,43 @@
+{
+  "template_schema": "aasopharma.live18.ui-template.v1",
+  "operation_id": "stock_adjustment",
+  "lifecycle_mode": "split",
+  "steps": {
+    "missing_required_steps": [
+      {"actor":"requester","action":"goto","value":"/#/stock-management/stock-adjustment"},
+      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"{{fact.clock.business_date}}","exact":true},"value":"{{fact.clock.business_date}}"},
+      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Enter the exact timestamp from the retained count evidence. The browser does not supply or convert this time.","exact":true},"value":"Enter the exact timestamp from the retained count evidence. The browser does not supply or convert this time."},
+      {"actor":"requester","action":"expectDisabled","locator":{"kind":"role","role":"button","name":"Continue","exact":true}}
+    ],
+    "prepare_steps": [
+      {"actor":"requester","action":"goto","value":"/#/stock-management/stock-adjustment"},
+      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"{{fact.clock.business_date}}","exact":true},"value":"{{fact.clock.business_date}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Physical count completed at (UTC)","exact":true},"value":"{{fact.clock.cycle_count_completed_at_utc}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"placeholder","name":"Search and select product...","exact":true},"value":"{{fact.display.product_code}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"testId","name":"product-search-option-{{fact.identity.product_id}}"}},
+      {"actor":"requester","action":"click","locator":{"kind":"testId","name":"select-batch-{{fact.identity.direct_issue_batch_id}}"}},
+      {"actor":"requester","action":"select","locator":{"kind":"label","name":"Count UOM for {{fact.display.product_name}}","exact":true},"value":"{{fact.identity.count_uom_conversion_id}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"combobox","name":"Verified physical count sheet","exact":true}},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"option","name":"{{fact.display.cycle_count_evidence_label}}","exact":true}},
+      {"actor":"requester","action":"expectText","locator":{"kind":"testId","name":"cycle-count-system-base-{{fact.identity.direct_issue_batch_id}}"},"value":"{{fact.choice.stock_adjustment_expected_system_base_quantity}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Exact physical count in {{fact.display.cycle_count_uom_code}} for {{fact.display.product_name}}","exact":true},"value":"{{fact.choice.stock_adjustment_counted_quantity}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Continue","exact":true}},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Prepare Cycle Count","exact":true}}
+    ],
+    "approval_steps": [
+      {"actor":"requester","action":"expectText","locator":{"kind":"role","role":"dialog","name":"Confirm Stock Adjustment","exact":true},"value":"{{command_request_id}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Submit for Independent Approval","exact":true}},
+      {"actor":"reviewer","action":"goto","value":"/#/stock-management/stock-adjustment"},
+      {"actor":"reviewer","action":"fill","locator":{"kind":"label","name":"Cycle-count command UUID to review","exact":true},"value":"{{command_request_id}}"},
+      {"actor":"reviewer","action":"click","locator":{"kind":"role","role":"button","name":"Load immutable preview","exact":true}},
+      {"actor":"reviewer","action":"expectText","locator":{"kind":"text","name":"{{command_request_id}}","exact":true},"value":"{{command_request_id}}"},
+      {"actor":"reviewer","action":"expectText","locator":{"kind":"testId","name":"canonical-immutable-preview"},"value":"{{fact.identity.product_id}}"},
+      {"actor":"reviewer","action":"click","locator":{"kind":"role","role":"button","name":"Approve exact preview","exact":true}}
+    ],
+    "execute_steps": [
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Execute Approved Count","exact":true}},
+      {"actor":"requester","action":"expectText","locator":{"kind":"role","role":"dialog","name":"Confirm Stock Adjustment","exact":true},"value":"{{command_request_id}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Post Approved Cycle Count Once","exact":true}}
+    ]
+  }
+}

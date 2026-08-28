@@ -1,0 +1,120 @@
+{
+  "blocked_count": 26,
+  "blocked_invariants": {
+    "inventory.inventory_document_lines:inventory_inventory_document_lines_invariant_1": {
+      "reason": "Full validation is part of the missing atomic inventory posting command; a row trigger cannot prove source-command ownership, effective UOM lineage, and locked cost state together."
+    },
+    "inventory.inventory_document_lines:inventory_inventory_document_lines_invariant_2": {
+      "reason": "Exact transfer ledger emission and zero-variance suppression require the same atomic inventory posting command that owns ledger and projection writes."
+    },
+    "inventory.inventory_document_lines:inventory_inventory_document_lines_landed_cost_allocation": {
+      "reason": "The catalog lacks persisted eligible variance and capitalized-charge allocation authority needed to prove exact weights and signed landed-cost amounts."
+    },
+    "inventory.inventory_documents:inventory_inventory_documents_invariant_1": {
+      "reason": "No reviewed atomic inventory posting command exists yet to recompute totals, freeze evidence, emit the complete ledger, and replay idempotently as one transaction."
+    },
+    "inventory.inventory_documents:inventory_inventory_documents_invariant_2": {
+      "reason": "Source ownership and reversal require the missing inventory posting command plus an idempotency claim link; triggers alone cannot prove exactly-once command ownership."
+    },
+    "inventory.inventory_documents:inventory_inventory_documents_landed_cost": {
+      "reason": "The supplier invoice does not persist an approved eligible price-variance/capitalized-charge allocation set, so exact MWA cost adjustment cannot be reconstructed honestly."
+    },
+    "inventory.inventory_documents:inventory_inventory_documents_physical_logistics": {
+      "reason": "Complete physical-movement snapshots, branch/location consistency and live transporter provenance must be locked and frozen by the atomic inventory posting command."
+    },
+    "inventory.stock_balances:inventory_stock_balances_invariant_1": {
+      "reason": "Projection-only mutation, exact signed ledger folding, and last-entry ordering require a single reviewed ledger projector command and corresponding direct-write privilege revocation."
+    },
+    "inventory.stock_ledger_entries:inventory_stock_ledger_entries_invariant_1": {
+      "reason": "The sole posting function and locked costing-state derivation are not implemented; a session flag or trigger would create bypassable duplicate mutation ownership."
+    },
+    "inventory.stock_ledger_entries:inventory_stock_ledger_entries_invariant_2": {
+      "reason": "Exact per-line ledger cardinality and reversal uniqueness must be enforced inside the missing atomic posting command, including idempotent replay and inverse evidence creation."
+    },
+    "inventory.stock_ledger_entries:inventory_stock_ledger_entries_landed_cost": {
+      "reason": "Exact nonnegative MWA projection after a zero-quantity value adjustment requires the missing serialized ledger projector and persisted eligible allocation authority."
+    },
+    "procurement.goods_receipts:procurement_goods_receipts_invariant_1": {
+      "reason": "Posting fan-out to exactly one typed inventory receipt requires a reviewed idempotent procurement receipt command; a row trigger must not become a second stock writer."
+    },
+    "procurement.purchase_order_advance_allocations:purchase_order_advance_allocations_cross_row_guard": {
+      "reason": "Supplier-advance allocation requires a locked posted payment, approved product PO line, exact prepayment open item/accounting evidence, full payment allocation, and compensating reversal command."
+    },
+    "procurement.purchase_order_lines:procurement_purchase_order_lines_invariant_1": {
+      "reason": "The PostgreSQL layer does not implement the canonical Decimal calculation engine or persist a signed calculation input/output digest, so exact engine equivalence cannot be proved."
+    },
+    "procurement.purchase_orders:procurement_purchase_orders_invariant_1": {
+      "reason": "Approval needs an atomic canonical Decimal recomputation and immutable calculation digest; aggregate-only triggers would not prove the complete pricing and tax rule."
+    },
+    "procurement.purchase_return_lines:procurement_purchase_return_lines_invariant_1": {
+      "reason": "Exact cumulative reversal residuals require persisted original per-allocation value components and a reviewed return command; those facts are absent from the current catalog."
+    },
+    "procurement.purchase_returns:procurement_purchase_returns_invariant_1": {
+      "reason": "Return calculation and fan-out to tax, payable, accounting, and inventory require one reviewed idempotent posting command spanning domains."
+    },
+    "procurement.supplier_invoice_lines:procurement_supplier_invoice_lines_invariant_1": {
+      "reason": "The database lacks the canonical Decimal engine and approved landed-cost allocation authority needed to prove every calculation and capitalize/expense outcome."
+    },
+    "procurement.supplier_invoices:procurement_supplier_invoices_invariant_1": {
+      "reason": "Supplier invoice posting requires one idempotent command spanning exact Decimal tax calculation, tax facts, payable, accounting, and landed-cost eligibility."
+    },
+    "sales.dispatches:sales_dispatches_invariant_1": {
+      "reason": "Posting fan-out to exactly one typed inventory issue requires a reviewed idempotent sales dispatch command; a row trigger must not become a second stock writer."
+    },
+    "sales.invoice_lines:sales_invoice_lines_invariant_1": {
+      "reason": "The PostgreSQL layer does not implement the canonical Decimal calculation engine or persist a signed calculation input/output digest, so exact engine equivalence cannot be proved."
+    },
+    "sales.invoices:sales_invoices_invariant_1": {
+      "reason": "Invoice posting requires one idempotent command spanning exact Decimal tax calculation, tax facts, receivable, accounting, and immutable fiscal evidence."
+    },
+    "sales.order_lines:sales_order_lines_invariant_1": {
+      "reason": "The PostgreSQL layer does not implement the canonical Decimal calculation engine or persist a signed calculation input/output digest, so exact engine equivalence cannot be proved."
+    },
+    "sales.orders:sales_orders_invariant_1": {
+      "reason": "Approval needs an atomic canonical Decimal recomputation and immutable calculation digest; aggregate-only triggers would not prove the complete pricing and tax rule."
+    },
+    "sales.return_lines:sales_return_lines_invariant_1": {
+      "reason": "Exact cumulative reversal residuals require persisted original per-allocation value components and a reviewed return command; those facts are absent from the current catalog."
+    },
+    "sales.returns:sales_returns_invariant_1": {
+      "reason": "Return calculation and fan-out to tax, receivable, accounting, and inventory require one reviewed idempotent posting command spanning domains."
+    }
+  },
+  "catalog_invariant_sha256": "cf74457aa0d2fbdfd5d892a9b504df8f07bb0bec0e9c538b8d7f71b6c07cf925",
+  "manifest_version": "1.0.0",
+  "mapping_file": "baseline-trade-enforcements.json",
+  "mapping_sha256": "5a3f68fb2a4ee70751cf9942c0c2215ec269bc2cab24fd6121ab167bc30da35c",
+  "mutation_ownership": {
+    "inventory_ledger_writers_added": 0,
+    "inventory_projector_writers_added": 0,
+    "posting_commands_added": 0,
+    "reason": "Posting remains blocked until one reviewed idempotent command owns each cross-domain mutation."
+  },
+  "postgresql": "15+",
+  "resolved_count": 10,
+  "resolved_invariants": [
+    "inventory.batches:inventory_batches_invariant_1",
+    "inventory.locations:inventory_locations_invariant_1",
+    "inventory.reservations:inventory_reservations_invariant_1",
+    "inventory.reservations:inventory_reservations_invariant_2",
+    "inventory.stock_balances:inventory_stock_balances_invariant_2",
+    "procurement.goods_receipt_lines:procurement_goods_receipt_lines_invariant_1",
+    "procurement.supplier_invoice_receipt_allocations:procurement_supplier_invoice_receipt_allocations_invariant_1",
+    "sales.dispatch_lines:sales_dispatch_lines_invariant_1",
+    "sales.invoice_dispatch_allocations:sales_invoice_dispatch_allocations_invariant_1",
+    "sales.invoices:sales_invoices_invariant_2"
+  ],
+  "security": {
+    "dynamic_sql": false,
+    "function_schema": "erp_trade_invariants",
+    "runtime_callable_functions": [
+      "inventory.available_quantity(uuid,uuid,uuid,uuid)"
+    ],
+    "trigger_functions_public_execute": false
+  },
+  "trade_domains": [
+    "inventory",
+    "sales",
+    "procurement"
+  ]
+}

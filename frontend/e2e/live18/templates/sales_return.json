@@ -1,0 +1,46 @@
+{
+  "template_schema": "aasopharma.live18.ui-template.v1",
+  "operation_id": "sales_return",
+  "lifecycle_mode": "split",
+  "steps": {
+    "missing_required_steps": [
+      {"actor":"requester","action":"goto","value":"/#/returns/sales-return"},
+      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Required: select an exact posted invoice, return line and quantities, condition, quarantine destination, reason, and GST treatment.","exact":true},"value":"Required: select an exact posted invoice, return line and quantities, condition, quarantine destination, reason, and GST treatment."},
+      {"actor":"requester","action":"expectDisabled","locator":{"kind":"role","role":"button","name":"Continue","exact":true}}
+    ],
+    "prepare_steps": [
+      {"actor":"requester","action":"goto","value":"/#/returns/sales-return"},
+      {"actor":"requester","action":"fill","locator":{"kind":"placeholder","name":"Search customer by name, phone, or code...","exact":true},"value":"{{fact.display.customer_code}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"testId","name":"entity-search-option-{{fact.identity.customer_account_id}}"}},
+      {"actor":"requester","action":"click","locator":{"kind":"testId","name":"select-sales-invoice-{{resource_sales_invoice}}"}},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"checkbox","name":"Return {{fact.display.product_name}}","exact":true}},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Billed quantity for {{fact.display.product_name}}","exact":true},"value":"{{scalar.sales_return_billed_quantity}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Free quantity for {{fact.display.product_name}}","exact":true},"value":"{{scalar.sales_return_free_quantity}}"},
+      {"actor":"requester","action":"select","locator":{"kind":"label","name":"Return condition for {{fact.display.product_name}}","exact":true},"value":"{{scalar.sales_return_condition}}"},
+      {"actor":"requester","action":"select","locator":{"kind":"label","name":"Quarantine location for {{fact.display.product_name}}","exact":true},"value":"{{fact.identity.quarantine_location_id}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"combobox","name":"Return Reason","exact":true}},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"option","name":"{{scalar.sales_return_reason_label}}","exact":true}},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"combobox","name":"GST treatment","exact":true}},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"option","name":"{{scalar.sales_return_gst_treatment_label}}","exact":true}},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Continue","exact":true}},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Prepare Immutable Return","exact":true}}
+    ],
+    "approval_steps": [
+      {"actor":"reviewer","action":"goto","value":"/#/returns/approval-inbox"},
+      {"actor":"reviewer","action":"click","locator":{"kind":"role","role":"button","name":"Refresh","exact":true}},
+      {"actor":"reviewer","action":"click","locator":{"kind":"testId","name":"review-return-{{command_request_id}}"}},
+      {"actor":"reviewer","action":"expectText","locator":{"kind":"label","name":"Immutable canonical return preview","exact":true},"value":"{{command_request_id}}"},
+      {"actor":"reviewer","action":"expectText","locator":{"kind":"testId","name":"canonical-immutable-preview"},"value":"{{fact.display.product_name}}"},
+      {"actor":"reviewer","action":"click","locator":{"kind":"role","role":"checkbox","name":"I reviewed the exact source, evidence, inventory, financial and tax impacts.","exact":true}},
+      {"actor":"reviewer","action":"click","locator":{"kind":"role","role":"button","name":"Approve — requester posts later","exact":true}}
+    ],
+    "execute_steps": [
+      {"actor":"requester","action":"goto","value":"/#/returns/resume-post"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Refresh","exact":true}},
+      {"actor":"requester","action":"click","locator":{"kind":"testId","name":"open-return-{{command_request_id}}"}},
+      {"actor":"requester","action":"expectText","locator":{"kind":"label","name":"Immutable canonical return preview","exact":true},"value":"{{command_request_id}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"checkbox","name":"Post this exact approved preview. This creates inventory, GST and ledger effects.","exact":true}},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Post Approved Return","exact":true}}
+    ]
+  }
+}

@@ -6,30 +6,30 @@
  */
 import React from 'react';
 import {
-  Truck, Search, Plus, Edit2, Trash2,
-  AlertCircle, Check,
-  Phone, AlertTriangle
+  Truck, Search, Plus, AlertCircle
 } from 'lucide-react';
 import { suppliersApi } from '../../../services/api';
 import { DataTable, Column } from '../../global/ui/display/DataTable';
 import { GlobalLayout, ContentCard } from '../../global';
 import Button from '../../global/ui/Button';
-import SupplierEditModal from '../modals/SupplierEditModal';
+import SupplierFlow from '../suppliers/SupplierFlow';
 import { useEntityMaster } from '../hooks';
+import ContactActions from './ContactActions';
+import CanonicalWriteNotice from '../../global/ui/CanonicalWriteNotice';
 
 // ============================================================================
 // Types
 // ============================================================================
 
 interface Supplier {
-  supplier_id: number;
+  supplier_id: number | string;
   supplier_code?: string;
   supplier_name: string;
   supplier_type?: string;
-  primary_phone: string;
-  primary_email?: string;
+  primary_phone?: string | null;
+  primary_email?: string | null;
   whatsapp_number?: string;
-  gst_number?: string;
+  gst_number?: string | null;
   pan_number?: string;
   drug_license_number?: string;
   drug_license_validity?: string;
@@ -47,9 +47,16 @@ interface Supplier {
   bank_name?: string;
   account_number?: string;
   ifsc_code?: string;
-  current_outstanding?: number;
-  outstanding?: number;
+  current_outstanding?: number | string | null;
+  outstanding?: number | string | null;
+  outstanding_available?: boolean;
 }
+
+export const loadCanonicalSuppliers = async () => {
+  const response = await suppliersApi.getAll();
+  const rows = response.data;
+  return { ...response, data: rows as Supplier[] };
+};
 
 // ============================================================================
 // Constants
@@ -69,7 +76,11 @@ const SUPPLIER_TYPES = [
 // ============================================================================
 
 const getPaymentTermsBadge = (supplier: Supplier) => {
-  const days = supplier.payment_days || 0;
+  const days = supplier.payment_days;
+
+  if (days == null) {
+    return <span className="text-xs text-gray-500">Unavailable</span>;
+  }
 
   if (days === 0) {
     return <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">COD</span>;
@@ -102,10 +113,7 @@ const getLicenseStatus = (expiryDate?: string) => {
 // Column Definitions
 // ============================================================================
 
-const getColumns = (
-  handleEdit: (s: Supplier) => void,
-  handleDelete: (id: string | number) => Promise<void>
-): Column<Supplier>[] => [
+const getColumns = (): Column<Supplier>[] => [
     {
       key: 'supplier_name',
       header: 'Supplier',
@@ -120,14 +128,14 @@ const getColumns = (
       key: 'contact',
       header: 'Contact',
       render: (_, supplier) => supplier ? (
-        <div>
-          <div className="flex items-center text-gray-900">
-            <Phone className="w-3 h-3 mr-1" />
-            {supplier.primary_phone || 'N/A'}
-          </div>
-          {supplier.primary_email && (
-            <div className="text-sm text-gray-500 truncate">{supplier.primary_email}</div>
-          )}
+        <div className="space-y-1">
+          <div className="text-sm text-gray-700">{supplier.primary_phone || supplier.primary_email || 'No contact details'}</div>
+          <ContactActions
+            name={supplier.supplier_name || 'supplier'}
+            phone={supplier.primary_phone}
+            email={supplier.primary_email}
+            whatsapp={supplier.whatsapp_number}
+          />
         </div>
       ) : <div>N/A</div>
     },
@@ -145,9 +153,12 @@ const getColumns = (
       header: 'Payable',
       align: 'right' as const,
       render: (_, supplier) => {
-        const amount = parseFloat(String(supplier?.current_outstanding || supplier?.outstanding || 0));
-        if (!amount) return <span className="text-gray-400">-</span>;
-        return <span className="font-medium text-red-600">{'\u20B9'}{amount.toLocaleString()}</span>;
+        const rawAmount = supplier?.current_outstanding ?? supplier?.outstanding;
+        if (supplier?.outstanding_available !== true || rawAmount == null) {
+          return <span className="text-gray-500">Unavailable</span>;
+        }
+        const amount = parseFloat(String(rawAmount));
+        return <span className={`font-medium ${amount > 0 ? 'text-red-600' : 'text-green-600'}`}>{'\u20B9'}{amount.toLocaleString()}</span>;
       }
     },
     {
@@ -181,11 +192,7 @@ const getColumns = (
         return (
           <div>
             {getPaymentTermsBadge(supplier)}
-            {supplier.current_outstanding && supplier.current_outstanding > 0 && (
-              <div className="text-sm text-gray-500 mt-1">
-                Due: {'\u20B9'}{supplier.current_outstanding.toLocaleString()}
-              </div>
-            )}
+            <div className="mt-1 text-sm text-gray-500">Payable balance unavailable</div>
           </div>
         );
       }
@@ -206,32 +213,11 @@ const getColumns = (
       header: 'Actions',
       align: 'center' as const,
       sortable: false,
-      render: (_, supplier) => (
-        <div className="flex items-center justify-center space-x-2">
-          <button
-            onClick={() => handleEdit(supplier)}
-            className="text-blue-600 hover:text-blue-700 p-1 rounded transition-colors"
-            disabled={!supplier}
-          >
-            <Edit2 className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => handleDelete(supplier?.supplier_id)}
-            className={`${supplier?.is_active !== false
-              ? 'text-amber-600 hover:text-amber-700'
-              : 'text-green-600 hover:text-green-700'
-              } p-1 rounded transition-colors`}
-            disabled={!supplier?.supplier_id}
-            title={supplier?.is_active !== false ? 'Deactivate Supplier' : 'Reactivate Supplier'}
-          >
-            {supplier?.is_active !== false ? (
-              supplier?.current_outstanding && supplier.current_outstanding > 0
-                ? <AlertTriangle className="w-4 h-4" />
-                : <Trash2 className="w-4 h-4" />
-            ) : <Check className="w-4 h-4" />}
-          </button>
-        </div>
-      )
+      render: () => (
+        <span className="text-sm text-gray-500" title="A canonical supplier edit command is not available">
+          Read only
+        </span>
+      ),
     }
   ];
 
@@ -252,21 +238,14 @@ const SupplierMaster: React.FC = () => {
     setFilterValue,
     showAddModal,
     setShowAddModal,
-    editingEntity,
-    setEditingEntity,
-    selectedIds,
-    setSelectedIds,
-    handleEdit,
-    handleDelete,
     handleSaved,
-    handleBulkDelete,
     searchInputRef
   } = useEntityMaster<Supplier>({
     entityName: 'supplier',
     idField: 'supplier_id',
     nameField: 'supplier_name',
     api: {
-      getAll: suppliersApi.getAll,
+      getAll: loadCanonicalSuppliers,
       update: suppliersApi.update
     },
     searchFields: ['supplier_name', 'supplier_code', 'primary_phone', 'gst_number'],
@@ -274,13 +253,12 @@ const SupplierMaster: React.FC = () => {
     softDelete: true
   });
 
-  const columns = getColumns(handleEdit, handleDelete);
+  const columns = getColumns();
 
   // Summary stats
   const total = suppliers.length;
   const active = suppliers.filter(s => s.is_active !== false).length;
   const inactive = total - active;
-  const totalOutstanding = suppliers.reduce((sum, s) => sum + (s.current_outstanding || s.outstanding || 0), 0);
 
   const headerActions = (
     <Button variant="primary" onClick={() => setShowAddModal(true)}>
@@ -301,12 +279,7 @@ const SupplierMaster: React.FC = () => {
           <span className="text-gray-600">Total: <strong className="text-gray-900">{total}</strong></span>
           <span className="text-green-600">Active: <strong>{active}</strong></span>
           <span className="text-red-600">Inactive: <strong>{inactive}</strong></span>
-          <span className="text-gray-600">Payable: <strong className="text-gray-900">{'\u20B9'}{totalOutstanding.toLocaleString()}</strong></span>
-          {selectedIds.length > 0 && (
-            <Button variant="danger" size="sm" onClick={handleBulkDelete}>
-              <Trash2 className="w-4 h-4 mr-2" />Deactivate ({selectedIds.length})
-            </Button>
-          )}
+          <span className="text-gray-600">Payable: <strong className="text-gray-900">Unavailable</strong></span>
         </div>
         <div className="flex items-center gap-3">
           <div className="relative">
@@ -314,16 +287,18 @@ const SupplierMaster: React.FC = () => {
             <input
               ref={searchInputRef}
               type="text"
+              aria-label="Search suppliers"
               placeholder="Search suppliers... ( / )"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-9 pr-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-56"
+              className="min-h-11 pl-9 pr-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-56"
             />
           </div>
           <select
+            aria-label="Filter suppliers by type"
             value={filterValue}
             onChange={(e) => setFilterValue(e.target.value)}
-            className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="min-h-11 px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             {SUPPLIER_TYPES.map(type => (
               <option key={type.value} value={type.value}>{type.label}</option>
@@ -339,6 +314,11 @@ const SupplierMaster: React.FC = () => {
           <span className="text-sm text-red-800">{error}</span>
         </div>
       )}
+
+      <CanonicalWriteNotice
+        action="Editing suppliers or changing supplier status"
+        description="New supplier accounts use the canonical API. Existing supplier edits and status changes remain unavailable until their reviewed cloud commands exist."
+      />
 
       {/* Supplier List */}
       <ContentCard title="Supplier List" subtitle={undefined} actions={undefined} className="overflow-hidden" icon={Truck}>
@@ -359,9 +339,7 @@ const SupplierMaster: React.FC = () => {
             loading={isLoading}
             emptyMessage="No suppliers found"
             emptyIcon={<Truck className="w-12 h-12 text-gray-400" />}
-            selectable={true}
-            selectedRows={filteredEntities.filter(s => selectedIds.includes(String(s.supplier_id)))}
-            onSelectionChange={(selected) => setSelectedIds(selected.map(s => String(s.supplier_id)))}
+            selectable={false}
             hoverable={true}
             striped={true}
             paginated={true}
@@ -371,19 +349,12 @@ const SupplierMaster: React.FC = () => {
         )}
       </ContentCard>
 
-      {/* Supplier Edit/Add Modal */}
-      {(showAddModal || editingEntity) && (
-        <SupplierEditModal
-          isOpen={true}
-          onSave={(updatedSupplier) => {
-            handleSaved();
-            setEditingEntity(null);
-          }}
-          onClose={() => {
-            setShowAddModal(false);
-            setEditingEntity(null);
-          }}
-          supplier={editingEntity}
+      {/* Canonical online create flow; unsupported edits are not rendered. */}
+      {showAddModal && (
+        <SupplierFlow
+          open={true}
+          onSupplierCreated={handleSaved}
+          onClose={() => setShowAddModal(false)}
         />
       )}
     </GlobalLayout>

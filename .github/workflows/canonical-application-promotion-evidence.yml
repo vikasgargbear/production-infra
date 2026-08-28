@@ -1,0 +1,454 @@
+name: Canonical application promotion evidence
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type CAPTURE_CANONICAL_PROMOTION_EVIDENCE
+        required: true
+        type: string
+      reviewed_sha:
+        description: Exact deployed 40-character commit to evidence
+        required: true
+        type: string
+      deployment_workflow_run_id:
+        description: Exact Production readiness run containing one reviewed deployment and Live18 evidence
+        required: true
+        type: number
+      source_disposition:
+        description: Repository path to the reviewed reset disposition JSON
+        required: true
+        default: docs/architecture/promotion-evidence/source-disposition.template.json
+        type: string
+      rollback_plan:
+        description: Repository path to the reviewed rollback plan JSON
+        required: true
+        default: docs/architecture/promotion-evidence/rollback-plan.template.json
+        type: string
+      decommission_plan:
+        description: Repository path to the reviewed retired-project decommission plan JSON
+        required: true
+        default: docs/architecture/promotion-evidence/decommission-plan.template.json
+        type: string
+  workflow_call:
+    inputs:
+      confirmation:
+        description: Exact canonical promotion evidence confirmation
+        required: true
+        type: string
+      reviewed_sha:
+        description: Exact deployed 40-character commit to evidence
+        required: true
+        type: string
+      deployment_workflow_run_id:
+        description: Exact Production readiness run containing one reviewed deployment and Live18 evidence
+        required: true
+        type: number
+      source_disposition:
+        description: Repository path to the reviewed reset disposition JSON
+        required: true
+        type: string
+      rollback_plan:
+        description: Repository path to the reviewed rollback plan JSON
+        required: true
+        type: string
+      decommission_plan:
+        description: Repository path to the reviewed retired-project decommission plan JSON
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: canonical-application-promotion-evidence
+  cancel-in-progress: false
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    environment: canonical-staging
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: promotion_restore
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d promotion_restore"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      CANONICAL_BASELINE_APPROVED_SHA256: ${{ vars.CANONICAL_BASELINE_APPROVED_SHA256 }}
+      CANONICAL_STAGING_PROJECT_REF: ${{ vars.CANONICAL_STAGING_PROJECT_REF }}
+      CANONICAL_PRODUCTION_PROJECT_REFS: ${{ vars.CANONICAL_PRODUCTION_PROJECT_REFS }}
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      ERP_RUNTIME_PASSWORD: ${{ secrets.ERP_RUNTIME_PASSWORD }}
+      REVIEWED_SHA: ${{ inputs.reviewed_sha }}
+      DEPLOYMENT_WORKFLOW_RUN_ID: ${{ inputs.deployment_workflow_run_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.reviewed_sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Pin the exact non-retired staging and deployment boundary
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          test "$CONFIRMATION" = CAPTURE_CANONICAL_PROMOTION_EVIDENCE
+          [[ "$REVIEWED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$REVIEWED_SHA"
+          test "$CANONICAL_STAGING_PROJECT_REF" = rgihahbmkrmhitjdjvev
+          test "$CANONICAL_STAGING_PROJECT_REF" != jfrairkkzxwkhbtqejnz
+          test -n "$CANONICAL_PRODUCTION_PROJECT_REFS"
+          case ",$CANONICAL_PRODUCTION_PROJECT_REFS," in
+            *",$CANONICAL_STAGING_PROJECT_REF,"*)
+              echo "canonical staging appears in the production project denylist" >&2
+              exit 2
+              ;;
+          esac
+          for reviewed_path in \
+            '${{ inputs.source_disposition }}' \
+            '${{ inputs.rollback_plan }}' \
+            '${{ inputs.decommission_plan }}'; do
+            test -f "$reviewed_path"
+            case "$reviewed_path" in
+              /*|../*|*/../*) echo "reviewed artifact path escapes the checkout" >&2; exit 2 ;;
+            esac
+          done
+
+      - name: Install evidence and PostgreSQL clients
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends postgresql-client
+          pip install -r backend/requirements.txt
+
+      - name: Bind one exact successful deployment and Live18 artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p staging-evidence
+          [[ "$DEPLOYMENT_WORKFLOW_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+          run_json=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$DEPLOYMENT_WORKFLOW_RUN_ID")
+          test "$(jq -r .head_sha <<<"$run_json")" = "$REVIEWED_SHA"
+          test "$(jq -r .path <<<"$run_json")" = .github/workflows/production-readiness.yml
+          test "$(jq -r .event <<<"$run_json")" = workflow_dispatch
+          run_attempt=$(jq -er '.run_attempt | select(. > 0)' <<<"$run_json")
+          jobs_json=$(gh api --paginate \
+            "repos/$GITHUB_REPOSITORY/actions/runs/$DEPLOYMENT_WORKFLOW_RUN_ID/jobs?per_page=100" \
+            --slurp | jq '{jobs: map(.jobs[]) }')
+          railway_success=$(jq '[.jobs[] | select(.name == "railway-canonical-staging / deploy" and .conclusion == "success")] | length' <<<"$jobs_json")
+          render_success=$(jq '[.jobs[] | select(.name == "canonical-free-staging / baseline" and .conclusion == "success")] | length' <<<"$jobs_json")
+          test "$((railway_success + render_success))" = 1
+          test "$(jq '[.jobs[] | select(.name == "live18-acceptance" and .conclusion == "success")] | length' <<<"$jobs_json")" = 1
+          artifacts_json=$(gh api --paginate \
+            "repos/$GITHUB_REPOSITORY/actions/runs/$DEPLOYMENT_WORKFLOW_RUN_ID/artifacts?per_page=100" \
+            --slurp | jq '{artifacts: map(.artifacts[]) }')
+          if test "$railway_success" = 1; then
+            deployment_provider=railway
+            deployment_name="railway-canonical-staging-$REVIEWED_SHA"
+          else
+            deployment_provider=render
+            deployment_name="canonical-staging-baseline-$DEPLOYMENT_WORKFLOW_RUN_ID"
+          fi
+          deployment_id=$(jq -er --arg name "$deployment_name" \
+            '[.artifacts[] | select(.name == $name and .expired == false)] | select(length == 1) | .[0].id' \
+            <<<"$artifacts_json")
+          deployment_digest=$(jq -er --arg name "$deployment_name" \
+            '[.artifacts[] | select(.name == $name and .expired == false)] | select(length == 1) | .[0].digest | select(test("^sha256:[0-9a-f]{64}$"))' \
+            <<<"$artifacts_json")
+          live18_id=$(jq -er \
+            '[.artifacts[] | select(.name == "canonical-live18-acceptance-evidence" and .expired == false)] | select(length == 1) | .[0].id' \
+            <<<"$artifacts_json")
+          live18_digest=$(jq -er \
+            '[.artifacts[] | select(.name == "canonical-live18-acceptance-evidence" and .expired == false)] | select(length == 1) | .[0].digest | select(test("^sha256:[0-9a-f]{64}$"))' \
+            <<<"$artifacts_json")
+          deployment_zip="$RUNNER_TEMP/railway-deployment.zip"
+          live18_zip="$RUNNER_TEMP/live18-acceptance.zip"
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$deployment_id/zip" > "$deployment_zip"
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$live18_id/zip" > "$live18_zip"
+          test "$(unzip -Z1 "$live18_zip")" = live18-evidence-manifest.json
+          case "$deployment_provider" in
+            railway)
+              test "$(unzip -Z1 "$deployment_zip" | sort | tr '\n' ' ')" = \
+                "_temp/railway-oauth-evidence/canonical-staging-oauth-client.json production-infra/production-infra/railway-pilot-evidence.json production-infra/production-infra/railway-supabase-auth-redirect.json "
+              unzip -p "$deployment_zip" \
+                production-infra/production-infra/railway-pilot-evidence.json \
+                > staging-evidence/deployment-maintenance.json
+              ;;
+            render)
+              test "$(unzip -Z1 "$deployment_zip" | grep -Fxc render-pilot-evidence.json)" = 1
+              unzip -p "$deployment_zip" render-pilot-evidence.json \
+                > staging-evidence/deployment.json
+              ;;
+            *) exit 2 ;;
+          esac
+          unzip -p "$live18_zip" live18-evidence-manifest.json \
+            > staging-evidence/live18-evidence-manifest.json
+          live18_sha256=$(sha256sum staging-evidence/live18-evidence-manifest.json | cut -d' ' -f1)
+          if test "$deployment_provider" = railway; then
+            python3 backend/scripts/audit/application_promotion_evidence.py \
+              reconcile-railway-deployment \
+              --maintenance-evidence staging-evidence/deployment-maintenance.json \
+              --deployment-artifact-id "$deployment_id" \
+              --deployment-artifact-digest "$deployment_digest" \
+              --live18-manifest staging-evidence/live18-evidence-manifest.json \
+              --workflow-run-id "$DEPLOYMENT_WORKFLOW_RUN_ID" \
+              --workflow-run-attempt "$run_attempt" \
+              --live18-artifact-id "$live18_id" \
+              --live18-artifact-sha256 "$live18_sha256" \
+              --live18-artifact-digest "$live18_digest" \
+              --expected-sha "$REVIEWED_SHA" \
+              --output staging-evidence/deployment.json
+          fi
+          test -s staging-evidence/deployment.json
+          test -s staging-evidence/live18-evidence-manifest.json
+          {
+            echo "LIVE18_WORKFLOW_RUN_ATTEMPT=$run_attempt"
+            echo "DEPLOYMENT_ARTIFACT_ID=$deployment_id"
+            echo "DEPLOYMENT_ARTIFACT_DIGEST=$deployment_digest"
+            echo "LIVE18_ARTIFACT_ID=$live18_id"
+            echo "LIVE18_ARTIFACT_DIGEST=$live18_digest"
+            echo "LIVE18_ARTIFACT_SHA256=$live18_sha256"
+          } >> "$GITHUB_ENV"
+          rm -f -- "$deployment_zip" "$live18_zip"
+
+      - name: Resolve read-only canonical staging connections
+        run: |
+          set -euo pipefail
+          test -n "$SUPABASE_ACCESS_TOKEN"
+          test -n "$SUPABASE_DB_PASSWORD"
+          test -n "$ERP_RUNTIME_PASSWORD"
+          project_json=$(curl --fail --silent --show-error \
+            --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            "https://api.supabase.com/v1/projects/$CANONICAL_STAGING_PROJECT_REF")
+          test "$(jq -r .id <<<"$project_json")" = "$CANONICAL_STAGING_PROJECT_REF"
+          test "$(jq -r .status <<<"$project_json")" = ACTIVE_HEALTHY
+          PYTHONPATH=backend python3 - <<'PY'
+          import os
+          from pathlib import Path
+          from scripts.canonical_staging_database import (
+              build_direct_dsn,
+              load_direct_database_contract,
+              verify_direct_database,
+          )
+
+          contract = load_direct_database_contract()
+          if os.environ["CANONICAL_STAGING_PROJECT_REF"] != contract.project_ref:
+              raise SystemExit("promotion project does not match direct database authority")
+          urls = {
+              "PROMOTION_ADMIN_DATABASE_URL": build_direct_dsn(
+                  contract=contract,
+                  role="postgres",
+                  password=os.environ["SUPABASE_DB_PASSWORD"],
+                  application_name="promotion_evidence_admin",
+              ),
+              "PROMOTION_RUNTIME_DATABASE_URL": build_direct_dsn(
+                  contract=contract,
+                  role="erp_runtime",
+                  password=os.environ["ERP_RUNTIME_PASSWORD"],
+                  application_name="promotion_evidence_runtime",
+              ),
+          }
+          bindings = (
+              ("postgres", "SUPABASE_DB_PASSWORD", "PROMOTION_ADMIN_DATABASE_URL"),
+              ("erp_runtime", "ERP_RUNTIME_PASSWORD", "PROMOTION_RUNTIME_DATABASE_URL"),
+          )
+          for role, password_variable, output_variable in bindings:
+              verify_direct_database(
+                  contract=contract,
+                  role=role,
+                  password=os.environ[password_variable],
+                  application_name="promotion_evidence_verify",
+              )
+              print(f"::add-mask::{urls[output_variable]}")
+          with Path(os.environ["GITHUB_ENV"]).open("a", encoding="utf-8") as stream:
+              for variable, value in urls.items():
+                  stream.write(f"{variable}={value}\n")
+          PY
+
+      - name: Capture mounted route and exact database evidence
+        run: |
+          set -euo pipefail
+          expected_head=$(python3 backend/scripts/canonical_migration_contract.py --print-head)
+          echo "EXPECTED_ALEMBIC_HEAD=$expected_head" >> "$GITHUB_ENV"
+          python3 backend/scripts/audit/application_promotion_evidence.py route-graph \
+            --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
+            --git-commit "$REVIEWED_SHA" \
+            --deployment-evidence staging-evidence/deployment.json \
+            --deployment-artifact-id "$DEPLOYMENT_ARTIFACT_ID" \
+            --deployment-artifact-digest "$DEPLOYMENT_ARTIFACT_DIGEST" \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --output staging-evidence/mounted-route-graph.json
+          python3 backend/scripts/audit/application_promotion_evidence.py database \
+            --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
+            --git-commit "$REVIEWED_SHA" \
+            --deployment-evidence staging-evidence/deployment.json \
+            --deployment-artifact-id "$DEPLOYMENT_ARTIFACT_ID" \
+            --deployment-artifact-digest "$DEPLOYMENT_ARTIFACT_DIGEST" \
+            --runtime-database-url "$PROMOTION_RUNTIME_DATABASE_URL" \
+            --admin-database-url "$PROMOTION_ADMIN_DATABASE_URL" \
+            --expected-head "$expected_head" \
+            --output staging-evidence/canonical-database-runtime.json
+
+      - name: Perform PostgreSQL 15 backup restore and exact reconciliation
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          schema_args=()
+          for schema in automation calculation catalog compliance core finance hr inventory parties procurement sales tax; do
+            schema_args+=(--schema "$schema")
+          done
+          docker run --rm \
+            -e PROMOTION_DATABASE_URL="$PROMOTION_ADMIN_DATABASE_URL" \
+            postgres:17-alpine sh -ec \
+            'pg_dump --data-only --no-owner --no-privileges "$@" "$PROMOTION_DATABASE_URL"' \
+            pg_dump "${schema_args[@]}" \
+            > staging-evidence/canonical-staging-backup.sql
+          test -s staging-evidence/canonical-staging-backup.sql
+
+          export DATABASE_URL=postgresql+psycopg2://postgres:postgres@localhost:5432/promotion_restore
+          psql -X -v ON_ERROR_STOP=1 \
+            postgresql://postgres@localhost:5432/promotion_restore \
+            -f database/canonical/ci/bootstrap_supabase_auth.sql \
+            >/dev/null
+          (cd backend && alembic upgrade head)
+          psql -X -v ON_ERROR_STOP=1 \
+            postgresql://postgres@localhost:5432/promotion_restore \
+            >/dev/null <<'SQL'
+          DO $truncate_canonical_restore$
+          DECLARE
+            table_row record;
+          BEGIN
+            FOR table_row IN
+              SELECT format('%I.%I', schemaname, tablename) AS qualified_name
+                FROM pg_catalog.pg_tables
+               WHERE schemaname=ANY(ARRAY[
+                 'automation','calculation','catalog','compliance','core','finance',
+                 'hr','inventory','parties','procurement','sales','tax'
+               ])
+            LOOP
+              EXECUTE 'TRUNCATE TABLE ' || table_row.qualified_name || ' RESTART IDENTITY CASCADE';
+            END LOOP;
+          END
+          $truncate_canonical_restore$;
+          SQL
+          {
+            printf 'SET session_replication_role=replica;\n'
+            cat staging-evidence/canonical-staging-backup.sql
+            printf 'SET session_replication_role=origin;\n'
+          } | psql -X -v ON_ERROR_STOP=1 \
+            postgresql://postgres@localhost:5432/promotion_restore \
+            >/dev/null
+          test "$(psql -XAt postgresql://postgres@localhost:5432/promotion_restore \
+            -c 'SELECT version_num FROM public.alembic_version')" = "$EXPECTED_ALEMBIC_HEAD"
+
+          python3 backend/scripts/audit/application_promotion_evidence.py snapshot \
+            --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
+            --git-commit "$REVIEWED_SHA" \
+            --deployment-evidence staging-evidence/deployment.json \
+            --deployment-artifact-id "$DEPLOYMENT_ARTIFACT_ID" \
+            --deployment-artifact-digest "$DEPLOYMENT_ARTIFACT_DIGEST" \
+            --database-url postgresql://postgres:postgres@localhost:5432/promotion_restore \
+            --source restored_postgresql_15 \
+            --output staging-evidence/restored-postgresql-15.json
+          python3 backend/scripts/audit/application_promotion_evidence.py reconcile-backup \
+            --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
+            --git-commit "$REVIEWED_SHA" \
+            --deployment-evidence staging-evidence/deployment.json \
+            --deployment-artifact-id "$DEPLOYMENT_ARTIFACT_ID" \
+            --deployment-artifact-digest "$DEPLOYMENT_ARTIFACT_DIGEST" \
+            --source-artifact staging-evidence/canonical-database-runtime.json \
+            --restored-artifact staging-evidence/restored-postgresql-15.json \
+            --backup-file staging-evidence/canonical-staging-backup.sql \
+            --output staging-evidence/reconciliation-backup-restore.json
+
+      - name: Bind reviewed reset rollback and decommission inputs
+        run: |
+          set -euo pipefail
+          common=(
+            --project-ref "$CANONICAL_STAGING_PROJECT_REF"
+            --git-commit "$REVIEWED_SHA"
+            --deployment-evidence staging-evidence/deployment.json
+            --deployment-artifact-id "$DEPLOYMENT_ARTIFACT_ID"
+            --deployment-artifact-digest "$DEPLOYMENT_ARTIFACT_DIGEST"
+          )
+          python3 backend/scripts/audit/application_promotion_evidence.py capture-live18 \
+            "${common[@]}" \
+            --manifest staging-evidence/live18-evidence-manifest.json \
+            --workflow-run-id "$DEPLOYMENT_WORKFLOW_RUN_ID" \
+            --workflow-run-attempt "$LIVE18_WORKFLOW_RUN_ATTEMPT" \
+            --artifact-id "$LIVE18_ARTIFACT_ID" \
+            --artifact-sha256 "$LIVE18_ARTIFACT_SHA256" \
+            --artifact-digest "$LIVE18_ARTIFACT_DIGEST" \
+            --output staging-evidence/live18-acceptance.json
+          python3 backend/scripts/audit/application_promotion_evidence.py wrap-reviewed-input \
+            "${common[@]}" --kind source_disposition \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --input '${{ inputs.source_disposition }}' \
+            --output staging-evidence/source-disposition.json
+          python3 backend/scripts/audit/application_promotion_evidence.py wrap-reviewed-input \
+            "${common[@]}" --kind rollback_plan \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --input '${{ inputs.rollback_plan }}' \
+            --output staging-evidence/rollback-plan.json
+          python3 backend/scripts/audit/application_promotion_evidence.py wrap-reviewed-input \
+            "${common[@]}" --kind retired_project_decommission_plan \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --input '${{ inputs.decommission_plan }}' \
+            --output staging-evidence/decommission-plan.json
+
+      - name: Assemble and independently validate the candidate manifest
+        run: |
+          set -euo pipefail
+          python3 backend/scripts/audit/application_promotion_evidence.py assemble \
+            --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
+            --git-commit "$REVIEWED_SHA" \
+            --deployment-evidence staging-evidence/deployment.json \
+            --deployment-artifact-id "$DEPLOYMENT_ARTIFACT_ID" \
+            --deployment-artifact-digest "$DEPLOYMENT_ARTIFACT_DIGEST" \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --source-disposition staging-evidence/source-disposition.json \
+            --route-graph staging-evidence/mounted-route-graph.json \
+            --database staging-evidence/canonical-database-runtime.json \
+            --reconciliation-backup staging-evidence/reconciliation-backup-restore.json \
+            --live18-acceptance staging-evidence/live18-acceptance.json \
+            --rollback staging-evidence/rollback-plan.json \
+            --decommission staging-evidence/decommission-plan.json \
+            --reviewer "$GITHUB_ACTOR" \
+            --reviewed-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --output staging-evidence/canonical-application-promotion-evidence.json
+          python3 backend/scripts/audit/application_promotion_evidence.py validate-manifest \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --manifest staging-evidence/canonical-application-promotion-evidence.json
+          # The staging rows are disposable, but raw database contents still do
+          # not belong in a GitHub artifact. The reconciliation record retains
+          # the exact dump hash and size after the local restore succeeds.
+          rm -- staging-evidence/canonical-staging-backup.sql
+
+      - name: Publish immutable candidate evidence without changing readiness
+        uses: actions/upload-artifact@v4
+        with:
+          name: canonical-application-promotion-${{ inputs.reviewed_sha }}-${{ github.run_id }}
+          path: |
+            staging-evidence/*
+            ${{ inputs.source_disposition }}
+            ${{ inputs.rollback_plan }}
+            ${{ inputs.decommission_plan }}
+          if-no-files-found: error
+          retention-days: 30

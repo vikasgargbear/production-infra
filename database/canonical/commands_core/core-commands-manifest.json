@@ -1,0 +1,50 @@
+{
+  "blocked_count": 4,
+  "blocked_invariants": {
+    "automation.agent_grant_capabilities:agent_grant_capabilities_revocation": {
+      "reason": "Revocation lifecycle is locally enforceable, but automation.agent_grants has no typed risk, approval, amount, currency, or sensitive-read ceilings. Enforcing a derived ceiling would invent consent facts."
+    },
+    "automation.command_requests:command_execution_guard": {
+      "reason": "The row stores calculation_hash and aggregate_version_hash without calculation bytes, a serializer version, or a reviewed operation dispatcher. PostgreSQL cannot re-hash absent evidence or execute every shared application command exactly once through this isolated core boundary."
+    },
+    "automation.command_requests:command_request_matches_grant": {
+      "reason": "The request persists no typed branch, amount, currency, or sensitive-read intent, and capability_code does not identify a reviewed operation registry entry. Opaque request_bytes cannot safely establish those bounds."
+    },
+    "catalog.products:products_regulatory_classification": {
+      "reason": "No reviewed effective-dated CDSCO and NDPS ingredient classification authority is present. Core commands must not fabricate legal classifications or weaken the existing activation preflight."
+    }
+  },
+  "catalog_sha256": "6c88d9a0f93158f126abc8d87057b8fcebb287ba332ef36fd37b802cadc29c31",
+  "dependencies": {
+    "audit": "erp_plumbing.audit_row_mutation binds each mutation to app.request_id and optional app.command_request_id",
+    "authorization": "erp_security.has_permission evaluates grant valid_from_at/expires_at at transaction time",
+    "idempotency": "core.claim_idempotency_key plus immutable terminal response evidence"
+  },
+  "manifest_version": "1.0.0",
+  "mapping_file": "baseline-core-command-enforcements.json",
+  "mapping_sha256": "a2db9cb66f2eee3c62283cbddeda9b0a232c82762ce9bc4ec1bb40008d6c096d",
+  "postgresql": "15+",
+  "resolved_count": 7,
+  "resolved_invariants": [
+    "core.access_grants:access_grants_state_transition",
+    "core.data_retention_cases:data_retention_cases_command_guard",
+    "core.document_sequences:document_sequences_atomic_allocation",
+    "core.settings:settings_state_transition",
+    "parties.customer_accounts:customer_accounts_state_transition",
+    "parties.parties:parties_state_transition",
+    "parties.supplier_accounts:supplier_accounts_state_transition"
+  ],
+  "security": {
+    "dynamic_sql": false,
+    "explicit_context_and_permission_checks": true,
+    "fixed_empty_search_path": true,
+    "function_schema": "erp_core_commands",
+    "runtime_callable_functions": [
+      "allocate_document_number(uuid,uuid,bytea,timestamptz)",
+      "change_customer_terms(uuid,uuid,bigint,numeric,integer,bytea,timestamptz)",
+      "change_supplier_terms(uuid,uuid,bigint,integer,bytea,timestamptz)",
+      "replace_setting(uuid,uuid,uuid,bigint,text,text,numeric,boolean,date,timestamptz,bytea,timestamptz)"
+    ]
+  },
+  "source_manifest": "../invariants_agent/invariants-agent-manifest.json"
+}

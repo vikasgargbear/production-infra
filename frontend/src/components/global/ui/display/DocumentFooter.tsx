@@ -5,19 +5,25 @@
 
 import React, { useState, RefObject } from 'react';
 import { ArrowRight, Save, Printer, Receipt } from 'lucide-react';
+import {
+    compareExactDecimals,
+    formatExactCurrency,
+    formatExactDecimal,
+    type EditableDecimalValue,
+} from '../../../../utils/exactDecimal';
 
 // ==================== TYPE DEFINITIONS ====================
 
 export interface DocumentFooterProps {
     // Amounts
     totalItems?: number;
-    totalAmount?: number;
-    subtotalAmount?: number;
-    discountAmount?: number;
-    deliveryCharges?: number;
-    taxAmount?: number;
-    roundOffAmount?: number;
-    grandTotal?: number;
+    totalAmount?: EditableDecimalValue;
+    subtotalAmount?: EditableDecimalValue;
+    discountAmount?: EditableDecimalValue;
+    deliveryCharges?: EditableDecimalValue;
+    taxAmount?: EditableDecimalValue;
+    roundOffAmount?: EditableDecimalValue;
+    grandTotal?: EditableDecimalValue;
     additionalInfo?: React.ReactNode;
 
     // Actions - all optional for flexibility
@@ -31,6 +37,7 @@ export interface DocumentFooterProps {
 
     // State
     isSaving?: boolean;
+    saveDisabled?: boolean;
     customerPhone?: string | null;
 
     // Labels
@@ -70,6 +77,7 @@ const DocumentFooter: React.FC<DocumentFooterProps> = ({
     onThermalPrint,
     onWhatsApp,
     isSaving = false,
+    saveDisabled = false,
     customerPhone = null,
     cancelLabel = "Cancel",
     continueLabel = "Continue",
@@ -83,71 +91,68 @@ const DocumentFooter: React.FC<DocumentFooterProps> = ({
 }) => {
     const [showThermalOptions, setShowThermalOptions] = useState(false);
 
-    const getButtonColorClasses = (color: string): string => {
-        switch (color) {
-            case 'purple':
-                return 'bg-purple-600 hover:bg-purple-700';
-            case 'green':
-                return 'bg-green-600 hover:bg-green-700';
-            case 'orange':
-                return 'bg-orange-600 hover:bg-orange-700';
-            case 'red':
-                return 'bg-red-600 hover:bg-red-700';
-            default:
-                return 'bg-blue-600 hover:bg-blue-700';
-        }
-    };
+    // Keep the main forward action visually identical in every document flow.
+    // The legacy color prop remains accepted so existing callers do not break.
+    const getButtonColorClasses = (_color: string): string =>
+        'bg-blue-600 hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2';
+    const positiveMoney = (value: EditableDecimalValue, label: string) =>
+        compareExactDecimals(value, '0.00', label, { scale: 2, maximumWholeDigits: 20, allowNegative: true }) > 0;
+    const nonZeroMoney = (value: EditableDecimalValue, label: string) =>
+        compareExactDecimals(value, '0.00', label, { scale: 2, maximumWholeDigits: 20, allowNegative: true }) !== 0;
 
     return (
-        <div className={`border-t border-gray-200 bg-white px-6 py-3 ${className}`}>
+        <div className={`border-t border-gray-200 bg-white px-3 py-3 sm:px-6 ${className}`}>
             {showActionButtons ? (
                 // Review page layout - single line like step 1
-                <div className="flex justify-between items-center min-h-[36px]">
-                    <div className="flex items-center gap-6 text-sm">
-                        {totalItems > 0 && (
+                <div className="flex min-h-[36px] flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-wrap items-center gap-3 text-sm sm:gap-6">
+                        {compareExactDecimals(totalItems, '0', 'Document item count', { scale: 6, maximumWholeDigits: 14 }) > 0 && (
                             <span className="text-gray-600">
-                                Items: <strong>{totalItems}</strong>
+                                Items: <strong>{formatExactDecimal(totalItems, 'Document item count', { scale: 6, maximumWholeDigits: 14 })}</strong>
                             </span>
                         )}
-                        {subtotalAmount > 0 && (
+                        {additionalInfo && (
+                            <span className="text-gray-600">{additionalInfo}</span>
+                        )}
+                        {positiveMoney(subtotalAmount, 'Document subtotal') && (
                             <span className="text-gray-600">
-                                Sub Total: <strong>₹{subtotalAmount.toFixed(2)}</strong>
+                                Sub Total: <strong>{formatExactCurrency(subtotalAmount, 'Document subtotal')}</strong>
                             </span>
                         )}
-                        {discountAmount > 0 && (
+                        {positiveMoney(discountAmount, 'Document discount') && (
                             <span className="text-gray-600">
-                                Discount: <strong>-₹{discountAmount.toFixed(2)}</strong>
+                                Discount: <strong>-{formatExactCurrency(discountAmount, 'Document discount')}</strong>
                             </span>
                         )}
-                        {deliveryCharges > 0 && (
+                        {positiveMoney(deliveryCharges, 'Document delivery charges') && (
                             <span className="text-gray-600">
-                                Delivery: <strong>+₹{deliveryCharges.toFixed(2)}</strong>
+                                Delivery: <strong>+{formatExactCurrency(deliveryCharges, 'Document delivery charges')}</strong>
                             </span>
                         )}
-                        {taxAmount > 0 && (
+                        {positiveMoney(taxAmount, 'Document tax') && (
                             <span className="text-gray-600">
-                                Tax: <strong>₹{taxAmount.toFixed(2)}</strong>
+                                Tax: <strong>{formatExactCurrency(taxAmount, 'Document tax')}</strong>
                             </span>
                         )}
-                        {roundOffAmount !== 0 && (
+                        {nonZeroMoney(roundOffAmount, 'Document round off') && (
                             <span className="text-gray-600">
-                                Round Off: <strong>{roundOffAmount >= 0 ? '+' : '-'}₹{Math.abs(roundOffAmount).toFixed(2)}</strong>
+                                Round Off: <strong>{formatExactCurrency(roundOffAmount, 'Document round off')}</strong>
                             </span>
                         )}
-                        {grandTotal > 0 && (
+                        {positiveMoney(grandTotal, 'Document grand total') && (
                             <span className="text-lg font-semibold text-gray-900">
-                                Total: <strong>₹{grandTotal.toFixed(2)}</strong>
+                                Total: <strong>{formatExactCurrency(grandTotal, 'Document grand total')}</strong>
                             </span>
                         )}
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end sm:gap-3">
                         {/* Thermal Print button with dropdown */}
                         {onThermalPrint && (
                             <div className="relative">
                                 <button
                                     onClick={() => setShowThermalOptions(!showThermalOptions)}
-                                    className="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg transition-colors flex items-center gap-2"
+                                    className="min-h-11 px-4 py-2 bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 rounded-lg transition-colors flex items-center gap-2"
                                 >
                                     <Receipt className="w-4 h-4" />
                                     Thermal Print
@@ -181,7 +186,7 @@ const DocumentFooter: React.FC<DocumentFooterProps> = ({
                         {onPrint && (
                             <button
                                 onClick={onPrint}
-                                className="px-6 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors flex items-center gap-2"
+                                className="min-h-11 px-6 py-2 bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 rounded-lg transition-colors flex items-center gap-2"
                             >
                                 <Printer className="w-4 h-4" />
                                 Print
@@ -193,8 +198,8 @@ const DocumentFooter: React.FC<DocumentFooterProps> = ({
                             <button
                                 ref={saveButtonRef}
                                 onClick={onSave}
-                                disabled={isSaving}
-                                className="px-8 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-sm"
+                                disabled={isSaving || saveDisabled}
+                                className="min-h-11 flex-1 px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center justify-center gap-2 disabled:bg-gray-300 disabled:text-gray-600 disabled:cursor-not-allowed font-medium sm:flex-none sm:px-8"
                             >
                                 <Save className="w-5 h-5" />
                                 {isSaving ? 'Generating...' : saveLabel}
@@ -204,7 +209,7 @@ const DocumentFooter: React.FC<DocumentFooterProps> = ({
                 </div>
             ) : (
                 // Standard layout for create/edit pages - optimized for speed
-                <div className="flex justify-between items-center min-h-[36px]">
+                <div className="flex min-h-[36px] flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center gap-4 text-sm">
                         {totalItems > 0 && (
                             <span className="text-gray-600">
@@ -218,11 +223,11 @@ const DocumentFooter: React.FC<DocumentFooterProps> = ({
                         )}
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex w-full items-center gap-2 sm:w-auto sm:gap-3">
                         {onCancel && (
                             <button
                                 onClick={onCancel}
-                                className="px-6 py-2 border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
+                                className="min-h-11 flex-1 px-4 py-2 border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors sm:flex-none sm:px-6"
                             >
                                 {cancelLabel}
                             </button>
@@ -231,7 +236,7 @@ const DocumentFooter: React.FC<DocumentFooterProps> = ({
                             <button
                                 onClick={onContinue}
                                 disabled={continueDisabled}
-                                className={`px-6 py-2 text-white rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${getButtonColorClasses(continueButtonColor)}`}
+                                className={`min-h-11 flex-1 justify-center px-4 py-2 text-white rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed sm:flex-none sm:px-6 ${getButtonColorClasses(continueButtonColor)}`}
                             >
                                 {continueLabel}
                                 <ArrowRight className="w-4 h-4" />

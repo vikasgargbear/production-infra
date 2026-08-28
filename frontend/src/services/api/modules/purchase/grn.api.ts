@@ -3,6 +3,7 @@
  */
 
 import { apiHelpers } from '../../apiClient';
+import { rejectCanonicalWrite } from '../../canonicalWritePolicy';
 import type { AxiosResponse } from 'axios';
 
 // ============================================
@@ -10,9 +11,10 @@ import type { AxiosResponse } from 'axios';
 // ============================================
 
 export interface GRNParams {
-    supplier_id?: number;
-    po_id?: number;
+    supplier_id?: number | string;
+    po_id?: number | string;
     status?: string;
+    search?: string;
     from_date?: string;
     to_date?: string;
     limit?: number;
@@ -72,30 +74,14 @@ export const grnApi = {
         return apiHelpers.get(ENDPOINTS.BY_SUPPLIER(supplierId), { params });
     },
 
-    create: async (data: GRNData): Promise<AxiosResponse> => {
-        const response = await apiHelpers.post(ENDPOINTS.BASE, data);
+    create: (_data: GRNData): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Legacy goods-receipt creation'),
 
-        // Trigger delta sync after successful GRN creation
-        // New stock received - update IndexedDB
-        if (response?.data?.success || response?.data?.grn_id) {
-            try {
-                const { default: deltaSyncService } = await import('../../../offline/sync/deltaSyncService');
-                deltaSyncService.afterGRNApproved();
-            } catch (e) {
-                console.warn('[GRN-API] Delta sync trigger failed:', e);
-            }
-        }
+    update: (_grnId: number, _data: Partial<GRNData>): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Legacy goods-receipt editing'),
 
-        return response;
-    },
-
-    update: (grnId: number, data: Partial<GRNData>): Promise<AxiosResponse> => {
-        return apiHelpers.put(`${ENDPOINTS.BASE}/${grnId}`, data);
-    },
-
-    delete: (grnId: number): Promise<AxiosResponse> => {
-        return apiHelpers.delete(`${ENDPOINTS.BASE}/${grnId}`);
-    },
+    delete: (_grnId: number): Promise<AxiosResponse> =>
+        rejectCanonicalWrite('Legacy goods-receipt deletion'),
 
     print: (grnId: number): Promise<AxiosResponse> => {
         return apiHelpers.get(`${ENDPOINTS.BASE}/${grnId}/print`, { responseType: 'blob' });

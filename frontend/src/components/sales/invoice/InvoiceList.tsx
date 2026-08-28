@@ -9,17 +9,23 @@
  * - Types extracted to invoicelist/types/
  */
 
-import React, { useEffect, useCallback, useState, useMemo } from 'react';
+import React, { useEffect, useCallback, useState, useRef } from 'react';
 import { FileText, RefreshCw, Package, ShoppingCart } from 'lucide-react';
 import { Pagination, ModuleHeader, InlineFilterPanel } from '../../global';
-import { invoicesApi, challansApi, ordersApi } from '../../../services/api';
-import CancelInvoiceModal from '../modals/CancelInvoiceModal';
-import { useCompany } from '../../../contexts/CompanyContext';
-import { toast } from 'react-toastify';
+import { canonicalDocumentHistoryApi } from '../../../services/api';
 import { InvoiceTable } from './invoicelist/components/InvoiceTable';
 import { InvoiceBulkActions } from './invoicelist/components/InvoiceBulkActions';
 import { useInvoiceListState } from './invoicelist/hooks/useInvoiceListState';
-import type { InvoiceListProps, Invoice } from './invoicelist/types/invoicelist.types';
+import type { InvoiceListProps, Invoice, InvoiceFilters } from './invoicelist/types/invoicelist.types';
+import { projectInvoiceListRow, projectSalesHistoryRow } from './invoicelist/utils/invoiceListProjection';
+import {
+  salesHistoryExportFilename,
+  salesHistoryListCsv,
+} from './invoicelist/utils/salesHistoryPresentation';
+import {
+  buildSalesHistoryRequestParams,
+  resolveSalesHistoryDateRange,
+} from './invoicelist/utils/salesHistoryQuery';
 
 // Document type configuration
 type DocumentType = 'invoice' | 'challan' | 'sales_order';
@@ -46,7 +52,7 @@ const documentTypeConfig = {
 };
 
 // Filter configuration for InlineFilterPanel
-const filterOptions = [
+const commonFilterOptions = [
   {
     key: 'date_preset',
     label: 'Period',
@@ -64,19 +70,6 @@ const filterOptions = [
     defaultValue: 'all'
   },
   {
-    key: 'payment_status',
-    label: 'Status',
-    type: 'select' as const,
-    options: [
-      { value: 'all', label: 'All Status' },
-      { value: 'paid', label: 'Paid' },
-      { value: 'partial', label: 'Partial' },
-      { value: 'pending', label: 'Pending' },
-      { value: 'overdue', label: 'Overdue' }
-    ],
-    defaultValue: 'all'
-  },
-  {
     key: 'dateFrom',
     label: 'From Date',
     type: 'date' as const
@@ -88,301 +81,121 @@ const filterOptions = [
   }
 ];
 
+const historyFilterOptions = (type: DocumentType) => [{
+  key: 'payment_status', label: 'Status', type: 'select' as const, defaultValue: 'all',
+  options: type === 'invoice' ? [
+    { value: 'all', label: 'All Status' }, { value: 'paid', label: 'Paid' },
+    { value: 'partial', label: 'Partial' }, { value: 'pending', label: 'Pending' },
+    { value: 'overdue', label: 'Overdue' }, { value: 'cancelled', label: 'Cancelled' },
+  ] : type === 'sales_order' ? [
+    { value: 'all', label: 'All Status' }, { value: 'submitted', label: 'Submitted' },
+    { value: 'approved', label: 'Approved' }, { value: 'partially_fulfilled', label: 'Partially Fulfilled' },
+    { value: 'fulfilled', label: 'Fulfilled' }, { value: 'cancelled', label: 'Cancelled' },
+  ] : [
+    { value: 'all', label: 'All Status' }, { value: 'posted', label: 'Posted' },
+    { value: 'cancelled', label: 'Cancelled' }, { value: 'reversed', label: 'Reversed' },
+  ],
+}, ...commonFilterOptions];
+
+const emptyFilters = (): InvoiceFilters => ({
+  searchQuery: '',
+  statusFilter: 'all',
+  dateFilter: 'all',
+  dateFrom: '',
+  dateTo: '',
+});
+
 const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
   // Use centralized state management (replaces 15 useState!)
-  const { state, dispatch, invoices, selectedIds, filters, ui, pagination, loading } = useInvoiceListState();
+  const { dispatch, invoices, selectedIds, filters, ui, pagination, loading } = useInvoiceListState();
 
   // Document type state - default to invoice
   const [documentType, setDocumentType] = useState<DocumentType>('invoice');
-
-  // Cancel modal state
-  const [cancelModalOpen, setCancelModalOpen] = useState(false);
-  const [invoiceToCancel, setInvoiceToCancel] = useState<Invoice | null>(null);
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const requestSequenceRef = useRef(0);
+  const businessDateRef = useRef<string | null>(null);
+  const perPageRef = useRef(pagination.per_page);
+  perPageRef.current = pagination.per_page;
 
   // Fetch documents from backend based on document type
-  const fetchDocuments = useCallback(async (page = 1, searchFilters: any = {}, docType: DocumentType = documentType) => {
+  const fetchDocuments = useCallback(async (
+    page: number,
+    activeFilters: InvoiceFilters,
+    docType: DocumentType,
+    perPage: number,
+  ) => {
+    const requestSequence = ++requestSequenceRef.current;
     dispatch({ type: 'SET_LOADING', loading: true });
     dispatch({ type: 'SET_ERROR', error: null });
 
     try {
-      const searchParams: any = {
-        limit: pagination.per_page,
-        offset: (page - 1) * pagination.per_page,
-        skip: (page - 1) * pagination.per_page,
-        ...searchFilters
-      };
+      const searchParams = buildSalesHistoryRequestParams(docType, activeFilters, page, perPage);
+      const response = await canonicalDocumentHistoryApi.get(searchParams);
+      const transformedData: Invoice[] = docType === 'invoice'
+        ? response.items.map(projectInvoiceListRow)
+        : response.items.map(row => projectSalesHistoryRow(row, docType));
+      const total = response.total;
 
-      if (searchFilters.search?.trim()) {
-        searchParams.search = searchFilters.search.trim();
-      }
-
-      let response;
-      let transformedData: Invoice[] = [];
-
-      if (docType === 'invoice') {
-        // Invoices API returns { invoices: [], total }
-        response = await invoicesApi.getAll(searchParams);
-        const responseData = response?.data;
-        console.log('[Invoice API] Raw response:', responseData);
-
-        // Backend returns: { invoices: [...], total }
-        const invoicesData = responseData?.invoices;
-
-        if (!Array.isArray(invoicesData)) {
-          console.error('[Invoice API] Expected invoices array, got:', typeof invoicesData);
-          dispatch({ type: 'SET_INVOICES', invoices: [] });
-          dispatch({ type: 'SET_PAGINATION', pagination: { total: 0, page, total_pages: 0 } });
-          return;
-        }
-
-        // Map invoice fields to display format
-        // Backend fields: invoice_id, invoice_number, invoice_date, customer_name, final_amount, paid_amount, pending_amount, payment_status, due_date
-        transformedData = invoicesData.map((invoice: any) => ({
-          id: String(invoice.invoice_id),
-          invoice_number: invoice.invoice_number,
-          customer_id: String(invoice.customer_id),
-          customer_name: invoice.customer_name,
-          invoice_date: invoice.invoice_date,
-          due_date: invoice.due_date,
-          total_amount: Number(invoice.final_amount),
-          paid_amount: Number(invoice.paid_amount),
-          pending_amount: Number(invoice.pending_amount),
-          payment_status: invoice.payment_status,
-          items_count: invoice.items_count ?? 0,
-          created_at: invoice.created_at,
-          updated_at: invoice.updated_at
-        }));
-
-        const total = responseData?.total ?? transformedData.length;
-        dispatch({ type: 'SET_INVOICES', invoices: transformedData });
-        dispatch({
-          type: 'SET_PAGINATION',
-          pagination: { total, page, total_pages: Math.ceil(total / pagination.per_page) }
-        });
-
-      } else if (docType === 'challan') {
-        // Challans API returns DIRECT ARRAY (not wrapped in { challans: [] })
-        response = await challansApi.getAll({
-          skip: searchParams.skip,
-          limit: searchParams.limit,
-          start_date: searchFilters.date_from,
-          end_date: searchFilters.date_to
-        });
-
-        // Backend returns direct array: [{ challan_id, challan_number, ... }]
-        const challansData = response?.data;
-        console.log('[Challan API] Raw response:', challansData);
-
-        if (!Array.isArray(challansData)) {
-          console.error('[Challan API] Expected array, got:', typeof challansData);
-          dispatch({ type: 'SET_INVOICES', invoices: [] });
-          dispatch({ type: 'SET_PAGINATION', pagination: { total: 0, page, total_pages: 0 } });
-          return;
-        }
-
-        // Map challan fields to display format
-        // Backend fields: challan_id, challan_number, challan_date, customer_name, total_amount, challan_status, delivery_status
-        transformedData = challansData.map((challan: any) => ({
-          id: String(challan.challan_id),
-          invoice_number: challan.challan_number,
-          customer_id: String(challan.customer_id),
-          customer_name: challan.customer_name,
-          invoice_date: challan.challan_date,
-          due_date: challan.dispatch_date,
-          total_amount: Number(challan.total_amount),
-          paid_amount: 0,
-          pending_amount: Number(challan.total_amount),
-          payment_status: challan.delivery_status,
-          items_count: Number(challan.total_quantity),
-          created_at: challan.challan_date,
-          updated_at: challan.challan_date
-        }));
-
-        const total = transformedData.length;
-        dispatch({ type: 'SET_INVOICES', invoices: transformedData });
-        dispatch({
-          type: 'SET_PAGINATION',
-          pagination: { total, page, total_pages: Math.ceil(total / pagination.per_page) }
-        });
-
-      } else if (docType === 'sales_order') {
-        // Sales Orders API returns { orders: [], total, page, per_page }
-        response = await ordersApi.getAll({
-          skip: searchParams.skip,
-          limit: searchParams.limit,
-          from_date: searchFilters.date_from,
-          to_date: searchFilters.date_to
-        });
-
-        const responseData = response?.data;
-        console.log('[Sales Orders API] Raw response:', responseData);
-
-        // Backend returns: { orders: [...], total, page, per_page }
-        const ordersData = responseData?.orders;
-
-        if (!Array.isArray(ordersData)) {
-          console.error('[Sales Orders API] Expected orders array, got:', typeof ordersData);
-          dispatch({ type: 'SET_INVOICES', invoices: [] });
-          dispatch({ type: 'SET_PAGINATION', pagination: { total: 0, page, total_pages: 0 } });
-          return;
-        }
-
-        // Map order fields to display format
-        // Backend fields: order_id, order_number, order_date, customer_name, total_amount, order_status, paid_amount, balance_amount
-        transformedData = ordersData.map((order: any) => ({
-          id: String(order.order_id),
-          invoice_number: order.order_number,
-          customer_id: String(order.customer_id),
-          customer_name: order.customer_name,
-          invoice_date: order.order_date,
-          due_date: order.delivery_date,
-          total_amount: Number(order.total_amount),
-          paid_amount: Number(order.paid_amount),
-          pending_amount: Number(order.balance_amount),
-          payment_status: order.order_status,
-          items_count: order.items?.length ?? 0,
-          created_at: order.created_at,
-          updated_at: order.updated_at
-        }));
-
-        const total = responseData?.total ?? transformedData.length;
-        dispatch({ type: 'SET_INVOICES', invoices: transformedData });
-        dispatch({
-          type: 'SET_PAGINATION',
-          pagination: { total, page, total_pages: Math.ceil(total / pagination.per_page) }
-        });
-      }
+      if (requestSequence !== requestSequenceRef.current) return;
+      businessDateRef.current = response.business_date;
+      dispatch({ type: 'SET_INVOICES', invoices: transformedData });
+      dispatch({
+        type: 'SET_PAGINATION',
+        pagination: { total, page, total_pages: Math.ceil(total / perPage) }
+      });
 
     } catch (error) {
+      if (requestSequence !== requestSequenceRef.current) return;
       console.error(`Failed to fetch ${docType}:`, error);
       dispatch({ type: 'SET_ERROR', error: `Failed to fetch ${documentTypeConfig[docType].label}. Please try again.` });
       dispatch({ type: 'SET_INVOICES', invoices: [] });
     } finally {
-      dispatch({ type: 'SET_LOADING', loading: false });
+      if (requestSequence === requestSequenceRef.current) {
+        dispatch({ type: 'SET_LOADING', loading: false });
+      }
     }
-  }, [dispatch, pagination.per_page, documentType]);
-
-  // Alias for backward compatibility
-  const fetchInvoices = fetchDocuments;
+  }, [dispatch]);
 
   // Load documents on mount and when document type changes
   useEffect(() => {
-    fetchDocuments(1, {}, documentType);
-  }, [documentType]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    fetchDocuments(1, emptyFilters(), documentType, perPageRef.current);
+    return () => {
+      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+      requestSequenceRef.current += 1;
+    };
+  }, [documentType, fetchDocuments]); // pagination size is handled by its explicit change handler
 
   // Handle document type change
   const handleDocumentTypeChange = (type: DocumentType) => {
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
     setDocumentType(type);
     dispatch({ type: 'CLEAR_SELECTION' });
+    dispatch({
+      type: 'SET_FILTERS',
+      filters: emptyFilters()
+    });
   };
 
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && onClose) {
-        onClose();
-        return;
-      }
-
-      if ((event.altKey && event.key.toLowerCase() === 'r') || event.key === 'F5') {
-        event.preventDefault();
-        handleRefresh();
-        return;
-      }
-
-      if (event.altKey && event.key.toLowerCase() === 'e') {
-        event.preventDefault();
-        handleExportAll();
-        return;
-      }
-
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
-        event.preventDefault();
-        document.querySelector<HTMLInputElement>('[placeholder*="Search"]')?.focus();
-        return;
-      }
-
-      if (event.altKey && event.key.toLowerCase() === 's') {
-        event.preventDefault();
-        dispatch({ type: 'TOGGLE_SHOW_FILTERS' });
-        return;
-      }
-
-      if (event.key === 'PageUp' && pagination.page > 1) {
-        event.preventDefault();
-        fetchDocuments(pagination.page - 1, buildSearchParams(), documentType);
-        return;
-      }
-
-      if (event.key === 'PageDown' && pagination.page < pagination.total_pages) {
-        event.preventDefault();
-        fetchDocuments(pagination.page + 1, buildSearchParams(), documentType);
-        return;
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [onClose, pagination, dispatch, fetchDocuments, documentType]);
-
   // Build search params from current filters
-  const buildSearchParams = useCallback(() => ({
-    search: filters.searchQuery,
-    payment_status: filters.statusFilter === 'all' ? undefined : filters.statusFilter,
-    dateFilter: filters.dateFilter
-  }), [filters]);
+  const buildSearchParams = useCallback((): InvoiceFilters => ({ ...filters }), [filters]);
 
   // Event handlers
-  const handleRefresh = async () => {
+  const handleRefresh = useCallback(async () => {
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
     dispatch({ type: 'SET_REFRESHING', refreshing: true });
     dispatch({ type: 'SET_REFRESH_SUCCESS', success: false });
 
     try {
-      await fetchDocuments(pagination.page, buildSearchParams(), documentType);
+      await fetchDocuments(pagination.page, buildSearchParams(), documentType, pagination.per_page);
       dispatch({ type: 'SET_REFRESH_SUCCESS', success: true });
       setTimeout(() => dispatch({ type: 'SET_REFRESH_SUCCESS', success: false }), 2000);
     } finally {
       dispatch({ type: 'SET_REFRESHING', refreshing: false });
     }
-  };
+  }, [buildSearchParams, dispatch, documentType, fetchDocuments, pagination.page, pagination.per_page]);
 
-  const handleExportAll = () => {
-    dispatch({ type: 'SET_EXPORTING', exporting: true });
-    dispatch({ type: 'SET_EXPORT_SUCCESS', success: false });
-
-    try {
-      const csvData = generateCSVData(invoices);
-      downloadCSV(csvData, `invoices-export-${new Date().toISOString().split('T')[0]}.csv`);
-
-      dispatch({ type: 'SET_EXPORT_SUCCESS', success: true });
-      setTimeout(() => dispatch({ type: 'SET_EXPORT_SUCCESS', success: false }), 3000);
-    } finally {
-      dispatch({ type: 'SET_EXPORTING', exporting: false });
-    }
-  };
-
-  const generateCSVData = (data: Invoice[]) => {
-    const headers = ['Invoice Number', 'Customer Name', 'Date', 'Due Date', 'Amount', 'Paid', 'Pending', 'Status'];
-    const rows = data.map(invoice => [
-      invoice.invoice_number,
-      invoice.customer_name,
-      invoice.invoice_date,
-      invoice.due_date,
-      invoice.total_amount.toString(),
-      invoice.paid_amount.toString(),
-      invoice.pending_amount.toString(),
-      invoice.payment_status
-    ]);
-    return [headers, ...rows];
-  };
-
-  const downloadCSV = (data: any[][], filename: string) => {
-    const csvContent = data.map(row =>
-      row.map(field =>
-        typeof field === 'string' && field.includes(',') ? `"${field}"` : field
-      ).join(',')
-    ).join('\n');
-
+  const downloadCSV = useCallback((csvContent: string, filename: string) => {
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
@@ -393,26 +206,35 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-  };
+  }, []);
+
+  const handleExportAll = useCallback(() => {
+    dispatch({ type: 'SET_EXPORTING', exporting: true });
+    dispatch({ type: 'SET_EXPORT_SUCCESS', success: false });
+
+    try {
+      const today = businessDateRef.current;
+      if (!today) throw new Error('Organization business date is unavailable.');
+      downloadCSV(
+        salesHistoryListCsv(documentType, invoices),
+        salesHistoryExportFilename(documentType, today),
+      );
+
+      dispatch({ type: 'SET_EXPORT_SUCCESS', success: true });
+      setTimeout(() => dispatch({ type: 'SET_EXPORT_SUCCESS', success: false }), 3000);
+    } finally {
+      dispatch({ type: 'SET_EXPORTING', exporting: false });
+    }
+  }, [dispatch, documentType, downloadCSV, invoices]);
 
   const handleSearchChange = (query: string) => {
-    dispatch({ type: 'SET_FILTERS', filters: { searchQuery: query } });
-
-    const timeoutId = setTimeout(() => {
-      fetchDocuments(1, { ...buildSearchParams(), search: query }, documentType);
+    const nextFilters = { ...filters, searchQuery: query };
+    dispatch({ type: 'SET_FILTERS', filters: nextFilters });
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    requestSequenceRef.current += 1;
+    searchTimeoutRef.current = setTimeout(() => {
+      fetchDocuments(1, nextFilters, documentType, pagination.per_page);
     }, 500);
-
-    return () => clearTimeout(timeoutId);
-  };
-
-  const handleStatusChange = (status: string) => {
-    dispatch({ type: 'SET_FILTERS', filters: { statusFilter: status } });
-    fetchDocuments(1, { ...buildSearchParams(), payment_status: status === 'all' ? undefined : status }, documentType);
-  };
-
-  const handleDateChange = (dateFilter: string) => {
-    dispatch({ type: 'SET_FILTERS', filters: { dateFilter } });
-    fetchDocuments(1, { ...buildSearchParams(), dateFilter }, documentType);
   };
 
   const handleToggleSelect = (id: string) => {
@@ -424,53 +246,28 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
     dispatch({ type: 'TOGGLE_SELECT_ALL', invoiceIds });
   };
 
-  const handleViewInvoice = (invoice: Invoice) => {
-    // Show invoice details in an alert for now
-    // TODO: Implement full invoice preview modal
-    toast.info(`Opening invoice ${invoice.invoice_number} - Full preview coming soon`);
-    console.log('Invoice details:', invoice);
-  };
-
-  const handlePrintInvoice = (invoice: Invoice) => {
-    // TODO: Implement print invoice flow
-    toast.info(`Print invoice ${invoice.invoice_number} - Feature coming soon`);
-    console.log('Print invoice:', invoice);
-  };
-
-  const handleCancelInvoice = (invoice: Invoice) => {
-    setInvoiceToCancel(invoice);
-    setCancelModalOpen(true);
-  };
-
-  const handleCancelComplete = () => {
-    setCancelModalOpen(false);
-    setInvoiceToCancel(null);
-    fetchDocuments(pagination.page, buildSearchParams(), documentType); // Refresh list
-  };
-
-  const handleMarkPaid = () => {
-    console.log('Mark selected as paid:', Array.from(selectedIds));
-    // TODO: Implement bulk mark as paid
-  };
-
-  const handleSendReminder = () => {
-    console.log('Send reminder for:', Array.from(selectedIds));
-    // TODO: Implement bulk send reminder
-  };
-
   const handleExportSelected = () => {
     const selected = invoices.filter(inv => selectedIds.has(inv.id));
-    const csvData = generateCSVData(selected);
-    downloadCSV(csvData, `invoices-selected-${new Date().toISOString().split('T')[0]}.csv`);
+    const today = businessDateRef.current;
+    if (!today) {
+      dispatch({ type: 'SET_ERROR', error: 'Organization business date is unavailable.' });
+      return;
+    }
+    downloadCSV(
+      salesHistoryListCsv(documentType, selected),
+      salesHistoryExportFilename(documentType, today, true),
+    );
   };
 
   const handlePageChange = (page: number) => {
-    fetchDocuments(page, buildSearchParams(), documentType);
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    fetchDocuments(page, buildSearchParams(), documentType, pagination.per_page);
   };
 
   const handlePerPageChange = (perPage: number) => {
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
     dispatch({ type: 'SET_PAGINATION', pagination: { per_page: perPage, page: 1 } });
-    fetchDocuments(1, buildSearchParams(), documentType);
+    fetchDocuments(1, buildSearchParams(), documentType, perPage);
   };
 
   // Filtered invoices
@@ -478,85 +275,69 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
   const isAllSelected = filteredInvoices.length > 0 && filteredInvoices.every(invoice => selectedIds.has(invoice.id));
   const selectedCount = Array.from(selectedIds).filter(id => filteredInvoices.some(f => f.id === id)).length;
 
-  // Calculate status counts for filter tabs
-  const statusCounts = useMemo(() => ({
-    all: invoices.length,
-    paid: invoices.filter(i => i.payment_status === 'paid').length,
-    partial: invoices.filter(i => i.payment_status === 'partial').length,
-    pending: invoices.filter(i => i.payment_status === 'pending').length,
-    overdue: invoices.filter(inv => {
-      if (inv.payment_status === 'paid' || inv.payment_status === 'cancelled') return false;
-      return new Date(inv.due_date) < new Date();
-    }).length
-  }), [invoices]);
-
   // Handle filter changes from InlineFilterPanel
   const handleFilterChange = (newFilters: any) => {
-    // Map filter values to search params
-    const searchFilters: any = {};
-
-    if (newFilters.payment_status && newFilters.payment_status !== 'all') {
-      searchFilters.payment_status = newFilters.payment_status;
+    if (typeof newFilters.search === 'string') {
+      const nextFilters = { ...filters, searchQuery: newFilters.search };
+      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+      fetchDocuments(1, nextFilters, documentType, pagination.per_page);
+      return;
     }
 
-    // Handle date preset conversion
-    if (newFilters.date_preset && newFilters.date_preset !== 'all') {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-
-      switch (newFilters.date_preset) {
-        case 'today':
-          searchFilters.date_from = today.toISOString().split('T')[0];
-          searchFilters.date_to = today.toISOString().split('T')[0];
-          break;
-        case 'yesterday':
-          const yesterday = new Date(today);
-          yesterday.setDate(yesterday.getDate() - 1);
-          searchFilters.date_from = yesterday.toISOString().split('T')[0];
-          searchFilters.date_to = yesterday.toISOString().split('T')[0];
-          break;
-        case 'last7days':
-          const last7 = new Date(today);
-          last7.setDate(last7.getDate() - 7);
-          searchFilters.date_from = last7.toISOString().split('T')[0];
-          searchFilters.date_to = today.toISOString().split('T')[0];
-          break;
-        case 'last30days':
-          const last30 = new Date(today);
-          last30.setDate(last30.getDate() - 30);
-          searchFilters.date_from = last30.toISOString().split('T')[0];
-          searchFilters.date_to = today.toISOString().split('T')[0];
-          break;
-        case 'thisMonth':
-          const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-          searchFilters.date_from = startOfMonth.toISOString().split('T')[0];
-          searchFilters.date_to = today.toISOString().split('T')[0];
-          break;
-        case 'lastMonth':
-          const startOfLastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-          const endOfLastMonth = new Date(today.getFullYear(), today.getMonth(), 0);
-          searchFilters.date_from = startOfLastMonth.toISOString().split('T')[0];
-          searchFilters.date_to = endOfLastMonth.toISOString().split('T')[0];
-          break;
-        case 'thisQuarter':
-          const quarter = Math.floor(today.getMonth() / 3);
-          const startOfQuarter = new Date(today.getFullYear(), quarter * 3, 1);
-          searchFilters.date_from = startOfQuarter.toISOString().split('T')[0];
-          searchFilters.date_to = today.toISOString().split('T')[0];
-          break;
-      }
+    const preset = newFilters.date_preset || 'all';
+    if (!businessDateRef.current) {
+      dispatch({ type: 'SET_ERROR', error: 'Organization business date is unavailable.' });
+      return;
     }
-
-    // Custom date range (overrides preset if both specified)
-    if (newFilters.dateFrom) {
-      searchFilters.date_from = newFilters.dateFrom;
-    }
-    if (newFilters.dateTo) {
-      searchFilters.date_to = newFilters.dateTo;
-    }
-
-    fetchDocuments(1, { ...searchFilters, search: filters.searchQuery }, documentType);
+    const presetRange = resolveSalesHistoryDateRange(preset, businessDateRef.current);
+    const nextFilters: InvoiceFilters = {
+      ...filters,
+      statusFilter: newFilters.payment_status || 'all',
+      dateFilter: preset,
+      dateFrom: newFilters.dateFrom || presetRange.dateFrom,
+      dateTo: newFilters.dateTo || presetRange.dateTo,
+    };
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    dispatch({ type: 'SET_FILTERS', filters: nextFilters });
+    fetchDocuments(1, nextFilters, documentType, pagination.per_page);
   };
+
+  const handleClearFilters = () => {
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    const nextFilters = emptyFilters();
+    dispatch({ type: 'SET_FILTERS', filters: nextFilters });
+    fetchDocuments(1, nextFilters, documentType, pagination.per_page);
+  };
+
+  // Keyboard shortcuts use the same authoritative filter snapshot as visible controls.
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && onClose) {
+        onClose();
+      } else if ((event.altKey && event.key.toLowerCase() === 'r') || event.key === 'F5') {
+        event.preventDefault();
+        handleRefresh();
+      } else if (event.altKey && event.key.toLowerCase() === 'e') {
+        event.preventDefault();
+        handleExportAll();
+      } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
+        event.preventDefault();
+        document.querySelector<HTMLInputElement>('[placeholder*="Search"]')?.focus();
+      } else if (event.altKey && event.key.toLowerCase() === 's' && documentType === 'invoice') {
+        event.preventDefault();
+        dispatch({ type: 'TOGGLE_SHOW_FILTERS' });
+      } else if (event.key === 'PageUp' && pagination.page > 1) {
+        event.preventDefault();
+        fetchDocuments(pagination.page - 1, filters, documentType, pagination.per_page);
+      } else if (event.key === 'PageDown' && pagination.page < pagination.total_pages) {
+        event.preventDefault();
+        fetchDocuments(pagination.page + 1, filters, documentType, pagination.per_page);
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onClose, pagination, dispatch, fetchDocuments, documentType, filters, handleExportAll, handleRefresh]);
 
   return (
     <div className="h-full bg-gray-50">
@@ -578,7 +359,7 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
               className: loading ? "animate-spin" : ""
             },
             {
-              label: "Export All",
+              label: "Export Page",
               onClick: handleExportAll,
               className: "bg-gray-900 hover:bg-gray-800 text-white"
             }
@@ -619,20 +400,24 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
             {/* Global Inline Filter Panel */}
             <div className="mb-6">
               <InlineFilterPanel
-                filters={filterOptions}
+                key={documentType}
+                filters={historyFilterOptions(documentType)}
                 onFilterChange={handleFilterChange}
                 searchQuery={filters.searchQuery}
                 onSearchChange={handleSearchChange}
+                searchPlaceholder={documentType === 'sales_order'
+                  ? 'Search order number or customer name...'
+                  : 'Search invoice number or customer name...'}
+                showFilterToggle={true}
                 showFilters={ui.showFilters}
                 onToggleFilters={(show: boolean) => dispatch({ type: 'TOGGLE_SHOW_FILTERS' })}
+                onClearFilters={handleClearFilters}
               />
             </div>
 
             {/* Bulk Actions */}
             <InvoiceBulkActions
               selectedCount={selectedCount}
-              onMarkPaid={handleMarkPaid}
-              onSendReminder={handleSendReminder}
               onExport={handleExportSelected}
               onClear={() => dispatch({ type: 'CLEAR_SELECTION' })}
             />
@@ -640,14 +425,12 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
             {/* Table */}
             <InvoiceTable
               invoices={filteredInvoices}
+              documentType={documentType}
               selectedIds={selectedIds}
               isAllSelected={isAllSelected}
               loading={loading}
               onToggleSelect={handleToggleSelect}
               onToggleSelectAll={handleToggleSelectAll}
-              onViewInvoice={handleViewInvoice}
-              onPrintInvoice={handlePrintInvoice}
-              onCancelInvoice={handleCancelInvoice}
             />
 
             {/* Pagination */}
@@ -667,13 +450,6 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
         </div>
       </div>
 
-      {/* Cancel Invoice Modal */}
-      <CancelInvoiceModal
-        isOpen={cancelModalOpen}
-        onClose={() => { setCancelModalOpen(false); setInvoiceToCancel(null); }}
-        invoice={invoiceToCancel}
-        onCancelled={handleCancelComplete}
-      />
     </div>
   );
 };

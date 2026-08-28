@@ -1,12 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
-  Download, Eye, Edit, Printer,
-  MoreHorizontal, Package, RotateCcw,
-  X, Check, AlertCircle, RefreshCw, XCircle, Users, Truck
+  Download, Package, RotateCcw,
+  X, AlertCircle, RefreshCw, Users, Truck
 } from 'lucide-react';
 import { Button, StatusBadge, DataTable, InlineFilterPanel, ModuleHeader } from '../global';
-import { returnsApi } from '../../services/api';
-import CancelDocumentModal from '../global/modals/CancelDocumentModal';
+import { canonicalDocumentHistoryApi } from '../../services/api';
+import { formatExactCurrency } from '../../utils/exactDecimal';
+import { formatCalendarDate } from '../../utils/calendarDate';
+import { resolvePurchaseHistoryDates } from '../purchase/purchaselisthistory/utils/purchaseHistoryProjection';
+import {
+  normalizeReturnStatus,
+  projectReturnHistoryRow,
+  returnsHistoryCsv,
+  ReturnsHistoryRow,
+} from './utils/returnsHistoryProjection';
 
 // Return type configuration for visual tabs
 type ReturnType = 'all' | 'sales' | 'purchase';
@@ -36,29 +43,12 @@ interface ReturnsListHistoryProps {
   onClose?: () => void;
 }
 
-interface Return {
-  id: string;
-  return_no: string;
-  return_type: 'sales' | 'purchase';
-  customer_name?: string;
-  supplier_name?: string;
-  original_document_no: string;
-  return_date: string;
-  total_amount: number;
-  status: string;
-  reason: string;
-  created_at?: string;
-  items_count?: number;
-}
-
 // Bulk action bar
 const BulkActionBar: React.FC<{
   selectedCount: number;
-  onApprove: () => void;
-  onReject: () => void;
   onExport: () => void;
   onClear: () => void;
-}> = ({ selectedCount, onApprove, onReject, onExport, onClear }) => {
+}> = ({ selectedCount, onExport, onClear }) => {
   if (selectedCount === 0) return null;
 
   return (
@@ -70,17 +60,9 @@ const BulkActionBar: React.FC<{
           </span>
         </div>
         <div className="flex items-center space-x-2">
-          <Button variant="outline" size="sm" onClick={onApprove}>
-            <Check className="w-4 h-4 mr-2" />
-            Approve
-          </Button>
-          <Button variant="outline" size="sm" onClick={onReject}>
-            <X className="w-4 h-4 mr-2" />
-            Reject
-          </Button>
           <Button variant="outline" size="sm" onClick={onExport}>
             <Download className="w-4 h-4 mr-2" />
-            Export
+            Export Selected
           </Button>
           <Button variant="ghost" size="sm" onClick={onClear}>
             <X className="w-4 h-4" />
@@ -93,10 +75,14 @@ const BulkActionBar: React.FC<{
 
 const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [activeFilters, setActiveFilters] = useState<Record<string, unknown>>({});
   const [showFilters, setShowFilters] = useState(true);  // Show filters by default to see type selector
   const [selectedReturns, setSelectedReturns] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const searchTimerRef = useRef<number | undefined>();
+  const requestSequenceRef = useRef(0);
+  const businessDateRef = useRef<string | null>(null);
   const [pagination, setPagination] = useState({
     total: 0,
     page: 1,
@@ -108,22 +94,7 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
   const [returnType, setReturnType] = useState<ReturnType>('all');
 
   // State for real data
-  const [returns, setReturns] = useState<Return[]>([]);
-
-  // Cancel modal state
-  const [cancelModalOpen, setCancelModalOpen] = useState(false);
-  const [returnToCancel, setReturnToCancel] = useState<Return | null>(null);
-
-  const handleCancelReturn = (returnItem: Return) => {
-    setReturnToCancel(returnItem);
-    setCancelModalOpen(true);
-  };
-
-  const handleCancelSuccess = () => {
-    setCancelModalOpen(false);
-    setReturnToCancel(null);
-    fetchReturns(pagination.page);
-  };
+  const [returns, setReturns] = useState<ReturnsHistoryRow[]>([]);
 
   // ESC key handler for better UX
   useEffect(() => {
@@ -171,11 +142,12 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
       label: 'Status',
       type: 'select' as const,
       options: [
-        { value: 'pending', label: 'Pending' },
-        { value: 'approved', label: 'Approved' },
-        { value: 'rejected', label: 'Rejected' },
-        { value: 'completed', label: 'Completed' }
-      ]
+        { value: 'all', label: 'All Statuses' },
+        { value: 'posted', label: 'Posted' },
+        { value: 'cancelled', label: 'Cancelled' },
+        { value: 'reversed', label: 'Reversed' }
+      ],
+      defaultValue: 'all'
     },
     {
       key: 'dateFrom',
@@ -191,211 +163,131 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
 
   // Fetch returns from backend
   const fetchReturns = async (page = 1, filters: any = {}) => {
+    const requestSequence = ++requestSequenceRef.current;
     setLoading(true);
     setError(null);
 
     try {
-      // Prepare search parameters
-      const searchParams: any = {
-        limit: pagination.per_page,
-        offset: (page - 1) * pagination.per_page,
-        ...filters
-      };
+      const selectedType = filters.return_type || returnType;
+      const response = await canonicalDocumentHistoryApi.get({
+        document_kind: selectedType === 'sales' ? 'sales_return'
+          : selectedType === 'purchase' ? 'purchase_return' : undefined,
+        document_group: selectedType === 'all' ? 'returns' : undefined,
+        page,
+        page_size: pagination.per_page,
+        search: filters.search?.trim() || undefined,
+        status: filters.status && filters.status !== 'all' ? filters.status : undefined,
+        date_from: filters.dateFrom || undefined,
+        date_to: filters.dateTo || undefined,
+      });
+      const allReturns = response.items.map(projectReturnHistoryRow);
 
-      // If there's a search query, add it to the filters
-      if (filters.search && filters.search.trim()) {
-        searchParams.search = filters.search.trim();
-      }
-
-      // Fetch both sales and purchase returns
-      // Using Promise.allSettled to handle if one endpoint fails
-      const [salesResult, purchaseResult] = await Promise.allSettled([
-        returnsApi.getSaleReturns(searchParams),
-        returnsApi.getPurchaseReturns(searchParams)
-      ]);
-
-      // Handle responses based on their status
-      const salesResponse = salesResult.status === 'fulfilled' ? salesResult.value : null;
-      const purchaseResponse = purchaseResult.status === 'fulfilled' ? purchaseResult.value : null;
-
-      const salesReturnsList = salesResponse?.data?.returns || [];
-      const purchaseReturnsList = purchaseResponse?.data?.data || [];
-
-      const salesReturns: Return[] = (Array.isArray(salesReturnsList) ? salesReturnsList : []).map((ret: any) => ({
-        id: ret.return_id || ret.id,  // Backend uses return_id
-        return_no: ret.return_number || ret.return_no || ret.sales_return_no || `SR-${ret.return_id || ret.id}`,
-        return_type: 'sales' as const,
-        customer_name: ret.party_name || ret.customer_name || 'Unknown Customer',  // Backend uses party_name
-        supplier_name: undefined,
-        original_document_no: ret.original_invoice_number || ret.original_invoice_number || ret.invoice_number || '-',
-        return_date: ret.return_date,
-        total_amount: ret.total_amount || 0,
-        status: ret.approval_status || ret.status || 'pending',  // Backend uses approval_status
-        reason: ret.return_reason || ret.reason || '-',
-        created_at: ret.created_at,
-        items_count: ret.items?.length || 0
-      }));
-
-      const purchaseReturns: Return[] = (Array.isArray(purchaseReturnsList) ? purchaseReturnsList : []).map((ret: any) => ({
-        id: ret.return_id || ret.id,  // Backend uses return_id
-        return_no: ret.return_number || ret.return_no || ret.purchase_return_no || `PR-${ret.return_id || ret.id}`,
-        return_type: 'purchase' as const,
-        customer_name: undefined,
-        supplier_name: ret.party_name || ret.supplier_name || 'Unknown Supplier',  // Backend uses party_name
-        original_document_no: ret.original_invoice_number || ret.original_purchase_no || ret.purchase_no || '-',
-        return_date: ret.return_date,
-        total_amount: ret.total_amount || 0,
-        status: ret.approval_status || ret.status || 'pending',  // Backend uses approval_status
-        reason: ret.return_reason || ret.reason || '-',
-        created_at: ret.created_at,
-        items_count: ret.items?.length || 0
-      }));
-
-      // Combine and filter based on type filter if specified
-      let allReturns = [...salesReturns, ...purchaseReturns];
-
-      if (filters.return_type && filters.return_type !== 'all') {
-        allReturns = allReturns.filter(ret => ret.return_type === filters.return_type);
-      }
-
+      if (requestSequence !== requestSequenceRef.current) return;
+      businessDateRef.current = response.business_date;
       setReturns(allReturns);
       setPagination({
-        total: allReturns.length,
+        total: response.total,
         page: page,
         per_page: pagination.per_page,
-        total_pages: Math.ceil(allReturns.length / pagination.per_page)
+        total_pages: Math.ceil(response.total / pagination.per_page)
       });
-
-      // If both endpoints failed, show a message
-      if (salesResult.status === 'rejected' && purchaseResult.status === 'rejected') {
-        setError('Returns feature is currently being deployed. Please try again later.');
-      }
     } catch (error) {
+      if (requestSequence !== requestSequenceRef.current) return;
       // Log error for debugging if needed
       setError('Failed to fetch returns. Please try again.');
     } finally {
-      setLoading(false);
+      if (requestSequence === requestSequenceRef.current) setLoading(false);
     }
   };
 
   // Load returns on component mount and when return type changes
   useEffect(() => {
     fetchReturns(1, { return_type: returnType });
+    return () => {
+      if (searchTimerRef.current !== undefined) window.clearTimeout(searchTimerRef.current);
+      requestSequenceRef.current += 1;
+    };
   }, [returnType]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Handle return type change
   const handleReturnTypeChange = (type: ReturnType) => {
     setReturnType(type);
+    setActiveFilters(prev => ({ ...prev, return_type: type }));
     setSelectedReturns([]);
   };
 
   // Refresh returns
   const handleRefresh = () => {
-    fetchReturns(pagination.page);
+    if (searchTimerRef.current !== undefined) {
+      window.clearTimeout(searchTimerRef.current);
+      searchTimerRef.current = undefined;
+    }
+    fetchReturns(pagination.page, { ...activeFilters, search: searchQuery, return_type: returnType });
   };
 
   // Handle filter changes with auto-search
   const handleFilterChange = (filters: any) => {
+    if (searchTimerRef.current !== undefined) {
+      window.clearTimeout(searchTimerRef.current);
+      searchTimerRef.current = undefined;
+    }
+    if (!businessDateRef.current) {
+      setError('Organization business date is unavailable.');
+      return;
+    }
+    const preset = resolvePurchaseHistoryDates(
+      String(filters.date_preset || 'all'), String(filters.dateFrom || ''), String(filters.dateTo || ''),
+      businessDateRef.current,
+    );
+    const resolvedFilters = {
+      ...filters,
+      dateFrom: filters.dateFrom || preset.from_date || '',
+      dateTo: filters.dateTo || preset.to_date || '',
+    };
+    setActiveFilters(resolvedFilters);
     // Reset to first page when filters change
-    fetchReturns(1, { ...filters, search: searchQuery });
+    fetchReturns(1, { ...resolvedFilters, search: searchQuery });
   };
 
   // Handle search changes with auto-search
   const handleSearchChange = (query: string) => {
     setSearchQuery(query);
-    // Auto-search after a short delay to avoid too many API calls
-    const timeoutId = setTimeout(() => {
-      fetchReturns(1, { search: query });
+    if (searchTimerRef.current !== undefined) window.clearTimeout(searchTimerRef.current);
+    requestSequenceRef.current += 1;
+    searchTimerRef.current = window.setTimeout(() => {
+      searchTimerRef.current = undefined;
+      fetchReturns(1, { ...activeFilters, search: query });
     }, 300);
-
-    return () => clearTimeout(timeoutId);
   };
 
-  // Action handlers
-  const handleViewReturn = (returnItem: Return) => {
-    // TODO: Navigate to return view page or open modal
-    alert(`Viewing return: ${returnItem.return_no}`);
+  const exportRows = (rows: ReturnsHistoryRow[], selected: boolean) => {
+    if (!rows.length) return;
+    const blob = new Blob([returnsHistoryCsv(rows)], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    if (!businessDateRef.current) {
+      URL.revokeObjectURL(url);
+      setError('Organization business date is unavailable.');
+      return;
+    }
+    link.download = `returns-${selected ? 'selected' : 'page'}-${businessDateRef.current}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
-  const handleEditReturn = (returnItem: Return) => {
-    // TODO: Navigate to return edit page or open modal
-    alert(`Editing return: ${returnItem.return_no}`);
-  };
-
-  const handlePrintReturn = (returnItem: Return) => {
-    // TODO: Open print dialog or generate PDF
-    alert(`Printing return: ${returnItem.return_no}`);
-  };
-
-  const handleMoreOptions = (returnItem: Return) => {
-    // TODO: Show dropdown menu with more options
-    alert(`More options for return: ${returnItem.return_no}`);
-  };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
+  const handleExportSelected = () => exportRows(
+    returns.filter(item => selectedReturns.includes(item.id)),
+    true,
+  );
 
   const formatDate = (value: string) => {
     if (!value) return 'N/A';
-    return new Date(value).toLocaleDateString('en-IN');
-  };
-
-  // Helper function to get proper status text
-  const getStatusText = (status: string | undefined) => {
-    if (!status) return 'Unknown';
-
-    // Map backend statuses to display text - handle various formats
-    const statusMap: Record<string, string> = {
-      // Common lowercase variations
-      'pending': 'Pending',
-      'approved': 'Approved',
-      'rejected': 'Rejected',
-      'completed': 'Completed',
-      'cancelled': 'Cancelled',
-      'canceled': 'Cancelled', // Handle US spelling
-      'draft': 'Draft',
-      'sent': 'Sent',
-
-      // Common uppercase variations
-      'PENDING': 'Pending',
-      'APPROVED': 'Approved',
-      'REJECTED': 'Rejected',
-      'COMPLETED': 'Completed',
-      'CANCELLED': 'Cancelled',
-      'CANCELED': 'Cancelled',
-      'DRAFT': 'Draft',
-      'SENT': 'Sent',
-
-      // Handle null/undefined cases
-      'null': 'Unknown',
-      'undefined': 'Unknown',
-      '': 'Unknown',
-
-      // Handle numeric statuses if backend uses them
-      '0': 'Draft',
-      '1': 'Pending',
-      '2': 'Approved',
-      '3': 'Rejected',
-      '4': 'Completed',
-      '5': 'Cancelled'
-    };
-
-    const normalizedStatus = status.toString().toLowerCase().trim();
-    const mappedStatus = statusMap[normalizedStatus];
-
-    if (mappedStatus) {
-      return mappedStatus;
+    try {
+      return formatCalendarDate(value);
+    } catch {
+      return 'N/A';
     }
-
-    // If no mapping found, log it and return the original value
-    // No status mapping found, returning original value
-    return status;
   };
 
   // Columns ordered to match Invoice History: Date, Doc #, Party, Amount, Status
@@ -403,7 +295,7 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
     {
       key: 'return_date',
       header: 'Date',
-      render: (value: string, returnItem: Return) => (
+      render: (value: string, returnItem: ReturnsHistoryRow) => (
         <div className="text-gray-700">{formatDate(returnItem.return_date)}</div>
       ),
       width: '110px',
@@ -411,7 +303,7 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
     {
       key: 'return_no',
       header: 'Return #',
-      render: (value: string, returnItem: Return) => (
+      render: (value: string, returnItem: ReturnsHistoryRow) => (
         <div className="text-sm text-gray-600">
           {returnItem.return_no}
         </div>
@@ -421,7 +313,7 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
     {
       key: 'return_type',
       header: 'Type',
-      render: (value: string, returnItem: Return) => (
+      render: (value: string, returnItem: ReturnsHistoryRow) => (
         <div className="flex items-center space-x-2">
           {returnItem.return_type === 'sales' ? (
             <Package className="w-4 h-4 text-red-500" />
@@ -438,11 +330,11 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
     {
       key: 'customer_supplier',
       header: 'Party',
-      render: (value: string, returnItem: Return) => (
+      render: (value: string, returnItem: ReturnsHistoryRow) => (
         <div className="font-medium text-gray-900">
           {returnItem.return_type === 'sales'
-            ? returnItem.customer_name || 'Unknown Customer'
-            : returnItem.supplier_name || 'Unknown Supplier'
+            ? returnItem.customer_name
+            : returnItem.supplier_name
           }
         </div>
       ),
@@ -450,7 +342,7 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
     {
       key: 'original_document_no',
       header: 'Original Doc',
-      render: (value: string, returnItem: Return) => (
+      render: (value: string, returnItem: ReturnsHistoryRow) => (
         <div className="text-gray-600">{returnItem.original_document_no}</div>
       ),
       width: '140px',
@@ -459,9 +351,9 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
       key: 'total_amount',
       header: 'Amount',
       align: 'right' as const,
-      render: (value: number, returnItem: Return) => (
+      render: (value: string, returnItem: ReturnsHistoryRow) => (
         <div className="font-semibold text-gray-900 text-right">
-          {formatCurrency(returnItem.total_amount)}
+          {formatExactCurrency(returnItem.total_amount, 'Return history amount')}
         </div>
       ),
       width: '120px',
@@ -469,12 +361,15 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
     {
       key: 'status',
       header: 'Status',
-      render: (value: string, returnItem: Return) => {
-        const statusText = getStatusText(returnItem.status);
-        // Status column render
+      render: (value: string, returnItem: ReturnsHistoryRow) => {
+        const normalized = normalizeReturnStatus(returnItem.status);
+        const badgeStatus = ['posted', 'approved'].includes(normalized.status) ? 'success'
+          : ['cancelled', 'reversed'].includes(normalized.status) ? 'error'
+            : normalized.status === 'submitted' ? 'pending' : normalized.status;
         return (
           <StatusBadge
-            status={statusText}
+            status={badgeStatus}
+            label={normalized.label}
             variant="light"
           />
         );
@@ -483,60 +378,13 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
     },
     {
       key: 'actions',
-      header: 'Actions',
-      render: (value: any, returnItem: Return) => (
-        <div className="flex items-center space-x-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => handleViewReturn(returnItem)}
-            title="View Return"
-            className="h-10 w-10 p-0 hover:bg-blue-50"
-          >
-            <Eye className="w-5 h-5 text-blue-600" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => handleEditReturn(returnItem)}
-            title="Edit Return"
-            className="h-10 w-10 p-0 hover:bg-green-50"
-          >
-            <Edit className="w-5 h-5 text-green-600" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => handlePrintReturn(returnItem)}
-            title="Print Return"
-            className="h-10 w-10 p-0 hover:bg-purple-50"
-          >
-            <Printer className="w-5 h-5 text-purple-600" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => handleMoreOptions(returnItem)}
-            title="More Options"
-            className="h-10 w-10 p-0 hover:bg-gray-50"
-          >
-            <MoreHorizontal className="w-5 h-5 text-gray-600" />
-          </Button>
-          {/* Cancel button - only for non-cancelled, non-completed returns */}
-          {returnItem.status !== 'cancelled' && returnItem.status !== 'completed' && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => handleCancelReturn(returnItem)}
-              title="Cancel Return"
-              className="h-10 w-10 p-0 hover:bg-red-50"
-            >
-              <XCircle className="w-5 h-5 text-red-500" />
-            </Button>
-          )}
-        </div>
+      header: 'Action',
+      render: () => (
+        <span className="text-sm text-gray-500" title="Canonical return reversal is not available">
+          No actions
+        </span>
       ),
-      width: '180px',
+      width: '110px',
     },
   ];
 
@@ -553,7 +401,6 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
           iconColor={returnTypeConfig[returnType].iconColor}
           onClose={onClose}
           showSaveDraft={false}
-          onSaveDraft={() => { }}
           additionalActions={[
             {
               label: "Refresh",
@@ -563,9 +410,11 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
               disabled: loading
             },
             {
-              label: "Export All",
+              label: "Export Current Page",
+              onClick: () => exportRows(returns, false),
               variant: "default",
-              icon: Download
+              icon: Download,
+              disabled: loading || returns.length === 0,
             }
           ] as any}
         />
@@ -626,9 +475,7 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
             {/* Bulk Actions */}
             <BulkActionBar
               selectedCount={selectedReturns.length}
-              onApprove={() => {/* TODO: Implement approve selected */ }}
-              onReject={() => {/* TODO: Implement reject selected */ }}
-              onExport={() => {/* TODO: Implement export selected */ }}
+              onExport={handleExportSelected}
               onClear={() => setSelectedReturns([])}
             />
 
@@ -655,8 +502,12 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
                     <Button
                       variant="outline"
                       onClick={() => {
+                        if (searchTimerRef.current !== undefined) {
+                          window.clearTimeout(searchTimerRef.current);
+                          searchTimerRef.current = undefined;
+                        }
                         setSearchQuery('');
-                        fetchReturns(1);
+                        fetchReturns(1, { ...activeFilters, search: '', return_type: returnType });
                       }}
                       className="mt-4"
                     >
@@ -687,7 +538,15 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => fetchReturns(pagination.page - 1)}
+                        onClick={() => {
+                          if (searchTimerRef.current !== undefined) {
+                            window.clearTimeout(searchTimerRef.current);
+                            searchTimerRef.current = undefined;
+                          }
+                          fetchReturns(pagination.page - 1, {
+                            ...activeFilters, search: searchQuery, return_type: returnType,
+                          });
+                        }}
                         disabled={pagination.page <= 1 || loading}
                       >
                         Previous
@@ -698,7 +557,15 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => fetchReturns(pagination.page + 1)}
+                        onClick={() => {
+                          if (searchTimerRef.current !== undefined) {
+                            window.clearTimeout(searchTimerRef.current);
+                            searchTimerRef.current = undefined;
+                          }
+                          fetchReturns(pagination.page + 1, {
+                            ...activeFilters, search: searchQuery, return_type: returnType,
+                          });
+                        }}
                         disabled={pagination.page >= pagination.total_pages || loading}
                       >
                         Next
@@ -712,20 +579,6 @@ const ReturnsListHistory: React.FC<ReturnsListHistoryProps> = ({ onClose }) => {
         </div>
       </div>
 
-      {/* Cancel Return Modal */}
-      <CancelDocumentModal
-        isOpen={cancelModalOpen}
-        onClose={() => { setCancelModalOpen(false); setReturnToCancel(null); }}
-        documentType="return"
-        document={returnToCancel ? {
-          id: returnToCancel.id,
-          document_number: returnToCancel.return_no,
-          customer_name: returnToCancel.customer_name,
-          supplier_name: returnToCancel.supplier_name,
-          amount: returnToCancel.total_amount
-        } : null}
-        onCancelled={handleCancelSuccess}
-      />
     </div>
   );
 };

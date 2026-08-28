@@ -11,19 +11,23 @@ import {
     ModuleHeader,
     DocumentFooter,
     NotesSection,
-    AddressForm,
     GenericSuccessModal
 } from '../../../global';
 import KeyboardShortcuts, { SHORTCUT_SETS } from '../../../global/ui/KeyboardShortcuts';
 import ChallanPreview from '../ui/ChallanPreview';
 import { Challan, CustomerDetails, CreatedChallanData } from '../types/challanTypes';
+import { useCompany } from '../../../../contexts/CompanyContext';
+import { canonicalDispatchPreviewUnavailableReason } from '../../utils/canonicalSalesPreviewFacts';
+import type { CanonicalDocumentPolicy } from '../../../../services/api/modules/org/canonicalBusinessContext.api';
 
 interface ChallanPreviewStepProps {
     // State
     challan: Challan;
     setChallan: React.Dispatch<React.SetStateAction<Challan>>;
     selectedCustomer: CustomerDetails | null;
+    documentPolicy: CanonicalDocumentPolicy | null;
     saving: boolean;
+    submissionUnavailableReason: string;
     sameAsBilling: boolean;
     setSameAsBilling: React.Dispatch<React.SetStateAction<boolean>>;
     showSuccessModal: boolean;
@@ -45,9 +49,9 @@ const ChallanPreviewStep: React.FC<ChallanPreviewStepProps> = ({
     challan,
     setChallan,
     selectedCustomer,
+    documentPolicy,
     saving,
-    sameAsBilling,
-    setSameAsBilling,
+    submissionUnavailableReason,
     showSuccessModal,
     setShowSuccessModal,
     createdChallanData,
@@ -58,19 +62,12 @@ const ChallanPreviewStep: React.FC<ChallanPreviewStepProps> = ({
     onClose,
     onBack
 }) => {
-    // Get company info from localStorage
-    const companyInfo = {
-        name: localStorage.getItem('companyName') || 'AASO PHARMACEUTICALS',
-        address: localStorage.getItem('companyAddress') || 'Gangapur City, Rajasthan',
-        phone: localStorage.getItem('companyPhone') || '7738228969',
-        email: localStorage.getItem('companyEmail') || 'info@aasopharma.com',
-        gst_number: localStorage.getItem('companyGSTIN') || '08AAXCA4042N1Z2',
-        drugLicense: localStorage.getItem('companyDrugLicense') || 'DL No: MH-MUM-123456',
-        logo: localStorage.getItem('companyLogo') || undefined
-    };
+    const { companyInfo } = useCompany();
+    const previewUnavailableReason = canonicalDispatchPreviewUnavailableReason(challan);
+    const blockingReason = submissionUnavailableReason || previewUnavailableReason || '';
 
     return (
-        <div className="h-full bg-blue-50">
+        <div className="h-full bg-gray-50">
             <div className="h-full flex flex-col">
 
                 {/* Header */}
@@ -91,155 +88,57 @@ const ChallanPreviewStep: React.FC<ChallanPreviewStepProps> = ({
                 <KeyboardShortcuts shortcuts={SHORTCUT_SETS.REVIEW} />
 
                 {/* Content */}
-                <div className="flex-1 overflow-y-auto bg-blue-50">
+                <div className="flex-1 overflow-y-auto bg-gray-50">
                     <div className="max-w-6xl mx-auto px-6 py-6">
 
-                        {/* Transport Details Section */}
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mb-6">
-                            <div className="bg-gradient-to-r from-blue-50 to-blue-100 px-6 py-4 border-b border-blue-100">
-                                <h3 className="text-sm font-semibold text-blue-900 uppercase tracking-wider flex items-center">
-                                    <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center mr-3">
-                                        <Truck className="w-4 h-4 text-white" />
-                                    </div>
-                                    Transport Details
+                        {/* Only logistics fields accepted by sales.dispatch.prepare are editable. */}
+                        <div className="mb-6 overflow-hidden rounded-xl border border-gray-200 bg-white">
+                            <div className="border-b border-gray-200 bg-gray-50 px-6 py-4">
+                                <h3 className="flex items-center text-sm font-semibold uppercase tracking-wider text-gray-900">
+                                    <span className="mr-3 flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600">
+                                        <Truck className="h-4 w-4 text-white" />
+                                    </span>
+                                    Transport evidence
                                 </h3>
                             </div>
-
-                            <div className="p-6">
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-600 mb-2">Transport Company</label>
-                                        <input
-                                            type="text"
-                                            value={challan.transport_company}
-                                            onChange={(e) => setChallan(prev => ({ ...prev, transport_company: e.target.value }))}
-                                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                            placeholder="Company name"
-                                        />
+                            <div className="grid grid-cols-1 gap-4 p-6 md:grid-cols-2">
+                                <div>
+                                    <span className="mb-2 block text-sm font-medium text-gray-600">Transport mode</span>
+                                    <div className="min-h-11 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-800">
+                                        {documentPolicy?.logistics_modes[0]?.display_name
+                                            || 'Waiting for server policy'}
                                     </div>
-
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-600 mb-2">Vehicle Number</label>
-                                        <input
-                                            type="text"
-                                            value={challan.vehicle_number}
-                                            onChange={(e) => setChallan(prev => ({ ...prev, vehicle_number: e.target.value.toUpperCase() }))}
-                                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 uppercase"
-                                            placeholder="KA01AB1234"
-                                        />
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-600 mb-2">Driver Phone</label>
-                                        <input
-                                            type="tel"
-                                            value={challan.driver_phone}
-                                            onChange={(e) => setChallan(prev => ({ ...prev, driver_phone: e.target.value }))}
-                                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                            placeholder="Phone number"
-                                        />
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-600 mb-2">Freight Charges</label>
-                                        <div className="relative">
-                                            <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 text-sm">₹</span>
-                                            <input
-                                                type="number"
-                                                value={challan.freight_charges || ''}
-                                                onChange={(e) => {
-                                                    const value = parseFloat(e.target.value) || 0;
-                                                    setChallan(prev => ({ ...prev, freight_charges: value }));
-                                                }}
-                                                className="w-full pl-8 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                                placeholder="0"
-                                                step="0.01"
-                                                min="0"
-                                            />
-                                        </div>
-                                    </div>
+                                </div>
+                                <div>
+                                    <label htmlFor="dispatch-distance-km" className="mb-2 block text-sm font-medium text-gray-600">
+                                        Exact distance (km)
+                                    </label>
+                                    <input
+                                        id="dispatch-distance-km"
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        inputMode="decimal"
+                                        value={challan.distance_km}
+                                        onChange={(event) => setChallan(previous => ({
+                                            ...previous,
+                                            distance_km: event.target.value,
+                                        }))}
+                                        className="min-h-11 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                        placeholder="Enter measured distance"
+                                    />
                                 </div>
                             </div>
                         </div>
 
-                        {/* Address Section */}
-                        {selectedCustomer && (
-                            <div className="grid grid-cols-2 gap-6 mb-6">
-                                {/* Billing Address */}
-                                <AddressForm
-                                    customer={selectedCustomer}
-                                    addressType="billing"
-                                    addressData={{
-                                        address_line1: selectedCustomer.address || '',
-                                        city: selectedCustomer.city || '',
-                                        state: selectedCustomer.state || '',
-                                        pincode: selectedCustomer.pincode || ''
-                                    }}
-                                    onChange={(addressString: string) => {
-                                        setChallan(prev => ({ ...prev, billing_address: addressString }));
-                                    }}
-                                    className=""
-                                />
-
-                                {/* Delivery Address */}
-                                <AddressForm
-                                    customer={selectedCustomer}
-                                    addressType="shipping"
-                                    addressData={{
-                                        address_line1: challan.delivery_address || '',
-                                        city: challan.delivery_city || '',
-                                        state: challan.delivery_state || '',
-                                        pincode: challan.delivery_pincode || ''
-                                    }}
-                                    sameAsBilling={sameAsBilling}
-                                    onSameAsBillingChange={(same: boolean) => {
-                                        setSameAsBilling(same);
-                                        if (same && selectedCustomer) {
-                                            setChallan(prev => ({
-                                                ...prev,
-                                                delivery_address: selectedCustomer.address || '',
-                                                delivery_city: selectedCustomer.city || '',
-                                                delivery_state: selectedCustomer.state || '',
-                                                delivery_pincode: selectedCustomer.pincode || ''
-                                            }));
-                                        }
-                                    }}
-                                    onChange={(addressString: string) => {
-                                        setChallan(prev => ({ ...prev, delivery_address: addressString }));
-                                    }}
-                                    onSave={(addressData: any) => {
-                                        setChallan(prev => ({
-                                            ...prev,
-                                            delivery_address: addressData.address_line1 || '',
-                                            delivery_city: addressData.city || '',
-                                            delivery_state: addressData.state || '',
-                                            delivery_pincode: addressData.pincode || ''
-                                        }));
-                                    }}
-                                    className=""
-                                />
-                            </div>
-                        )}
+                        <div className="mb-6 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+                            The shipping address is resolved from the approved sales order by the canonical prepare operation. This screen does not create or override an unverified address.
+                        </div>
 
                         {/* Challan Preview */}
                         <ChallanPreview
-                            challan={{
-                                ...challan,
-                                customer_details: (selectedCustomer ? {
-                                    address: selectedCustomer.address || '',
-                                    city: selectedCustomer.city || '',
-                                    state: selectedCustomer.state || '',
-                                    pincode: selectedCustomer.pincode || '',
-                                    phone: selectedCustomer.phone || ''
-                                } : null) as any,
-                                delivery_address: challan.delivery_address || '',
-                                delivery_city: challan.delivery_city || '',
-                                delivery_state: challan.delivery_state || '',
-                                delivery_pincode: challan.delivery_pincode || '',
-                                delivery_contact_person: challan.delivery_contact_person || '',
-                                delivery_contact_phone: challan.delivery_contact_phone || ''
-                            }}
-                            companyInfo={companyInfo}
+                            challan={challan}
+                            companyInfo={companyInfo ?? undefined}
                         />
 
                         {/* Notes Section */}
@@ -256,18 +155,19 @@ const ChallanPreviewStep: React.FC<ChallanPreviewStepProps> = ({
                 </div>
 
                 {/* Footer */}
-                <DocumentFooter
-                    totalItems={challan.total_quantity || challan.items?.length || 0}
-                    totalAmount={challan.total_amount}
-                    subtotalAmount={challan.total_amount || 0}
-                    taxAmount={0}
-                    grandTotal={challan.total_amount || 0}
-                    onSave={saveChallan}
-                    saveLabel="Generate Challan"
-                    isSaving={saving}
-                    showActionButtons={true}
-                    showPrintOptions={false}
-                />
+                {blockingReason && <div id="challan-submission-status" role="alert" className="border-t border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+                    {blockingReason}
+                </div>}
+                <fieldset disabled={Boolean(blockingReason)} aria-describedby={blockingReason ? "challan-submission-status" : undefined}>
+                    <DocumentFooter
+                        totalItems={challan.items.length}
+                        onSave={saveChallan}
+                        saveLabel="Generate Challan"
+                        isSaving={saving}
+                        showActionButtons={true}
+                        showPrintOptions={false}
+                    />
+                </fieldset>
 
             </div>
 
@@ -280,13 +180,16 @@ const ChallanPreviewStep: React.FC<ChallanPreviewStepProps> = ({
                             setShowSuccessModal(false);
                             onClose?.();
                         },
-                        documentType: "Delivery Challan",
+                        title: "Challan Created Successfully!",
+                        documentType: "challan",
                         documentNumber: createdChallanData.challan_number,
+                        documentId: createdChallanData.challan_id,
                         documentData: createdChallanData as any,
                         onPrint: printChallan,
                         onThermalPrint: thermalPrintChallan,
                         onWhatsApp: shareOnWhatsApp,
-                        phoneNumber: createdChallanData.customer_details?.phone || challan.customer_details?.phone
+                        phoneNumber: createdChallanData.customer_details?.primary_phone
+                            || challan.customer_details?.primary_phone
                     } as any}
                 />
             )}

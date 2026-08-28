@@ -6,47 +6,23 @@
  */
 
 import { apiHelpers } from '../../apiClient';
-import { createCrudApi } from '../../utils/createCrudApi';
+import { rejectCanonicalWrite } from '../../canonicalWritePolicy';
+import { decodeCanonicalBankAccountList } from './canonicalMasterReads';
 
 // ============================================================================
 // TYPES
 // ============================================================================
-const crud = createCrudApi({ basePath: '/bank-accounts' });
-
 export const bankAccountsApi = {
-    ...crud,
+    getAll: () => apiHelpers.get('/bank-accounts')
+        .then(response => ({ ...response, data: decodeCanonicalBankAccountList(response.data) })),
 
-    // Transactions
-    getTransactions: (accountId: number | string, params: any = {}) => {
-        return apiHelpers.get(`/bank-accounts/${accountId}/transactions`, { params });
-    },
+    create: (_data: any) => rejectCanonicalWrite('Creating a bank account'),
+    update: (_id: number | string, _data: any) => rejectCanonicalWrite('Editing a bank account'),
+    delete: (_id: number | string) => rejectCanonicalWrite('Deleting a bank account'),
 
-    recordTransaction: (accountId: number | string, data: any) => {
-        return apiHelpers.post(`/bank-accounts/${accountId}/transactions`, data);
-    },
+    getActive: () => apiHelpers.get('/bank-accounts')
+        .then(response => ({ ...response, data: decodeCanonicalBankAccountList(response.data) })),
 
-    // Balance & Reconciliation
-    getBalance: (accountId: number | string) => {
-        return apiHelpers.get(`/bank-accounts/${accountId}/balance`);
-    },
-
-    reconcile: (accountId: number | string, data: any) => {
-        return apiHelpers.post(`/bank-accounts/${accountId}/reconcile`, data);
-    },
-
-    getStatement: (accountId: number | string, params: any = {}) => {
-        return apiHelpers.get(`/bank-accounts/${accountId}/statement`, { params });
-    },
-
-    getActive: () => {
-        return apiHelpers.get('/bank-accounts', { params: { is_active: true } });
-    },
-
-    search: (query: string) => {
-        return apiHelpers.get('/bank-accounts', { params: { search: query } });
-    },
-
-    setDefaultAccount: (id: number | string) => {
-        return apiHelpers.put(`/bank-accounts/${id}/set-default`, {});
-    }
+    setDefaultAccount: (_id: number | string) =>
+        rejectCanonicalWrite('Changing the default bank account')
 };

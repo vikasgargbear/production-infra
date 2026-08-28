@@ -1,29 +1,39 @@
 import React, { createContext, useContext, useReducer, ReactNode } from 'react';
 
 // Types
-interface PaymentAllocation {
+export interface PaymentAllocation {
     invoice_id: string;
     invoice_number: string;
-    amount: number;
+    amount: string;
 }
 
-interface CustomerDetails {
+export interface CustomerDetails {
     customer_id: string;
     customer_name: string;
     [key: string]: any;
 }
 
-interface Payment {
+export interface Payment {
     customer_id: string;
     customer_name: string;
     customer_details: CustomerDetails | null;
     receipt_no: string;
     payment_date: string;
+    business_date: string;
     amount: string;
     payment_mode: string;
     reference_number: string;
+    bank_account_id: string;
+    settlement_account_id: string;
+    branch_id: string;
+    evidence_attachment_id: string;
+    sales_order_id: string;
+    receipt_purpose: 'invoice_settlement' | 'customer_advance';
+    instrument_number: string;
+    instrument_date: string;
+    drawee_bank_name: string;
+    account_payee_confirmed: boolean;
     remarks: string;
-    payment_type: string;
     allocation_method: string;
     allocations: PaymentAllocation[];
 }
@@ -81,13 +91,23 @@ const initialState: PaymentState = {
         customer_name: '',
         customer_details: null,
         receipt_no: '',
-        payment_date: new Date().toISOString().split('T')[0],
+        payment_date: '',
+        business_date: '',
         amount: '',
-        payment_mode: 'CASH',
+        payment_mode: '',
         reference_number: '',
+        bank_account_id: '',
+        settlement_account_id: '',
+        branch_id: '',
+        evidence_attachment_id: '',
+        sales_order_id: '',
+        receipt_purpose: 'invoice_settlement',
+        instrument_number: '',
+        instrument_date: '',
+        drawee_bank_name: '',
+        account_payee_confirmed: false,
         remarks: '',
-        payment_type: 'order_payment',
-        allocation_method: 'manual',
+        allocation_method: 'fifo',
         allocations: []
     },
     selectedCustomer: null,
@@ -209,8 +229,9 @@ const paymentReducer = (state: PaymentState, action: PaymentAction): PaymentStat
                 ...initialState,
                 payment: {
                     ...initialState.payment,
-                    payment_date: new Date().toISOString().split('T')[0],
-                    allocation_method: 'manual'
+                    payment_date: '',
+                    business_date: '',
+                    allocation_method: 'fifo'
                 }
             };
 

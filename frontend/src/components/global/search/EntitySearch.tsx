@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo, forwardRef, useImperativeHandle } from 'react';
+import React, { useState, useEffect, useRef, useMemo, forwardRef, useImperativeHandle } from 'react';
 import { Search, Loader2, X, LucideIcon } from 'lucide-react';
 import { ActionButton } from '../ui';
 import { debounce } from '../../../utils/debounce';
@@ -125,6 +125,7 @@ function EntitySearchInner<T>(
     const searchInputRef = useRef<HTMLInputElement>(null);
     const dropdownRef = useRef<HTMLDivElement>(null);
     const resultRefs = useRef<(HTMLDivElement | null)[]>([]);
+    const searchRequestRef = useRef(0);
 
     // Expose methods to parent
     useImperativeHandle(ref, () => ({
@@ -142,24 +143,24 @@ function EntitySearchInner<T>(
 
     // Debounced search - only recreate when debounceMs or minLength changes
     const performSearch = useMemo(
-        () => debounce(async (query: string) => {
+        () => debounce(async (query: string, requestId: number) => {
             if (!query || query.length < minLength) {
-                setSearchResults([]);
-                setHighlightedIndex(-1);
                 return;
             }
 
             setLoading(true);
             try {
                 const results = await searchFnRef.current(query);
+                if (requestId !== searchRequestRef.current) return;
                 setSearchResults(results || []);
                 setHighlightedIndex(results?.length > 0 ? 0 : -1);
             } catch (error) {
+                if (requestId !== searchRequestRef.current) return;
                 console.error(`[EntitySearch] ${entityType} search failed:`, error);
                 setSearchResults([]);
                 setHighlightedIndex(-1);
             } finally {
-                setLoading(false);
+                if (requestId === searchRequestRef.current) setLoading(false);
             }
         }, debounceMs),
         [minLength, debounceMs, entityType]
@@ -167,19 +168,29 @@ function EntitySearchInner<T>(
 
     // Trigger search when query changes
     useEffect(() => {
-        if (searchQuery) {
+        const requestId = ++searchRequestRef.current;
+        if (searchQuery && searchQuery.length >= minLength) {
             setShowDropdown(true);
-            performSearch(searchQuery);
+            performSearch(searchQuery, requestId);
         } else {
-            setShowDropdown(false);
+            setShowDropdown(Boolean(searchQuery));
             setSearchResults([]);
+            setHighlightedIndex(-1);
+            setLoading(false);
         }
-    }, [searchQuery, performSearch]);
+        return () => {
+            performSearch.cancel();
+            if (searchRequestRef.current === requestId) {
+                searchRequestRef.current += 1;
+            }
+        };
+    }, [searchQuery, minLength, performSearch]);
 
     // Auto-scroll to highlighted item
     useEffect(() => {
-        if (highlightedIndex >= 0 && resultRefs.current[highlightedIndex]) {
-            resultRefs.current[highlightedIndex]?.scrollIntoView({
+        const highlightedResult = resultRefs.current[highlightedIndex];
+        if (highlightedIndex >= 0 && typeof highlightedResult?.scrollIntoView === 'function') {
+            highlightedResult.scrollIntoView({
                 behavior: 'smooth',
                 block: 'nearest'
             });
@@ -322,7 +333,7 @@ function EntitySearchInner<T>(
 
     // Render dropdown content
     const renderDropdownContent = () => (
-        <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+        <div role="listbox" className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
             {loading ? (
                 <div className="p-4 text-center text-gray-500">
                     <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
@@ -333,8 +344,11 @@ function EntitySearchInner<T>(
                     {searchResults.map((item, index) => (
                         <div
                             key={getItemKey(item)}
+                            data-testid={`entity-search-option-${getItemKey(item)}`}
                             onClick={() => handleSelect(item)}
                             ref={(el) => { resultRefs.current[index] = el; }}
+                            role="option"
+                            aria-selected={index === highlightedIndex}
                         >
                             {renderResultFn(item, index === highlightedIndex, index)}
                         </div>

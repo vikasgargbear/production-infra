@@ -11,10 +11,12 @@ import { z } from 'zod';
  */
 export interface Product {
   // Primary fields - NOT NULL in DB
-  product_id: number;     // NOT NULL
+  product_id: number | string; // Canonical IDs are UUID strings
   product_code: string;   // NOT NULL (was incorrectly optional!)
   product_name: string;   // NOT NULL
   product_type: string;   // NOT NULL (was missing!)
+  uom_conversion_id?: string;
+  row_version?: number;
 
   // Nullable fields from DB
   generic_name?: string;
@@ -51,6 +53,7 @@ export interface Product {
   critical_stock_level?: number;
 
   // Product lifecycle (nullable)
+  status?: 'draft' | 'active' | 'blocked';
   product_status?: string;
   launch_date?: string;
   discontinuation_date?: string;
@@ -109,6 +112,9 @@ export interface ProductBatch {
   sale_price?: number;
 
   location?: string;
+  location_id?: string;
+  branch_id?: string;
+  uom_conversion_id?: string;
   is_active?: boolean;
   created_at?: string;
   updated_at?: string;
@@ -120,52 +126,63 @@ export interface ProductBatch {
   pack_type?: string;
 }
 
+export const productKindSchema = z.enum(['medicine', 'medical_device', 'consumable']);
+
 /**
- * Product creation input
+ * Product master mutations create and edit draft identity only. Tax, Drugs
+ * Rules schedule, NDPS, Schedule H2, composition, price and opening stock are
+ * deliberately separate reviewed commands.
  */
-export interface ProductCreateInput {
+export const productDraftBaseSchema = z.object({
+  product_name: z.string().trim().min(1).max(255),
+  generic_name: z.string().trim().max(255).optional(),
+  product_kind: productKindSchema,
+}).strict();
+
+export const productCreateSchema = productDraftBaseSchema;
+
+export const productUpdateSchema = z.object({
+  row_version: z.number().int().positive(),
+  product_name: z.string().trim().min(1).max(255).optional(),
+  generic_name: z.string().trim().max(255).optional(),
+  brand: z.string().trim().max(100).optional(),
+  manufacturer: z.string().trim().max(200).optional(),
+  category_id: z.number().int().positive().optional(),
+  type_id: z.number().int().positive().optional(),
+  product_kind: productKindSchema.optional(),
+  reorder_level: z.number().nonnegative().optional(),
+  min_stock_quantity: z.number().nonnegative().optional(),
+  max_stock_quantity: z.number().nonnegative().optional(),
+  maintain_batch: z.boolean().optional(),
+  maintain_expiry: z.boolean().optional(),
+}).strict().superRefine((data, context) => {
+  if (Object.keys(data).every(key => key === 'row_version')) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: 'At least one product field is required' });
+  }
+  if (
+    data.min_stock_quantity !== undefined &&
+    data.max_stock_quantity !== undefined &&
+    data.min_stock_quantity > data.max_stock_quantity
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['min_stock_quantity'],
+      message: 'Minimum stock cannot exceed maximum stock',
+    });
+  }
+});
+
+export type ProductCreateInput = z.infer<typeof productCreateSchema>;
+export type ProductUpdateInput = z.infer<typeof productUpdateSchema>;
+
+export interface ProductMutationResponse {
+  product_id: string;
+  product_code: string;
   product_name: string;
-  product_code?: string;
-  manufacturer: string;
-  hsn_code: string;
-  category?: string;
-  salt_composition?: string;
-
-  // Pricing
-  mrp: number;
-  sale_price: number;
-  cost_per_unit: number;
-  gst_percent: number;
-
-  // Units
-  base_unit: string;
-  sale_unit?: string;
-
-  // Pack configuration
-  pack_input?: string;
-  pack_quantity?: number;
-  pack_multiplier?: number;
-
-  // Optional pharmaceutical details
-  drug_schedule?: 'G' | 'H' | 'H1' | 'X' | 'OTC';
-  requires_prescription?: boolean;
-  controlled_substance?: boolean;
-  dosage_instructions?: string;
-  storage_instructions?: string;
-
-  // Optional physical details
-  generic_name?: string;
-  packer?: string;
-  country_of_origin?: string;
-  weight?: number;
-  weight_unit?: 'g' | 'kg' | 'mg';
-  pack_form?: string;
+  lifecycle_status: 'draft';
+  row_version?: number;
+  message: string;
 }
-
-/**
- * Product update input (all fields optional)
- */
-export interface ProductUpdateInput extends Partial<ProductCreateInput> { }
 
 /**
  * Product search parameters

@@ -13,20 +13,22 @@ import {
     ItemsTableKeyboard,
     StandardDatePicker
 } from '../../../global';
-import type { Order, OrderItem } from '../../../../types/models';
-import type { Customer, Product } from '../../../../types/models';
+import type { Order } from '../../../../types/models';
+import type { Customer } from '../../../../types/models';
 import type { ProductSearchRef } from '../../../global/search/ProductSearch';
+import { resolvedSalesOrderDeliveryAddress } from '../../utils/canonicalSalesChainCommand';
 
 // Using canonical types from /types/models - no local duplicates
 
 interface OrderItemsStepProps {
     order: Order;
     setOrder: React.Dispatch<React.SetStateAction<Order>>;
+    maximumOrderDate: string;
     selectedCustomer: Customer | null;
     message: string;
     messageType: string;
     onCustomerSelect: (customer: Customer | null) => Promise<void>;
-    onProductSelect: (product: Product) => void;
+    onProductSelect: (product: any) => void;
     onUpdateItem: (index: number, field: string, value: unknown) => void;
     onRemoveItem: (index: number) => void;
     onShowCustomerModal: () => void;
@@ -38,6 +40,7 @@ interface OrderItemsStepProps {
 const OrderItemsStep: React.FC<OrderItemsStepProps> = ({
     order,
     setOrder,
+    maximumOrderDate,
     selectedCustomer,
     message,
     messageType,
@@ -52,6 +55,7 @@ const OrderItemsStep: React.FC<OrderItemsStepProps> = ({
 }) => {
     const productSearchRef = useRef<ProductSearchRef>(null);
     const itemsTableRef = useRef<HTMLDivElement>(null);
+    const deliveryAddress = resolvedSalesOrderDeliveryAddress(order.shipping_address_data);
     return (
         <div className="max-w-6xl mx-auto px-6 py-6">
             {/* Message Display */}
@@ -69,6 +73,7 @@ const OrderItemsStep: React.FC<OrderItemsStepProps> = ({
                     label="Order Date"
                     value={order.order_date}
                     onChange={(value: string) => setOrder(prev => ({ ...prev, order_date: value }))}
+                    max={maximumOrderDate || undefined}
                     required
                     size="sm"
                 />
@@ -116,6 +121,15 @@ const OrderItemsStep: React.FC<OrderItemsStepProps> = ({
                         tabIndex={1}
                         nextFocusRef={productSearchRef as any}
                     />
+                    {selectedCustomer && deliveryAddress && (
+                        <p
+                            className="mt-3 flex items-center gap-2 text-sm text-green-700"
+                            data-testid={`sales-order-delivery-address-${deliveryAddress.id}-v${deliveryAddress.rowVersion}`}
+                        >
+                            <CheckCircle className="h-4 w-4" aria-hidden="true" />
+                            Delivery address ready
+                        </p>
+                    )}
                 </div>
             </div>
 
@@ -137,6 +151,7 @@ const OrderItemsStep: React.FC<OrderItemsStepProps> = ({
                     ref={productSearchRef}
                     onAddItem={onProductSelect as any}
                     onCreateProduct={onCreateProduct as any}
+                    enforceFefo
                     tabIndex={2}
                 />
             </div>
@@ -155,6 +170,8 @@ const OrderItemsStep: React.FC<OrderItemsStepProps> = ({
                         onRemoveItem={onRemoveItem}
                         productSearchRef={productSearchRef as any}
                         currencySymbol="₹"
+                        preserveExactDecimals
+                        showFreeSupplyTaxTreatment
                     />
                 </div>
             )}

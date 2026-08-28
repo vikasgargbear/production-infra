@@ -21,6 +21,7 @@ interface ExtractedItem {
   hsn_code?: string;
   free_quantity?: number | string;
   product_id?: string | number | null;
+  uom_conversion_id?: string;
   [key: string]: any;
 }
 
@@ -187,14 +188,14 @@ const PDFVerificationFlow: React.FC<PDFVerificationFlowProps> = ({
       product_name: '',
       batch_number: '',
       expiry_date: '',
-      quantity: 1,
-      unit_price: 0,
-      mrp: 0,
-      selling_price: 0,
-      tax_percent: 12,
+      quantity: '',
+      unit_price: '',
+      mrp: '',
+      selling_price: '',
+      tax_percent: '',
       hsn_code: '',
-      free_quantity: 0,
-      discount_percent: 0,
+      free_quantity: '',
+      discount_percent: '',
       verified: false,
       hasIssues: false,
       isNewProduct: true
@@ -240,6 +241,30 @@ const PDFVerificationFlow: React.FC<PDFVerificationFlowProps> = ({
       toast.error('No products to save');
       return;
     }
+    const incomplete = productsToSave.find(product => (
+      !product.verified
+      || !String(product.product_id || '').trim()
+      || !String(product.uom_conversion_id || '').trim()
+      || !String(product.product_name || '').trim()
+      || !String(product.batch_number || '').trim()
+      || !String(product.expiry_date || '').trim()
+      || !(Number(product.quantity) > 0)
+      || !(Number(product.unit_price) > 0)
+      || !(Number(product.mrp) > 0)
+      || product.free_quantity === ''
+      || product.free_quantity === null
+      || product.free_quantity === undefined
+      || product.discount_percent === ''
+      || product.discount_percent === null
+      || product.discount_percent === undefined
+      || product.tax_percent === ''
+      || product.tax_percent === null
+      || product.tax_percent === undefined
+    ));
+    if (incomplete) {
+      toast.error('Every included line needs canonical product/UOM identity and explicit batch, expiry, quantity, free quantity, cost, MRP, discount and GST facts.');
+      return;
+    }
 
     // Compile final data with all supplier info
     if (!verifiedSupplier) {
@@ -251,31 +276,31 @@ const PDFVerificationFlow: React.FC<PDFVerificationFlowProps> = ({
       ...extractedData,
       supplier_id: verifiedSupplier.supplier_id,
       supplier_name: verifiedSupplier.supplier_name,
-      supplier_gst: verifiedSupplier.gst_number || verifiedSupplier.gst_number,
-      supplier_gst_number: verifiedSupplier.gst_number || verifiedSupplier.gst_number,
+      supplier_gst_number: verifiedSupplier.gst_number,
       supplier_phone: verifiedSupplier.primary_phone || verifiedSupplier.phone,
       supplier_email: verifiedSupplier.primary_email || verifiedSupplier.email,
       supplier_address: verifiedSupplier.address_line1 || verifiedSupplier.address,
       fromPDFExtract: !extractedData.isBulkUpload, // Mark as PDF extract if not bulk upload
       items: productsToSave.map(product => ({
         product_id: product.product_id || null,
+        uom_conversion_id: product.uom_conversion_id,
         product_name: product.product_name,
-        batch_number: product.batch_number || product.batch_number,
+        batch_number: product.batch_number,
         expiry_date: product.expiry_date,
         quantity: product.quantity,
         unit_price: product.unit_price,
         mrp: product.mrp,
-        selling_price: product.selling_price || (parseFloat(String(product.mrp || 0)) * 0.9),
-        tax_percent: product.tax_percent || 12,
+        selling_price: product.selling_price ?? '',
+        tax_percent: product.tax_percent,
         hsn_code: product.hsn_code,
-        free_quantity: product.free_quantity || 0,
-        discount_percent: product.discount_percent || 0,
+        free_quantity: product.free_quantity ?? '',
+        discount_percent: product.discount_percent ?? '',
         isNewProduct: product.isNewProduct || false
       }))
     };
 
     onComplete(finalData);
-    toast.success('Verification complete! Saving purchase...');
+    toast.success('Line verification complete. Live API calculation is required next.');
   };
 
   // Progress indicator
@@ -375,8 +400,8 @@ const PDFVerificationFlow: React.FC<PDFVerificationFlowProps> = ({
                     <span className="ml-2 font-semibold">{extractedData.invoice_date}</span>
                   </div>
                   <div>
-                    <span className="text-gray-600">Total Amount:</span>
-                    <span className="ml-2 font-semibold">₹{extractedData.total_amount || extractedData.total_amount || 0}</span>
+                    <span className="text-gray-600">Extracted total (unverified):</span>
+                    <span className="ml-2 font-semibold">{extractedData.total_amount === '' || extractedData.total_amount === null || extractedData.total_amount === undefined ? 'Unavailable' : `₹${extractedData.total_amount}`}</span>
                   </div>
                 </div>
               </div>
@@ -393,7 +418,7 @@ const PDFVerificationFlow: React.FC<PDFVerificationFlowProps> = ({
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
                     <p><span className="text-gray-600">Name:</span> <span className="font-medium">{verifiedSupplier?.supplier_name || verifiedSupplier?.name}</span></p>
-                    {(verifiedSupplier?.gst_number || verifiedSupplier?.gst_number) && <p><span className="text-gray-600">GSTIN:</span> {verifiedSupplier.gst_number || verifiedSupplier.gst_number}</p>}
+                    {verifiedSupplier?.gst_number && <p><span className="text-gray-600">GSTIN:</span> {verifiedSupplier.gst_number}</p>}
                     {(verifiedSupplier?.primary_phone || verifiedSupplier?.phone) && <p><span className="text-gray-600">Phone:</span> {verifiedSupplier.primary_phone || verifiedSupplier.phone}</p>}
                   </div>
                   <div>
@@ -440,21 +465,6 @@ const PDFVerificationFlow: React.FC<PDFVerificationFlowProps> = ({
                     </thead>
                     <tbody>
                       {verifiedProducts.filter(p => !p.skipped).map((product, index) => {
-                        // Calculate line totals
-                        const qty = parseFloat(String(product.quantity || 0));
-                        const cost = parseFloat(String(product.unit_price || 0));
-                        const discountPercent = parseFloat(String(product.discount_percent || 0));
-                        const taxPercent = parseFloat(String(product.tax_percent || 0));
-
-                        // Calculate base amount after discount
-                        const baseAmount = qty * cost;
-                        const discountAmount = baseAmount * (discountPercent / 100);
-                        const discountedAmount = baseAmount - discountAmount;
-
-                        // Calculate tax on discounted amount
-                        const taxAmount = discountedAmount * (taxPercent / 100);
-                        const totalAmount = discountedAmount + taxAmount;
-
                         return (
                           <tr key={index} className="border-b hover:bg-gray-50 text-xs">
                             <td className="px-2 py-1">
@@ -467,14 +477,14 @@ const PDFVerificationFlow: React.FC<PDFVerificationFlowProps> = ({
                             </td>
                             <td className="px-2 py-1">{product.expiry_date}</td>
                             <td className="px-2 py-1 text-right font-medium">{product.quantity}</td>
-                            <td className="px-2 py-1 text-right">{product.free_quantity || 0}</td>
-                            <td className="px-2 py-1 text-right">{product.discount_percent || 0}%</td>
-                            <td className="px-2 py-1 text-right">₹{cost.toFixed(2)}</td>
-                            <td className="px-2 py-1 text-right">₹{product.mrp || 0}</td>
-                            <td className="px-2 py-1 text-right">₹{product.selling_price || (parseFloat(String(product.mrp || 0)) * 0.9) || 0}</td>
-                            <td className="px-2 py-1 text-right">{taxPercent}%</td>
-                            <td className="px-2 py-1 text-right">₹{taxAmount.toFixed(2)}</td>
-                            <td className="px-2 py-1 text-right font-semibold">₹{totalAmount.toFixed(2)}</td>
+                            <td className="px-2 py-1 text-right">{product.free_quantity === '' || product.free_quantity === null || product.free_quantity === undefined ? '—' : product.free_quantity}</td>
+                            <td className="px-2 py-1 text-right">{product.discount_percent === '' || product.discount_percent === null || product.discount_percent === undefined ? '—' : `${product.discount_percent}%`}</td>
+                            <td className="px-2 py-1 text-right">₹{product.unit_price}</td>
+                            <td className="px-2 py-1 text-right">{product.mrp === '' || product.mrp === null || product.mrp === undefined ? '—' : `₹${product.mrp}`}</td>
+                            <td className="px-2 py-1 text-right">{product.selling_price === '' || product.selling_price === null || product.selling_price === undefined ? '—' : `₹${product.selling_price}`}</td>
+                            <td className="px-2 py-1 text-right">{product.tax_percent}%</td>
+                            <td className="px-2 py-1 text-right">Pending API</td>
+                            <td className="px-2 py-1 text-right font-semibold">Pending API</td>
                             <td className="px-2 py-1 text-center">
                               <button
                                 onClick={() => {
@@ -492,50 +502,7 @@ const PDFVerificationFlow: React.FC<PDFVerificationFlowProps> = ({
                       })}
                     </tbody>
                     <tfoot className="bg-gray-50 text-xs">
-                      <tr>
-                        <td colSpan={9} className="px-2 py-1 text-right font-medium">Subtotal:</td>
-                        <td className="px-2 py-1 text-right">
-                          ₹{verifiedProducts.filter(p => !p.skipped).reduce((sum, p) => {
-                            const qty = parseFloat(String(p.quantity || 0));
-                            const cost = parseFloat(String(p.unit_price || 0));
-                            const discount = parseFloat(String(p.discount_percent || 0));
-                            const base = qty * cost;
-                            return sum + (base - (base * discount / 100));
-                          }, 0).toFixed(2)}
-                        </td>
-                        <td colSpan={2}></td>
-                      </tr>
-                      <tr>
-                        <td colSpan={9} className="px-2 py-1 text-right font-medium">Total Tax:</td>
-                        <td className="px-2 py-1 text-right">
-                          ₹{verifiedProducts.filter(p => !p.skipped).reduce((sum, p) => {
-                            const qty = parseFloat(String(p.quantity || 0));
-                            const cost = parseFloat(String(p.unit_price || 0));
-                            const discount = parseFloat(String(p.discount_percent || 0));
-                            const tax = parseFloat(String(p.tax_percent || 0));
-                            const base = qty * cost;
-                            const discountedAmount = base - (base * discount / 100);
-                            return sum + (discountedAmount * tax / 100);
-                          }, 0).toFixed(2)}
-                        </td>
-                        <td colSpan={2}></td>
-                      </tr>
-                      <tr className="font-semibold">
-                        <td colSpan={10} className="px-2 py-2 text-right">Grand Total:</td>
-                        <td className="px-2 py-2 text-right text-indigo-600">
-                          ₹{verifiedProducts.filter(p => !p.skipped).reduce((sum, p) => {
-                            const qty = parseFloat(String(p.quantity || 0));
-                            const cost = parseFloat(String(p.unit_price || 0));
-                            const discount = parseFloat(String(p.discount_percent || 0));
-                            const tax = parseFloat(String(p.tax_percent || 0));
-                            const base = qty * cost;
-                            const discountedAmount = base - (base * discount / 100);
-                            const taxAmount = discountedAmount * tax / 100;
-                            return sum + discountedAmount + taxAmount;
-                          }, 0).toFixed(2)}
-                        </td>
-                        <td></td>
-                      </tr>
+                      <tr><td colSpan={12} className="px-3 py-3 text-right font-medium text-blue-900">Subtotal, GST and grand total are intentionally deferred to the live purchase calculation API.</td></tr>
                     </tfoot>
                   </table>
                 </div>
@@ -566,7 +533,7 @@ const PDFVerificationFlow: React.FC<PDFVerificationFlowProps> = ({
                     className="px-8 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center space-x-2"
                   >
                     <Save className="w-5 h-5" />
-                    <span>Confirm & Save Purchase</span>
+                    <span>Confirm & Load Draft</span>
                   </button>
                 </div>
               </div>

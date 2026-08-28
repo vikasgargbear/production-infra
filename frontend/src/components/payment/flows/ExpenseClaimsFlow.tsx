@@ -1,381 +1,262 @@
-import React, { useState, useEffect } from 'react';
-import { Receipt, Plus, Calendar, X, Loader2, RefreshCw, AlertCircle, User } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AlertCircle, CheckCircle, Loader2, Plus, Receipt, RefreshCw, Trash2, Upload } from 'lucide-react';
+
 import { ModuleHeader } from '../../global';
-import { expensesApi } from '../../../services/api';
-import { showFinancialEntryNotification } from '../../../utils/financialEntryNotifier';
+import { branchesApi } from '../../../services/api';
+import {
+  approveCanonicalAction, getCanonicalCommandReview, getCanonicalCommandStatus,
+  type CanonicalCommandExecution, type CanonicalCommandPreview, type CanonicalCommandReview,
+} from '../../../services/api/canonicalOperatorActions';
+import {
+  buildExpenseClaimPayload, canonicalExpenseClaimsApi, executeApprovedExpenseClaim,
+  prepareExpenseClaim, type ExpenseClaimContext, type PostedExpenseClaim,
+} from '../../../services/api/modules/finance/canonicalExpenseClaims.api';
+import { clientUuid } from '../../../utils/clientUuid';
+import { addExactDecimals, formatExactCurrency } from '../../../utils/exactDecimal';
+import { isCanonicalUuid } from '../../../utils/canonicalUuid';
 
-
-interface ExpenseClaimsFlowProps {
-  onClose?: () => void;
+interface ExpenseClaimsFlowProps { onClose?: () => void; open?: boolean }
+interface BranchChoice { branch_id: string; branch_code: string; branch_name: string }
+interface ExpenseDraftLine {
+  id: string; expense_date: string; expense_account_id: string; description: string;
+  merchant_name: string; receipt_attachment_id: string; claimed_amount: string;
 }
-
-interface ExpenseLine {
-  id: string;
-  expense_type: string;
-  description: string;
-  amount: number;
-  date: string;
-  receipt_attached: boolean;
-}
-
-const ExpenseClaimsFlow: React.FC<ExpenseClaimsFlowProps> = ({ onClose }) => {
-  const [claimDate, setClaimDate] = useState(new Date().toISOString().split('T')[0]);
-  const [employeeName, setEmployeeName] = useState('');
-  const [purpose, setPurpose] = useState('');
-  const [expenses, setExpenses] = useState<ExpenseLine[]>([
-    { id: '1', expense_type: '', description: '', amount: 0, date: new Date().toISOString().split('T')[0], receipt_attached: false }
-  ]);
-  const [saving, setSaving] = useState(false);
-
-  // API data states
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
-
-  // Expense types loaded from API
-  const [expenseTypes, setExpenseTypes] = useState<{ code: string, name: string }[]>([]);
-
-  useEffect(() => {
-    // Load any initial data if needed
-    loadInitialData();
-  }, []);
-
-  const loadInitialData = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      // Load expense types from API
-      const expenseTypesResponse = await expensesApi.getCategories();
-      setExpenseTypes(expenseTypesResponse?.data?.expense_types || expenseTypesResponse?.data || []);
-
-      // Set default employee name (in real app, get from auth context)
-      setEmployeeName('Current User');
-
-    } catch (error) {
-      setError('Failed to load expense types');
-      // Fallback expense types
-      setExpenseTypes([
-        { code: 'TRAVEL', name: 'Travel' },
-        { code: 'ACCOMMODATION', name: 'Accommodation' },
-        { code: 'MEALS', name: 'Meals' },
-        { code: 'OFFICE_SUPPLIES', name: 'Office Supplies' },
-        { code: 'COMMUNICATION', name: 'Communication' },
-        { code: 'MEDICAL', name: 'Medical' },
-        { code: 'TRAINING', name: 'Training' },
-        { code: 'OTHER', name: 'Other' }
-      ]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    await loadInitialData();
-    setRefreshing(false);
-  };
-
-  const addExpenseLine = () => {
-    const newExpense: ExpenseLine = {
-      id: Date.now().toString(),
-      expense_type: '',
-      description: '',
-      amount: 0,
-      date: new Date().toISOString().split('T')[0],
-      receipt_attached: false
-    };
-    setExpenses(prev => [...prev, newExpense]);
-  };
-
-  const updateExpense = (id: string, field: keyof ExpenseLine, value: any) => {
-    setExpenses(prev => prev.map(exp =>
-      exp.id === id ? { ...exp, [field]: value } : exp
-    ));
-  };
-
-  const removeExpense = (id: string) => {
-    if (expenses.length <= 1) return;
-    setExpenses(prev => prev.filter(exp => exp.id !== id));
-  };
-
-  const saveExpenseClaim = async () => {
-    setSaving(true);
-    try {
-      setError(null);
-
-      // Validate required fields
-      if (!employeeName.trim()) {
-        throw new Error('Employee name is required');
-      }
-
-      if (expenses.length === 0) {
-        throw new Error('At least one expense line is required');
-      }
-
-      // Validate expense lines
-      for (const expense of expenses) {
-        if (!expense.expense_type.trim()) {
-          throw new Error('Expense type is required for all lines');
-        }
-        if (!expense.description.trim()) {
-          throw new Error('Description is required for all lines');
-        }
-        if (expense.amount <= 0) {
-          throw new Error('Amount must be greater than 0 for all lines');
-        }
-      }
-
-      // Prepare expense claim data for API
-      const claimData = {
-        employee_name: employeeName,
-        claim_date: claimDate,
-        purpose: purpose,
-        expenses: expenses.map(expense => ({
-          expense_type: expense.expense_type,
-          description: expense.description,
-          amount: expense.amount,
-          expense_date: expense.date,
-          receipt_attached: expense.receipt_attached
-        }))
-      };
-
-      // Call the actual API to save the expense claim
-      const response = await expensesApi.create(claimData as any);
-      const claimResult = response.data?.data || response.data;
-
-      showFinancialEntryNotification({
-        title: 'Expense Claim Posted',
-        reference: claimResult?.claim_number,
-        amount: expenses.reduce((sum, expense) => sum + (expense.amount || 0), 0),
-        status: 'confirmed',
-        impacts: [
-          'This expense is now recorded in the system.',
-          'Your business cost goes up by this amount.',
-          'The team can now use this record for repayment and reports.'
-        ]
-      });
-
-      // Reset form after successful save
-      setExpenses([{ id: '1', expense_type: '', description: '', amount: 0, date: new Date().toISOString().split('T')[0], receipt_attached: false }]);
-      setPurpose('');
-
-    } catch (error) {
-      setError(error instanceof Error ? error.message : 'Error saving expense claim');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const totalAmount = expenses.reduce((sum, exp) => sum + (exp.amount || 0), 0);
-
-  return (
-    <div className="h-full bg-green-50">
-      <div className="h-full flex flex-col">
-        {/* Header */}
-        <ModuleHeader
-          title="Expense Claims"
-          documentNumber={`EXP-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`}
-          status={`Total: ₹${totalAmount.toFixed(2)}`}
-          icon={Receipt}
-          iconColor="text-orange-600"
-          onClose={onClose}
-          historyType="expense"
-          onSaveDraft={() => { }}
-          additionalActions={[
-            {
-              label: "Refresh",
-              onClick: handleRefresh,
-              variant: "primary",
-              icon: refreshing ? Loader2 : RefreshCw,
-              disabled: refreshing
-            },
-            {
-              label: saving ? 'Saving...' : 'Submit Claim',
-              onClick: saveExpenseClaim,
-              variant: 'primary',
-              disabled: !employeeName || expenses.length === 0 || saving
-            }
-          ] as any}
-        />
-
-        {/* Keyboard Shortcuts Help */}
-        <div className="bg-green-50 px-4 py-2 text-xs text-green-700 border-b border-green-200">
-          Keyboard shortcuts: <strong>Ctrl+S</strong> - Submit Claim | <strong>Ctrl+A</strong> - Add Expense | <strong>Esc</strong> - Close
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
-          <div className="max-w-6xl mx-auto space-y-6">
-
-            {/* Loading State */}
-            {isLoading && (
-              <div className="bg-white rounded-lg shadow-sm border border-green-200 p-8 mb-6">
-                <div className="text-center">
-                  <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-green-600" />
-                  <p className="text-gray-600">Loading expense claim form...</p>
-                </div>
-              </div>
-            )}
-
-            {/* Error State */}
-            {error && (
-              <div className="bg-white rounded-lg shadow-sm border border-red-200 p-6 mb-6">
-                <div className="text-center max-w-md mx-auto">
-                  <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-red-800 mb-2">Error</h3>
-                  <p className="text-red-700 mb-4">{error}</p>
-                  <button
-                    onClick={() => setError(null)}
-                    className="px-4 py-2 bg-red-100 text-red-700 rounded-md hover:bg-red-200 text-sm"
-                  >
-                    Dismiss
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Claim Header */}
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
-                <User className="w-5 h-5 mr-2 text-blue-600" />
-                Claim Details
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-600 mb-2">Employee Name</label>
-                  <input
-                    type="text"
-                    value={employeeName}
-                    onChange={(e) => setEmployeeName(e.target.value)}
-                    placeholder="Enter employee name"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-600 mb-2">Claim Date</label>
-                  <input
-                    type="date"
-                    value={claimDate}
-                    onChange={(e) => setClaimDate(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-600 mb-2">Total Amount</label>
-                  <div className="px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-lg font-semibold text-gray-900">
-                    ₹{totalAmount.toFixed(2)}
-                  </div>
-                </div>
-              </div>
-              <div className="mt-4">
-                <label className="block text-sm font-medium text-gray-600 mb-2">Purpose</label>
-                <textarea
-                  value={purpose}
-                  onChange={(e) => setPurpose(e.target.value)}
-                  placeholder="Enter purpose of expenses..."
-                  rows={2}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                />
-              </div>
-            </div>
-
-            {/* Expense Lines */}
-            <div className="bg-white rounded-lg border border-gray-200">
-              <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-                <h3 className="text-lg font-medium text-gray-900">Expense Items</h3>
-                <button
-                  onClick={addExpenseLine}
-                  className="px-3 py-2 text-orange-600 hover:text-orange-700 hover:bg-orange-50 rounded-lg flex items-center gap-2"
-                >
-                  <Plus className="w-4 h-4" />
-                  Add Expense
-                </button>
-              </div>
-
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Type</th>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Description</th>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Date</th>
-                      <th className="px-4 py-3 text-right text-sm font-medium text-gray-600">Amount</th>
-                      <th className="px-4 py-3 text-center text-sm font-medium text-gray-600">Receipt</th>
-                      <th className="px-4 py-3 text-center text-sm font-medium text-gray-600">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {expenses.map((expense) => (
-                      <tr key={expense.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3">
-                          <select
-                            value={expense.expense_type}
-                            onChange={(e) => updateExpense(expense.id, 'expense_type', e.target.value)}
-                            className="w-32 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-sm"
-                          >
-                            <option value="">Select type...</option>
-                            {expenseTypes.map(type => (
-                              <option key={type.code} value={type.code}>{type.name}</option>
-                            ))}
-                          </select>
-                        </td>
-                        <td className="px-4 py-3">
-                          <input
-                            type="text"
-                            value={expense.description}
-                            onChange={(e) => updateExpense(expense.id, 'description', e.target.value)}
-                            placeholder="Expense description..."
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-sm"
-                          />
-                        </td>
-                        <td className="px-4 py-3">
-                          <input
-                            type="date"
-                            value={expense.date}
-                            onChange={(e) => updateExpense(expense.id, 'date', e.target.value)}
-                            className="w-32 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-sm"
-                          />
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <input
-                            type="number"
-                            value={expense.amount || ''}
-                            onChange={(e) => updateExpense(expense.id, 'amount', parseFloat(e.target.value) || 0)}
-                            placeholder="0.00"
-                            step="0.01"
-                            className="w-24 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-right text-sm"
-                          />
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <input
-                            type="checkbox"
-                            checked={expense.receipt_attached}
-                            onChange={(e) => updateExpense(expense.id, 'receipt_attached', e.target.checked)}
-                            className="w-4 h-4 text-orange-600 focus:ring-orange-500 border-gray-300 rounded"
-                          />
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          {expenses.length > 1 && (
-                            <button
-                              onClick={() => removeExpense(expense.id)}
-                              className="p-1 text-red-600 hover:text-red-700 hover:bg-red-50 rounded"
-                            >
-                              <X className="w-4 h-4" />
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+type Workspace = 'prepare' | 'approve' | 'execute';
+type ReceiptUploadResult = {
+  state: 'pending' | 'verified' | 'failed';
+  message: string;
 };
+const moneyOptions = { scale: 2, maximumWholeDigits: 20 } as const;
+const emptyLine = (): ExpenseDraftLine => ({
+  id: clientUuid(), expense_date: '', expense_account_id: '', description: '',
+  merchant_name: '', receipt_attachment_id: '', claimed_amount: '',
+});
+const messageFrom = (error: any): string => {
+  const detail = error?.response?.data?.detail;
+  return detail?.message || detail || error?.message || 'Canonical expense-claim request failed.';
+};
+
+const ExpenseClaimsFlow: React.FC<ExpenseClaimsFlowProps> = ({ onClose, open = true }) => {
+  const [workspace, setWorkspace] = useState<Workspace>('prepare');
+  const [branches, setBranches] = useState<BranchChoice[]>([]);
+  const [branchId, setBranchId] = useState('');
+  const [context, setContext] = useState<ExpenseClaimContext | null>(null);
+  const [periodStart, setPeriodStart] = useState('');
+  const [periodEnd, setPeriodEnd] = useState('');
+  const [purpose, setPurpose] = useState('');
+  const [reimbursementAccountId, setReimbursementAccountId] = useState('');
+  const [lines, setLines] = useState<ExpenseDraftLine[]>([emptyLine()]);
+  const [prepared, setPrepared] = useState<CanonicalCommandPreview | null>(null);
+  const [commandId, setCommandId] = useState('');
+  const [review, setReview] = useState<CanonicalCommandReview | null>(null);
+  const [status, setStatus] = useState<CanonicalCommandExecution | null>(null);
+  const [posted, setPosted] = useState<PostedExpenseClaim | null>(null);
+  const [receiptDate, setReceiptDate] = useState('');
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const [uploadResult, setUploadResult] = useState<ReceiptUploadResult | null>(null);
+  const [confirmed, setConfirmed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const prepareKey = useRef(`erp-web-expense-claim-prepare:${clientUuid()}`);
+  const approvalKey = useRef(clientUuid());
+  const executeKey = useRef(clientUuid());
+  const receiptInput = useRef<HTMLInputElement | null>(null);
+
+  const invalidatePrepared = useCallback(() => {
+    setPrepared(null); setStatus(null); setPosted(null); setConfirmed(false);
+    prepareKey.current = `erp-web-expense-claim-prepare:${clientUuid()}`;
+  }, []);
+  const loadBranches = useCallback(async () => {
+    setBusy(true); setError('');
+    try {
+      const response = await branchesApi.getAll();
+      const raw = Array.isArray(response.data?.branches) ? response.data.branches : [];
+      const next: BranchChoice[] = raw.filter((row: any) => row?.is_active !== false
+        && isCanonicalUuid(String(row?.branch_id || ''))
+        && String(row?.branch_code || '').trim() && String(row?.branch_name || '').trim())
+        .map((row: any) => ({ branch_id: String(row.branch_id), branch_code: String(row.branch_code), branch_name: String(row.branch_name) }));
+      if (!next.length) throw new Error('No active canonical branch is available for expense claims.');
+      setBranches(next);
+      setBranchId(current => next.some(row => row.branch_id === current) ? current : '');
+    } catch (requestError) {
+      setBranches([]); setBranchId(''); setContext(null); setError(messageFrom(requestError));
+    } finally { setBusy(false); }
+  }, []);
+  const loadContext = useCallback(async (selectedBranch: string) => {
+    if (!selectedBranch) return;
+    setBusy(true); setError(''); setContext(null); invalidatePrepared();
+    try {
+      const next = (await canonicalExpenseClaimsApi.context(selectedBranch)).data;
+      setContext(next); setPeriodStart(''); setPeriodEnd('');
+      setReimbursementAccountId('');
+      setLines([emptyLine()]);
+      setReceiptDate(''); setReceiptFile(null); setUploadResult(null);
+      if (receiptInput.current) receiptInput.current.value = '';
+    } catch (requestError) { setError(messageFrom(requestError)); }
+    finally { setBusy(false); }
+  }, [invalidatePrepared]);
+  useEffect(() => { if (open) void loadBranches(); }, [loadBranches, open]);
+  useEffect(() => { if (open && branchId) void loadContext(branchId); }, [branchId, loadContext, open]);
+
+  const total = useMemo(() => {
+    if (lines.some(line => !line.claimed_amount.trim())) return null;
+    try { return addExactDecimals(lines.map(line => line.claimed_amount), 'Expense total', moneyOptions); }
+    catch { return null; }
+  }, [lines]);
+  const usedReceipts = useMemo(() => new Set(lines.map(line => line.receipt_attachment_id).filter(Boolean)), [lines]);
+  const updateLine = (id: string, patch: Partial<ExpenseDraftLine>) => {
+    setLines(current => current.map(line => line.id === id ? { ...line, ...patch } : line)); invalidatePrepared();
+  };
+  const chooseReceipt = (line: ExpenseDraftLine, receiptId: string) => {
+    const receipt = context?.receipts.find(row => row.receipt_attachment_id === receiptId);
+    updateLine(line.id, { receipt_attachment_id: receiptId, expense_date: receipt?.document_date || '' });
+  };
+  const changeCommandId = (value: string) => {
+    setCommandId(value); setReview(null); setStatus(null); setPosted(null); setConfirmed(false);
+    approvalKey.current = clientUuid(); executeKey.current = clientUuid();
+  };
+
+  const uploadReceipt = async () => {
+    if (!context || !receiptFile || !receiptDate) return;
+    setBusy(true); setError('');
+    setUploadResult({ state: 'pending', message: 'Receipt upload in progress.' });
+    invalidatePrepared();
+    try {
+      const uploaded = (await canonicalExpenseClaimsApi.uploadReceipt(
+        context.branch_id, receiptDate, receiptFile,
+      )).data;
+      const refreshed = (await canonicalExpenseClaimsApi.context(context.branch_id)).data;
+      if (!refreshed.receipts.some(row => row.receipt_attachment_id === uploaded.attachment_id)) {
+        throw new Error('Verified receipt is not available in authoritative claim context. Refresh before continuing.');
+      }
+      setContext(refreshed);
+      setLines(current => {
+        let selected = false;
+        const next = current.map(line => {
+          if (!selected && !line.receipt_attachment_id) {
+            selected = true;
+            return { ...line, receipt_attachment_id: uploaded.attachment_id, expense_date: uploaded.document_date };
+          }
+          return line;
+        });
+        return selected ? next : [...next, { ...emptyLine(), receipt_attachment_id: uploaded.attachment_id, expense_date: uploaded.document_date }];
+      });
+      setUploadResult({
+        state: 'verified',
+        message: `Receipt verified and selected. ${uploaded.original_filename} — SHA-256 ${uploaded.sha256.slice(0, 12)}…`,
+      });
+      setReceiptDate(''); setReceiptFile(null);
+      if (receiptInput.current) receiptInput.current.value = '';
+    } catch (requestError) {
+      const message = messageFrom(requestError);
+      setUploadResult({ state: 'failed', message: `Receipt upload failed. ${message}` });
+      setError(message);
+    }
+    finally { setBusy(false); }
+  };
+
+  const prepare = async () => {
+    if (!context) return;
+    setBusy(true); setError('');
+    try {
+      const payload = buildExpenseClaimPayload(context, {
+        idempotency_key: prepareKey.current, period_start: periodStart, period_end: periodEnd,
+        purpose, reimbursement_account_id: reimbursementAccountId,
+        lines: lines.map(({ id: _id, ...line }) => line),
+      });
+      const response = await prepareExpenseClaim(payload);
+      setPrepared(response.data); setCommandId(response.data.command_request_id);
+    } catch (requestError) { setError(messageFrom(requestError)); }
+    finally { setBusy(false); }
+  };
+  const fetchReview = async () => {
+    setBusy(true); setError(''); setReview(null); setConfirmed(false);
+    try {
+      const next = (await getCanonicalCommandReview(commandId.trim())).data;
+      if (next.capability_code !== 'finance.expense_claim.prepare') throw new Error('This command is not an expense claim.');
+      setReview(next);
+    } catch (requestError) { setError(messageFrom(requestError)); }
+    finally { setBusy(false); }
+  };
+  const approve = async () => {
+    if (!review || !confirmed) return;
+    setBusy(true); setError('');
+    try {
+      await approveCanonicalAction('finance.expense_claim.prepare', review, approvalKey.current);
+      setReview({ ...review, status: 'approved' }); setConfirmed(false);
+    } catch (requestError) { setError(messageFrom(requestError)); }
+    finally { setBusy(false); }
+  };
+  const fetchStatus = async () => {
+    setBusy(true); setError(''); setStatus(null); setPosted(null); setConfirmed(false);
+    try {
+      const next = (await getCanonicalCommandStatus(commandId.trim())).data;
+      setStatus(next);
+      if (['executed', 'succeeded'].includes(next.status)) setPosted((await canonicalExpenseClaimsApi.readback(commandId.trim())).data);
+    } catch (requestError) { setError(messageFrom(requestError)); }
+    finally { setBusy(false); }
+  };
+  const execute = async () => {
+    if (!status || !confirmed) return;
+    setBusy(true); setError('');
+    try {
+      const result = await executeApprovedExpenseClaim(status, executeKey.current);
+      if (result.command_request_id !== commandId.trim()) throw new Error('Expense execution identity differs from the approved command. Query status before retrying.');
+      setStatus(result); setPosted((await canonicalExpenseClaimsApi.readback(commandId.trim())).data); setConfirmed(false);
+    } catch (requestError) { setError(messageFrom(requestError)); }
+    finally { setBusy(false); }
+  };
+
+  if (!open) return null;
+  return <div className="flex h-full flex-col bg-slate-50">
+    <ModuleHeader title="Expense Claims" icon={Receipt} iconColor="text-blue-600" onClose={onClose} status={posted ? 'Posted' : prepared ? 'Prepared' : 'New'} />
+    <main className="flex-1 overflow-auto p-5" data-testid="canonical-immutable-preview"><div className="mx-auto max-w-6xl space-y-4">
+      <nav aria-label="Expense claim lifecycle" className="flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-white p-2">
+        {([['prepare', '1. Prepare claim'], ['approve', '2. Independent approval'], ['execute', '3. Execute & verify']] as const).map(([id, label]) => <button key={id} type="button" aria-pressed={workspace === id} onClick={() => { setWorkspace(id); setError(''); setConfirmed(false); }} className={`min-h-11 rounded-lg px-4 text-sm font-medium ${workspace === id ? 'bg-blue-600 text-white' : 'text-slate-700 hover:bg-slate-100'}`}>{label}</button>)}
+      </nav>
+      {error && <div role="alert" className="flex gap-2 rounded-lg border border-red-200 bg-red-50 p-4 text-red-800"><AlertCircle className="h-5 w-5 shrink-0" />{error}</div>}
+      {busy && <div role="status" className="flex gap-2 rounded-lg border bg-white p-4"><Loader2 className="h-5 w-5 animate-spin" />Working with the canonical API…</div>}
+      {workspace === 'prepare' && <PrepareWorkspace busy={busy} branches={branches} branchId={branchId} setBranchId={setBranchId} context={context} loadBranches={loadBranches} receiptDate={receiptDate} setReceiptDate={setReceiptDate} receiptFile={receiptFile} setReceiptFile={setReceiptFile} receiptInput={receiptInput} uploadReceipt={uploadReceipt} uploadResult={uploadResult} periodStart={periodStart} setPeriodStart={value => { setPeriodStart(value); invalidatePrepared(); }} periodEnd={periodEnd} setPeriodEnd={value => { setPeriodEnd(value); invalidatePrepared(); }} purpose={purpose} setPurpose={value => { setPurpose(value); invalidatePrepared(); }} reimbursementAccountId={reimbursementAccountId} setReimbursementAccountId={value => { setReimbursementAccountId(value); invalidatePrepared(); }} lines={lines} setLines={setLines} updateLine={updateLine} chooseReceipt={chooseReceipt} usedReceipts={usedReceipts} total={total} prepare={prepare} prepared={prepared} invalidatePrepared={invalidatePrepared} />}
+      {workspace === 'approve' && <ApproveWorkspace busy={busy} commandId={commandId} changeCommandId={changeCommandId} fetchReview={fetchReview} review={review} confirmed={confirmed} setConfirmed={setConfirmed} approve={approve} />}
+      {workspace === 'execute' && <ExecuteWorkspace busy={busy} commandId={commandId} changeCommandId={changeCommandId} fetchStatus={fetchStatus} status={status} posted={posted} confirmed={confirmed} setConfirmed={setConfirmed} execute={execute} />}
+    </div></main>
+  </div>;
+};
+
+const PrepareWorkspace = (props: any) => <>
+  <section className="rounded-xl border border-slate-200 bg-white p-5">
+    <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-lg font-semibold">Authoritative claim context</h2><p className="text-sm text-slate-600">The server supplies claimant identity, India business date, eligible accounts, and verified unused receipts.</p></div><button type="button" onClick={() => void props.loadBranches()} disabled={props.busy} className="min-h-11 rounded-lg border px-4"><RefreshCw className="mr-2 inline h-4 w-4" />Refresh</button></div>
+    <p className="mt-3 text-sm text-slate-600">Required: select a branch, exact claim period, reimbursement liability, verified unused receipt, expense account, merchant, description, amount, and business purpose.</p>
+    <div className="mt-4 grid gap-4 md:grid-cols-3">
+      <label className="text-sm font-medium">Branch<select aria-label="Branch" value={props.branchId} onChange={event => props.setBranchId(event.target.value)} className="mt-1 min-h-11 w-full rounded-lg border px-3"><option value="">Select branch</option>{props.branches.map((branch: BranchChoice) => <option key={branch.branch_id} value={branch.branch_id}>{branch.branch_code} — {branch.branch_name}</option>)}</select></label>
+      <label className="text-sm font-medium">Claimant<input value={props.context?.claimant_display_name || ''} readOnly className="mt-1 min-h-11 w-full rounded-lg border bg-slate-50 px-3" /></label>
+      <label className="text-sm font-medium">Server business date<input value={props.context?.business_date || ''} readOnly className="mt-1 min-h-11 w-full rounded-lg border bg-slate-50 px-3" /></label>
+    </div>
+    {props.context && (props.context.expense_accounts.length === 0 || props.context.reimbursement_accounts.length === 0 || props.context.receipts.length === 0) && <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">Posting is unavailable until this branch has an active INR expense account, a member-reimbursement liability account, and at least one verified unused expense receipt.</p>}
+    {props.context && <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-4"><div className="flex items-start gap-3"><Upload className="mt-0.5 h-5 w-5 shrink-0 text-blue-700" aria-hidden="true" /><div className="min-w-0 flex-1"><h3 className="font-semibold text-blue-950">Add a receipt securely</h3><p className="text-sm text-blue-900">Private PDF only, up to 10 MiB. The server reads it back and verifies SHA-256 before it becomes selectable.</p><div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,12rem)_minmax(0,1fr)_auto] md:items-end"><label className="text-sm font-medium text-slate-800">Receipt date<input aria-label="Receipt date" type="date" max={props.context.business_date} value={props.receiptDate} onChange={event => { props.setReceiptDate(event.target.value); props.invalidatePrepared(); }} className="mt-1 min-h-11 w-full rounded-lg border bg-white px-3" /></label><label className="text-sm font-medium text-slate-800">Receipt PDF<input aria-label="Receipt PDF" ref={props.receiptInput} type="file" accept="application/pdf,.pdf" onChange={event => { props.setReceiptFile(event.target.files?.[0] || null); props.invalidatePrepared(); }} className="mt-1 block min-h-11 w-full rounded-lg border bg-white px-3 py-2 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1" /></label><button type="button" onClick={() => void props.uploadReceipt()} disabled={props.busy || !props.receiptDate || !props.receiptFile} className="min-h-11 rounded-lg bg-blue-700 px-4 font-medium text-white disabled:bg-slate-300">Upload and verify receipt</button></div>{props.uploadResult && <p data-testid="expense-receipt-upload-result" role={props.uploadResult.state === 'failed' ? 'alert' : 'status'} aria-label="Expense receipt upload result" aria-live={props.uploadResult.state === 'failed' ? 'assertive' : 'polite'} className={`mt-3 break-all text-sm font-medium ${props.uploadResult.state === 'failed' ? 'text-red-800' : props.uploadResult.state === 'verified' ? 'text-emerald-800' : 'text-blue-900'}`}>{props.uploadResult.message}</p>}</div></div></div>}
+    {!props.context && <div className="mt-5 flex justify-end"><button type="button" disabled className="min-h-11 rounded-lg bg-slate-300 px-6 font-medium text-white">Prepare immutable preview</button></div>}
+  </section>
+  {props.context && <section className="rounded-xl border border-slate-200 bg-white p-5"><h2 className="text-lg font-semibold">Claim details</h2><p className="text-sm text-slate-600">Gross receipt expense only. GST input credit, withholding, FX, mileage, per diem, advances, reversals, and partial approval fail closed.</p><div className="mt-4 grid gap-4 md:grid-cols-3">
+    <label className="text-sm font-medium">Period start<input aria-label="Period start" type="date" max={props.context.business_date} value={props.periodStart} onChange={event => props.setPeriodStart(event.target.value)} className="mt-1 min-h-11 w-full rounded-lg border px-3" /></label>
+    <label className="text-sm font-medium">Period end<input aria-label="Period end" type="date" min={props.periodStart} max={props.context.business_date} value={props.periodEnd} onChange={event => props.setPeriodEnd(event.target.value)} className="mt-1 min-h-11 w-full rounded-lg border px-3" /></label>
+    <label className="text-sm font-medium">Reimbursement liability<select aria-label="Reimbursement liability" value={props.reimbursementAccountId} onChange={event => props.setReimbursementAccountId(event.target.value)} className="mt-1 min-h-11 w-full rounded-lg border px-3"><option value="">Select account</option>{props.context.reimbursement_accounts.map((account: any) => <option key={account.account_id} value={account.account_id}>{account.account_code} — {account.account_name}</option>)}</select></label>
+  </div><label className="mt-4 block text-sm font-medium">Business purpose<textarea aria-label="Business purpose" value={props.purpose} onChange={event => props.setPurpose(event.target.value)} rows={2} maxLength={1024} className="mt-1 w-full rounded-lg border px-3 py-2" /></label></section>}
+  {props.context && <section className="rounded-xl border border-slate-200 bg-white"><div className="flex flex-wrap items-center justify-between gap-3 border-b p-5"><div><h2 className="text-lg font-semibold">Verified receipt lines</h2><p className="text-sm text-slate-600">Receipt date is immutable evidence and becomes the expense date.</p></div><button type="button" onClick={() => { props.setLines((current: ExpenseDraftLine[]) => [...current, emptyLine()]); props.invalidatePrepared(); }} className="min-h-11 rounded-lg border px-4"><Plus className="mr-2 inline h-4 w-4" />Add receipt</button></div>
+    <div className="space-y-4 p-5">{props.lines.map((line: ExpenseDraftLine, index: number) => <fieldset key={`${line.id}:${index}`} className="rounded-lg border p-4"><legend className="px-2 text-sm font-semibold">Expense {index + 1}</legend><div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <label className="text-sm font-medium">Verified unused receipt<select value={line.receipt_attachment_id} onChange={event => props.chooseReceipt(line, event.target.value)} className="mt-1 min-h-11 w-full rounded-lg border px-3"><option value="">Select receipt</option>{props.context.receipts.map((receipt: any) => <option key={receipt.receipt_attachment_id} value={receipt.receipt_attachment_id} disabled={props.usedReceipts.has(receipt.receipt_attachment_id) && receipt.receipt_attachment_id !== line.receipt_attachment_id}>{receipt.original_filename} — {receipt.document_date} — {receipt.status}</option>)}</select></label>
+      <label className="text-sm font-medium">Selected receipt date<input value={line.expense_date} readOnly className="mt-1 min-h-11 w-full rounded-lg border bg-slate-50 px-3" /></label>
+      <label className="text-sm font-medium">Expense account<select aria-label="Expense account" value={line.expense_account_id} onChange={event => props.updateLine(line.id, { expense_account_id: event.target.value })} className="mt-1 min-h-11 w-full rounded-lg border px-3"><option value="">Select account</option>{props.context.expense_accounts.map((account: any) => <option key={account.account_id} value={account.account_id}>{account.account_code} — {account.account_name}</option>)}</select></label>
+      <label className="text-sm font-medium">Merchant<input aria-label="Merchant" value={line.merchant_name} onChange={event => props.updateLine(line.id, { merchant_name: event.target.value })} maxLength={256} className="mt-1 min-h-11 w-full rounded-lg border px-3" /></label>
+      <label className="text-sm font-medium">Description<input aria-label="Description" value={line.description} onChange={event => props.updateLine(line.id, { description: event.target.value })} maxLength={1024} className="mt-1 min-h-11 w-full rounded-lg border px-3" /></label>
+      <label className="text-sm font-medium">Gross INR amount<input aria-label="Gross INR amount" inputMode="decimal" value={line.claimed_amount} onChange={event => props.updateLine(line.id, { claimed_amount: event.target.value })} placeholder="0.00" className="mt-1 min-h-11 w-full rounded-lg border px-3 text-right" /></label>
+    </div>{props.lines.length > 1 && <button type="button" aria-label={`Remove expense ${index + 1}`} onClick={() => { props.setLines((current: ExpenseDraftLine[]) => current.filter(row => row.id !== line.id)); props.invalidatePrepared(); }} className="mt-4 min-h-11 rounded-lg px-3 text-red-700 hover:bg-red-50"><Trash2 className="mr-2 inline h-4 w-4" />Remove</button>}</fieldset>)}</div>
+    <div className="flex flex-wrap items-center justify-between gap-4 border-t p-5"><p className="text-lg font-semibold">Exact total: {props.total === null ? 'Invalid amount' : formatExactCurrency(props.total, 'Expense total')}</p><button type="button" onClick={() => void props.prepare()} disabled={props.busy || !props.total || !props.periodStart || !props.periodEnd || !props.reimbursementAccountId || props.context.expense_accounts.length === 0 || props.context.reimbursement_accounts.length === 0 || props.context.receipts.length === 0} className="min-h-11 rounded-lg bg-blue-600 px-6 font-medium text-white disabled:bg-slate-300">Prepare immutable preview</button></div>
+  </section>}
+  {props.prepared && <section className="rounded-xl border border-blue-200 bg-white p-5"><h2 className="text-lg font-semibold">Prepared — independent approval required</h2><p className="mt-1 text-sm text-slate-600">Nothing has posted. Give this command ID to a different authorized checker.</p><dl className="mt-4 grid gap-3 rounded-lg bg-blue-50 p-4 md:grid-cols-2"><div><dt className="text-xs uppercase text-slate-500">Command ID</dt><dd className="break-all font-mono text-sm">{props.prepared.command_request_id}</dd></div><div><dt className="text-xs uppercase text-slate-500">Exact claim</dt><dd className="font-semibold">{props.total && formatExactCurrency(props.total, 'Prepared expense total')}</dd></div><div className="md:col-span-2"><dt className="text-xs uppercase text-slate-500">Preview hash</dt><dd className="break-all font-mono text-xs">{props.prepared.preview_hash}</dd></div></dl></section>}
+</>;
+
+const ApproveWorkspace = (props: any) => <section className="rounded-xl border border-slate-200 bg-white p-5"><h2 className="text-lg font-semibold">Independent checker approval</h2><p className="text-sm text-slate-600">Sign in as a different authorized reviewer. The server rejects self-approval and cross-tenant access.</p><div className="mt-4 flex flex-wrap gap-3"><label className="min-w-64 flex-1 text-sm font-medium">Command ID<input value={props.commandId} onChange={event => props.changeCommandId(event.target.value)} className="mt-1 min-h-11 w-full rounded-lg border px-3" /></label><button type="button" onClick={() => void props.fetchReview()} disabled={props.busy || !props.commandId.trim()} className="min-h-11 self-end rounded-lg border px-5">Load immutable review</button></div>{props.review && <div className="mt-5 rounded-lg border p-4"><p className="font-medium">{props.review.command_type} · {props.review.status}</p><p className="mt-1 break-all text-xs text-slate-600">{props.review.preview_hash}</p><pre className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap rounded bg-slate-50 p-3 text-xs">{props.review.preview_canonical_json}</pre>{['prepared', 'pending_approval'].includes(props.review.status) && <><label className="mt-4 flex min-h-11 items-center gap-3 rounded-lg border p-3"><input type="checkbox" checked={props.confirmed} onChange={event => props.setConfirmed(event.target.checked)} /><span>I independently reviewed the exact claimant, receipts, accounts, dates, tax treatment, and amount.</span></label><button type="button" onClick={() => void props.approve()} disabled={!props.confirmed || props.busy} className="mt-4 min-h-11 rounded-lg bg-blue-600 px-6 font-medium text-white disabled:bg-slate-300">Approve exact preview</button></>}</div>}</section>;
+
+const ExecuteWorkspace = (props: any) => <section className="rounded-xl border border-slate-200 bg-white p-5"><h2 className="text-lg font-semibold">Requester execution and recovery</h2><p className="text-sm text-slate-600">Return as the original requester. Status and readback are GET-only; execution occurs once after separate approval.</p><div className="mt-4 flex flex-wrap gap-3"><label className="min-w-64 flex-1 text-sm font-medium">Command ID<input value={props.commandId} onChange={event => props.changeCommandId(event.target.value)} className="mt-1 min-h-11 w-full rounded-lg border px-3" /></label><button type="button" onClick={() => void props.fetchStatus()} disabled={props.busy || !props.commandId.trim()} className="min-h-11 self-end rounded-lg border px-5">Check status / recover</button></div>{props.status && !props.posted && <div className="mt-5 rounded-lg border p-4"><p className="font-medium">Status: {props.status.status}</p><p className="break-all text-xs text-slate-600">{props.status.preview_hash}</p>{props.status.status === 'approved' && <><label className="mt-4 flex min-h-11 items-center gap-3 rounded-lg border p-3"><input type="checkbox" checked={props.confirmed} onChange={event => props.setConfirmed(event.target.checked)} /><span>I am the original requester and authorize one idempotent execution of this approved preview.</span></label><button type="button" onClick={() => void props.execute()} disabled={!props.confirmed || props.busy} className="mt-4 min-h-11 rounded-lg bg-blue-600 px-6 font-medium text-white disabled:bg-slate-300">Execute approved claim</button></>}</div>}{props.posted && <div className="mt-5 flex gap-3 rounded-lg border border-green-200 bg-green-50 p-5 text-green-900"><CheckCircle className="h-6 w-6 shrink-0" /><div><h3 className="font-semibold">Posted and reconciled</h3><p className="break-all font-mono text-xs">{props.posted.expense_claim_id}</p><p>{props.posted.claim_number} · {formatExactCurrency(props.posted.approved_amount, 'Posted expense')}</p><p className="text-sm">{props.posted.lines.length} verified receipt line{props.posted.lines.length === 1 ? '' : 's'}; journal debit {formatExactCurrency(props.posted.journal_debit_total)} equals credit {formatExactCurrency(props.posted.journal_credit_total)}. Accounting event {props.posted.accounting_event_id} was loaded from canonical readback.</p></div></div>}</section>;
 
 export default ExpenseClaimsFlow;

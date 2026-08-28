@@ -1,3 +1,6 @@
-# Isolated compatibility environment only. Do not merge into backend/requirements.txt.
+# Isolated Python 3.11 MCP service. Do not merge into backend/requirements.txt.
 mcp==2.0.0
+httpx==0.28.1
+jsonschema==4.25.1
+PyJWT[crypto]==2.13.0
 packaging==25.0

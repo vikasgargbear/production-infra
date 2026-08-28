@@ -1,0 +1,191 @@
+{
+  "enforcements": [
+    {
+      "enforcement": "constraint_trigger",
+      "invariant": "agent_grants_state_expiry_and_revocation",
+      "requirement_sha256": "8ab96a78f456eeb2ee71592e57dd01f5d9d6346cce33b2e8bf4290930bca1a3b",
+      "reviewed": true,
+      "statements": [
+        "CREATE SCHEMA \"erp_stable_invariants\" AUTHORIZATION \"erp_migration_owner\"",
+        "REVOKE ALL ON SCHEMA \"erp_stable_invariants\" FROM PUBLIC, \"erp_app\", \"erp_runtime\"",
+        "CREATE FUNCTION \"erp_stable_invariants\".\"guard_agent_grant\"()\nRETURNS trigger\nLANGUAGE plpgsql\nSECURITY INVOKER\nSET search_path = ''\nAS $function$\nBEGIN\n    IF TG_OP = 'INSERT' AND NEW.status NOT IN ('pending_consent','active') THEN\n        RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'new agent grant must be pending consent or validly active';\n    END IF;\n    IF TG_OP = 'UPDATE' AND (\n       OLD.status = 'pending_consent' AND NEW.status NOT IN ('pending_consent','active','revoked','expired')\n       OR OLD.status = 'active' AND NEW.status NOT IN ('active','suspended','revoked','expired')\n       OR OLD.status = 'suspended' AND NEW.status NOT IN ('suspended','active','revoked','expired')\n       OR OLD.status IN ('revoked','expired') AND NEW.status IS DISTINCT FROM OLD.status\n    ) THEN\n        RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'invalid agent grant lifecycle transition';\n    END IF;\n    IF NEW.status = 'active' AND (\n        NEW.consented_by_membership_id IS DISTINCT FROM NEW.subject_membership_id\n        OR NEW.consented_at IS NULL\n        OR NEW.granted_by_membership_id IS NULL\n        OR NEW.granted_at IS NULL\n        OR NEW.expires_at <= pg_catalog.transaction_timestamp()\n        OR (NEW.authorization_mode = 'admin_approved'\n            AND NEW.granted_by_membership_id IS NOT DISTINCT FROM NEW.subject_membership_id)\n    ) THEN\n        RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'active agent grant lacks valid consent or administrator separation';\n    END IF;\n    IF TG_OP = 'UPDATE' AND OLD.status <> 'pending_consent' AND ROW(\n        NEW.subject_membership_id, NEW.client_id, NEW.branch_id, NEW.authorization_mode,\n        NEW.consent_version, NEW.consent_text_hash, NEW.consented_by_membership_id,\n        NEW.consented_at, NEW.granted_by_membership_id, NEW.granted_at, NEW.expires_at\n    ) IS DISTINCT FROM ROW(\n        OLD.subject_membership_id, OLD.client_id, OLD.branch_id, OLD.authorization_mode,\n        OLD.consent_version, OLD.consent_text_hash, OLD.consented_by_membership_id,\n        OLD.consented_at, OLD.granted_by_membership_id, OLD.granted_at, OLD.expires_at\n    ) THEN\n        RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'consented agent grant scope is immutable';\n    END IF;\n    IF TG_OP = 'UPDATE' AND OLD.status IN ('revoked','expired') AND NEW IS DISTINCT FROM OLD THEN\n        RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'terminal agent grant is immutable';\n    END IF;\n    RETURN NEW;\nEND\n$function$",
+        "ALTER FUNCTION \"erp_stable_invariants\".\"guard_agent_grant\"() OWNER TO \"erp_migration_owner\"",
+        "REVOKE ALL ON FUNCTION \"erp_stable_invariants\".\"guard_agent_grant\"() FROM PUBLIC, \"erp_app\", \"erp_runtime\"",
+        "CREATE CONSTRAINT TRIGGER \"agent_grants_state_guard_ct\" AFTER INSERT OR UPDATE ON \"automation\".\"agent_grants\" DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"erp_stable_invariants\".\"guard_agent_grant\"()",
+        "CREATE FUNCTION \"erp_stable_invariants\".\"guard_agent_grant_execution\"()\nRETURNS trigger\nLANGUAGE plpgsql\nSECURITY INVOKER\nSET search_path = ''\nAS $function$\nDECLARE\n    grant_row automation.agent_grants%ROWTYPE;\nBEGIN\n    IF NEW.status = 'executing'\n       AND (CASE WHEN TG_OP = 'INSERT' THEN true ELSE OLD.status IS DISTINCT FROM 'executing' END) THEN\n        SELECT * INTO grant_row\n          FROM automation.agent_grants AS agent_grant\n         WHERE agent_grant.org_id = NEW.org_id\n           AND agent_grant.id = NEW.agent_grant_id\n         FOR SHARE;\n        IF NOT FOUND\n           OR grant_row.status <> 'active'\n           OR grant_row.expires_at <= pg_catalog.transaction_timestamp()\n           OR grant_row.consented_by_membership_id IS DISTINCT FROM grant_row.subject_membership_id\n           OR (grant_row.authorization_mode = 'admin_approved'\n               AND grant_row.granted_by_membership_id IS NOT DISTINCT FROM grant_row.subject_membership_id) THEN\n            RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'command execution requires an active unexpired consented agent grant';\n        END IF;\n    END IF;\n    RETURN NEW;\nEND\n$function$",
+        "ALTER FUNCTION \"erp_stable_invariants\".\"guard_agent_grant_execution\"() OWNER TO \"erp_migration_owner\"",
+        "REVOKE ALL ON FUNCTION \"erp_stable_invariants\".\"guard_agent_grant_execution\"() FROM PUBLIC, \"erp_app\", \"erp_runtime\"",
+        "CREATE CONSTRAINT TRIGGER \"command_requests_agent_grant_execution_ct\" AFTER INSERT OR UPDATE ON \"automation\".\"command_requests\" DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"erp_stable_invariants\".\"guard_agent_grant_execution\"()"
+      ],
+      "table": "automation.agent_grants"
+    },
+    {
+      "enforcement": "constraint_trigger",
+      "invariant": "command_approval_exact_preview",
+      "requirement_sha256": "b44c615ba8674447a6eba3857adc5c6d8b545756b91c6b883c7f7e9c59d556d3",
+      "reviewed": true,
+      "statements": [
+        "CREATE FUNCTION \"erp_stable_invariants\".\"guard_command_approval\"()\nRETURNS trigger\nLANGUAGE plpgsql\nSECURITY INVOKER\nSET search_path = ''\nAS $function$\nDECLARE\n    request_row automation.command_requests%ROWTYPE;\nBEGIN\n    IF TG_OP <> 'INSERT' THEN\n        RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'command approvals are append-only';\n    END IF;\n    SELECT * INTO request_row\n      FROM automation.command_requests AS request\n     WHERE request.org_id = NEW.org_id\n       AND request.id = NEW.command_request_id\n     FOR SHARE;\n    IF NOT FOUND OR request_row.expires_at <= pg_catalog.transaction_timestamp() THEN\n        RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'command approval requires a current unexpired request';\n    END IF;\n    IF NEW.preview_hash IS DISTINCT FROM request_row.preview_hash\n       OR NEW.aggregate_version_hash IS DISTINCT FROM request_row.aggregate_version_hash THEN\n        RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'command approval hashes do not match the current request';\n    END IF;\n    RETURN NEW;\nEND\n$function$",
+        "ALTER FUNCTION \"erp_stable_invariants\".\"guard_command_approval\"() OWNER TO \"erp_migration_owner\"",
+        "REVOKE ALL ON FUNCTION \"erp_stable_invariants\".\"guard_command_approval\"() FROM PUBLIC, \"erp_app\", \"erp_runtime\"",
+        "CREATE CONSTRAINT TRIGGER \"command_approvals_exact_preview_ct\" AFTER INSERT OR UPDATE OR DELETE ON \"automation\".\"command_approvals\" DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"erp_stable_invariants\".\"guard_command_approval\"()",
+        "CREATE FUNCTION \"erp_stable_invariants\".\"guard_approved_command_snapshot\"()\nRETURNS trigger\nLANGUAGE plpgsql\nSECURITY INVOKER\nSET search_path = ''\nAS $function$\nBEGIN\n    IF (NEW.preview_hash IS DISTINCT FROM OLD.preview_hash\n        OR NEW.aggregate_version_hash IS DISTINCT FROM OLD.aggregate_version_hash)\n       AND EXISTS (\n            SELECT 1 FROM automation.command_approvals AS approval\n             WHERE approval.org_id = OLD.org_id\n               AND approval.command_request_id = OLD.id\n       ) THEN\n        RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'an approved command snapshot cannot be replaced';\n    END IF;\n    RETURN NEW;\nEND\n$function$",
+        "ALTER FUNCTION \"erp_stable_invariants\".\"guard_approved_command_snapshot\"() OWNER TO \"erp_migration_owner\"",
+        "REVOKE ALL ON FUNCTION \"erp_stable_invariants\".\"guard_approved_command_snapshot\"() FROM PUBLIC, \"erp_app\", \"erp_runtime\"",
+        "CREATE CONSTRAINT TRIGGER \"command_requests_approved_snapshot_ct\" AFTER UPDATE ON \"automation\".\"command_requests\" DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"erp_stable_invariants\".\"guard_approved_command_snapshot\"()"
+      ],
+      "table": "automation.command_approvals"
+    },
+    {
+      "enforcement": "exclusion_constraint",
+      "invariant": "commercial_charge_tax_profiles_no_overlap",
+      "requirement_sha256": "ec572f7a23e3bfc3304c748f410bfc4d78b8ae558e37ce7989fbca88991fc3b8",
+      "reviewed": true,
+      "statements": [
+        "ALTER TABLE \"catalog\".\"commercial_charge_tax_profiles\"\nADD CONSTRAINT \"commercial_charge_tax_profiles_period_excl\"\nEXCLUDE USING gist (\n    org_id WITH =,\n    charge_code WITH =,\n    direction WITH =,\n    daterange(effective_from, COALESCE(effective_to, 'infinity'::date), '[]') WITH &&\n) WHERE (status = 'active')"
+      ],
+      "table": "catalog.commercial_charge_tax_profiles"
+    },
+    {
+      "enforcement": "exclusion_constraint",
+      "invariant": "product_ingredients_no_overlap",
+      "requirement_sha256": "9eb7387f42c52df113ad52f028f21237a9574a1e15c83dd363751ded6a81448f",
+      "reviewed": true,
+      "statements": [
+        "CREATE EXTENSION \"btree_gist\" WITH SCHEMA \"public\"",
+        "ALTER TABLE \"catalog\".\"product_ingredients\"\nADD CONSTRAINT \"product_ingredients_period_excl\"\nEXCLUDE USING gist (\n    org_id WITH =,\n    product_id WITH =,\n    ingredient_id WITH =,\n    daterange(valid_from, COALESCE(valid_until, 'infinity'::date), '[]') WITH &&\n)"
+      ],
+      "table": "catalog.product_ingredients"
+    },
+    {
+      "enforcement": "exclusion_constraint",
+      "invariant": "uom_conversions_no_overlap",
+      "requirement_sha256": "6893ae33cc5e3e137c0d2663f89196959b6a856f58dcc2c6b9b5e33f8e22dac5",
+      "reviewed": true,
+      "statements": [
+        "ALTER TABLE \"catalog\".\"uom_conversions\"\nADD CONSTRAINT \"uom_conversions_period_excl\"\nEXCLUDE USING gist (\n    org_id WITH =,\n    product_id WITH =,\n    from_uom_code WITH =,\n    to_uom_code WITH =,\n    daterange(valid_from, COALESCE(valid_until, 'infinity'::date), '[]') WITH &&\n)"
+      ],
+      "table": "catalog.uom_conversions"
+    },
+    {
+      "enforcement": "constraint_trigger",
+      "invariant": "attachments_evidence_immutability",
+      "requirement_sha256": "ca1c44386c5d377217172b104bdf21ad456b3d0d44e23bafd57211381a8831fa",
+      "reviewed": true,
+      "statements": [
+        "CREATE FUNCTION \"erp_stable_invariants\".\"guard_attachment_evidence\"()\nRETURNS trigger\nLANGUAGE plpgsql\nSECURITY INVOKER\nSET search_path = ''\nAS $function$\nBEGIN\n    IF TG_OP = 'DELETE' THEN\n        IF OLD.legal_hold THEN\n            RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'attachment under legal hold cannot be retired';\n        END IF;\n        RETURN OLD;\n    END IF;\n    IF OLD.verified_at IS NOT NULL AND (\n        NEW.storage_bucket IS DISTINCT FROM OLD.storage_bucket\n        OR NEW.storage_object_path IS DISTINCT FROM OLD.storage_object_path\n        OR NEW.byte_size IS DISTINCT FROM OLD.byte_size\n        OR NEW.media_type IS DISTINCT FROM OLD.media_type\n        OR NEW.sha256 IS DISTINCT FROM OLD.sha256\n        OR NEW.evidence_kind IS DISTINCT FROM OLD.evidence_kind\n    ) THEN\n        RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'verified attachment evidence is immutable';\n    END IF;\n    IF OLD.legal_hold AND NEW.status IS DISTINCT FROM OLD.status THEN\n        RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'attachment under legal hold cannot be retired';\n    END IF;\n    RETURN NEW;\nEND\n$function$",
+        "ALTER FUNCTION \"erp_stable_invariants\".\"guard_attachment_evidence\"() OWNER TO \"erp_migration_owner\"",
+        "REVOKE ALL ON FUNCTION \"erp_stable_invariants\".\"guard_attachment_evidence\"() FROM PUBLIC, \"erp_app\", \"erp_runtime\"",
+        "CREATE CONSTRAINT TRIGGER \"attachments_evidence_guard_ct\" AFTER UPDATE OR DELETE ON \"core\".\"attachments\" DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"erp_stable_invariants\".\"guard_attachment_evidence\"()"
+      ],
+      "table": "core.attachments"
+    },
+    {
+      "enforcement": "constraint_trigger",
+      "invariant": "branches_state_transition",
+      "requirement_sha256": "1a34f0dfd65d86b8e9a61e5421b119a7ba206b44cf715ca08c641aed376db3ef",
+      "reviewed": true,
+      "statements": [
+        "CREATE FUNCTION \"erp_stable_invariants\".\"guard_branch_transition\"()\nRETURNS trigger\nLANGUAGE plpgsql\nSECURITY INVOKER\nSET search_path = ''\nAS $function$\nBEGIN\n    IF OLD.status = 'active' AND NEW.status NOT IN ('active','inactive','closed')\n       OR OLD.status = 'inactive' AND NEW.status NOT IN ('inactive','active','closed')\n       OR OLD.status = 'closed' AND NEW.status IS DISTINCT FROM 'closed' THEN\n        RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'invalid branch lifecycle transition';\n    END IF;\n    RETURN NEW;\nEND\n$function$",
+        "ALTER FUNCTION \"erp_stable_invariants\".\"guard_branch_transition\"() OWNER TO \"erp_migration_owner\"",
+        "REVOKE ALL ON FUNCTION \"erp_stable_invariants\".\"guard_branch_transition\"() FROM PUBLIC, \"erp_app\", \"erp_runtime\"",
+        "CREATE CONSTRAINT TRIGGER \"branches_state_guard_ct\" AFTER UPDATE ON \"core\".\"branches\" DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"erp_stable_invariants\".\"guard_branch_transition\"()"
+      ],
+      "table": "core.branches"
+    },
+    {
+      "enforcement": "transaction_guard",
+      "invariant": "idempotency_claim_once",
+      "requirement_sha256": "22b251d2b56dc69d93d9c6c38d5363b485d8c9d38cc2d4f6ca3f1fe6414e90e1",
+      "reviewed": true,
+      "statements": [
+        "CREATE FUNCTION \"core\".\"claim_idempotency_key\"(\n    p_org_id uuid,\n    p_actor_membership_id uuid,\n    p_operation varchar(128),\n    p_idempotency_key_hash bytea,\n    p_request_hash bytea,\n    p_expires_at timestamptz\n)\nRETURNS core.idempotency_keys\nLANGUAGE plpgsql\nSECURITY INVOKER\nSET search_path = ''\nAS $function$\nDECLARE\n    claimed core.idempotency_keys%ROWTYPE;\nBEGIN\n    INSERT INTO core.idempotency_keys (\n        org_id, actor_membership_id, operation, idempotency_key_hash,\n        request_hash, expires_at\n    ) VALUES (\n        p_org_id, p_actor_membership_id, p_operation, p_idempotency_key_hash,\n        p_request_hash, p_expires_at\n    )\n    ON CONFLICT (org_id, actor_membership_id, operation, idempotency_key_hash) DO NOTHING\n    RETURNING * INTO claimed;\n    IF FOUND THEN\n        RETURN claimed;\n    END IF;\n    SELECT * INTO STRICT claimed\n      FROM core.idempotency_keys AS claim\n     WHERE claim.org_id = p_org_id\n       AND claim.actor_membership_id = p_actor_membership_id\n       AND claim.operation = p_operation\n       AND claim.idempotency_key_hash = p_idempotency_key_hash\n     FOR UPDATE;\n    IF claimed.request_hash IS DISTINCT FROM p_request_hash THEN\n        RAISE EXCEPTION USING ERRCODE = '23505', MESSAGE = 'idempotency key was claimed by a different request';\n    END IF;\n    RETURN claimed;\nEND\n$function$",
+        "ALTER FUNCTION \"core\".\"claim_idempotency_key\"(uuid, uuid, varchar, bytea, bytea, timestamptz) OWNER TO \"erp_migration_owner\"",
+        "REVOKE ALL ON FUNCTION \"core\".\"claim_idempotency_key\"(uuid, uuid, varchar, bytea, bytea, timestamptz) FROM PUBLIC, \"erp_runtime\"",
+        "GRANT EXECUTE ON FUNCTION \"core\".\"claim_idempotency_key\"(uuid, uuid, varchar, bytea, bytea, timestamptz) TO \"erp_app\"",
+        "CREATE FUNCTION \"erp_stable_invariants\".\"guard_idempotency_claim\"()\nRETURNS trigger\nLANGUAGE plpgsql\nSECURITY INVOKER\nSET search_path = ''\nAS $function$\nBEGIN\n    IF TG_OP = 'INSERT' THEN\n        IF NEW.status <> 'claimed' OR NEW.completed_at IS NOT NULL\n           OR NEW.resource_type IS NOT NULL OR NEW.resource_id IS NOT NULL\n           OR NEW.response_status IS NOT NULL OR NEW.response_media_type IS NOT NULL\n           OR NEW.response_body IS NOT NULL OR NEW.response_hash IS NOT NULL OR NEW.error_code IS NOT NULL THEN\n            RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'new idempotency key must be an empty claimed row';\n        END IF;\n        RETURN NEW;\n    END IF;\n    IF TG_OP = 'DELETE' THEN\n        RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'idempotency claims cannot be deleted or reused';\n    END IF;\n    IF ROW(NEW.org_id, NEW.id, NEW.actor_membership_id, NEW.operation,\n           NEW.idempotency_key_hash, NEW.request_hash, NEW.claimed_at, NEW.expires_at)\n       IS DISTINCT FROM\n       ROW(OLD.org_id, OLD.id, OLD.actor_membership_id, OLD.operation,\n           OLD.idempotency_key_hash, OLD.request_hash, OLD.claimed_at, OLD.expires_at) THEN\n        RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'idempotency claim identity is immutable';\n    END IF;\n    IF OLD.status IN ('succeeded','failed','expired') THEN\n        RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'terminal idempotency response is immutable';\n    END IF;\n    IF OLD.status = 'claimed' AND NEW.status NOT IN ('claimed','succeeded','failed','expired') THEN\n        RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'invalid idempotency claim transition';\n    END IF;\n    IF NEW.status = 'claimed' AND (\n        NEW.completed_at IS NOT NULL OR NEW.resource_type IS NOT NULL OR NEW.resource_id IS NOT NULL\n        OR NEW.response_status IS NOT NULL OR NEW.response_media_type IS NOT NULL\n        OR NEW.response_body IS NOT NULL OR NEW.response_hash IS NOT NULL OR NEW.error_code IS NOT NULL\n    ) THEN\n        RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'claimed idempotency row cannot contain a terminal response';\n    END IF;\n    IF NEW.status = 'succeeded' AND (\n        NEW.completed_at IS NULL OR NEW.response_status IS NULL\n        OR NEW.response_media_type IS NULL OR NEW.response_hash IS NULL\n    ) THEN\n        RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'successful idempotency claim requires an exact terminal response';\n    END IF;\n    IF NEW.status = 'failed' AND (NEW.completed_at IS NULL OR NEW.error_code IS NULL) THEN\n        RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'failed idempotency claim requires terminal error evidence';\n    END IF;\n    IF NEW.status = 'expired' AND NEW.completed_at IS NULL THEN\n        RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'expired idempotency claim requires completion time';\n    END IF;\n    RETURN NEW;\nEND\n$function$",
+        "ALTER FUNCTION \"erp_stable_invariants\".\"guard_idempotency_claim\"() OWNER TO \"erp_migration_owner\"",
+        "REVOKE ALL ON FUNCTION \"erp_stable_invariants\".\"guard_idempotency_claim\"() FROM PUBLIC, \"erp_app\", \"erp_runtime\"",
+        "CREATE CONSTRAINT TRIGGER \"idempotency_claim_guard_ct\" AFTER INSERT OR UPDATE OR DELETE ON \"core\".\"idempotency_keys\" DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"erp_stable_invariants\".\"guard_idempotency_claim\"()"
+      ],
+      "table": "core.idempotency_keys"
+    },
+    {
+      "enforcement": "constraint_trigger",
+      "invariant": "memberships_state_transition",
+      "requirement_sha256": "8e579d3b0e71f7e3650cd4ac0b931006f45f32f45d74ad04c1c155342825b2d7",
+      "reviewed": true,
+      "statements": [
+        "CREATE FUNCTION \"erp_stable_invariants\".\"guard_membership_transition\"()\nRETURNS trigger\nLANGUAGE plpgsql\nSECURITY INVOKER\nSET search_path = ''\nAS $function$\nBEGIN\n    IF OLD.status = 'invited' AND NEW.status NOT IN ('invited','active','revoked')\n       OR OLD.status = 'active' AND NEW.status NOT IN ('active','suspended','revoked')\n       OR OLD.status = 'suspended' AND NEW.status NOT IN ('suspended','active','revoked')\n       OR OLD.status = 'revoked' AND NEW.status IS DISTINCT FROM 'revoked' THEN\n        RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'invalid membership lifecycle transition';\n    END IF;\n    IF NEW.created_by_membership_id IS DISTINCT FROM OLD.created_by_membership_id THEN\n        RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'membership creation actor evidence is immutable';\n    END IF;\n    IF OLD.status = 'revoked' AND ROW(NEW.revoked_at, NEW.revocation_reason, NEW.updated_by_membership_id)\n       IS DISTINCT FROM ROW(OLD.revoked_at, OLD.revocation_reason, OLD.updated_by_membership_id) THEN\n        RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'revoked membership actor evidence is immutable';\n    END IF;\n    RETURN NEW;\nEND\n$function$",
+        "ALTER FUNCTION \"erp_stable_invariants\".\"guard_membership_transition\"() OWNER TO \"erp_migration_owner\"",
+        "REVOKE ALL ON FUNCTION \"erp_stable_invariants\".\"guard_membership_transition\"() FROM PUBLIC, \"erp_app\", \"erp_runtime\"",
+        "CREATE CONSTRAINT TRIGGER \"memberships_state_guard_ct\" AFTER UPDATE ON \"core\".\"memberships\" DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"erp_stable_invariants\".\"guard_membership_transition\"()"
+      ],
+      "table": "core.memberships"
+    },
+    {
+      "enforcement": "constraint_trigger",
+      "invariant": "outbox_delivery_transition",
+      "requirement_sha256": "716b6f8ad31a70be6d29fd400f05cf9d91d0d9b9faf4cc1ee03f4aee689e15be",
+      "reviewed": true,
+      "statements": [
+        "CREATE FUNCTION \"erp_stable_invariants\".\"guard_outbox_delivery\"()\nRETURNS trigger\nLANGUAGE plpgsql\nSECURITY INVOKER\nSET search_path = ''\nAS $function$\nBEGIN\n    IF TG_OP = 'INSERT' THEN\n        IF NEW.status <> 'pending' OR NEW.attempt_count <> 0\n           OR NEW.claimed_at IS NOT NULL OR NEW.published_at IS NOT NULL THEN\n            RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'new outbox event must be pending and unattempted';\n        END IF;\n        RETURN NEW;\n    END IF;\n    IF TG_OP = 'DELETE' THEN\n        RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'outbox events cannot be deleted';\n    END IF;\n    IF ROW(NEW.org_id, NEW.id, NEW.event_type, NEW.aggregate_type, NEW.aggregate_id,\n           NEW.event_version, NEW.media_type, NEW.payload_bytes, NEW.payload_hash, NEW.created_at)\n       IS DISTINCT FROM\n       ROW(OLD.org_id, OLD.id, OLD.event_type, OLD.aggregate_type, OLD.aggregate_id,\n           OLD.event_version, OLD.media_type, OLD.payload_bytes, OLD.payload_hash, OLD.created_at) THEN\n        RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'outbox payload and aggregate identity are immutable';\n    END IF;\n    IF OLD.status = 'pending' AND NEW.status NOT IN ('pending','claimed','dead_letter')\n       OR OLD.status = 'claimed' AND NEW.status NOT IN ('claimed','pending','published','dead_letter')\n       OR OLD.status IN ('published','dead_letter') AND NEW.status IS DISTINCT FROM OLD.status THEN\n        RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'invalid outbox delivery transition';\n    END IF;\n    IF NEW.status = 'claimed' AND OLD.status <> 'claimed' THEN\n        IF NEW.attempt_count <> OLD.attempt_count + 1 OR NEW.claimed_at IS NULL THEN\n            RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'outbox claim must increment attempts exactly once and record claim time';\n        END IF;\n    ELSIF NEW.attempt_count <> OLD.attempt_count THEN\n        RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'outbox attempts change only when a pending event is claimed';\n    END IF;\n    IF NEW.attempt_count < OLD.attempt_count THEN\n        RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'outbox attempt counter cannot decrease';\n    END IF;\n    IF OLD.status IN ('published','dead_letter') AND NEW IS DISTINCT FROM OLD THEN\n        RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'terminal outbox event is immutable';\n    END IF;\n    RETURN NEW;\nEND\n$function$",
+        "ALTER FUNCTION \"erp_stable_invariants\".\"guard_outbox_delivery\"() OWNER TO \"erp_migration_owner\"",
+        "REVOKE ALL ON FUNCTION \"erp_stable_invariants\".\"guard_outbox_delivery\"() FROM PUBLIC, \"erp_app\", \"erp_runtime\"",
+        "CREATE CONSTRAINT TRIGGER \"outbox_delivery_guard_ct\" AFTER INSERT OR UPDATE OR DELETE ON \"core\".\"outbox_events\" DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"erp_stable_invariants\".\"guard_outbox_delivery\"()"
+      ],
+      "table": "core.outbox_events"
+    },
+    {
+      "enforcement": "constraint_trigger",
+      "invariant": "users_state_transition",
+      "requirement_sha256": "669c125d9ef1815f3e9725845478f003ea1955d7334109b098a0993e1b5173da",
+      "reviewed": true,
+      "statements": [
+        "CREATE FUNCTION \"erp_stable_invariants\".\"guard_user_transition\"()\nRETURNS trigger\nLANGUAGE plpgsql\nSECURITY INVOKER\nSET search_path = ''\nAS $function$\nBEGIN\n    IF OLD.status = 'active' AND NEW.status NOT IN ('active','disabled','anonymized')\n       OR OLD.status = 'disabled' AND NEW.status NOT IN ('disabled','active','anonymized')\n       OR OLD.status = 'anonymized' AND NEW.status IS DISTINCT FROM 'anonymized' THEN\n        RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'invalid user lifecycle transition';\n    END IF;\n    IF NEW.status = 'anonymized' AND NEW.auth_user_id IS NOT NULL THEN\n        RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'anonymized user cannot remain mapped to Auth';\n    END IF;\n    IF OLD.status = 'anonymized' AND NEW.auth_user_id IS DISTINCT FROM OLD.auth_user_id THEN\n        RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'anonymized user cannot be remapped to Auth';\n    END IF;\n    RETURN NEW;\nEND\n$function$",
+        "ALTER FUNCTION \"erp_stable_invariants\".\"guard_user_transition\"() OWNER TO \"erp_migration_owner\"",
+        "REVOKE ALL ON FUNCTION \"erp_stable_invariants\".\"guard_user_transition\"() FROM PUBLIC, \"erp_app\", \"erp_runtime\"",
+        "CREATE CONSTRAINT TRIGGER \"users_state_guard_ct\" AFTER UPDATE ON \"core\".\"users\" DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"erp_stable_invariants\".\"guard_user_transition\"()"
+      ],
+      "table": "core.users"
+    },
+    {
+      "enforcement": "constraint_trigger",
+      "invariant": "employees_state_transition",
+      "requirement_sha256": "d8ef81d53f572d99e4e4deaa6c627d03d579a96ea69612654dd7cd65d49383ba",
+      "reviewed": true,
+      "statements": [
+        "CREATE FUNCTION \"erp_stable_invariants\".\"guard_employee\"()\nRETURNS trigger\nLANGUAGE plpgsql\nSECURITY INVOKER\nSET search_path = ''\nAS $function$\nDECLARE\n    cycle_found boolean;\nBEGIN\n    IF TG_OP = 'UPDATE' AND (\n        OLD.status = 'draft' AND NEW.status NOT IN ('draft','active','separated')\n        OR OLD.status = 'active' AND NEW.status NOT IN ('active','suspended','separated')\n        OR OLD.status = 'suspended' AND NEW.status NOT IN ('suspended','active','separated')\n        OR OLD.status = 'separated' AND NEW.status IS DISTINCT FROM 'separated'\n    ) THEN\n        RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'invalid employee lifecycle transition';\n    END IF;\n    PERFORM pg_catalog.pg_advisory_xact_lock(\n        pg_catalog.hashtextextended(NEW.org_id::text, 329742019)\n    );\n    IF NEW.manager_employee_id IS NOT NULL THEN\n        WITH RECURSIVE managers(id) AS (\n            SELECT NEW.manager_employee_id\n            UNION\n            SELECT employee.manager_employee_id\n              FROM hr.employees AS employee\n              JOIN managers ON employee.org_id = NEW.org_id AND employee.id = managers.id\n             WHERE employee.manager_employee_id IS NOT NULL\n        )\n        SELECT EXISTS (SELECT 1 FROM managers WHERE id = NEW.id) INTO cycle_found;\n        IF cycle_found THEN\n            RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'employee manager assignment creates a reporting cycle';\n        END IF;\n    END IF;\n    RETURN NEW;\nEND\n$function$",
+        "ALTER FUNCTION \"erp_stable_invariants\".\"guard_employee\"() OWNER TO \"erp_migration_owner\"",
+        "REVOKE ALL ON FUNCTION \"erp_stable_invariants\".\"guard_employee\"() FROM PUBLIC, \"erp_app\", \"erp_runtime\"",
+        "CREATE CONSTRAINT TRIGGER \"employees_state_manager_guard_ct\" AFTER INSERT OR UPDATE ON \"hr\".\"employees\" DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"erp_stable_invariants\".\"guard_employee\"()"
+      ],
+      "table": "hr.employees"
+    },
+    {
+      "enforcement": "exclusion_constraint",
+      "invariant": "addresses_primary_period_no_overlap",
+      "requirement_sha256": "ea9f5fb213a6222b971c019d7e9faa87afa1b6e187ba849662b10421877ba720",
+      "reviewed": true,
+      "statements": [
+        "ALTER TABLE \"parties\".\"addresses\"\nADD CONSTRAINT \"addresses_primary_period_excl\"\nEXCLUDE USING gist (\n    org_id WITH =,\n    party_id WITH =,\n    address_kind WITH =,\n    daterange(valid_from, COALESCE(valid_until, 'infinity'::date), '[]') WITH &&\n) WHERE (is_primary)"
+      ],
+      "table": "parties.addresses"
+    },
+    {
+      "enforcement": "constraint_trigger",
+      "invariant": "tax_registrations_state_and_period",
+      "requirement_sha256": "8132ac6e1df57985cda50cf6cfc6d5e8aafea5f74dccdd6af8416d7d4b4f913c",
+      "reviewed": true,
+      "statements": [
+        "CREATE FUNCTION \"erp_stable_invariants\".\"guard_tax_registration\"()\nRETURNS trigger\nLANGUAGE plpgsql\nSECURITY INVOKER\nSET search_path = ''\nAS $function$\nBEGIN\n    IF OLD.status = 'pending_verification' AND NEW.status NOT IN ('pending_verification','active','cancelled','expired')\n       OR OLD.status = 'active' AND NEW.status NOT IN ('active','suspended','cancelled','expired')\n       OR OLD.status = 'suspended' AND NEW.status NOT IN ('suspended','active','cancelled','expired')\n       OR OLD.status IN ('cancelled','expired') AND NEW.status IS DISTINCT FROM OLD.status THEN\n        RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'invalid tax registration lifecycle transition';\n    END IF;\n    IF OLD.verified_at IS NOT NULL AND ROW(\n        NEW.party_id, NEW.registration_type, NEW.registration_number, NEW.registered_legal_name,\n        NEW.state_code, NEW.taxpayer_type, NEW.valid_from, NEW.valid_until, NEW.verified_at\n    ) IS DISTINCT FROM ROW(\n        OLD.party_id, OLD.registration_type, OLD.registration_number, OLD.registered_legal_name,\n        OLD.state_code, OLD.taxpayer_type, OLD.valid_from, OLD.valid_until, OLD.verified_at\n    ) THEN\n        RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'verified statutory identity history is immutable';\n    END IF;\n    RETURN NEW;\nEND\n$function$",
+        "ALTER FUNCTION \"erp_stable_invariants\".\"guard_tax_registration\"() OWNER TO \"erp_migration_owner\"",
+        "REVOKE ALL ON FUNCTION \"erp_stable_invariants\".\"guard_tax_registration\"() FROM PUBLIC, \"erp_app\", \"erp_runtime\"",
+        "CREATE CONSTRAINT TRIGGER \"tax_registrations_state_guard_ct\" AFTER UPDATE ON \"parties\".\"tax_registrations\" DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"erp_stable_invariants\".\"guard_tax_registration\"()"
+      ],
+      "table": "parties.tax_registrations"
+    }
+  ],
+  "mapping_version": "1.0.0",
+  "platform_enforcements": []
+}

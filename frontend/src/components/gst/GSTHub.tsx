@@ -1,52 +1,35 @@
 import React, { useState } from 'react';
 import {
-  Home, FileText, BarChart3,
-  Upload, Receipt
+  Home, BarChart3, Receipt
 } from 'lucide-react';
 import { ModuleHub } from '../global';
 import { GSTDashboard } from './dashboard';
-import GSTFiling from './GSTFiling';
 import { GSTReports } from './reports';
-import { GSTR2BUpload, ReconciliationDashboard } from './gstr2b';
+
+export const GST_SUBPAGE_IDS = ['gst-dashboard', 'gst-reports'] as const;
+type GSTSubpage = typeof GST_SUBPAGE_IDS[number];
 
 interface GSTHubProps {
   open?: boolean;
   onClose?: () => void;
+  initialSubpage?: string | null;
+  onSubpageChange?: (subpage: string | null) => void;
 }
 
-const GSTHub: React.FC<GSTHubProps> = ({ open = true, onClose }) => {
-  const [activeModule, setActiveModule] = useState('gst-dashboard');
+const GSTHub: React.FC<GSTHubProps> = ({ open = true, onClose, initialSubpage, onSubpageChange }) => {
+  const resolvedDefault: GSTSubpage = initialSubpage
+    && (GST_SUBPAGE_IDS as readonly string[]).includes(initialSubpage)
+    ? initialSubpage as GSTSubpage
+    : 'gst-dashboard';
+  const [activeModule, setActiveModule] = useState<GSTSubpage>(resolvedDefault);
+
+  React.useEffect(() => {
+    setActiveModule(resolvedDefault);
+  }, [resolvedDefault]);
 
   const navigateToReports = () => {
     setActiveModule('gst-reports');
-  };
-
-  const navigateToGSTR2B = () => {
-    setActiveModule('gstr2b-reconcile');
-  };
-
-  const navigateToFiling = () => {
-    setActiveModule('gst-filing');
-  };
-
-  // GSTR-2B Upload component with reconciliation dashboard
-  const GSTR2BModule: React.FC<{ onClose?: () => void }> = () => {
-    const [showReconciliation, setShowReconciliation] = useState(false);
-
-    return (
-      <div className="p-6 space-y-6">
-        {!showReconciliation ? (
-          <GSTR2BUpload
-            onUploadComplete={() => setShowReconciliation(true)}
-            onReconcile={() => setShowReconciliation(true)}
-          />
-        ) : (
-          <ReconciliationDashboard
-            onStartReconcile={() => setShowReconciliation(false)}
-          />
-        )}
-      </div>
-    );
+    onSubpageChange?.('gst-reports');
   };
 
   const gstModules = [
@@ -61,28 +44,8 @@ const GSTHub: React.FC<GSTHubProps> = ({ open = true, onClose }) => {
         <GSTDashboard
           {...props}
           onNavigateToReports={navigateToReports}
-          onNavigateToUpload={navigateToGSTR2B}
-          onNavigateToFiling={navigateToFiling}
         />
       )
-    },
-    {
-      id: 'gst-filing',
-      label: 'Filing',
-      fullLabel: 'GST Filing',
-      description: 'File GSTR-1, GSTR-3B',
-      icon: FileText,
-      color: 'green',
-      component: GSTFiling
-    },
-    {
-      id: 'gstr2b-reconcile',
-      label: '2B Reconcile',
-      fullLabel: 'GSTR-2B Reconcile',
-      description: 'Upload & reconcile 2B',
-      icon: Upload,
-      color: 'teal',
-      component: GSTR2BModule
     },
     {
       id: 'gst-reports',
@@ -103,7 +66,8 @@ const GSTHub: React.FC<GSTHubProps> = ({ open = true, onClose }) => {
       subtitle="Tax management & compliance"
       icon={Receipt}
       modules={gstModules}
-      defaultModule="gst-dashboard"
+      defaultModule={activeModule}
+      onActiveModuleChange={onSubpageChange}
     />
   );
 };

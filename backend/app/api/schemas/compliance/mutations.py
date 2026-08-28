@@ -11,16 +11,3 @@ class DrugLicenseMutationResponse(ComplianceMutationModel):
     license_id: int
     license_number: str
     message: str
-
-
-class ComplianceAuditMutationResponse(ComplianceMutationModel):
-    audit_id: int
-    message: str
-    corrective_actions_created: int
-
-
-class InspectorVisitMutationResponse(ComplianceMutationModel):
-    visit_id: int
-    message: str
-    violations_count: int
-    follow_up_required: bool

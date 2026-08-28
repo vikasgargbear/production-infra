@@ -267,15 +267,18 @@ export const theme: Theme = {
     // Component Specific Styles
     components: {
         button: {
-            base: 'inline-flex items-center justify-center font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2',
+            base: 'inline-flex min-h-11 items-center justify-center font-medium transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2',
             sizes: {
-                sm: 'px-3 py-1.5 text-sm',
+                xs: 'px-3 py-2 text-xs',
+                sm: 'px-3 py-2 text-sm',
                 md: 'px-5 py-2.5 text-sm',
-                lg: 'px-6 py-3 text-base'
+                lg: 'px-6 py-3 text-base',
+                xl: 'px-7 py-3.5 text-lg'
             },
             variants: {
                 primary: 'bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500',
                 secondary: 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 focus:ring-gray-500',
+                outline: 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 focus:ring-blue-500',
                 danger: 'bg-red-600 text-white hover:bg-red-700 focus:ring-red-500',
                 success: 'bg-green-600 text-white hover:bg-green-700 focus:ring-green-500',
                 warning: 'bg-amber-600 text-white hover:bg-amber-700 focus:ring-amber-500',
@@ -299,7 +302,7 @@ export const theme: Theme = {
         },
 
         card: {
-            base: 'bg-white rounded-xl border border-gray-200',
+            base: 'bg-white rounded-lg border border-gray-200',
             padding: {
                 sm: 'p-4',
                 md: 'p-6',

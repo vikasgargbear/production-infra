@@ -1,301 +1,85 @@
-# MCP Readiness Architecture
+# MCP readiness architecture
 
-## Decision
+## Boundary
 
-Build MCP as a separately deployable backend module over the same versioned
-application services used by the REST API. Host that module in the existing
-FastAPI Render web service for the internal pilot; split it into a separate
-service only when scaling, isolation, or release evidence justifies the cost.
-MCP must never call PostgreSQL, database functions, or route implementation
-helpers directly.
-
-```mermaid
-flowchart LR
-    UI[Frontend] -->|generated client| API[Versioned FastAPI contract]
-    MCP[MCP adapter] -->|service credential + user grant| API
-    API --> AUTH[Authorization and policy]
-    AUTH --> SVC[Application services]
-    SVC --> DB[(PostgreSQL)]
-    SVC --> AUDIT[Append-only audit/outbox]
-```
-
-The requested Mozie-style pattern is a small, canonical operator surface:
-route each task to a named system of record, read before write, resolve exact
-IDs, and require a human decision before consequential actions. PharmaERP
-enforces these rules in the backend rather than only in agent instructions.
-
-## Implemented baseline
-
-`backend/app/core/api_contract.py` is the current machine-readable operation
-registry. It annotates OpenAPI only after verifying that the declared route,
-HTTP method, `PermissionChecker`, and JWT-derived organization context agree.
-The initial allowlist contains three bounded reads: product search, supplier
-search, and GST settings. OpenAPI explicitly reports that MCP transport is not
-implemented and that no write operation is exported.
-
-This is a contract gate for a future adapter, not an MCP server. Additions must
-pass the registry tests and the delivery gates below; do not infer that another
-GET route is safe merely because it appears in OpenAPI.
-
-There is no `/mcp` route today. The official Python SDK 2.0 dependency floor
-conflicts with the repository's pinned Pydantic, PyJWT, multipart, and Uvicorn
-versions. The `mcp-sdk-compatibility` CI job now installs the official SDK in an
-isolated Python 3.11 environment, constructs its stateless JSON Streamable HTTP
-ASGI application, reads the SDK's installed dependency metadata, and verifies
-the exact three-tool registry. This executable gate proves the SDK surface
-without importing incompatible dependencies into the production FastAPI
-process. It intentionally keeps `mcp_transport_implemented` false.
-
-The existing ERP HS256 access token is valid for protected REST calls, but it
-is not an MCP audience-restricted OAuth grant and carries no consented MCP
-scopes. Registry `oauth_scope` values are policy metadata, not issued grants;
-the adapter must not treat them as user consent. Product and supplier reads
-already have service functions, while GST settings assembly remains owned by
-its FastAPI route. That route logic must move behind a tested application
-operation before an MCP tool can call it without coupling to HTTP handlers.
-Supabase's OAuth 2.1 server solves authorization-server discovery, PKCE, consent,
-DCR, and token rotation, but the application still needs asymmetric JWT/JWKS
-validation, a consent UI, protected-resource metadata, ERP membership mapping,
-and negative tenant/RBAC tests. The exact implementation and hosting gates are
-recorded in [`hosting-options-2026-08.md`](hosting-options-2026-08.md).
-
-## Contract boundary
-
-The backend owns validation, calculations, numbering, authorization,
-transactions, audit, and side effects. The MCP adapter owns protocol transport,
-tool descriptions, resource rendering, and conversion of backend errors into
-structured MCP results. The frontend owns presentation only.
-
-The target HTTP contract is `/api/v1`. OpenAPI is the source for generated
-frontend and MCP DTOs, but it is not the MCP tool registry. Exported endpoints
-must have stable `operationId` values and the following vendor metadata:
-
-```yaml
-x-erp-domain: sales
-x-erp-permission: sales.invoice.create
-x-erp-risk: consequential
-x-erp-tenant-scope: organization
-x-erp-branch-scope: required
-x-erp-mcp-export: true
-x-erp-idempotency: required
-```
-
-An allowlist generator may create tool schemas only for operations where
-`x-erp-mcp-export` is true. CI must reject duplicate operation IDs, undocumented
-side effects, unbounded list responses, missing error schemas, and an exported
-write without risk/idempotency metadata.
-
-Do not expose the existing schema documentation route, generic SQL, arbitrary
-report builders, file paths, test routes, auth administration, raw sync, or a
-one-tool-per-handler mirror.
-
-## Tool taxonomy
-
-Tools should express business outcomes and remain below roughly 40 in the
-initial catalog. List/search tools must be paginated, explicitly bounded, and
-return opaque canonical IDs for later writes.
-
-The canonical user-intent-to-operation map and the rule that compatibility
-routes never become additional tools are defined in
-[`legacy-retirement.md`](legacy-retirement.md).
-
-| Family | Initial examples | Default risk |
-|---|---|---|
-| Context | `erp_context_get`, `erp_branch_list` | Read |
-| Master data | `erp_customer_search`, `erp_supplier_search`, `erp_product_search` | Read |
-| Inventory | `erp_stock_get`, `erp_batch_expiry_list`, `erp_reorder_suggestion_list` | Read |
-| Sales | `erp_order_get`, `erp_order_preview_create`, `erp_order_create`, `erp_invoice_get`, `erp_invoice_preview_create`, `erp_invoice_create` | Mixed |
-| Procurement | `erp_purchase_order_get`, `erp_purchase_order_preview_create`, `erp_purchase_order_create`, `erp_grn_get` | Mixed |
-| Finance | `erp_outstanding_get`, `erp_ledger_get`, `erp_payment_preview_record`, `erp_payment_record` | Mixed/high |
-| GST | `erp_gst_summary_get`, `erp_gstr_reconciliation_get`, `erp_gst_export_preview` | Read/high |
-| Compliance | `erp_compliance_alert_list`, `erp_recall_get`, `erp_expiry_risk_list` | Read |
-| Audit | `erp_audit_event_list`, `erp_operation_status_get` | Read |
-
-Tool names, schemas, and semantics are versioned independently of display copy.
-A tool returns a consistent envelope:
-
-```json
-{
-  "data": {},
-  "context": {"organization_id": "opaque", "branch_ids": ["opaque"]},
-  "trace_id": "trace_...",
-  "as_of": "2026-08-19T12:00:00Z",
-  "warnings": [],
-  "next_actions": []
-}
-```
-
-Money is a decimal string plus ISO currency, quantities are decimal strings
-plus unit, tax rates are decimal strings, and dates include an explicit
-timezone/period. Never send binary floating-point monetary values.
-
-## Resource taxonomy
-
-Resources provide stable, read-only context. They are not hidden mutation
-channels and should not dump entire tables.
-
-| URI template | Purpose |
-|---|---|
-| `erp://context/current` | Effective organization, user, role, branches, locale, currency, and fiscal period |
-| `erp://policy/tool-catalog` | Allowed tools, risk class, approval rule, and limits for the current grant |
-| `erp://policy/tax/{jurisdiction}/{effective_date}` | Versioned tax configuration used for explanations |
-| `erp://organization/current/branches` | Authorized branch summaries |
-| `erp://invoice/{invoice_id}` | Canonical invoice summary with status and version |
-| `erp://payment/{payment_id}` | Canonical payment and allocations |
-| `erp://compliance/calendar/{period}` | Due dates and state, filtered to the tenant |
-| `erp://audit/operation/{operation_id}` | Outcome and audit reference for a prior write |
-
-Resource templates must perform the same permission check as tools. Sensitive
-fields such as credentials, password hashes, full audit payloads, health data,
-bank details, and personally identifying data are omitted unless the exact
-field is authorized and required.
-
-## Authentication and scopes
-
-Remote MCP should use the protocol's current authorization profile and a
-standards-based authorization server. Tokens are audience-restricted to the MCP
-server, short-lived, revocable, and bound to an installation/user. The adapter
-exchanges or delegates that grant for a backend credential; it must not forward
-an arbitrary client token to internal services.
-
-`org_id`, user identity, branch access, and role come from the verified grant
-and backend membership lookup. An LLM argument, header such as `X-Org-Id`,
-prompt text, saved resource URI, or model memory can never select a tenant.
-
-Use granular scopes that map to existing RBAC permissions, for example:
+The MCP adapter is a separately deployable Python 3.11 Streamable HTTP service.
+It never connects to PostgreSQL or imports FastAPI route implementations. It
+verifies the OAuth bearer, requests a bounded internal delegation from the API,
+and calls only canonical internal API contracts.
 
 ```text
-erp.context.read
-erp.master.read
-erp.inventory.read
-erp.sales.read
-erp.sales.order.write
-erp.sales.invoice.write
-erp.procurement.read
-erp.procurement.write
-erp.finance.read
-erp.finance.payment.write
-erp.gst.read
-erp.gst.export
-erp.compliance.read
-erp.audit.read
+ChatGPT/Codex → OAuth-protected MCP → canonical internal REST → PostgreSQL
 ```
 
-Scopes are an outer ceiling, not the authorization decision. Every call also
-checks active user membership, role permission, organization, branch access,
-record status, separation-of-duties rules, and field-level policy. Service or
-support accounts receive separate grants and may not impersonate a user without
-an auditable delegation record.
+The backend owns tenant/branch resolution, permissions, validation,
+calculations, numbering, transactions, idempotency, audit, and side effects. MCP
+owns protocol transport and model-readable tool schemas. The frontend owns
+presentation. Missing context or authority fails closed at every boundary.
 
-## Organization and branch context
+## Sources of truth
 
-The effective context object is resolved once per call and propagated through
-typed application services:
+- `backend/mcp_runtime/service-contract.json`: transport, environment, OAuth,
+  current tool inventory, and readiness gates.
+- `docs/architecture/mcp-operator-actions.json`: reviewed prepare/resolution/
+  lifecycle publication contract.
+- `backend/mcp_runtime/aasopharma_mcp/server.py`: actual SDK tool registration.
+- `backend/app/infrastructure/operator_actions/registry.py`: canonical adapter
+  availability.
+- `docs/architecture/app-data-contract.json`: mounted REST/MCP ownership map.
+
+Do not copy tool lists into prose. Contract tests must reject drift between
+these sources and the published MCP registry.
+
+## Authentication and tenant context
+
+Remote MCP uses OAuth 2.1 discovery with standard `openid` and
+`offline_access`. The OAuth subject authenticates the person and client; it does
+not authorize an ERP operation. The API resolves the subject through active
+`core.users`, `core.memberships`, live role permissions, branch access, and the
+bounded `automation.agent_grants` capability.
+
+An argument, header, prompt, saved resource, or model memory can never select a
+tenant. Every call revalidates organization and branch context before activating
+forced RLS. The Supabase bearer is not forwarded as an internal service token.
+
+## Reads and writes
+
+Read tools resolve bounded canonical records and return opaque UUIDs plus human
+references. They never expose generic SQL, arbitrary report builders, file
+paths, raw audit payloads, or auth administration.
+
+Consequential operations use the shared lifecycle:
 
 ```text
-actor_id, installation_id, organization_id, authorized_branch_ids,
-active_branch_id, role_id, scopes, locale, timezone, fiscal_period, trace_id
+resolve facts → prepare → immutable review → approve → execute → readback
 ```
 
-Rules:
+Preparation does not mean success. Approval and execution target the captured
+command UUID and preview hash; stale sources, changed inputs, replay conflicts,
+cross-tenant access, and missing distinct-reviewer authority fail closed. A tool
+must not search for an arbitrary pending command or fabricate a successful
+business record.
 
-1. The backend rejects a record whose organization does not equal the effective
-   organization even if its numeric ID exists.
-2. A branch-bound operation requires an explicit `branch_id` that is a member
-   of `authorized_branch_ids`; there is no silent default for writes.
-3. Cross-branch reads require a distinct permission. Cross-branch stock
-   transfers validate both endpoints.
-4. Child records inherit tenant and branch through a validated parent FK. A
-   child ID alone is never sufficient authorization.
-5. Scheduled/queued work persists the grant snapshot and reauthorizes before
-   execution.
-6. Database RLS is defense in depth and uses the same transaction/connection as
-   the query. A separate middleware session cannot establish query RLS state.
+Money and quantities remain exact decimal strings with their currency/UOM;
+dates and periods are explicit; canonical UUIDs are never converted to integer
+IDs. Communications and regulated external submissions are not implicit side
+effects.
 
-## Read, preview, commit
+## Release gates
 
-| Class | Examples | Behavior |
-|---|---|---|
-| R0 read | Search, get, list, calculate preview | Execute after authorization; log access to sensitive/exported data |
-| W1 reversible | Draft note, draft order metadata | Require explicit intent, idempotency, audit, and optimistic concurrency |
-| W2 consequential | Invoice, GRN, payment, allocation, stock adjustment | Mandatory preview then commit with user approval |
-| W3 regulated/external | Post/cancel document, GST export/file, payment reversal, recall action | Strong approval, separation of duties where configured, immutable audit; keep filing/external submission out of v1 |
+MCP is usable only when all of the following are true for the same reviewed SHA:
 
-Do not rely on a host application's generic "approve tool" UI. For W2/W3, the
-backend issues a short-lived, single-use preview:
+1. API, MCP, and frontend deployment metadata match.
+2. API and MCP `/health` and `/ready` pass.
+3. OAuth protected-resource and issuer discovery work, including refresh.
+4. Published tool names, descriptions, schemas, annotations, and adapter
+   availability match the checked-in contracts.
+5. Representative read, validation, authorization, confirmation, and canonical
+   readback evaluations pass through MCP Inspector and the target host.
+6. No unavailable, legacy, offline, direct-database, or fake-success path is
+   reachable.
 
-```json
-{
-  "preview_id": "prv_...",
-  "payload_hash": "sha256:...",
-  "expires_at": "2026-08-19T12:05:00Z",
-  "impact": {"currency": "INR", "total": "1180.00", "tax": "180.00"},
-  "warnings": [],
-  "required_approvals": ["initiating_user"]
-}
-```
-
-The commit tool accepts only `preview_id`, `approval_token`,
-`idempotency_key`, and `expected_version`. It reloads all source records,
-recomputes totals, verifies the payload hash and permission, and commits the
-business change, idempotency result, audit event, and outbox event in one
-transaction. Changed or expired inputs require a new preview.
-
-## Idempotency, concurrency, and audit
-
-The checked-in idempotency guide is target behavior, not evidence of current
-enforcement. Before any write tool ships, implement a server-side store keyed by
-`(organization_id, actor_id, operation_id, idempotency_key)` with request hash,
-state, response reference, and expiry. The same key plus a different hash is a
-conflict; the same key plus the same hash returns the recorded result.
-
-Financial and inventory writes also require database uniqueness constraints and
-document-number allocation inside the transaction. Idempotency does not replace
-business keys. Updates use `expected_version` or an equivalent row version and
-return a structured conflict instead of last-write-wins.
-
-Every tool invocation records:
-
-- trace ID, tool name/version, start/end time, client and installation IDs;
-- actor, organization, effective branches, scopes, and permission decision;
-- risk class, preview/approval IDs, idempotency key hash, request schema version;
-- affected entity IDs and before/after hashes, never raw secrets;
-- calculation/tax ruleset version, outcome, error code, and latency.
-
-Audit rows for regulated records are append-only with retention controls.
-Corrections create reversals or adjustment documents. Audit reads are tenant
-filtered, and access to them is itself audited.
-
-## Errors and model behavior
-
-Errors are typed and actionable: `AUTH_REQUIRED`, `SCOPE_DENIED`,
-`BRANCH_DENIED`, `NOT_FOUND`, `VALIDATION_FAILED`, `STALE_VERSION`,
-`PREVIEW_EXPIRED`, `APPROVAL_REQUIRED`, `IDEMPOTENCY_CONFLICT`,
-`PERIOD_CLOSED`, `INSUFFICIENT_STOCK`, and `POLICY_BLOCKED`. Do not return SQL,
-stack traces, credentials, or cross-tenant existence hints.
-
-Tool descriptions must state side effects and preconditions, but prompt text is
-not a security control. Treat all database text, uploaded documents, customer
-names, and notes as untrusted content; never interpret them as tool
-instructions.
-
-## Delivery sequence and tests
-
-1. **Contract gate:** inventory routes, assign stable operation IDs, normalize
-   error/page/money schemas, and publish a diffed `/api/v1/openapi.json`.
-2. **Policy gate:** centralize effective context and authorization. Add negative
-   org/branch tests for every exportable operation.
-3. **Write-safety gate:** implement idempotency, optimistic concurrency,
-   preview/commit, immutable audit, and transactional outbox.
-4. **Read-only MCP:** release context, master-data, inventory, finance summary,
-   GST summary, and compliance resources/tools to an allowlisted pilot.
-5. **Controlled writes:** add draft/order tools, then invoices/payments only
-   after calculation parity and failure-injection tests pass.
-6. **External actions:** evaluate filing, messages, and integrations separately;
-   keep them disabled until W3 controls and operational runbooks are proven.
-
-Required automated tests include schema validation, permission matrix tests,
-cross-tenant/cross-branch property tests, prompt-injection fixtures,
-pagination/limit tests, preview tampering/expiry, duplicate/reordered retries,
-concurrent commits, rollback/failure injection, audit completeness, calculation
-goldens, and frontend/REST/MCP parity over the same service operation.
+The ChatGPT/Codex package lives under `plugins/aasopharma-erp`. ChatGPT must
+first register the public `/mcp` connection in developer mode and supply its real
+technical app ID; the repository must never ship another connection's ID or a
+placeholder.

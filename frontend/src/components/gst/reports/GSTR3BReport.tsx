@@ -5,27 +5,67 @@
  * Merged: absorbs GST Payable Report (per-component payable breakdown)
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Loader2, AlertCircle, TrendingUp, TrendingDown, IndianRupee, Download, ChevronDown, ChevronUp } from 'lucide-react';
 import type { DateRange } from '../types';
-import { formatCurrency, calculateNetPayable } from '../utils';
-import { invoicesApi, purchasesApi } from '../../../services/api';
+import { gstApi } from '../../../services/api';
+import { compareExactDecimals, formatExactCurrency, normalizeAuthoritativeDecimal } from '../../../utils/exactDecimal';
 
 interface GSTR3BReportProps {
-    dateRange: DateRange;
-    refreshTrigger: number;
+    dateRange?: DateRange;
+    refreshTrigger?: number;
     onRefresh?: () => void;
     showTaxBreakdown?: boolean;
     onDataReady?: (data: any) => void;
     onExport?: () => void;
 }
 
-const GSTR3BReport: React.FC<GSTR3BReportProps> = ({ dateRange, refreshTrigger, showTaxBreakdown = false, onDataReady, onExport }) => {
-    const [loading, setLoading] = useState(false);
+const localISODate = (value: Date): string => [
+    value.getFullYear(),
+    String(value.getMonth() + 1).padStart(2, '0'),
+    String(value.getDate()).padStart(2, '0'),
+].join('-');
+
+const currentMonthRange = (): DateRange => {
+    const today = new Date();
+    return {
+        from: localISODate(new Date(today.getFullYear(), today.getMonth(), 1)),
+        to: localISODate(today),
+    };
+};
+
+type TaxSummary = {
+    cgst: string;
+    sgst: string;
+    igst: string;
+    cess: string;
+    total: string;
+};
+
+const EMPTY_TAX: TaxSummary = { cgst: '0.00', sgst: '0.00', igst: '0.00', cess: '0.00', total: '0.00' };
+
+const exactTax = (value: any, label: string): TaxSummary => {
+    const money = (field: keyof TaxSummary) => normalizeAuthoritativeDecimal(value?.[field], `${label} ${field}`, {
+        scale: 2, maximumWholeDigits: 20, allowNegative: false,
+    });
+    return { cgst: money('cgst'), sgst: money('sgst'), igst: money('igst'), cess: money('cess'), total: money('total') };
+};
+
+const GSTR3BReport: React.FC<GSTR3BReportProps> = ({
+    dateRange = currentMonthRange(),
+    refreshTrigger = 0,
+    showTaxBreakdown = false,
+    onDataReady,
+    onExport,
+}) => {
+    const onDataReadyRef = useRef(onDataReady);
+    onDataReadyRef.current = onDataReady;
+    const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [outputTax, setOutputTax] = useState({ cgst: 0, sgst: 0, igst: 0, total: 0 });
-    const [inputCredit, setInputCredit] = useState({ cgst: 0, sgst: 0, igst: 0, total: 0 });
-    const [netPayable, setNetPayable] = useState(0);
+    const [outputTax, setOutputTax] = useState<TaxSummary>(EMPTY_TAX);
+    const [inputCredit, setInputCredit] = useState<TaxSummary>(EMPTY_TAX);
+    const [payable, setPayable] = useState<TaxSummary>(EMPTY_TAX);
+    const [netPayable, setNetPayable] = useState('0.00');
     const [showPayableBreakdown, setShowPayableBreakdown] = useState(false);
 
     useEffect(() => {
@@ -34,51 +74,32 @@ const GSTR3BReport: React.FC<GSTR3BReportProps> = ({ dateRange, refreshTrigger, 
             setError(null);
 
             try {
-                const invoiceRes = await invoicesApi.search({
-                    dateFrom: dateRange.from,
-                    dateTo: dateRange.to,
-                    limit: 5000
+                const response = await gstApi.reports.gstr3b({
+                    date_from: dateRange.from,
+                    date_to: dateRange.to,
                 });
-                const invoiceData = invoiceRes?.data || invoiceRes;
-                const invoices = Array.isArray(invoiceData) ? invoiceData : invoiceData?.invoices || [];
-
-                let outCgst = 0, outSgst = 0, outIgst = 0;
-                invoices.forEach((inv: any) => {
-                    outCgst += inv.cgst_amount || 0;
-                    outSgst += inv.sgst_amount || 0;
-                    outIgst += inv.igst_amount || 0;
+                const payload = response?.data || response;
+                const output = exactTax(payload?.outputTax, 'GSTR-3B output tax');
+                setOutputTax(output);
+                const input = exactTax(payload?.inputCredit, 'GSTR-3B input credit');
+                setInputCredit(input);
+                const exactPayable = exactTax(payload?.payable, 'GSTR-3B payable');
+                setPayable(exactPayable);
+                const net = normalizeAuthoritativeDecimal(payload?.netPayable, 'GSTR-3B net payable', {
+                    scale: 2, maximumWholeDigits: 20, allowNegative: true,
                 });
-                const outTotal = outCgst + outSgst + outIgst;
-                setOutputTax({ cgst: outCgst, sgst: outSgst, igst: outIgst, total: outTotal });
-
-                const purchaseRes = await purchasesApi.getOrders({
-                    dateFrom: dateRange.from,
-                    dateTo: dateRange.to,
-                    limit: 5000
-                });
-                const purchaseData = purchaseRes?.data || purchaseRes;
-                const purchases = Array.isArray(purchaseData) ? purchaseData : purchaseData?.purchases || purchaseData?.orders || [];
-
-                let inCgst = 0, inSgst = 0, inIgst = 0;
-                purchases.forEach((p: any) => {
-                    inCgst += p.cgst_amount || 0;
-                    inSgst += p.sgst_amount || 0;
-                    inIgst += p.igst_amount || 0;
-                });
-                const inTotal = inCgst + inSgst + inIgst;
-                setInputCredit({ cgst: inCgst, sgst: inSgst, igst: inIgst, total: inTotal });
-
-                const net = calculateNetPayable(outTotal, inTotal);
                 setNetPayable(net);
 
-                onDataReady?.({
-                    outputTax: { cgst: outCgst, sgst: outSgst, igst: outIgst, total: outTotal },
-                    inputCredit: { cgst: inCgst, sgst: inSgst, igst: inIgst, total: inTotal },
+                onDataReadyRef.current?.({
+                    outputTax: output,
+                    inputCredit: input,
+                    payable: exactPayable,
                     netPayable: net
                 });
 
             } catch (err) {
-                setError('Failed to load GSTR-3B data');
+                onDataReadyRef.current?.(null);
+                setError(err instanceof Error ? err.message : 'Canonical GSTR-3B data is unavailable.');
             } finally {
                 setLoading(false);
             }
@@ -105,19 +126,21 @@ const GSTR3BReport: React.FC<GSTR3BReportProps> = ({ dateRange, refreshTrigger, 
         );
     }
 
-    const cgstPayable = Math.max(0, outputTax.cgst - inputCredit.cgst);
-    const sgstPayable = Math.max(0, outputTax.sgst - inputCredit.sgst);
-    const igstPayable = Math.max(0, outputTax.igst - inputCredit.igst);
+    const netIsPayable = compareExactDecimals(netPayable, '0.00', 'GSTR-3B net payable', {
+        scale: 2, maximumWholeDigits: 20, allowNegative: true,
+    }) >= 0;
+    const displayNet = netPayable.startsWith('-') ? netPayable.slice(1) : netPayable;
+    const fmt = (value: string, label: string) => formatExactCurrency(value, label);
 
     return (
         <div className="space-y-6">
             {/* Net Payable Banner */}
-            <div className={`p-6 rounded-lg ${netPayable >= 0 ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'} border`}>
+            <div className={`p-6 rounded-lg ${netIsPayable ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'} border`}>
                 <div className="flex items-center justify-between">
                     <div>
-                        <div className="text-sm text-gray-600">{netPayable >= 0 ? 'Net GST Payable' : 'GST Refund Claimable'}</div>
-                        <div className={`text-3xl font-bold ${netPayable >= 0 ? 'text-red-600' : 'text-green-600'}`}>
-                            {formatCurrency(Math.abs(netPayable))}
+                        <div className="text-sm text-gray-600">{netIsPayable ? 'Net GST Payable' : 'GST Refund Claimable'}</div>
+                        <div className={`text-3xl font-bold ${netIsPayable ? 'text-red-600' : 'text-green-600'}`}>
+                            {fmt(displayNet, 'GSTR-3B net payable')}
                         </div>
                     </div>
                     <div className="flex items-center space-x-2">
@@ -130,7 +153,7 @@ const GSTR3BReport: React.FC<GSTR3BReportProps> = ({ dateRange, refreshTrigger, 
                                 Export
                             </button>
                         )}
-                        <IndianRupee className={`h-12 w-12 ${netPayable >= 0 ? 'text-red-400' : 'text-green-400'}`} />
+                        <IndianRupee className={`h-12 w-12 ${netIsPayable ? 'text-red-400' : 'text-green-400'}`} />
                     </div>
                 </div>
             </div>
@@ -144,30 +167,30 @@ const GSTR3BReport: React.FC<GSTR3BReportProps> = ({ dateRange, refreshTrigger, 
                             <TrendingUp className="h-4 w-4 text-red-500 mr-2" />
                             <span className="text-sm font-medium text-gray-700">Total Output Tax</span>
                         </div>
-                        <div className="text-2xl font-bold text-red-600">{formatCurrency(outputTax.total)}</div>
+                        <div className="text-2xl font-bold text-red-600">{fmt(outputTax.total, 'GSTR-3B output total')}</div>
                     </div>
                     <div className="bg-white rounded-lg border p-4">
                         <div className="flex items-center mb-2">
                             <TrendingDown className="h-4 w-4 text-green-500 mr-2" />
                             <span className="text-sm font-medium text-gray-700">Total Input Credit</span>
                         </div>
-                        <div className="text-2xl font-bold text-green-600">{formatCurrency(inputCredit.total)}</div>
+                        <div className="text-2xl font-bold text-green-600">{fmt(inputCredit.total, 'GSTR-3B input total')}</div>
                     </div>
                     <div className="bg-gray-50 rounded-lg border p-4">
                         <div className="text-sm font-medium text-gray-700 mb-2">Calculation</div>
                         <div className="space-y-1 text-sm">
                             <div className="flex justify-between">
                                 <span>Output Tax</span>
-                                <span>{formatCurrency(outputTax.total)}</span>
+                                <span>{fmt(outputTax.total, 'GSTR-3B output total')}</span>
                             </div>
                             <div className="flex justify-between text-green-600">
                                 <span>Less: Input Credit</span>
-                                <span>- {formatCurrency(inputCredit.total)}</span>
+                                <span>- {fmt(inputCredit.total, 'GSTR-3B input total')}</span>
                             </div>
                             <div className="border-t pt-1 flex justify-between font-bold">
                                 <span>Net Payable</span>
-                                <span className={netPayable >= 0 ? 'text-red-600' : 'text-green-600'}>
-                                    {formatCurrency(netPayable)}
+                                <span className={netIsPayable ? 'text-red-600' : 'text-green-600'}>
+                                    {fmt(displayNet, 'GSTR-3B net payable')}
                                 </span>
                             </div>
                         </div>
@@ -182,22 +205,26 @@ const GSTR3BReport: React.FC<GSTR3BReportProps> = ({ dateRange, refreshTrigger, 
                             <TrendingUp className="h-5 w-5 text-red-600 mr-2" />
                             <h3 className="text-lg font-semibold">Output Tax (Sales)</h3>
                         </div>
-                        <div className="grid grid-cols-4 gap-4">
+                        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
                             <div>
                                 <div className="text-sm text-gray-600">CGST</div>
-                                <div className="text-xl font-bold">{formatCurrency(outputTax.cgst)}</div>
+                                <div className="text-xl font-bold">{fmt(outputTax.cgst, 'GSTR-3B output CGST')}</div>
                             </div>
                             <div>
                                 <div className="text-sm text-gray-600">SGST</div>
-                                <div className="text-xl font-bold">{formatCurrency(outputTax.sgst)}</div>
+                                <div className="text-xl font-bold">{fmt(outputTax.sgst, 'GSTR-3B output SGST')}</div>
                             </div>
                             <div>
                                 <div className="text-sm text-gray-600">IGST</div>
-                                <div className="text-xl font-bold">{formatCurrency(outputTax.igst)}</div>
+                                <div className="text-xl font-bold">{fmt(outputTax.igst, 'GSTR-3B output IGST')}</div>
+                            </div>
+                            <div>
+                                <div className="text-sm text-gray-600">Cess</div>
+                                <div className="text-xl font-bold">{fmt(outputTax.cess, 'GSTR-3B output cess')}</div>
                             </div>
                             <div className="bg-red-50 p-2 rounded">
                                 <div className="text-sm text-gray-600">Total Output</div>
-                                <div className="text-xl font-bold text-red-600">{formatCurrency(outputTax.total)}</div>
+                                <div className="text-xl font-bold text-red-600">{fmt(outputTax.total, 'GSTR-3B output total')}</div>
                             </div>
                         </div>
                     </div>
@@ -208,22 +235,26 @@ const GSTR3BReport: React.FC<GSTR3BReportProps> = ({ dateRange, refreshTrigger, 
                             <TrendingDown className="h-5 w-5 text-green-600 mr-2" />
                             <h3 className="text-lg font-semibold">Input Credit (Purchases)</h3>
                         </div>
-                        <div className="grid grid-cols-4 gap-4">
+                        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
                             <div>
                                 <div className="text-sm text-gray-600">CGST</div>
-                                <div className="text-xl font-bold">{formatCurrency(inputCredit.cgst)}</div>
+                                <div className="text-xl font-bold">{fmt(inputCredit.cgst, 'GSTR-3B input CGST')}</div>
                             </div>
                             <div>
                                 <div className="text-sm text-gray-600">SGST</div>
-                                <div className="text-xl font-bold">{formatCurrency(inputCredit.sgst)}</div>
+                                <div className="text-xl font-bold">{fmt(inputCredit.sgst, 'GSTR-3B input SGST')}</div>
                             </div>
                             <div>
                                 <div className="text-sm text-gray-600">IGST</div>
-                                <div className="text-xl font-bold">{formatCurrency(inputCredit.igst)}</div>
+                                <div className="text-xl font-bold">{fmt(inputCredit.igst, 'GSTR-3B input IGST')}</div>
+                            </div>
+                            <div>
+                                <div className="text-sm text-gray-600">Cess</div>
+                                <div className="text-xl font-bold">{fmt(inputCredit.cess, 'GSTR-3B input cess')}</div>
                             </div>
                             <div className="bg-green-50 p-2 rounded">
                                 <div className="text-sm text-gray-600">Total Input</div>
-                                <div className="text-xl font-bold text-green-600">{formatCurrency(inputCredit.total)}</div>
+                                <div className="text-xl font-bold text-green-600">{fmt(inputCredit.total, 'GSTR-3B input total')}</div>
                             </div>
                         </div>
                     </div>
@@ -234,16 +265,16 @@ const GSTR3BReport: React.FC<GSTR3BReportProps> = ({ dateRange, refreshTrigger, 
                         <div className="space-y-2 text-sm">
                             <div className="flex justify-between">
                                 <span>Output Tax (A)</span>
-                                <span className="font-medium">{formatCurrency(outputTax.total)}</span>
+                                <span className="font-medium">{fmt(outputTax.total, 'GSTR-3B output total')}</span>
                             </div>
                             <div className="flex justify-between">
                                 <span>Input Credit (B)</span>
-                                <span className="font-medium text-green-600">- {formatCurrency(inputCredit.total)}</span>
+                                <span className="font-medium text-green-600">- {fmt(inputCredit.total, 'GSTR-3B input total')}</span>
                             </div>
                             <div className="border-t pt-2 flex justify-between font-bold">
                                 <span>Net Payable (A - B)</span>
-                                <span className={netPayable >= 0 ? 'text-red-600' : 'text-green-600'}>
-                                    {formatCurrency(netPayable)}
+                                <span className={netIsPayable ? 'text-red-600' : 'text-green-600'}>
+                                    {fmt(displayNet, 'GSTR-3B net payable')}
                                 </span>
                             </div>
                         </div>
@@ -269,21 +300,21 @@ const GSTR3BReport: React.FC<GSTR3BReportProps> = ({ dateRange, refreshTrigger, 
                 </button>
                 {showPayableBreakdown && (
                     <div className="p-4 border-t">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                             <div className="bg-gray-50 rounded-lg p-4">
                                 <h4 className="font-semibold text-sm text-blue-600 mb-3">CGST</h4>
                                 <div className="space-y-2 text-sm">
                                     <div className="flex justify-between">
                                         <span>Output:</span>
-                                        <span>{formatCurrency(outputTax.cgst)}</span>
+                                        <span>{fmt(outputTax.cgst, 'GSTR-3B output CGST')}</span>
                                     </div>
                                     <div className="flex justify-between text-green-600">
                                         <span>Input Credit:</span>
-                                        <span>- {formatCurrency(inputCredit.cgst)}</span>
+                                        <span>- {fmt(inputCredit.cgst, 'GSTR-3B input CGST')}</span>
                                     </div>
                                     <div className="border-t pt-2 flex justify-between font-bold">
                                         <span>Payable:</span>
-                                        <span className="text-red-600">{formatCurrency(cgstPayable)}</span>
+                                        <span className="text-red-600">{fmt(payable.cgst, 'GSTR-3B CGST payable')}</span>
                                     </div>
                                 </div>
                             </div>
@@ -292,15 +323,15 @@ const GSTR3BReport: React.FC<GSTR3BReportProps> = ({ dateRange, refreshTrigger, 
                                 <div className="space-y-2 text-sm">
                                     <div className="flex justify-between">
                                         <span>Output:</span>
-                                        <span>{formatCurrency(outputTax.sgst)}</span>
+                                        <span>{fmt(outputTax.sgst, 'GSTR-3B output SGST')}</span>
                                     </div>
                                     <div className="flex justify-between text-green-600">
                                         <span>Input Credit:</span>
-                                        <span>- {formatCurrency(inputCredit.sgst)}</span>
+                                        <span>- {fmt(inputCredit.sgst, 'GSTR-3B input SGST')}</span>
                                     </div>
                                     <div className="border-t pt-2 flex justify-between font-bold">
                                         <span>Payable:</span>
-                                        <span className="text-red-600">{formatCurrency(sgstPayable)}</span>
+                                        <span className="text-red-600">{fmt(payable.sgst, 'GSTR-3B SGST payable')}</span>
                                     </div>
                                 </div>
                             </div>
@@ -309,15 +340,32 @@ const GSTR3BReport: React.FC<GSTR3BReportProps> = ({ dateRange, refreshTrigger, 
                                 <div className="space-y-2 text-sm">
                                     <div className="flex justify-between">
                                         <span>Output:</span>
-                                        <span>{formatCurrency(outputTax.igst)}</span>
+                                        <span>{fmt(outputTax.igst, 'GSTR-3B output IGST')}</span>
                                     </div>
                                     <div className="flex justify-between text-green-600">
                                         <span>Input Credit:</span>
-                                        <span>- {formatCurrency(inputCredit.igst)}</span>
+                                        <span>- {fmt(inputCredit.igst, 'GSTR-3B input IGST')}</span>
                                     </div>
                                     <div className="border-t pt-2 flex justify-between font-bold">
                                         <span>Payable:</span>
-                                        <span className="text-red-600">{formatCurrency(igstPayable)}</span>
+                                        <span className="text-red-600">{fmt(payable.igst, 'GSTR-3B IGST payable')}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="bg-gray-50 rounded-lg p-4">
+                                <h4 className="font-semibold text-sm text-amber-700 mb-3">Cess</h4>
+                                <div className="space-y-2 text-sm">
+                                    <div className="flex justify-between">
+                                        <span>Output:</span>
+                                        <span>{fmt(outputTax.cess, 'GSTR-3B output cess')}</span>
+                                    </div>
+                                    <div className="flex justify-between text-green-600">
+                                        <span>Input Credit:</span>
+                                        <span>- {fmt(inputCredit.cess, 'GSTR-3B input cess')}</span>
+                                    </div>
+                                    <div className="border-t pt-2 flex justify-between font-bold">
+                                        <span>Payable:</span>
+                                        <span className="text-red-600">{fmt(payable.cess, 'GSTR-3B cess payable')}</span>
                                     </div>
                                 </div>
                             </div>

@@ -1,0 +1,4407 @@
+{
+  "domain": "tax",
+  "table_count": 25,
+  "tables": [
+    {
+      "name": "tax.registrations",
+      "fact_owner": "Tenant GST registration and effective place-of-business identity",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "mutable_regulatory_master",
+      "lifecycle": {
+        "state_column": "status",
+        "states": [
+          "pending",
+          "active",
+          "suspended",
+          "cancelled"
+        ],
+        "initial": "pending",
+        "terminal": [
+          "cancelled"
+        ],
+        "transitions": [
+          "pending->active",
+          "pending->cancelled",
+          "active->suspended",
+          "suspended->active",
+          "active->cancelled",
+          "suspended->cancelled"
+        ]
+      },
+      "rls": {
+        "class": "tenant_membership",
+        "force": true,
+        "write_permission": "tax.registration.manage"
+      },
+      "retention": {
+        "class": "gst_registration",
+        "minimum": "permanent",
+        "hard_delete": false
+      },
+      "columns": [
+        [
+          "org_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "id",
+          "uuid",
+          false,
+          "gen_random_uuid()",
+          "internal"
+        ],
+        [
+          "gstin",
+          "varchar(15)",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "legal_name",
+          "text",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "trade_name",
+          "text",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "state_code",
+          "char(2)",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "registration_type",
+          "text",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "business_vertical_code",
+          "varchar(32)",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "effective_from",
+          "date",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "effective_to",
+          "date",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "status",
+          "text",
+          false,
+          "'pending'::text",
+          "internal"
+        ],
+        [
+          "created_at",
+          "timestamptz",
+          false,
+          "transaction_timestamp()",
+          "internal"
+        ],
+        [
+          "created_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "personal"
+        ],
+        [
+          "updated_at",
+          "timestamptz",
+          false,
+          "transaction_timestamp()",
+          "internal"
+        ],
+        [
+          "updated_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "personal"
+        ],
+        [
+          "row_version",
+          "bigint",
+          false,
+          "1",
+          "internal"
+        ]
+      ],
+      "primary_key": [
+        "org_id",
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "registrations_org_fk",
+          "columns": [
+            "org_id"
+          ],
+          "references": "core.organizations",
+          "referenced_columns": [
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "registrations_created_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "created_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "registrations_updated_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "updated_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        }
+      ],
+      "uniques": [
+        {
+          "name": "registrations_gstin_uq",
+          "columns": [
+            "org_id",
+            "gstin"
+          ],
+          "where": null
+        }
+      ],
+      "checks": [
+        {
+          "name": "registrations_gstin_ck",
+          "expression": "gstin ~ '^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$'"
+        },
+        {
+          "name": "registrations_state_ck",
+          "expression": "left(gstin,2) = state_code"
+        },
+        {
+          "name": "registrations_type_ck",
+          "expression": "registration_type IN ('regular','composition','casual','non_resident','input_service_distributor','tax_deductor','tax_collector')"
+        },
+        {
+          "name": "registrations_dates_ck",
+          "expression": "effective_to IS NULL OR effective_to >= effective_from"
+        },
+        {
+          "name": "registrations_status_ck",
+          "expression": "status IN ('pending','active','suspended','cancelled')"
+        },
+        {
+          "name": "registrations_row_version_ck",
+          "expression": "row_version > 0"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "registrations_state_idx",
+          "columns": [
+            "org_id",
+            "state_code",
+            "gstin",
+            "id"
+          ],
+          "unique": false,
+          "where": "status = 'active'",
+          "purpose": "place-of-supply registration lookup"
+        }
+      ],
+      "cross_row_invariants": [
+        {
+          "name": "registrations_cross_row_guard",
+          "enforcement": "exclusion_constraint",
+          "rule": "Reject overlapping active effective periods for the same GSTIN and prevent identity changes after referenced postings. Branch applicability is owned only by effective tax.registration_branches associations."
+        }
+      ]
+    },
+    {
+      "name": "tax.registration_branches",
+      "fact_owner": "Effective association of one GST registration with one operating branch/place of business",
+      "tenant_class": "tenant_association",
+      "mutation_class": "temporal_regulatory_association",
+      "cross_row_invariants": [{"name": "registration_branches_effective_guard", "enforcement": "exclusion_constraint", "rule": "The registration and branch belong to the same organization and state; active effective periods cannot overlap for a branch, and a branch association referenced by a posted tax document is immutable. Posting and provider commands resolve registration authority only through the association covering the document date."}],
+      "lifecycle": {"state_column": "status", "states": ["active", "retired"], "initial": "active", "terminal": ["retired"], "transitions": ["active->retired"]},
+      "rls": {"class": "tenant_membership", "force": true, "write_permission": "tax.registration.manage"},
+      "retention": {"class": "gst_registration_place", "minimum": "permanent", "hard_delete": false},
+      "columns": [
+        ["org_id", "uuid", false, null, "internal"], ["registration_id", "uuid", false, null, "regulated"], ["branch_id", "uuid", false, null, "internal"],
+        ["place_of_business_kind", "text", false, null, "regulated"], ["effective_from", "date", false, null, "regulated"], ["effective_to", "date", true, null, "regulated"], ["status", "text", false, "'active'::text", "internal"],
+        ["created_at", "timestamptz", false, "transaction_timestamp()", "internal"], ["created_by_membership_id", "uuid", false, "current_setting('app.membership_id')::uuid", "personal"]
+      ],
+      "primary_key": ["org_id", "registration_id", "branch_id", "effective_from"],
+      "foreign_keys": [
+        {"name": "registration_branches_org_fk", "columns": ["org_id"], "references": "core.organizations", "referenced_columns": ["id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "registration_branches_registration_fk", "columns": ["org_id", "registration_id"], "references": "tax.registrations", "referenced_columns": ["org_id", "id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "registration_branches_branch_fk", "columns": ["org_id", "branch_id"], "references": "core.branches", "referenced_columns": ["org_id", "id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "registration_branches_created_by_fk", "columns": ["org_id", "created_by_membership_id"], "references": "core.memberships", "referenced_columns": ["org_id", "id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false}
+      ],
+      "uniques": [],
+      "checks": [
+        {"name": "registration_branches_kind_ck", "expression": "place_of_business_kind IN ('principal','additional')"},
+        {"name": "registration_branches_dates_ck", "expression": "effective_to IS NULL OR effective_to>=effective_from"},
+        {"name": "registration_branches_status_ck", "expression": "status IN ('active','retired')"}
+      ],
+      "indexes": [
+        {"name": "registration_branches_branch_effective_idx", "columns": ["org_id", "branch_id", "effective_from", "registration_id"], "unique": false, "where": "status='active'", "purpose": "document-date GST registration authority"},
+        {"name": "registration_branches_registration_idx", "columns": ["org_id", "registration_id", "effective_from", "branch_id"], "unique": false, "where": "status='active'", "purpose": "all effective places for one GSTIN"}
+      ]
+    },
+    {
+      "name": "tax.tax_code_versions",
+      "population_mode": "regulated_import",
+      "fact_owner": "Versioned statutory HSN/SAC tax treatment",
+      "tenant_class": "global_reference",
+      "mutation_class": "migration_owned_reference",
+      "lifecycle": {
+        "state_column": "status",
+        "states": [
+          "active",
+          "retired"
+        ],
+        "initial": "active",
+        "terminal": [
+          "retired"
+        ],
+        "transitions": [
+          "active->retired"
+        ]
+      },
+      "rls": {
+        "class": "global_reference_read_only",
+        "force": false,
+        "write_permission": null
+      },
+      "retention": {
+        "class": "statutory_tax_reference",
+        "minimum": "permanent",
+        "hard_delete": false
+      },
+      "columns": [
+        [
+          "id",
+          "uuid",
+          false,
+          null,
+          "public_reference"
+        ],
+        [
+          "release_id",
+          "uuid",
+          false,
+          null,
+          "public_reference"
+        ],
+        [
+          "code",
+          "varchar(16)",
+          false,
+          null,
+          "public_reference"
+        ],
+        [
+          "code_kind",
+          "text",
+          false,
+          null,
+          "public_reference"
+        ],
+        [
+          "version_number",
+          "integer",
+          false,
+          null,
+          "public_reference"
+        ],
+        [
+          "description",
+          "text",
+          false,
+          null,
+          "public_reference"
+        ],
+        [
+          "effective_from",
+          "date",
+          false,
+          null,
+          "public_reference"
+        ],
+        [
+          "effective_to",
+          "date",
+          true,
+          null,
+          "public_reference"
+        ],
+        [
+          "taxability",
+          "text",
+          false,
+          null,
+          "public_reference"
+        ],
+        [
+          "default_supply_type",
+          "text",
+          false,
+          null,
+          "public_reference"
+        ],
+        [
+          "cgst_rate",
+          "numeric(9,6)",
+          false,
+          "0",
+          "public_reference"
+        ],
+        [
+          "sgst_rate",
+          "numeric(9,6)",
+          false,
+          "0",
+          "public_reference"
+        ],
+        [
+          "igst_rate",
+          "numeric(9,6)",
+          false,
+          "0",
+          "public_reference"
+        ],
+        [
+          "cess_rate",
+          "numeric(9,6)",
+          false,
+          "0",
+          "public_reference"
+        ],
+        [
+          "ruleset_version",
+          "varchar(64)",
+          false,
+          null,
+          "public_reference"
+        ],
+        [
+          "status",
+          "text",
+          false,
+          "'active'::text",
+          "public_reference"
+        ],
+        [
+          "created_at",
+          "timestamptz",
+          false,
+          "transaction_timestamp()",
+          "internal"
+        ]
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "tax_code_versions_release_fk",
+          "columns": ["release_id"],
+          "references": "core.reference_data_releases",
+          "referenced_columns": ["id"],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        }
+      ],
+      "uniques": [
+        {
+          "name": "tax_code_versions_code_version_uq",
+          "columns": [
+            "code",
+            "version_number"
+          ],
+          "where": null
+        }
+      ],
+      "checks": [
+        {
+          "name": "tax_code_versions_kind_ck",
+          "expression": "code_kind IN ('hsn','sac')"
+        },
+        {
+          "name": "tax_code_versions_dates_ck",
+          "expression": "effective_to IS NULL OR effective_to >= effective_from"
+        },
+        {
+          "name": "tax_code_versions_taxability_ck",
+          "expression": "taxability IN ('taxable','exempt','nil_rated','non_gst')"
+        },
+        {
+          "name": "tax_code_versions_supply_ck",
+          "expression": "default_supply_type IN ('goods','services')"
+        },
+        {
+          "name": "tax_code_versions_rates_ck",
+          "expression": "cgst_rate >= 0 AND sgst_rate >= 0 AND igst_rate >= 0 AND cess_rate >= 0 AND cgst_rate + sgst_rate = igst_rate"
+        },
+        {
+          "name": "tax_code_versions_status_ck",
+          "expression": "status IN ('active','retired')"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "tax_code_versions_effective_idx",
+          "columns": [
+            "code",
+            "effective_from",
+            "version_number"
+          ],
+          "unique": false,
+          "where": "status = 'active'",
+          "purpose": "effective tax rule resolution"
+        }
+      ],
+      "cross_row_invariants": [
+        {
+          "name": "tax_code_versions_cross_row_guard",
+          "enforcement": "exclusion_constraint",
+          "rule": "Reject overlapping effective periods for the same code and require ruleset_version to identify an immutable deployed ruleset. Runtime roles are SELECT-only."
+        },
+        {
+          "name": "tax_code_versions_release_authority",
+          "enforcement": "transaction_guard",
+          "rule": "Tax-code versions are inserted only as the exact rows of a verified hsn_sac_tax release. Classification, rates, effective dates and release provenance are immutable; atomic release supersession may only retire the prior active row set. Runtime and MCP roles cannot import or select a ruleset."
+        }
+      ]
+    },
+    {
+      "name": "tax.documents",
+      "fact_owner": "Immutable GST header snapshot for exactly one posted typed business source",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "immutable_tax_snapshot",
+      "lifecycle": {
+        "state_column": null,
+        "states": [],
+        "initial": null,
+        "terminal": [],
+        "transitions": []
+      },
+      "rls": {
+        "class": "tenant_membership",
+        "force": true,
+        "write_permission": "internal.tax_document.post"
+      },
+      "retention": {
+        "class": "gst_document",
+        "minimum": "permanent",
+        "hard_delete": false
+      },
+      "columns": [
+        [
+          "org_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "id",
+          "uuid",
+          false,
+          "gen_random_uuid()",
+          "internal"
+        ],
+        [
+          "registration_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "sales_invoice_id",
+          "uuid",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "supplier_invoice_id",
+          "uuid",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "adjustment_note_id",
+          "uuid",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "document_class",
+          "text",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "document_number",
+          "varchar(64)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "document_date",
+          "date",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "direction",
+          "text",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "counterparty_party_id",
+          "uuid",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "counterparty_gstin",
+          "varchar(15)",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "place_of_supply_state_code",
+          "char(2)",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "supply_type",
+          "text",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "zero_rated_payment_mode",
+          "text",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "tax_charge_mechanism",
+          "text",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "tax_liability_party",
+          "text",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "document_effect",
+          "text",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "adjusts_tax_document_id",
+          "uuid",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "currency_code",
+          "char(3)",
+          false,
+          "'INR'::bpchar",
+          "internal"
+        ],
+        [
+          "net_value_amount",
+          "numeric(20,2)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "gst_taxable_value",
+          "numeric(20,2)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "cgst_amount",
+          "numeric(20,2)",
+          false,
+          "0",
+          "internal"
+        ],
+        [
+          "sgst_amount",
+          "numeric(20,2)",
+          false,
+          "0",
+          "internal"
+        ],
+        [
+          "igst_amount",
+          "numeric(20,2)",
+          false,
+          "0",
+          "internal"
+        ],
+        [
+          "cess_amount",
+          "numeric(20,2)",
+          false,
+          "0",
+          "internal"
+        ],
+        [
+          "self_assessed_tax_amount",
+          "numeric(20,2)",
+          false,
+          "0",
+          "internal"
+        ],
+        [
+          "rounding_adjustment",
+          "numeric(20,2)",
+          false,
+          "0",
+          "internal"
+        ],
+        [
+          "counterparty_payable_amount",
+          "numeric(20,2)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "tax_ruleset_version",
+          "varchar(64)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "tax_ruleset_effective_date",
+          "date",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "source_hash",
+          "bytea",
+          false,
+          null,
+          "secret_ciphertext"
+        ],
+        [
+          "posted_at",
+          "timestamptz",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "created_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "personal"
+        ]
+      ],
+      "primary_key": [
+        "org_id",
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "documents_org_fk",
+          "columns": [
+            "org_id"
+          ],
+          "references": "core.organizations",
+          "referenced_columns": [
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "documents_registration_fk",
+          "columns": [
+            "org_id",
+            "registration_id"
+          ],
+          "references": "tax.registrations",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "documents_sales_invoice_fk",
+          "columns": [
+            "org_id",
+            "sales_invoice_id"
+          ],
+          "references": "sales.invoices",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "1:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "documents_supplier_invoice_fk",
+          "columns": [
+            "org_id",
+            "supplier_invoice_id"
+          ],
+          "references": "procurement.supplier_invoices",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "1:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "documents_adjustment_note_fk",
+          "columns": [
+            "org_id",
+            "adjustment_note_id"
+          ],
+          "references": "finance.adjustment_notes",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "1:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "documents_adjusts_tax_document_fk",
+          "columns": [
+            "org_id",
+            "adjusts_tax_document_id"
+          ],
+          "references": "tax.documents",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": "INITIALLY_DEFERRED"
+        },
+        {
+          "name": "documents_party_fk",
+          "columns": [
+            "org_id",
+            "counterparty_party_id"
+          ],
+          "references": "parties.parties",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "documents_created_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "created_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        }
+      ],
+      "uniques": [
+        {
+          "name": "documents_registration_number_uq",
+          "columns": [
+            "org_id",
+            "registration_id",
+            "document_class",
+            "document_number"
+          ],
+          "where": null
+        }
+      ],
+      "checks": [
+        {
+          "name": "documents_exact_source_ck",
+          "expression": "num_nonnulls(sales_invoice_id,supplier_invoice_id,adjustment_note_id) = 1"
+        },
+        {
+          "name": "documents_class_source_ck",
+          "expression": "(document_class = 'sales_invoice' AND sales_invoice_id IS NOT NULL) OR (document_class = 'supplier_invoice' AND supplier_invoice_id IS NOT NULL) OR (document_class = 'adjustment_note' AND adjustment_note_id IS NOT NULL)"
+        },
+        {
+          "name": "documents_direction_ck",
+          "expression": "direction IN ('outward','inward')"
+        },
+        {
+          "name": "documents_supply_ck",
+          "expression": "supply_type IN ('intra_state','inter_state','export','sez','deemed_export','import')"
+        },
+        {
+          "name": "documents_zero_rated_ck",
+          "expression": "zero_rated_payment_mode IN ('not_applicable','without_payment','with_igst') AND ((supply_type IN ('export','sez') AND zero_rated_payment_mode IN ('without_payment','with_igst')) OR (supply_type NOT IN ('export','sez') AND zero_rated_payment_mode = 'not_applicable'))"
+        },
+        {
+          "name": "documents_charge_mechanism_ck",
+          "expression": "tax_charge_mechanism IN ('normal','reverse_charge') AND tax_liability_party IN ('supplier','recipient') AND ((tax_charge_mechanism = 'normal' AND tax_liability_party = 'supplier') OR (tax_charge_mechanism = 'reverse_charge' AND tax_liability_party = 'recipient'))"
+        },
+        {
+          "name": "documents_effect_ck",
+          "expression": "(document_effect = 'original' AND adjusts_tax_document_id IS NULL) OR (document_effect IN ('increase','decrease') AND adjusts_tax_document_id IS NOT NULL)"
+        },
+        {
+          "name": "documents_components_ck",
+          "expression": "net_value_amount >= 0 AND gst_taxable_value >= 0 AND gst_taxable_value <= net_value_amount AND cgst_amount >= 0 AND sgst_amount >= 0 AND igst_amount >= 0 AND cess_amount >= 0 AND self_assessed_tax_amount >= 0 AND counterparty_payable_amount >= 0"
+        },
+        {
+          "name": "documents_payable_ck",
+          "expression": "((tax_charge_mechanism = 'normal' AND self_assessed_tax_amount = 0 AND counterparty_payable_amount = net_value_amount + cgst_amount + sgst_amount + igst_amount + cess_amount + rounding_adjustment) OR (tax_charge_mechanism = 'reverse_charge' AND counterparty_payable_amount = net_value_amount + rounding_adjustment AND ((direction = 'inward' AND self_assessed_tax_amount = cgst_amount + sgst_amount + igst_amount + cess_amount) OR (direction = 'outward' AND self_assessed_tax_amount = 0))))"
+        },
+        {
+          "name": "documents_component_mode_ck",
+          "expression": "(supply_type = 'intra_state' AND igst_amount = 0 AND cgst_amount = sgst_amount) OR (supply_type <> 'intra_state' AND cgst_amount = 0 AND sgst_amount = 0)"
+        },
+        {
+          "name": "documents_zero_rated_components_ck",
+          "expression": "supply_type NOT IN ('export','sez') OR ((zero_rated_payment_mode = 'without_payment' AND cgst_amount = 0 AND sgst_amount = 0 AND igst_amount = 0 AND cess_amount = 0) OR (zero_rated_payment_mode = 'with_igst' AND cgst_amount = 0 AND sgst_amount = 0 AND igst_amount > 0 AND cess_amount = 0))"
+        },
+        {
+          "name": "documents_hash_ck",
+          "expression": "octet_length(source_hash) = 32"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "documents_sales_source_uq",
+          "columns": [
+            "org_id",
+            "sales_invoice_id"
+          ],
+          "unique": true,
+          "where": "sales_invoice_id IS NOT NULL",
+          "purpose": "one tax snapshot per sales invoice"
+        },
+        {
+          "name": "documents_supplier_source_uq",
+          "columns": [
+            "org_id",
+            "supplier_invoice_id"
+          ],
+          "unique": true,
+          "where": "supplier_invoice_id IS NOT NULL",
+          "purpose": "one tax snapshot per supplier invoice"
+        },
+        {
+          "name": "documents_adjustment_source_uq",
+          "columns": [
+            "org_id",
+            "adjustment_note_id"
+          ],
+          "unique": true,
+          "where": "adjustment_note_id IS NOT NULL",
+          "purpose": "one tax snapshot per adjustment note"
+        },
+        {
+          "name": "documents_adjustment_idx",
+          "columns": [
+            "org_id",
+            "adjusts_tax_document_id",
+            "document_date",
+            "id"
+          ],
+          "unique": false,
+          "where": "adjusts_tax_document_id IS NOT NULL",
+          "purpose": "signed tax adjustment lineage and cumulative reversal ceiling"
+        },
+        {
+          "name": "documents_period_idx",
+          "columns": [
+            "org_id",
+            "registration_id",
+            "document_date",
+            "id"
+          ],
+          "unique": false,
+          "where": null,
+          "purpose": "return population"
+        }
+      ],
+      "cross_row_invariants": [
+        {
+          "name": "documents_cross_row_guard",
+          "enforcement": "transaction_guard",
+          "rule": "Insert only with the typed source posted and locked; copy exact rounded net_value_amount, gst_taxable_value, recipient-assessed components, rounding adjustment and counterparty payable from immutable business-line snapshots. Derive organization self_assessed_tax_amount from direction: it equals recipient-assessed components only for inward reverse charge and is zero for outward reverse charge. Validate registration, place of supply, zero-rated payment mode, tax-liability party and ruleset. An adjustment locks its original tax document, copies its tax context, records increase/decrease explicitly, and cumulative decreases by each rounded component and value cannot exceed the original plus prior increases. Block UPDATE and DELETE."
+        }
+      ]
+    },
+    {
+      "name": "tax.withholdings",
+      "fact_owner": "Typed statutory tax deduction or compensating reversal against one payable open item",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "append_only_statutory_settlement",
+      "lifecycle": {
+        "state_column": "status",
+        "states": [
+          "deducted",
+          "reversed"
+        ],
+        "initial": "deducted",
+        "terminal": [
+          "reversed"
+        ],
+        "transitions": [
+          "deducted->reversed"
+        ]
+      },
+      "rls": {
+        "class": "tenant_membership",
+        "force": true,
+        "write_permission": "tax.withholding.manage"
+      },
+      "retention": {
+        "class": "withholding_evidence",
+        "minimum": "permanent",
+        "hard_delete": false
+      },
+      "columns": [
+        ["org_id", "uuid", false, null, "internal"],
+        ["id", "uuid", false, "gen_random_uuid()", "internal"],
+        ["registration_id", "uuid", true, null, "internal"],
+        ["open_item_id", "uuid", true, null, "internal"],
+        ["purchase_order_advance_allocation_id", "uuid", true, null, "internal"],
+        ["triggered_by_payment_id", "uuid", true, null, "internal"],
+        ["counterparty_party_id", "uuid", false, null, "internal"],
+        ["tax_regime", "text", false, null, "internal"],
+        ["governing_act_code", "varchar(32)", false, null, "regulated"],
+        ["provision_code", "varchar(64)", false, null, "regulated"],
+        ["rule_version_id", "uuid", false, null, "regulated"],
+        ["deduction_trigger", "text", false, null, "internal"],
+        ["deduction_date", "date", false, null, "internal"],
+        ["gst_component_mode", "text", false, null, "internal"],
+        ["currency_code", "char(3)", false, "'INR'::bpchar", "internal"],
+        ["basis_amount", "numeric(20,2)", false, null, "financial"],
+        ["withholding_rate", "numeric(9,6)", false, null, "financial"],
+        ["income_tax_rate", "numeric(9,6)", false, "0", "financial"],
+        ["cgst_rate", "numeric(9,6)", false, "0", "financial"],
+        ["sgst_rate", "numeric(9,6)", false, "0", "financial"],
+        ["igst_rate", "numeric(9,6)", false, "0", "financial"],
+        ["income_tax_amount", "numeric(20,2)", false, "0", "financial"],
+        ["cgst_amount", "numeric(20,2)", false, "0", "financial"],
+        ["sgst_amount", "numeric(20,2)", false, "0", "financial"],
+        ["igst_amount", "numeric(20,2)", false, "0", "financial"],
+        ["withheld_amount", "numeric(20,2)", false, null, "financial"],
+        ["deductor_tax_identifier", "varchar(15)", false, null, "regulated"],
+        ["deductee_identifier_kind", "text", false, null, "regulated"],
+        ["deductee_tax_identifier", "varchar(15)", true, null, "regulated"],
+        ["deposit_due_date", "date", false, null, "regulated"],
+        ["reversal_of_withholding_id", "uuid", true, null, "internal"],
+        ["reversal_reason", "text", true, null, "regulated"],
+        ["status", "text", false, "'deducted'::text", "internal"],
+        ["created_at", "timestamptz", false, "transaction_timestamp()", "internal"],
+        ["created_by_membership_id", "uuid", false, "current_setting('app.membership_id')::uuid", "personal"]
+      ],
+      "primary_key": ["org_id", "id"],
+      "foreign_keys": [
+        {
+          "name": "withholdings_org_fk",
+          "columns": ["org_id"],
+          "references": "core.organizations",
+          "referenced_columns": ["id"],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "withholdings_registration_fk",
+          "columns": ["org_id", "registration_id"],
+          "references": "tax.registrations",
+          "referenced_columns": ["org_id", "id"],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "withholdings_open_item_fk",
+          "columns": ["org_id", "open_item_id"],
+          "references": "finance.open_items",
+          "referenced_columns": ["org_id", "id"],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {"name":"withholdings_advance_fk","columns":["org_id","purchase_order_advance_allocation_id"],"references":"procurement.purchase_order_advance_allocations","referenced_columns":["org_id","id"],"cardinality":"1:0..1","on_delete":"RESTRICT","deferrable":"INITIALLY_DEFERRED"},
+        {
+          "name": "withholdings_trigger_payment_fk",
+          "columns": ["org_id", "triggered_by_payment_id"],
+          "references": "finance.payments",
+          "referenced_columns": ["org_id", "id"],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "withholdings_counterparty_fk",
+          "columns": ["org_id", "counterparty_party_id"],
+          "references": "parties.parties",
+          "referenced_columns": ["org_id", "id"],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "withholdings_rule_version_fk",
+          "columns": ["rule_version_id"],
+          "references": "tax.withholding_rule_versions",
+          "referenced_columns": ["id"],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "withholdings_reversal_fk",
+          "columns": ["org_id", "reversal_of_withholding_id"],
+          "references": "tax.withholdings",
+          "referenced_columns": ["org_id", "id"],
+          "cardinality": "1:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": "INITIALLY_DEFERRED"
+        },
+        {
+          "name": "withholdings_created_by_membership_id_fk",
+          "columns": ["org_id", "created_by_membership_id"],
+          "references": "core.memberships",
+          "referenced_columns": ["org_id", "id"],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        }
+      ],
+      "uniques": [],
+      "checks": [
+        {"name":"withholdings_exact_commercial_source_ck","expression":"num_nonnulls(open_item_id,purchase_order_advance_allocation_id)=1"},
+        {
+          "name": "withholdings_regime_ck",
+          "expression": "(tax_regime = 'income_tax_tds' AND registration_id IS NULL AND gst_component_mode = 'not_applicable' AND withholding_rate = income_tax_rate AND income_tax_rate > 0 AND cgst_rate = 0 AND sgst_rate = 0 AND igst_rate = 0 AND income_tax_amount = round(basis_amount * income_tax_rate / 100,2) AND income_tax_amount = withheld_amount AND cgst_amount = 0 AND sgst_amount = 0 AND igst_amount = 0) OR (tax_regime = 'gst_tds' AND registration_id IS NOT NULL AND gst_component_mode IN ('intra_state','inter_state') AND income_tax_rate = 0 AND income_tax_amount = 0 AND ((gst_component_mode = 'intra_state' AND withholding_rate = cgst_rate + sgst_rate AND cgst_rate = sgst_rate AND cgst_rate > 0 AND igst_rate = 0 AND cgst_amount = round(basis_amount * cgst_rate / 100,2) AND sgst_amount = round(basis_amount * sgst_rate / 100,2) AND cgst_amount = sgst_amount AND igst_amount = 0) OR (gst_component_mode = 'inter_state' AND withholding_rate = igst_rate AND cgst_rate = 0 AND sgst_rate = 0 AND igst_rate > 0 AND cgst_amount = 0 AND sgst_amount = 0 AND igst_amount = round(basis_amount * igst_rate / 100,2))))"
+        },
+        {
+          "name": "withholdings_trigger_ck",
+          "expression": "(deduction_trigger = 'credit' AND triggered_by_payment_id IS NULL) OR (deduction_trigger = 'payment' AND triggered_by_payment_id IS NOT NULL)"
+        },
+        {
+          "name": "withholdings_amount_ck",
+          "expression": "currency_code = 'INR' AND basis_amount > 0 AND withholding_rate > 0 AND withheld_amount > 0 AND withheld_amount = income_tax_amount + cgst_amount + sgst_amount + igst_amount"
+        },
+        {
+          "name": "withholdings_identifier_ck",
+          "expression": "((tax_regime = 'income_tax_tds' AND deductor_tax_identifier ~ '^[A-Z]{4}[0-9]{5}[A-Z]$') OR (tax_regime = 'gst_tds' AND deductor_tax_identifier ~ '^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$')) AND ((deductee_identifier_kind = 'unavailable' AND deductee_tax_identifier IS NULL) OR (deductee_identifier_kind = 'pan' AND deductee_tax_identifier ~ '^[A-Z]{5}[0-9]{4}[A-Z]$') OR (deductee_identifier_kind = 'gstin' AND deductee_tax_identifier ~ '^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$'))"
+        },
+        {
+          "name": "withholdings_dates_ck",
+          "expression": "deposit_due_date >= deduction_date"
+        },
+        {
+          "name": "withholdings_reversal_ck",
+          "expression": "(reversal_of_withholding_id IS NULL AND reversal_reason IS NULL) OR (reversal_of_withholding_id IS NOT NULL AND reversal_reason IS NOT NULL AND status = 'reversed')"
+        },
+        {
+          "name": "withholdings_status_ck",
+          "expression": "status IN ('deducted','reversed')"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "withholdings_reversal_uq",
+          "columns": ["org_id", "reversal_of_withholding_id"],
+          "unique": true,
+          "where": "reversal_of_withholding_id IS NOT NULL",
+          "purpose": "one compensating reversal per withholding"
+        },
+        {
+          "name": "withholdings_open_item_idx",
+          "columns": ["org_id", "open_item_id", "deduction_date", "id"],
+          "unique": false,
+          "where": null,
+          "purpose": "payable withholding history"
+        },
+        {
+          "name": "withholdings_due_idx",
+          "columns": ["org_id", "deposit_due_date", "tax_regime", "id"],
+          "unique": false,
+          "where": "status = 'deducted'",
+          "purpose": "statutory deposit deadline queue"
+        }
+      ],
+      "cross_row_invariants": [
+        {
+          "name": "withholdings_cross_row_guard",
+          "enforcement": "transaction_guard",
+          "rule": "Lock the payable open item and optional posted payment. Apply the immutable ruleset selected by deduction_date: the earlier credit/payment event selects the governing Income-tax Act and provision; GST TDS requires a tax_deductor registration and its basis excludes invoice GST and cess. Require counterparty and currency to match, cap active withholding allocations by both the withholding and open-item principal, create exactly one accounting event, and freeze statutory amounts. Deposit, statement and certificate evidence belong only to their typed many-to-many aggregates. A reversal copies every financial and law snapshot, posts a compensating journal and allocation reversal, and never deletes or rewrites deduction evidence."
+        }
+      ]
+    },
+    {
+      "name": "tax.withholding_deposits",
+      "fact_owner": "One immutable statutory challan backed by one exact posted government disbursement",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "append_only_authority_artifact",
+      "lifecycle": {"state_column":"status","states":["posted","reversed"],"initial":"posted","terminal":["reversed"],"transitions":["posted->reversed"]},
+      "rls": {"class":"tenant_membership","force":true,"write_permission":"tax.withholding.manage"},
+      "retention": {"class":"withholding_deposit_evidence","minimum":"permanent","hard_delete":false},
+      "columns": [
+        ["org_id","uuid",false,null,"internal"],
+        ["id","uuid",false,"gen_random_uuid()","internal"],
+        ["tax_regime","text",false,null,"regulated"],
+        ["registration_id","uuid",true,null,"internal"],
+        ["payment_id","uuid",false,null,"internal"],
+        ["challan_reference","varchar(128)",false,null,"regulated"],
+        ["deposited_on","date",false,null,"regulated"],
+        ["deposited_amount","numeric(20,2)",false,null,"financial"],
+        ["evidence_attachment_id","uuid",false,null,"regulated"],
+        ["reversal_of_deposit_id","uuid",true,null,"internal"],
+        ["reversal_reason","text",true,null,"regulated"],
+        ["status","text",false,"'posted'::text","internal"],
+        ["created_at","timestamptz",false,"transaction_timestamp()","internal"],
+        ["created_by_membership_id","uuid",false,"current_setting('app.membership_id')::uuid","personal"]
+      ],
+      "primary_key":["org_id","id"],
+      "foreign_keys":[
+        {"name":"withholding_deposits_org_fk","columns":["org_id"],"references":"core.organizations","referenced_columns":["id"],"cardinality":"M:1","on_delete":"RESTRICT","deferrable":false},
+        {"name":"withholding_deposits_registration_fk","columns":["org_id","registration_id"],"references":"tax.registrations","referenced_columns":["org_id","id"],"cardinality":"M:0..1","on_delete":"RESTRICT","deferrable":false},
+        {"name":"withholding_deposits_payment_fk","columns":["org_id","payment_id"],"references":"finance.payments","referenced_columns":["org_id","id"],"cardinality":"1:1","on_delete":"RESTRICT","deferrable":false},
+        {"name":"withholding_deposits_evidence_fk","columns":["org_id","evidence_attachment_id"],"references":"core.attachments","referenced_columns":["org_id","id"],"cardinality":"M:1","on_delete":"RESTRICT","deferrable":false},
+        {"name":"withholding_deposits_reversal_fk","columns":["org_id","reversal_of_deposit_id"],"references":"tax.withholding_deposits","referenced_columns":["org_id","id"],"cardinality":"1:0..1","on_delete":"RESTRICT","deferrable":"INITIALLY_DEFERRED"},
+        {"name":"withholding_deposits_created_by_fk","columns":["org_id","created_by_membership_id"],"references":"core.memberships","referenced_columns":["org_id","id"],"cardinality":"M:1","on_delete":"RESTRICT","deferrable":false}
+      ],
+      "uniques":[
+        {"name":"withholding_deposits_payment_uq","columns":["org_id","payment_id"],"where":null},
+        {"name":"withholding_deposits_challan_uq","columns":["org_id","tax_regime","challan_reference"],"where":null}
+      ],
+      "checks":[
+        {"name":"withholding_deposits_regime_ck","expression":"(tax_regime='income_tax_tds' AND registration_id IS NULL) OR (tax_regime='gst_tds' AND registration_id IS NOT NULL)"},
+        {"name":"withholding_deposits_amount_ck","expression":"deposited_amount>0 AND btrim(challan_reference)<>''"},
+        {"name":"withholding_deposits_status_ck","expression":"status IN ('posted','reversed')"},
+        {"name":"withholding_deposits_reversal_ck","expression":"(status='posted' AND reversal_of_deposit_id IS NULL AND reversal_reason IS NULL) OR (status='reversed' AND reversal_of_deposit_id IS NOT NULL AND btrim(reversal_reason)<>'')"}
+      ],
+      "indexes":[
+        {"name":"withholding_deposits_reversal_uq","columns":["org_id","reversal_of_deposit_id"],"unique":true,"where":"reversal_of_deposit_id IS NOT NULL","purpose":"one compensating reversal per deposit"},
+        {"name":"withholding_deposits_date_idx","columns":["org_id","deposited_on","id"],"unique":false,"where":null,"purpose":"statutory deposit history"}
+      ],
+      "cross_row_invariants":[{"name":"withholding_deposits_cross_row_guard","enforcement":"transaction_guard","rule":"Posting locks an INR government disbursement in posted state, verified retained challan evidence, and all included deductions. Line component sums must equal both deposited_amount and the exact payment amount. A compensating reversal links the reversed payment, copies the statutory snapshot, and never edits the original challan or lines."}]
+    },
+    {
+      "name":"tax.withholding_deposit_lines",
+      "fact_owner":"Immutable M:N allocation of one challan to exact withholding deductions",
+      "tenant_class":"tenant_direct",
+      "mutation_class":"append_only_statutory_allocation",
+      "lifecycle":{"state_column":null,"states":[],"initial":null,"terminal":[],"transitions":[]},
+      "rls":{"class":"tenant_membership","force":true,"write_permission":"tax.withholding.manage"},
+      "retention":{"class":"withholding_deposit_evidence","minimum":"permanent","hard_delete":false},
+      "columns":[
+        ["org_id","uuid",false,null,"internal"],["id","uuid",false,"gen_random_uuid()","internal"],
+        ["deposit_id","uuid",false,null,"internal"],["withholding_id","uuid",false,null,"internal"],
+        ["income_tax_amount","numeric(20,2)",false,"0","financial"],["cgst_amount","numeric(20,2)",false,"0","financial"],
+        ["sgst_amount","numeric(20,2)",false,"0","financial"],["igst_amount","numeric(20,2)",false,"0","financial"],
+        ["deposited_amount","numeric(20,2)",false,null,"financial"],
+        ["created_at","timestamptz",false,"transaction_timestamp()","internal"],["created_by_membership_id","uuid",false,"current_setting('app.membership_id')::uuid","personal"]
+      ],
+      "primary_key":["org_id","id"],
+      "foreign_keys":[
+        {"name":"withholding_deposit_lines_org_fk","columns":["org_id"],"references":"core.organizations","referenced_columns":["id"],"cardinality":"M:1","on_delete":"RESTRICT","deferrable":false},
+        {"name":"withholding_deposit_lines_deposit_fk","columns":["org_id","deposit_id"],"references":"tax.withholding_deposits","referenced_columns":["org_id","id"],"cardinality":"M:1","on_delete":"RESTRICT","deferrable":false},
+        {"name":"withholding_deposit_lines_withholding_fk","columns":["org_id","withholding_id"],"references":"tax.withholdings","referenced_columns":["org_id","id"],"cardinality":"M:1","on_delete":"RESTRICT","deferrable":false},
+        {"name":"withholding_deposit_lines_created_by_fk","columns":["org_id","created_by_membership_id"],"references":"core.memberships","referenced_columns":["org_id","id"],"cardinality":"M:1","on_delete":"RESTRICT","deferrable":false}
+      ],
+      "uniques":[{"name":"withholding_deposit_lines_pair_uq","columns":["org_id","deposit_id","withholding_id"],"where":null}],
+      "checks":[{"name":"withholding_deposit_lines_amount_ck","expression":"income_tax_amount>=0 AND cgst_amount>=0 AND sgst_amount>=0 AND igst_amount>=0 AND deposited_amount>0 AND deposited_amount=income_tax_amount+cgst_amount+sgst_amount+igst_amount"}],
+      "indexes":[{"name":"withholding_deposit_lines_withholding_idx","columns":["org_id","withholding_id","deposit_id"],"unique":false,"where":null,"purpose":"deduction deposit coverage and residual"}],
+      "cross_row_invariants":[{"name":"withholding_deposit_lines_cross_row_guard","enforcement":"transaction_guard","rule":"Only the deposit command inserts lines while locking the deposit and deduction. Tax regime, registration and exact components must match; cumulative active deposits cannot exceed the deduction components. Rows are immutable and reversal uses a linked compensating deposit."}]
+    },
+    {
+      "name":"tax.withholding_statements",
+      "fact_owner":"Immutable statutory withholding statement revision and authority acknowledgement",
+      "tenant_class":"tenant_direct","mutation_class":"append_only_authority_artifact",
+      "lifecycle":{"state_column":null,"states":[],"initial":null,"terminal":[],"transitions":[]},
+      "rls":{"class":"tenant_membership","force":true,"write_permission":"tax.withholding.manage"},
+      "retention":{"class":"withholding_statement_evidence","minimum":"permanent","hard_delete":false},
+      "columns":[
+        ["org_id","uuid",false,null,"internal"],["id","uuid",false,"gen_random_uuid()","internal"],
+        ["tax_regime","text",false,null,"regulated"],["registration_id","uuid",true,null,"internal"],
+        ["fiscal_year_start_year","smallint",false,null,"regulated"],["period_start","date",false,null,"regulated"],["period_end","date",false,null,"regulated"],
+        ["form_code","varchar(32)",false,null,"regulated"],["statement_reference","varchar(128)",false,null,"regulated"],
+        ["filed_at","timestamptz",false,null,"regulated"],["acknowledgement_attachment_id","uuid",false,null,"regulated"],
+        ["revision_of_statement_id","uuid",true,null,"internal"],
+        ["created_at","timestamptz",false,"transaction_timestamp()","internal"],["created_by_membership_id","uuid",false,"current_setting('app.membership_id')::uuid","personal"]
+      ],
+      "primary_key":["org_id","id"],
+      "foreign_keys":[
+        {"name":"withholding_statements_org_fk","columns":["org_id"],"references":"core.organizations","referenced_columns":["id"],"cardinality":"M:1","on_delete":"RESTRICT","deferrable":false},
+        {"name":"withholding_statements_registration_fk","columns":["org_id","registration_id"],"references":"tax.registrations","referenced_columns":["org_id","id"],"cardinality":"M:0..1","on_delete":"RESTRICT","deferrable":false},
+        {"name":"withholding_statements_ack_fk","columns":["org_id","acknowledgement_attachment_id"],"references":"core.attachments","referenced_columns":["org_id","id"],"cardinality":"M:1","on_delete":"RESTRICT","deferrable":false},
+        {"name":"withholding_statements_revision_fk","columns":["org_id","revision_of_statement_id"],"references":"tax.withholding_statements","referenced_columns":["org_id","id"],"cardinality":"1:0..1","on_delete":"RESTRICT","deferrable":"INITIALLY_DEFERRED"},
+        {"name":"withholding_statements_created_by_fk","columns":["org_id","created_by_membership_id"],"references":"core.memberships","referenced_columns":["org_id","id"],"cardinality":"M:1","on_delete":"RESTRICT","deferrable":false}
+      ],
+      "uniques":[{"name":"withholding_statements_reference_uq","columns":["org_id","tax_regime","statement_reference"],"where":null}],
+      "checks":[
+        {"name":"withholding_statements_regime_ck","expression":"(tax_regime='income_tax_tds' AND registration_id IS NULL) OR (tax_regime='gst_tds' AND registration_id IS NOT NULL)"},
+        {"name":"withholding_statements_period_ck","expression":"fiscal_year_start_year BETWEEN 2000 AND 9999 AND period_start>=make_date(fiscal_year_start_year,4,1) AND period_end<=make_date(fiscal_year_start_year+1,3,31) AND period_end>=period_start"},
+        {"name":"withholding_statements_text_ck","expression":"btrim(form_code)<>'' AND btrim(statement_reference)<>''"}
+      ],
+      "indexes":[
+        {"name":"withholding_statements_revision_uq","columns":["org_id","revision_of_statement_id"],"unique":true,"where":"revision_of_statement_id IS NOT NULL","purpose":"single next revision of a statement"},
+        {"name":"withholding_statements_period_idx","columns":["org_id","fiscal_year_start_year","period_start","id"],"unique":false,"where":null,"purpose":"immutable statement revision history"}
+      ],
+      "cross_row_invariants":[{"name":"withholding_statements_cross_row_guard","enforcement":"transaction_guard","rule":"The filing command locks one exact statement population of deductions and deposit lines, verifies retained authority acknowledgement evidence, and inserts a complete immutable revision. A revision copies the filing context and links one prior statement; the current head is derived by absence of a child revision. Statements and lines are never updated or deleted."}]
+    },
+    {
+      "name":"tax.withholding_statement_lines",
+      "fact_owner":"Immutable M:N filed-statement membership and per-deductee certificate evidence",
+      "tenant_class":"tenant_direct","mutation_class":"append_only_statutory_membership",
+      "lifecycle":{"state_column":null,"states":[],"initial":null,"terminal":[],"transitions":[]},
+      "rls":{"class":"tenant_membership","force":true,"write_permission":"tax.withholding.manage"},
+      "retention":{"class":"withholding_statement_evidence","minimum":"permanent","hard_delete":false},
+      "columns":[
+        ["org_id","uuid",false,null,"internal"],["id","uuid",false,"gen_random_uuid()","internal"],
+        ["statement_id","uuid",false,null,"internal"],["withholding_id","uuid",false,null,"internal"],["deposit_line_id","uuid",false,null,"internal"],
+        ["created_at","timestamptz",false,"transaction_timestamp()","internal"],["created_by_membership_id","uuid",false,"current_setting('app.membership_id')::uuid","personal"]
+      ],
+      "primary_key":["org_id","id"],
+      "foreign_keys":[
+        {"name":"withholding_statement_lines_org_fk","columns":["org_id"],"references":"core.organizations","referenced_columns":["id"],"cardinality":"M:1","on_delete":"RESTRICT","deferrable":false},
+        {"name":"withholding_statement_lines_statement_fk","columns":["org_id","statement_id"],"references":"tax.withholding_statements","referenced_columns":["org_id","id"],"cardinality":"M:1","on_delete":"RESTRICT","deferrable":false},
+        {"name":"withholding_statement_lines_withholding_fk","columns":["org_id","withholding_id"],"references":"tax.withholdings","referenced_columns":["org_id","id"],"cardinality":"M:1","on_delete":"RESTRICT","deferrable":false},
+        {"name":"withholding_statement_lines_deposit_line_fk","columns":["org_id","deposit_line_id"],"references":"tax.withholding_deposit_lines","referenced_columns":["org_id","id"],"cardinality":"M:1","on_delete":"RESTRICT","deferrable":false},
+        {"name":"withholding_statement_lines_created_by_fk","columns":["org_id","created_by_membership_id"],"references":"core.memberships","referenced_columns":["org_id","id"],"cardinality":"M:1","on_delete":"RESTRICT","deferrable":false}
+      ],
+      "uniques":[{"name":"withholding_statement_lines_pair_uq","columns":["org_id","statement_id","withholding_id"],"where":null}],
+      "checks":[{"name":"withholding_statement_lines_identity_ck","expression":"statement_id<>withholding_id AND statement_id<>deposit_line_id AND withholding_id<>deposit_line_id"}],
+      "indexes":[
+        {"name":"withholding_statement_lines_withholding_idx","columns":["org_id","withholding_id","statement_id"],"unique":false,"where":null,"purpose":"deduction filing and certificate history"},
+        {"name":"withholding_statement_lines_deposit_uq","columns":["org_id","deposit_line_id","statement_id"],"unique":true,"where":null,"purpose":"one deposit allocation per statement revision"}
+      ],
+      "cross_row_invariants":[{"name":"withholding_statement_lines_cross_row_guard","enforcement":"transaction_guard","rule":"Only the statement command inserts lines. Each deposit line must belong to the same withholding and regime, be active and fully cover the reported deduction; the deduction date must lie in the statement period. Lines are immutable and corrections use a new statement revision."}]
+    },
+    {
+      "name":"tax.withholding_certificates",
+      "fact_owner":"Immutable per-deductee statutory certificate authority artifact",
+      "tenant_class":"tenant_direct","mutation_class":"append_only_authority_artifact",
+      "lifecycle":{"state_column":null,"states":[],"initial":null,"terminal":[],"transitions":[]},
+      "rls":{"class":"tenant_membership","force":true,"write_permission":"tax.withholding.manage"},
+      "retention":{"class":"withholding_certificate_evidence","minimum":"permanent","hard_delete":false},
+      "columns":[
+        ["org_id","uuid",false,null,"internal"],["id","uuid",false,"gen_random_uuid()","internal"],
+        ["tax_regime","text",false,null,"regulated"],["registration_id","uuid",true,null,"internal"],["counterparty_party_id","uuid",false,null,"internal"],
+        ["fiscal_year_start_year","smallint",false,null,"regulated"],["period_start","date",false,null,"regulated"],["period_end","date",false,null,"regulated"],
+        ["form_code","varchar(32)",false,null,"regulated"],["certificate_reference","varchar(128)",false,null,"regulated"],["issued_on","date",false,null,"regulated"],
+        ["evidence_attachment_id","uuid",false,null,"regulated"],["correction_of_certificate_id","uuid",true,null,"internal"],
+        ["created_at","timestamptz",false,"transaction_timestamp()","internal"],["created_by_membership_id","uuid",false,"current_setting('app.membership_id')::uuid","personal"]
+      ],
+      "primary_key":["org_id","id"],
+      "foreign_keys":[
+        {"name":"withholding_certificates_org_fk","columns":["org_id"],"references":"core.organizations","referenced_columns":["id"],"cardinality":"M:1","on_delete":"RESTRICT","deferrable":false},
+        {"name":"withholding_certificates_registration_fk","columns":["org_id","registration_id"],"references":"tax.registrations","referenced_columns":["org_id","id"],"cardinality":"M:0..1","on_delete":"RESTRICT","deferrable":false},
+        {"name":"withholding_certificates_party_fk","columns":["org_id","counterparty_party_id"],"references":"parties.parties","referenced_columns":["org_id","id"],"cardinality":"M:1","on_delete":"RESTRICT","deferrable":false},
+        {"name":"withholding_certificates_evidence_fk","columns":["org_id","evidence_attachment_id"],"references":"core.attachments","referenced_columns":["org_id","id"],"cardinality":"1:1","on_delete":"RESTRICT","deferrable":false},
+        {"name":"withholding_certificates_correction_fk","columns":["org_id","correction_of_certificate_id"],"references":"tax.withholding_certificates","referenced_columns":["org_id","id"],"cardinality":"1:0..1","on_delete":"RESTRICT","deferrable":"INITIALLY_DEFERRED"},
+        {"name":"withholding_certificates_created_by_fk","columns":["org_id","created_by_membership_id"],"references":"core.memberships","referenced_columns":["org_id","id"],"cardinality":"M:1","on_delete":"RESTRICT","deferrable":false}
+      ],
+      "uniques":[
+        {"name":"withholding_certificates_reference_uq","columns":["org_id","tax_regime","certificate_reference"],"where":null},
+        {"name":"withholding_certificates_evidence_uq","columns":["org_id","evidence_attachment_id"],"where":null}
+      ],
+      "checks":[
+        {"name":"withholding_certificates_regime_ck","expression":"(tax_regime='income_tax_tds' AND registration_id IS NULL) OR (tax_regime='gst_tds' AND registration_id IS NOT NULL)"},
+        {"name":"withholding_certificates_period_ck","expression":"fiscal_year_start_year BETWEEN 2000 AND 9999 AND period_start>=make_date(fiscal_year_start_year,4,1) AND period_end<=make_date(fiscal_year_start_year+1,3,31) AND period_end>=period_start AND issued_on>=period_end"},
+        {"name":"withholding_certificates_text_ck","expression":"btrim(form_code)<>'' AND btrim(certificate_reference)<>''"}
+      ],
+      "indexes":[
+        {"name":"withholding_certificates_correction_uq","columns":["org_id","correction_of_certificate_id"],"unique":true,"where":"correction_of_certificate_id IS NOT NULL","purpose":"single append-only correction lineage"},
+        {"name":"withholding_certificates_party_period_idx","columns":["org_id","counterparty_party_id","fiscal_year_start_year","period_start","id"],"unique":false,"where":null,"purpose":"deductee certificate history"}
+      ],
+      "cross_row_invariants":[{"name":"withholding_certificates_cross_row_guard","enforcement":"transaction_guard","rule":"Only the certificate import command inserts a verified retained authority artifact. It locks one deductee, regime and period, freezes the typed form/reference/evidence, and links every covered filed statement line. Corrections append a child and never update or delete prior certificates."}]
+    },
+    {
+      "name":"tax.withholding_certificate_lines",
+      "fact_owner":"Immutable M:N certificate coverage of filed withholding statement lines",
+      "tenant_class":"tenant_direct","mutation_class":"append_only_statutory_membership",
+      "lifecycle":{"state_column":null,"states":[],"initial":null,"terminal":[],"transitions":[]},
+      "rls":{"class":"tenant_membership","force":true,"write_permission":"tax.withholding.manage"},
+      "retention":{"class":"withholding_certificate_evidence","minimum":"permanent","hard_delete":false},
+      "columns":[
+        ["org_id","uuid",false,null,"internal"],["id","uuid",false,"gen_random_uuid()","internal"],
+        ["certificate_id","uuid",false,null,"internal"],["statement_line_id","uuid",false,null,"internal"],["withholding_id","uuid",false,null,"internal"],
+        ["certified_amount","numeric(20,2)",false,null,"financial"],
+        ["created_at","timestamptz",false,"transaction_timestamp()","internal"],["created_by_membership_id","uuid",false,"current_setting('app.membership_id')::uuid","personal"]
+      ],
+      "primary_key":["org_id","id"],
+      "foreign_keys":[
+        {"name":"withholding_certificate_lines_org_fk","columns":["org_id"],"references":"core.organizations","referenced_columns":["id"],"cardinality":"M:1","on_delete":"RESTRICT","deferrable":false},
+        {"name":"withholding_certificate_lines_certificate_fk","columns":["org_id","certificate_id"],"references":"tax.withholding_certificates","referenced_columns":["org_id","id"],"cardinality":"M:1","on_delete":"RESTRICT","deferrable":false},
+        {"name":"withholding_certificate_lines_statement_line_fk","columns":["org_id","statement_line_id"],"references":"tax.withholding_statement_lines","referenced_columns":["org_id","id"],"cardinality":"M:1","on_delete":"RESTRICT","deferrable":false},
+        {"name":"withholding_certificate_lines_withholding_fk","columns":["org_id","withholding_id"],"references":"tax.withholdings","referenced_columns":["org_id","id"],"cardinality":"M:1","on_delete":"RESTRICT","deferrable":false},
+        {"name":"withholding_certificate_lines_created_by_fk","columns":["org_id","created_by_membership_id"],"references":"core.memberships","referenced_columns":["org_id","id"],"cardinality":"M:1","on_delete":"RESTRICT","deferrable":false}
+      ],
+      "uniques":[{"name":"withholding_certificate_lines_pair_uq","columns":["org_id","certificate_id","statement_line_id"],"where":null}],
+      "checks":[{"name":"withholding_certificate_lines_amount_ck","expression":"certified_amount>0"}],
+      "indexes":[{"name":"withholding_certificate_lines_statement_idx","columns":["org_id","statement_line_id","certificate_id"],"unique":false,"where":null,"purpose":"statement-line certificate and correction history"}],
+      "cross_row_invariants":[{"name":"withholding_certificate_lines_cross_row_guard","enforcement":"transaction_guard","rule":"The certificate command proves the statement line belongs to the same withholding, deductee, regime and period, and copies the exact filed deduction amount. Lines are immutable; corrected certificates use new linked rows without overwriting prior evidence."}]
+    },
+    {
+      "name": "tax.return_periods",
+      "fact_owner": "GST filing period and lock state for one registration",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "controlled_period",
+      "lifecycle": {
+        "state_column": "status",
+        "states": [
+          "open",
+          "locked",
+          "filed"
+        ],
+        "initial": "open",
+        "terminal": [
+          "filed"
+        ],
+        "transitions": [
+          "open->locked",
+          "locked->open",
+          "locked->filed"
+        ]
+      },
+      "rls": {
+        "class": "tenant_membership",
+        "force": true,
+        "write_permission": "tax.return_period.manage"
+      },
+      "retention": {
+        "class": "gst_return_period",
+        "minimum": "permanent",
+        "hard_delete": false
+      },
+      "columns": [
+        [
+          "org_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "id",
+          "uuid",
+          false,
+          "gen_random_uuid()",
+          "internal"
+        ],
+        [
+          "registration_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "period_start",
+          "date",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "period_end",
+          "date",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "due_date",
+          "date",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "period_kind",
+          "text",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "status",
+          "text",
+          false,
+          "'open'::text",
+          "internal"
+        ],
+        [
+          "locked_at",
+          "timestamptz",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "locked_by_membership_id",
+          "uuid",
+          true,
+          null,
+          "personal"
+        ],
+        [
+          "created_at",
+          "timestamptz",
+          false,
+          "transaction_timestamp()",
+          "internal"
+        ],
+        [
+          "created_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "personal"
+        ],
+        [
+          "updated_at",
+          "timestamptz",
+          false,
+          "transaction_timestamp()",
+          "internal"
+        ],
+        [
+          "updated_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "personal"
+        ],
+        [
+          "row_version",
+          "bigint",
+          false,
+          "1",
+          "internal"
+        ]
+      ],
+      "primary_key": [
+        "org_id",
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "return_periods_org_fk",
+          "columns": [
+            "org_id"
+          ],
+          "references": "core.organizations",
+          "referenced_columns": [
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "return_periods_registration_fk",
+          "columns": [
+            "org_id",
+            "registration_id"
+          ],
+          "references": "tax.registrations",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "return_periods_locked_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "locked_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "return_periods_created_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "created_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "return_periods_updated_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "updated_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        }
+      ],
+      "uniques": [
+        {
+          "name": "return_periods_registration_dates_uq",
+          "columns": [
+            "org_id",
+            "registration_id",
+            "period_start",
+            "period_end"
+          ],
+          "where": null
+        }
+      ],
+      "checks": [
+        {
+          "name": "return_periods_dates_ck",
+          "expression": "period_end >= period_start AND due_date >= period_end"
+        },
+        {
+          "name": "return_periods_kind_ck",
+          "expression": "period_kind IN ('monthly','quarterly','annual')"
+        },
+        {
+          "name": "return_periods_lock_ck",
+          "expression": "status = 'open' OR (locked_at IS NOT NULL AND locked_by_membership_id IS NOT NULL)"
+        },
+        {
+          "name": "return_periods_status_ck",
+          "expression": "status IN ('open','locked','filed')"
+        },
+        {
+          "name": "return_periods_row_version_ck",
+          "expression": "row_version > 0"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "return_periods_due_idx",
+          "columns": [
+            "org_id",
+            "due_date",
+            "registration_id",
+            "id"
+          ],
+          "unique": false,
+          "where": "status <> 'filed'",
+          "purpose": "filing due queue"
+        }
+      ],
+      "cross_row_invariants": [
+        {
+          "name": "return_periods_cross_row_guard",
+          "enforcement": "exclusion_constraint",
+          "rule": "Reject overlapping periods for a registration; a filed return atomically moves the period to filed and prevents membership changes."
+        }
+      ]
+    },
+    {
+      "name": "tax.returns",
+      "fact_owner": "Versioned GST return filing, validation, and authority acknowledgement",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "draft_then_filed",
+      "lifecycle": {
+        "state_column": "status",
+        "states": [
+          "draft",
+          "validated",
+          "filed",
+          "rejected",
+          "superseded"
+        ],
+        "initial": "draft",
+        "terminal": [
+          "filed",
+          "rejected",
+          "superseded"
+        ],
+        "transitions": [
+          "draft->validated",
+          "validated->draft",
+          "validated->filed",
+          "validated->rejected",
+          "filed->superseded"
+        ]
+      },
+      "rls": {
+        "class": "tenant_membership",
+        "force": true,
+        "write_permission": "tax.return.file"
+      },
+      "retention": {
+        "class": "gst_return",
+        "minimum": "permanent",
+        "hard_delete": false
+      },
+      "columns": [
+        [
+          "org_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "id",
+          "uuid",
+          false,
+          "gen_random_uuid()",
+          "internal"
+        ],
+        [
+          "return_period_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "return_type",
+          "text",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "revision",
+          "integer",
+          false,
+          "1",
+          "internal"
+        ],
+        [
+          "previous_return_id",
+          "uuid",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "taxable_amount",
+          "numeric(20,2)",
+          false,
+          "0",
+          "internal"
+        ],
+        [
+          "cgst_amount",
+          "numeric(20,2)",
+          false,
+          "0",
+          "internal"
+        ],
+        [
+          "sgst_amount",
+          "numeric(20,2)",
+          false,
+          "0",
+          "internal"
+        ],
+        [
+          "igst_amount",
+          "numeric(20,2)",
+          false,
+          "0",
+          "internal"
+        ],
+        [
+          "cess_amount",
+          "numeric(20,2)",
+          false,
+          "0",
+          "internal"
+        ],
+        [
+          "liability_amount",
+          "numeric(20,2)",
+          false,
+          "0",
+          "internal"
+        ],
+        [
+          "payload_attachment_id",
+          "uuid",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "payload_sha256",
+          "bytea",
+          true,
+          null,
+          "secret_ciphertext"
+        ],
+        [
+          "arn",
+          "varchar(64)",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "filed_at",
+          "timestamptz",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "filed_by_membership_id",
+          "uuid",
+          true,
+          null,
+          "personal"
+        ],
+        [
+          "status",
+          "text",
+          false,
+          "'draft'::text",
+          "internal"
+        ],
+        [
+          "created_at",
+          "timestamptz",
+          false,
+          "transaction_timestamp()",
+          "internal"
+        ],
+        [
+          "created_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "personal"
+        ],
+        [
+          "updated_at",
+          "timestamptz",
+          false,
+          "transaction_timestamp()",
+          "internal"
+        ],
+        [
+          "updated_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "personal"
+        ],
+        [
+          "row_version",
+          "bigint",
+          false,
+          "1",
+          "internal"
+        ]
+      ],
+      "primary_key": [
+        "org_id",
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "returns_org_fk",
+          "columns": [
+            "org_id"
+          ],
+          "references": "core.organizations",
+          "referenced_columns": [
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "returns_period_fk",
+          "columns": [
+            "org_id",
+            "return_period_id"
+          ],
+          "references": "tax.return_periods",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "returns_previous_fk",
+          "columns": [
+            "org_id",
+            "previous_return_id"
+          ],
+          "references": "tax.returns",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "1:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": "INITIALLY_DEFERRED"
+        },
+        {
+          "name": "returns_payload_fk",
+          "columns": [
+            "org_id",
+            "payload_attachment_id"
+          ],
+          "references": "core.attachments",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "returns_filed_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "filed_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "returns_created_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "created_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "returns_updated_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "updated_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        }
+      ],
+      "uniques": [
+        {
+          "name": "returns_revision_uq",
+          "columns": [
+            "org_id",
+            "return_period_id",
+            "return_type",
+            "revision"
+          ],
+          "where": null
+        }
+      ],
+      "checks": [
+        {
+          "name": "returns_type_ck",
+          "expression": "return_type IN ('gstr1','gstr3b','gstr9','gstr9c')"
+        },
+        {
+          "name": "returns_revision_ck",
+          "expression": "revision > 0 AND ((revision = 1 AND previous_return_id IS NULL) OR (revision > 1 AND previous_return_id IS NOT NULL))"
+        },
+        {
+          "name": "returns_totals_ck",
+          "expression": "taxable_amount >= 0 AND cgst_amount >= 0 AND sgst_amount >= 0 AND igst_amount >= 0 AND cess_amount >= 0 AND liability_amount >= 0"
+        },
+        {
+          "name": "returns_payload_ck",
+          "expression": "(payload_attachment_id IS NULL AND payload_sha256 IS NULL) OR (payload_attachment_id IS NOT NULL AND octet_length(payload_sha256) = 32)"
+        },
+        {
+          "name": "returns_filed_ck",
+          "expression": "status <> 'filed' OR (arn IS NOT NULL AND filed_at IS NOT NULL AND filed_by_membership_id IS NOT NULL AND payload_attachment_id IS NOT NULL)"
+        },
+        {
+          "name": "returns_status_ck",
+          "expression": "status IN ('draft','validated','filed','rejected','superseded')"
+        },
+        {
+          "name": "returns_row_version_ck",
+          "expression": "row_version > 0"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "returns_previous_uq",
+          "columns": [
+            "org_id",
+            "previous_return_id"
+          ],
+          "unique": true,
+          "where": "previous_return_id IS NOT NULL",
+          "purpose": "one direct revision successor"
+        },
+        {
+          "name": "returns_active_idx",
+          "columns": [
+            "org_id",
+            "return_period_id",
+            "return_type",
+            "revision"
+          ],
+          "unique": false,
+          "where": "status IN ('draft','validated','filed')",
+          "purpose": "current return revision"
+        }
+      ],
+      "cross_row_invariants": [
+        {
+          "name": "returns_cross_row_guard",
+          "enforcement": "transaction_guard",
+          "rule": "Validation recomputes totals from return_documents; filing verifies the exact payload hash, freezes return and membership rows, marks prior filed revision superseded, and disallows UPDATE/DELETE thereafter."
+        }
+      ]
+    },
+    {
+      "name": "tax.return_documents",
+      "fact_owner": "Explicit M:N membership of an internal tax document in a return revision",
+      "tenant_class": "tenant_association",
+      "mutation_class": "return_composition_link",
+      "lifecycle": {
+        "state_column": null,
+        "states": [],
+        "initial": null,
+        "terminal": [],
+        "transitions": []
+      },
+      "rls": {
+        "class": "tenant_membership",
+        "force": true,
+        "write_permission": "tax.return.compose"
+      },
+      "retention": {
+        "class": "gst_return_population",
+        "minimum": "permanent",
+        "hard_delete": false
+      },
+      "columns": [
+        [
+          "org_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "return_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "tax_document_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "population_role",
+          "text",
+          false,
+          "'original'::text",
+          "internal"
+        ],
+        [
+          "included_at",
+          "timestamptz",
+          false,
+          "transaction_timestamp()",
+          "internal"
+        ],
+        [
+          "included_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "personal"
+        ]
+      ],
+      "primary_key": [
+        "org_id",
+        "return_id",
+        "tax_document_id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "return_documents_org_fk",
+          "columns": [
+            "org_id"
+          ],
+          "references": "core.organizations",
+          "referenced_columns": [
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "return_documents_return_fk",
+          "columns": [
+            "org_id",
+            "return_id"
+          ],
+          "references": "tax.returns",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "CASCADE",
+          "deferrable": false
+        },
+        {
+          "name": "return_documents_document_fk",
+          "columns": [
+            "org_id",
+            "tax_document_id"
+          ],
+          "references": "tax.documents",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "return_documents_included_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "included_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        }
+      ],
+      "uniques": [],
+      "checks": [
+        {
+          "name": "return_documents_role_ck",
+          "expression": "population_role IN ('original','amendment','credit_adjustment','debit_adjustment')"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "return_documents_document_idx",
+          "columns": [
+            "org_id",
+            "tax_document_id",
+            "return_id"
+          ],
+          "unique": false,
+          "where": null,
+          "purpose": "document filing history"
+        }
+      ],
+      "cross_row_invariants": [
+        {
+          "name": "return_documents_cross_row_guard",
+          "enforcement": "constraint_trigger",
+          "rule": "Allow INSERT/DELETE only while return is draft; validate registration, period, direction and return-type eligibility; filed membership is immutable."
+        }
+      ]
+    },
+    {
+      "name": "tax.portal_documents",
+      "fact_owner": "Immutable GST portal source file with bounded parsing lifecycle",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "guarded_external_import",
+      "lifecycle": {
+        "state_column": "status",
+        "states": [
+          "imported",
+          "parsed",
+          "rejected",
+          "superseded"
+        ],
+        "initial": "imported",
+        "terminal": [
+          "rejected",
+          "superseded"
+        ],
+        "transitions": [
+          "imported->parsed",
+          "imported->rejected",
+          "parsed->superseded"
+        ]
+      },
+      "rls": {
+        "class": "tenant_membership",
+        "force": true,
+        "write_permission": "tax.portal.import"
+      },
+      "retention": {
+        "class": "gst_portal_evidence",
+        "minimum": "permanent",
+        "hard_delete": false
+      },
+      "columns": [
+        [
+          "org_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "id",
+          "uuid",
+          false,
+          "gen_random_uuid()",
+          "internal"
+        ],
+        [
+          "registration_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "return_period_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "portal_document_type",
+          "text",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "portal_generation_date",
+          "date",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "source_attachment_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "source_sha256",
+          "bytea",
+          false,
+          null,
+          "secret_ciphertext"
+        ],
+        [
+          "status",
+          "text",
+          false,
+          "'imported'::text",
+          "internal"
+        ],
+        [
+          "parsed_at",
+          "timestamptz",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "parse_error_code",
+          "varchar(128)",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "parse_error_message",
+          "text",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "created_at",
+          "timestamptz",
+          false,
+          "transaction_timestamp()",
+          "internal"
+        ],
+        [
+          "created_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "personal"
+        ]
+      ],
+      "primary_key": [
+        "org_id",
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "portal_documents_org_fk",
+          "columns": [
+            "org_id"
+          ],
+          "references": "core.organizations",
+          "referenced_columns": [
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "portal_documents_registration_fk",
+          "columns": [
+            "org_id",
+            "registration_id"
+          ],
+          "references": "tax.registrations",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "portal_documents_period_fk",
+          "columns": [
+            "org_id",
+            "return_period_id"
+          ],
+          "references": "tax.return_periods",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "portal_documents_attachment_fk",
+          "columns": [
+            "org_id",
+            "source_attachment_id"
+          ],
+          "references": "core.attachments",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "portal_documents_created_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "created_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        }
+      ],
+      "uniques": [
+        {
+          "name": "portal_documents_hash_uq",
+          "columns": [
+            "org_id",
+            "registration_id",
+            "portal_document_type",
+            "source_sha256"
+          ],
+          "where": null
+        }
+      ],
+      "checks": [
+        {
+          "name": "portal_documents_type_ck",
+          "expression": "portal_document_type IN ('gstr2a','gstr2b','gstr1','icegate')"
+        },
+        {
+          "name": "portal_documents_hash_ck",
+          "expression": "octet_length(source_sha256) = 32"
+        },
+        {
+          "name": "portal_documents_parse_ck",
+          "expression": "(status = 'parsed' AND parsed_at IS NOT NULL AND parse_error_code IS NULL) OR (status = 'rejected' AND parse_error_code IS NOT NULL) OR status IN ('imported','superseded')"
+        },
+        {
+          "name": "portal_documents_status_ck",
+          "expression": "status IN ('imported','parsed','rejected','superseded')"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "portal_documents_period_idx",
+          "columns": [
+            "org_id",
+            "return_period_id",
+            "portal_document_type",
+            "portal_generation_date",
+            "id"
+          ],
+          "unique": false,
+          "where": null,
+          "purpose": "portal evidence selection"
+        }
+      ],
+      "cross_row_invariants": [
+        {
+          "name": "portal_documents_cross_row_guard",
+          "enforcement": "transaction_guard",
+          "rule": "Verify attachment hash before parsing; insert all lines atomically; source identity, bytes, and parsed lines are immutable after parsed."
+        }
+      ]
+    },
+    {
+      "name": "tax.portal_document_lines",
+      "fact_owner": "Normalized immutable invoice line from one GST portal document",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "immutable_external_line",
+      "lifecycle": {
+        "state_column": null,
+        "states": [],
+        "initial": null,
+        "terminal": [],
+        "transitions": []
+      },
+      "rls": {
+        "class": "tenant_membership",
+        "force": true,
+        "write_permission": "internal.tax.portal.parse"
+      },
+      "retention": {
+        "class": "gst_portal_evidence",
+        "minimum": "permanent",
+        "hard_delete": false
+      },
+      "columns": [
+        [
+          "org_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "id",
+          "uuid",
+          false,
+          "gen_random_uuid()",
+          "internal"
+        ],
+        [
+          "portal_document_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "line_number",
+          "integer",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "supplier_gstin",
+          "varchar(15)",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "counterparty_name",
+          "text",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "invoice_number",
+          "varchar(64)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "invoice_date",
+          "date",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "document_type",
+          "varchar(64)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "place_of_supply_state_code",
+          "char(2)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "taxable_amount",
+          "numeric(20,2)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "cgst_amount",
+          "numeric(20,2)",
+          false,
+          "0",
+          "internal"
+        ],
+        [
+          "sgst_amount",
+          "numeric(20,2)",
+          false,
+          "0",
+          "internal"
+        ],
+        [
+          "igst_amount",
+          "numeric(20,2)",
+          false,
+          "0",
+          "internal"
+        ],
+        [
+          "cess_amount",
+          "numeric(20,2)",
+          false,
+          "0",
+          "internal"
+        ],
+        [
+          "total_amount",
+          "numeric(20,2)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "portal_reference",
+          "text",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "source_row_hash",
+          "bytea",
+          false,
+          null,
+          "secret_ciphertext"
+        ],
+        [
+          "created_at",
+          "timestamptz",
+          false,
+          "transaction_timestamp()",
+          "internal"
+        ],
+        [
+          "created_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "personal"
+        ]
+      ],
+      "primary_key": [
+        "org_id",
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "portal_document_lines_org_fk",
+          "columns": [
+            "org_id"
+          ],
+          "references": "core.organizations",
+          "referenced_columns": [
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "portal_document_lines_document_fk",
+          "columns": [
+            "org_id",
+            "portal_document_id"
+          ],
+          "references": "tax.portal_documents",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "CASCADE",
+          "deferrable": false
+        },
+        {
+          "name": "portal_document_lines_created_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "created_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        }
+      ],
+      "uniques": [
+        {
+          "name": "portal_document_lines_number_uq",
+          "columns": [
+            "org_id",
+            "portal_document_id",
+            "line_number"
+          ],
+          "where": null
+        }
+      ],
+      "checks": [
+        {
+          "name": "portal_document_lines_number_ck",
+          "expression": "line_number > 0"
+        },
+        {
+          "name": "portal_document_lines_gstin_ck",
+          "expression": "supplier_gstin ~ '^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$'"
+        },
+        {
+          "name": "portal_document_lines_type_ck",
+          "expression": "document_type IN ('invoice','credit_note','debit_note','import')"
+        },
+        {
+          "name": "portal_document_lines_amount_ck",
+          "expression": "taxable_amount >= 0 AND cgst_amount >= 0 AND sgst_amount >= 0 AND igst_amount >= 0 AND cess_amount >= 0 AND total_amount = taxable_amount + cgst_amount + sgst_amount + igst_amount + cess_amount"
+        },
+        {
+          "name": "portal_document_lines_hash_ck",
+          "expression": "octet_length(source_row_hash) = 32"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "portal_document_lines_match_idx",
+          "columns": [
+            "org_id",
+            "supplier_gstin",
+            "invoice_number",
+            "invoice_date",
+            "id"
+          ],
+          "unique": false,
+          "where": null,
+          "purpose": "deterministic reconciliation candidates"
+        }
+      ],
+      "cross_row_invariants": [
+        {
+          "name": "portal_document_lines_cross_row_guard",
+          "enforcement": "constraint_trigger",
+          "rule": "Insert only in the parent parse transaction, reject duplicate source-row hashes within a portal document, then block UPDATE and DELETE."
+        }
+      ]
+    },
+    {
+      "name": "tax.reconciliation_runs",
+      "fact_owner": "Versioned execution boundary for GST internal-to-portal reconciliation",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "run_then_terminal",
+      "lifecycle": {
+        "state_column": "status",
+        "states": [
+          "running",
+          "completed",
+          "failed",
+          "superseded"
+        ],
+        "initial": "running",
+        "terminal": [
+          "completed",
+          "failed",
+          "superseded"
+        ],
+        "transitions": [
+          "running->completed",
+          "running->failed",
+          "completed->superseded"
+        ]
+      },
+      "rls": {
+        "class": "tenant_membership",
+        "force": true,
+        "write_permission": "tax.reconciliation.run"
+      },
+      "retention": {
+        "class": "gst_reconciliation",
+        "minimum": "permanent",
+        "hard_delete": false
+      },
+      "columns": [
+        [
+          "org_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "id",
+          "uuid",
+          false,
+          "gen_random_uuid()",
+          "internal"
+        ],
+        [
+          "registration_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "return_period_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "portal_document_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "policy_version",
+          "varchar(64)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "date_tolerance_days",
+          "smallint",
+          false,
+          "0",
+          "internal"
+        ],
+        [
+          "amount_tolerance",
+          "numeric(20,2)",
+          false,
+          "0",
+          "internal"
+        ],
+        [
+          "started_at",
+          "timestamptz",
+          false,
+          "transaction_timestamp()",
+          "internal"
+        ],
+        [
+          "started_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "personal"
+        ],
+        [
+          "completed_at",
+          "timestamptz",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "failure_code",
+          "varchar(128)",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "failure_message",
+          "text",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "status",
+          "text",
+          false,
+          "'running'::text",
+          "internal"
+        ],
+        [
+          "created_at",
+          "timestamptz",
+          false,
+          "transaction_timestamp()",
+          "internal"
+        ],
+        [
+          "created_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "personal"
+        ]
+      ],
+      "primary_key": [
+        "org_id",
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "reconciliation_runs_org_fk",
+          "columns": [
+            "org_id"
+          ],
+          "references": "core.organizations",
+          "referenced_columns": [
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "reconciliation_runs_registration_fk",
+          "columns": [
+            "org_id",
+            "registration_id"
+          ],
+          "references": "tax.registrations",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "reconciliation_runs_period_fk",
+          "columns": [
+            "org_id",
+            "return_period_id"
+          ],
+          "references": "tax.return_periods",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "reconciliation_runs_portal_fk",
+          "columns": [
+            "org_id",
+            "portal_document_id"
+          ],
+          "references": "tax.portal_documents",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "reconciliation_runs_started_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "started_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "reconciliation_runs_created_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "created_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        }
+      ],
+      "uniques": [],
+      "checks": [
+        {
+          "name": "reconciliation_runs_tolerance_ck",
+          "expression": "date_tolerance_days BETWEEN 0 AND 31 AND amount_tolerance >= 0"
+        },
+        {
+          "name": "reconciliation_runs_terminal_ck",
+          "expression": "(status = 'completed' AND completed_at IS NOT NULL AND failure_code IS NULL) OR (status = 'failed' AND completed_at IS NOT NULL AND failure_code IS NOT NULL) OR status IN ('running','superseded')"
+        },
+        {
+          "name": "reconciliation_runs_status_ck",
+          "expression": "status IN ('running','completed','failed','superseded')"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "reconciliation_runs_current_idx",
+          "columns": [
+            "org_id",
+            "registration_id",
+            "return_period_id",
+            "started_at",
+            "id"
+          ],
+          "unique": false,
+          "where": "status IN ('running','completed')",
+          "purpose": "current reconciliation resolution"
+        }
+      ],
+      "cross_row_invariants": [
+        {
+          "name": "reconciliation_runs_cross_row_guard",
+          "enforcement": "transaction_guard",
+          "rule": "Take a repeatable-read snapshot of internal and portal populations; atomically insert all items and terminal status; only one running run per registration/period/portal document."
+        }
+      ]
+    },
+    {
+      "name": "tax.reconciliation_items",
+      "fact_owner": "Auditable match result between one internal tax document and/or one portal line",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "immutable_reconciliation_result",
+      "lifecycle": {
+        "state_column": null,
+        "states": [],
+        "initial": null,
+        "terminal": [],
+        "transitions": []
+      },
+      "rls": {
+        "class": "tenant_membership",
+        "force": true,
+        "write_permission": "internal.tax.reconciliation.write"
+      },
+      "retention": {
+        "class": "gst_reconciliation",
+        "minimum": "permanent",
+        "hard_delete": false
+      },
+      "columns": [
+        [
+          "org_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "id",
+          "uuid",
+          false,
+          "gen_random_uuid()",
+          "internal"
+        ],
+        [
+          "reconciliation_run_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "tax_document_id",
+          "uuid",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "portal_document_line_id",
+          "uuid",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "match_status",
+          "text",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "match_method",
+          "text",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "confidence_score",
+          "numeric(9,6)",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "document_number_match",
+          "boolean",
+          false,
+          "false",
+          "internal"
+        ],
+        [
+          "document_date_difference_days",
+          "integer",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "taxable_difference",
+          "numeric(20,2)",
+          false,
+          "0",
+          "internal"
+        ],
+        [
+          "cgst_difference",
+          "numeric(20,2)",
+          false,
+          "0",
+          "internal"
+        ],
+        [
+          "sgst_difference",
+          "numeric(20,2)",
+          false,
+          "0",
+          "internal"
+        ],
+        [
+          "igst_difference",
+          "numeric(20,2)",
+          false,
+          "0",
+          "internal"
+        ],
+        [
+          "cess_difference",
+          "numeric(20,2)",
+          false,
+          "0",
+          "internal"
+        ],
+        [
+          "resolution_status",
+          "text",
+          false,
+          "'unresolved'::text",
+          "internal"
+        ],
+        [
+          "resolution_reason",
+          "text",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "resolved_at",
+          "timestamptz",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "resolved_by_membership_id",
+          "uuid",
+          true,
+          null,
+          "personal"
+        ],
+        [
+          "created_at",
+          "timestamptz",
+          false,
+          "transaction_timestamp()",
+          "internal"
+        ],
+        [
+          "created_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "personal"
+        ]
+      ],
+      "primary_key": [
+        "org_id",
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "reconciliation_items_org_fk",
+          "columns": [
+            "org_id"
+          ],
+          "references": "core.organizations",
+          "referenced_columns": [
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "reconciliation_items_run_fk",
+          "columns": [
+            "org_id",
+            "reconciliation_run_id"
+          ],
+          "references": "tax.reconciliation_runs",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "CASCADE",
+          "deferrable": false
+        },
+        {
+          "name": "reconciliation_items_tax_document_fk",
+          "columns": [
+            "org_id",
+            "tax_document_id"
+          ],
+          "references": "tax.documents",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "reconciliation_items_portal_line_fk",
+          "columns": [
+            "org_id",
+            "portal_document_line_id"
+          ],
+          "references": "tax.portal_document_lines",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "reconciliation_items_resolved_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "resolved_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "reconciliation_items_created_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "created_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        }
+      ],
+      "uniques": [],
+      "checks": [
+        {
+          "name": "reconciliation_items_presence_ck",
+          "expression": "num_nonnulls(tax_document_id,portal_document_line_id) >= 1"
+        },
+        {
+          "name": "reconciliation_items_match_ck",
+          "expression": "(match_status IN ('matched','mismatch') AND tax_document_id IS NOT NULL AND portal_document_line_id IS NOT NULL) OR (match_status = 'internal_only' AND tax_document_id IS NOT NULL AND portal_document_line_id IS NULL) OR (match_status = 'portal_only' AND tax_document_id IS NULL AND portal_document_line_id IS NOT NULL)"
+        },
+        {
+          "name": "reconciliation_items_method_ck",
+          "expression": "match_method IN ('gstin_invoice_date','invoice_amount','manual','unmatched')"
+        },
+        {
+          "name": "reconciliation_items_confidence_ck",
+          "expression": "confidence_score IS NULL OR confidence_score BETWEEN 0 AND 1"
+        },
+        {
+          "name": "reconciliation_items_resolution_ck",
+          "expression": "resolution_status IN ('unresolved','accepted','corrected','ignored') AND (resolution_status = 'unresolved') = (resolved_at IS NULL AND resolved_by_membership_id IS NULL)"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "reconciliation_items_internal_uq",
+          "columns": [
+            "org_id",
+            "reconciliation_run_id",
+            "tax_document_id"
+          ],
+          "unique": true,
+          "where": "tax_document_id IS NOT NULL",
+          "purpose": "one internal result per run"
+        },
+        {
+          "name": "reconciliation_items_portal_uq",
+          "columns": [
+            "org_id",
+            "reconciliation_run_id",
+            "portal_document_line_id"
+          ],
+          "unique": true,
+          "where": "portal_document_line_id IS NOT NULL",
+          "purpose": "one portal result per run"
+        },
+        {
+          "name": "reconciliation_items_status_idx",
+          "columns": [
+            "org_id",
+            "reconciliation_run_id",
+            "match_status",
+            "resolution_status",
+            "id"
+          ],
+          "unique": false,
+          "where": null,
+          "purpose": "review queue"
+        }
+      ],
+      "cross_row_invariants": [
+        {
+          "name": "reconciliation_items_cross_row_guard",
+          "enforcement": "constraint_trigger",
+          "rule": "Populate only while run is running; match evidence and differences are immutable. Resolution may transition once from unresolved by an authorized actor and is audit-logged."
+        }
+      ]
+    },
+    {
+      "name": "tax.eway_bills",
+      "fact_owner": "Append-only e-way bill authority artifact version for one posted physical inventory movement with an optional matching tax document",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "provider_evidence_state_machine",
+      "lifecycle": {
+        "state_column": "status",
+        "states": [
+          "requested",
+          "generated",
+          "failed",
+          "cancelled",
+          "expired"
+        ],
+        "initial": "requested",
+        "terminal": [
+          "failed",
+          "cancelled",
+          "expired"
+        ],
+        "transitions": [
+          "requested->generated",
+          "requested->failed",
+          "requested->cancelled",
+          "requested->expired"
+        ]
+      },
+      "rls": {
+        "class": "tenant_membership",
+        "force": true,
+        "write_permission": "tax.eway_bill.generate"
+      },
+      "retention": {
+        "class": "gst_authority_artifact",
+        "minimum": "permanent",
+        "hard_delete": false
+      },
+      "columns": [
+        [
+          "org_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "id",
+          "uuid",
+          false,
+          "gen_random_uuid()",
+          "internal"
+        ],
+        [
+          "tax_document_id",
+          "uuid",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "inventory_document_id",
+          "uuid",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "artifact_version",
+          "integer",
+          false,
+          "1",
+          "internal"
+        ],
+        [
+          "supersedes_artifact_id",
+          "uuid",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "eway_bill_number",
+          "varchar(64)",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "transport_mode",
+          "text",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "vehicle_number",
+          "varchar(20)",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "transporter_id",
+          "varchar(32)",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "valid_from_at",
+          "timestamptz",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "valid_until_at",
+          "timestamptz",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "request_media_type",
+          "varchar(128)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "request_bytes",
+          "bytea",
+          false,
+          null,
+          "secret_ciphertext"
+        ],
+        [
+          "request_sha256",
+          "bytea",
+          false,
+          null,
+          "secret_ciphertext"
+        ],
+        [
+          "response_media_type",
+          "varchar(128)",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "response_bytes",
+          "bytea",
+          true,
+          null,
+          "secret_ciphertext"
+        ],
+        [
+          "response_sha256",
+          "bytea",
+          true,
+          null,
+          "secret_ciphertext"
+        ],
+        [
+          "provider_name",
+          "varchar(64)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "provider_request_id",
+          "varchar(128)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "status",
+          "text",
+          false,
+          "'requested'::text",
+          "internal"
+        ],
+        [
+          "cancelled_at",
+          "timestamptz",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "cancelled_by_membership_id",
+          "uuid",
+          true,
+          null,
+          "personal"
+        ],
+        [
+          "cancellation_reason",
+          "text",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "created_at",
+          "timestamptz",
+          false,
+          "transaction_timestamp()",
+          "internal"
+        ],
+        [
+          "created_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "personal"
+        ]
+      ],
+      "primary_key": [
+        "org_id",
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "eway_bills_org_fk",
+          "columns": [
+            "org_id"
+          ],
+          "references": "core.organizations",
+          "referenced_columns": [
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "eway_bills_inventory_document_fk",
+          "columns": [
+            "org_id",
+            "inventory_document_id"
+          ],
+          "references": "inventory.inventory_documents",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "eway_bills_document_fk",
+          "columns": [
+            "org_id",
+            "tax_document_id"
+          ],
+          "references": "tax.documents",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "eway_bills_supersedes_fk",
+          "columns": [
+            "org_id",
+            "supersedes_artifact_id"
+          ],
+          "references": "tax.eway_bills",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "1:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": "INITIALLY_DEFERRED"
+        },
+        {
+          "name": "eway_bills_cancelled_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "cancelled_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "eway_bills_created_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "created_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        }
+      ],
+      "uniques": [
+        {
+          "name": "eway_bills_provider_request_uq",
+          "columns": [
+            "org_id",
+            "provider_name",
+            "provider_request_id"
+          ],
+          "where": null
+        }
+      ],
+      "checks": [
+        {
+          "name": "eway_bills_source_ck",
+          "expression": "inventory_document_id IS NOT NULL"
+        },
+        {
+          "name": "eway_bills_version_ck",
+          "expression": "artifact_version > 0 AND ((artifact_version = 1 AND supersedes_artifact_id IS NULL) OR (artifact_version > 1 AND supersedes_artifact_id IS NOT NULL))"
+        },
+        {
+          "name": "eway_bills_request_hash_ck",
+          "expression": "octet_length(request_sha256) = 32"
+        },
+        {
+          "name": "eway_bills_response_ck",
+          "expression": "(response_bytes IS NULL AND response_media_type IS NULL AND response_sha256 IS NULL) OR (response_bytes IS NOT NULL AND response_media_type IS NOT NULL AND octet_length(response_sha256) = 32)"
+        },
+        {
+          "name": "eway_bills_generated_ck",
+          "expression": "status NOT IN ('generated','cancelled','expired') OR (eway_bill_number IS NOT NULL AND valid_from_at IS NOT NULL AND valid_until_at > valid_from_at)"
+        },
+        {
+          "name": "eway_bills_cancel_ck",
+          "expression": "status <> 'cancelled' OR (cancelled_at IS NOT NULL AND cancelled_by_membership_id IS NOT NULL AND cancellation_reason IS NOT NULL)"
+        },
+        {
+          "name": "eway_bills_status_ck",
+          "expression": "status IN ('requested','generated','failed','cancelled','expired')"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "eway_bills_tax_document_version_uq",
+          "columns": ["org_id", "tax_document_id", "artifact_version"],
+          "unique": true,
+          "where": "tax_document_id IS NOT NULL",
+          "purpose": "one artifact version per tax-document evidence chain"
+        },
+        {
+          "name": "eway_bills_inventory_document_version_uq",
+          "columns": ["org_id", "inventory_document_id", "artifact_version"],
+          "unique": true,
+          "where": "inventory_document_id IS NOT NULL",
+          "purpose": "one artifact version per inventory-movement evidence chain"
+        },
+        {
+          "name": "eway_bills_successor_uq",
+          "columns": ["org_id", "supersedes_artifact_id"],
+          "unique": true,
+          "where": "supersedes_artifact_id IS NOT NULL",
+          "purpose": "one immutable successor per authority artifact"
+        },
+        {
+          "name": "eway_bills_validity_idx",
+          "columns": [
+            "org_id",
+            "valid_until_at",
+            "tax_document_id",
+            "inventory_document_id",
+            "id"
+          ],
+          "unique": false,
+          "where": "status = 'generated'",
+          "purpose": "generated authority evidence validity lookup"
+        }
+      ],
+      "cross_row_invariants": [
+        {
+          "name": "eway_bills_cross_row_guard",
+          "enforcement": "transaction_guard",
+          "rule": "Provider transitions append or complete immutable envelope evidence under idempotency for one mandatory posted physical inventory movement and, when present, its matching tax document; cancellation never overwrites authority response. Regeneration requires a new version linked through supersedes_artifact_id."
+        }
+      ]
+    },
+    {
+      "name": "tax.einvoices",
+      "fact_owner": "Append-only IRN and signed e-invoice authority artifact version",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "provider_evidence_state_machine",
+      "lifecycle": {
+        "state_column": "status",
+        "states": [
+          "requested",
+          "generated",
+          "failed",
+          "cancelled"
+        ],
+        "initial": "requested",
+        "terminal": [
+          "failed",
+          "cancelled"
+        ],
+        "transitions": [
+          "requested->generated",
+          "requested->failed",
+          "requested->cancelled"
+        ]
+      },
+      "rls": {
+        "class": "tenant_membership",
+        "force": true,
+        "write_permission": "tax.einvoice.generate"
+      },
+      "retention": {
+        "class": "gst_authority_artifact",
+        "minimum": "permanent",
+        "hard_delete": false
+      },
+      "columns": [
+        [
+          "org_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "id",
+          "uuid",
+          false,
+          "gen_random_uuid()",
+          "internal"
+        ],
+        [
+          "tax_document_id",
+          "uuid",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "rule_version_id",
+          "uuid",
+          false,
+          null,
+          "regulated"
+        ],
+        [
+          "artifact_version",
+          "integer",
+          false,
+          "1",
+          "internal"
+        ],
+        [
+          "supersedes_artifact_id",
+          "uuid",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "irn",
+          "varchar(128)",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "acknowledgement_number",
+          "varchar(64)",
+          true,
+          null,
+          "regulated"
+        ],
+        [
+          "acknowledged_at",
+          "timestamptz",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "signed_qr_bytes",
+          "bytea",
+          true,
+          null,
+          "secret_ciphertext"
+        ],
+        [
+          "signed_qr_sha256",
+          "bytea",
+          true,
+          null,
+          "secret_ciphertext"
+        ],
+        [
+          "request_media_type",
+          "varchar(128)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "request_bytes",
+          "bytea",
+          false,
+          null,
+          "secret_ciphertext"
+        ],
+        [
+          "request_sha256",
+          "bytea",
+          false,
+          null,
+          "secret_ciphertext"
+        ],
+        [
+          "response_media_type",
+          "varchar(128)",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "response_bytes",
+          "bytea",
+          true,
+          null,
+          "secret_ciphertext"
+        ],
+        [
+          "response_sha256",
+          "bytea",
+          true,
+          null,
+          "secret_ciphertext"
+        ],
+        [
+          "provider_name",
+          "varchar(64)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "provider_request_id",
+          "varchar(128)",
+          false,
+          null,
+          "internal"
+        ],
+        [
+          "status",
+          "text",
+          false,
+          "'requested'::text",
+          "internal"
+        ],
+        [
+          "cancelled_at",
+          "timestamptz",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "cancelled_by_membership_id",
+          "uuid",
+          true,
+          null,
+          "personal"
+        ],
+        [
+          "cancellation_reason",
+          "text",
+          true,
+          null,
+          "internal"
+        ],
+        [
+          "created_at",
+          "timestamptz",
+          false,
+          "transaction_timestamp()",
+          "internal"
+        ],
+        [
+          "created_by_membership_id",
+          "uuid",
+          false,
+          "current_setting('app.membership_id')::uuid",
+          "personal"
+        ]
+      ],
+      "primary_key": [
+        "org_id",
+        "id"
+      ],
+      "foreign_keys": [
+        {
+          "name": "einvoices_org_fk",
+          "columns": [
+            "org_id"
+          ],
+          "references": "core.organizations",
+          "referenced_columns": [
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "einvoices_document_fk",
+          "columns": [
+            "org_id",
+            "tax_document_id"
+          ],
+          "references": "tax.documents",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "einvoices_rule_version_fk",
+          "columns": ["rule_version_id"],
+          "references": "tax.einvoice_rule_versions",
+          "referenced_columns": ["id"],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "einvoices_supersedes_fk",
+          "columns": [
+            "org_id",
+            "supersedes_artifact_id"
+          ],
+          "references": "tax.einvoices",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "1:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": "INITIALLY_DEFERRED"
+        },
+        {
+          "name": "einvoices_cancelled_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "cancelled_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:0..1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        },
+        {
+          "name": "einvoices_created_by_membership_id_fk",
+          "columns": [
+            "org_id",
+            "created_by_membership_id"
+          ],
+          "references": "core.memberships",
+          "referenced_columns": [
+            "org_id",
+            "id"
+          ],
+          "cardinality": "M:1",
+          "on_delete": "RESTRICT",
+          "deferrable": false
+        }
+      ],
+      "uniques": [
+        {
+          "name": "einvoices_version_uq",
+          "columns": [
+            "org_id",
+            "tax_document_id",
+            "artifact_version"
+          ],
+          "where": null
+        },
+        {
+          "name": "einvoices_provider_request_uq",
+          "columns": [
+            "org_id",
+            "provider_name",
+            "provider_request_id"
+          ],
+          "where": null
+        }
+      ],
+      "checks": [
+        {
+          "name": "einvoices_version_ck",
+          "expression": "artifact_version > 0 AND ((artifact_version = 1 AND supersedes_artifact_id IS NULL) OR (artifact_version > 1 AND supersedes_artifact_id IS NOT NULL))"
+        },
+        {
+          "name": "einvoices_request_hash_ck",
+          "expression": "octet_length(request_sha256) = 32"
+        },
+        {
+          "name": "einvoices_response_ck",
+          "expression": "(response_bytes IS NULL AND response_media_type IS NULL AND response_sha256 IS NULL) OR (response_bytes IS NOT NULL AND response_media_type IS NOT NULL AND octet_length(response_sha256) = 32)"
+        },
+        {
+          "name": "einvoices_qr_ck",
+          "expression": "(signed_qr_bytes IS NULL AND signed_qr_sha256 IS NULL) OR (signed_qr_bytes IS NOT NULL AND octet_length(signed_qr_sha256) = 32)"
+        },
+        {
+          "name": "einvoices_generated_ck",
+          "expression": "status NOT IN ('generated','cancelled') OR (irn IS NOT NULL AND acknowledgement_number IS NOT NULL AND acknowledged_at IS NOT NULL AND signed_qr_bytes IS NOT NULL)"
+        },
+        {
+          "name": "einvoices_cancel_ck",
+          "expression": "status <> 'cancelled' OR (cancelled_at IS NOT NULL AND cancelled_by_membership_id IS NOT NULL AND cancellation_reason IS NOT NULL)"
+        },
+        {
+          "name": "einvoices_status_ck",
+          "expression": "status IN ('requested','generated','failed','cancelled')"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "einvoices_irn_uq",
+          "columns": [
+            "org_id",
+            "irn"
+          ],
+          "unique": true,
+          "where": "status = 'generated' AND irn IS NOT NULL",
+          "purpose": "authority IRN uniqueness"
+        },
+        {
+          "name": "einvoices_successor_uq",
+          "columns": ["org_id", "supersedes_artifact_id"],
+          "unique": true,
+          "where": "supersedes_artifact_id IS NOT NULL",
+          "purpose": "one immutable successor per authority artifact"
+        }
+      ],
+      "cross_row_invariants": [
+        {
+          "name": "einvoices_cross_row_guard",
+          "enforcement": "transaction_guard",
+          "rule": "Provider transitions append/complete immutable request, response and signed-QR evidence under idempotency. Cancellation and regeneration create new authority evidence; no artifact row is deleted or repointed."
+        }
+      ]
+    },
+    {
+      "name": "tax.withholding_rule_versions",
+      "population_mode": "regulated_import",
+      "fact_owner": "Migration-owned effective-dated Income-tax and GST-TDS rule authority",
+      "tenant_class": "global_reference",
+      "mutation_class": "regulated_import",
+      "lifecycle": {"state_column": "status", "states": ["active", "retired"], "initial": "active", "terminal": ["retired"], "transitions": ["active->retired"]},
+      "rls": {"class": "global_reference_read_only", "force": false, "write_permission": null},
+      "retention": {"class": "statutory_rule_release", "minimum": "permanent", "hard_delete": false},
+      "columns": [
+        ["id", "uuid", false, null, "regulated"],
+        ["release_id", "uuid", false, null, "regulated"],
+        ["rule_code", "varchar(64)", false, null, "regulated"],
+        ["version_number", "integer", false, null, "regulated"],
+        ["tax_regime", "text", false, null, "regulated"],
+        ["governing_act_code", "varchar(32)", false, null, "regulated"],
+        ["provision_code", "varchar(64)", false, null, "regulated"],
+        ["fiscal_year_start_from", "smallint", false, null, "regulated"],
+        ["fiscal_year_start_to", "smallint", true, null, "regulated"],
+        ["effective_from", "date", false, null, "regulated"],
+        ["effective_to", "date", true, null, "regulated"],
+        ["deduction_trigger", "text", false, null, "regulated"],
+        ["source_kind", "text", false, null, "regulated"],
+        ["nature_code", "varchar(64)", false, null, "regulated"],
+        ["deductor_person_type", "varchar(32)", false, null, "regulated"],
+        ["deductee_person_type", "varchar(32)", false, null, "regulated"],
+        ["deductee_residency", "text", false, null, "regulated"],
+        ["deductee_pan_status", "text", false, null, "regulated"],
+        ["organization_prior_fy_turnover_threshold", "numeric(20,2)", true, null, "regulated"],
+        ["transaction_threshold", "numeric(20,2)", false, "0", "regulated"],
+        ["aggregation_scope", "text", false, null, "regulated"],
+        ["threshold_application", "text", false, null, "regulated"],
+        ["basis_mode", "text", false, null, "regulated"],
+        ["income_tax_rate", "numeric(9,6)", false, "0", "regulated"],
+        ["cgst_rate", "numeric(9,6)", false, "0", "regulated"],
+        ["sgst_rate", "numeric(9,6)", false, "0", "regulated"],
+        ["igst_rate", "numeric(9,6)", false, "0", "regulated"],
+        ["deposit_due_policy", "text", false, null, "regulated"],
+        ["deposit_month_offset", "smallint", false, "0", "regulated"],
+        ["deposit_due_day", "smallint", false, null, "regulated"],
+        ["statement_form_code", "varchar(32)", false, null, "regulated"],
+        ["certificate_form_code", "varchar(32)", false, null, "regulated"],
+        ["status", "text", false, "'active'::text", "internal"],
+        ["created_at", "timestamptz", false, "transaction_timestamp()", "internal"]
+      ],
+      "primary_key": ["id"],
+      "foreign_keys": [
+        {"name": "withholding_rule_versions_release_fk", "columns": ["release_id"], "references": "core.reference_data_releases", "referenced_columns": ["id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false}
+      ],
+      "uniques": [
+        {"name": "withholding_rule_versions_code_version_uq", "columns": ["rule_code", "version_number"], "where": null}
+      ],
+      "checks": [
+        {"name": "withholding_rule_versions_regime_ck", "expression": "tax_regime IN ('income_tax_tds','gst_tds')"},
+        {"name": "withholding_rule_versions_dates_ck", "expression": "fiscal_year_start_from BETWEEN 2000 AND 9999 AND (fiscal_year_start_to IS NULL OR fiscal_year_start_to>=fiscal_year_start_from) AND (effective_to IS NULL OR effective_to>=effective_from)"},
+        {"name": "withholding_rule_versions_trigger_ck", "expression": "deduction_trigger IN ('credit','earlier_credit_or_payment')"},
+        {"name": "withholding_rule_versions_source_ck", "expression": "source_kind IN ('supplier_invoice','expense_claim') AND btrim(nature_code)<>''"},
+        {"name": "withholding_rule_versions_applicability_ck", "expression": "deductor_person_type IN ('any','individual','huf','company','firm','llp','trust','aop','boi','government','local_authority','artificial_juridical_person','other') AND deductee_person_type IN ('any','individual','huf','company','firm','llp','trust','aop','boi','government','local_authority','artificial_juridical_person','other') AND deductee_residency IN ('any','resident','non_resident') AND deductee_pan_status IN ('any','verified','inoperative','not_available','not_applicable')"},
+        {"name": "withholding_rule_versions_threshold_ck", "expression": "(organization_prior_fy_turnover_threshold IS NULL OR organization_prior_fy_turnover_threshold>=0) AND transaction_threshold>=0 AND aggregation_scope IN ('party_rule_fiscal_year','contract') AND threshold_application IN ('excess_only','full_amount')"},
+        {"name": "withholding_rule_versions_basis_ck", "expression": "basis_mode IN ('net_value','net_excluding_gst_cess','approved_amount')"},
+        {"name": "withholding_rule_versions_rates_ck", "expression": "income_tax_rate>=0 AND cgst_rate>=0 AND sgst_rate>=0 AND igst_rate>=0 AND ((tax_regime='income_tax_tds' AND income_tax_rate>0 AND cgst_rate=0 AND sgst_rate=0 AND igst_rate=0) OR (tax_regime='gst_tds' AND income_tax_rate=0 AND ((cgst_rate>0 AND sgst_rate=cgst_rate AND igst_rate=0) OR (cgst_rate=0 AND sgst_rate=0 AND igst_rate>0))))"},
+        {"name": "withholding_rule_versions_due_ck", "expression": "deposit_due_policy IN ('day_of_following_month','days_after_deduction','fixed_date_after_fy_end') AND deposit_month_offset BETWEEN 0 AND 24 AND deposit_due_day BETWEEN 1 AND 31"},
+        {"name": "withholding_rule_versions_forms_ck", "expression": "btrim(statement_form_code)<>'' AND btrim(certificate_form_code)<>''"},
+        {"name": "withholding_rule_versions_status_ck", "expression": "status IN ('active','retired')"}
+      ],
+      "indexes": [
+        {"name": "withholding_rule_versions_effective_idx", "columns": ["tax_regime", "nature_code", "effective_from", "id"], "unique": false, "where": "status='active'", "purpose": "deterministic effective rule selection"}
+      ],
+      "cross_row_invariants": [
+        {"name": "withholding_rule_versions_release_authority", "enforcement": "transaction_guard", "rule": "Only the isolated regulatory importer inserts the exact canonical row set of a verified withholding_rules release. Rule identity, applicability, thresholds, aggregation, rates and deposit policy are immutable; active effective periods for the same rule and applicability dimensions cannot overlap, and release supersession retires the prior row set atomically."}
+      ]
+    },
+    {
+      "name": "tax.organization_fiscal_tax_facts",
+      "fact_owner": "Verified tenant Indian-fiscal-year tax applicability, identifier and turnover evidence",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "immutable_regulatory_evidence",
+      "lifecycle": {"state_column": "status", "states": ["active", "superseded"], "initial": "active", "terminal": ["superseded"], "transitions": ["active->superseded"]},
+      "rls": {"class": "tenant_membership", "force": true, "write_permission": "tax.registration.manage"},
+      "retention": {"class": "withholding_evidence", "minimum": "permanent", "hard_delete": false},
+      "columns": [
+        ["org_id", "uuid", false, null, "internal"], ["id", "uuid", false, "gen_random_uuid()", "internal"],
+        ["fiscal_year_start_year", "smallint", false, null, "regulated"], ["effective_from", "date", false, null, "regulated"], ["effective_to", "date", false, null, "regulated"], ["organization_person_type", "varchar(32)", false, null, "regulated"],
+        ["prior_fiscal_year_turnover", "numeric(20,2)", false, null, "financial"], ["gst_tds_notified_deductor", "boolean", false, "false", "regulated"], ["einvoice_exemption_code", "varchar(64)", false, "'NONE'::text", "regulated"],
+        ["tan", "varchar(10)", true, null, "regulated"],
+        ["evidence_attachment_id", "uuid", false, null, "regulated"], ["verified_at", "timestamptz", false, null, "regulated"],
+        ["verified_by_membership_id", "uuid", false, null, "personal"], ["status", "text", false, "'active'::text", "internal"],
+        ["created_at", "timestamptz", false, "transaction_timestamp()", "internal"], ["created_by_membership_id", "uuid", false, "current_setting('app.membership_id')::uuid", "personal"]
+      ],
+      "primary_key": ["org_id", "id"],
+      "foreign_keys": [
+        {"name": "organization_fiscal_tax_facts_org_fk", "columns": ["org_id"], "references": "core.organizations", "referenced_columns": ["id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "organization_fiscal_tax_facts_evidence_fk", "columns": ["org_id", "evidence_attachment_id"], "references": "core.attachments", "referenced_columns": ["org_id", "id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "organization_fiscal_tax_facts_verified_by_fk", "columns": ["org_id", "verified_by_membership_id"], "references": "core.memberships", "referenced_columns": ["org_id", "id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "organization_fiscal_tax_facts_created_by_fk", "columns": ["org_id", "created_by_membership_id"], "references": "core.memberships", "referenced_columns": ["org_id", "id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false}
+      ],
+      "uniques": [
+        {"name": "organization_fiscal_tax_facts_active_fy_uq", "columns": ["org_id", "fiscal_year_start_year"], "where": "status='active'"},
+        {"name": "organization_fiscal_tax_facts_evidence_uq", "columns": ["org_id", "evidence_attachment_id"], "where": null}
+      ],
+      "checks": [
+        {"name": "organization_fiscal_tax_facts_fy_ck", "expression": "fiscal_year_start_year BETWEEN 2000 AND 9999 AND effective_from=make_date(fiscal_year_start_year,4,1) AND effective_to=make_date(fiscal_year_start_year+1,3,31)"},
+        {"name": "organization_fiscal_tax_facts_person_type_ck", "expression": "organization_person_type IN ('individual','huf','company','firm','llp','trust','aop','boi','government','local_authority','artificial_juridical_person','other')"},
+        {"name": "organization_fiscal_tax_facts_turnover_ck", "expression": "prior_fiscal_year_turnover>=0"},
+        {"name": "organization_fiscal_tax_facts_tan_ck", "expression": "tan IS NULL OR tan ~ '^[A-Z]{4}[0-9]{5}[A-Z]$'"},
+        {"name": "organization_fiscal_tax_facts_einvoice_exemption_ck", "expression": "btrim(einvoice_exemption_code)<>''"},
+        {"name": "organization_fiscal_tax_facts_status_ck", "expression": "status IN ('active','superseded')"}
+      ],
+      "indexes": [],
+      "cross_row_invariants": [
+        {"name": "organization_fiscal_tax_facts_evidence_guard", "enforcement": "constraint_trigger", "rule": "fiscal_year_start_year means the Indian fiscal year beginning 1 April of that year. Activation requires verified immutable attachment evidence and a distinct authorized verifier; one active fact exists per organization and fiscal year, and supersession never rewrites prior turnover, TAN, notified-deductor or e-invoice exemption evidence."}
+      ]
+    },
+    {
+      "name": "tax.withholding_basis_lines",
+      "fact_owner": "Immutable exact source-line basis and threshold aggregation membership for one withholding",
+      "tenant_class": "tenant_direct",
+      "mutation_class": "append_only_statutory_fact",
+      "lifecycle": {"state_column": null, "states": [], "initial": null, "terminal": [], "transitions": []},
+      "rls": {"class": "tenant_membership", "force": true, "write_permission": "tax.withholding.manage"},
+      "retention": {"class": "withholding_evidence", "minimum": "permanent", "hard_delete": false},
+      "columns": [
+        ["org_id", "uuid", false, null, "internal"], ["id", "uuid", false, "gen_random_uuid()", "internal"],
+        ["withholding_id", "uuid", true, null, "internal"], ["rule_version_id", "uuid", false, null, "regulated"],
+        ["supplier_invoice_line_id", "uuid", true, null, "internal"], ["expense_claim_line_id", "uuid", true, null, "internal"],
+        ["purchase_order_advance_allocation_id", "uuid", true, null, "internal"],
+        ["counterparty_party_id", "uuid", false, null, "regulated"], ["fiscal_year_start_year", "smallint", false, null, "regulated"],
+        ["nature_code", "varchar(64)", false, null, "regulated"], ["contract_reference", "varchar(64)", true, null, "regulated"],
+        ["source_event_date", "date", false, null, "regulated"], ["source_gross_amount", "numeric(20,2)", false, null, "financial"],
+        ["excluded_gst_cess_amount", "numeric(20,2)", false, "0", "financial"], ["prior_advance_basis_amount", "numeric(20,2)", false, "0", "financial"],
+        ["eligible_basis_amount", "numeric(20,2)", false, null, "financial"],
+        ["created_at", "timestamptz", false, "transaction_timestamp()", "internal"], ["created_by_membership_id", "uuid", false, "current_setting('app.membership_id')::uuid", "personal"]
+      ],
+      "primary_key": ["org_id", "id"],
+      "foreign_keys": [
+        {"name": "withholding_basis_lines_org_fk", "columns": ["org_id"], "references": "core.organizations", "referenced_columns": ["id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "withholding_basis_lines_withholding_fk", "columns": ["org_id", "withholding_id"], "references": "tax.withholdings", "referenced_columns": ["org_id", "id"], "cardinality": "M:0..1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "withholding_basis_lines_rule_fk", "columns": ["rule_version_id"], "references": "tax.withholding_rule_versions", "referenced_columns": ["id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "withholding_basis_lines_supplier_line_fk", "columns": ["org_id", "supplier_invoice_line_id"], "references": "procurement.supplier_invoice_lines", "referenced_columns": ["org_id", "id"], "cardinality": "M:0..1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "withholding_basis_lines_expense_line_fk", "columns": ["org_id", "expense_claim_line_id"], "references": "finance.expense_claim_lines", "referenced_columns": ["org_id", "id"], "cardinality": "M:0..1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "withholding_basis_lines_advance_fk", "columns": ["org_id", "purchase_order_advance_allocation_id"], "references": "procurement.purchase_order_advance_allocations", "referenced_columns": ["org_id", "id"], "cardinality": "M:0..1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "withholding_basis_lines_party_fk", "columns": ["org_id", "counterparty_party_id"], "references": "parties.parties", "referenced_columns": ["org_id", "id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false},
+        {"name": "withholding_basis_lines_created_by_fk", "columns": ["org_id", "created_by_membership_id"], "references": "core.memberships", "referenced_columns": ["org_id", "id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false}
+      ],
+      "uniques": [
+        {"name": "withholding_basis_lines_supplier_uq", "columns": ["org_id", "supplier_invoice_line_id"], "where": "supplier_invoice_line_id IS NOT NULL"},
+        {"name": "withholding_basis_lines_expense_uq", "columns": ["org_id", "expense_claim_line_id"], "where": "expense_claim_line_id IS NOT NULL"},
+        {"name": "withholding_basis_lines_advance_uq", "columns": ["org_id", "purchase_order_advance_allocation_id"], "where": "purchase_order_advance_allocation_id IS NOT NULL"}
+      ],
+      "checks": [
+        {"name": "withholding_basis_lines_exact_source_ck", "expression": "num_nonnulls(supplier_invoice_line_id,expense_claim_line_id,purchase_order_advance_allocation_id)=1"},
+        {"name": "withholding_basis_lines_fy_ck", "expression": "fiscal_year_start_year BETWEEN 2000 AND 9999 AND source_event_date BETWEEN make_date(fiscal_year_start_year,4,1) AND make_date(fiscal_year_start_year+1,3,31)"},
+        {"name": "withholding_basis_lines_text_ck", "expression": "btrim(nature_code)<>'' AND (contract_reference IS NULL OR btrim(contract_reference)<>'')"},
+        {"name": "withholding_basis_lines_amount_ck", "expression": "source_gross_amount>0 AND excluded_gst_cess_amount>=0 AND prior_advance_basis_amount>=0 AND eligible_basis_amount>0 AND eligible_basis_amount=source_gross_amount-excluded_gst_cess_amount-prior_advance_basis_amount"}
+      ],
+      "indexes": [
+        {"name": "withholding_basis_lines_threshold_idx", "columns": ["org_id", "counterparty_party_id", "rule_version_id", "fiscal_year_start_year", "source_event_date", "id"], "unique": false, "where": null, "purpose": "locked cumulative statutory threshold derivation"},
+        {"name": "withholding_basis_lines_advance_idx", "columns": ["org_id", "purchase_order_advance_allocation_id", "id"], "unique": true, "where": "purchase_order_advance_allocation_id IS NOT NULL", "purpose": "one statutory basis membership per exact vendor advance allocation"}
+      ],
+      "cross_row_invariants": [
+        {"name": "withholding_basis_lines_source_guard", "enforcement": "transaction_guard", "rule": "Only the withholding deduction command or its private zero-deduction evaluator inserts rows. It locks the posted supplier invoice line, posted expense claim line, or exact posted pharma-goods purchase-order advance allocation; copies exact party, nature, contract, earlier-event date and eligible amount under the selected immutable rule; and computes cumulative party/rule/fiscal-year or contract thresholds under lock. Below-threshold classified sources persist immutable basis with nullable withholding_id so later transactions cannot reset cumulative eligibility. A later supplier invoice excludes an already-observed advance basis and reclassifies the supplier-prepayment receivable without duplicate withholding. Rows cannot be updated or deleted; reversed advance lineage is excluded without changing basis history."}
+      ]
+    },
+    {
+      "name": "tax.einvoice_rule_versions",
+      "population_mode": "regulated_import",
+      "fact_owner": "One effective reviewed e-invoice applicability and reporting-window rule for a document and registration context",
+      "tenant_class": "global_reference",
+      "mutation_class": "migration_owned_regulatory_reference",
+      "cross_row_invariants": [{"name": "einvoice_rule_versions_release_authority", "enforcement": "transaction_guard", "rule": "Only the isolated regulatory importer inserts the exact canonical row set of a verified einvoice_rules release. PAN prior-fiscal-year threshold, organization/person exemption, registration/document/supply scope and reporting window are immutable; active effective periods for one applicability dimension cannot overlap and release supersession retires the prior set atomically."}],
+      "lifecycle": {"state_column": "status", "states": ["active", "retired"], "initial": "active", "terminal": ["retired"], "transitions": ["active->retired"]},
+      "rls": {"class": "global_reference_read_only", "force": false, "write_permission": null},
+      "retention": {"class": "statutory_rule_release", "minimum": "permanent", "hard_delete": false},
+      "columns": [
+        ["id", "uuid", false, null, "public_reference"], ["release_id", "uuid", false, null, "public_reference"], ["rule_code", "varchar(64)", false, null, "public_reference"], ["rule_version", "varchar(32)", false, null, "public_reference"],
+        ["organization_person_type", "varchar(32)", false, null, "regulated"], ["organization_exemption_code", "varchar(64)", false, null, "regulated"], ["registration_type", "text", false, null, "regulated"], ["document_class", "text", false, null, "regulated"], ["supply_scope", "text", false, null, "regulated"],
+        ["minimum_prior_fy_turnover", "numeric(20,2)", false, null, "financial"], ["reporting_window_days", "integer", true, null, "regulated"], ["effective_from", "date", false, null, "regulated"], ["effective_to", "date", true, null, "regulated"], ["status", "text", false, "'active'::text", "public_reference"], ["created_at", "timestamptz", false, "transaction_timestamp()", "internal"]
+      ],
+      "primary_key": ["id"],
+      "foreign_keys": [{"name": "einvoice_rule_versions_release_fk", "columns": ["release_id"], "references": "core.reference_data_releases", "referenced_columns": ["id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false}],
+      "uniques": [{"name": "einvoice_rule_versions_identity_uq", "columns": ["release_id", "rule_code", "rule_version"], "where": null}],
+      "checks": [
+        {"name": "einvoice_rule_versions_person_ck", "expression": "organization_person_type IN ('any','individual','huf','company','firm','llp','trust','aop','boi','government','local_authority','artificial_juridical_person','other') AND btrim(organization_exemption_code)<>''"},
+        {"name": "einvoice_rule_versions_registration_ck", "expression": "registration_type IN ('any','regular','composition','casual','non_resident','input_service_distributor','tax_deductor','tax_collector')"},
+        {"name": "einvoice_rule_versions_document_ck", "expression": "document_class IN ('sales_invoice','adjustment_note') AND supply_scope IN ('domestic_registered','export','sez')"},
+        {"name": "einvoice_rule_versions_threshold_ck", "expression": "minimum_prior_fy_turnover>=0 AND (reporting_window_days IS NULL OR reporting_window_days>0)"},
+        {"name": "einvoice_rule_versions_dates_ck", "expression": "effective_to IS NULL OR effective_to>=effective_from"},
+        {"name": "einvoice_rule_versions_status_ck", "expression": "status IN ('active','retired')"}
+      ],
+      "indexes": [{"name": "einvoice_rule_versions_effective_idx", "columns": ["document_class", "registration_type", "effective_from", "id"], "unique": false, "where": "status='active'", "purpose": "deterministic document-date e-invoice applicability"}]
+    },
+    {
+      "name": "tax.gst_adjustment_rule_versions",
+      "population_mode": "regulated_import",
+      "fact_owner": "One effective reviewed GST statutory-adjustment eligibility and evidence rule",
+      "tenant_class": "global_reference",
+      "mutation_class": "migration_owned_regulatory_reference",
+      "cross_row_invariants": [{"name": "gst_adjustment_rule_versions_release_authority", "enforcement": "transaction_guard", "rule": "Only the isolated regulatory importer inserts the exact canonical row set of a verified gst_adjustment_rules release. Side, direction, reason, deadline policy, portal-evidence requirement and tax effect are immutable; active effective periods for one applicability dimension cannot overlap and release supersession retires the prior set atomically."}],
+      "lifecycle": {"state_column": "status", "states": ["active", "retired"], "initial": "active", "terminal": ["retired"], "transitions": ["active->retired"]},
+      "rls": {"class": "global_reference_read_only", "force": false, "write_permission": null},
+      "retention": {"class": "statutory_rule_release", "minimum": "permanent", "hard_delete": false},
+      "columns": [
+        ["id", "uuid", false, null, "public_reference"], ["release_id", "uuid", false, null, "public_reference"], ["rule_code", "varchar(64)", false, null, "public_reference"], ["rule_version", "varchar(32)", false, null, "public_reference"],
+        ["side", "text", false, null, "regulated"], ["direction", "text", false, null, "regulated"], ["document_effect", "text", false, null, "regulated"], ["reason_code", "varchar(64)", false, null, "regulated"],
+        ["deadline_policy", "text", false, null, "regulated"], ["deadline_days", "integer", true, null, "regulated"], ["portal_evidence_required", "boolean", false, "false", "regulated"], ["tax_effect", "text", false, null, "regulated"],
+        ["effective_from", "date", false, null, "regulated"], ["effective_to", "date", true, null, "regulated"], ["status", "text", false, "'active'::text", "public_reference"], ["created_at", "timestamptz", false, "transaction_timestamp()", "internal"]
+      ],
+      "primary_key": ["id"],
+      "foreign_keys": [{"name": "gst_adjustment_rule_versions_release_fk", "columns": ["release_id"], "references": "core.reference_data_releases", "referenced_columns": ["id"], "cardinality": "M:1", "on_delete": "RESTRICT", "deferrable": false}],
+      "uniques": [{"name": "gst_adjustment_rule_versions_identity_uq", "columns": ["release_id", "rule_code", "rule_version"], "where": null}],
+      "checks": [
+        {"name": "gst_adjustment_rule_versions_shape_ck", "expression": "side IN ('sales','purchase') AND direction IN ('credit','debit') AND document_effect IN ('increase','decrease') AND btrim(reason_code)<>''"},
+        {"name": "gst_adjustment_rule_versions_deadline_ck", "expression": "deadline_policy IN ('none','days_after_original','november_30_following_fy') AND ((deadline_policy='days_after_original' AND deadline_days>0) OR (deadline_policy<>'days_after_original' AND deadline_days IS NULL))"},
+        {"name": "gst_adjustment_rule_versions_effect_ck", "expression": "tax_effect IN ('statutory','commercial_only') AND (side='purchase' OR NOT portal_evidence_required)"},
+        {"name": "gst_adjustment_rule_versions_dates_ck", "expression": "effective_to IS NULL OR effective_to>=effective_from"},
+        {"name": "gst_adjustment_rule_versions_status_ck", "expression": "status IN ('active','retired')"}
+      ],
+      "indexes": [{"name": "gst_adjustment_rule_versions_effective_idx", "columns": ["side", "direction", "reason_code", "effective_from", "id"], "unique": false, "where": "status='active'", "purpose": "deterministic statutory adjustment eligibility"}]
+    }
+  ],
+  "unresolved_design_choices": []
+}

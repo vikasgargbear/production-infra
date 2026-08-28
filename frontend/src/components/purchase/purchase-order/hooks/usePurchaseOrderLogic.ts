@@ -6,12 +6,19 @@
  * The main component handles only rendering.
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-import documentNumberGenerator from '../../../../services/offline/documents/documentNumberGenerator';
-import { calculatePurchaseOrderPreview } from '../../../../services/calculations/purchaseOrderCalculationService';
-import { useToast } from '../../../global';
-import { useNetworkStatus } from '../../../../hooks/useNetworkStatus';
+import { useState, useCallback, useEffect } from 'react';
+import { useAuth } from '../../../../contexts/AuthContext';
+import { clientUuid } from '../../../../utils/clientUuid';
+import { branchesApi } from '../../../../services/api';
+import { canonicalBusinessContextApi } from '../../../../services/api/modules/org/canonicalBusinessContext.api';
+import type { CanonicalDocumentPolicy } from '../../../../services/api/modules/org/canonicalBusinessContext.api';
+import { isCanonicalUuid } from '../../../../utils/canonicalUuid';
+import { toast } from 'react-toastify';
 import { usePurchaseOrderSave } from './usePurchaseOrderSave';
+import {
+    canonicalPurchaseOrderValidationError,
+    type CanonicalPurchaseOrderReview,
+} from '../utils/canonicalPurchaseOrderCommand';
 
 // Types
 export interface PurchaseOrderItem {
@@ -20,21 +27,25 @@ export interface PurchaseOrderItem {
     product_name: string;
     product_code?: string;
     hsn_code?: string;
+    uom_conversion_id?: string;
     batch_number?: string;
     expiry_date?: string;
-    quantity: number;
+    quantity: number | string;
     unit?: string;
-    unit_price: number;
+    unit_price: number | string;
     mrp?: number;
     expected_rate?: number;
-    tax_percent: number;
-    discount_percent?: number;
-    free_quantity?: number;
+    tax_percent?: number | string;
+    discount_percent?: number | string;
+    free_quantity?: number | string;
+    free_supply_tax_treatment?:
+        | 'excluded_from_taxable_value'
+        | 'included_at_unit_rate';
     pack_type?: string;
     pack_size?: number;
     packages_per_box?: number;
     manufacturer?: string;
-    total?: number;
+    total?: number | string;
 }
 
 export interface PurchaseOrderData {
@@ -49,12 +60,12 @@ export interface PurchaseOrderData {
     delivery_terms: string;
     delivery_location: string;
     transport_mode: string;
-    gross_amount: number;
-    discount_amount: number;
-    tax_amount: number;
-    freight_charges: number;
-    net_amount: number;
-    total_amount: number;
+    gross_amount: number | string;
+    discount_amount: number | string;
+    tax_amount: number | string;
+    freight_charges: number | string;
+    net_amount: number | string;
+    total_amount: number | string;
     notes: string;
     status: string;
 }
@@ -63,7 +74,13 @@ export interface CreatedPOData {
     poNumber: string;
     poId: string | number;
     supplierName: string;
-    totalAmount: number;
+    totalAmount: number | string;
+}
+
+export interface PurchaseOrderBranchChoice {
+    branch_id: string;
+    branch_code: string;
+    branch_name: string;
 }
 
 export interface UsePurchaseOrderLogicProps {
@@ -75,12 +92,22 @@ export interface UsePurchaseOrderLogicReturn {
     // State
     purchaseOrder: PurchaseOrderData;
     setPurchaseOrder: React.Dispatch<React.SetStateAction<PurchaseOrderData>>;
+    documentPolicy: CanonicalDocumentPolicy | null;
+    businessDate: string;
+    branches: PurchaseOrderBranchChoice[];
+    branchId: string;
+    setBranchId: React.Dispatch<React.SetStateAction<string>>;
+    branchLoadError: string | null;
     selectedSupplier: any;
     setSelectedSupplier: React.Dispatch<React.SetStateAction<any>>;
     currentStep: number;
     setCurrentStep: React.Dispatch<React.SetStateAction<number>>;
     saving: boolean;
+    preparingReview: boolean;
     errors: Record<string, string>;
+    purchaseOrderValidationError: string | null;
+    canonicalReview: CanonicalPurchaseOrderReview | null;
+    executedResourceId: string | null;
 
     // Modal states
     showSupplierModal: boolean;
@@ -98,45 +125,68 @@ export interface UsePurchaseOrderLogicReturn {
     handleAddItem: (product: any) => void;
     handleUpdateItem: (index: number, field: string, value: any) => void;
     handleRemoveItem: (index: number) => void;
+    prepareForReview: () => Promise<boolean>;
     handleSavePurchaseOrder: () => Promise<void>;
     validatePurchaseOrder: () => boolean;
     handlePrint: () => void;
-    formatCurrency: (amount: number | string) => string;
 }
 
-const getInitialPurchaseOrder = (prefilledData?: Partial<PurchaseOrderData> | null): PurchaseOrderData => ({
+export const getInitialPurchaseOrder = (
+    prefilledData?: Partial<PurchaseOrderData> | null,
+): PurchaseOrderData => ({
     po_no: '',
-    po_date: new Date().toISOString().split('T')[0],
-    expected_delivery_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    po_date: prefilledData?.po_date || '',
+    expected_delivery_date: prefilledData?.expected_delivery_date || '',
     supplier_id: prefilledData?.supplier_id || '',
     supplier_name: prefilledData?.supplier_name || '',
     supplier_details: prefilledData?.supplier_details || null,
     items: prefilledData?.items || [],
-    payment_terms: '30 days',
-    delivery_terms: 'F.O.R. Destination',
-    delivery_location: 'Main Warehouse',
-    transport_mode: 'By Road',
-    gross_amount: 0,
-    discount_amount: 0,
-    tax_amount: 0,
-    freight_charges: 0,
-    net_amount: 0,
-    total_amount: 0,
+    payment_terms: '',
+    delivery_terms: '',
+    delivery_location: '',
+    transport_mode: '',
+    gross_amount: '',
+    discount_amount: '',
+    tax_amount: '',
+    freight_charges: '',
+    net_amount: '',
+    total_amount: '',
     notes: prefilledData?.notes || '',
     status: 'draft'
 });
+
+export const canonicalPurchaseOrderBranches = (value: unknown): PurchaseOrderBranchChoice[] => {
+    if (!Array.isArray(value)) return [];
+    return value.flatMap((row: any) => {
+        const branchId = String(row?.branch_id ?? '').trim();
+        const branchCode = String(row?.branch_code ?? '').trim();
+        const branchName = String(row?.branch_name ?? '').trim();
+        if (!isCanonicalUuid(branchId) || !branchCode || !branchName || row?.is_active === false) {
+            return [];
+        }
+        return [{ branch_id: branchId, branch_code: branchCode, branch_name: branchName }];
+    });
+};
 
 export function usePurchaseOrderLogic({
     prefilledData = null,
     onClose
 }: UsePurchaseOrderLogicProps): UsePurchaseOrderLogicReturn {
-    const toast = useToast();
+    const { user, isOnline } = useAuth();
 
     // Core State
     const [purchaseOrder, setPurchaseOrder] = useState<PurchaseOrderData>(() => getInitialPurchaseOrder(prefilledData));
+    const [branches, setBranches] = useState<PurchaseOrderBranchChoice[]>([]);
+    const [branchId, setBranchId] = useState(() => {
+        const authenticatedBranch = String(user?.branch_id ?? '').trim();
+        return isCanonicalUuid(authenticatedBranch) ? authenticatedBranch : '';
+    });
+    const [branchLoadError, setBranchLoadError] = useState<string | null>(null);
     const [selectedSupplier, setSelectedSupplier] = useState(prefilledData?.supplier_details || null);
     const [currentStep, setCurrentStep] = useState(1);
     const [errors, setErrors] = useState<Record<string, string>>({});
+    const [documentPolicy, setDocumentPolicy] = useState<CanonicalDocumentPolicy | null>(null);
+    const [businessDate, setBusinessDate] = useState('');
 
     // Modal States
     const [showSupplierModal, setShowSupplierModal] = useState(false);
@@ -145,114 +195,84 @@ export function usePurchaseOrderLogic({
 
     // Data States
     const [createdPOData, setCreatedPOData] = useState<CreatedPOData | null>(null);
-    const calculationRequestRef = useRef(0);
-    const purchaseOrderRef = useRef(purchaseOrder);
-    purchaseOrderRef.current = purchaseOrder;
 
-    // Network status for offline-first
-    const { isOnline } = useNetworkStatus();
-
-    // Generate PO number on mount
     useEffect(() => {
-        const generateAndSetPONumber = async () => {
-            try {
-                const poNumber = await documentNumberGenerator.generatePONumber();
-                setPurchaseOrder(prev => ({ ...prev, po_no: poNumber }));
-            } catch (error) {
-                const fallbackNumber = `PO-${Date.now().toString().slice(-8)}`;
-                setPurchaseOrder(prev => ({ ...prev, po_no: fallbackNumber }));
-            }
-        };
-        generateAndSetPONumber();
+        let active = true;
+        void canonicalBusinessContextApi.get().then(context => {
+            if (!active) return;
+            setPurchaseOrder(previous => ({
+                ...previous,
+                po_date: previous.po_date || context.business_date,
+            }));
+            setBusinessDate(context.business_date);
+            setDocumentPolicy(context.document_policy);
+        }).catch(error => {
+            if (active) toast.error(
+                error instanceof Error
+                    ? error.message
+                    : 'Unable to load the organization business date.',
+            );
+        });
+        return () => { active = false; };
     }, []);
 
-    // Calculate totals
-    const calculateTotals = useCallback(async (order: PurchaseOrderData) => {
-        const requestId = ++calculationRequestRef.current;
-        if (!order.items || order.items.length === 0) {
-            setPurchaseOrder(prev => ({
-                ...prev,
-                gross_amount: 0,
-                tax_amount: 0,
-                net_amount: 0,
-                total_amount: 0
-            }));
-            return;
-        }
-
-        try {
-            const calculation = await calculatePurchaseOrderPreview(order, isOnline);
-            if (requestId !== calculationRequestRef.current) return;
-            const totals = calculation.totals;
-
-            setPurchaseOrder(prev => {
-                let itemTotalsChanged = false;
-                const items = prev.items.map((item, index) => {
-                    const calculatedTotal = Number(calculation.items[index]?.total || 0);
-                    if (Number(item.total || 0) === calculatedTotal) return item;
-                    itemTotalsChanged = true;
-                    return { ...item, total: calculatedTotal };
-                });
-                return {
-                    ...prev,
-                    items: itemTotalsChanged ? items : prev.items,
-                    gross_amount: totals.subtotal_amount || totals.gross_amount || 0,
-                    tax_amount: totals.tax_amount || totals.total_tax_amount || totals.total_tax || 0,
-                    net_amount: totals.net_amount || totals.total_amount || 0,
-                    total_amount: totals.total_amount || totals.final_amount || 0
-                };
-            });
-        } catch (error) {
-            if (requestId !== calculationRequestRef.current) return;
-            toast.error(error instanceof Error ? error.message : 'Unable to calculate purchase-order totals.');
-        }
-    }, [isOnline, toast]);
-
-    // Trigger calculations when items change
     useEffect(() => {
-        if (purchaseOrderRef.current.items) {
-            void calculateTotals(purchaseOrderRef.current);
-        }
-    }, [
-        calculateTotals,
-        purchaseOrder.items,
-        purchaseOrder.discount_amount,
-        purchaseOrder.freight_charges
-    ]);
+        let active = true;
+        void branchesApi.getAll().then(response => {
+            if (!active) return;
+            const choices = canonicalPurchaseOrderBranches(response.data?.branches);
+            if (!choices.length) {
+                throw new Error('No active canonical branch is available for purchase orders.');
+            }
+            setBranches(choices);
+            setBranchId(current => choices.some(branch => branch.branch_id === current) ? current : '');
+            setBranchLoadError(null);
+        }).catch(error => {
+            if (!active) return;
+            setBranches([]);
+            setBranchId('');
+            setBranchLoadError(error instanceof Error
+                ? error.message
+                : 'Unable to load canonical purchase-order branches.');
+        });
+        return () => { active = false; };
+    }, []);
 
     // Handlers
     const handleSupplierSelect = useCallback((supplier: any) => {
         setSelectedSupplier(supplier);
         setPurchaseOrder(prev => ({
             ...prev,
-            supplier_id: supplier.supplier_id,
-            supplier_name: supplier.supplier_name,
+            supplier_id: supplier?.supplier_id ?? '',
+            supplier_name: supplier?.supplier_name ?? '',
             supplier_details: supplier
         }));
     }, []);
 
     const handleAddItem = useCallback((product: any) => {
         const newItem: PurchaseOrderItem = {
-            id: Date.now() + Math.random(),
+            id: clientUuid(),
             product_id: product.product_id,
             product_name: product.product_name,
             product_code: product.product_code,
             hsn_code: product.hsn_code || '',
+            uom_conversion_id: product.uom_conversion_id,
             batch_number: product.batch_number || '',
             expiry_date: product.expiry_date || '',
-            quantity: 1,
+            quantity: '',
             unit: product.unit || product.uom || '',
-            unit_price: product.unit_price || (product.mrp || 0) * 0.7,
-            mrp: product.mrp || 0,
-            expected_rate: product.sale_price || product.selling_price || product.mrp || 0,
-            tax_percent: product.tax_percent || 12,
-            discount_percent: 0,
-            free_quantity: 0,
-            pack_type: 'STRIP',
-            pack_size: 10,
-            packages_per_box: 10,
+            unit_price: product.unit_price ?? product.purchase_rate ?? '',
+            mrp: product.mrp,
+            expected_rate: product.unit_price ?? product.purchase_rate,
+            tax_percent: product.gst_percent,
+            discount_percent: '',
+            free_quantity: '',
+            free_supply_tax_treatment: product.free_supply_tax_treatment,
+            pack_type: product.pack_type || '',
+            pack_size: product.pack_size,
+            packages_per_box: product.packages_per_box,
             manufacturer: product.manufacturer || '',
-            total: 0
+            total: ''
         };
 
         setPurchaseOrder(prev => ({
@@ -262,11 +282,12 @@ export function usePurchaseOrderLogic({
     }, []);
 
     const handleUpdateItem = useCallback((index: number, field: string, value: any) => {
+        const exactFields = new Set(['quantity', 'unit_price', 'discount_percent', 'free_quantity', 'free']);
         setPurchaseOrder(prev => ({
             ...prev,
             items: (prev.items || []).map((item, i) => {
                 if (i === index) {
-                    return { ...item, [field]: value };
+                    return { ...item, [field]: exactFields.has(field) ? String(value) : value };
                 }
                 return item;
             })
@@ -284,43 +305,64 @@ export function usePurchaseOrderLogic({
         const newErrors: Record<string, string> = {};
         if (!selectedSupplier) newErrors.supplier = 'Supplier is required';
         if (!purchaseOrder.items || purchaseOrder.items.length === 0) newErrors.items = 'At least one item is required';
-        if (Number(purchaseOrder.discount_amount) !== 0) {
-            newErrors.discount_amount = 'Header discounts are unavailable until the purchase tax contract is baselined';
-        }
-        if (Number(purchaseOrder.freight_charges) !== 0) {
-            newErrors.freight_charges = 'Freight is unavailable until purchase-order persistence is baselined';
-        }
+        const canonicalError = canonicalPurchaseOrderValidationError(
+            purchaseOrder,
+            selectedSupplier,
+            branchId,
+        );
+        if (canonicalError) newErrors.submission = canonicalError;
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
-    }, [selectedSupplier, purchaseOrder]);
+    }, [branchId, purchaseOrder, selectedSupplier]);
 
-    // Offline-first save hook
-    const { saving: offlineSaving, handleSavePurchaseOrder } = usePurchaseOrderSave({
+    const {
+        saving,
+        preparingReview,
+        canonicalReview,
+        executedResourceId,
+        prepareForReview,
+        handleSavePurchaseOrder,
+    } = usePurchaseOrderSave({
         purchaseOrder,
         selectedSupplier,
+        branchId,
         isOnline,
+        documentPolicy,
+        businessDate,
+        setPurchaseOrder,
         setCreatedPOData,
         setShowSuccessModal,
-        validatePurchaseOrder
+        setErrors,
     });
+    const purchaseOrderValidationError = canonicalPurchaseOrderValidationError(
+        purchaseOrder,
+        selectedSupplier,
+        branchId,
+    );
 
     const handlePrint = useCallback(() => {
         window.print();
     }, []);
 
-    const formatCurrency = useCallback((amount: number | string): string => {
-        return `₹${(parseFloat(String(amount)) || 0).toFixed(2)}`;
-    }, []);
-
     return {
         purchaseOrder,
         setPurchaseOrder,
+        documentPolicy,
+        businessDate,
+        branches,
+        branchId,
+        setBranchId,
+        branchLoadError,
         selectedSupplier,
         setSelectedSupplier,
         currentStep,
         setCurrentStep,
-        saving: offlineSaving,
+        saving,
+        preparingReview,
         errors,
+        purchaseOrderValidationError,
+        canonicalReview,
+        executedResourceId,
         showSupplierModal,
         setShowSupplierModal,
         showProductModal,
@@ -332,10 +374,10 @@ export function usePurchaseOrderLogic({
         handleAddItem,
         handleUpdateItem,
         handleRemoveItem,
+        prepareForReview,
         handleSavePurchaseOrder,
         validatePurchaseOrder,
-        handlePrint,
-        formatCurrency
+        handlePrint
     };
 }
 

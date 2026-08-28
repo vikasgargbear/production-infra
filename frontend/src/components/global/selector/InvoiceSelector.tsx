@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Search, FileText, X, Check, ChevronDown,
-  Eye, RefreshCw
+  RefreshCw
 } from 'lucide-react';
 import Button from '../ui/Button';
 import { StatusBadge, DataTable } from '../ui';
@@ -257,11 +257,11 @@ const InvoiceSelector: React.FC<InvoiceSelectorProps> = ({
       render: (_, invoice: Invoice) => (
         <div className="flex items-center space-x-1">
           <button
-            onClick={() => console.log('View invoice:', invoice.id)}
-            className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-            title="View Details"
+            onClick={() => onSelect(invoice)}
+            className="p-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
+            title="Select Invoice"
           >
-            <Eye className="w-4 h-4" />
+            <Check className="w-4 h-4" />
           </button>
         </div>
       ),

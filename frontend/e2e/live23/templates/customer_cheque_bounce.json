@@ -1,0 +1,38 @@
+{
+  "template_schema": "aasopharma.live23.ui-variant-template.v1",
+  "scenario_id": "customer_cheque_bounce",
+  "operation_id": "customer_cheque_bounce",
+  "lifecycle_mode": "split",
+  "steps": {
+    "missing_required_steps": [
+      {"actor":"requester","action":"goto","value":"/#/payment/cheque-actions"},
+      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Clear or bounce an exact posted customer cheque","exact":true},"value":"Clear or bounce an exact posted customer cheque"},
+      {"actor":"requester","action":"expectDisabled","locator":{"kind":"role","role":"button","name":"Prepare terminal action","exact":true}}
+    ],
+    "prepare_steps": [
+      {"actor":"requester","action":"goto","value":"/#/payment/cheque-actions"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Exact posted cheque receipt UUID","exact":true},"value":"{{resource_customer_receipt_cheque_bounce}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Resolve exact cheque receipt","exact":true}},
+      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Exact uncleared cheque receipt resolved with its authoritative row version.","exact":true},"value":"Exact uncleared cheque receipt resolved"},
+      {"actor":"requester","action":"select","locator":{"kind":"label","name":"Action","exact":true},"value":"bounce"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Action date","exact":true},"value":"{{fact.clock.business_date}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Verified evidence ID","exact":true},"value":"{{fact.identity.customer_receipt_evidence_attachment_id}}"},
+      {"actor":"requester","action":"select","locator":{"kind":"label","name":"Bounce reason","exact":true},"value":"funds_insufficient"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Prepare terminal action","exact":true}}
+    ],
+    "approval_steps": [
+      {"actor":"reviewer","action":"goto","value":"/#/payment/cheque-actions"},
+      {"actor":"reviewer","action":"fill","locator":{"kind":"label","name":"Command UUID","exact":true},"value":"{{command_request_id}}"},
+      {"actor":"reviewer","action":"click","locator":{"kind":"role","role":"button","name":"Load exact review","exact":true}},
+      {"actor":"reviewer","action":"expectText","locator":{"kind":"testId","name":"canonical-immutable-preview"},"value":"finance.customer_cheque_bounce.post"},
+      {"actor":"reviewer","action":"click","locator":{"kind":"role","role":"button","name":"Approve as distinct reviewer","exact":true}}
+    ],
+    "execute_steps": [
+      {"actor":"requester","action":"goto","value":"/#/payment/cheque-actions"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Command UUID","exact":true},"value":"{{command_request_id}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Load exact review","exact":true}},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"checkbox","name":"I am the original requester and authorize one execution of this approved cheque action.","exact":true}},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Execute as requester","exact":true}}
+    ]
+  }
+}

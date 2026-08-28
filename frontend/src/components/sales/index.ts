@@ -7,8 +7,7 @@
 export interface InvoiceItem {
     quantity: number;
     unit_price?: number;
-    tax_rate?: number;
-    tax_percent?: number;
+    gst_percent?: number;
     product_id?: number;
     [key: string]: unknown;
 }
@@ -27,7 +26,7 @@ export interface ValidationResult {
 // Main Components
 export { default as InvoiceFlow } from './invoice/InvoiceFlow';
 export { default as InvoiceList } from './invoice/InvoiceList';
-export { SalesOrderFlow, SalesOrderManagement } from './order';
+export { SalesOrderFlow } from './order';
 export { ChallanFlow } from './challan';
 export { default as SalesHub } from './SalesHub';
 
@@ -35,14 +34,13 @@ export { default as SalesHub } from './SalesHub';
 export { default as ConvertToInvoiceButton } from './ui/ConvertToInvoiceButton';
 
 // Modals - re-export from modals folder
-export { PaymentRecordingModal } from './modals';
 
 // Shared Hooks
-export { useSalesTransaction, useEmployees, useDraftAutoSave } from './hooks';
-export type { UseSalesTransactionConfig, UseSalesTransactionReturn, UseEmployeesReturn, UseDraftAutoSaveOptions } from './hooks';
+export { useSalesTransaction, useEmployees } from './hooks';
+export type { UseSalesTransactionConfig, UseSalesTransactionReturn, UseEmployeesReturn } from './hooks';
 
 // Shared Utils
-export { generateTempId, deductStockLocally, prepareOfflineDocument, prepareItemForTransaction } from './utils';
+export { prepareItemForTransaction } from './utils';
 export type { ProductInput } from './utils';
 
 // Shared Types

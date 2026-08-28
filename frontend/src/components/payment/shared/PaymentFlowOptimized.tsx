@@ -3,12 +3,13 @@ import { Calendar } from 'lucide-react';
 import { usePayment } from '../../../contexts/PaymentContext';
 import { Card } from '../../global';
 import { CustomerSearch } from '../../global';
+import { moneyToCents } from '../entry/customerReceiptCommand';
+import {
+  getCustomerReceiptContext,
+  type CustomerReceiptContext,
+} from '../../../services/api/modules/finance/customerReceipts.api';
 
-interface SplitPayment {
-  type: string;
-  amount: string;
-  reference?: string;
-}
+type CanonicalBankAccount = CustomerReceiptContext['settlement_accounts'][number];
 
 const PaymentFlowOptimized: React.FC = () => {
   const {
@@ -21,11 +22,9 @@ const PaymentFlowOptimized: React.FC = () => {
     setError
   } = usePayment();
 
-  const [showSplitModal, setShowSplitModal] = useState(false);
-  const [splitPayments, setSplitPayments] = useState<SplitPayment[]>([
-    { type: 'CASH', amount: '' },
-    { type: 'UPI', amount: '' }
-  ]);
+  const [bankAccounts, setBankAccounts] = useState<CanonicalBankAccount[]>([]);
+  const [paymentMethods, setPaymentMethods] = useState<CustomerReceiptContext['payment_methods']>([]);
+  const [bankAccountsError, setBankAccountsError] = useState('');
 
   const amountRef = useRef<HTMLInputElement>(null);
   const customerSearchRef = useRef<any>(null);
@@ -45,6 +44,32 @@ const PaymentFlowOptimized: React.FC = () => {
     if (!selectedCustomer) {
       customerSearchRef.current?.focus();
     }
+  }, [selectedCustomer]);
+
+  useEffect(() => {
+    let active = true;
+    getCustomerReceiptContext()
+      .then(response => {
+        if (!active) return;
+        const accounts = response.data.settlement_accounts;
+        setBankAccounts(accounts);
+        setPaymentMethods(response.data.payment_methods);
+        setPaymentField('payment_date', response.data.business_date);
+        setPaymentField('business_date', response.data.business_date);
+        setBankAccountsError(accounts.length ? '' : 'No canonical bank settlement account is available.');
+      })
+      .catch(() => {
+        if (!active) return;
+        setBankAccounts([]);
+        setPaymentMethods([]);
+        setPaymentField('payment_date', '');
+        setPaymentField('business_date', '');
+        setBankAccountsError('Unable to load the canonical receipt context. Receipt posting is unavailable.');
+      });
+    return () => { active = false; };
+    // The context action is intentionally read once; including its render-local
+    // function identity would refetch after every field update.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleFieldChange = (field: string, value: string): void => {
@@ -54,8 +79,9 @@ const PaymentFlowOptimized: React.FC = () => {
     }
 
     if (field === 'amount') {
-      const amount = parseFloat(value);
-      if (value && (isNaN(amount) || amount <= 0)) {
+      let valid = false;
+      try { valid = moneyToCents(value) > 0n; } catch { valid = false; }
+      if (value && !valid) {
         setError(field, 'Enter valid amount');
       }
     }
@@ -67,38 +93,11 @@ const PaymentFlowOptimized: React.FC = () => {
     window.dispatchEvent(new CustomEvent('customerSelected', { detail: customer }));
   };
 
-  // Payment modes including split
-  const paymentModes = [
-    { value: 'CASH', label: 'Cash', icon: '💵' },
-    { value: 'UPI', label: 'UPI', icon: '📱' },
-    { value: 'CARD', label: 'Card', icon: '💳' },
-    { value: 'BANK_TRANSFER', label: 'Bank', icon: '🏦' },
-    { value: 'CHEQUE', label: 'Cheque', icon: '📄' },
-    { value: 'SPLIT', label: 'Split', icon: '➗' }
-  ];
-
-  const needsReference = ['UPI', 'BANK_TRANSFER', 'CHEQUE'].includes(payment.payment_mode);
+  const needsReference = Boolean(payment.payment_mode);
 
   const handlePaymentModeSelect = (mode: string) => {
-    if (mode === 'SPLIT') {
-      setShowSplitModal(true);
-      setPaymentField('payment_mode', 'SPLIT');
-    } else {
-      setPaymentField('payment_mode', mode);
-      setShowSplitModal(false);
-    }
+    setPaymentField('payment_mode', mode);
   };
-
-  const updateSplitPayment = (index: number, field: string, value: string) => {
-    const updated = [...splitPayments];
-    updated[index] = { ...updated[index], [field]: value };
-    setSplitPayments(updated);
-
-    // Update payment field with split details
-    setPaymentField('split_payments', JSON.stringify(updated));
-  };
-
-  const totalSplitAmount = splitPayments.reduce((sum, p) => sum + parseFloat(p.amount || '0'), 0);
 
   return (
     <div className="space-y-4">
@@ -113,6 +112,9 @@ const PaymentFlowOptimized: React.FC = () => {
             Create Customer
           </button>
         </div>
+        <p className="text-sm text-gray-600">
+          Required: select a customer, positive receipt amount, payment method, settlement account, reference, and allocation.
+        </p>
         {/* White card wrapper - consistent with other flows */}
         <div className="bg-white rounded-lg border border-gray-200 p-4">
           <CustomerSearch
@@ -131,31 +133,20 @@ const PaymentFlowOptimized: React.FC = () => {
       {/* Payment Details - Only show after customer selection */}
       {selectedCustomer && (
         <div className="space-y-4">
-          {/* Date and Type - First */}
-          <div className="grid grid-cols-2 gap-4">
+          {/* Business date */}
+          <div className="max-w-md">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Payment Date</label>
               <div className="relative">
                 <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input
                   type="date"
-                  value={payment.payment_date || new Date().toISOString().split('T')[0]}
+                  value={payment.payment_date}
+                  max={payment.business_date || undefined}
                   onChange={(e) => handleFieldChange('payment_date', e.target.value)}
                   className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Payment Type</label>
-              <select
-                value={payment.payment_type || 'order_payment'}
-                onChange={(e) => handleFieldChange('payment_type', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="order_payment">Order Payment</option>
-                <option value="advance">Advance</option>
-                <option value="adjustment">Adjustment</option>
-              </select>
             </div>
           </div>
 
@@ -174,7 +165,8 @@ const PaymentFlowOptimized: React.FC = () => {
                   className={`w-full pl-10 pr-3 py-2.5 text-xl font-semibold border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${errors.amount ? 'border-red-500 bg-red-50' : 'border-gray-300'
                     }`}
                   placeholder="0"
-                  step="1"
+                  min="0.01"
+                  step="0.01"
                 />
               </div>
               {errors.amount && (
@@ -186,109 +178,114 @@ const PaymentFlowOptimized: React.FC = () => {
           {/* Payment Mode Selection */}
           <div className="space-y-2">
             <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">PAYMENT METHOD</h3>
-            <div className="grid grid-cols-6 gap-2">
-              {paymentModes.map((mode) => (
+            <div className="grid grid-cols-3 gap-2">
+              {paymentMethods.map((method) => {
+                const label = method === 'bank_transfer'
+                  ? 'Bank Transfer'
+                  : method.charAt(0).toUpperCase() + method.slice(1);
+                return (
                 <button
-                  key={mode.value}
+                  key={method}
                   type="button"
-                  onClick={() => handlePaymentModeSelect(mode.value)}
-                  className={`p-2.5 rounded-lg border transition-all ${payment.payment_mode === mode.value
+                  onClick={() => handlePaymentModeSelect(method)}
+                  className={`min-h-11 p-2.5 rounded-lg border transition-all ${payment.payment_mode === method
                     ? 'border-blue-500 bg-blue-50'
                     : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
                     }`}
                 >
-                  <div className="text-lg">{mode.icon}</div>
-                  <div className="text-xs font-medium text-gray-600 mt-1">{mode.label}</div>
+                  <div className="text-xs font-medium text-gray-700">{label}</div>
                 </button>
-              ))}
+              );})}
             </div>
           </div>
 
-          {/* Reference Number - Optional */}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="text-sm font-medium text-gray-700">Receipt purpose
+              <select value={payment.receipt_purpose} onChange={(event) => {
+                handleFieldChange('receipt_purpose', event.target.value);
+                setPaymentField('allocation_method', event.target.value === 'customer_advance' ? 'advance' : 'manual');
+              }} className="mt-1 min-h-11 w-full rounded-lg border border-gray-300 bg-white px-3">
+                <option value="invoice_settlement">Invoice settlement</option>
+                <option value="customer_advance">Goods-order customer advance</option>
+              </select>
+            </label>
+            <label className="text-sm font-medium text-gray-700">Verified evidence ID
+              <input value={payment.evidence_attachment_id} onChange={(event) => handleFieldChange('evidence_attachment_id', event.target.value)}
+                className="mt-1 min-h-11 w-full rounded-lg border border-gray-300 px-3" placeholder="Canonical attachment UUID" />
+            </label>
+          </div>
+
+          {payment.receipt_purpose === 'customer_advance' && <div className="grid gap-3 sm:grid-cols-2">
+            <label className="text-sm font-medium text-gray-700">Approved goods order ID
+              <input value={payment.sales_order_id} onChange={(event) => handleFieldChange('sales_order_id', event.target.value)}
+                className="mt-1 min-h-11 w-full rounded-lg border border-gray-300 px-3" placeholder="Canonical sales-order UUID" />
+            </label>
+            <label className="text-sm font-medium text-gray-700">Order branch ID
+              <input value={payment.branch_id} onChange={(event) => handleFieldChange('branch_id', event.target.value)}
+                className="mt-1 min-h-11 w-full rounded-lg border border-gray-300 px-3" placeholder="Canonical branch UUID" />
+            </label>
+          </div>}
+
+          {/* Canonical settlement identity */}
+          {!['cash', 'cheque'].includes(payment.payment_mode) && <div className="space-y-2">
+            <label htmlFor="receipt-bank-account" className="block text-sm font-medium text-gray-700">
+              Settlement bank account <span className="text-red-600" aria-hidden="true">*</span>
+            </label>
+            <select
+              id="receipt-bank-account"
+              value={payment.bank_account_id}
+              onChange={(event) => {
+                const account = bankAccounts.find(candidate => candidate.bank_account_id === event.target.value);
+                setPaymentField('bank_account_id', account?.bank_account_id || '');
+                setPaymentField('settlement_account_id', account?.settlement_account_id || '');
+              }}
+              className="min-h-11 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Select bank settlement account</option>
+              {bankAccounts.map(account => (
+                <option key={account.bank_account_id} value={account.bank_account_id}>
+                  {account.bank_name} — {account.settlement_account_name}
+                </option>
+              ))}
+            </select>
+            {bankAccountsError && <p role="alert" className="text-sm text-red-700">{bankAccountsError}</p>}
+          </div>}
+
+          {payment.payment_mode === 'cheque' && <div className="grid gap-3 rounded-lg border border-blue-200 bg-blue-50 p-3 sm:grid-cols-2">
+            <label className="text-sm font-medium text-gray-700">Instrument number
+              <input value={payment.instrument_number} onChange={(event) => handleFieldChange('instrument_number', event.target.value)} className="mt-1 min-h-11 w-full rounded-lg border border-gray-300 px-3" />
+            </label>
+            <label className="text-sm font-medium text-gray-700">Instrument date
+              <input type="date" value={payment.instrument_date} onChange={(event) => handleFieldChange('instrument_date', event.target.value)} className="mt-1 min-h-11 w-full rounded-lg border border-gray-300 px-3" />
+            </label>
+            <label className="text-sm font-medium text-gray-700">Drawee bank
+              <input value={payment.drawee_bank_name} onChange={(event) => handleFieldChange('drawee_bank_name', event.target.value)} className="mt-1 min-h-11 w-full rounded-lg border border-gray-300 px-3" />
+            </label>
+            <label className="flex min-h-11 items-center gap-2 text-sm font-medium text-gray-700">
+              <input type="checkbox" checked={payment.account_payee_confirmed} onChange={(event) => setPaymentField('account_payee_confirmed', event.target.checked)} />Account-payee confirmed
+            </label>
+          </div>}
+
+          {/* Reference Number */}
           {needsReference && (
             <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
               <label className="block text-sm font-medium text-gray-600 mb-2">
-                {payment.payment_mode === 'UPI' ? 'UPI Transaction ID' :
-                  payment.payment_mode === 'CHEQUE' ? 'Cheque Number' :
-                    'Reference Number'} <span className="text-xs text-gray-500">(Optional)</span>
+                {payment.payment_mode === 'upi' ? 'UPI Transaction ID' : 'Reference Number'}
+                {' '}<span className="text-red-600" aria-hidden="true">*</span>
               </label>
               <input
                 type="text"
                 value={payment.reference_number || ''}
                 onChange={(e) => handleFieldChange('reference_number', e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Enter reference (optional)"
+                required
+                placeholder="Enter bank, UPI, or gateway reference"
               />
             </div>
           )}
         </div>
       )}
 
-      {/* Split Payment Details - Compact but user-friendly */}
-      {selectedCustomer && showSplitModal && (
-        <div className="space-y-2">
-          <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">SPLIT PAYMENT DETAILS</h3>
-          <Card className="p-3">
-            <div className="space-y-2">
-              {splitPayments.map((split, index) => (
-                <div key={index} className="flex items-center gap-2">
-                  <select
-                    value={split.type}
-                    onChange={(e) => updateSplitPayment(index, 'type', e.target.value)}
-                    className="px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="CASH">💵 Cash</option>
-                    <option value="UPI">📱 UPI</option>
-                    <option value="CARD">💳 Card</option>
-                    <option value="BANK_TRANSFER">🏦 Bank</option>
-                  </select>
-                  <div className="relative flex-1 max-w-[150px]">
-                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-sm text-gray-600 font-semibold">₹</span>
-                    <input
-                      type="number"
-                      value={split.amount}
-                      onChange={(e) => updateSplitPayment(index, 'amount', e.target.value)}
-                      onFocus={(e) => e.target.select()}
-                      placeholder="Amount"
-                      className="w-full pl-7 pr-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                  {['UPI', 'BANK_TRANSFER'].includes(split.type) && (
-                    <input
-                      type="text"
-                      value={split.reference || ''}
-                      onChange={(e) => updateSplitPayment(index, 'reference', e.target.value)}
-                      placeholder="Reference (optional)"
-                      className="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  )}
-                  {splitPayments.length > 1 && (
-                    <button
-                      onClick={() => setSplitPayments(splitPayments.filter((_, i) => i !== index))}
-                      className="text-red-500 hover:text-red-700 px-2"
-                    >
-                      ✕
-                    </button>
-                  )}
-                </div>
-              ))}
-
-              <button
-                onClick={() => setSplitPayments([...splitPayments, { type: 'CASH', amount: '' }])}
-                className="text-sm text-blue-600 hover:text-blue-700 mt-2"
-              >
-                + Add another payment method
-              </button>
-
-              {totalSplitAmount !== parseFloat(payment.amount || '0') && (
-                <div className="text-xs text-amber-600 bg-amber-50 p-2 rounded mt-2">
-                  Split total (₹{totalSplitAmount}) must equal payment amount (₹{payment.amount || '0'})
-                </div>
-              )}
-            </div>
-          </Card>
-        </div>
-      )}
     </div>
   );
 };

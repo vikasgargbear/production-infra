@@ -4,30 +4,34 @@
 
 import { apiHelpers } from '../../apiClient';
 import type { AxiosResponse } from 'axios';
+import { isCanonicalUuid } from '../../../../utils/canonicalUuid';
 
 // ============================================
 // Type Definitions
 // ============================================
 
-export interface BatchParams {
-    product_id?: number;
-    expiring_soon?: boolean;
-    expired?: boolean;
-    days?: number;
-    limit?: number;
-    offset?: number;
-}
-
-export interface BatchData {
-    product_id: number;
+export interface CanonicalProductBatch {
+    batch_id: string;
+    product_id: string;
+    product_name: string;
     batch_number: string;
-    manufacturing_date?: string;
+    manufacturing_date: string | null;
     expiry_date: string;
-    mrp: number;
-    sale_price?: number;
-    cost_per_unit?: number;
-    quantity: number;
-    rack_location?: string;
+    mrp_per_unit: string;
+    sale_price_per_unit: string;
+    uom_conversion_id: string | null;
+    location_id: string;
+    branch_id: string;
+    location_name: string;
+    branch_name: string;
+    cost_per_unit: string | null;
+    quantity_available: string;
+    days_to_expiry: number;
+    fefo_expiry_tier: number | null;
+    has_pending_sync: false;
+    taxability: 'taxable' | 'exempt' | 'nil_rated' | 'non_gst' | null;
+    gst_percent: string | null;
+    batch_status: 'released' | 'blocked';
 }
 
 // ============================================
@@ -35,10 +39,7 @@ export interface BatchData {
 // ============================================
 
 const ENDPOINTS = {
-    BASE: '/inventory/batches/',
-    BY_PRODUCT: (id: number) => `/products/${id}/batches`,
-    EXPIRING: '/inventory/batches/expiring',
-    EXPIRED: '/inventory/batches/expired'
+    BY_PRODUCT: (id: string) => `/products/${id}/batches`,
 } as const;
 
 // ============================================
@@ -46,35 +47,12 @@ const ENDPOINTS = {
 // ============================================
 
 export const batchesApi = {
-    getAll: (params: BatchParams = {}): Promise<AxiosResponse> => {
-        return apiHelpers.get(ENDPOINTS.BASE, { params });
+    getByProduct: (productId: string): Promise<AxiosResponse<{ batches: CanonicalProductBatch[] }>> => {
+        if (!isCanonicalUuid(productId)) {
+            throw new Error('Product batch lookup requires a canonical product UUID.');
+        }
+        return apiHelpers.get(ENDPOINTS.BY_PRODUCT(productId), {
+            preserveExactDecimals: true,
+        });
     },
-
-    getById: (batchId: number): Promise<AxiosResponse> => {
-        return apiHelpers.get(`${ENDPOINTS.BASE}/${batchId}`);
-    },
-
-    getByProduct: (productId: number, params: BatchParams = {}): Promise<AxiosResponse> => {
-        return apiHelpers.get(ENDPOINTS.BY_PRODUCT(productId), { params });
-    },
-
-    create: (data: BatchData): Promise<AxiosResponse> => {
-        return apiHelpers.post(ENDPOINTS.BASE, data);
-    },
-
-    update: (batchId: number, data: Partial<BatchData>): Promise<AxiosResponse> => {
-        return apiHelpers.put(`${ENDPOINTS.BASE}/${batchId}`, data);
-    },
-
-    delete: (batchId: number): Promise<AxiosResponse> => {
-        return apiHelpers.delete(`${ENDPOINTS.BASE}/${batchId}`);
-    },
-
-    getExpiring: (days: number = 90): Promise<AxiosResponse> => {
-        return apiHelpers.get(ENDPOINTS.EXPIRING, { params: { days } });
-    },
-
-    getExpired: (): Promise<AxiosResponse> => {
-        return apiHelpers.get(ENDPOINTS.EXPIRED);
-    }
 };

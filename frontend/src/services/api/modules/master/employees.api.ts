@@ -6,7 +6,8 @@
  */
 
 import { apiHelpers } from '../../apiClient';
-import { createCrudApi } from '../../utils/createCrudApi';
+import { rejectCanonicalWrite } from '../../canonicalWritePolicy';
+import { decodeCanonicalEmployeeList } from './canonicalMasterReads';
 
 // ============================================================================
 // TYPES
@@ -52,29 +53,12 @@ export interface Employee {
 // API
 // ============================================================================
 
-const crud = createCrudApi({ basePath: '/employees' });
-
 export const employeesApi = {
-  ...crud,
+  getAll: (params: { limit?: number; offset?: number; search?: string; include_inactive?: boolean } = {}) =>
+    apiHelpers.get('/employees', { params })
+      .then(response => ({ ...response, data: decodeCanonicalEmployeeList(response.data) })),
+  create: (_data: any) => rejectCanonicalWrite('Legacy employee creation'),
+  update: (_employeeId: number | string, _data: any) => rejectCanonicalWrite('Legacy employee editing'),
+  delete: (_employeeId: number | string) => rejectCanonicalWrite('Legacy employee deletion'),
 
-  // Search employees
-  search: (query: string, params: EmployeeParams = {}) => {
-    return apiHelpers.get('/employees', {
-      params: { search: query, ...params }
-    });
-  },
-
-  // Get active employees only
-  getActive: (params: EmployeeParams = {}) => {
-    return apiHelpers.get('/employees', {
-      params: { is_active: true, ...params }
-    });
-  },
-
-  // Get inactive employees
-  getInactive: (params: EmployeeParams = {}) => {
-    return apiHelpers.get('/employees', {
-      params: { is_active: false, ...params }
-    });
-  }
 };

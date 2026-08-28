@@ -1,0 +1,66 @@
+{
+  "evidence_version": "1.0.0",
+  "external_provider_feature": {
+    "enabled": false,
+    "reviewed": true,
+    "release_scope": "initial_production_disabled",
+    "reason": "Product owner directed e-invoice and e-way-bill provider submission to remain disabled for the initial production release; internal GST calculation and tax documents remain enabled.",
+    "reviewed_by": "product_owner_direction",
+    "reviewed_at": "2026-08-23"
+  },
+  "release_compliance_handling": {
+    "reviewed": true,
+    "mode": "manual_outside_application",
+    "applicability_determined": false,
+    "owner": "finance_operator",
+    "reason": "The initial production release does not submit e-invoices or e-way bills. Finance remains responsible for determining applicability and completing any required submission outside this application.",
+    "reviewed_by": "product_owner_direction",
+    "reviewed_at": "2026-08-24"
+  },
+  "adapter_contract": {
+    "reviewed": true,
+    "adapter_name": "aasopharma_provider_neutral_worker_boundary",
+    "adapter_version": "1.0.0",
+    "official_schema_version": "declared_per_completion",
+    "source_sha256": {
+      "backend/app/api/routes/internal/tax_provider.py": "e3693f7c8e5add5376e81c4c17620bbce32741d2fcaf7e21d5eef283ae0e06cb",
+      "backend/app/domain/tax_provider/contract.py": "4c1279da8ab9efa4f4d346c43d996a07f070777a032275d1c49e08b74269a5de",
+      "backend/app/infrastructure/tax_provider.py": "c5b55665372d86e6f1af6518872214aad969136189ddde2c2c445ae83cb028a2",
+      "backend/tests/fixtures/tax_provider/offline-boundary-conformance.json": "ffa6f65842ca301c8f8fe73ffdfc45d807e0b7244b6cf6f3f576ef3b27cbb167"
+    },
+    "reviewed_by": "canonical-tax-provider-boundary-tests",
+    "reviewed_at": "2026-08-26"
+  },
+  "sandbox_conformance": {
+    "reviewed": false,
+    "report_uri": null,
+    "report_sha256": null,
+    "reviewed_by": null,
+    "reviewed_at": null
+  },
+  "credential_provisioning": {
+    "provisioned_outside_repository": false,
+    "static_indian_egress_provisioned": false,
+    "provider_ip_allowlist_provisioned": false,
+    "secret_values_stored": false,
+    "evidence_reference": null,
+    "reviewed_by": null,
+    "reviewed_at": null
+  },
+  "provider_route": {
+    "reviewed": true,
+    "route_kind": "authenticated_internal_worker_boundary",
+    "authentication_contract": "bearer_plus_raw_body_hmac_v1",
+    "database_principal": "erp_tax_provider",
+    "evidence_reference": "backend/tests/unit/test_tax_provider_boundary.py",
+    "reviewed_by": "canonical-tax-provider-boundary-tests",
+    "reviewed_at": "2026-08-20"
+  },
+  "einvoice_applicability": {
+    "reviewed": false,
+    "profile_contract_version": null,
+    "rule_release_id": null,
+    "reviewed_by": null,
+    "reviewed_at": null
+  }
+}

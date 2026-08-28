@@ -18,7 +18,6 @@ from .permissions import (
     MODULES,
     PERMISSIONS,
 )
-from .role_management import RoleManager
 
 __all__ = [
     "PermissionChecker", "require_permission", "require_admin",
@@ -27,5 +26,5 @@ __all__ = [
     "require_reports_permission", "require_master_permission",
     "require_returns_permission", "get_current_user",
     "check_module_access", "check_permission",
-    "MODULES", "PERMISSIONS", "RoleManager",
+    "MODULES", "PERMISSIONS",
 ]

@@ -11,11 +11,309 @@ on:
         required: true
         default: false
         type: boolean
+      run_live_erp_two_user_approvals:
+        description: Run destructive disposable-org maker/checker browser approval tests
+        required: true
+        default: false
+        type: boolean
+      run_live18:
+        description: Run the reviewed exact-SHA disposable 17-ready-operation UI/REST/MCP/PostgreSQL certification
+        required: true
+        default: false
+        type: boolean
+      live18_provider:
+        description: Exact-SHA staging application provider to certify
+        required: true
+        default: railway
+        type: choice
+        options:
+          - render
+          - railway
+      deploy_canonical_staging:
+        description: Apply and verify the canonical baseline on the pinned free staging project
+        required: true
+        default: false
+        type: boolean
+      provision_canonical_demo:
+        description: Provision and exercise the disposable free-staging demo organization
+        required: true
+        default: false
+        type: boolean
+      reset_canonical_staging:
+        description: Reset canonical data on the pinned disposable free-staging project
+        required: true
+        default: false
+        type: boolean
+      restart_canonical_staging:
+        description: Restart the pinned free-staging database before verification
+        required: true
+        default: false
+        type: boolean
+      rotate_canonical_staging_roles:
+        description: Rotate the isolated canonical database role credentials
+        required: true
+        default: false
+        type: boolean
+      canonical_staging_deploy_sha:
+        description: Reviewed application SHA for the selected staging provider
+        required: false
+        default: ""
+        type: string
+      recover_canonical_render_suspension:
+        description: Explicitly adopt a reviewed pre-existing Render suspension after a failed certification run
+        required: true
+        default: false
+        type: boolean
+      capture_canonical_promotion_evidence:
+        description: Capture read-only exact-SHA application promotion evidence
+        required: true
+        default: false
+        type: boolean
+      canonical_promotion_reviewed_sha:
+        description: Exact deployed SHA to bind into promotion evidence
+        required: false
+        default: ""
+        type: string
+      canonical_promotion_deployment_run_id:
+        description: Exact completed Production readiness run containing one reviewed deploy and Live18 artifacts
+        required: false
+        default: 0
+        type: number
+      canonical_promotion_source_disposition:
+        description: Repository path to the reviewed reset disposition JSON
+        required: false
+        default: docs/architecture/promotion-evidence/source-disposition.template.json
+        type: string
+      canonical_promotion_rollback_plan:
+        description: Repository path to the reviewed rollback plan JSON
+        required: false
+        default: docs/architecture/promotion-evidence/rollback-plan.template.json
+        type: string
+      canonical_promotion_decommission_plan:
+        description: Repository path to the reviewed retired-project decommission plan JSON
+        required: false
+        default: docs/architecture/promotion-evidence/decommission-plan.template.json
+        type: string
+      diagnose_render_pilot:
+        description: Read sanitized status and startup logs for the free Render pilot
+        required: true
+        default: false
+        type: boolean
+      deploy_render_api_hotfix:
+        description: Deploy one reviewed commit to only the free Render API service
+        required: true
+        default: false
+        type: boolean
+      render_api_hotfix_sha:
+        description: Reviewed application SHA for the API-only Render deployment
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
+  canonical-free-staging:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      (inputs.deploy_canonical_staging || inputs.provision_canonical_demo ||
+       inputs.reset_canonical_staging) &&
+      inputs.live18_provider == 'render'
+    uses: ./.github/workflows/canonical-staging.yml
+    with:
+      confirmation: DEPLOY_FREE_CANONICAL_STAGING
+      deploy_render_pilot: ${{ inputs.deploy_canonical_staging && inputs.live18_provider == 'render' }}
+      provision_demo_data: ${{ inputs.provision_canonical_demo }}
+      reset_disposable_data: ${{ inputs.reset_canonical_staging }}
+      restart_staging_database: ${{ inputs.restart_canonical_staging }}
+      rotate_role_passwords: ${{ inputs.rotate_canonical_staging_roles }}
+      render_deploy_sha: ${{ inputs.canonical_staging_deploy_sha }}
+      recover_render_suspension: ${{ inputs.recover_canonical_render_suspension }}
+    secrets: inherit
+
+  railway-canonical-staging:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      (inputs.deploy_canonical_staging || inputs.reset_canonical_staging) &&
+      inputs.live18_provider == 'railway' &&
+      vars.DEPLOY_RAILWAY_PILOT == 'true'
+    uses: ./.github/workflows/railway-canonical-staging.yml
+    with:
+      reviewed_sha: ${{ inputs.canonical_staging_deploy_sha }}
+      reset_disposable_data: ${{ inputs.reset_canonical_staging }}
+    secrets: inherit
+
+  canonical-application-promotion-evidence:
+    needs: [canonical-free-staging]
+    if: >-
+      always() && github.event_name == 'workflow_dispatch' &&
+      inputs.capture_canonical_promotion_evidence &&
+      (!(inputs.deploy_canonical_staging || inputs.provision_canonical_demo) ||
+       needs.canonical-free-staging.result == 'success')
+    uses: ./.github/workflows/canonical-application-promotion-evidence.yml
+    with:
+      confirmation: CAPTURE_CANONICAL_PROMOTION_EVIDENCE
+      reviewed_sha: ${{ inputs.canonical_promotion_reviewed_sha }}
+      deployment_workflow_run_id: ${{ inputs.canonical_promotion_deployment_run_id }}
+      source_disposition: ${{ inputs.canonical_promotion_source_disposition }}
+      rollback_plan: ${{ inputs.canonical_promotion_rollback_plan }}
+      decommission_plan: ${{ inputs.canonical_promotion_decommission_plan }}
+    secrets: inherit
+
+  render-pilot-diagnostics:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.diagnose_render_pilot
+    runs-on: ubuntu-latest
+    environment: canonical-staging
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read metadata-only deployment diagnostics
+        env:
+          RENDER_API_SERVICE_ID: ${{ vars.RENDER_API_SERVICE_ID }}
+          RENDER_MCP_SERVICE_ID: ${{ vars.RENDER_MCP_SERVICE_ID }}
+          RENDER_FRONTEND_SERVICE_ID: ${{ vars.RENDER_FRONTEND_SERVICE_ID }}
+        run: |
+          PYTHONPATH=backend python3 - <<'PY'
+          import json
+          import os
+          from scripts.provision_render_pilot import RenderClient
+          from scripts.verify_render_pilot_sha import select_latest_deploy
+
+          client = RenderClient(os.environ["RENDER_API_KEY"])
+
+          diagnostic_targets = (
+              ("aasopharma-api-pilot", os.environ["RENDER_API_SERVICE_ID"]),
+              ("aasopharma-mcp-pilot", os.environ["RENDER_MCP_SERVICE_ID"]),
+              ("aasopharma-erp-pilot", os.environ["RENDER_FRONTEND_SERVICE_ID"]),
+          )
+
+          for name, service_id in diagnostic_targets:
+              if not service_id:
+                  raise SystemExit(f"{name}: service ID is required")
+              deploy_rows = client.request(
+                  "GET",
+                  f"/services/{service_id}/deploys",
+                  query={"limit": 20},
+              )
+              deploy = select_latest_deploy(deploy_rows)
+              print(json.dumps({
+                  "service": name,
+                  "service_id": service_id,
+                  "deploy": {
+                      "id": deploy.get("id"),
+                      "status": deploy.get("status"),
+                      "commit": (deploy.get("commit") or {}).get("id"),
+                      "created_at": deploy.get("createdAt"),
+                      "finished_at": deploy.get("finishedAt"),
+                  },
+              }, sort_keys=True))
+          PY
+
+  render-api-hotfix:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.deploy_render_api_hotfix
+    runs-on: ubuntu-latest
+    environment: canonical-staging
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      RENDER_OWNER_ID: tea-da2nh58ae00c73ciaqog
+      REVIEWED_DEPLOY_SHA: ${{ inputs.render_api_hotfix_sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Validate the reviewed API-only commit
+        run: |
+          set -euo pipefail
+          test "${#REVIEWED_DEPLOY_SHA}" = 40
+          case "$REVIEWED_DEPLOY_SHA" in
+            *[!0-9a-f]*) echo "Deploy SHA must be lowercase hexadecimal" >&2; exit 2 ;;
+          esac
+          git cat-file -e "$REVIEWED_DEPLOY_SHA^{commit}"
+          git merge-base --is-ancestor "$REVIEWED_DEPLOY_SHA" "$GITHUB_SHA"
+      - name: Deploy and verify only the free Render API
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import time
+          from urllib.parse import urlencode
+          from urllib.request import Request, urlopen
+
+          api_key = os.environ["RENDER_API_KEY"]
+          owner_id = os.environ["RENDER_OWNER_ID"]
+          commit_id = os.environ["REVIEWED_DEPLOY_SHA"]
+
+          def request(method, path, payload=None, query=None, timeout=30):
+              url = "https://api.render.com/v1" + path
+              if query:
+                  url += "?" + urlencode(query, doseq=True)
+              data = None if payload is None else json.dumps(payload).encode()
+              headers = {
+                  "Accept": "application/json",
+                  "Authorization": f"Bearer {api_key}",
+              }
+              if data is not None:
+                  headers["Content-Type"] = "application/json"
+              with urlopen(Request(url, data=data, method=method, headers=headers), timeout=timeout) as response:
+                  body = response.read()
+                  return json.loads(body) if body else None
+
+          rows = request(
+              "GET",
+              "/services",
+              query={
+                  "ownerId": owner_id,
+                  "name": "aasopharma-api-pilot",
+                  "includePreviews": "false",
+                  "limit": 20,
+              },
+          )
+          matches = [row.get("service", row) for row in rows if row.get("service", row).get("name") == "aasopharma-api-pilot"]
+          if len(matches) != 1:
+              raise SystemExit(f"expected one API service, found {len(matches)}")
+          service = matches[0]
+          service_id = service["id"]
+          service_url = service.get("url") or service.get("serviceDetails", {}).get("url")
+          if not service_url and service.get("slug"):
+              service_url = f"https://{service['slug']}.onrender.com"
+          if not service_url:
+              raise SystemExit("API service has no public URL")
+          deploy = request(
+              "POST",
+              f"/services/{service_id}/deploys",
+              {"clearCache": "do_not_clear", "commitId": commit_id},
+          )
+          deploy_id = deploy["id"]
+          print(f"API deploy {deploy_id} requested for {commit_id}")
+          terminal_failures = {
+              "build_failed", "update_failed", "pre_deploy_failed",
+              "canceled", "deactivated",
+          }
+          for attempt in range(1, 11):
+              current = request("GET", f"/services/{service_id}/deploys/{deploy_id}")
+              status = current.get("status")
+              print(f"check {attempt}/10: {status}")
+              if status == "live":
+                  break
+              if status in terminal_failures:
+                  raise SystemExit(f"API deploy ended as {status}")
+              if attempt == 10:
+                  raise SystemExit("API deploy did not become live within 15 minutes")
+              time.sleep(90)
+          for path in ("/health", "/ready"):
+              with urlopen(service_url.rstrip("/") + path, timeout=30) as response:
+                  if response.status != 200:
+                      raise SystemExit(f"{path} returned HTTP {response.status}")
+          print("API-only deployment is live and ready")
+          PY
+
   mcp-sdk-compatibility:
     runs-on: ubuntu-latest
     steps:
@@ -24,11 +322,24 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-          cache-dependency-path: backend/mcp_runtime/requirements.txt
+          cache-dependency-path: backend/mcp_runtime/requirements-dev.txt
       - name: Install official MCP SDK in an isolated compatibility environment
-        run: pip install -r backend/mcp_runtime/requirements.txt
+        run: pip install -r backend/mcp_runtime/requirements-dev.txt
       - name: Verify SDK ASGI surface, dependency boundary, and read-only registry
         run: python backend/scripts/mcp_runtime_gate.py --probe-sdk
+      - name: Run isolated MCP auth, grant, and transport tests without network
+        run: |
+          set -o pipefail
+          log_file=$(mktemp)
+          PYTHONPATH=backend/mcp_runtime pytest -q backend/mcp_runtime/tests 2>&1 | tee "$log_file" || {
+            python - "$log_file" <<'PY'
+          import pathlib, sys
+          text = pathlib.Path(sys.argv[1]).read_text(errors="replace")[-3500:]
+          text = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          print(f"::error title=MCP compatibility failure::{text}")
+          PY
+            exit 1
+          }
 
   backend-unit:
     runs-on: ubuntu-latest
@@ -38,9 +349,49 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-          cache-dependency-path: backend/requirements.txt
-      - run: pip install -r backend/requirements.txt
-      - run: PYTHONPATH=backend pytest -q backend/tests/unit
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+      - run: pip install -r backend/requirements-dev.txt
+      - name: Audit backend runtime dependencies
+        run: |
+          set -o pipefail
+          log_file=$(mktemp)
+          pip-audit -r backend/requirements.txt 2>&1 | tee "$log_file" || {
+            python - "$log_file" <<'PY'
+          import pathlib, sys
+          text = pathlib.Path(sys.argv[1]).read_text(errors="replace")[-3500:]
+          text = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          print(f"::error title=Backend dependency audit failure::{text}")
+          PY
+            exit 1
+          }
+      - name: Run backend unit tests
+        run: |
+          set -o pipefail
+          log_file=$(mktemp)
+          PYTHONPATH=backend pytest -q backend/tests/unit 2>&1 | tee "$log_file" || {
+            python - "$log_file" <<'PY'
+          import pathlib, sys
+          text = pathlib.Path(sys.argv[1]).read_text(errors="replace")[-3500:]
+          text = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          print(f"::error title=Backend unit test failure::{text}")
+          PY
+            exit 1
+          }
+      - name: Validate the canonical topology, column catalog, and app ownership map
+        run: |
+          python backend/scripts/validate_canonical_model.py
+          python database/canonical/domains/validate_domain_catalog.py
+          python backend/scripts/check_canonical_artifacts.py
+          python backend/scripts/package_canonical_baseline_migration.py
+          python backend/scripts/generate_canonical_data_dictionary.py --check docs/architecture/canonical-field-dictionary.json
+          python backend/scripts/audit/runtime_environment_contract.py
+          python backend/scripts/audit/mcp_operator_action_contract.py
+          python database/canonical/security/generate_security_contract.py --check
+          python database/canonical/platform/generate_platform_contract.py --check
+          python backend/scripts/audit/app_data_contract_gate.py --contract-only
+          PYTHONPATH=backend pytest -q database/canonical/domains/test_domain_catalog.py
       - run: python backend/scripts/schema_readiness.py --validate-claim
 
   frontend:
@@ -60,9 +411,21 @@ jobs:
       - run: npm run lint:critical
       - run: npm run test:ci -- --runInBand
       - run: CI=false npm run build
+      - name: Install Playwright video support
+        run: npx playwright install ffmpeg
       - run: npm run test:e2e
         env:
           PLAYWRIGHT_USE_SYSTEM_CHROME: "true"
+      - name: Upload browser traces, screenshots, videos, and reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-browser-evidence
+          path: |
+            frontend/playwright-report
+            frontend/test-results
+          if-no-files-found: ignore
+          retention-days: 14
 
   frontend-dependency-audit:
     runs-on: ubuntu-latest
@@ -79,29 +442,87 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm audit --omit=dev --audit-level=high
 
+  frontend-toolchain-dependency-audit:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --ignore-scripts
+      - name: Reject high or critical build and test dependency advisories
+        run: |
+          set -o pipefail
+          log_file=$(mktemp)
+          npm audit --audit-level=high 2>&1 | tee "$log_file" || {
+            python - "$log_file" <<'PY'
+          import pathlib, sys
+          text = pathlib.Path(sys.argv[1]).read_text(errors="replace")[-3500:]
+          text = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          print(f"::error title=Frontend toolchain audit failure::{text}")
+          PY
+            exit 1
+          }
+
   deploy-render-pilot:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs:
       - backend-unit
+      - canonical-postgres15
+      - canonical-alembic-postgres15
       - frontend
       - frontend-dependency-audit
+      - frontend-toolchain-dependency-audit
       - mcp-sdk-compatibility
       - production-blockers
     runs-on: ubuntu-latest
     env:
       RENDER_API_SERVICE_ID: ${{ vars.RENDER_API_SERVICE_ID }}
+      RENDER_MCP_SERVICE_ID: ${{ vars.RENDER_MCP_SERVICE_ID }}
       RENDER_FRONTEND_SERVICE_ID: ${{ vars.RENDER_FRONTEND_SERVICE_ID }}
       RENDER_API_URL: ${{ vars.RENDER_API_URL }}
+      RENDER_MCP_URL: ${{ vars.RENDER_MCP_URL }}
       RENDER_FRONTEND_URL: ${{ vars.RENDER_FRONTEND_URL }}
     steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deployment control-plane validator
+        run: pip install jsonschema==4.23.0
+
+      - name: Diagnose Render configuration before mutation
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+        run: |
+          python backend/scripts/deployment_control.py preflight \
+            --expected-sha "$GITHUB_SHA" \
+            --repository "$GITHUB_REPOSITORY" \
+            --require-env RENDER_API_KEY \
+            --require-env RENDER_API_SERVICE_ID \
+            --require-env RENDER_MCP_SERVICE_ID \
+            --require-env RENDER_FRONTEND_SERVICE_ID \
+            --require-env RENDER_API_URL \
+            --require-env RENDER_MCP_URL \
+            --require-env RENDER_FRONTEND_URL
+
       - name: Refuse incomplete Render configuration
         env:
           RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
         run: |
           test -n "$RENDER_API_KEY"
           test -n "$RENDER_API_SERVICE_ID"
+          test -n "$RENDER_MCP_SERVICE_ID"
           test -n "$RENDER_FRONTEND_SERVICE_ID"
           test -n "$RENDER_API_URL"
+          test -n "$RENDER_MCP_URL"
           test -n "$RENDER_FRONTEND_URL"
 
       - name: Deploy API and wait for readiness
@@ -130,6 +551,33 @@ jobs:
           done
           curl --fail --silent --show-error "$RENDER_API_URL/health" >/dev/null
           curl --fail --silent --show-error "$RENDER_API_URL/ready" >/dev/null
+
+      - name: Deploy MCP and wait for delegated-action readiness
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+        run: |
+          set -euo pipefail
+          deploy_id=$(curl --fail --silent --show-error \
+            -X POST \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            "https://api.render.com/v1/services/$RENDER_MCP_SERVICE_ID/deploys" \
+            --data "{\"clearCache\":\"do_not_clear\",\"commitId\":\"$GITHUB_SHA\"}" \
+            | jq -er '.id')
+          for attempt in $(seq 1 60); do
+            status=$(curl --fail --silent --show-error \
+              -H "Authorization: Bearer $RENDER_API_KEY" \
+              "https://api.render.com/v1/services/$RENDER_MCP_SERVICE_ID/deploys/$deploy_id" \
+              | jq -er '.status')
+            case "$status" in
+              live) break ;;
+              build_failed|update_failed|canceled|deactivated) exit 1 ;;
+            esac
+            test "$attempt" -lt 60
+            sleep 10
+          done
+          curl --fail --silent --show-error "$RENDER_MCP_URL/health" >/dev/null
+          curl --fail --silent --show-error "$RENDER_MCP_URL/ready" >/dev/null
 
       - name: Deploy frontend and verify the SPA
         env:
@@ -165,38 +613,105 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Require schema documentation and application queries to agree
-        run: PYTHONPATH=backend python backend/scripts/audit_schema.py
-      - name: Require one safe database migration authority
-        if: always()
-        run: python backend/scripts/schema_readiness.py
-      - name: Require transaction integrity ownership
-        if: always()
-        run: python backend/scripts/audit/transaction_integrity_audit.py
-      - name: Require consistent identifiers and API contracts
-        if: always()
-        run: python backend/scripts/audit/contract_consistency_audit.py
-      - name: Require dedicated payment idempotency readiness
-        if: always()
-        run: python backend/scripts/audit/payment_idempotency_readiness.py
-      - name: Reject placeholder critical-path integration tests
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install backend dependencies for mounted-route authority analysis
+        run: pip install -r backend/requirements.txt
+      - name: Require one classified canonical database migration authority
+        run: python backend/scripts/schema_readiness.py --validate-authority
+      - name: Require canonical topology and application ownership contracts
         if: always()
         run: |
-          if rg -n "# Implementation|simplified - actual|Actual .* would|^\s+pass\s*$" backend/tests/integration; then
-            echo "Critical-path integration tests still contain placeholders"
-            exit 1
-          fi
+          python backend/scripts/validate_canonical_model.py
+          python backend/scripts/check_canonical_artifacts.py
+          python backend/scripts/package_canonical_baseline_migration.py
+          python backend/scripts/audit/app_data_contract_gate.py --contract-only
+          python backend/scripts/audit/mcp_operator_action_contract.py
+          python backend/scripts/audit/runtime_environment_contract.py
+      - name: Require executable canonical constraints and RLS before reset baseline
+        if: always()
+        run: >-
+          python backend/scripts/generate_canonical_baseline.py
+          --enforcement-root database/canonical
+      - name: Require canonical live cutover and operator promotion evidence
+        if: always()
+        run: python backend/scripts/audit/canonical_promotion_readiness.py
+      - name: Require reviewed tax-provider operational evidence
+        if: always()
+        run: python backend/scripts/audit/tax_provider_operational_readiness.py
+      - name: Reject placeholder critical-path integration tests
+        if: always()
+        run: python backend/scripts/audit/test_implementation_audit.py
 
-  live-erp:
-    if: github.event_name == 'workflow_dispatch' && inputs.run_live_erp
+  canonical-postgres15:
     runs-on: ubuntu-latest
-    environment: live-erp-test
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: canonical_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: canonical_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d canonical_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     env:
-      PHARMA_LIVE_API_BASE_URL: ${{ secrets.PHARMA_LIVE_API_BASE_URL }}
-      PHARMA_LIVE_DATABASE_URL: ${{ secrets.PHARMA_LIVE_DATABASE_URL }}
-      PHARMA_LIVE_ACCESS_TOKEN: ${{ secrets.PHARMA_LIVE_ACCESS_TOKEN }}
-      PHARMA_LIVE_TEST_ORG_ID: ${{ secrets.PHARMA_LIVE_TEST_ORG_ID }}
-      PHARMA_LIVE_TEST_BRANCH_ID: ${{ secrets.PHARMA_LIVE_TEST_BRANCH_ID }}
+      CANONICAL_CI_ALLOW_DISPOSABLE: "1"
+      PGHOST: 127.0.0.1
+      PGPORT: "5432"
+      PGDATABASE: canonical_ci
+      PGUSER: postgres
+      PGPASSWORD: canonical_ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Verify deterministic platform and security contracts
+        run: |
+          python database/canonical/security/generate_security_contract.py --check
+          python database/canonical/platform/generate_platform_contract.py --check
+      - name: Generate only a fully reviewed baseline, apply it, and run negative fixtures
+        run: |
+          set -o pipefail
+          log_file=$(mktemp)
+          bash database/canonical/ci/run_postgres15_gate.sh 2>&1 | tee "$log_file" || {
+            python - "$log_file" <<'PY'
+          import pathlib, sys
+          text = pathlib.Path(sys.argv[1]).read_text(errors="replace")[-3500:]
+          text = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          print(f"::error title=Canonical PostgreSQL 15 failure::{text}")
+          PY
+            exit 1
+          }
+
+  canonical-alembic-postgres15:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: canonical_alembic_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: canonical_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d canonical_alembic_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      CANONICAL_CI_ALLOW_DISPOSABLE: "1"
+      PGHOST: 127.0.0.1
+      PGPORT: "5432"
+      PGDATABASE: canonical_alembic_ci
+      PGUSER: postgres
+      PGPASSWORD: canonical_ci
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -205,11 +720,1578 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements.txt
       - run: pip install -r backend/requirements.txt
-      - name: Refuse an incompletely configured live run
+      - name: Apply the hash-bound Alembic baseline twice and run every fixture
         run: |
-          test -n "$PHARMA_LIVE_API_BASE_URL"
-          test -n "$PHARMA_LIVE_DATABASE_URL"
-          test -n "$PHARMA_LIVE_ACCESS_TOKEN"
-          test -n "$PHARMA_LIVE_TEST_ORG_ID"
-          test -n "$PHARMA_LIVE_TEST_BRANCH_ID"
-      - run: PYTHONPATH=backend pytest -q backend/tests/live_erp
+          set -o pipefail
+          log_file=$(mktemp)
+          bash database/canonical/ci/run_alembic_postgres15_gate.sh 2>&1 | tee "$log_file" || {
+            python - "$log_file" <<'PY'
+          import pathlib, sys
+          text = pathlib.Path(sys.argv[1]).read_text(errors="replace")[-3500:]
+          text = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          print(f"::error title=Canonical Alembic PostgreSQL 15 failure::{text}")
+          PY
+            exit 1
+          }
+
+  live-erp:
+    needs: [canonical-free-staging]
+    if: >-
+      always() && github.event_name == 'workflow_dispatch' && inputs.run_live_erp &&
+      (!(inputs.deploy_canonical_staging || inputs.provision_canonical_demo) ||
+       needs.canonical-free-staging.result == 'success')
+    runs-on: ubuntu-latest
+    environment: canonical-staging
+    concurrency:
+      group: canonical-staging-live-browser-identities
+      cancel-in-progress: false
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      REVIEWED_DEPLOY_SHA: ${{ inputs.canonical_staging_deploy_sha }}
+      PHARMA_CANONICAL_LIVE_WRITE_ACK: "true"
+      PHARMA_CANONICAL_LIVE_TARGET_KIND: disposable_test
+      PHARMA_CANONICAL_LIVE_PROJECT_REF: rgihahbmkrmhitjdjvev
+      PHARMA_CANONICAL_LIVE_ALLOWED_PROJECT_REF: rgihahbmkrmhitjdjvev
+      PHARMA_CANONICAL_PRODUCTION_PROJECT_REFS: ${{ vars.CANONICAL_PRODUCTION_PROJECT_REFS }}
+      PHARMA_CANONICAL_LIVE_API_BASE_URL: https://aasopharma-api-pilot.onrender.com
+      CANONICAL_STAGING_PROJECT_REF: ${{ vars.CANONICAL_STAGING_PROJECT_REF }}
+      CANONICAL_EPHEMERAL_DATABASE_TRANSPORT: direct_ipv4
+      SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      ERP_RUNTIME_PASSWORD: ${{ secrets.ERP_RUNTIME_PASSWORD }}
+      PHARMA_CANONICAL_LIVE_SERVICE_TOKEN: ${{ secrets.MCP_INTERNAL_SERVICE_TOKEN }}
+      PHARMA_CANONICAL_MCP_URL: https://aasopharma-mcp-pilot.onrender.com/mcp
+      PHARMA_CANONICAL_LIVE_TEST_ORG_ID: d3000000-0000-7000-8000-000000000001
+      PHARMA_CANONICAL_LIVE_FIXTURE_INPUT_PATH: ${{ github.workspace }}/.live-secrets/fixture-inputs.json
+      PHARMA_CANONICAL_LIVE_FIXTURE_IDENTITY_EVIDENCE_PATH: ${{ github.workspace }}/canonical-live-fixture-identities.json
+      PHARMA_CANONICAL_LIVE_TIMEOUT_SECONDS: "30"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - run: pip install -r backend/requirements.txt
+      - name: Install pinned ephemeral identity reconciler dependencies
+        run: python3 -m pip install psycopg2-binary==2.9.9 requests==2.34.2
+      - name: Bind the canonical live run to one reviewed deployed SHA
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$REVIEWED_DEPLOY_SHA"
+          PYTHONPATH=backend python3 backend/scripts/verify_render_pilot_sha.py \
+            --commit-sha "$REVIEWED_DEPLOY_SHA" \
+            > render-pilot-live-sha.json
+      - name: Build the masked exact erp_runtime connection
+        run: |
+          set -euo pipefail
+          test "$CANONICAL_STAGING_PROJECT_REF" = rgihahbmkrmhitjdjvev
+          test "$SUPABASE_URL" = https://rgihahbmkrmhitjdjvev.supabase.co
+          encoded_password=$(jq -nr --arg value "$ERP_RUNTIME_PASSWORD" '$value|@uri')
+          runtime_url="postgresql://erp_runtime:${encoded_password}@db.${CANONICAL_STAGING_PROJECT_REF}.supabase.co:5432/postgres?sslmode=require&gssencmode=disable&connect_timeout=15&application_name=canonical_live_reconciliation"
+          echo "::add-mask::$runtime_url"
+          echo "PHARMA_CANONICAL_LIVE_DATABASE_URL=$runtime_url" >> "$GITHUB_ENV"
+      - name: Provision masked disposable requester and reviewer identities
+        run: |
+          python3 backend/scripts/provision_ephemeral_browser_identities.py \
+            provision --profile two-user-approvals \
+            --state "$RUNNER_TEMP/canonical-live-browser-identities.json"
+      - name: Obtain real short-lived MCP OAuth and per-call delegation authority
+        run: |
+          python3 backend/scripts/provision_ephemeral_canonical_live.py provision \
+            --state "$RUNNER_TEMP/canonical-live-mcp-identities.json" \
+            --browser-state "$RUNNER_TEMP/canonical-live-browser-identities.json" \
+            --fixture-run-token "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+      - name: Refuse an incompletely configured canonical live run
+        env:
+          PHARMA_CANONICAL_LIVE_FIXTURE_INPUT_JSON: ${{ secrets.PHARMA_CANONICAL_LIVE_FIXTURE_INPUT_JSON }}
+        run: |
+          set -euo pipefail
+          missing=()
+          for name in \
+            PHARMA_CANONICAL_LIVE_DATABASE_URL \
+            PHARMA_CANONICAL_LIVE_SERVICE_TOKEN \
+            PHARMA_CANONICAL_MCP_ACCESS_TOKEN \
+            PHARMA_CANONICAL_MCP_REVIEWER_ACCESS_TOKEN \
+            PHARMA_CANONICAL_LIVE_TEST_AUTH_USER_ID \
+            PHARMA_CANONICAL_LIVE_TEST_BRANCH_ID \
+            PHARMA_CANONICAL_LIVE_DENIAL_ORG_ID \
+            PHARMA_CANONICAL_LIVE_FIXTURE_INPUT_JSON
+          do
+            if [ -z "${!name:-}" ]; then missing+=("$name"); fi
+          done
+          if [ "${#missing[@]}" -ne 0 ]; then
+            printf 'Canonical live API reconciliation is securely blocked; canonical-staging is missing ephemeral inputs: %s\n' "${missing[*]}" >&2
+            exit 2
+          fi
+          test "$PHARMA_CANONICAL_LIVE_TEST_ORG_ID" = d3000000-0000-7000-8000-000000000001
+          umask 077
+          mkdir -p .live-secrets
+          printf '%s' "$PHARMA_CANONICAL_LIVE_FIXTURE_INPUT_JSON" > "$PHARMA_CANONICAL_LIVE_FIXTURE_INPUT_PATH"
+          python3 -m json.tool "$PHARMA_CANONICAL_LIVE_FIXTURE_INPUT_PATH" >/dev/null
+      - run: |
+          set -o pipefail
+          PYTHONPATH=backend pytest -q backend/tests/live_canonical | tee canonical-live-pytest.txt
+      - name: Always suspend temporary MCP authorities
+        if: always()
+        run: |
+          python3 backend/scripts/provision_ephemeral_canonical_live.py cleanup \
+            --state "$RUNNER_TEMP/canonical-live-mcp-identities.json"
+      - name: Always restore seeded identities and delete disposable Auth users
+        if: always()
+        run: |
+          python3 backend/scripts/provision_ephemeral_browser_identities.py cleanup \
+            --state "$RUNNER_TEMP/canonical-live-browser-identities.json"
+      - name: Upload canonical REST, MCP, database, and SHA evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: canonical-live-reconciliation-evidence
+          path: |
+            render-pilot-live-sha.json
+            canonical-live-fixture-identities.json
+            canonical-live-pytest.txt
+          if-no-files-found: error
+          retention-days: 30
+
+  live-browser-erp:
+    needs: [canonical-free-staging]
+    if: >-
+      always() && github.event_name == 'workflow_dispatch' && inputs.run_live_erp &&
+      (!(inputs.deploy_canonical_staging || inputs.provision_canonical_demo) ||
+       needs.canonical-free-staging.result == 'success')
+    runs-on: ubuntu-latest
+    environment: canonical-staging
+    timeout-minutes: 60
+    concurrency:
+      group: canonical-staging-live-browser-identities
+      cancel-in-progress: false
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      REVIEWED_DEPLOY_SHA: ${{ inputs.canonical_staging_deploy_sha }}
+      PLAYWRIGHT_LIVE_BASE_URL: https://aasopharma-erp-pilot.onrender.com
+      PLAYWRIGHT_LIVE_EXPECTED_ORG_ID: d3000000-0000-7000-8000-000000000001
+      CANONICAL_STAGING_PROJECT_REF: ${{ vars.CANONICAL_STAGING_PROJECT_REF }}
+      CANONICAL_EPHEMERAL_DATABASE_TRANSPORT: direct_ipv4
+      SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+      PLAYWRIGHT_LIVE_WRITES: "true"
+      PLAYWRIGHT_USE_SYSTEM_CHROME: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Bind the live browser run to one reviewed deployed SHA
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$REVIEWED_DEPLOY_SHA"
+          test -n "$PLAYWRIGHT_LIVE_EXPECTED_ORG_ID"
+          PYTHONPATH=backend python3 backend/scripts/verify_render_pilot_sha.py \
+            --commit-sha "$REVIEWED_DEPLOY_SHA" \
+            > render-pilot-browser-sha.json
+      - name: Refuse any browser target except reviewed canonical staging
+        run: |
+          set -euo pipefail
+          test -n "$PLAYWRIGHT_LIVE_BASE_URL"
+          test "$PLAYWRIGHT_LIVE_EXPECTED_ORG_ID" = d3000000-0000-7000-8000-000000000001
+          test "$CANONICAL_STAGING_PROJECT_REF" = rgihahbmkrmhitjdjvev
+          test "$SUPABASE_URL" = https://rgihahbmkrmhitjdjvev.supabase.co
+          case "$PLAYWRIGHT_LIVE_BASE_URL" in
+            https://*) ;;
+            *) echo "Live browser target must use HTTPS" >&2; exit 2 ;;
+          esac
+      - name: Install pinned ephemeral identity reconciler dependencies
+        working-directory: ${{ github.workspace }}
+        run: python3 -m pip install psycopg2-binary==2.9.9 requests==2.34.2
+      - run: npm ci
+      - name: Install Playwright video support
+        run: npx playwright install ffmpeg
+      - name: Provision one masked disposable core operator and live fixture
+        working-directory: ${{ github.workspace }}
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          python3 backend/scripts/provision_ephemeral_browser_identities.py \
+            provision --profile core-operator \
+            --state "$RUNNER_TEMP/canonical-browser-identities.json"
+      - name: Refuse missing ephemeral browser credentials or fixture
+        run: |
+          set -euo pipefail
+          test -n "$PLAYWRIGHT_LIVE_EMAIL"
+          test -n "$PLAYWRIGHT_LIVE_PASSWORD"
+          test -n "$PLAYWRIGHT_SALES_CHAIN_FIXTURE"
+      - run: npm run test:e2e:live:writes
+      - name: Always restore seeded identity and remove disposable Auth user
+        if: always()
+        working-directory: ${{ github.workspace }}
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          python3 backend/scripts/provision_ephemeral_browser_identities.py \
+            cleanup --state "$RUNNER_TEMP/canonical-browser-identities.json"
+      - name: Upload live browser traces, screenshots, videos, and reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-erp-browser-evidence
+          path: |
+            render-pilot-browser-sha.json
+            frontend/playwright-report
+            frontend/test-results
+          if-no-files-found: ignore
+          retention-days: 30
+
+  live-browser-erp-two-user-approvals:
+    needs: [canonical-free-staging]
+    if: >-
+      always() && github.event_name == 'workflow_dispatch' && inputs.run_live_erp_two_user_approvals &&
+      (!(inputs.deploy_canonical_staging || inputs.provision_canonical_demo) ||
+       needs.canonical-free-staging.result == 'success')
+    runs-on: ubuntu-latest
+    environment: canonical-staging
+    timeout-minutes: 45
+    concurrency:
+      group: canonical-staging-live-browser-identities
+      cancel-in-progress: false
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      REVIEWED_DEPLOY_SHA: ${{ inputs.canonical_staging_deploy_sha }}
+      PLAYWRIGHT_LIVE_BASE_URL: "https://aasopharma-erp-pilot.onrender.com"
+      PLAYWRIGHT_LIVE_EXPECTED_ORG_ID: "d3000000-0000-7000-8000-000000000001"
+      CANONICAL_STAGING_PROJECT_REF: ${{ vars.CANONICAL_STAGING_PROJECT_REF }}
+      CANONICAL_EPHEMERAL_DATABASE_TRANSPORT: direct_ipv4
+      SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+      PLAYWRIGHT_LIVE_RETURN_CUSTOMER_QUERY: "Demo Retail Customer"
+      PLAYWRIGHT_LIVE_RETURN_INVOICE_PATTERN: "DEMO-SI-"
+      PLAYWRIGHT_LIVE_RETURN_SUPPLIER_QUERY: "Synthetic Packaging"
+      PLAYWRIGHT_LIVE_SUPPLIER_INVOICE_PATTERN: "DEMO-SUP-"
+      PLAYWRIGHT_LIVE_CYCLE_PRODUCT_QUERY: "Synthetic Corrugated"
+      PLAYWRIGHT_LIVE_CYCLE_BATCH_PATTERN: "DEMO-BATCH-"
+      PLAYWRIGHT_LIVE_WRITES: "true"
+      PLAYWRIGHT_USE_SYSTEM_CHROME: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Bind two-user approvals to one reviewed deployed SHA
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$REVIEWED_DEPLOY_SHA"
+          PYTHONPATH=backend python3 backend/scripts/verify_render_pilot_sha.py \
+            --commit-sha "$REVIEWED_DEPLOY_SHA" \
+            > render-pilot-two-user-sha.json
+      - name: Refuse any browser target except reviewed canonical staging
+        run: |
+          set -euo pipefail
+          test -n "$PLAYWRIGHT_LIVE_BASE_URL"
+          test "$CANONICAL_STAGING_PROJECT_REF" = rgihahbmkrmhitjdjvev
+          test "$SUPABASE_URL" = https://rgihahbmkrmhitjdjvev.supabase.co
+          case "$PLAYWRIGHT_LIVE_BASE_URL" in
+            https://*) ;;
+            *) echo "Two-user browser target must use HTTPS" >&2; exit 2 ;;
+          esac
+      - name: Install pinned ephemeral identity reconciler dependencies
+        working-directory: ${{ github.workspace }}
+        run: python3 -m pip install psycopg2-binary==2.9.9 requests==2.34.2
+      - run: npm ci
+      - name: Install Playwright video support
+        run: npx playwright install ffmpeg
+      - name: Provision masked disposable maker and checker identities
+        working-directory: ${{ github.workspace }}
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          python3 backend/scripts/provision_ephemeral_browser_identities.py \
+            provision --profile two-user-approvals \
+            --state "$RUNNER_TEMP/canonical-browser-identities.json"
+      - name: Refuse missing or identical maker/checker browser identities
+        run: |
+          set -euo pipefail
+          test -n "$PLAYWRIGHT_LIVE_REQUESTER_EMAIL"
+          test -n "$PLAYWRIGHT_LIVE_REQUESTER_PASSWORD"
+          test -n "$PLAYWRIGHT_LIVE_REVIEWER_EMAIL"
+          test -n "$PLAYWRIGHT_LIVE_REVIEWER_PASSWORD"
+          test "$PLAYWRIGHT_LIVE_REQUESTER_EMAIL" != "$PLAYWRIGHT_LIVE_REVIEWER_EMAIL"
+      - run: npm run test:e2e:live:approvals -- --retries=0
+      - name: Require one passed maker/checker journey and complete browser evidence
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          from xml.etree import ElementTree
+
+          results = Path("test-results")
+          junit = results / "e2e-junit.xml"
+          root = ElementTree.parse(junit).getroot()
+          cases = root.findall(".//testcase")
+          failures = root.findall(".//failure")
+          errors = root.findall(".//error")
+          skipped = root.findall(".//skipped")
+          if len(cases) != 1 or failures or errors or skipped:
+              raise SystemExit(
+                  "Two-user approval certification requires exactly one passed, "
+                  "non-skipped, non-flaky journey"
+              )
+          screenshots = list(results.rglob("*.png"))
+          traces = list(results.rglob("*-trace.zip"))
+          if len(screenshots) < 9 or len(traces) < 2:
+              raise SystemExit(
+                  "Two-user approval certification is missing its nine screenshots "
+                  "or two actor traces"
+              )
+          PY
+      - name: Always restore seeded identities and remove disposable Auth users
+        if: always()
+        working-directory: ${{ github.workspace }}
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          python3 backend/scripts/provision_ephemeral_browser_identities.py \
+            cleanup --state "$RUNNER_TEMP/canonical-browser-identities.json"
+      - name: Upload maker/checker traces, screenshots, videos, and reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-erp-two-user-approval-evidence
+          path: |
+            render-pilot-two-user-sha.json
+            frontend/playwright-report
+            frontend/test-results
+          if-no-files-found: ignore
+          retention-days: 30
+
+  live18-acceptance:
+    needs: [canonical-free-staging, railway-canonical-staging]
+    if: >-
+      always() && github.event_name == 'workflow_dispatch' && inputs.run_live18 &&
+      ((inputs.live18_provider == 'render' &&
+        needs.canonical-free-staging.result == 'success' &&
+        needs.railway-canonical-staging.result == 'skipped') ||
+       (inputs.live18_provider == 'railway' &&
+        needs.canonical-free-staging.result == 'skipped' &&
+        needs.railway-canonical-staging.result == 'success'))
+    runs-on: ubuntu-latest
+    environment: canonical-staging
+    timeout-minutes: 180
+    concurrency:
+      group: canonical-staging-live-browser-identities
+      cancel-in-progress: false
+    env:
+      REVIEWED_DEPLOY_SHA: ${{ inputs.canonical_staging_deploy_sha }}
+      LIVE18_PROVIDER: ${{ inputs.live18_provider }}
+      CANONICAL_STAGING_PROJECT_REF: ${{ vars.CANONICAL_STAGING_PROJECT_REF }}
+      CANONICAL_STAGING_WEB_TEST_AUTH_USER_ID: ${{ vars.CANONICAL_STAGING_WEB_TEST_AUTH_USER_ID }}
+      CANONICAL_EPHEMERAL_DATABASE_TRANSPORT: direct_ipv4
+      SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+      PHARMA_CANONICAL_LIVE_WRITE_ACK: "true"
+      PHARMA_CANONICAL_LIVE_TARGET_KIND: disposable_test
+      PHARMA_CANONICAL_LIVE_PROJECT_REF: rgihahbmkrmhitjdjvev
+      PHARMA_CANONICAL_LIVE_ALLOWED_PROJECT_REF: rgihahbmkrmhitjdjvev
+      PHARMA_CANONICAL_PRODUCTION_PROJECT_REFS: ${{ vars.CANONICAL_PRODUCTION_PROJECT_REFS }}
+      PHARMA_CANONICAL_LIVE_TIMEOUT_SECONDS: "30"
+      LIVE18_REQUIRED: "true"
+      LIVE23_BUSINESS_VARIANTS_REQUIRED: "true"
+      LIVE18_WRITE_ACK: canonical-disposable-only
+      LIVE18_EXPECTED_DEPLOYED_SHA: ${{ inputs.canonical_staging_deploy_sha }}
+      LIVE18_RUN_TOKEN: ${{ github.run_id }}-${{ github.run_attempt }}
+      RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
+      RAILWAY_ENVIRONMENT_ID: ${{ vars.RAILWAY_ENVIRONMENT_ID }}
+      RAILWAY_API_SERVICE: ${{ vars.RAILWAY_API_SERVICE }}
+      RAILWAY_API_DEPLOYMENT_ID: ${{ needs.railway-canonical-staging.outputs.api_deployment_id }}
+      RAILWAY_MCP_DEPLOYMENT_ID: ${{ needs.railway-canonical-staging.outputs.mcp_deployment_id }}
+      RAILWAY_FRONTEND_DEPLOYMENT_ID: ${{ needs.railway-canonical-staging.outputs.frontend_deployment_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.canonical_staging_deploy_sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Bind live18 evidence paths to the runner temporary directory
+        run: |
+          set -euo pipefail
+          {
+            echo "PHARMA_CANONICAL_LIVE_FIXTURE_INPUT_PATH=$RUNNER_TEMP/live18-reviewed-fixture.json"
+            echo "PHARMA_CANONICAL_LIVE_FIXTURE_IDENTITY_EVIDENCE_PATH=$RUNNER_TEMP/live18-fixture-identities.json"
+            echo "LIVE18_FIXTURE_PATH=$RUNNER_TEMP/live18-reviewed-fixture.json"
+            echo "LIVE18_REVIEWED_SCALARS_INPUT_PATH=$RUNNER_TEMP/live18-reviewed-scalars-input.json"
+            echo "LIVE18_REVIEWED_SCALARS_PATH=$RUNNER_TEMP/live18-reviewed-scalars.json"
+            echo "LIVE18_EXPENSE_RECEIPT_PATH=$RUNNER_TEMP/live18-reviewed-expense-receipt.pdf"
+            echo "LIVE18_TEMPLATE_DIRECTORY=$GITHUB_WORKSPACE/frontend/e2e/live18/templates"
+            echo "LIVE18_EVIDENCE_DIR=$RUNNER_TEMP/live18-evidence"
+            echo "LIVE18_PLAYWRIGHT_ARTIFACT_DIR=$RUNNER_TEMP/live18-playwright"
+            echo "LIVE18_DATABASE_EVIDENCE_PATH=$RUNNER_TEMP/live18-database-evidence.json"
+            echo "LIVE23_BUSINESS_DATABASE_EVIDENCE_PATH=$RUNNER_TEMP/live23-business-database-evidence.json"
+            echo "LIVE23_BUSINESS_RECONCILIATION_EVIDENCE_PATH=$RUNNER_TEMP/live23-business-reconciliation-evidence.json"
+            echo "LIVE18_RECONCILIATION_EVIDENCE_PATH=$RUNNER_TEMP/live18-reconciliation-attestation.json"
+            echo "LIVE18_DEMO_EVIDENCE_PATH=$RUNNER_TEMP/live18-demo-evidence.json"
+            echo "LIVE18_EVIDENCE_IDENTITY_PREPARE_PATH=$RUNNER_TEMP/live18-evidence-identity-prepare.json"
+            echo "LIVE18_EVIDENCE_CREDENTIAL_RETIREMENT_PATH=$RUNNER_TEMP/live18-evidence-credential-retirement.json"
+            echo "LIVE18_RAILWAY_IDENTITY_RESPONSE_PATH=$RUNNER_TEMP/live18-railway-identity-response.json"
+            echo "LIVE18_AUTHORITATIVE_FACTS_PATH=$RUNNER_TEMP/live18-authoritative-facts.json"
+            echo "LIVE18_RAILWAY_SSH_PRIVATE_KEY=$RUNNER_TEMP/live18-railway-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            echo "LIVE18_RAILWAY_SSH_FINGERPRINT_PATH=$RUNNER_TEMP/live18-railway-ssh-fingerprint"
+            echo "LIVE18_RAILWAY_SSH_REGISTERED_PATH=$RUNNER_TEMP/live18-railway-ssh-registered"
+            echo "LIVE18_RAILWAY_SSH_AGENT_STARTED_PATH=$RUNNER_TEMP/live18-railway-ssh-agent-started"
+            echo "LIVE18_RAILWAY_PRE_DEMO_RECOVERY_ATTEMPTED_PATH=$RUNNER_TEMP/live18-railway-pre-demo-recovery-attempted"
+            echo "LIVE18_RAILWAY_IDENTITY_ATTEMPTED_PATH=$RUNNER_TEMP/live18-railway-identity-attempted"
+            echo "LIVE18_RAILWAY_AUTHORITY_OPEN_ATTEMPTED_PATH=$RUNNER_TEMP/live18-railway-authority-open-attempted"
+          } >> "$GITHUB_ENV"
+      - name: Bind live18 to one reviewed staging provider
+        env:
+          RAILWAY_APP_ORIGIN: ${{ vars.RAILWAY_FRONTEND_URL }}
+          RAILWAY_API_ORIGIN: ${{ vars.RAILWAY_API_URL }}
+          RAILWAY_MCP_ORIGIN: ${{ vars.RAILWAY_MCP_URL }}
+        run: |
+          set -euo pipefail
+          test '${{ inputs.deploy_canonical_staging }}' = true
+          test '${{ inputs.provision_canonical_demo }}' = true
+          case "$LIVE18_PROVIDER" in
+            render)
+              test '${{ needs.canonical-free-staging.result }}' = success
+              test '${{ needs.railway-canonical-staging.result }}' = skipped
+              app_origin=https://aasopharma-erp-pilot.onrender.com
+              api_origin=https://aasopharma-api-pilot.onrender.com
+              mcp_origin=https://aasopharma-mcp-pilot.onrender.com
+              ;;
+            railway)
+              test '${{ needs.canonical-free-staging.result }}' = skipped
+              test '${{ needs.railway-canonical-staging.result }}' = success
+              app_origin=$RAILWAY_APP_ORIGIN
+              api_origin=$RAILWAY_API_ORIGIN
+              mcp_origin=$RAILWAY_MCP_ORIGIN
+              test -n "$RAILWAY_API_DEPLOYMENT_ID"
+              test -n "$RAILWAY_MCP_DEPLOYMENT_ID"
+              test -n "$RAILWAY_FRONTEND_DEPLOYMENT_ID"
+              ;;
+            *) exit 2 ;;
+          esac
+          for origin in "$app_origin" "$api_origin" "$mcp_origin"; do
+            case "$origin" in
+              https://*/*|*localhost*|*127.0.0.1*|http://*|'') exit 2 ;;
+            esac
+          done
+          metadata_urls=$(jq -cn --arg app "$app_origin" --arg api "$api_origin" --arg mcp "$mcp_origin" \
+            '[$app+"/build-metadata.json",$api+"/health",$mcp+"/health"]')
+          {
+            echo "LIVE18_APP_ORIGIN=$app_origin"
+            echo "LIVE18_API_ORIGIN=$api_origin"
+            echo "LIVE18_MCP_ORIGIN=$mcp_origin"
+            echo "PHARMA_CANONICAL_LIVE_API_BASE_URL=$api_origin"
+            echo "PHARMA_CANONICAL_MCP_URL=$mcp_origin/mcp"
+            echo "LIVE18_METADATA_URLS_JSON=$metadata_urls"
+          } >> "$GITHUB_ENV"
+
+      - name: Bind live18 to the exact reviewed deployed SHA
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$REVIEWED_DEPLOY_SHA"
+          test "${#REVIEWED_DEPLOY_SHA}" = 40
+          readiness_mode=()
+          if test "$LIVE18_PROVIDER" = railway; then
+            readiness_mode=(--provenance-only)
+            readiness_mode+=(
+              --api-deployment-id "$RAILWAY_API_DEPLOYMENT_ID"
+              --mcp-deployment-id "$RAILWAY_MCP_DEPLOYMENT_ID"
+              --frontend-deployment-id "$RAILWAY_FRONTEND_DEPLOYMENT_ID"
+            )
+          fi
+          PYTHONPATH=backend python3 backend/scripts/verify_live18_deployment_sha.py \
+            --provider "$LIVE18_PROVIDER" \
+            --commit-sha "$REVIEWED_DEPLOY_SHA" \
+            --frontend-origin "$LIVE18_APP_ORIGIN" \
+            --api-origin "$LIVE18_API_ORIGIN" \
+            --mcp-origin "$LIVE18_MCP_ORIGIN" \
+            "${readiness_mode[@]}" \
+            > "$RUNNER_TEMP/live18-deployed-sha.json"
+          echo "LIVE18_DEPLOYMENT_BOUND=true" >> "$GITHUB_ENV"
+      - name: Extract and verify the same-run Render demo receipt
+        if: env.LIVE18_PROVIDER == 'render'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/live18-render-baseline.zip"
+          trap 'rm -f "$archive"' EXIT
+          artifact_name="canonical-staging-baseline-${GITHUB_RUN_ID}"
+          artifact_id=$(
+            gh api --paginate \
+              "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts?per_page=100" \
+              | jq -ser --arg name "$artifact_name" '
+                  [.[].artifacts[] | select(.name == $name and .expired == false)]
+                  | if length == 1 then .[0].id
+                    else error("expected exactly one same-run staging artifact") end
+                '
+          )
+          [[ "$artifact_id" =~ ^[1-9][0-9]*$ ]]
+          gh api "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}/zip" \
+            > "$archive"
+          python3 - "$archive" "$LIVE18_DEMO_EVIDENCE_PATH" \
+            "$LIVE18_EVIDENCE_IDENTITY_PREPARE_PATH" <<'PY'
+          import os
+          from pathlib import Path, PurePosixPath
+          import sys
+          from zipfile import ZipFile
+
+          archive = Path(sys.argv[1])
+          with ZipFile(archive) as bundle:
+              for filename, target in (
+                  ("live18-render-demo-receipt.json", Path(sys.argv[2])),
+                  ("canonical-evidence-storage-identity.json", Path(sys.argv[3])),
+              ):
+                  matches = [
+                      row for row in bundle.infolist()
+                      if not row.is_dir()
+                      and PurePosixPath(row.filename).name == filename
+                  ]
+                  if len(matches) != 1 or matches[0].file_size > 65536:
+                      raise SystemExit(
+                          f"same-run {filename} is missing or ambiguous"
+                      )
+                  payload = bundle.read(matches[0])
+                  descriptor = os.open(
+                      target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600
+                  )
+                  with os.fdopen(descriptor, "wb") as handle:
+                      handle.write(payload)
+          PY
+          PYTHONPATH=backend python3 - "$LIVE18_DEMO_EVIDENCE_PATH" \
+            "$RUNNER_TEMP/live18-deployed-sha.json" <<'PY'
+          from pathlib import Path
+          import os
+          import sys
+          from scripts.build_live18_artifact_manifest import (
+              _demo_summary,
+              _deployment_summary,
+          )
+
+          _demo_summary(
+              Path(sys.argv[1]),
+              deployment=_deployment_summary(Path(sys.argv[2])),
+              run_id=os.environ["GITHUB_RUN_ID"],
+              run_attempt=os.environ["GITHUB_RUN_ATTEMPT"],
+          )
+          PY
+      - name: Refuse any target except canonical disposable staging
+        run: |
+          set -euo pipefail
+          if [ '${{ inputs.provision_canonical_demo }}' != true ]; then
+            echo 'live18 requires a same-run canonical demo provision for run-scoped business lineage' >&2
+            exit 2
+          fi
+          test "$CANONICAL_STAGING_PROJECT_REF" = rgihahbmkrmhitjdjvev
+          test "$SUPABASE_URL" = https://rgihahbmkrmhitjdjvev.supabase.co
+          case "$LIVE18_APP_ORIGIN|$LIVE18_API_ORIGIN|$LIVE18_MCP_ORIGIN" in
+            *localhost*|*127.0.0.1*|*http://*) exit 2 ;;
+          esac
+      - name: Install pinned live18 dependencies
+        run: |
+          python3 -m pip install -r backend/requirements.txt
+          python3 -m pip install psycopg2-binary==2.9.9 requests==2.34.2
+          if [ "$LIVE18_PROVIDER" = railway ]; then
+            npm install --global @railway/cli@5.43.4
+          fi
+          npm ci --prefix frontend
+          cd frontend
+          npx playwright install --with-deps chromium ffmpeg
+      - name: Register one run-scoped Railway SSH key
+        if: env.LIVE18_PROVIDER == 'railway'
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$RAILWAY_API_TOKEN"
+          test -n "$RAILWAY_PROJECT_ID"
+          test -n "$RAILWAY_ENVIRONMENT_ID"
+          test "$RAILWAY_API_SERVICE" = aasopharma-api-pilot
+          railway whoami >/dev/null
+          umask 077
+          mkdir -p "$HOME/.ssh" "$HOME/.railway"
+          chmod 700 "$HOME/.ssh" "$HOME/.railway"
+          printf '%s\n' \
+            'Host ssh.railway.com' \
+            "    UserKnownHostsFile $HOME/.railway/known_hosts_relay" \
+            '    StrictHostKeyChecking accept-new' \
+            '    BatchMode yes' \
+            '    IdentitiesOnly yes' \
+            '    ConnectTimeout 10' \
+            '    ServerAliveInterval 15' \
+            '    ServerAliveCountMax 2' \
+            > "$HOME/.ssh/config"
+          chmod 600 "$HOME/.ssh/config"
+          ssh-keygen -q -t ed25519 -N '' \
+            -C "live18-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            -f "$LIVE18_RAILWAY_SSH_PRIVATE_KEY"
+          fingerprint=$(ssh-keygen -E sha256 -lf \
+            "$LIVE18_RAILWAY_SSH_PRIVATE_KEY.pub" | awk '{print $2}')
+          case "$fingerprint" in SHA256:*) ;; *) exit 2 ;; esac
+          printf '%s\n' "$fingerprint" > "$LIVE18_RAILWAY_SSH_FINGERPRINT_PATH"
+          eval "$(ssh-agent -s)"
+          case "$SSH_AUTH_SOCK" in /*) ;; *) exit 2 ;; esac
+          [[ "$SSH_AGENT_PID" =~ ^[1-9][0-9]*$ ]]
+          {
+            printf 'SSH_AUTH_SOCK=%s\n' "$SSH_AUTH_SOCK"
+            printf 'SSH_AGENT_PID=%s\n' "$SSH_AGENT_PID"
+          } >> "$GITHUB_ENV"
+          touch "$LIVE18_RAILWAY_SSH_AGENT_STARTED_PATH"
+          ssh-add "$LIVE18_RAILWAY_SSH_PRIVATE_KEY" >/dev/null
+          test "$(ssh-add -l | awk 'NR==1 {print $2}')" = "$fingerprint"
+          test "$(ssh-add -l | wc -l)" -eq 1
+          request_nonce=$(openssl rand -hex 32)
+          [[ "$request_nonce" =~ ^[0-9a-f]{64}$ ]]
+          echo "LIVE18_RAILWAY_REQUEST_NONCE=$request_nonce" >> "$GITHUB_ENV"
+          key_name="live18-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          railway ssh keys add \
+            --key "$fingerprint" \
+            --name "$key_name" >/dev/null
+          touch "$LIVE18_RAILWAY_SSH_REGISTERED_PATH"
+          railway ssh keys list > "$RUNNER_TEMP/live18-railway-ssh-keys.txt"
+          grep -F -- "$fingerprint" "$RUNNER_TEMP/live18-railway-ssh-keys.txt" >/dev/null
+          grep -F -- "$key_name" "$RUNNER_TEMP/live18-railway-ssh-keys.txt" >/dev/null
+      - name: Resolve the one running instance of the exact Railway API deployment
+        if: env.LIVE18_PROVIDER == 'railway'
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          status="$RUNNER_TEMP/live18-railway-status.json"
+          probe_nonce=$(openssl rand -hex 32)
+          [[ "$probe_nonce" =~ ^[0-9a-f]{64}$ ]]
+          ssh_ready=false
+          for attempt in $(seq 1 12); do
+            if curl --fail-with-body --silent --show-error --max-time 30 \
+              "$LIVE18_API_ORIGIN/health" >/dev/null && \
+              railway status \
+                --project "$RAILWAY_PROJECT_ID" \
+                --environment "$RAILWAY_ENVIRONMENT_ID" \
+                --json > "$status"; then
+              instance_id=$(jq -er \
+                --arg environment "$RAILWAY_ENVIRONMENT_ID" \
+                --arg service "$RAILWAY_API_SERVICE" \
+                --arg deployment "$RAILWAY_API_DEPLOYMENT_ID" '
+                  [.environments.edges[].node
+                   | select(.id == $environment)
+                   | .serviceInstances.edges[].node
+                   | select(.serviceName == $service)
+                   | .activeDeployments[]
+                   | select(.id == $deployment and .status == "SUCCESS" and .deploymentStopped == false)
+                   | .instances[]
+                   | select(.status == "RUNNING")
+                   | .id]
+                  | if length == 1 then .[0] else error("expected one exact running API instance") end
+                ' "$status" 2>/dev/null || true)
+              if test -n "$instance_id"; then
+                probe_rc=0
+                # Expansion belongs to the remote shell.
+                # shellcheck disable=SC2016
+                probe=$(timeout --signal=TERM 20s railway ssh \
+                  --project "$RAILWAY_PROJECT_ID" \
+                  --environment "$RAILWAY_ENVIRONMENT_ID" \
+                  --service "$RAILWAY_API_SERVICE" \
+                  --deployment-instance "$instance_id" \
+                  --identity-file "$LIVE18_RAILWAY_SSH_PRIVATE_KEY" \
+                  -- /bin/sh -c 'printf "%s|%s" "$1" "$RAILWAY_GIT_COMMIT_SHA"' \
+                    sh "$probe_nonce" \
+                  2>"$RUNNER_TEMP/live18-railway-ssh-probe.err") || probe_rc=$?
+                if test "$probe" = "$probe_nonce|$REVIEWED_DEPLOY_SHA" && test "$probe_rc" -eq 0; then
+                  ssh_ready=true
+                  break
+                fi
+                if test -n "$probe"; then
+                  echo 'Exact Railway API SSH probe returned unexpected provenance' >&2
+                  exit 1
+                fi
+                case "$probe_rc" in
+                  0|124|255) ;;
+                  *) echo "Exact Railway API SSH probe failed with non-transport status $probe_rc" >&2; exit 1 ;;
+                esac
+              fi
+            fi
+            echo "Exact Railway API instance or run-scoped SSH key is not ready (attempt $attempt/12)" >&2
+            sleep 5
+          done
+          if test "$ssh_ready" != true; then
+            echo 'Exact Railway API instance did not become SSH-ready after 12 attempts' >&2
+            exit 1
+          fi
+          echo "RAILWAY_API_DEPLOYMENT_INSTANCE_ID=$instance_id" >> "$GITHUB_ENV"
+          rm -f "$status"
+      - name: Write compact externally reviewed scalar choices outside the repository
+        env:
+          LIVE18_REVIEWED_SCALARS_JSON: ${{ secrets.LIVE18_REVIEWED_SCALARS_JSON }}
+          LIVE18_REVIEWED_STOCK_ADJUSTMENT_LOSS_QUANTITY: ${{ secrets.LIVE18_REVIEWED_STOCK_ADJUSTMENT_LOSS_QUANTITY }}
+          CANONICAL_DEMO_EXPENSE_RECEIPT_BASE64: ${{ secrets.CANONICAL_DEMO_EXPENSE_RECEIPT_BASE64 }}
+          CANONICAL_DEMO_EXPENSE_RECEIPT_SHA256: ${{ secrets.CANONICAL_DEMO_EXPENSE_RECEIPT_SHA256 }}
+        run: |
+          set -euo pipefail
+          test -n "$LIVE18_REVIEWED_SCALARS_JSON"
+          [[ "$LIVE18_REVIEWED_STOCK_ADJUSTMENT_LOSS_QUANTITY" =~ ^[1-9][0-9]{0,13}(\.[0-9]{1,6})?$|^0\.[0-9]*[1-9][0-9]{0,5}$ ]]
+          test -n "$CANONICAL_DEMO_EXPENSE_RECEIPT_BASE64"
+          [[ "$CANONICAL_DEMO_EXPENSE_RECEIPT_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          umask 077
+          printf '%s' "$LIVE18_REVIEWED_SCALARS_JSON" > "$LIVE18_REVIEWED_SCALARS_INPUT_PATH"
+          python3 -m json.tool "$LIVE18_REVIEWED_SCALARS_INPUT_PATH" >/dev/null
+          python3 - "$LIVE18_REVIEWED_SCALARS_INPUT_PATH" <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          import sys
+
+          path = Path(sys.argv[1])
+          payload = json.loads(path.read_text(encoding="utf-8"))
+          values = payload.get("values")
+          if not isinstance(values, dict):
+              raise SystemExit("reviewed scalar transport must contain a values object")
+          # This key belonged to the retired stock-gain fixture. It is not valid
+          # authority for the current loss-based cycle count and must not leak
+          # into the compiler's strict reviewed-scalar set.
+          values.pop("stock_adjustment_gain_quantity", None)
+          key = "stock_adjustment_loss_quantity"
+          reviewed = os.environ["LIVE18_REVIEWED_STOCK_ADJUSTMENT_LOSS_QUANTITY"]
+          existing = values.get(key)
+          if existing is not None and str(existing) != reviewed:
+              raise SystemExit("reviewed stock-adjustment choices disagree")
+          values[key] = reviewed
+          path.write_text(json.dumps(payload, separators=(",", ":")), encoding="utf-8")
+          PY
+          test "$(jq -r 'has("values") and (.values|type=="object") and (.values|has("expense_receipt_pdf_path")|not)' "$LIVE18_REVIEWED_SCALARS_INPUT_PATH")" = true
+          printf '%s' "$CANONICAL_DEMO_EXPENSE_RECEIPT_BASE64" | base64 --decode > "$LIVE18_EXPENSE_RECEIPT_PATH"
+          test -s "$LIVE18_EXPENSE_RECEIPT_PATH"
+          test "$(wc -c < "$LIVE18_EXPENSE_RECEIPT_PATH")" -le 10485760
+          test "$(sha256sum "$LIVE18_EXPENSE_RECEIPT_PATH" | cut -d' ' -f1)" = "$CANONICAL_DEMO_EXPENSE_RECEIPT_SHA256"
+          jq --arg path "$LIVE18_EXPENSE_RECEIPT_PATH" '.values.expense_receipt_pdf_path=$path' \
+            "$LIVE18_REVIEWED_SCALARS_INPUT_PATH" > "$LIVE18_REVIEWED_SCALARS_PATH"
+          test "$(wc -c < "$LIVE18_REVIEWED_SCALARS_PATH")" -le 32768
+          case "$LIVE18_REVIEWED_SCALARS_PATH" in "$GITHUB_WORKSPACE"/*) exit 2 ;; esac
+      - name: Recover stale Railway-direct identities before demo provisioning
+        if: env.LIVE18_PROVIDER == 'railway'
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          set -euo pipefail
+          request="$RUNNER_TEMP/live18-railway-recovery-request.json"
+          response="$RUNNER_TEMP/live18-railway-recovery-response.json"
+          umask 077
+          python3 - "$request" <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          import sys
+
+          value = {
+              "schema": "aasopharma.live18.railway-database-phase.v1",
+              "expected_sha": os.environ["REVIEWED_DEPLOY_SHA"],
+              "project_ref": os.environ["CANONICAL_STAGING_PROJECT_REF"],
+              "run_id": os.environ["GITHUB_RUN_ID"],
+              "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+              "request_nonce": os.environ["LIVE18_RAILWAY_REQUEST_NONCE"],
+              "deployment_id": os.environ["RAILWAY_API_DEPLOYMENT_ID"],
+              "deployment_instance_id": os.environ["RAILWAY_API_DEPLOYMENT_INSTANCE_ID"],
+              "supabase_url": os.environ["SUPABASE_URL"],
+              "secrets": {
+                  name: os.environ[name]
+                  for name in (
+                      "SUPABASE_ACCESS_TOKEN",
+                      "SUPABASE_DB_PASSWORD",
+                      "SUPABASE_ANON_KEY",
+                  )
+              },
+          }
+          Path(sys.argv[1]).write_text(json.dumps(value), encoding="utf-8")
+          PY
+          trap 'rm -f "$request" "$response"' EXIT
+          # Keep this marker until the always-clean boundary succeeds. If this
+          # SSH call fails, final cleanup must retry durable orphan recovery.
+          touch "$LIVE18_RAILWAY_PRE_DEMO_RECOVERY_ATTEMPTED_PATH"
+          railway ssh \
+            --project "$RAILWAY_PROJECT_ID" \
+            --environment "$RAILWAY_ENVIRONMENT_ID" \
+            --service "$RAILWAY_API_SERVICE" \
+            --deployment-instance "$RAILWAY_API_DEPLOYMENT_INSTANCE_ID" \
+            --identity-file "$LIVE18_RAILWAY_SSH_PRIVATE_KEY" \
+            -- python scripts/live18_railway_database_phase.py recover-identities-before-demo \
+              --input - --output - \
+            < "$request" > "$response"
+          PYTHONPATH=backend python3 - "$response" "$request" <<'PY'
+          import json
+          from pathlib import Path
+          import sys
+          from scripts.live18_railway_database_phase import _verify_response
+
+          response = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          request = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+          request["response"] = response
+          _verify_response(request)
+          if response.get("action") != "recover-identities-before-demo" or response.get("cleaned") is not True:
+              raise SystemExit("Railway pre-demo identity recovery was not attested")
+          reconciliation = response.get("orphan_reconciliation")
+          if not isinstance(reconciliation, dict):
+              raise SystemExit("Railway pre-demo orphan reconciliation was not attested")
+          if any(
+              reconciliation.get(key) != 0
+              for key in (
+                  "remaining_auth_identity_count",
+                  "remaining_active_temporary_grant_count",
+                  "remaining_active_mcp_grant_count",
+                  "remaining_denial_role_count",
+                  "remaining_active_denial_authority_count",
+                  "remaining_denial_auth_binding_count",
+              )
+          ):
+              raise SystemExit("Railway pre-demo recovery left disposable authority behind")
+          recovered = reconciliation.get("recovered_auth_identity_count")
+          if not isinstance(recovered, int) or isinstance(recovered, bool) or recovered < 0:
+              raise SystemExit("Railway pre-demo recovery count is invalid")
+          recovered_mcp = reconciliation.get("recovered_active_mcp_grant_count")
+          if not isinstance(recovered_mcp, int) or isinstance(recovered_mcp, bool) or recovered_mcp < 0:
+              raise SystemExit("Railway pre-demo MCP recovery count is invalid")
+          PY
+          rm -f "$LIVE18_RAILWAY_PRE_DEMO_RECOVERY_ATTEMPTED_PATH"
+      - name: Verify exact migration head and provision same-run demo over Railway direct IPv6
+        if: env.LIVE18_PROVIDER == 'railway'
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          ERP_REGULATORY_IMPORTER_PASSWORD: ${{ secrets.ERP_REGULATORY_IMPORTER_PASSWORD }}
+        run: |
+          set -euo pipefail
+          request="$RUNNER_TEMP/live18-railway-demo-request.json"
+          umask 077
+          python3 - "$request" <<'PY'
+          import base64
+          import json
+          import os
+          from pathlib import Path
+          import sys
+
+          receipt_path = Path(os.environ["LIVE18_EXPENSE_RECEIPT_PATH"])
+          scalar_path = Path(os.environ["LIVE18_REVIEWED_SCALARS_INPUT_PATH"])
+          scalar_bytes = scalar_path.read_bytes()
+          if not scalar_bytes or len(scalar_bytes) > 32768:
+              raise SystemExit("reviewed scalar transport is missing or oversized")
+          reviewed_scalars = json.loads(scalar_bytes)
+          if not isinstance(reviewed_scalars, dict):
+              raise SystemExit("reviewed scalar transport must be one JSON object")
+          request = {
+              "schema": "aasopharma.live18.railway-database-phase.v1",
+              "expected_sha": os.environ["REVIEWED_DEPLOY_SHA"],
+              "project_ref": os.environ["CANONICAL_STAGING_PROJECT_REF"],
+              "run_id": os.environ["GITHUB_RUN_ID"],
+              "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+              "request_nonce": os.environ["LIVE18_RAILWAY_REQUEST_NONCE"],
+              "deployment_id": os.environ["RAILWAY_API_DEPLOYMENT_ID"],
+              "deployment_instance_id": os.environ["RAILWAY_API_DEPLOYMENT_INSTANCE_ID"],
+              "api_origin": os.environ["LIVE18_API_ORIGIN"],
+              "production_project_refs": os.environ["PHARMA_CANONICAL_PRODUCTION_PROJECT_REFS"],
+              "reviewed_web_auth_user_id": os.environ["CANONICAL_STAGING_WEB_TEST_AUTH_USER_ID"],
+              "expense_receipt_sha256": __import__("hashlib").sha256(
+                  receipt_path.read_bytes()
+              ).hexdigest(),
+              "expense_receipt_base64": base64.b64encode(
+                  receipt_path.read_bytes()
+              ).decode("ascii"),
+              "reviewed_scalars": reviewed_scalars,
+              "secrets": {
+                  "SUPABASE_DB_PASSWORD": os.environ["SUPABASE_DB_PASSWORD"],
+                  "ERP_REGULATORY_IMPORTER_PASSWORD": os.environ[
+                      "ERP_REGULATORY_IMPORTER_PASSWORD"
+                  ],
+              },
+          }
+          Path(sys.argv[1]).write_text(json.dumps(request), encoding="utf-8")
+          PY
+          trap 'rm -f "$request"' EXIT
+          # Write before the remote call: an ambiguous SSH result may have
+          # opened public authority even when no response reached this runner.
+          touch "$LIVE18_RAILWAY_AUTHORITY_OPEN_ATTEMPTED_PATH"
+          railway ssh \
+            --project "$RAILWAY_PROJECT_ID" \
+            --environment "$RAILWAY_ENVIRONMENT_ID" \
+            --service "$RAILWAY_API_SERVICE" \
+            --deployment-instance "$RAILWAY_API_DEPLOYMENT_INSTANCE_ID" \
+            --identity-file "$LIVE18_RAILWAY_SSH_PRIVATE_KEY" \
+            -- python scripts/live18_railway_database_phase.py provision-demo \
+              --input - --output - \
+            < "$request" > "$LIVE18_DEMO_EVIDENCE_PATH"
+          PYTHONPATH=backend python3 - "$LIVE18_DEMO_EVIDENCE_PATH" "$request" <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          import sys
+          from scripts.live18_railway_database_phase import _verify_response
+
+          response = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          request = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+          request["response"] = response
+          _verify_response(request)
+          if response.get("action") != "provision-demo":
+              raise SystemExit("Railway direct demo response has the wrong action")
+          if response.get("transport") != "supabase_direct_ipv6_from_railway":
+              raise SystemExit("Railway direct demo response has the wrong transport")
+          if response.get("temporary_owner_delegation_removed") is not True:
+              raise SystemExit("Railway direct demo retained temporary owner delegation")
+          provisioning_fence = response.get("provisioning_fence")
+          if not isinstance(provisioning_fence, dict) or not (
+              provisioning_fence.get("state") == "provisioning"
+              and provisioning_fence.get("commit_sha") == os.environ["REVIEWED_DEPLOY_SHA"]
+          ):
+              raise SystemExit(
+                  "Railway direct demo did not attest exact-SHA provisioning authority"
+              )
+          reviewed_operator = response.get("reviewed_web_operator")
+          if not isinstance(reviewed_operator, dict) or (
+              reviewed_operator.get("auth_user_id")
+              != os.environ["CANONICAL_STAGING_WEB_TEST_AUTH_USER_ID"]
+          ):
+              raise SystemExit("Railway direct demo did not attest the reviewed web operator")
+          write_fence = response.get("write_fence")
+          if not isinstance(write_fence, dict) or not (
+              write_fence.get("state") == "open"
+              and write_fence.get("commit_sha") == os.environ["REVIEWED_DEPLOY_SHA"]
+          ):
+              raise SystemExit(
+                  "Railway direct demo did not open exact-SHA canonical session authority"
+              )
+          PY
+          ready_evidence="$RUNNER_TEMP/live18-deployed-sha-ready.json"
+          for attempt in $(seq 1 30); do
+            if PYTHONPATH=backend python3 backend/scripts/verify_live18_deployment_sha.py \
+              --provider railway \
+              --commit-sha "$REVIEWED_DEPLOY_SHA" \
+              --frontend-origin "$LIVE18_APP_ORIGIN" \
+              --api-origin "$LIVE18_API_ORIGIN" \
+              --mcp-origin "$LIVE18_MCP_ORIGIN" \
+              --api-deployment-id "$RAILWAY_API_DEPLOYMENT_ID" \
+              --mcp-deployment-id "$RAILWAY_MCP_DEPLOYMENT_ID" \
+              --frontend-deployment-id "$RAILWAY_FRONTEND_DEPLOYMENT_ID" \
+              > "$ready_evidence"; then
+              mv "$ready_evidence" "$RUNNER_TEMP/live18-deployed-sha.json"
+              break
+            fi
+            rm -f "$ready_evidence"
+            if test "$attempt" = 30; then
+              echo "Railway did not become ready after canonical session authority opened" >&2
+              exit 1
+            fi
+            sleep 2
+          done
+      - name: Build the masked exact erp_runtime connection
+        if: env.LIVE18_PROVIDER == 'render'
+        env:
+          ERP_RUNTIME_PASSWORD: ${{ secrets.ERP_RUNTIME_PASSWORD }}
+        run: |
+          set -euo pipefail
+          encoded_password=$(jq -nr --arg value "$ERP_RUNTIME_PASSWORD" '$value|@uri')
+          runtime_url="postgresql://erp_runtime:${encoded_password}@db.${CANONICAL_STAGING_PROJECT_REF}.supabase.co:5432/postgres?sslmode=require&gssencmode=disable&connect_timeout=15&application_name=canonical_live18"
+          echo "::add-mask::$runtime_url"
+          {
+            echo "PHARMA_CANONICAL_LIVE_DATABASE_URL=$runtime_url"
+            echo "LIVE18_DIRECT_DATABASE_EVIDENCE_OUTPUT_PATH=$LIVE18_DATABASE_EVIDENCE_PATH"
+            echo "LIVE23_DIRECT_DATABASE_EVIDENCE_OUTPUT_PATH=$LIVE23_BUSINESS_DATABASE_EVIDENCE_PATH"
+          } >> "$GITHUB_ENV"
+      - name: Provision disposable live18 requester, reviewer, and denial identities
+        if: env.LIVE18_PROVIDER == 'render'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          python3 backend/scripts/provision_ephemeral_browser_identities.py \
+            provision --profile live18 \
+            --state "$RUNNER_TEMP/live18-browser-identities.json"
+      - name: Provision disposable identities and MCP authority over Railway direct IPv6
+        if: env.LIVE18_PROVIDER == 'railway'
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          set -euo pipefail
+          request="$RUNNER_TEMP/live18-railway-identity-request.json"
+          umask 077
+          python3 - "$request" <<'PY'
+          import json
+          import os
+          import base64
+          from pathlib import Path
+          import sys
+
+          value = {
+              "schema": "aasopharma.live18.railway-database-phase.v1",
+              "expected_sha": os.environ["REVIEWED_DEPLOY_SHA"],
+              "project_ref": os.environ["CANONICAL_STAGING_PROJECT_REF"],
+              "run_id": os.environ["GITHUB_RUN_ID"],
+              "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+              "request_nonce": os.environ["LIVE18_RAILWAY_REQUEST_NONCE"],
+              "deployment_id": os.environ["RAILWAY_API_DEPLOYMENT_ID"],
+              "deployment_instance_id": os.environ["RAILWAY_API_DEPLOYMENT_INSTANCE_ID"],
+              "transport_key_base64": base64.b64encode(os.urandom(32)).decode("ascii"),
+              "supabase_url": os.environ["SUPABASE_URL"],
+              "api_origin": os.environ["LIVE18_API_ORIGIN"],
+              "mcp_url": os.environ["PHARMA_CANONICAL_MCP_URL"],
+              "secrets": {
+                  name: os.environ[name]
+                  for name in (
+                      "SUPABASE_ACCESS_TOKEN",
+                      "SUPABASE_DB_PASSWORD",
+                      "SUPABASE_ANON_KEY",
+                  )
+              },
+          }
+          Path(sys.argv[1]).write_text(json.dumps(value), encoding="utf-8")
+          PY
+          trap 'rm -f "$request" "$LIVE18_RAILWAY_IDENTITY_RESPONSE_PATH"' EXIT
+          touch "$LIVE18_RAILWAY_IDENTITY_ATTEMPTED_PATH"
+          railway ssh \
+            --project "$RAILWAY_PROJECT_ID" \
+            --environment "$RAILWAY_ENVIRONMENT_ID" \
+            --service "$RAILWAY_API_SERVICE" \
+            --deployment-instance "$RAILWAY_API_DEPLOYMENT_INSTANCE_ID" \
+            --identity-file "$LIVE18_RAILWAY_SSH_PRIVATE_KEY" \
+            -- python scripts/live18_railway_database_phase.py provision-identities \
+              --input - --output - \
+            < "$request" > "$LIVE18_RAILWAY_IDENTITY_RESPONSE_PATH"
+          PYTHONPATH=backend python3 - "$LIVE18_RAILWAY_IDENTITY_RESPONSE_PATH" "$request" <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          import sys
+          from scripts.live18_railway_database_phase import _apply_identity_response
+
+          response = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          request = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+          request["response"] = response
+          values = _apply_identity_response(
+              request,
+              Path(os.environ["RUNNER_TEMP"]),
+          )
+          with Path(os.environ["GITHUB_ENV"]).open("a", encoding="utf-8") as handle:
+              for key, value in sorted(values.items()):
+                  if "\n" in value or "\r" in value:
+                      raise SystemExit(f"Refusing multiline remote environment value {key}")
+                  print(f"::add-mask::{value}")
+                  handle.write(f"{key}={value}\n")
+          PY
+      - name: Refuse incomplete or cross-mapped browser identities
+        run: |
+          set -euo pipefail
+          test -n "$LIVE18_REQUESTER_EMAIL"
+          test -n "$LIVE18_REVIEWER_EMAIL"
+          test -n "$LIVE18_DENIAL_ACCESS_TOKEN"
+          test "$LIVE18_EXPECTED_ORG_ID" != "$LIVE18_EXPECTED_DENIAL_ORG_ID"
+          echo "PHARMA_CANONICAL_LIVE_TEST_ORG_ID=$LIVE18_EXPECTED_ORG_ID" >> "$GITHUB_ENV"
+      - name: Provision short-lived canonical MCP authority and mapping
+        if: env.LIVE18_PROVIDER == 'render'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          python3 backend/scripts/provision_ephemeral_canonical_live.py provision \
+            --state "$RUNNER_TEMP/live18-mcp-identities.json" \
+            --browser-state "$RUNNER_TEMP/live18-browser-identities.json" \
+            --fixture-run-token "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+      - name: Refuse inconsistent REST, MCP, organization, or branch mapping
+        run: |
+          set -euo pipefail
+          test "$PHARMA_CANONICAL_LIVE_TEST_BRANCH_ID" = "$LIVE18_EXPECTED_BRANCH_ID"
+          test "$PHARMA_CANONICAL_LIVE_DENIAL_ORG_ID" = "$LIVE18_EXPECTED_DENIAL_ORG_ID"
+      - name: Compile browser fixture from canonical facts and reviewed choices
+        run: |
+          set -euo pipefail
+          fact_source=(--resolve-from-database)
+          if test "$LIVE18_PROVIDER" = railway; then
+            test -s "$LIVE18_AUTHORITATIVE_FACTS_PATH"
+            fact_source=(--authoritative-facts "$LIVE18_AUTHORITATIVE_FACTS_PATH")
+          fi
+          PYTHONPATH=backend python3 backend/scripts/compile_live18_browser_fixture.py \
+            --identity-evidence "$PHARMA_CANONICAL_LIVE_FIXTURE_IDENTITY_EVIDENCE_PATH" \
+            --reviewed-scalars "$LIVE18_REVIEWED_SCALARS_PATH" \
+            --matrix backend/tests/live_acceptance/operation_matrix.json \
+            --readiness docs/testing/live18-ui-template-readiness.json \
+            --templates "$LIVE18_TEMPLATE_DIRECTORY" \
+            --output "$LIVE18_FIXTURE_PATH" \
+            "${fact_source[@]}"
+          python3 -m json.tool "$LIVE18_FIXTURE_PATH" >/dev/null
+          case "$LIVE18_FIXTURE_PATH" in "$GITHUB_WORKSPACE"/*) exit 2 ;; esac
+      - name: Discover every template-ready Playwright operation
+        working-directory: frontend
+        run: |
+          set -euo pipefail
+          npx playwright test --config e2e/live18/playwright.config.ts --list \
+            | tee "$RUNNER_TEMP/live18-playwright-list.txt"
+          discovered=$(grep -c 'canonical-live18\.spec\.ts.*: UI to REST readback' "$RUNNER_TEMP/live18-playwright-list.txt")
+          expected=$(jq -r '.ready_count' ../docs/testing/live18-ui-template-readiness.json)
+          test "$discovered" -eq "$expected"
+          variant_discovered=$(grep -c 'canonical-live18\.spec\.ts.*visible variant UI to REST readback' "$RUNNER_TEMP/live18-playwright-list.txt")
+          variant_expected=$(jq -r '.ready_count' ../backend/tests/live_acceptance/live23_supported_business_readiness.json)
+          test "$variant_discovered" -eq "$variant_expected"
+      - name: Run the exact-SHA live18 desktop browser certification
+        id: live18_browser
+        working-directory: frontend
+        run: >-
+          npx playwright test --config e2e/live18/playwright.config.ts
+          --grep ': UI to REST readback emits canonical UUID evidence'
+      - name: Capture PostgreSQL evidence from exact Railway deployment over direct IPv6
+        if: always() && env.LIVE18_PROVIDER == 'railway' && steps.live18_browser.outcome != 'skipped'
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          request="$RUNNER_TEMP/live18-railway-evidence-request.json"
+          umask 077
+          python3 - "$request" <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          import sys
+
+          evidence_dir = Path(os.environ["LIVE18_EVIDENCE_DIR"])
+          evidence = {
+              path.stem: json.loads(path.read_text(encoding="utf-8"))
+              for path in evidence_dir.glob("*.json")
+              if path.name != "completed-resources.json"
+          }
+          value = {
+              "schema": "aasopharma.live18.railway-database-phase.v1",
+              "expected_sha": os.environ["REVIEWED_DEPLOY_SHA"],
+              "project_ref": os.environ["CANONICAL_STAGING_PROJECT_REF"],
+              "run_id": os.environ["GITHUB_RUN_ID"],
+              "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+              "request_nonce": os.environ["LIVE18_RAILWAY_REQUEST_NONCE"],
+              "deployment_id": os.environ["RAILWAY_API_DEPLOYMENT_ID"],
+              "deployment_instance_id": os.environ["RAILWAY_API_DEPLOYMENT_INSTANCE_ID"],
+              "organization_id": os.environ["PHARMA_CANONICAL_LIVE_TEST_ORG_ID"],
+              "auth_user_id": os.environ["PHARMA_CANONICAL_LIVE_TEST_AUTH_USER_ID"],
+              "denial_auth_user_id": os.environ["LIVE18_DENIAL_AUTH_USER_ID"],
+              "denial_organization_id": os.environ["PHARMA_CANONICAL_LIVE_DENIAL_ORG_ID"],
+              "evidence": evidence,
+          }
+          Path(sys.argv[1]).write_text(json.dumps(value), encoding="utf-8")
+          PY
+          trap 'rm -f "$request"' EXIT
+          railway ssh \
+            --project "$RAILWAY_PROJECT_ID" \
+            --environment "$RAILWAY_ENVIRONMENT_ID" \
+            --service "$RAILWAY_API_SERVICE" \
+            --deployment-instance "$RAILWAY_API_DEPLOYMENT_INSTANCE_ID" \
+            --identity-file "$LIVE18_RAILWAY_SSH_PRIVATE_KEY" \
+            -- python scripts/live18_railway_database_phase.py capture-evidence \
+              --input - --output - \
+            < "$request" > "$LIVE18_DATABASE_EVIDENCE_PATH"
+          PYTHONPATH=backend python3 - "$LIVE18_DATABASE_EVIDENCE_PATH" "$request" <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          import sys
+          from scripts.live18_railway_database_phase import _verify_response
+
+          response = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          request = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+          request["response"] = response
+          _verify_response(request)
+          if response.get("action") != "capture-evidence":
+              raise SystemExit("Railway database evidence has the wrong action")
+          PY
+          echo "PHARMA_CANONICAL_LIVE_DATABASE_EVIDENCE_PATH=$LIVE18_DATABASE_EVIDENCE_PATH" >> "$GITHUB_ENV"
+      - name: Reconcile every template-ready browser resource through MCP and PostgreSQL
+        id: live18_reconciliation
+        if: always() && steps.live18_browser.outcome == 'success'
+        env:
+          PHARMA_CANONICAL_LIVE_SERVICE_TOKEN: ${{ secrets.MCP_INTERNAL_SERVICE_TOKEN }}
+        run: |
+          set -euo pipefail
+          PYTHONPATH=backend pytest -q \
+            backend/tests/live_acceptance/test_browser_evidence_reconciliation.py \
+            -k test_browser_resource_reconciles_through_mcp_and_postgresql
+          python3 backend/scripts/build_live18_reconciliation_attestation.py \
+            --deployed-sha "$RUNNER_TEMP/live18-deployed-sha.json" \
+            --evidence-dir "$LIVE18_EVIDENCE_DIR" \
+            --operation-matrix backend/tests/live_acceptance/operation_matrix.json \
+            --database-evidence "$LIVE18_DATABASE_EVIDENCE_PATH" \
+            --provider "$LIVE18_PROVIDER" \
+            --output "$LIVE18_RECONCILIATION_EVIDENCE_PATH"
+      - name: Run exact-SHA supported-business browser variants
+        id: business_variant_browser
+        if: always() && steps.live18_reconciliation.outcome == 'success'
+        working-directory: frontend
+        run: >-
+          npx playwright test --config e2e/live18/playwright.config.ts
+          --grep 'visible variant UI to REST readback emits canonical UUID evidence'
+      - name: Capture supported-business variant PostgreSQL evidence separately
+        if: always() && env.LIVE18_PROVIDER == 'railway' && steps.business_variant_browser.outcome == 'success'
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          request="$RUNNER_TEMP/live23-business-railway-evidence-request.json"
+          umask 077
+          python3 - "$request" <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          import sys
+
+          evidence_dir = Path(os.environ["LIVE18_EVIDENCE_DIR"]) / "business-variants"
+          evidence = {
+              path.stem: json.loads(path.read_text(encoding="utf-8"))
+              for path in evidence_dir.glob("*.json")
+          }
+          value = {
+              "schema": "aasopharma.live18.railway-database-phase.v1",
+              "evidence_scope": "supported_business_variants",
+              "expected_sha": os.environ["REVIEWED_DEPLOY_SHA"],
+              "project_ref": os.environ["CANONICAL_STAGING_PROJECT_REF"],
+              "run_id": os.environ["GITHUB_RUN_ID"],
+              "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+              "request_nonce": os.environ["LIVE18_RAILWAY_REQUEST_NONCE"],
+              "deployment_id": os.environ["RAILWAY_API_DEPLOYMENT_ID"],
+              "deployment_instance_id": os.environ["RAILWAY_API_DEPLOYMENT_INSTANCE_ID"],
+              "organization_id": os.environ["PHARMA_CANONICAL_LIVE_TEST_ORG_ID"],
+              "auth_user_id": os.environ["PHARMA_CANONICAL_LIVE_TEST_AUTH_USER_ID"],
+              "denial_auth_user_id": os.environ["LIVE18_DENIAL_AUTH_USER_ID"],
+              "denial_organization_id": os.environ["PHARMA_CANONICAL_LIVE_DENIAL_ORG_ID"],
+              "evidence": evidence,
+          }
+          Path(sys.argv[1]).write_text(json.dumps(value), encoding="utf-8")
+          PY
+          trap 'rm -f "$request"' EXIT
+          railway ssh \
+            --project "$RAILWAY_PROJECT_ID" \
+            --environment "$RAILWAY_ENVIRONMENT_ID" \
+            --service "$RAILWAY_API_SERVICE" \
+            --deployment-instance "$RAILWAY_API_DEPLOYMENT_INSTANCE_ID" \
+            --identity-file "$LIVE18_RAILWAY_SSH_PRIVATE_KEY" \
+            -- python scripts/live18_railway_database_phase.py capture-evidence \
+              --input - --output - \
+            < "$request" > "$LIVE23_BUSINESS_DATABASE_EVIDENCE_PATH"
+          PYTHONPATH=backend python3 - "$LIVE23_BUSINESS_DATABASE_EVIDENCE_PATH" "$request" <<'PY'
+          import json
+          from pathlib import Path
+          import sys
+          from scripts.live18_railway_database_phase import _verify_response
+
+          response = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          request = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+          request["response"] = response
+          _verify_response(request)
+          if response.get("action") != "capture-evidence":
+              raise SystemExit("Railway variant database evidence has the wrong action")
+          if response.get("evidence_scope") != "supported_business_variants":
+              raise SystemExit("Railway variant database evidence has the wrong scope")
+          PY
+          echo "PHARMA_CANONICAL_BUSINESS_VARIANT_DATABASE_EVIDENCE_PATH=$LIVE23_BUSINESS_DATABASE_EVIDENCE_PATH" >> "$GITHUB_ENV"
+      - name: Reconcile supported-business variants through MCP and PostgreSQL
+        id: business_variant_reconciliation
+        if: always() && steps.business_variant_browser.outcome == 'success'
+        env:
+          PHARMA_CANONICAL_LIVE_SERVICE_TOKEN: ${{ secrets.MCP_INTERNAL_SERVICE_TOKEN }}
+        run: |
+          set -euo pipefail
+          PYTHONPATH=backend pytest -q \
+            backend/tests/live_acceptance/test_browser_evidence_reconciliation.py \
+            -k test_supported_business_variant_reconciles_through_mcp_and_postgresql
+      - name: Retire the legacy evidence credential after exact-SHA backend proof
+        id: evidence_credential_retirement
+        if: >-
+          always() && env.LIVE18_PROVIDER == 'render' &&
+          steps.live18_reconciliation.outcome == 'success'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_API_SERVICE_ID: ${{ vars.RENDER_API_SERVICE_ID }}
+        run: |
+          set -euo pipefail
+          python3 backend/scripts/retire_canonical_evidence_storage_credential.py \
+            --project-ref "$CANONICAL_STAGING_PROJECT_REF" \
+            --reviewed-sha "$REVIEWED_DEPLOY_SHA" \
+            --prepare-receipt "$LIVE18_EVIDENCE_IDENTITY_PREPARE_PATH" \
+            --proof-receipt "$LIVE18_RECONCILIATION_EVIDENCE_PATH" \
+            --render-api-service-id "$RENDER_API_SERVICE_ID" \
+            --receipt "$LIVE18_EVIDENCE_CREDENTIAL_RETIREMENT_PATH"
+      - name: Re-close canonical authority immediately after any Live18 failure
+        if: failure() && env.LIVE18_PROVIDER == 'railway'
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: PYTHONPATH=backend python3 backend/scripts/close_live18_railway_authority.py
+      - name: Always suspend temporary MCP authorities
+        if: always() && env.LIVE18_PROVIDER == 'render'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          state="$RUNNER_TEMP/live18-mcp-identities.json"
+          if [ -s "$state" ]; then
+            python3 backend/scripts/provision_ephemeral_canonical_live.py cleanup \
+              --state "$state"
+          else
+            echo "No temporary MCP authority state was created"
+          fi
+      - name: Always restore seeded bindings and remove all three disposable identities
+        if: always() && env.LIVE18_PROVIDER == 'render'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          state="$RUNNER_TEMP/live18-browser-identities.json"
+          if [ -s "$state" ]; then
+            python3 backend/scripts/provision_ephemeral_browser_identities.py cleanup \
+              --state "$state"
+          else
+            echo "No disposable browser identity state was created"
+          fi
+      - name: Always clean Railway-direct temporary identities and authorities
+        if: always() && env.LIVE18_PROVIDER == 'railway'
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          set -euo pipefail
+          if [ ! -f "$LIVE18_RAILWAY_IDENTITY_ATTEMPTED_PATH" ] && \
+             [ ! -f "$LIVE18_RAILWAY_PRE_DEMO_RECOVERY_ATTEMPTED_PATH" ]; then
+            echo "Railway identity provisioning was never attempted"
+            exit 0
+          fi
+          cleanup_action=cleanup-identities
+          if [ ! -f "$LIVE18_RAILWAY_IDENTITY_ATTEMPTED_PATH" ]; then
+            cleanup_action=recover-identities-before-demo
+          fi
+          request="$RUNNER_TEMP/live18-railway-cleanup-request.json"
+          umask 077
+          python3 - "$request" <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          import sys
+
+          temporary = Path(os.environ["RUNNER_TEMP"])
+          def optional_json(name):
+              path = temporary / name
+              return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else None
+
+          value = {
+              "schema": "aasopharma.live18.railway-database-phase.v1",
+              "expected_sha": os.environ["REVIEWED_DEPLOY_SHA"],
+              "project_ref": os.environ["CANONICAL_STAGING_PROJECT_REF"],
+              "run_id": os.environ["GITHUB_RUN_ID"],
+              "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+              "request_nonce": os.environ["LIVE18_RAILWAY_REQUEST_NONCE"],
+              "deployment_id": os.environ["RAILWAY_API_DEPLOYMENT_ID"],
+              "deployment_instance_id": os.environ["RAILWAY_API_DEPLOYMENT_INSTANCE_ID"],
+              "supabase_url": os.environ["SUPABASE_URL"],
+              "browser_state": optional_json("live18-browser-identities.json"),
+              "mcp_state": optional_json("live18-mcp-identities.json"),
+              "secrets": {
+                  name: os.environ[name]
+                  for name in (
+                      "SUPABASE_ACCESS_TOKEN",
+                      "SUPABASE_DB_PASSWORD",
+                      "SUPABASE_ANON_KEY",
+                  )
+              },
+          }
+          Path(sys.argv[1]).write_text(json.dumps(value), encoding="utf-8")
+          PY
+          response="$RUNNER_TEMP/live18-railway-cleanup-response.json"
+          trap 'rm -f "$request" "$response"' EXIT
+          railway ssh \
+            --project "$RAILWAY_PROJECT_ID" \
+            --environment "$RAILWAY_ENVIRONMENT_ID" \
+            --service "$RAILWAY_API_SERVICE" \
+            --deployment-instance "$RAILWAY_API_DEPLOYMENT_INSTANCE_ID" \
+            --identity-file "$LIVE18_RAILWAY_SSH_PRIVATE_KEY" \
+            -- python scripts/live18_railway_database_phase.py "$cleanup_action" \
+              --input - --output - \
+            < "$request" > "$response"
+          PYTHONPATH=backend python3 - "$response" "$request" "$cleanup_action" <<'PY'
+          import json
+          from pathlib import Path
+          import sys
+          from scripts.live18_railway_database_phase import _verify_response
+
+          response = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          request = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+          request["response"] = response
+          _verify_response(request)
+          if response.get("action") != sys.argv[3] or response.get("cleaned") is not True:
+              raise SystemExit("Railway identity cleanup was not attested")
+          reconciliation = response.get("orphan_reconciliation")
+          if not isinstance(reconciliation, dict):
+              raise SystemExit("Railway orphan reconciliation was not attested")
+          if any(
+              reconciliation.get(key) != 0
+              for key in (
+                  "remaining_auth_identity_count",
+                  "remaining_active_temporary_grant_count",
+                  "remaining_active_mcp_grant_count",
+                  "remaining_denial_role_count",
+                  "remaining_active_denial_authority_count",
+                  "remaining_denial_auth_binding_count",
+              )
+          ):
+              raise SystemExit("Railway cleanup left disposable authority behind")
+          recovered = reconciliation.get("recovered_auth_identity_count")
+          if not isinstance(recovered, int) or isinstance(recovered, bool) or recovered < 0:
+              raise SystemExit("Railway cleanup recovery count is invalid")
+          recovered_mcp = reconciliation.get("recovered_active_mcp_grant_count")
+          if not isinstance(recovered_mcp, int) or isinstance(recovered_mcp, bool) or recovered_mcp < 0:
+              raise SystemExit("Railway MCP cleanup recovery count is invalid")
+          PY
+          rm -f "$LIVE18_RAILWAY_IDENTITY_ATTEMPTED_PATH" \
+            "$LIVE18_RAILWAY_PRE_DEMO_RECOVERY_ATTEMPTED_PATH"
+      - name: Re-close canonical authority after any identity cleanup failure
+        if: failure() && env.LIVE18_PROVIDER == 'railway'
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: PYTHONPATH=backend python3 backend/scripts/close_live18_railway_authority.py
+      - name: Always remove external reviewed choices and compiled fixture
+        if: always()
+        run: rm -f "$LIVE18_FIXTURE_PATH" "$LIVE18_REVIEWED_SCALARS_INPUT_PATH" "$LIVE18_REVIEWED_SCALARS_PATH" "$LIVE18_EXPENSE_RECEIPT_PATH" "$LIVE18_RAILWAY_IDENTITY_RESPONSE_PATH" "$LIVE18_RAILWAY_IDENTITY_ATTEMPTED_PATH" "$LIVE18_RAILWAY_PRE_DEMO_RECOVERY_ATTEMPTED_PATH" "$RUNNER_TEMP/live18-railway-demo-request.json" "$RUNNER_TEMP/live18-railway-identity-request.json" "$RUNNER_TEMP/live18-railway-evidence-request.json" "$RUNNER_TEMP/live23-business-railway-evidence-request.json" "$RUNNER_TEMP/live18-railway-cleanup-request.json" "$RUNNER_TEMP/live18-railway-cleanup-response.json"
+      - name: Build scrubbed allowlisted live18 evidence manifest
+        if: always() && env.LIVE18_DEPLOYMENT_BOUND == 'true'
+        env:
+          LIVE18_BROWSER_OUTCOME: ${{ steps.live18_browser.outcome }}
+          BUSINESS_VARIANT_RECONCILIATION_OUTCOME: ${{ steps.business_variant_reconciliation.outcome }}
+        run: |
+          set -euo pipefail
+          output="$RUNNER_TEMP/live18-upload/live18-evidence-manifest.json"
+          python3 backend/scripts/build_live18_artifact_manifest.py \
+            --deployed-sha "$RUNNER_TEMP/live18-deployed-sha.json" \
+            --evidence-dir "$LIVE18_EVIDENCE_DIR" \
+            --database-evidence "$LIVE18_DATABASE_EVIDENCE_PATH" \
+            --demo-evidence "$LIVE18_DEMO_EVIDENCE_PATH" \
+            --reconciliation-evidence "$LIVE18_RECONCILIATION_EVIDENCE_PATH" \
+            --operation-matrix backend/tests/live_acceptance/operation_matrix.json \
+            --require-business-variants \
+            --business-variant-evidence-dir "$LIVE18_EVIDENCE_DIR/business-variants" \
+            --business-variant-database-evidence "$LIVE23_BUSINESS_DATABASE_EVIDENCE_PATH" \
+            --business-variant-reconciliation-evidence "$LIVE23_BUSINESS_RECONCILIATION_EVIDENCE_PATH" \
+            --business-variant-screenshot-dir "$LIVE18_PLAYWRIGHT_ARTIFACT_DIR/screenshots/business-variants" \
+            --business-variant-readiness backend/tests/live_acceptance/live23_supported_business_readiness.json \
+            --business-variant-reconciliation-outcome "${BUSINESS_VARIANT_RECONCILIATION_OUTCOME:-skipped}" \
+            --browser-outcome "${LIVE18_BROWSER_OUTCOME:-skipped}" \
+            --screenshot-dir "$LIVE18_PLAYWRIGHT_ARTIFACT_DIR/screenshots" \
+            --output "$output"
+          test "$(find "$RUNNER_TEMP/live18-upload" -type f | wc -l | tr -d ' ')" = 1
+      - name: Upload scrubbed allowlisted live18 evidence only
+        if: always() && env.LIVE18_DEPLOYMENT_BOUND == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: canonical-live18-acceptance-evidence
+          path: ${{ runner.temp }}/live18-upload/live18-evidence-manifest.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload bounded evidence credential cutover receipt
+        if: always() && steps.evidence_credential_retirement.outcome != 'skipped'
+        uses: actions/upload-artifact@v4
+        with:
+          name: canonical-evidence-credential-cutover-${{ github.run_id }}
+          path: ${{ runner.temp }}/live18-evidence-credential-retirement.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Re-close canonical authority after any evidence failure
+        if: failure() && env.LIVE18_PROVIDER == 'railway'
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: PYTHONPATH=backend python3 backend/scripts/close_live18_railway_authority.py
+      - name: Always remove the run-scoped Railway SSH key
+        if: always() && env.LIVE18_PROVIDER == 'railway'
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          cleanup_failed=0
+          if [ -f "$LIVE18_RAILWAY_SSH_FINGERPRINT_PATH" ]; then
+            fingerprint=$(<"$LIVE18_RAILWAY_SSH_FINGERPRINT_PATH")
+            case "$fingerprint" in SHA256:*) ;; *) exit 2 ;; esac
+            railway ssh keys remove "$fingerprint" >/dev/null 2>&1 || true
+            ssh-add -d "$LIVE18_RAILWAY_SSH_PRIVATE_KEY" >/dev/null 2>&1 || true
+            rm -f "$LIVE18_RAILWAY_SSH_PRIVATE_KEY.pub"
+            key_removed=false
+            absent_observations=0
+            for attempt in $(seq 1 12); do
+              if railway ssh keys list > "$RUNNER_TEMP/live18-railway-ssh-keys-after.txt" && \
+                 ! grep -F -- "$fingerprint" "$RUNNER_TEMP/live18-railway-ssh-keys-after.txt" >/dev/null; then
+                absent_observations=$((absent_observations + 1))
+                if test "$absent_observations" -eq 2; then
+                  key_removed=true
+                  break
+                fi
+              else
+                absent_observations=0
+              fi
+              echo "Waiting for Railway SSH key removal (attempt $attempt/12)" >&2
+              sleep 2
+            done
+            if test "$key_removed" != true; then
+              echo "Run-scoped Railway SSH key remained registered" >&2
+              cleanup_failed=1
+            fi
+          fi
+          if [ -f "$LIVE18_RAILWAY_SSH_AGENT_STARTED_PATH" ]; then
+            ssh-add -D >/dev/null 2>&1 || true
+            ssh-agent -k >/dev/null 2>&1 || cleanup_failed=1
+          fi
+          rm -f "$LIVE18_RAILWAY_SSH_PRIVATE_KEY" \
+            "$LIVE18_RAILWAY_SSH_PRIVATE_KEY.pub" \
+            "$LIVE18_RAILWAY_SSH_FINGERPRINT_PATH" \
+            "$LIVE18_RAILWAY_SSH_REGISTERED_PATH" \
+            "$LIVE18_RAILWAY_SSH_AGENT_STARTED_PATH" \
+            "$LIVE18_RAILWAY_AUTHORITY_OPEN_ATTEMPTED_PATH" \
+            "$RUNNER_TEMP/live18-railway-ssh-probe.err" \
+            "$RUNNER_TEMP/live18-railway-ssh-keys-before-remove.txt" \
+            "$RUNNER_TEMP/live18-railway-ssh-keys.txt" \
+            "$RUNNER_TEMP/live18-railway-ssh-keys-after.txt"
+          exit "$cleanup_failed"

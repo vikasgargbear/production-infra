@@ -1,35 +1,47 @@
 import React from 'react';
 import {
-  CreditCard, Calculator, CheckCircle, Printer, ArrowLeft,
-  X, History, Plus, Loader2, AlertCircle, User, FileText
+  CreditCard, CheckCircle, Printer,
+  X, Loader2, AlertCircle, FileText
 } from 'lucide-react';
 import { PaymentProvider, usePayment } from '../../../contexts/PaymentContext';
-import { customersApi, invoicesApi } from '../../../services/api';
 import { paymentAllocationApi } from '../../../services/api/modules/finance/paymentAllocation.api';
-import { submitCustomerPayment } from '../../../services/api/modules/finance/payments.api';
-import { paymentsDataService } from '../../../services/offline/modules/payments/PaymentsDataService';
-import InvoiceSelector from '../shared/InvoiceSelector';
 import PaymentFlowOptimized from '../shared/PaymentFlowOptimized';
-import PaymentSummary from '../shared/PaymentSummary';
 import PaymentSummaryCompact from '../shared/PaymentSummaryCompact';
+import { projectPaymentOutstandingInvoices } from './paymentOutstandingProjection';
+import {
+  allocateReceiptByMethod,
+  buildCustomerReceiptPreparePayload,
+  centsToMoney,
+  moneyToCents,
+  receiptEscapeAction,
+  type CanonicalCustomerReceiptPreparePayload,
+  type ReceiptAllocation,
+} from './customerReceiptCommand';
+import {
+  approveCustomerReceipt,
+  prepareCustomerReceipt,
+  reconcileCustomerReceipt,
+} from '../../../services/api/modules/finance/customerReceipts.api';
+import { clientUuid } from '../../../utils/clientUuid';
+import type { CanonicalCommandPreview } from '../../../services/api/canonicalOperatorActions';
+import CustomerReceiptReviewDialog from './CustomerReceiptReviewDialog';
 
 
 // Import global components
-import { CustomerSearch, ProductSearch, GSTCalculator, ProductCreationModal, ProceedToReviewComponent, ViewHistoryButton, ModuleHeader, Card, CustomerCreation } from '../../global';
-import documentNumberGenerator from '../../../services/offline/documents/documentNumberGenerator';
-import { showFinancialEntryNotification } from '../../../utils/financialEntryNotifier';
-import { useNetworkStatus } from '../../../hooks/useNetworkStatus';
+import { ProceedToReviewComponent, ModuleHeader, Card, CustomerCreation } from '../../global';
 
 
 interface PaymentEntryContentProps {
   onClose: () => void;
 }
 
-interface KeyboardShortcut {
-  key: string;
-  label: string;
-}
+const isPositiveExactMoney = (value: unknown): boolean => {
+  try { return moneyToCents(String(value ?? '')) > 0n; } catch { return false; }
+};
 
+const exactMoneySum = (values: readonly (string | number)[]): string => (
+  centsToMoney(values.reduce<bigint>((sum, value) => sum + moneyToCents(value), 0n))
+);
 
 // Inner component that uses the context
 const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) => {
@@ -39,7 +51,6 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
     setCustomer,
     currentStep,
     saving,
-    setSaving,
     setCurrentStep,
     resetPayment,
     message,
@@ -47,12 +58,11 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
     clearMessage,
     setMessage,
     setPaymentField,
-    errors,
+    setSaving,
     outstandingInvoices,
     setOutstandingInvoices
   } = usePayment();
 
-  const [showGSTCalculator, setShowGSTCalculator] = React.useState<boolean>(false);
   const [showCustomerModal, setShowCustomerModal] = React.useState<boolean>(false);
 
   // API data states
@@ -60,23 +70,34 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
   const [error, setError] = React.useState<string | null>(null);
 
   // Manual invoice selection state
-  const [selectedInvoiceIds, setSelectedInvoiceIds] = React.useState<Set<number>>(new Set());
-  const [manualAllocations, setManualAllocations] = React.useState<{ [key: number]: number }>({});
-  const { isOnline } = useNetworkStatus();
-
-  // Generate receipt number on component mount (local-only, instant)
-  React.useEffect(() => {
-    if (!payment.receipt_no || payment.receipt_no === 'RCT-TEMP') {
-      documentNumberGenerator.generateReceiptNumber().then(receiptNo => {
-        setPaymentField('receipt_no', receiptNo);
-      });
-    }
-  }, []);
+  const [selectedInvoiceIds, setSelectedInvoiceIds] = React.useState<Set<string>>(new Set());
+  const [manualAllocations, setManualAllocations] = React.useState<Record<string, string>>({});
+  const [hasLoadedOutstanding, setHasLoadedOutstanding] = React.useState(false);
+  const receiptAttemptRef = React.useRef<{
+    fingerprint: string;
+    idempotencyKey: string;
+    lifecycleId: string;
+    preview?: CanonicalCommandPreview;
+  } | null>(null);
+  const postedReceiptRef = React.useRef<{
+    paymentId: string;
+    payload: ReturnType<typeof buildCustomerReceiptPreparePayload>;
+    invoiceByOpenItem: Map<string, { invoice_id: string; due: string | number }>;
+  } | null>(null);
+  const [postedPaymentId, setPostedPaymentId] = React.useState('');
+  const [postedReceiptRowVersion, setPostedReceiptRowVersion] = React.useState(0);
+  const [receiptConfirmation, setReceiptConfirmation] = React.useState<{
+    preview: CanonicalCommandPreview;
+    payload: CanonicalCustomerReceiptPreparePayload;
+    allocations: ReceiptAllocation[];
+    invoiceByOpenItem: Map<string, { invoice_id: string; due: string | number }>;
+  } | null>(null);
+  const outstandingRequestSequence = React.useRef(0);
 
   // Auto-apply allocation when amount changes ONLY if user explicitly selected an auto method
   React.useEffect(() => {
     // Only auto-allocate if user explicitly chose a method other than manual
-    if (payment.amount && parseFloat(payment.amount) > 0 &&
+    if (payment.amount && isPositiveExactMoney(payment.amount) &&
       outstandingInvoices && outstandingInvoices.length > 0 &&
       payment.allocation_method && payment.allocation_method !== 'manual' &&
       ['fifo', 'lifo', 'highest'].includes(payment.allocation_method)) {
@@ -109,18 +130,6 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
     };
   }, []);
 
-  // Keyboard shortcuts
-  const shortcuts: KeyboardShortcut[] = currentStep === 1 ? [
-    { key: 'Ctrl+N', label: 'Add Customer' },
-    { key: 'Ctrl+S', label: 'Search Products' },
-    { key: 'Ctrl+Enter', label: 'Proceed' },
-    { key: 'Esc', label: 'Close' }
-  ] : [
-    { key: 'Ctrl+S', label: 'Save Payment' },
-    { key: 'Ctrl+P', label: 'Print' },
-    { key: 'Esc', label: 'Back' }
-  ];
-
   React.useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
       // Ctrl+Enter to proceed
@@ -130,43 +139,53 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
       // Ctrl+S to save
       if (e.ctrlKey && e.key === 's' && currentStep === 2) {
         e.preventDefault();
-        savePayment();
-      }
-      // Ctrl+G for GST Calculator
-      if (e.ctrlKey && e.key === 'g') {
-        e.preventDefault();
-        setShowGSTCalculator(true);
+        void requestPaymentReview();
       }
       // Esc to close/back
       if (e.key === 'Escape') {
-        if (currentStep === 2) {
-          setCurrentStep(1);
-        } else {
-          onClose();
-        }
+        if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
+        const action = receiptEscapeAction(currentStep, postedPaymentId);
+        if (action === 'block') setMessage(`Receipt ${postedPaymentId} is already posted. Reconcile its readback before editing or leaving.`, 'error');
+        if (action === 'back') setCurrentStep(1);
+        if (action === 'close') onClose();
       }
     };
 
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [currentStep, payment]);
+  }, [currentStep, payment, postedPaymentId]);
 
   const validatePayment = (): boolean => {
     if (!selectedCustomer) {
       setMessage('Please select a customer', 'error');
       return false;
     }
-    if (!payment.amount || parseFloat(payment.amount) <= 0) {
-      setMessage('Please enter a valid payment amount', 'error');
+    try {
+      buildCustomerReceiptPreparePayload({
+        customer_account_id: selectedCustomer.customer_id,
+        payment_date: payment.payment_date,
+        business_date: payment.business_date,
+        payment_mode: payment.payment_mode,
+        amount: payment.amount,
+        reference_number: payment.reference_number,
+        bank_account_id: payment.bank_account_id,
+        settlement_account_id: payment.settlement_account_id,
+        branch_id: payment.branch_id,
+        evidence_attachment_id: payment.evidence_attachment_id,
+        sales_order_id: payment.sales_order_id,
+        receipt_purpose: payment.receipt_purpose,
+        instrument_number: payment.instrument_number,
+        instrument_date: payment.instrument_date,
+        drawee_bank_name: payment.drawee_bank_name,
+        account_payee_confirmed: payment.account_payee_confirmed,
+        allocation_method: payment.allocation_method,
+        allocations: payment.allocations,
+      }, outstandingInvoices, 'erp-web-customer-receipt-prepare:validation-only');
+      return true;
+    } catch (validationError) {
+      setMessage(validationError instanceof Error ? validationError.message : 'Receipt details are invalid.', 'error');
       return false;
     }
-    if (!payment.payment_mode) {
-      setMessage('Please select a payment mode', 'error');
-      return false;
-    }
-
-
-    return true;
   };
 
   const goToSummary = (): void => {
@@ -175,125 +194,108 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
     }
   };
 
-  const savePayment = async (): Promise<void> => {
-    setSaving(true);
+  const receiptSuccessMessage = payment.receipt_purpose === 'customer_advance'
+    ? 'Customer advance posted and reconciled against the authoritative goods order.'
+    : 'Receipt posted and reconciled against the authoritative invoice balance.';
+
+  const requestPaymentReview = async (): Promise<void> => {
+    if (!selectedCustomer || saving) return;
     try {
-      // Map payment mode to backend expected format
-      const paymentModeMap: { [key: string]: string } = {
-        'CASH': 'cash',
-        'UPI': 'upi',
-        'BANK': 'bank_transfer',
-        'BANK_TRANSFER': 'bank_transfer',
-        'CHEQUE': 'cheque',
-        'CARD': 'bank_transfer',
-        'CREDIT': 'credit_adjustment',
-        'SPLIT': 'cash' // Use cash for split payments
-      };
-
-      // Prepare payment data matching backend GeneralPaymentCreate schema
-      const paymentData = {
-        customer_id: selectedCustomer?.customer_id || selectedCustomer?.id,
-        payment_date: payment.payment_date || new Date().toISOString().split('T')[0],
-        payment_type: 'invoice_payment', // matches backend pattern
-        amount: parseFloat(payment.amount || '0'),
-        payment_mode: paymentModeMap[payment.payment_mode] || 'cash',
-        reference_number: payment.reference_number || null,
-        notes: payment.remarks || '',
-        // Store allocations separately - will handle after payment creation
-        _allocations: payment.allocations ? payment.allocations.map((alloc: any) => ({
-          invoice_id: alloc.invoice_id,
-          allocated_amount: parseFloat(alloc.allocated_amount || 0)
-        })) : []
-      };
-
-      // Basic validation
-      if (!paymentData.amount || paymentData.amount <= 0 || isNaN(paymentData.amount)) {
-        setMessage('Payment amount is required and must be a valid number', 'error');
-        setSaving(false);
+      setSaving(true);
+      clearMessage();
+      if (postedReceiptRef.current) {
+        const posted = postedReceiptRef.current;
+        const readback = await reconcileCustomerReceipt(posted.paymentId, posted.payload, posted.invoiceByOpenItem);
+        setPostedReceiptRowVersion(readback.row_version);
+        setPaymentField('receipt_no', readback.payment_number || readback.payment_id);
+        setMessage(receiptSuccessMessage, 'success');
+        setCurrentStep(3);
         return;
       }
-
-      // Make the actual API call to create payment
-      // Try customer payment endpoint which exists but has a backend bug (uses wrong schema)
-      const customerPaymentData = {
-        customer_id: selectedCustomer?.customer_id || selectedCustomer?.id,
-        customer_name: selectedCustomer?.customer_name || selectedCustomer?.name,
-        payment_date: payment.payment_date || new Date().toISOString().split('T')[0],
-        amount: parseFloat(payment.amount || '0'),
-        payment_mode: paymentModeMap[payment.payment_mode] || 'cash',
-        reference_number: payment.reference_number || `PMT-${Date.now()}`,
-        notes: payment.remarks || 'Direct payment received',
-        allocate_to_invoices: payment.allocations ? payment.allocations.map((a: any) => a.invoice_id) : []
+      const draft = {
+        customer_account_id: selectedCustomer.customer_id,
+        payment_date: payment.payment_date,
+        business_date: payment.business_date,
+        payment_mode: payment.payment_mode,
+        amount: payment.amount,
+        reference_number: payment.reference_number,
+        bank_account_id: payment.bank_account_id,
+        settlement_account_id: payment.settlement_account_id,
+        branch_id: payment.branch_id,
+        evidence_attachment_id: payment.evidence_attachment_id,
+        sales_order_id: payment.sales_order_id,
+        receipt_purpose: payment.receipt_purpose,
+        instrument_number: payment.instrument_number,
+        instrument_date: payment.instrument_date,
+        drawee_bank_name: payment.drawee_bank_name,
+        account_payee_confirmed: payment.account_payee_confirmed,
+        allocation_method: payment.allocation_method,
+        allocations: payment.allocations,
       };
-      const customerId = selectedCustomer?.customer_id || selectedCustomer?.id;
-
-      try {
-        const paymentResult = await submitCustomerPayment(customerId, customerPaymentData);
-
-        if (paymentResult.raw) {
-          const paymentNumber = paymentResult.paymentReference || payment.reference_number;
-
-          setPaymentField('receipt_no', paymentNumber || payment.receipt_no);
-
-          // Allocations are handled by backend through invoice_ids
-          // The backend will create payment_allocations records
-          // Triggers will update customer_outstanding automatically
-          if (payment.allocations && payment.allocations.length > 0) {
-          }
-
-          showFinancialEntryNotification({
-            title: 'Payment Receipt Posted',
-            reference: paymentNumber || payment.receipt_no,
-            amount: paymentData.amount,
-            status: 'confirmed',
-            impacts: [
-              'This money is now marked as received.',
-              'The customer now owes less by this amount.',
-              'If you linked invoices, this payment is used against those bills.'
-            ]
-          });
-          setMessage('Payment saved successfully!', 'success');
-          setCurrentStep(3);
-        } else {
-          throw new Error('Failed to save payment');
-        }
-      } catch (apiError: any) {
-        if (!isOnline || apiError.code === 'ERR_NETWORK') {
-          const offlineId = await paymentsDataService.saveReceipt({
-            receipt_number: payment.receipt_no || `RCPT-OFFLINE-${Date.now().toString(36).toUpperCase()}`,
-            receipt_date: customerPaymentData.payment_date,
-            customer_id: String(customerId),
-            customer_name: selectedCustomer?.customer_name || selectedCustomer?.name || '',
-            amount: customerPaymentData.amount,
-            payment_method: customerPaymentData.payment_mode as any,
-            notes: customerPaymentData.notes,
-            allocated_invoices: (payment.allocations || []).map((allocation: any) => ({
-              invoice_id: String(allocation.invoice_id),
-              invoice_number: String(allocation.invoice_number || allocation.invoice_id),
-              allocated_amount: Number(allocation.amount || allocation.allocated_amount || 0)
-            }))
-          });
-
-          setPaymentField('receipt_no', payment.receipt_no || offlineId);
-          showFinancialEntryNotification({
-            title: 'Payment Receipt Queued',
-            reference: payment.receipt_no || offlineId,
-            amount: paymentData.amount,
-            status: 'queued',
-            impacts: [
-              'The payment is saved on this device for now.',
-              'It will be sent to the main system when the connection works again.',
-              'The customer balance will change in the main system after that sync.'
-            ]
-          });
-          setMessage('Payment saved offline and queued for sync.', 'info');
-          setCurrentStep(3);
-        } else {
-          throw apiError;
-        }
+      const fingerprint = JSON.stringify(draft);
+      if (receiptAttemptRef.current?.fingerprint !== fingerprint) {
+        receiptAttemptRef.current = {
+          fingerprint,
+          idempotencyKey: `erp-web-customer-receipt-prepare:${clientUuid()}`,
+          lifecycleId: clientUuid(),
+          preview: undefined,
+        };
       }
-    } catch (error: any) {
-      setMessage(error.response?.data?.message || 'Failed to save payment. Please try again.', 'error');
+      const attempt = receiptAttemptRef.current!;
+      const payload = buildCustomerReceiptPreparePayload(
+        draft,
+        outstandingInvoices,
+        attempt.idempotencyKey,
+      );
+      let preview = attempt.preview;
+      if (!preview) {
+        const prepared = await prepareCustomerReceipt(payload);
+        preview = prepared.data;
+        attempt.preview = preview;
+      }
+      const invoiceByOpenItem = new Map(payload.allocations.map(allocation => {
+        const invoice = outstandingInvoices.find(candidate => candidate.open_item_id === allocation.open_item_id)!;
+        return [allocation.open_item_id, { invoice_id: invoice.invoice_id, due: invoice.amount_due }];
+      }));
+      setReceiptConfirmation({
+        preview,
+        payload,
+        allocations: payment.allocations.map(allocation => ({ ...allocation })),
+        invoiceByOpenItem,
+      });
+      setMessage('Authoritative receipt preview prepared. Review it before posting.', 'info');
+    } catch (saveError: any) {
+      const detail = saveError?.response?.data?.detail;
+      const reason = typeof detail === 'string' ? detail : detail?.message;
+      setMessage(reason || saveError?.message || 'Receipt review failed. Nothing was posted.', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const confirmPayment = async (): Promise<void> => {
+    if (!receiptConfirmation || saving) return;
+    setSaving(true);
+    clearMessage();
+    try {
+      const attempt = receiptAttemptRef.current;
+      if (!attempt || attempt.preview?.command_request_id !== receiptConfirmation.preview.command_request_id) {
+        throw new Error('Receipt review identity was lost. Close this review and prepare it again.');
+      }
+      const { preview, payload, invoiceByOpenItem } = receiptConfirmation;
+      const executed = await approveCustomerReceipt(preview, attempt.lifecycleId);
+      postedReceiptRef.current = { paymentId: executed.payment_id, payload, invoiceByOpenItem };
+      setPostedPaymentId(executed.payment_id);
+      setReceiptConfirmation(null);
+      const readback = await reconcileCustomerReceipt(executed.payment_id, payload, invoiceByOpenItem);
+      setPostedReceiptRowVersion(readback.row_version);
+      setPaymentField('receipt_no', readback.payment_number || readback.payment_id);
+      setMessage(receiptSuccessMessage, 'success');
+      setCurrentStep(3);
+    } catch (saveError: any) {
+      const detail = saveError?.response?.data?.detail;
+      const reason = typeof detail === 'string' ? detail : detail?.message;
+      setMessage(reason || saveError?.message || 'Receipt posting failed. Nothing was reported as successful.', 'error');
     } finally {
       setSaving(false);
     }
@@ -304,6 +306,11 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
   };
 
   const handleNewPayment = (): void => {
+    receiptAttemptRef.current = null;
+    postedReceiptRef.current = null;
+    setPostedPaymentId('');
+    setPostedReceiptRowVersion(0);
+    setReceiptConfirmation(null);
     resetPayment();
     setCurrentStep(1);
     clearMessage();
@@ -314,46 +321,18 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
     const invoices = outstandingInvoices || [];
     if (invoices.length === 0) return;
 
-    const paymentAmount = parseFloat(payment.amount || '0');
-    if (paymentAmount <= 0) return;
-
-    let sortedInvoices = [...invoices];
-
-    // Sort based on method
-    switch (method) {
-      case 'fifo':
-        // Sort by date ascending (oldest first)
-        sortedInvoices.sort((a, b) => new Date(a.invoice_date).getTime() - new Date(b.invoice_date).getTime());
-        break;
-      case 'lifo':
-        // Sort by date descending (newest first)
-        sortedInvoices.sort((a, b) => new Date(b.invoice_date).getTime() - new Date(a.invoice_date).getTime());
-        break;
-      case 'highest':
-        // Sort by amount descending (highest first)
-        sortedInvoices.sort((a, b) => b.amount_due - a.amount_due);
-        break;
-    }
-
-    // Auto-allocate payment to sorted invoices
-    let remainingAmount = paymentAmount;
-    const allocations: any[] = [];
-
-    for (const invoice of sortedInvoices) {
-      if (remainingAmount <= 0) break;
-
-      const allocatedAmount = Math.min(remainingAmount, invoice.amount_due);
-      if (allocatedAmount > 0) {
-        allocations.push({
-          invoice_id: invoice.invoice_id,
-          invoice_number: invoice.invoice_number,
-          allocated_amount: allocatedAmount,
-          invoice_date: invoice.invoice_date,
-          total_amount: invoice.total_amount,
-          amount_due: invoice.amount_due
-        });
-        remainingAmount -= allocatedAmount;
-      }
+    if (!['fifo', 'lifo', 'highest'].includes(method)) return;
+    let allocations: ReceiptAllocation[];
+    try {
+      allocations = allocateReceiptByMethod(payment.amount, invoices, method as 'fifo' | 'lifo' | 'highest');
+    } catch (allocationError) {
+      setMessage(
+        allocationError instanceof Error
+          ? allocationError.message
+          : 'Authoritative outstanding amounts could not be allocated.',
+        'error',
+      );
+      return;
     }
 
     // Update payment with allocations
@@ -363,8 +342,9 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
   };
 
   // Handle manual invoice selection with proper allocation amounts
-  const handleManualInvoiceSelection = (checked: boolean, invoiceId: number, invoice: any) => {
-    const paymentAmount = parseFloat(payment.amount) || 0;
+  const handleManualInvoiceSelection = (checked: boolean, invoiceId: string, invoice: any) => {
+    let paymentCents = 0n;
+    try { paymentCents = moneyToCents(payment.amount); } catch { return; }
     const newSelected = new Set(selectedInvoiceIds);
     let newManualAllocations = { ...manualAllocations };
 
@@ -372,22 +352,23 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
       newSelected.add(invoiceId);
 
       // Calculate remaining payment amount after existing allocations
-      let totalAllocated = 0;
+      let totalAllocated = 0n;
       Object.entries(newManualAllocations).forEach(([id, amount]) => {
-        if (parseInt(id) !== invoiceId) {
-          totalAllocated += amount as number;
+        if (id !== invoiceId) {
+          totalAllocated += moneyToCents(amount);
         }
       });
 
-      const remainingAmount = paymentAmount - totalAllocated;
+      const remainingAmount = paymentCents - totalAllocated;
       // Allocate the minimum of remaining payment or invoice due amount
-      const allocateAmount = Math.min(remainingAmount, invoice.amount_due);
+      const invoiceDue = moneyToCents(invoice.amount_due);
+      const allocateAmount = remainingAmount < invoiceDue ? remainingAmount : invoiceDue;
 
-      if (allocateAmount > 0) {
-        newManualAllocations[invoiceId] = allocateAmount;
+      if (allocateAmount > 0n) {
+        newManualAllocations[invoiceId] = centsToMoney(allocateAmount);
       } else {
-        // No remaining payment to allocate
-        alert('Payment amount fully allocated. Increase payment amount or uncheck other invoices.');
+        // No remaining payment to allocate — surface non-blocking inline message
+        setMessage('Payment amount fully allocated. Increase the payment amount or uncheck other invoices.', 'error');
         return;
       }
     } else {
@@ -398,13 +379,24 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
     setSelectedInvoiceIds(newSelected);
     setManualAllocations(newManualAllocations);
 
-    // Update payment allocations with correct amounts
+    const missingEvidence = Array.from(newSelected).find(id => (
+      !outstandingInvoices.some(candidate => candidate.invoice_id === id)
+      || !newManualAllocations[id]
+    ));
+    if (missingEvidence) {
+      setMessage('The selected invoice lost its authoritative allocation evidence. Reload outstanding invoices and select it again.', 'error');
+      return;
+    }
+
+    // Update payment allocations only from the selected canonical invoice and
+    // the explicit amount established above. Never manufacture an empty
+    // invoice identity or a zero allocation.
     const allocations = Array.from(newSelected).map(id => {
-      const inv = outstandingInvoices.find((inv: any) => inv.invoice_id === id);
+      const inv = outstandingInvoices.find(candidate => candidate.invoice_id === id)!;
       return {
         invoice_id: id,
-        invoice_number: inv?.invoice_number || '',
-        allocated_amount: newManualAllocations[id] || 0
+        invoice_number: inv.invoice_number,
+        amount: newManualAllocations[id]
       };
     });
 
@@ -412,6 +404,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
   };
 
   const handleCustomerSelect = async (customer: any): Promise<void> => {
+    const requestSequence = ++outstandingRequestSequence.current;
     setCustomer(customer);
 
     // Clear manual selections when customer changes
@@ -419,14 +412,16 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
     setManualAllocations({});
     setPaymentField('allocations', []);
 
-    // Keep manual as default - more user friendly
+    // FIFO is the reviewed default; Manual and Keep as Advance remain explicit choices.
     if (!payment.allocation_method) {
-      setPaymentField('allocation_method', 'manual');
+      setPaymentField('allocation_method', 'fifo');
     }
 
     // Fetch outstanding invoices - using the same approach as return component
     if (!customer) {
       setOutstandingInvoices([]);
+      setHasLoadedOutstanding(false);
+      setIsLoading(false);
       return;
     }
 
@@ -434,97 +429,19 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
 
     try {
       setIsLoading(true);
-
-      // Import invoicesApi for fetching invoices
-      const { invoicesApi } = await import('../../../services/api');
-      const response = await invoicesApi.getAll({
-        customer_id: customerId,
-        limit: 100,
-        offset: 0,
-        payment_status: 'pending,partial'
-      });
-
-      const invoiceData = response?.data || response;
-      if (invoiceData && invoiceData.invoices) {
-        // The invoices are in invoiceData.invoices array
-        const invoices = invoiceData.invoices || [];
-
-        // Fetch existing allocations for each invoice
-        const invoicesWithAllocations = await Promise.all(
-          invoices.map(async (inv: any) => {
-            try {
-              // Fetch existing payment allocations for this invoice
-              const allocResponse = await paymentAllocationApi.getInvoicePayments(inv.invoice_id);
-              const existingAllocations = allocResponse.data?.payments || [];
-              const totalAllocated = existingAllocations.reduce((sum: number, alloc: any) =>
-                sum + (alloc.allocated_amount || 0), 0);
-
-              return {
-                ...inv,
-                existing_allocations: existingAllocations,
-                total_allocated: totalAllocated,
-                remaining_due: (inv.credit_amount || inv.final_amount) - totalAllocated
-              };
-            } catch (error) {
-              // If allocation fetch fails, use invoice as-is
-              return {
-                ...inv,
-                existing_allocations: [],
-                total_allocated: 0,
-                remaining_due: inv.credit_amount || inv.final_amount
-              };
-            }
-          })
-        );
-
-        // Filter and map outstanding invoices
-        const outstandingInvoices = invoicesWithAllocations
-          .filter((inv: any) => {
-            // Use remaining_due which accounts for existing allocations
-            return inv.remaining_due > 0.01;
-          })
-          .map((inv: any) => {
-            const totalAmount = inv.final_amount || inv.total_amount || inv.total_amount || 0;
-            const paidAmount = inv.paid_amount || 0;
-
-            // Use remaining_due which already accounts for existing allocations
-            const amountDue = inv.remaining_due;
-
-            return {
-              invoice_number: inv.invoice_number || inv.invoice_number || `INV-${inv.invoice_id}`,
-              invoice_date: inv.invoice_date || inv.created_at,
-              total_amount: totalAmount,
-              paid_amount: paidAmount,
-              amount_due: amountDue,
-              remaining_due: amountDue, // Same as amount_due since it's already calculated
-              // Show existing allocations info
-              total_allocated: inv.total_allocated || 0,
-              existing_allocations: inv.existing_allocations || 0, // Changed to number for display
-              status: inv.payment_status || 'pending',
-              invoice_id: inv.invoice_id || inv.id,
-              customer_id: customerId
-            };
-          });
-
-        // Sort invoices by date (oldest first) for display
-        outstandingInvoices.sort((a, b) =>
-          new Date(a.invoice_date).getTime() - new Date(b.invoice_date).getTime()
-        );
-
-        setOutstandingInvoices(outstandingInvoices);
-
-        // Keep manual as default - don't auto-allocate
-        if (!payment.allocation_method) {
-          setPaymentField('allocation_method', 'manual');
-        }
-      } else {
-        setOutstandingInvoices([]);
-      }
+      setError(null);
+      setHasLoadedOutstanding(false);
+      const response = await paymentAllocationApi.getUnpaidInvoices(customerId);
+      if (requestSequence !== outstandingRequestSequence.current) return;
+      setOutstandingInvoices(projectPaymentOutstandingInvoices(response.data));
+      setHasLoadedOutstanding(true);
     } catch (error: any) {
+      if (requestSequence !== outstandingRequestSequence.current) return;
       setOutstandingInvoices([]);
-      // Don't show error message, just silently handle it
+      setHasLoadedOutstanding(false);
+      setError('Unable to load authoritative outstanding invoices. No advance allocation was assumed.');
     } finally {
-      setIsLoading(false);
+      if (requestSequence === outstandingRequestSequence.current) setIsLoading(false);
     }
   };
 
@@ -539,11 +456,20 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                 <CheckCircle className="w-8 h-8 text-blue-600" />
               </div>
               <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                Payment Recorded Successfully!
+                {receiptSuccessMessage}
               </h2>
-              <p className="text-2xl font-bold text-gray-900 mb-8">
-                Amount: ₹{parseFloat(payment.amount).toFixed(2)}
+              <p data-testid="canonical-posted-resource-id" className="mb-3 break-all font-mono text-sm text-gray-700">
+                {postedPaymentId}
               </p>
+              <p className="text-2xl font-bold text-gray-900 mb-8">
+                Amount: ₹{centsToMoney(moneyToCents(payment.amount))}
+              </p>
+
+              {payment.payment_mode === 'cheque' && postedPaymentId && postedReceiptRowVersion > 0 && (
+                <p className="mb-6 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+                  This cheque is in hand. Clearance or bounce is a separate command under Financial Hub → Cheque Actions and requires approval by another finance member.
+                </p>
+              )}
 
               <div className="flex justify-center space-x-3">
                 <button
@@ -555,7 +481,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                 </button>
                 <button
                   onClick={handleNewPayment}
-                  className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
+                  className="min-h-11 rounded-md bg-blue-600 px-4 py-2 text-white transition-colors hover:bg-blue-700"
                 >
                   New Payment
                 </button>
@@ -574,38 +500,27 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
   }
 
   return (
-    <div className="h-full bg-blue-50">
+    <div className="h-full bg-gray-50">
       <div className="h-full flex flex-col">
         {/* Header - Using Global ModuleHeader */}
         <ModuleHeader
           title="Payment Entry"
-          documentNumber={payment.receipt_no || 'RCT-' + Date.now().toString().slice(-6)}
+          documentNumber={payment.receipt_no || 'Assigned after posting'}
           status={currentStep === 1 ? 'draft' : 'review'}
           icon={CreditCard}
           iconColor="text-blue-600"
-          onClose={onClose}
+          onClose={postedPaymentId ? () => setMessage('This receipt was posted. Reconcile its readback before leaving this screen.', 'error') : onClose}
           historyType="payment"
-          showSaveDraft={currentStep === 1}
-          onSaveDraft={() => {
-            // TODO: Implement save draft
-          }}
-          additionalActions={[
-            {
-              label: "GST Calculator",
-              onClick: () => setShowGSTCalculator(true),
-              icon: Calculator,
-              variant: "default"
-            }
-          ] as any}
+          showSaveDraft={false}
         />
 
         {/* Keyboard Shortcuts Help */}
-        <div className="bg-blue-50 px-4 py-2 text-xs text-blue-700 border-b border-blue-200">
-          Keyboard shortcuts: <strong>Ctrl+N</strong> - Add Customer | <strong>Ctrl+G</strong> - GST Calculator | <strong>Ctrl+S</strong> - Save | <strong>Esc</strong> - Close
+        <div className="border-b border-gray-200 bg-white px-4 py-2 text-xs text-gray-600">
+          Keyboard shortcuts: <strong>Ctrl+N</strong> - Add Customer | <strong>Esc</strong> - Close
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto bg-blue-50">
+        <div className="flex-1 overflow-y-auto bg-gray-50">
           <div className="max-w-6xl mx-auto px-6 py-6">
 
             {/* Loading State */}
@@ -667,7 +582,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                         </h3>
                         <div className="flex items-center space-x-3">
                           {/* FIFO Quick Allocation Button */}
-                          {outstandingInvoices && outstandingInvoices.length > 0 && payment.amount && parseFloat(payment.amount) > 0 && (
+                          {outstandingInvoices && outstandingInvoices.length > 0 && payment.amount && isPositiveExactMoney(payment.amount) && (
                             <button
                               onClick={() => {
                                 setPaymentField('allocation_method', 'fifo');
@@ -682,12 +597,11 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
 
                           {/* Allocation Method Dropdown (simplified) */}
                           <select
-                            value={payment.allocation_method || 'manual'}
+                            aria-label="Customer receipt allocation method"
+                            value={payment.allocation_method || 'fifo'}
                             onChange={(e) => {
                               setPaymentField('allocation_method', e.target.value);
-                              if (e.target.value === 'advance') {
-                                setPaymentField('allocations', []);
-                              } else if (e.target.value !== 'manual') {
+                              if (e.target.value !== 'manual') {
                                 applyAllocationMethod(e.target.value);
                               }
                             }}
@@ -697,7 +611,6 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                             <option value="fifo">FIFO (Oldest First)</option>
                             <option value="lifo">LIFO (Newest First)</option>
                             <option value="highest">Highest First</option>
-                            <option value="advance">Keep as Advance</option>
                           </select>
                         </div>
                       </div>
@@ -724,7 +637,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                                 {payment.allocation_method === 'highest' && '💰 Highest First Applied'}
                               </span>
                               <span className="text-sm text-blue-600">
-                                ({payment.allocations.length} invoices, ₹{payment.allocations.reduce((sum: number, alloc: any) => sum + parseFloat(alloc.allocated_amount || 0), 0).toFixed(2)})
+                                ({payment.allocations.length} invoices, ₹{centsToMoney(payment.allocations.reduce<bigint>((sum, allocation) => sum + moneyToCents(allocation.amount), 0n))})
                               </span>
                             </div>
                             <button
@@ -746,18 +659,18 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                           <div className="text-2xl mb-2">💳</div>
                           <h4 className="font-semibold text-green-800 mb-1">Customer Advance Payment</h4>
                           <p className="text-sm text-green-700">
-                            This payment will be recorded as customer advance for future use.
+                            This posts a goods-order payment liability with zero invoice allocations. Service or mixed-supply advances fail closed.
                           </p>
                         </div>
                       )}
 
                       {/* No invoices message */}
-                      {!isLoading && (!outstandingInvoices || outstandingInvoices.length === 0) && payment.allocation_method !== 'advance' && (
+                      {!isLoading && hasLoadedOutstanding && (!outstandingInvoices || outstandingInvoices.length === 0) && payment.allocation_method !== 'advance' && (
                         <div className="text-center py-8">
                           <FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" />
                           <p className="text-gray-600 font-medium">No Outstanding Invoices</p>
                           <p className="text-sm text-gray-500 mt-2">
-                            This customer has no pending invoices. The payment will be recorded as an advance.
+                            This customer has no pending invoices. A reviewed goods-order advance remains available when its exact order identity is supplied.
                           </p>
                         </div>
                       )}
@@ -767,7 +680,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                         <div>
                           {/* Summary row */}
                           <div className="mb-3 text-sm text-gray-600">
-                            <span>{outstandingInvoices.length} invoices • Outstanding: ₹{outstandingInvoices.reduce((sum: number, inv: any) => sum + (inv.amount_due || 0), 0).toFixed(2)}</span>
+                            <span>{outstandingInvoices.length} invoices • Outstanding: ₹{exactMoneySum(outstandingInvoices.map(inv => inv.amount_due))}</span>
                           </div>
 
                           {/* Simple table */}
@@ -783,17 +696,19 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                                         onChange={(e) => {
                                           if (e.target.checked) {
                                             // Select all with FIFO-like allocation up to payment amount
-                                            const paymentAmount = parseFloat(payment.amount) || 0;
-                                            const newSelected = new Set<number>();
-                                            const newAllocations: { [key: number]: number } = {};
+                                            let paymentAmount = 0n;
+                                            try { paymentAmount = moneyToCents(payment.amount); } catch { return; }
+                                            const newSelected = new Set<string>();
+                                            const newAllocations: Record<string, string> = {};
                                             let remainingPayment = paymentAmount;
 
                                             outstandingInvoices.forEach((inv: any) => {
-                                              if (remainingPayment > 0) {
+                                              if (remainingPayment > 0n) {
                                                 const id = inv.invoice_id;
                                                 newSelected.add(id);
-                                                const allocateAmount = Math.min(remainingPayment, inv.amount_due);
-                                                newAllocations[id] = allocateAmount;
+                                                const due = moneyToCents(inv.amount_due);
+                                                const allocateAmount = remainingPayment < due ? remainingPayment : due;
+                                                newAllocations[id] = centsToMoney(allocateAmount);
                                                 remainingPayment -= allocateAmount;
                                               }
                                             });
@@ -802,14 +717,14 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                                             setManualAllocations(newAllocations);
 
                                             // Update payment allocations
-                                            const allocations = Array.from(newSelected).map(id => {
-                                              const inv = outstandingInvoices.find((inv: any) => inv.invoice_id === id);
-                                              return {
-                                                invoice_id: id,
-                                                invoice_number: inv?.invoice_number || '',
-                                                allocated_amount: newAllocations[id] || 0
-                                              };
-                                            });
+                                                const allocations = Array.from(newSelected).map(id => {
+                                                  const inv = outstandingInvoices.find((candidate: any) => candidate.invoice_id === id)!;
+                                                  return {
+                                                    invoice_id: id,
+                                                    invoice_number: inv.invoice_number,
+                                                    amount: newAllocations[id]
+                                                  };
+                                                });
                                             setPaymentField('allocations', allocations);
                                           } else {
                                             setSelectedInvoiceIds(new Set());
@@ -830,8 +745,8 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                                 </tr>
                               </thead>
                               <tbody>
-                                {outstandingInvoices.map((invoice: any, index: number) => {
-                                  const invoiceId = invoice.invoice_id || index;
+                                    {outstandingInvoices.map((invoice: any) => {
+                                      const invoiceId = String(invoice.invoice_id);
                                   const isSelected = selectedInvoiceIds.has(invoiceId);
                                   const autoAllocation = payment.allocations?.find((alloc: any) =>
                                     alloc.invoice_id === invoiceId || alloc.invoice_number === invoice.invoice_number
@@ -843,6 +758,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                                         {payment.allocation_method === 'manual' && (
                                           <input
                                             type="checkbox"
+                                            aria-label={`Select canonical invoice ${invoiceId}`}
                                             checked={isSelected}
                                             onChange={(e) => {
                                               handleManualInvoiceSelection(e.target.checked, invoiceId, invoice);
@@ -853,20 +769,20 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                                       </td>
                                       <td className="py-2 px-2 font-medium">{invoice.invoice_number}</td>
                                       <td className="py-2 px-2 text-gray-600">{new Date(invoice.invoice_date).toLocaleDateString()}</td>
-                                      <td className="text-right py-2 px-2">₹{(invoice.total_amount || 0).toFixed(2)}</td>
+                                      <td className="text-right py-2 px-2">₹{invoice.total_amount}</td>
                                       <td className="text-right py-2 px-2 text-gray-600">
-                                        ₹{((invoice.total_amount || 0) - (invoice.amount_due || 0)).toFixed(2)}
-                                        {invoice.total_allocated > 0 && (
+                                        ₹{centsToMoney(moneyToCents(invoice.total_amount) - moneyToCents(invoice.amount_due))}
+                                        {moneyToCents(invoice.total_allocated) > 0n && (
                                           <span className="block text-xs text-blue-600">
-                                            (incl. ₹{invoice.total_allocated.toFixed(2)} recent)
+                                            (incl. ₹{invoice.total_allocated} recent)
                                           </span>
                                         )}
                                       </td>
-                                      <td className="text-right py-2 px-2 font-medium text-red-600">₹{invoice.amount_due.toFixed(2)}</td>
+                                      <td className="text-right py-2 px-2 font-medium text-red-600">₹{invoice.amount_due}</td>
                                       <td className="text-right py-2 px-2 font-medium text-green-600">
                                         {payment.allocation_method === 'manual'
-                                          ? (isSelected ? `₹${(manualAllocations[invoiceId] || 0).toFixed(2)}` : '-')
-                                          : (autoAllocation ? `₹${(autoAllocation.amount || 0).toFixed(2)}` : '-')
+                                              ? (isSelected ? `₹${manualAllocations[invoiceId] ?? 'Unavailable'}` : '-')
+                                          : (autoAllocation ? `₹${autoAllocation.amount}` : '-')
                                         }
                                       </td>
                                     </tr>
@@ -884,6 +800,11 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
             ) : (
               // Step 2: Payment Summary
               <div className="mb-8">
+                {postedPaymentId && (
+                  <div role="status" className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+                    Receipt <strong>{postedPaymentId}</strong> is already posted. The only available action is authoritative readback reconciliation; posting will not run again.
+                  </div>
+                )}
                 <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-4 flex items-center">
                   <CheckCircle className="w-4 h-4 mr-2" />
                   PAYMENT SUMMARY
@@ -897,34 +818,23 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
         {/* Footer - Using Global Component */}
         <ProceedToReviewComponent
           currentStep={currentStep}
-          canProceed={Boolean(
-            (currentStep === 1 && selectedCustomer && payment.amount && payment.payment_mode) ||
-            (currentStep === 2)
-          )}
-          onBack={currentStep === 2 ? () => setCurrentStep(1) : undefined}
+          canProceed={Boolean(currentStep === 1 && selectedCustomer && payment.amount && payment.payment_mode)}
+          onBack={currentStep === 2 && !postedPaymentId ? () => setCurrentStep(1) : undefined}
           onProceed={() => {
             if (currentStep === 1) {
               goToSummary();
             } else if (currentStep === 2) {
-              savePayment();
+              requestPaymentReview();
             }
           }}
           onReset={currentStep === 1 ? resetPayment : undefined}
           totalItems={payment.allocations ? payment.allocations.length : 0}
-          totalAmount={parseFloat(payment.amount) || 0}
-          proceedText={currentStep === 2 ? 'Save Payment' : 'Continue'}
+              totalAmount={payment.amount}
+          proceedText={currentStep === 2 ? (postedPaymentId ? 'Reconcile Receipt' : 'Review Posting') : 'Continue'}
           saving={saving}
+          disabled={false}
         />
       </div>
-
-      {/* GST Calculator Modal */}
-      {showGSTCalculator && (
-        <GSTCalculator
-          orderData={undefined}
-          onCalculationComplete={() => setShowGSTCalculator(false)}
-          showDetails={true}
-        />
-      )}
 
       {/* Customer Creation Modal */}
       {showCustomerModal && (
@@ -935,6 +845,21 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
             setShowCustomerModal(false);
             // You can add toast notification here if needed
           }}
+        />
+      )}
+
+      {receiptConfirmation && selectedCustomer && (
+        <CustomerReceiptReviewDialog
+          preview={receiptConfirmation.preview}
+          payload={receiptConfirmation.payload}
+          allocations={receiptConfirmation.allocations}
+          customerName={selectedCustomer.customer_name}
+          busy={saving}
+          onCancel={() => {
+            setReceiptConfirmation(null);
+            setMessage('Receipt remains prepared but unapproved. Nothing was posted.', 'info');
+          }}
+          onConfirm={() => { void confirmPayment(); }}
         />
       )}
     </div>

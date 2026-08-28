@@ -1,8 +1,8 @@
 """
 Shared environment helpers.
 
-These helpers treat APP_ENV and ENV as the same deployment signal so
-production safeguards do not depend on one variable name.
+``APP_ENV`` is the only runtime-mode authority.  A second alias makes it
+possible for deployment configuration and safety checks to disagree.
 """
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ PRODUCTION_VALUES = {"production", "prod"}
 
 
 def get_app_env(default: str = "development") -> str:
-    return (os.getenv("APP_ENV") or os.getenv("ENV") or default).lower()
+    return (os.getenv("APP_ENV") or default).lower()
 
 
 def is_production() -> bool:

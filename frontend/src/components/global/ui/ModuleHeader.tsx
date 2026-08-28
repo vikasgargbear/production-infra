@@ -44,8 +44,6 @@ const ModuleHeader: React.FC<ModuleHeaderProps> = ({
     onClose,
     historyType: _historyType, // deprecated, no longer rendered
     additionalActions = [],
-    showSaveDraft = false,
-    onSaveDraft,
     className = ""
 }) => {
     const getStatusColor = (statusValue: string | undefined): string => {
@@ -72,13 +70,13 @@ const ModuleHeader: React.FC<ModuleHeaderProps> = ({
 
     return (
         <div className={`bg-white border-b border-gray-200 ${className}`}>
-            <div className="flex items-center justify-between px-6 py-3">
+            <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
                 {/* Left side - Back button, Title and info */}
-                <div className="flex items-center gap-3 min-h-[36px]">
+                <div className="flex min-w-0 flex-wrap items-center gap-2 min-h-[36px] sm:gap-3">
                     {onClose && (
                         <button
                             onClick={onClose}
-                            className="p-2 -ml-2 hover:bg-gray-100 rounded-lg transition-all duration-200 group"
+                            className="-ml-2 inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg hover:bg-gray-100 transition-colors group"
                             title="Back (Esc)"
                             aria-label="Go back"
                         >
@@ -86,14 +84,14 @@ const ModuleHeader: React.FC<ModuleHeaderProps> = ({
                         </button>
                     )}
                     {Icon && (
-                        <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-blue-50">
+                        <div className="flex items-center justify-center w-8 h-8 rounded-lg border border-gray-200 bg-white">
                             <Icon className={`w-4 h-4 ${iconColor}`} />
                         </div>
                     )}
-                    <h1 className="text-lg font-semibold text-gray-900 leading-none">{title}</h1>
+                    <h1 className="min-w-0 truncate text-base font-semibold text-gray-900 leading-none sm:text-lg">{title}</h1>
                     {documentNumber && (
-                        <div className="px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg flex items-center">
-                            <span className="text-sm font-medium text-blue-700 leading-none">{documentNumber}</span>
+                        <div className="max-w-[10rem] px-2 py-1.5 bg-white border border-gray-200 rounded-lg flex items-center sm:max-w-none sm:px-3">
+                            <span className="truncate text-xs font-medium text-gray-700 leading-none sm:text-sm">{documentNumber}</span>
                         </div>
                     )}
                     {status && (
@@ -104,16 +102,7 @@ const ModuleHeader: React.FC<ModuleHeaderProps> = ({
                 </div>
 
                 {/* Right side - Actions */}
-                <div className="flex items-center gap-2">
-                    {showSaveDraft && onSaveDraft && (
-                        <button
-                            onClick={onSaveDraft}
-                            className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
-                        >
-                            Save Draft
-                        </button>
-                    )}
-
+                <div className="flex w-full items-center gap-2 overflow-x-auto pb-1 sm:w-auto sm:justify-end sm:pb-0">
                     {additionalActions.map((action, index) => {
                         const ActionIcon = action?.icon;
                         const isElement = React.isValidElement(ActionIcon);
@@ -122,15 +111,16 @@ const ModuleHeader: React.FC<ModuleHeaderProps> = ({
                                 key={index}
                                 onClick={action.onClick}
                                 disabled={action.disabled}
-                                className={`px-4 py-2 text-sm rounded-lg transition-colors flex items-center ${action.variant === 'primary'
+                                className={`min-h-11 shrink-0 px-4 py-2 text-sm rounded-lg transition-colors flex items-center ${action.variant === 'primary'
                                     ? 'bg-blue-600 text-white hover:bg-blue-700 disabled:bg-gray-400'
                                     : action.variant === 'success'
-                                        ? 'bg-green-500 text-white hover:bg-green-600 disabled:bg-gray-400'
+                                        ? 'bg-blue-600 text-white hover:bg-blue-700 disabled:bg-gray-400'
                                         : action.variant === 'secondary'
                                             ? 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
                                             : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'
                                     } ${action.className || ''}`}
                                 title={action.title}
+                                aria-label={action.label || action.title || 'Action'}
                             >
                                 {ActionIcon ? (
                                     isElement ? (

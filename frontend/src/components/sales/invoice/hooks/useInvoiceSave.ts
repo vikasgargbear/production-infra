@@ -1,27 +1,35 @@
 /**
- * useInvoiceSave Hook
+ * API-only invoice submission.
  *
- * Thin wrapper around useDocumentSave for sales invoices.
- * Stock DEDUCTION (goods sold to customer).
- * Supports fallbackToOffline (5xx) and handleConflict (409 INSUFFICIENT_STOCK).
+ * A Sales invoice is successful only after the canonical command has executed
+ * and the server read-back supplies its final ID and number. Nothing is written
+ * to IndexedDB and failed requests are never converted into local documents.
  */
 
-import { Dispatch, SetStateAction } from 'react';
+import { Dispatch, SetStateAction, useCallback, useRef, useState } from 'react';
 import { toast } from 'react-toastify';
-import { useDocumentSave } from '../../../global/hooks/useDocumentSave';
 import { invoicesApi } from '../../../../services/api';
-import { DOC_TYPES } from '../../../../services/offline/documents/documentNumberGenerator';
-import { getTodayBusinessDate } from '../../../../utils/indianDateUtils';
 import { Customer } from '../../../../types/models/customer';
-import { storageService, STORAGE_KEYS } from '../../../../services/core/storageService';
-import { deductStockLocally } from '../../utils/offlineSaveHelpers';
-import type { Invoice, InvoiceItem } from './useInvoiceLogic';
-import type { CreatedInvoiceData } from '../types/invoiceTypes';
+import type { CompanyInfo } from '../../../../types/common/company.types';
 import { showFinancialEntryNotification } from '../../../../utils/financialEntryNotifier';
+import { clientUuid } from '../../../../utils/clientUuid';
+import type { Invoice } from './useInvoiceLogic';
+import type { CreatedInvoiceData } from '../types/invoiceTypes';
+import type { CanonicalCommandPreview } from '../../../../services/api/canonicalOperatorActions';
+import type { CanonicalDocumentPolicy } from '../../../../services/api/modules/org/canonicalBusinessContext.api';
+import { normalizeAuthoritativeDecimal } from '../../../../utils/exactDecimal';
+import {
+    buildCanonicalInvoicePreparePayload,
+    invoicePreviewValidationError,
+} from '../utils/canonicalInvoiceCommand';
+import { requireCanonicalPostingDate } from '../../../../utils/canonicalPostingDate';
 
 export interface UseInvoiceSaveProps {
     invoice: Invoice;
     selectedCustomer: Customer | null;
+    companyInfo: CompanyInfo | null;
+    documentPolicy: CanonicalDocumentPolicy | null;
+    businessDate: string;
     isOnline: boolean;
     setInvoice: Dispatch<SetStateAction<Invoice>>;
     setCreatedInvoiceData: Dispatch<SetStateAction<CreatedInvoiceData | null>>;
@@ -31,141 +39,216 @@ export interface UseInvoiceSaveProps {
 
 export interface UseInvoiceSaveReturn {
     saving: boolean;
+    preparedPreview: CanonicalCommandPreview | null;
+    reviewOpen: boolean;
     handleSaveInvoice: () => Promise<void>;
+    confirmPreparedInvoice: () => Promise<void>;
+    closeInvoiceReview: () => void;
 }
+
+export const formatInvoiceSubmissionError = (error: unknown): string => {
+    const apiError = error as {
+        message?: string;
+        response?: { data?: { detail?: unknown } };
+    };
+    const detail = apiError.response?.data?.detail;
+    if (Array.isArray(detail)) {
+        return detail.map((entry: { loc?: string[]; msg?: string }) =>
+            `${entry.loc?.join('.') || 'Field'}: ${entry.msg || 'Invalid value'}`
+        ).join('\n');
+    }
+    if (typeof detail === 'string') return detail;
+    if (detail && typeof detail === 'object') {
+        const structured = detail as { message?: string; error?: string };
+        return structured.message || structured.error || JSON.stringify(detail);
+    }
+    return apiError.message || 'Invoice submission failed. No invoice was created.';
+};
 
 export function useInvoiceSave(props: UseInvoiceSaveProps): UseInvoiceSaveReturn {
     const {
         invoice,
         selectedCustomer,
+        companyInfo,
+        documentPolicy,
+        businessDate,
         isOnline,
         setInvoice,
         setCreatedInvoiceData,
         setShowSuccessModal,
-        setError
+        setError,
     } = props;
+    const [saving, setSaving] = useState(false);
+    const [preparedPreview, setPreparedPreview] = useState<CanonicalCommandPreview | null>(null);
+    const [reviewOpen, setReviewOpen] = useState(false);
+    const executedResourceId = useRef<string | null>(null);
+    const idempotencyKey = useRef(`erp-web-invoice:${clientUuid()}`);
+    const lifecycleId = useRef(clientUuid());
+    const preparedFingerprint = useRef<string | null>(null);
 
-    const { saving, handleSave } = useDocumentSave({
-        docTypeKey: DOC_TYPES.INVOICE,
-        idbStoreName: 'invoices',
-        entityType: 'invoices',
-        serverIdField: 'invoice_id',
-        docNumberField: 'invoice_number',
-        isOnline,
-        fallbackToOffline: true,
+    const handleSaveInvoice = useCallback(async () => {
+        setError(null);
+        const validationError = invoicePreviewValidationError(companyInfo, invoice, selectedCustomer);
+        if (validationError) {
+            setError(validationError);
+            toast.error(validationError);
+            return;
+        }
+        try {
+            requireCanonicalPostingDate(invoice.invoice_date, businessDate, 'Invoice date');
+        } catch (dateError) {
+            const message = dateError instanceof Error ? dateError.message : 'Invoice date is invalid.';
+            setError(message);
+            toast.error(message);
+            return;
+        }
 
-        validate: () => {
-            setError(null);
-            if (!selectedCustomer) return 'Please select a customer';
-            if (invoice.items.length === 0) return 'Please add at least one item';
-            return null;
-        },
+        if (!isOnline) {
+            const message = 'Invoice submission requires an API connection. No local or queued invoice was created.';
+            setError(message);
+            toast.error(message);
+            return;
+        }
 
-        preparePayload: () => ({
-            customer_id: Number(selectedCustomer!.customer_id),
-            invoice_date: invoice.invoice_date || getTodayBusinessDate(),
-            due_date: invoice.due_date,
-            items: invoice.items.map(item => ({
-                product_id: Number(item.product_id),
-                batch_id: item.batch_id ? Number(item.batch_id) : undefined,
-                quantity: parseFloat(String(item.quantity)) || 0,
-                free_quantity: parseFloat(String(item.free_quantity)) || 0,
-                unit_price: parseFloat(String(item.unit_price)) || 0,
-                mrp: parseFloat(String(item.mrp)) || 0,
-                discount_percent: parseFloat(String(item.discount_percent)) || 0,
-                gst_percent: parseFloat(String(item.gst_percent)) || 0
-            })),
-            discount_type: invoice.discount_type || 'percentage',
-            discount_percent: parseFloat(String(invoice.discount_percent)) || 0,
-            discount_amount: parseFloat(String(invoice.discount_amount)) || 0,
-            freight_charges: parseFloat(String(invoice.freight_charges)) || 0,
-            delivery_type: invoice.delivery_type || 'PICKUP',
-            payment_mode: invoice.payment_mode || 'cash',
-            payment_status: invoice.payment_status || 'pending',
-            payments: (invoice.payments || []).map(p => ({
-                method: p.method,
-                amount: parseFloat(String(p.amount)) || 0
-            })),
-            billing_address: invoice.billing_address || '',
-            shipping_address: invoice.shipping_address || '',
-            notes: invoice.notes || '',
-            gst_type: invoice.gst_type || 'CGST/SGST',
-            total_amount: invoice.final_amount || 0,
-            salesperson_id: invoice.salesperson_id || null,
-            transport_company: invoice.transport_company || '',
-            vehicle_number: invoice.vehicle_number || '',
-            driver_phone: invoice.driver_phone || '',
-            lr_number: invoice.lr_number || '',
-            eway_bill_number: invoice.eway_bill_number || ''
-        }),
-
-        apiCall: (data: any) => invoicesApi.create(data),
-
-        stockOperation: async () => {
-            await deductStockLocally(invoice.items);
-        },
-
-        handleConflict: (syncError: any) => {
-            if (syncError.response?.data?.detail?.error === 'INSUFFICIENT_STOCK') {
-                const details = syncError.response.data.detail;
-                setError(`Insufficient stock: Product ${details.product_id} - Required ${details.required_quantity}, Available ${details.available_quantity}`);
-                toast.error(`Insufficient Stock: Only ${details.available_quantity} units available`, {
-                    autoClose: 8000
-                });
+        if (saving) return;
+        setSaving(true);
+        try {
+            let payload = buildCanonicalInvoicePreparePayload(
+                invoice,
+                selectedCustomer!,
+                idempotencyKey.current,
+                documentPolicy,
+            );
+            let fingerprint = JSON.stringify(payload);
+            if (preparedFingerprint.current && preparedFingerprint.current !== fingerprint) {
+                idempotencyKey.current = `erp-web-invoice:${clientUuid()}`;
+                lifecycleId.current = clientUuid();
+                executedResourceId.current = null;
+                setPreparedPreview(null);
+                payload = buildCanonicalInvoicePreparePayload(
+                    invoice,
+                    selectedCustomer!,
+                    idempotencyKey.current,
+                    documentPolicy,
+                );
+                fingerprint = JSON.stringify(payload);
             }
-        },
+            if (!preparedPreview || preparedFingerprint.current !== fingerprint) {
+                const prepared = await invoicesApi.prepareCanonical(payload);
+                preparedFingerprint.current = fingerprint;
+                setPreparedPreview(prepared.data);
+            }
+            setReviewOpen(true);
+        } catch (error) {
+            const message = formatInvoiceSubmissionError(error);
+            setError(message);
+            toast.error(message);
+        } finally {
+            setSaving(false);
+        }
+    }, [
+        companyInfo,
+        businessDate,
+        documentPolicy,
+        invoice,
+        isOnline,
+        preparedPreview,
+        saving,
+        selectedCustomer,
+        setError,
+    ]);
 
-        onSuccess: (tempId: string, docNo: string) => {
-            setInvoice(prev => ({ ...prev, invoice_number: docNo }));
+    const confirmPreparedInvoice = useCallback(async () => {
+        if (!preparedPreview || saving) return;
+        if (!selectedCustomer) {
+            const message = 'The selected customer changed after review. Return and prepare the invoice again.';
+            setError(message);
+            toast.error(message);
+            return;
+        }
 
-            const createdData: CreatedInvoiceData = {
-                invoiceId: tempId,
-                invoiceNumber: docNo,
+        setSaving(true);
+        try {
+            if (!executedResourceId.current) {
+                const executed = await invoicesApi.executePreparedCanonical(preparedPreview, lifecycleId.current);
+                const invoiceId = executed?.data?.invoice_id;
+                if (!executed?.data?.success || !invoiceId) {
+                    throw new Error('The API did not confirm the invoice. No invoice was created.');
+                }
+                executedResourceId.current = String(invoiceId);
+            }
+
+            const invoiceId = executedResourceId.current;
+            const readback = (await invoicesApi.getCanonicalPostingReadback(invoiceId)).data;
+            if (!readback || String(readback.sales_invoice_id) !== invoiceId) {
+                throw new Error('Invoice posted, but authoritative readback could not be verified. Retry to perform GET-only reconciliation.');
+            }
+            if (typeof readback.invoice_number !== 'string' || !readback.invoice_number.trim()) {
+                throw new Error('Invoice posted, but authoritative readback omitted its invoice number.');
+            }
+            const invoiceNumber = readback.invoice_number.trim();
+
+            const authoritativeTotal = normalizeAuthoritativeDecimal(
+                readback.invoice_total,
+                'Posted invoice total',
+                { scale: 2 },
+            );
+            setInvoice(previous => ({ ...previous, invoice_number: invoiceNumber }));
+            setCreatedInvoiceData({
+                invoiceId: String(invoiceId),
+                invoiceNumber,
                 customerName: selectedCustomer!.customer_name,
                 customerPhone: selectedCustomer!.primary_phone || '',
                 customerEmail: selectedCustomer!.primary_email || '',
-                totalAmount: invoice.final_amount || 0,
+                totalAmount: authoritativeTotal,
                 items: invoice.items,
-                isOffline: !isOnline
-            };
-
-            setCreatedInvoiceData(createdData);
+                isOffline: false,
+            });
             setShowSuccessModal(true);
-            storageService.removeItem(STORAGE_KEYS.INVOICE_DRAFT);
-            localStorage.removeItem('invoice_draft');
-        },
-
-        onServerSuccess: (_response: any, _tempId: string, docNo: string, payload: any) => {
             showFinancialEntryNotification({
                 title: 'Sales Invoice Posted',
-                reference: docNo,
-                amount: payload.total_amount,
+                reference: invoiceNumber,
+                amount: authoritativeTotal,
                 status: 'confirmed',
                 impacts: [
                     'The invoice is committed to the backend sales ledger.',
                     'Inventory is reduced against the selected batches.',
                     'Customer receivable and outstanding balances are refreshed.',
-                    'Output GST values are recorded for compliance reporting.'
-                ]
+                    'Output GST values are recorded for compliance reporting.',
+                ],
             });
-        },
+            executedResourceId.current = null;
+            preparedFingerprint.current = null;
+            idempotencyKey.current = `erp-web-invoice:${clientUuid()}`;
+            lifecycleId.current = clientUuid();
+            setPreparedPreview(null);
+            setReviewOpen(false);
+        } catch (error) {
+            const message = formatInvoiceSubmissionError(error);
+            setError(message);
+            toast.error(message);
+        } finally {
+            setSaving(false);
+        }
+    }, [
+        invoice,
+        preparedPreview,
+        saving,
+        selectedCustomer,
+        setCreatedInvoiceData,
+        setError,
+        setInvoice,
+        setShowSuccessModal,
+    ]);
 
-        onSyncQueued: (_tempId: string, docNo: string, payload: any) => {
-            showFinancialEntryNotification({
-                title: 'Sales Invoice Saved Locally',
-                reference: docNo,
-                amount: payload.total_amount,
-                status: 'queued',
-                impacts: [
-                    'The invoice is stored locally and queued for backend posting.',
-                    'Stock is reserved on this device immediately.',
-                    'Receivable and GST confirmation will appear after sync succeeds.'
-                ]
-            });
-        },
-    });
-
-    return { saving, handleSaveInvoice: handleSave };
+    return {
+        saving,
+        preparedPreview,
+        reviewOpen,
+        handleSaveInvoice,
+        confirmPreparedInvoice,
+        closeInvoiceReview: () => setReviewOpen(false),
+    };
 }
 
 export default useInvoiceSave;

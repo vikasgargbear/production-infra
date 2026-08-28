@@ -41,7 +41,7 @@ const Button: React.FC<ButtonProps> = ({
   const variantClasses = theme.components.button.variants[variant];
   const widthClasses = fullWidth ? 'w-full' : '';
   const disabledClasses = disabled || loading ? 'opacity-50 cursor-not-allowed' : '';
-  const roundedClasses = 'rounded-lg';
+  const roundedClasses = 'rounded-md';
 
   const buttonClasses = `
     ${baseClasses}

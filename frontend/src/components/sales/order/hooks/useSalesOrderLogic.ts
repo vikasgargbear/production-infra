@@ -3,39 +3,29 @@
  * Manages state and logic for sales order creation flow
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { toast } from 'react-toastify';
-import { apiClient, usersApi, authApi } from '../../../../services/api';
-import { calculateSalesOrderPreview } from '../../../../services/calculations/salesOrderCalculationService';
-import { useNetworkStatus } from '../../../../hooks/useNetworkStatus';
+import { apiClient } from '../../../../services/api';
+import {
+    calculateSalesOrderPreview,
+    isSalesOrderPreviewReady,
+} from '../../../../services/calculations/salesOrderCalculationService';
 import { useSalesOrderSave } from './useSalesOrderSave';
 import { useCompany } from '../../../../contexts/CompanyContext';
-import { determineGstTypeForSupply } from '../../../gst/utils/gstCalculations';
 import type { Order, OrderItem, Address, CreatedOrderData, BankAccount, Product } from '../../../../types/models';
+import type { ImportData } from '../../../global/modals/DocumentImportModal';
+import type { CanonicalCommandPreview } from '../../../../services/api/canonicalOperatorActions';
+import { addExactDecimals, formatExactDecimal, normalizeExactDecimal } from '../../../../utils/exactDecimal';
+import { useCanonicalBusinessDate } from '../../../../hooks/useCanonicalBusinessDate';
+import { clientUuid } from '../../../../utils/clientUuid';
+import { isCanonicalUuid } from '../../../../utils/canonicalUuid';
+import type { CanonicalDocumentPolicy } from '../../../../services/api/modules/org/canonicalBusinessContext.api';
 
 // ==================== TYPE DEFINITIONS ====================
 
-// Using canonical Customer type with additional UI fields
 import type { Customer as BaseCustomer } from '../../../../types/models/customer';
 
-// Extended Customer with UI fields for this component
-type Customer = BaseCustomer & {
-    id?: number | string;
-    name?: string;
-    address?: string;
-    address2?: string;
-    city?: string;
-    state?: string;
-    pincode?: string;
-};
-
-interface Employee {
-    user_id?: number | string;
-    id?: number | string;
-    full_name?: string;
-    name?: string;
-    email?: string;
-}
+type Customer = BaseCustomer;
 
 interface CompanyInfo {
     name?: string;
@@ -49,38 +39,37 @@ interface CompanyInfo {
 }
 
 // Using canonical Product type from /types/models - extended with UI fields
-type ProductInput = Product & {
+type ProductInput = Omit<Product, 'mrp' | 'sale_price' | 'gst_percent'> & {
+    branch_id?: string;
+    location_id?: string;
+    uom_conversion_id?: string;
     batch_id?: number | string;
     batch_number?: string;
-    quantity?: number;
+    quantity?: string | number;
     unit?: string;
     uom?: string;
     pack_size?: string;
     pack_type?: string;
-    mrp?: number;
-    sale_price?: number;
-    unit_price?: number;
+    mrp?: string | number;
+    sale_price?: string | number;
+    unit_price?: string | number;
+    gst_percent?: string | number;
 };
-
-interface ImportData {
-    customer_id?: number | string;
-    customer_details?: Customer;
-    billing_address?: string;
-    shipping_address?: string;
-    items?: OrderItem[];
-    notes?: string;
-}
 
 export interface UseSalesOrderLogicReturn {
     // State
     order: Order;
     setOrder: React.Dispatch<React.SetStateAction<Order>>;
+    documentPolicy: CanonicalDocumentPolicy | null;
+    businessDate: string;
     selectedCustomer: Customer | null;
     setSelectedCustomer: React.Dispatch<React.SetStateAction<Customer | null>>;
     sameAsBilling: boolean;
     setSameAsBilling: React.Dispatch<React.SetStateAction<boolean>>;
-    employees: Employee[];
     saving: boolean;
+    submissionUnavailableReason: string;
+    preparedPreview: CanonicalCommandPreview | null;
+    reviewOpen: boolean;
     message: string;
     messageType: string;
     selectedBankAccount: BankAccount | null;
@@ -107,6 +96,8 @@ export interface UseSalesOrderLogicReturn {
     removeItem: (index: number) => void;
     updateItemQuantity: (itemId: number | string, newQuantity: number) => void;
     saveOrder: () => Promise<void>;
+    confirmPreparedOrder: () => Promise<void>;
+    closeOrderReview: () => void;
     printOrder: () => void;
     shareOnWhatsApp: () => void;
     resetOrder: () => void;
@@ -120,8 +111,8 @@ export interface UseSalesOrderLogicReturn {
 const createInitialOrder = (): Order => ({
     order_id: 0,  // Will be set when order is saved
     order_number: '',
-    order_date: new Date().toISOString().split('T')[0],
-    expected_delivery_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    order_date: '',
+    expected_delivery_date: '',
     customer_id: 0,  // Will be set when customer is selected
     customer_name: '',
     customer_details: null,
@@ -131,13 +122,14 @@ const createInitialOrder = (): Order => ({
     shipping_address_data: null,
     items: [],
     status: 'pending',
-    payment_terms: 'credit',
+    payment_terms: '',
     reference_no: '',
-    sales_person: localStorage.getItem('userName') || 'Admin',
-    created_by: localStorage.getItem('userName') || 'Admin',
-    terms_conditions: 'Standard terms apply',
+    sales_person: '',
+    created_by: '',
+    terms_conditions: '',
     notes: '',
-    discount_amount: 0,
+    document_discount_amount: '0.00',
+    discount_amount: '0.00',
     other_charges: 0,
     total_quantity: 0,
     total_amount: 0,
@@ -147,7 +139,7 @@ const createInitialOrder = (): Order => ({
     sgst_amount: 0,
     igst_amount: 0,
     round_off: 0,
-    gst_type: 'CGST/SGST',
+    gst_type: '',
     place_of_supply: ''
 });
 
@@ -155,26 +147,32 @@ const createInitialOrder = (): Order => ({
 
 export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
     const { companyInfo } = useCompany() as { companyInfo: CompanyInfo };
+    const { businessDate, documentPolicy, loading: businessDateLoading, error: businessDateError } = useCanonicalBusinessDate();
 
     // Core state
     const [order, setOrder] = useState<Order>(createInitialOrder());
     const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
     const [sameAsBilling, setSameAsBilling] = useState(true);
-    const [employees, setEmployees] = useState<Employee[]>([]);
     const [message, setMessage] = useState('');
     const [messageType, setMessageType] = useState('');
     const [selectedBankAccount, setSelectedBankAccount] = useState<BankAccount | null>(null);
     const [createdOrderData, setCreatedOrderData] = useState<CreatedOrderData | null>(null);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
 
-    // Network status for offline-first
-    const { isOnline } = useNetworkStatus();
-
-    // Offline-first save hook
-    const { saving: offlineSaving, handleSaveOrder: offlineSaveOrder } = useSalesOrderSave({
+    // Fail closed until the sales-order canonical command is available.
+    const {
+        saving: submissionSaving,
+        submissionUnavailableReason,
+        preparedPreview,
+        reviewOpen,
+        handleSaveOrder,
+        confirmPreparedOrder,
+        closeOrderReview,
+    } = useSalesOrderSave({
         order,
         selectedCustomer,
-        isOnline,
+        documentPolicy,
+        businessDate,
         setOrder,
         setCreatedOrderData,
         setShowSuccessModal,
@@ -189,77 +187,57 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
     const [newProductName, setNewProductName] = useState('');
     const calculationRequestRef = useRef(0);
 
-    // Load employees
     useEffect(() => {
-        const loadEmployees = async (): Promise<void> => {
-            try {
-                const response = await usersApi.getAll({ limit: 20, role: 'sales' });
-                const users = response.data?.data || response.data || [];
-
-                if (Array.isArray(users) && users.length > 0) {
-                    setEmployees(users);
-                    if (!order.created_by && users.length > 0) {
-                        setOrder(prev => ({
-                            ...prev,
-                            created_by: users[0].id,
-                            created_by_name: users[0].full_name || 'User'
-                        }));
-                    }
-                } else {
-                    throw new Error('No users returned');
-                }
-            } catch {
-                const currentUser = authApi.getCurrentUser() as Employee | null;
-                const fallbackUser: Employee = currentUser ? {
-                    user_id: currentUser.user_id || currentUser.id,
-                    full_name: currentUser.full_name || currentUser.name || 'Current User',
-                    email: currentUser.email
-                } : {
-                    user_id: undefined,
-                    full_name: companyInfo.name ? `${companyInfo.name} User` : 'User',
-                    email: companyInfo.email || ''
-                };
-
-                setEmployees([fallbackUser]);
-
-                if (!order.created_by && fallbackUser.user_id) {
-                    setOrder(prev => ({
-                        ...prev,
-                        created_by: fallbackUser.user_id || null,
-                        created_by_name: fallbackUser.full_name
-                    }));
-                }
-            }
-        };
-
-        loadEmployees();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [companyInfo]);
+        if (businessDate) {
+            setOrder(previous => ({
+                ...previous,
+                order_date: previous.order_date || businessDate,
+            }));
+            return;
+        }
+        if (!businessDateLoading && businessDateError) {
+            setMessage(businessDateError);
+            setMessageType('error');
+        }
+    }, [businessDate, businessDateError, businessDateLoading]);
 
     // Recalculate totals
-    const recalculateTotals = useCallback(async (items: OrderItem[]): Promise<void> => {
+    const recalculateTotals = useCallback(async (
+        items: OrderItem[],
+        sourceOrder: Order = order,
+    ): Promise<void> => {
         const requestId = ++calculationRequestRef.current;
-        if (!items || items.length === 0) {
+        const orderData = {
+            ...sourceOrder,
+            items,
+        };
+        if (!items || items.length === 0 || !isSalesOrderPreviewReady(orderData)) {
             setOrder(prev => ({
                 ...prev,
+                items: items.map(item => ({
+                    ...item,
+                    subtotal: 0,
+                    discount_amount: 0,
+                    tax_amount: 0,
+                    total: 0,
+                    calculated_total: 0,
+                    taxable_amount: 0,
+                })),
                 total_quantity: 0,
                 subtotal_amount: 0,
                 tax_amount: 0,
                 total_amount: 0,
-                final_amount: 0
+                final_amount: 0,
+                cgst_amount: 0,
+                sgst_amount: 0,
+                igst_amount: 0,
+                calculatedLineItems: [],
             }));
             return;
         }
 
         try {
-            const orderData = {
-                ...order,
-                items,
-                customer_id: Number(
-                    selectedCustomer?.customer_id || selectedCustomer?.id || order.customer_id
-                )
-            };
-            const result = await calculateSalesOrderPreview(orderData, isOnline);
+            const result = await calculateSalesOrderPreview(orderData, true);
 
             if (requestId !== calculationRequestRef.current) {
                 return;
@@ -286,16 +264,20 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
                 setOrder(prev => ({
                     ...prev,
                     items: updatedItems,
-                    total_quantity: items.reduce((sum, item) => sum + (parseFloat(String(item.quantity)) || 0), 0),
-                    subtotal_amount: formattedTotals.subtotal_amount || formattedTotals.gross_amount || 0,
-                    discount_amount: formattedTotals.discount_amount || formattedTotals.total_discount || 0,
-                    tax_amount: formattedTotals.total_tax_amount || formattedTotals.total_tax || 0,
-                    total_amount: formattedTotals.final_amount || formattedTotals.total_amount || 0,
-                    final_amount: formattedTotals.final_amount || formattedTotals.total_amount || 0,
-                    cgst_amount: formattedTotals.cgst_amount || 0,
-                    sgst_amount: formattedTotals.sgst_amount || 0,
-                    igst_amount: formattedTotals.igst_amount || 0,
-                    calculatedLineItems: result.items as any
+                    total_quantity: addExactDecimals(
+                        items.map(item => item.quantity),
+                        'Sales order total quantity',
+                        { scale: 6, maximumWholeDigits: 14 },
+                    ),
+                    subtotal_amount: formattedTotals.subtotal_amount,
+                    discount_amount: formattedTotals.discount_amount,
+                    tax_amount: formattedTotals.total_tax_amount,
+                    total_amount: formattedTotals.final_amount,
+                    final_amount: formattedTotals.final_amount,
+                    cgst_amount: formattedTotals.cgst_amount,
+                    sgst_amount: formattedTotals.sgst_amount,
+                    igst_amount: formattedTotals.igst_amount,
+                    calculatedLineItems: result.items
                 }));
             }
         } catch (error) {
@@ -305,7 +287,7 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
             console.error('Calculation error:', error);
             toast.error('Unable to calculate order totals. Please review the entered item values.');
         }
-    }, [isOnline, order, selectedCustomer]);
+    }, [order]);
 
     // Handle customer selection
     const handleCustomerSelect = useCallback(async (customer: Customer | null): Promise<void> => {
@@ -320,121 +302,137 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
                 billing_address: '',
                 shipping_address: '',
                 billing_address_data: null,
-                shipping_address_data: null
+                shipping_address_data: null,
+                gst_type: '',
+                place_of_supply: '',
             }));
             return;
         }
 
-        const addressParts: string[] = [];
-        if (customer.address) addressParts.push(customer.address);
-        if (customer.city) addressParts.push(customer.city);
-        if (customer.state) addressParts.push(customer.state);
-        if (customer.pincode) addressParts.push(customer.pincode);
-        let fullAddress = addressParts.filter(Boolean).join(', ');
-
-        let addressData: Address = {
-            address_line1: customer.address || '',
-            address_line2: customer.address2 || '',
-            city: customer.city || '',
-            state: customer.state || '',
-            pincode: customer.pincode || '',
-            country: 'India'
-        };
-
-        if (!fullAddress && customer.customer_id) {
-            try {
-                const response = await apiClient.get(`/customers/${customer.customer_id}/addresses`);
-                if (response.data?.success && response.data.data?.length > 0) {
-                    const addresses = response.data.data;
-                    const billingAddr = addresses.find((addr: { address_type: string; is_default: boolean }) =>
-                        addr.address_type === 'billing' && addr.is_default);
-                    const shippingAddr = addresses.find((addr: { address_type: string; is_default: boolean }) =>
-                        addr.address_type === 'shipping' && addr.is_default);
-                    const anyDefaultAddr = addresses.find((addr: { is_default: boolean }) => addr.is_default);
-                    const preferredAddr = billingAddr || shippingAddr || anyDefaultAddr || addresses[0];
-
-                    const fetchedParts: string[] = [];
-                    if (preferredAddr.address_line1) fetchedParts.push(preferredAddr.address_line1);
-                    if (preferredAddr.address_line2) fetchedParts.push(preferredAddr.address_line2);
-                    if (preferredAddr.city) fetchedParts.push(preferredAddr.city);
-                    if (preferredAddr.state) fetchedParts.push(preferredAddr.state);
-                    if (preferredAddr.pincode) fetchedParts.push(preferredAddr.pincode);
-                    fullAddress = fetchedParts.filter(Boolean).join(', ');
-
-                    addressData = {
-                        address_line1: preferredAddr.address_line1 || '',
-                        address_line2: preferredAddr.address_line2 || '',
-                        city: preferredAddr.city || '',
-                        state: preferredAddr.state || '',
-                        pincode: preferredAddr.pincode || '',
-                        country: preferredAddr.country || 'India'
-                    };
-
-                    customer = {
-                        ...customer,
-                        address: preferredAddr.address_line1 || '',
-                        address2: preferredAddr.address_line2 || '',
-                        city: preferredAddr.city || '',
-                        state: preferredAddr.state || '',
-                        pincode: preferredAddr.pincode || ''
-                    };
-                    setSelectedCustomer(customer);
-                }
-            } catch {
-                // Silent error
+        let billingAddress = '';
+        let shippingAddress = '';
+        let billingAddressData: Address | null = null;
+        let shippingAddressData: Address | null = null;
+        try {
+            const response = await apiClient.get(`/customers/${customer.customer_id}/addresses`);
+            if (!response.data?.success || !Array.isArray(response.data.data)) {
+                throw new Error('The server returned an invalid canonical address response.');
             }
+            const addresses = response.data.data as Array<Record<string, unknown>>;
+            const billing = addresses.find(address =>
+                address.address_type === 'billing' && address.is_default === true);
+            const shipping = addresses.find(address =>
+                address.address_type === 'shipping' && address.is_default === true);
+            if (!billing) {
+                throw new Error('The customer has no default canonical billing address.');
+            }
+            const toAddress = (address: Record<string, unknown>): Address => {
+                const stateCode = String(address.state_code ?? '').trim();
+                if (!/^\d{2}$/.test(stateCode)) {
+                    throw new Error('The customer address is missing its canonical state code.');
+                }
+                const addressId = String(address.address_id ?? '').trim();
+                const rowVersion = String(address.row_version ?? '').trim();
+                if (!isCanonicalUuid(addressId) || !/^[1-9][0-9]*$/.test(rowVersion)) {
+                    throw new Error('The customer address is missing its canonical identity or row version.');
+                }
+                return {
+                    address_id: addressId,
+                    row_version: rowVersion,
+                    address_type: address.address_type as Address['address_type'],
+                    address_line1: String(address.address_line1 ?? '').trim(),
+                    address_line2: String(address.address_line2 ?? '').trim(),
+                    city: String(address.city ?? '').trim(),
+                    state_code: stateCode,
+                    pincode: String(address.pincode ?? '').trim(),
+                    country: String(address.country_code ?? '').trim(),
+                };
+            };
+            const display = (address: Address): string => [
+                address.address_line1,
+                address.address_line2,
+                address.city,
+                address.state_code,
+                address.pincode,
+            ].filter(Boolean).join(', ');
+            billingAddressData = toAddress(billing);
+            shippingAddressData = shipping ? toAddress(shipping) : billingAddressData;
+            billingAddress = display(billingAddressData);
+            shippingAddress = display(shippingAddressData);
+        } catch (addressError) {
+            const reason = addressError instanceof Error
+                ? addressError.message
+                : 'Canonical customer addresses are unavailable.';
+            setMessage(reason);
+            setMessageType('error');
+            toast.error(reason);
         }
-
-        const customerState = addressData.state || addressData.state_name || customer.state || '';
-        const gstType = determineGstTypeForSupply(
-            companyInfo?.state,
-            customerState,
-            (companyInfo as any)?.gst_number,
-            customer.gst_number
-        );
 
         setOrder(prev => ({
             ...prev,
-            customer_id: Number(customer?.customer_id || customer?.id) || 0,
-            customer_name: customer?.customer_name || customer?.name || '',
-            customer_details: customer as unknown as Order['customer_details'],
-            billing_address: fullAddress,
-            shipping_address: fullAddress,
-            billing_address_data: addressData,
-            shipping_address_data: addressData,
-            gst_type: gstType,
-            place_of_supply: customerState || companyInfo?.state || ''
+            customer_id: String(customer.customer_id),
+            customer_name: customer.customer_name,
+            customer_details: customer,
+            billing_address: billingAddress,
+            shipping_address: shippingAddress,
+            billing_address_data: billingAddressData,
+            shipping_address_data: shippingAddressData,
+            gst_type: '',
+            place_of_supply: shippingAddressData?.state_code || '',
         }));
-    }, [companyInfo]);
+    }, []);
 
     // Handle product selection
     const handleProductSelect = useCallback((product: ProductInput): void => {
-        const existingItem = order.items.find(item => item.product_id === product.product_id);
+        const existingItem = order.items.find(item =>
+            item.product_id === product.product_id && item.batch_id === product.batch_id
+        );
 
         if (existingItem) {
             const updatedItems = order.items.map(item =>
-                item.product_id === product.product_id
-                    ? { ...item, quantity: item.quantity + 1 }
+                item.product_id === product.product_id && item.batch_id === product.batch_id
+                    ? { ...item, quantity: addExactDecimals(
+                        [item.quantity, product.quantity ?? '1.000000'],
+                        'Sales order item quantity',
+                        { scale: 6, maximumWholeDigits: 14 },
+                    ) }
                     : item
             );
             setOrder(prev => ({ ...prev, items: updatedItems }));
             recalculateTotals(updatedItems);
         } else {
-            const quantity = 1;
-            const unitPrice = product.sale_price || product.mrp || 0;
-            const discountPercent = 0;
-            const gstPercent = product.gst_percent || 0;
+            const quantity = normalizeExactDecimal(
+                product.quantity ?? '1.000000',
+                'Sales order item quantity',
+                { scale: 6, maximumWholeDigits: 14 },
+            );
+            const unitPrice = product.sale_price ?? product.unit_price;
+            const discountPercent = '0.000000';
+            const gstPercent = product.gst_percent;
+            if (typeof unitPrice !== 'string' || typeof gstPercent !== 'string') {
+                toast.error('Select an authoritative canonical batch before adding this order item.');
+                return;
+            }
             const newItem: OrderItem = {
-                id: Date.now(),
+                id: clientUuid(),
                 product_id: product.product_id,
                 product_name: product.product_name,
                 hsn_code: product.hsn_code,
                 batch_id: product.batch_id,
-                batch_number: product.batch_number || product.batch_number,
+                batch_number: product.batch_number,
+                branch_id: product.branch_id,
+                location_id: product.location_id,
+                uom_conversion_id: product.uom_conversion_id,
                 quantity,
-                unit: product.unit || product.uom || 'NOS',
+                // Batch selection establishes a complete canonical draft
+                // line. A zero free quantity is explicit operator state, not
+                // a posting-time fallback, and its only valid treatment is to
+                // exclude it from taxable value.
+                free_quantity: '0.000000',
+                free_supply_tax_treatment: 'excluded_from_taxable_value',
+                unit: product.unit || product.uom,
                 pack_size: product.pack_size || product.pack_type,
-                mrp: product.mrp || 0,
+                mrp: product.mrp,
                 unit_price: unitPrice,
                 discount_percent: discountPercent,
                 discount_amount: 0,
@@ -454,46 +452,70 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
 
     // Handle import
     const handleImport = useCallback((importData: ImportData): void => {
-        if (importData.customer_id && importData.customer_details) {
-            setSelectedCustomer(importData.customer_details);
-            handleCustomerSelect(importData.customer_details);
+        const importedCustomerId = importData.customer_id;
+        if (importedCustomerId === undefined || importedCustomerId === null
+            || String(importedCustomerId).trim() === '' || String(importedCustomerId) === '0') {
+            const errorMessage = 'The imported document is missing its canonical customer identity.';
+            setMessage(errorMessage);
+            setMessageType('error');
+            toast.error(errorMessage);
+            return;
         }
-
-        if (importData.billing_address) {
-            setOrder(prev => ({
-                ...prev,
-                billing_address: importData.billing_address || '',
-                shipping_address: importData.shipping_address || importData.billing_address || ''
-            }));
+        if (!String(importData.customer_name ?? '').trim()) {
+            const errorMessage = 'The imported document is missing its canonical customer name.';
+            setMessage(errorMessage);
+            setMessageType('error');
+            toast.error(errorMessage);
+            return;
         }
-
-        if (importData.items && importData.items.length > 0) {
-            const formattedItems: OrderItem[] = importData.items.map((item, index) => ({
-                ...item,
-                id: item.id || `imported-${Date.now()}-${index}`,
-                product_id: item.product_id,
-                product_name: item.product_name,
-                quantity: parseFloat(String(item.quantity)) || 0,
-                unit_price: parseFloat(String(item.unit_price || item.unit_price || item.sale_price)) || 0,
-                discount_percent: parseFloat(String(item.discount_percent)) || 0,
-                gst_percent: parseFloat(String(item.gst_percent)) || 0,
-                total: 0
-            }));
-
-            setOrder(prev => ({
-                ...prev,
-                items: formattedItems,
-                notes: importData.notes || prev.notes
-            }));
-
-            setTimeout(() => recalculateTotals(formattedItems), 100);
-        } else {
+        if (!importData.items.length) {
             const warningMsg = 'No items found in the selected document';
             setMessage(warningMsg);
             setMessageType('warning');
             toast.warning(warningMsg);
+            return;
         }
-    }, [handleCustomerSelect, recalculateTotals]);
+
+        const suppliedCustomer = importData.customer_details;
+        const importedCustomer: Customer = suppliedCustomer
+            && typeof suppliedCustomer === 'object'
+            ? {
+                ...(suppliedCustomer as Customer),
+                customer_id: importedCustomerId,
+                customer_name: String(importData.customer_name).trim(),
+            }
+            : {
+                customer_id: importedCustomerId,
+                customer_name: String(importData.customer_name).trim(),
+            } as Customer;
+        const formattedItems = importData.items.map((item, index) => ({
+            ...item,
+            id: `imported-${clientUuid()}-${index}`,
+            quantity: item.quantity,
+            free_quantity: item.free_quantity,
+            unit_price: item.unit_price,
+            discount_percent: item.discount_percent,
+            gst_percent: item.gst_percent,
+            mrp: item.mrp,
+            total: '0.00',
+        }));
+        const importedOrder: Order = {
+            ...order,
+            customer_id: importedCustomerId,
+            customer_name: String(importData.customer_name).trim(),
+            customer_details: importedCustomer,
+            billing_address: importData.billing_address || '',
+            shipping_address: importData.shipping_address || '',
+            items: formattedItems,
+            notes: importData.notes || order.notes,
+            gst_type: '',
+            place_of_supply: '',
+        };
+
+        setSelectedCustomer(importedCustomer);
+        setOrder(importedOrder);
+        void recalculateTotals(formattedItems, importedOrder);
+    }, [order, recalculateTotals]);
 
     // Update item
     const updateItem = useCallback((index: number, field: string, value: unknown): void => {
@@ -533,8 +555,7 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
         recalculateTotals(updatedItems);
     }, [order.items, removeItem, recalculateTotals]);
 
-    // Save order - delegates to offline-first useSalesOrderSave hook
-    const saveOrder = offlineSaveOrder;
+    const saveOrder = handleSaveOrder;
 
     // Print order
     const printOrder = useCallback((): void => {
@@ -546,7 +567,8 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
     // Share on WhatsApp
     const shareOnWhatsApp = useCallback((): void => {
         if (!order.customer_details?.phone) {
-            alert('Customer phone number not available');
+            setMessage('Customer phone number is unavailable. Nothing was opened or sent.');
+            setMessageType('error');
             return;
         }
 
@@ -555,7 +577,7 @@ Sales Order: ${order.order_number}
 Date: ${order.order_date}
 Customer: ${order.customer_name}
 Items: ${order.total_quantity}
-Amount: ₹${order.total_amount.toFixed(2)}
+Amount: ₹${formatExactDecimal(order.total_amount, 'Order total', { scale: 2, maximumWholeDigits: 20 }, 2)}
 Expected Delivery: ${order.expected_delivery_date}
     `.trim();
 
@@ -564,23 +586,31 @@ Expected Delivery: ${order.expected_delivery_date}
 
     // Reset order
     const resetOrder = useCallback((): void => {
-        setOrder(createInitialOrder());
+        setOrder({
+            ...createInitialOrder(),
+            order_date: businessDate,
+            expected_delivery_date: '',
+        });
         setSelectedCustomer(null);
         setCreatedOrderData(null);
         setShowSuccessModal(false);
         setMessage('');
         setMessageType('');
-    }, []);
+    }, [businessDate]);
 
     return {
         order,
         setOrder,
+        documentPolicy,
+        businessDate,
         selectedCustomer,
         setSelectedCustomer,
         sameAsBilling,
         setSameAsBilling,
-        employees,
-        saving: offlineSaving,
+        saving: submissionSaving,
+        submissionUnavailableReason,
+        preparedPreview,
+        reviewOpen,
         message,
         messageType,
         selectedBankAccount,
@@ -603,6 +633,8 @@ Expected Delivery: ${order.expected_delivery_date}
         removeItem,
         updateItemQuantity,
         saveOrder,
+        confirmPreparedOrder,
+        closeOrderReview,
         printOrder,
         shareOnWhatsApp,
         resetOrder,

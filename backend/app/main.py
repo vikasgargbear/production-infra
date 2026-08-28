@@ -4,20 +4,31 @@ Reorganized with domain-based folder structure
 """
 import asyncio
 import os
+from typing import Optional
 from fastapi import FastAPI, APIRouter
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 from sqlalchemy import text
 from starlette.concurrency import run_in_threadpool
 
-from .core.database import engine
+from .core.database import (
+    DATABASE_CONNECTION_MODE,
+    DATABASE_TRANSPORT_REQUIREMENT,
+    DATABASE_URL,
+    attest_database_transport,
+    engine,
+    validate_required_database_peers,
+)
 from .core.logging_config import setup_logging
 from .core.env import get_app_env, is_production, is_test_mode_enabled
 from .core.api_contract import install_operation_registry
+from .core.read_only_router import (
+    include_explicit_non_persistent_post_utilities,
+)
 from .middleware.error_handler import global_exception_handler
 from .middleware.security_headers import SecurityHeadersMiddleware
 from .middleware.request_logger import RequestLoggerMiddleware
+from .middleware.global_cors import GlobalCORSEnabledFastAPI
 
 # =============================================================================
 # DOMAIN-BASED IMPORTS - Organized by module
@@ -26,88 +37,52 @@ from .middleware.request_logger import RequestLoggerMiddleware
 # Auth Module
 from .api.routes.auth import enterprise as auth_enterprise
 from .api.routes.auth import oauth as auth_oauth
-from .api.routes.auth import users
-from .api.routes.auth import roles as role_management
-
-# Audit Module
-from .api.routes.audit import audit_router
-
-# Master Data Module
-from .api.routes.master import customers
-from .api.routes.master import suppliers
-from .api.routes.master import products
-from .api.routes.master import branches
-from .api.routes.master import departments
-from .api.routes.master import employees
-from .api.routes.master import bank_accounts
-
-# Sales Module (modular structure)
-from .api.routes.sales import (
-    orders_router,
-    invoices_router,
-    challan_router,
-    conversions_router,
-)
-
-# Returns Module (top-level, handles both sales and purchase returns)
-from .api.routes.returns import sales_returns_router, purchase_returns_router
+from .api.routes.auth import onboarding as auth_onboarding
 
 # Purchase Module
-from .api.routes.purchase import orders as purchases
-from .api.routes.purchase import supplier_invoices
-from .api.routes.purchase import grn
 from .api.routes.purchase import upload as purchase_upload
-
-# Inventory Module
-from .api.routes.inventory import stock as inventory
-from .api.routes.inventory import adjustments as stock_adjustments
-from .api.routes.inventory import movements as stock_movements
-from .api.routes.inventory import writeoff as stock_writeoff
-
-# Finance Module
-from .api.routes.finance import payments
-from .api.routes.finance import allocation as payment_allocation
-from .api.routes.finance import ledger
-from .api.routes.finance import journal as journal_entries
-from .api.routes.finance import tax as tax_entries
-from .api.routes.finance import credit_notes as credit_debit_notes
-from .api.routes.finance import expenses as expense_claims
-
-# Payroll Module
-from .api.routes.payroll import (
-    salary_structure_router,
-    leave_policy_router,
-    attendance_router,
-    leave_router,
-    payroll_run_router,
-    salary_slips_router,
-)
-
-# Compliance Module
-from .api.routes.compliance import gst
-from .api.routes.compliance import gstr2b
-from .api.routes.compliance import compliance
-
-# Reports Module (formerly Analytics)
-from .api.routes.reports import dashboard
-from .api.routes.reports import collection as collection_center
-from .api.routes.reports import outstanding as customer_outstanding
+from .api.routes.purchase.upload import routes as purchase_upload_routes
+from .api.routes import canonical_inventory_transfers
 
 # Organization Module
-from .api.routes.org import company
-
-# Settings (already in folder)
-from .api.routes.settings import router as settings_router
-
-# Offline Sync
-from .api.routes import sync as sync_router
+from .api.routes.org import company_assets
 
 # Standalone utilities (remain at root level)
-from .api.routes import metadata
 from .api.routes import calculations
-from .api.routes.loyalty import router as loyalty_router
-from .api.routes import documents
 from .api.routes import schema as schema_router  # Live database schema documentation
+from .api.routes import (
+    canonical_erp_reads,
+    canonical_sales_chain_reads,
+    canonical_goods_receipts,
+    canonical_purchase_order_reads,
+    canonical_return_reads,
+    canonical_supplier_invoice_reads,
+    canonical_supplier_payment_reads,
+    canonical_supplier_advance_reads,
+    canonical_payment_history_reads,
+    canonical_customer_receipt_reads,
+    canonical_party_ledger_reads,
+    canonical_document_history_reads,
+    canonical_inventory_reads,
+    canonical_adjustment_note_reads,
+    canonical_controlled_operation_reads,
+    canonical_reference_reads,
+    canonical_evidence_uploads,
+)
+from .api.routes import web_operator_actions
+from .api.routes.internal import (
+    mcp_actions,
+    mcp_agent_grants,
+    mcp_canonical_reads,
+    mcp_canonical_resolution_reads,
+    mcp_master_commands,
+    tax_provider,
+)
+from .infrastructure.operator_actions import install_sqlalchemy_operator_action_service
+from .infrastructure.operator_actions.calculator_database import (
+    dispose_calculator_engine,
+)
+from .infrastructure.tax_provider import dispose_tax_provider_engine
 # from .api.routes import conversions  # REMOVED: File deleted
 # from .api.routes import api_wrapper  # REMOVED: File deleted  
 # from .api.routes import enterprise_api_complete  # REMOVED: File deleted
@@ -124,45 +99,36 @@ async def lifespan(app: FastAPI):
     import logging
     logger = logging.getLogger(__name__)
 
-    # SECURITY: Block TEST_MODE in production at startup
-    env = get_app_env()
-    if is_production() and is_test_mode_enabled():
-        raise RuntimeError(
-            "SECURITY ERROR: TEST_MODE=true is not allowed in production! "
-            "Remove TEST_MODE env var or set APP_ENV/ENV=development."
-        )
+    try:
+        install_sqlalchemy_operator_action_service()
 
-    if is_production():
-        required = ("SUPABASE_URL", "SUPABASE_ANON_KEY", "CORS_ORIGINS", "APP_URL")
-        missing = [name for name in required if not os.getenv(name, "").strip()]
-        if missing:
+        # SECURITY: Block TEST_MODE in production at startup
+        env = get_app_env()
+        if is_production() and is_test_mode_enabled():
             raise RuntimeError(
-                "Missing required production configuration: " + ", ".join(missing)
+                "SECURITY ERROR: TEST_MODE=true is not allowed in production! "
+                "Remove TEST_MODE env var or set APP_ENV=development."
             )
 
-    logger.info("Starting Pharma ERP Backend...")
-    yield
-    logger.info("Shutting down...")
+        if is_production():
+            required = ("SUPABASE_URL", "SUPABASE_ANON_KEY", "CORS_ORIGINS", "APP_URL")
+            missing = [name for name in required if not os.getenv(name, "").strip()]
+            if missing:
+                raise RuntimeError(
+                    "Missing required production configuration: " + ", ".join(missing)
+                )
 
-app = FastAPI(
-    title="Pharma ERP API",
-    description="Enterprise Pharma ERP System API",
-    version="3.0.0",  # Major version bump for folder restructure
-    lifespan=lifespan
-)
-
-# =============================================================================
-# MIDDLEWARE STACK (order matters: last added = first executed)
-# =============================================================================
-
-# Global exception handler (catch-all for unhandled errors)
-app.add_exception_handler(Exception, global_exception_handler)
-
-# Security headers (X-Frame-Options, HSTS, etc.)
-app.add_middleware(SecurityHeadersMiddleware)
-
-# Request logging with correlation IDs
-app.add_middleware(RequestLoggerMiddleware)
+        logger.info("Starting Pharma ERP Backend...")
+        yield
+    finally:
+        logger.info("Shutting down...")
+        try:
+            dispose_calculator_engine()
+        finally:
+            try:
+                dispose_tax_provider_engine()
+            finally:
+                engine.dispose()
 
 # CORS Configuration — env-based whitelist in production
 _cors_origins_env = os.getenv("CORS_ORIGINS", "")
@@ -180,24 +146,43 @@ else:
 if "*" in _allowed_origins:
     raise RuntimeError("CORS_ORIGINS cannot contain '*' when credentials are enabled")
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=_allowed_origins,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=[
-        "Authorization",
-        "Content-Type",
-        "X-Request-ID",
-        "X-Idempotency-Key",
-    ],
-    expose_headers=[
-        "X-Request-ID",
-        "X-Idempotency-Key",
-        "X-Idempotency-Replayed",
-    ],
-    max_age=3600,
+app = GlobalCORSEnabledFastAPI(
+    title="Pharma ERP API",
+    description="Enterprise Pharma ERP System API",
+    version="3.0.0",  # Major version bump for folder restructure
+    lifespan=lifespan,
+    global_cors_options={
+        "allow_origins": _allowed_origins,
+        "allow_credentials": True,
+        "allow_methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        "allow_headers": [
+            "Authorization",
+            "Content-Type",
+            "X-Request-ID",
+            "X-Idempotency-Key",
+            "X-Connection-Check",
+        ],
+        "expose_headers": [
+            "X-Request-ID",
+            "X-Idempotency-Key",
+            "X-Idempotency-Replayed",
+        ],
+        "max_age": 3600,
+    },
 )
+
+# =============================================================================
+# MIDDLEWARE STACK (order matters: last added = first executed)
+# =============================================================================
+
+# Global exception handler (catch-all for unhandled errors)
+app.add_exception_handler(Exception, global_exception_handler)
+
+# Security headers (X-Frame-Options, HSTS, etc.)
+app.add_middleware(SecurityHeadersMiddleware)
+
+# Request logging with correlation IDs
+app.add_middleware(RequestLoggerMiddleware)
 
 # Disable redirect_slashes to prevent 307 redirects that break CORS
 # 307 redirects during preflight OPTIONS requests fail CORS validation
@@ -207,33 +192,113 @@ app.router.redirect_slashes = False
 # The custom handler was returning JSON without CORS headers, causing CORS failures
 # FastAPI's CORSMiddleware automatically handles OPTIONS requests properly
 
+def _deployed_git_commit() -> Optional[str]:
+    """Return the immutable build identity supplied by a supported platform."""
+
+    for variable_name in ("RENDER_GIT_COMMIT", "RAILWAY_GIT_COMMIT_SHA"):
+        value = os.getenv(variable_name, "").strip().lower()
+        if len(value) == 40 and all(
+            character in "0123456789abcdef" for character in value
+        ):
+            return value
+    return None
+
+
 @app.get("/")
 async def root():
     return {
         "message": "Pharma ERP API",
         "version": "3.0.0",
         "status": "healthy",
-        "structure": "domain-based-folders"
+        "structure": "domain-based-folders",
+        "git_commit": _deployed_git_commit(),
     }
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "service": "pharma-erp-backend", "version": "3.0.0"}
+    return {
+        "status": "healthy",
+        "service": "pharma-erp-backend",
+        "version": "3.0.0",
+        "git_commit": _deployed_git_commit(),
+    }
 
 
 READINESS_TIMEOUT_SECONDS = 5.0
 
 
-def _database_is_ready() -> bool:
+def _database_readiness() -> dict:
+    validate_required_database_peers()
     with engine.connect() as connection:
-        return connection.execute(text("SELECT 1")).scalar_one() == 1
+        row = connection.execute(
+            text(
+                """
+                SELECT current_user AS principal,
+                       role.rolsuper,
+                       role.rolbypassrls,
+                       pg_has_role(
+                           current_user,
+                           'erp_migration_owner',
+                           'MEMBER'
+                       ) AS migration_owner_member,
+                       pg_has_role(
+                           current_user,
+                           'erp_app',
+                           'USAGE'
+                       ) AS command_authority,
+                       pg_catalog.to_regrole('erp_session_authority') IS NOT NULL
+                         AS session_role_exists,
+                       CASE
+                         WHEN pg_catalog.to_regrole('erp_session_authority') IS NULL
+                           THEN false
+                         ELSE pg_has_role(
+                           current_user,
+                           pg_catalog.to_regrole('erp_session_authority'),
+                           'USAGE'
+                         )
+                       END AS session_authority,
+                       current_setting('row_security') = 'on' AS row_security
+                  FROM pg_catalog.pg_roles AS role
+                 WHERE role.rolname=current_user
+                """
+            )
+        ).mappings().one()
+
+    principal_isolated = (
+        row["principal"] == "erp_runtime"
+        and not bool(row["rolsuper"])
+        and not bool(row["rolbypassrls"])
+        and not bool(row["migration_owner_member"])
+    )
+    row_security = bool(row["row_security"])
+    transport_receipt = attest_database_transport(
+        DATABASE_URL,
+        DATABASE_TRANSPORT_REQUIREMENT,
+    )
+    required_ip_version = transport_receipt["ip_version"]
+    if required_ip_version is not None and not (principal_isolated and row_security):
+        raise RuntimeError(
+            f"required direct IPv{required_ip_version} database transport is not ready"
+        )
+
+    return {
+        "transport": DATABASE_CONNECTION_MODE,
+        "principal": row["principal"],
+        "principal_isolated": principal_isolated,
+        "migration_owner_member": bool(row["migration_owner_member"]),
+        "command_authority": bool(row["command_authority"]),
+        "session_role_exists": bool(row["session_role_exists"]),
+        "session_authority": bool(row["session_authority"]),
+        "row_security": row_security,
+        "ip_version": required_ip_version,
+    }
 
 
 @app.get("/ready", include_in_schema=False)
 async def readiness_check():
     try:
         ready = await asyncio.wait_for(
-            run_in_threadpool(_database_is_ready),
+            run_in_threadpool(_database_readiness),
             timeout=READINESS_TIMEOUT_SECONDS,
         )
     except Exception:
@@ -241,7 +306,18 @@ async def readiness_check():
 
     if not ready:
         return JSONResponse(status_code=503, content={"status": "not_ready"})
-    return {"status": "ready"}
+    authority_open = (
+        ready["principal_isolated"]
+        and ready["command_authority"]
+        and ready["session_role_exists"]
+        and ready["session_authority"]
+    )
+    if not authority_open:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "maintenance", "database": ready},
+        )
+    return {"status": "ready", "database": ready}
 
 # =============================================================================
 # API ROUTER REGISTRATION
@@ -252,84 +328,125 @@ api = APIRouter(prefix="/api")
 # --- Auth ---
 api.include_router(auth_enterprise.router, tags=["Authentication"])
 api.include_router(auth_oauth.router, tags=["OAuth"])
-api.include_router(users.router, tags=["Users"])
-api.include_router(role_management.router, tags=["Role Management"])
+api.include_router(auth_onboarding.router)
+api.include_router(mcp_agent_grants.router)
+api.include_router(mcp_canonical_reads.router)
+api.include_router(mcp_canonical_resolution_reads.router)
+api.include_router(mcp_master_commands.router)
+api.include_router(mcp_actions.router)
+api.include_router(web_operator_actions.router)
+api.include_router(tax_provider.router)
 
-# --- Audit ---
-api.include_router(audit_router, tags=["Audit Trail"])
+# Register canonical compatibility before legacy routes with overlapping paths.
+api.include_router(canonical_erp_reads.router, tags=["Canonical ERP Reads"])
+api.include_router(canonical_sales_chain_reads.router, tags=["Canonical Sales Chain Reads"])
+api.include_router(canonical_purchase_order_reads.router)
+api.include_router(canonical_goods_receipts.router, tags=["Canonical Goods Receipts"])
+api.include_router(canonical_supplier_invoice_reads.router)
+api.include_router(canonical_return_reads.router)
+api.include_router(canonical_supplier_payment_reads.router)
+api.include_router(canonical_supplier_advance_reads.router)
+api.include_router(canonical_payment_history_reads.router)
+api.include_router(canonical_customer_receipt_reads.router)
+api.include_router(canonical_inventory_reads.router, tags=["Canonical Inventory Reads"])
+api.include_router(canonical_adjustment_note_reads.router)
+api.include_router(canonical_controlled_operation_reads.router)
+api.include_router(canonical_inventory_transfers.router, tags=["Canonical Inventory Transfers"])
+api.include_router(canonical_party_ledger_reads.router)
+api.include_router(canonical_document_history_reads.router)
+api.include_router(canonical_reference_reads.router, tags=["Canonical Reference Reads"])
+api.include_router(canonical_evidence_uploads.router)
 
 # --- Master Data ---
-api.include_router(customers.router, prefix="/customers", tags=["Customers"])
-api.include_router(suppliers.router, prefix="/suppliers", tags=["Suppliers"])
-api.include_router(products.router, prefix="/products", tags=["Products"])
-api.include_router(branches.router, prefix="/branches", tags=["Branches"])
-api.include_router(departments.router, prefix="/departments", tags=["Departments"])
-api.include_router(employees.router, prefix="/employees", tags=["Employees"])
-api.include_router(bank_accounts.router, prefix="/bank-accounts", tags=["Bank Accounts"])
+# Canonical product/customer/supplier/address mutations and every supported
+# master read are registered by canonical_erp_reads above.  The retired master
+# routers are intentionally absent: their integer details, aliases, and
+# guessed account balances are not valid compatibility authorities.
 
-# --- Sales ---
-api.include_router(orders_router, tags=["Sales Orders"])
-api.include_router(invoices_router, tags=["Invoices"])
-api.include_router(challan_router, prefix="/challan", tags=["Challan"])
-api.include_router(conversions_router, prefix="/conversions", tags=["Conversions"])
+# --- Retired legacy business routers: reads only ---
+# Canonical business writes are available only through /web/actions.  Keeping
+# this fence at registration time prevents an unused legacy frontend method or
+# a direct API caller from bypassing reviewed prepare/approve/execute commands.
 
-# --- Returns (Sales & Purchase) ---
-api.include_router(sales_returns_router, prefix="/sale-returns", tags=["Sale Returns"])
-api.include_router(purchase_returns_router, prefix="/purchase-returns", tags=["Purchase Returns"])
+# Sales lists, UUID details, import contexts, acceptance readbacks and document
+# history are provided by the canonical routers above.  The retired integer-ID
+# sales routers are deliberately not mounted.
 
-# --- Purchase ---
-api.include_router(purchases.router, prefix="/purchases", tags=["Purchases"])
-api.include_router(supplier_invoices.router, prefix="/supplier-invoices", tags=["Supplier Invoices"])
-api.include_router(grn.router, prefix="/grn", tags=["Goods Receipt Notes"])
-api.include_router(purchase_upload.router, prefix="/purchase-upload", tags=["Purchase Upload"])
+# Return eligibility, reasons, reviewed lifecycle, history, and posted readback
+# are exposed only through canonical UUID resources above.  The retired
+# integer-ID routers also contained direct inventory and financial mutations
+# and are intentionally not imported or mounted.
 
-# --- Inventory ---
-api.include_router(inventory.router, prefix="/inventory", tags=["Inventory"])
-api.include_router(stock_adjustments.router, prefix="/stock-adjustments", tags=["Stock Adjustments"])
-api.include_router(stock_movements.router, prefix="/stock-movements", tags=["Stock Movements"])
-api.include_router(stock_writeoff.router, tags=["Stock Write-off"])
+# Purchase-order, supplier-invoice and goods-receipt reads are provided by the
+# canonical routers above.  Only the bounded, non-persistent upload utilities
+# remain reachable from the retired upload module.
+include_explicit_non_persistent_post_utilities(
+    api,
+    purchase_upload.router,
+    prefix="/purchase-upload",
+    tags=["Purchase Upload"],
+    routes={
+        "/parse-invoice-safe": purchase_upload_routes.parse_purchase_invoice_safe,
+    },
+)
+
+# Inventory reads and reviewed commands are mounted above through the canonical
+# UUID routers.  The retired inventory, adjustment, movement and write-off
+# routers used integer identifiers and pre-ledger stock tables, so none of
+# their reads or writes is reachable.
 
 # --- Finance ---
-api.include_router(payments.router, prefix="/payments", tags=["Payments"])
-api.include_router(payment_allocation.router, tags=["Payment Allocation"])
-api.include_router(ledger.router, tags=["Ledger"])
-api.include_router(journal_entries.router, prefix="/journal-entries", tags=["Journal Entries"])
-api.include_router(tax_entries.router, prefix="/tax-entries", tags=["Tax Entries"])
-api.include_router(credit_debit_notes.router, prefix="/credit-debit-notes", tags=["Credit/Debit Notes"])
-api.include_router(expense_claims.router, prefix="/expense-claims", tags=["Expense Claims"])
-
-# --- Payroll ---
-api.include_router(salary_structure_router, prefix="/payroll/salary-structures", tags=["Payroll"])
-api.include_router(leave_policy_router, prefix="/payroll/leave-policies", tags=["Payroll"])
-api.include_router(attendance_router, prefix="/payroll/attendance", tags=["Payroll"])
-api.include_router(leave_router, prefix="/payroll/leave", tags=["Payroll"])
-api.include_router(payroll_run_router, prefix="/payroll", tags=["Payroll"])
-api.include_router(salary_slips_router, prefix="/payroll/slips", tags=["Payroll"])
+# Posted payment history, open-item allocation context/readback, and standalone
+# adjustment-note context/readback are provided only by canonical UUID routers.
+# The retired payment/allocation/note routers mixed integer identifiers, old
+# outstanding projections, static reason/method lists, and silent zero/error
+# fallbacks, so none of them is mounted.
+# Expense-claim eligibility, review and posted readback are canonical web
+# operator-action resources.  The legacy claim list/detail projections are not
+# mounted.
 
 # --- Compliance ---
-api.include_router(gst.router, prefix="/gst", tags=["GST"])
-api.include_router(gstr2b.router, prefix="/gst", tags=["GST"])
-api.include_router(compliance.router, prefix="/compliance", tags=["Compliance"])
+# GST dashboard, filing status and statutory reports are published only by
+# canonical_erp_reads.  The retired compliance routers queried pre-canonical
+# GST/master tables, inferred filing facts, and exposed an unversioned 18%
+# calculation default.  GST settings now come from the single effective
+# tax.registrations row. Missing GSTR-2B and regulatory projections stay
+# explicitly unavailable until authoritative canonical resources exist.
 
 # --- Analytics ---
-api.include_router(dashboard.router, prefix="/dashboard", tags=["Dashboard"])
-api.include_router(collection_center.router, prefix="/collection-center", tags=["Collection Center"])
-api.include_router(customer_outstanding.router, tags=["Customer Outstanding"])
+# Dashboard and report projections are mounted by canonical_erp_reads.  The
+# retired reports.dashboard router queried the pre-canonical sales, inventory,
+# parties and financial schemas and silently converted read failures to zero.
+# Authoritative aging and collection totals are mounted by canonical_erp_reads.
+# The retired collection router exposed invented follow-up, agent, campaign and
+# efficiency facts; customer-outstanding also contained an unsafe first-org
+# fallback.  Neither legacy report router is mounted.
 
 # --- Organization ---
-api.include_router(company.router, prefix="/company", tags=["Company"])
+# Canonical company profile reads are mounted by canonical_erp_reads above.
+# This narrow router preserves the asset read boundary while all company
+# mutations remain fail-closed until reviewed core commands are available.
+api.include_router(company_assets.router, prefix="/company", tags=["Company"])
 
 # --- Settings ---
-api.include_router(settings_router, prefix="/settings", tags=["Settings"])
-
-# --- Offline Sync ---
-api.include_router(sync_router.router, tags=["Offline Sync"])
+# Canonical feature settings are mounted by canonical_erp_reads. Legacy nested
+# business-setting projections are deliberately not mounted: their behavior
+# differs across FastAPI router implementations and they are not authoritative.
 
 # --- Utilities ---
-api.include_router(documents.router, tags=["Documents"])
-api.include_router(metadata.router, prefix="/metadata", tags=["Metadata"])
-api.include_router(calculations.router)
-api.include_router(loyalty_router, prefix="/loyalty", tags=["Loyalty Points"])
+# The retired metadata router published unversioned statutory and commercial
+# choices (tax rates, state-name mappings, credit plans, payment terms and UOM
+# labels), and silently substituted hard-coded data after database failures.
+# Canonical workflows resolve these facts from their owning rows or reviewed
+# reference-data releases.  Unsupported choice catalogs remain unavailable.
+include_explicit_non_persistent_post_utilities(
+    api,
+    calculations.router,
+    routes={
+        "/calculations/invoice": calculations.preview_invoice_totals,
+        "/calculations/sales-order": calculations.preview_sales_order_totals,
+    },
+)
 # api.include_router(conversions.router, tags=["Document Conversions"])  # DISABLED: Module removed
 api.include_router(schema_router.router, tags=["Schema Documentation"])  # Live database schema
 

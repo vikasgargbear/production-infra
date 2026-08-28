@@ -2,24 +2,31 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { FileText, ChevronRight, ChevronLeft, Loader2, RefreshCw, Package } from 'lucide-react';
 import { invoicesApi } from '../../../services/api';
 import type { ReturnInvoiceSelectorProps } from '../types/return.types';
+import { formatReturnMoney } from '../utils/returnDecimal';
+import { formatCalendarDate } from '../../../utils/calendarDate';
 
 interface InvoiceData {
-    id?: number;
-    invoice_id?: number;
+    id?: string | number;
+    invoice_id?: string | number;
     invoice_number: string;
     invoice_date: string;
-    final_amount?: number;
-    total_amount?: number;
-    grand_total?: number;
+    final_amount?: number | string;
+    total_amount?: number | string;
+    grand_total?: number | string;
     total_items?: number;
     items?: any[];
 }
+
+const formatInvoiceAmount = (amount: unknown): string => {
+    if (amount === '' || amount === null || amount === undefined) return 'Amount unavailable';
+    try { return formatReturnMoney(amount, 'Invoice amount'); }
+    catch { return 'Invalid invoice amount'; }
+};
 
 export const ReturnInvoiceSelector = React.memo<ReturnInvoiceSelectorProps>(({
     selectedCustomer,
     selectedInvoice,
     onInvoiceSelect,
-    onSkipInvoice,
     onChangeInvoice,
     showInvoiceSection,
     invoiceSearchRef
@@ -42,66 +49,23 @@ export const ReturnInvoiceSelector = React.memo<ReturnInvoiceSelectorProps>(({
         setError(null);
 
         try {
-            // Try API first (online mode)
-            if (navigator.onLine) {
-                const response = await invoicesApi.search({
-                    customer_id: customerId,
-                    skip: (pageNum - 1) * ITEMS_PER_PAGE,
-                    limit: ITEMS_PER_PAGE,
-                    sort: 'invoice_date',
-                    order: 'desc'
-                });
+            const response = await invoicesApi.search({
+                customer_id: customerId,
+                skip: (pageNum - 1) * ITEMS_PER_PAGE,
+                limit: ITEMS_PER_PAGE,
+                sort: 'invoice_date',
+                order: 'desc'
+            });
 
-                const data = (response as any)?.data || response;
-                const invoiceList = data?.invoices || (Array.isArray(data) ? data : []);
-                setInvoices(invoiceList);
-                setTotalCount(data?.total || invoiceList.length);
-            } else {
-                // Offline mode: use cached invoices from IndexedDB
-                const { default: offlineDB } = await import('../../../services/offline/core/offlineDatabase');
-                const allInvoices = await offlineDB.getAll('invoices');
-
-                // Filter by customer ID
-                const customerInvoices = allInvoices.filter(
-                    (inv: any) => String(inv.customer_id) === String(customerId)
-                );
-
-                // Sort by date descending
-                customerInvoices.sort((a: any, b: any) =>
-                    new Date(b.invoice_date).getTime() - new Date(a.invoice_date).getTime()
-                );
-
-                // Paginate
-                const start = (pageNum - 1) * ITEMS_PER_PAGE;
-                const paginatedInvoices = customerInvoices.slice(start, start + ITEMS_PER_PAGE);
-
-                setInvoices(paginatedInvoices);
-                setTotalCount(customerInvoices.length);
-
-                if (customerInvoices.length === 0) {
-                    setError('No cached invoices. Sync when online.');
-                }
-            }
+            const data = (response as any)?.data || response;
+            const invoiceList = data?.invoices || (Array.isArray(data) ? data : []);
+            setInvoices(invoiceList);
+            setTotalCount(data?.total ?? invoiceList.length);
         } catch (err) {
             console.error('Failed to fetch invoices:', err);
-
-            // Fallback to IndexedDB on any error
-            try {
-                const { default: offlineDB } = await import('../../../services/offline/core/offlineDatabase');
-                const allInvoices = await offlineDB.getAll('invoices');
-                const customerInvoices = allInvoices.filter(
-                    (inv: any) => String(inv.customer_id) === String(customerId)
-                );
-                customerInvoices.sort((a: any, b: any) =>
-                    new Date(b.invoice_date).getTime() - new Date(a.invoice_date).getTime()
-                );
-                const start = (pageNum - 1) * ITEMS_PER_PAGE;
-                setInvoices(customerInvoices.slice(start, start + ITEMS_PER_PAGE));
-                setTotalCount(customerInvoices.length);
-            } catch (offlineErr) {
-                setError('Failed to load invoices');
-                setInvoices([]);
-            }
+            setError('Failed to load invoices from the canonical API.');
+            setInvoices([]);
+            setTotalCount(0);
         } finally {
             setLoading(false);
         }
@@ -124,7 +88,7 @@ export const ReturnInvoiceSelector = React.memo<ReturnInvoiceSelectorProps>(({
         if (selectedInvoice && selectedCustomer) {
             const invoiceNumber = (selectedInvoice as any)?.invoice_number || '';
             const invoiceDate = (selectedInvoice as any)?.invoice_date || '';
-            const invoiceAmount = (selectedInvoice as any)?.final_amount || (selectedInvoice as any)?.total_amount || 0;
+            const invoiceAmount = (selectedInvoice as any)?.final_amount ?? (selectedInvoice as any)?.total_amount;
 
             return (
                 <div className="mb-4">
@@ -141,9 +105,9 @@ export const ReturnInvoiceSelector = React.memo<ReturnInvoiceSelectorProps>(({
                                     </div>
                                     <div className="flex items-center gap-3 text-sm text-gray-500">
                                         {invoiceDate && (
-                                            <span>{new Date(invoiceDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                                            <span>{formatCalendarDate(invoiceDate)}</span>
                                         )}
-                                        <span>₹{invoiceAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                                        <span>{formatInvoiceAmount(invoiceAmount)}</span>
                                     </div>
                                 </div>
                             </div>
@@ -155,16 +119,6 @@ export const ReturnInvoiceSelector = React.memo<ReturnInvoiceSelectorProps>(({
                                     className="px-3 py-1.5 text-sm text-blue-600 border border-blue-300 hover:bg-blue-50 rounded-lg transition-colors font-medium"
                                 >
                                     Change Invoice
-                                </button>
-                                <button
-                                    onClick={() => {
-                                        if (onChangeInvoice) onChangeInvoice();
-                                        onSkipInvoice();
-                                    }}
-                                    className="px-3 py-1.5 text-sm text-gray-600 border border-gray-300 hover:bg-gray-100 rounded-lg transition-colors flex items-center gap-1.5"
-                                >
-                                    <Package className="w-4 h-4" />
-                                    Manual Entry
                                 </button>
                             </div>
                         </div>
@@ -179,50 +133,32 @@ export const ReturnInvoiceSelector = React.memo<ReturnInvoiceSelectorProps>(({
     const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
 
     // Format currency
-    const formatCurrency = (amount: number | undefined) => {
-        return `₹${(amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
-    };
-
     // Format date
-    const formatDate = (dateStr: string) => {
-        return new Date(dateStr).toLocaleDateString('en-IN', {
-            day: '2-digit',
-            month: 'short',
-            year: 'numeric'
-        });
-    };
+    const formatDate = (dateStr: string) => formatCalendarDate(dateStr);
 
     // Handle invoice click
     const handleInvoiceClick = (invoice: InvoiceData) => {
         // Map to expected format
-        const invoiceId = invoice.id || invoice.invoice_id;
+        const invoiceId = invoice.id ?? invoice.invoice_id;
         const mappedInvoice = {
             invoice_id: invoiceId,
             id: invoiceId,
             invoice_number: invoice.invoice_number,
             invoice_date: invoice.invoice_date,
-            final_amount: invoice.final_amount || invoice.total_amount || invoice.grand_total || 0,
-            total_items: invoice.total_items || invoice.items?.length || 0
+            final_amount: invoice.final_amount ?? invoice.total_amount ?? invoice.grand_total,
+            total_items: invoice.total_items ?? invoice.items?.length
         };
         onInvoiceSelect(mappedInvoice as any);
     };
 
     return (
         <div className="mb-6">
-            {/* Header with Manual Entry button */}
+            {/* Canonical source is required. */}
             <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider flex items-center">
                     <FileText className="w-4 h-4 mr-2" />
-                    SELECT INVOICE (Optional)
+                    SELECT POSTED INVOICE (Required)
                 </h3>
-                <button
-                    onClick={onSkipInvoice}
-                    className="min-w-[140px] px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors flex items-center justify-center gap-2 text-sm font-medium"
-                    title="Skip invoice and enter items manually"
-                >
-                    <span>Manual Entry</span>
-                    <ChevronRight className="w-4 h-4" />
-                </button>
             </div>
 
             {/* Invoice list */}
@@ -249,7 +185,7 @@ export const ReturnInvoiceSelector = React.memo<ReturnInvoiceSelectorProps>(({
                         <div className="flex flex-col items-center justify-center py-8 text-gray-500">
                             <Package className="w-8 h-8 mb-2 text-gray-400" />
                             <p>No invoices found for this customer</p>
-                            <p className="text-sm text-gray-400 mt-1">Use Manual Entry to add items directly</p>
+                            <p className="text-sm text-gray-400 mt-1">A posted dispatch-allocated invoice is required for exact return lineage.</p>
                         </div>
                     ) : (
                         <>
@@ -257,7 +193,8 @@ export const ReturnInvoiceSelector = React.memo<ReturnInvoiceSelectorProps>(({
                             <div className="space-y-2">
                                 {invoices.map((invoice) => (
                                     <button
-                                        key={invoice.id || invoice.invoice_id}
+                                        key={invoice.id ?? invoice.invoice_id}
+                                        data-testid={`select-sales-invoice-${invoice.id ?? invoice.invoice_id}`}
                                         onClick={() => handleInvoiceClick(invoice)}
                                         className="w-full text-left p-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-all flex items-center justify-between group"
                                     >
@@ -271,15 +208,15 @@ export const ReturnInvoiceSelector = React.memo<ReturnInvoiceSelectorProps>(({
                                                 </span>
                                                 <div className="flex items-center gap-3 text-sm text-gray-500">
                                                     <span>{formatDate(invoice.invoice_date)}</span>
-                                                    {(invoice.total_items || invoice.items?.length) && (
-                                                        <span>{invoice.total_items || invoice.items?.length} items</span>
+                                                    {(invoice.total_items ?? invoice.items?.length) !== undefined && (
+                                                        <span>{invoice.total_items ?? invoice.items?.length} items</span>
                                                     )}
                                                 </div>
                                             </div>
                                         </div>
                                         <div className="text-right">
                                             <span className="font-semibold text-gray-900">
-                                                {formatCurrency(invoice.final_amount || invoice.total_amount || invoice.grand_total)}
+                                                {formatInvoiceAmount(invoice.final_amount ?? invoice.total_amount ?? invoice.grand_total)}
                                             </span>
                                             <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-blue-600 inline-block ml-2" />
                                         </div>

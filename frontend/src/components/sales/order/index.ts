@@ -6,11 +6,6 @@
 
 // Main entry points
 export { default as SalesOrderFlow } from './SalesOrderFlow';
-export { default as SalesOrderList } from './SalesOrderList';
-export { default as Orders } from './Orders';
-
-// Legacy alias for backward compatibility
-export { default as SalesOrderManagement } from './SalesOrderList';
 
 // Step components
 export { default as OrderItemsStep } from './steps/OrderItemsStep';

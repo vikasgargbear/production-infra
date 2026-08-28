@@ -6,16 +6,18 @@
  */
 import React from 'react';
 import {
-  Users, Search, Plus, Edit2, Trash2,
-  AlertCircle, Check, Phone
+  Users, Search, Plus, AlertCircle
 } from 'lucide-react';
-import { customersApi } from '../../../services/api';
+import { customersApi, ledgerApi } from '../../../services/api';
 import { DataTable, Column } from '../../global/ui/display/DataTable';
 import { GlobalLayout, ContentCard } from '../../global';
 import Button from '../../global/ui/Button';
-import CustomerEditModal from '../modals/CustomerEditModal';
+import CustomerFlow from '../customers/CustomerFlow';
 import { useEntityMaster } from '../hooks';
 import type { Customer as BaseCustomer } from '../../../types/models';
+import ContactActions from './ContactActions';
+import { mergeCustomersWithCanonicalAging } from './customerAgingProjection';
+import CanonicalWriteNotice from '../../global/ui/CanonicalWriteNotice';
 
 // ============================================================================
 // Types
@@ -28,12 +30,32 @@ type Customer = BaseCustomer & {
   credit_limit?: number;
   credit_days?: number;
   credit_rating?: string;
-  current_outstanding?: number;
+  current_outstanding?: number | null;
+  outstanding_available?: boolean;
   customer_category?: string;
   business_type?: string;
   last_transaction_date?: string;
   total_business_amount?: number;
   address_line_1?: string;
+};
+
+export const loadCustomersWithCanonicalAging = async () => {
+  const customersResponse = await customersApi.getAll();
+  const responseData = customersResponse.data as any;
+  const customerRows: Customer[] = (Array.isArray(responseData)
+    ? responseData
+    : Array.isArray(responseData?.customers) ? responseData.customers : []) as Customer[];
+  let agingRows: Record<string, unknown>[] | null = null;
+  try {
+    const agingResponse = await ledgerApi.getAging({ party_type: 'customer' });
+    agingRows = Array.isArray(agingResponse.data?.aging_data) ? agingResponse.data.aging_data : [];
+  } catch {
+    agingRows = null;
+  }
+  return {
+    ...customersResponse,
+    data: mergeCustomersWithCanonicalAging(customerRows, agingRows),
+  };
 };
 
 // ============================================================================
@@ -42,11 +64,8 @@ type Customer = BaseCustomer & {
 
 const CUSTOMER_TYPES = [
   { value: 'all', label: 'All Types' },
-  { value: 'retail', label: 'Retail' },
-  { value: 'wholesale', label: 'Wholesale' },
-  { value: 'hospital', label: 'Hospital' },
-  { value: 'clinic', label: 'Clinic' },
-  { value: 'pharmacy', label: 'Pharmacy' }
+  { value: 'individual', label: 'Individual' },
+  { value: 'organization', label: 'Organization' },
 ];
 
 // ============================================================================
@@ -54,26 +73,26 @@ const CUSTOMER_TYPES = [
 // ============================================================================
 
 const getCreditStatus = (customer: Customer) => {
-  if (!customer.credit_limit) return null;
-  const utilization = (customer.current_outstanding || 0) / customer.credit_limit * 100;
-
-  if (utilization >= 100) {
-    return <span className="px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-700">Over Limit</span>;
-  } else if (utilization >= 80) {
-    return <span className="px-2 py-1 text-xs font-semibold rounded-full bg-amber-100 text-amber-700">Near Limit</span>;
-  } else {
-    return <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-700">Good</span>;
+  if (customer.credit_limit == null) {
+    return <span className="text-xs text-gray-500">Credit limit unavailable</span>;
   }
+  if (customer.credit_limit === 0) {
+    return <span className="text-xs text-gray-500">No credit limit</span>;
+  }
+  if (customer.outstanding_available === false || customer.current_outstanding == null) {
+    return <span className="text-xs text-gray-500">Balance unavailable</span>;
+  }
+  if (customer.current_outstanding > customer.credit_limit) {
+    return <span className="px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-700">Over Limit</span>;
+  }
+  return <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-700">Within Limit</span>;
 };
 
 // ============================================================================
 // Column Definitions
 // ============================================================================
 
-const getColumns = (
-  handleEdit: (c: Customer) => void,
-  handleDelete: (id: string | number) => Promise<void>
-): Column<Customer>[] => [
+const getColumns = (): Column<Customer>[] => [
     {
       key: 'customer_name',
       header: 'Customer',
@@ -88,14 +107,14 @@ const getColumns = (
       key: 'contact',
       header: 'Contact',
       render: (_, customer) => customer ? (
-        <div>
-          <div className="flex items-center text-gray-900">
-            <Phone className="w-3 h-3 mr-1" />
-            {customer.primary_phone || 'N/A'}
-          </div>
-          {customer.primary_email && (
-            <div className="text-sm text-gray-500 truncate">{customer.primary_email}</div>
-          )}
+        <div className="space-y-1">
+          <div className="text-sm text-gray-700">{customer.primary_phone || customer.primary_email || 'No contact details'}</div>
+          <ContactActions
+            name={customer.customer_name || 'customer'}
+            phone={customer.primary_phone}
+            email={customer.primary_email}
+            whatsapp={customer.whatsapp_number}
+          />
         </div>
       ) : <div>N/A</div>
     },
@@ -113,7 +132,7 @@ const getColumns = (
       header: 'GST/License',
       render: (_, customer) => {
         if (!customer) return <div>N/A</div>;
-        const gstNumber = (customer.gst_number || (customer as unknown as Record<string, unknown>).gst_number || '') as string;
+        const gstNumber = customer.gst_number;
         return (
           <div className="text-sm">
             {gstNumber ? (
@@ -134,16 +153,18 @@ const getColumns = (
       align: 'right' as const,
       render: (_, customer) => {
         if (!customer) return <div className="text-gray-400">No Credit</div>;
-        const creditLimit = customer.credit_limit || 0;
-        const creditDays = customer.credit_days || 0;
+        const creditLimit = customer.credit_limit;
+        const creditDays = customer.credit_days;
 
-        if (!creditLimit) return <div className="text-gray-400">No Credit</div>;
+        if (creditLimit == null || creditDays == null) {
+          return <div className="text-gray-500">Unavailable</div>;
+        }
 
         return (
           <div>
             <div className="font-medium">₹{creditLimit.toLocaleString()}</div>
             <div className="text-sm text-gray-500">{creditDays} days</div>
-            {getCreditStatus({ ...customer, credit_limit: creditLimit })}
+            {getCreditStatus(customer)}
           </div>
         );
       }
@@ -152,9 +173,11 @@ const getColumns = (
       key: 'current_outstanding',
       header: 'Outstanding',
       align: 'right' as const,
-      render: (value) => {
-        const amount = parseFloat(value || 0);
-        if (!amount) return <span className="text-gray-400">-</span>;
+      render: (value, customer) => {
+        if (customer.outstanding_available === false || value == null) {
+          return <span className="text-gray-500">Unavailable</span>;
+        }
+        const amount = Number(value);
         return <span className={`font-medium ${amount > 0 ? 'text-red-600' : 'text-green-600'}`}>₹{amount.toLocaleString()}</span>;
       }
     },
@@ -174,28 +197,11 @@ const getColumns = (
       header: 'Actions',
       align: 'center' as const,
       sortable: false,
-      render: (_, customer) => (
-        <div className="flex items-center justify-center space-x-2">
-          <button
-            onClick={() => handleEdit(customer)}
-            className="text-blue-600 hover:text-blue-700 p-1 rounded transition-colors"
-            disabled={!customer}
-          >
-            <Edit2 className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => handleDelete(customer?.customer_id)}
-            className={`${customer?.is_active !== false
-              ? 'text-amber-600 hover:text-amber-700'
-              : 'text-green-600 hover:text-green-700'
-              } p-1 rounded transition-colors`}
-            disabled={!customer?.customer_id}
-            title={customer?.is_active !== false ? 'Deactivate Customer' : 'Reactivate Customer'}
-          >
-            {customer?.is_active !== false ? <Trash2 className="w-4 h-4" /> : <Check className="w-4 h-4" />}
-          </button>
-        </div>
-      )
+      render: () => (
+        <span className="text-sm text-gray-500" title="A canonical customer edit command is not available">
+          Read only
+        </span>
+      ),
     }
   ];
 
@@ -216,21 +222,14 @@ const CustomerMaster: React.FC = () => {
     setFilterValue,
     showAddModal,
     setShowAddModal,
-    editingEntity,
-    setEditingEntity,
-    selectedIds,
-    setSelectedIds,
-    handleEdit,
-    handleDelete,
     handleSaved,
-    handleBulkDelete,
     searchInputRef
   } = useEntityMaster<Customer>({
     entityName: 'customer',
     idField: 'customer_id',
     nameField: 'customer_name',
     api: {
-      getAll: customersApi.getAll,
+      getAll: loadCustomersWithCanonicalAging,
       update: customersApi.update
     },
     searchFields: ['customer_name', 'customer_code', 'primary_phone', 'gst_number'],
@@ -238,13 +237,17 @@ const CustomerMaster: React.FC = () => {
     softDelete: true
   });
 
-  const columns = getColumns(handleEdit, handleDelete);
+  const columns = getColumns();
 
   // Summary stats
   const total = customers.length;
   const active = customers.filter(c => c.is_active !== false).length;
   const inactive = total - active;
-  const totalOutstanding = customers.reduce((sum, c) => sum + (c.current_outstanding || 0), 0);
+  const outstandingAvailable = !isLoading && !error
+    && customers.every(customer => customer.outstanding_available !== false);
+  const totalOutstanding = outstandingAvailable
+    ? customers.reduce((sum, customer) => sum + Number(customer.current_outstanding ?? 0), 0)
+    : null;
 
   const headerActions = (
     <Button variant="primary" onClick={() => setShowAddModal(true)}>
@@ -265,12 +268,7 @@ const CustomerMaster: React.FC = () => {
           <span className="text-gray-600">Total: <strong className="text-gray-900">{total}</strong></span>
           <span className="text-green-600">Active: <strong>{active}</strong></span>
           <span className="text-red-600">Inactive: <strong>{inactive}</strong></span>
-          <span className="text-gray-600">Outstanding: <strong className="text-gray-900">₹{totalOutstanding.toLocaleString()}</strong></span>
-          {selectedIds.length > 0 && (
-            <Button variant="danger" size="sm" onClick={handleBulkDelete}>
-              <Trash2 className="w-4 h-4 mr-2" />Deactivate ({selectedIds.length})
-            </Button>
-          )}
+          <span className="text-gray-600">Outstanding: <strong className="text-gray-900">{totalOutstanding == null ? 'Unavailable' : `₹${totalOutstanding.toLocaleString()}`}</strong></span>
         </div>
         <div className="flex items-center gap-3">
           <div className="relative">
@@ -278,16 +276,18 @@ const CustomerMaster: React.FC = () => {
             <input
               ref={searchInputRef}
               type="text"
+              aria-label="Search customers"
               placeholder="Search customers... ( / )"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-9 pr-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-64"
+              className="min-h-11 pl-9 pr-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-64"
             />
           </div>
           <select
+            aria-label="Filter customers by type"
             value={filterValue}
             onChange={(e) => setFilterValue(e.target.value)}
-            className="px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="min-h-11 px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             {CUSTOMER_TYPES.map(type => (
               <option key={type.value} value={type.value}>{type.label}</option>
@@ -303,6 +303,11 @@ const CustomerMaster: React.FC = () => {
           {error}
         </div>
       )}
+
+      <CanonicalWriteNotice
+        action="Editing customers or changing customer status"
+        description="New customer accounts use the canonical API. Existing customer edits and status changes remain unavailable until their reviewed cloud commands exist."
+      />
 
       {/* Customer List */}
       <ContentCard title="Customer List" subtitle={undefined} actions={undefined} className="overflow-hidden" icon={Users}>
@@ -323,9 +328,7 @@ const CustomerMaster: React.FC = () => {
             loading={isLoading}
             emptyMessage="No customers found"
             emptyIcon={<Users className="w-12 h-12 text-gray-400" />}
-            selectable={true}
-            selectedRows={filteredEntities.filter(c => selectedIds.includes(String(c.customer_id)))}
-            onSelectionChange={(selected) => setSelectedIds(selected.map(c => String(c.customer_id)))}
+            selectable={false}
             hoverable={true}
             striped={true}
             paginated={true}
@@ -335,16 +338,12 @@ const CustomerMaster: React.FC = () => {
         )}
       </ContentCard>
 
-      {/* Customer Edit/Add Modal */}
-      {(showAddModal || editingEntity) && (
-        <CustomerEditModal
-          isOpen={true}
-          onClose={() => {
-            setShowAddModal(false);
-            setEditingEntity(null);
-          }}
-          onSave={handleSaved}
-          customer={editingEntity}
+      {/* Canonical online create flow; unsupported edits are not rendered. */}
+      {showAddModal && (
+        <CustomerFlow
+          open={true}
+          onClose={() => setShowAddModal(false)}
+          onCustomerCreated={handleSaved}
         />
       )}
     </GlobalLayout>

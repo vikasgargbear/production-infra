@@ -1,0 +1,50 @@
+import { applySelectedDeliveryAddress } from './invoiceAddressSelection';
+
+const address = {
+  address_id: '10000000-0000-7000-8000-000000000014',
+  row_version: 3,
+  address_line1: '101 E2E Test Lane',
+  city: 'Mumbai',
+  state_code: '27',
+  pincode: '400001',
+};
+
+test('first saved delivery address establishes billing and delivery state', () => {
+  const result = applySelectedDeliveryAddress(
+    { billing_address: '', shipping_address: '' } as any,
+    address,
+  );
+
+  expect(result.billing_address).toBe('101 E2E Test Lane, Mumbai, 27, 400001');
+  expect(result.shipping_address).toBe(result.billing_address);
+  expect((result.shipping_address_data as any).state_code).toBe('27');
+  expect(result.gst_type).toBe('');
+});
+
+test('alternate delivery address preserves the confirmed billing address', () => {
+  const result = applySelectedDeliveryAddress(
+    {
+      billing_address: 'Original billing address',
+      billing_address_data: { state_code: '27' },
+    } as any,
+    { ...address, address_line1: '202 Alternate Lane', state_code: '08' },
+  );
+
+  expect(result.billing_address).toBe('Original billing address');
+  expect(result.shipping_address).toBe('202 Alternate Lane, Mumbai, 08, 400001');
+  expect(result.gst_type).toBe('');
+});
+
+test('rejects an address without an explicit canonical state code', () => {
+  expect(() => applySelectedDeliveryAddress(
+    { billing_address: '', shipping_address: '' } as any,
+    { ...address, state_code: undefined, state: 'Maharashtra' },
+  )).toThrow(/canonical state code/i);
+});
+
+test('rejects an address without immutable selection identity', () => {
+  expect(() => applySelectedDeliveryAddress(
+    { billing_address: '', shipping_address: '' } as any,
+    { ...address, row_version: undefined },
+  )).toThrow(/identity or row version/i);
+});

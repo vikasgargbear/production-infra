@@ -160,13 +160,6 @@ def test_grn_list():
             pass
     return finish_test(passed)
 
-def test_grn_generate_number():
-    """Test POST /api/grn/generate-number - reserve next GRN number"""
-    response = request_post("/grn/generate-number")
-    passed = response and response.status_code in [200, 401, 403]  # Auth may be required
-    log_result("POST /api/grn/generate-number", passed, response)
-    return finish_test(passed)
-
 def test_grn_by_id():
     """Test GET /api/grn/{id} - get GRN details"""
     list_response = request_get("/grn", {"limit": 1})

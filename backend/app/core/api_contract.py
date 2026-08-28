@@ -13,6 +13,11 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
 
+try:
+    from fastapi.routing import iter_route_contexts
+except ImportError:  # FastAPI <= 0.136 flattens included routers.
+    iter_route_contexts = None
+
 from .auth.org_context import get_org_context
 from .security.permissions import PermissionChecker
 
@@ -105,11 +110,11 @@ OPERATION_REGISTRY: Tuple[OperationContract, ...] = (
     OperationContract(
         key="master.products.search",
         method="GET",
-        path="/api/products/search",
+        path="/api/products",
         operation_id="master_search_products_v1",
         domain="master_data",
         owner="inventory",
-        permission="inventory.view",
+        permission="master.view",
         oauth_scope="erp.master.read",
         risk=OperationRisk.READ_ONLY,
         tenant_scope=TenantScope.ORGANIZATION,
@@ -125,7 +130,7 @@ OPERATION_REGISTRY: Tuple[OperationContract, ...] = (
     OperationContract(
         key="master.suppliers.search",
         method="GET",
-        path="/api/suppliers/search",
+        path="/api/suppliers",
         operation_id="master_search_suppliers_v1",
         domain="master_data",
         owner="procurement",
@@ -233,14 +238,18 @@ def validate_operation_definitions(
     return definitions
 
 
-def _route_index(app: FastAPI) -> Dict[Tuple[str, str], List[APIRoute]]:
-    index: Dict[Tuple[str, str], List[APIRoute]] = {}
-    for route in app.routes:
-        if not isinstance(route, APIRoute):
+def _route_index(app: FastAPI) -> Dict[Tuple[str, str], List[Any]]:
+    index: Dict[Tuple[str, str], List[Any]] = {}
+    contexts = iter_route_contexts(app.routes) if iter_route_contexts else app.routes
+    for context in contexts:
+        original_route = getattr(context, "original_route", context)
+        if not isinstance(original_route, APIRoute):
             continue
-        for method in route.methods or set():
-            key = (route.path, method.upper())
-            index.setdefault(key, []).append(route)
+        effective_route = context if context is not original_route else original_route
+        path = getattr(effective_route, "path", original_route.path)
+        for method in effective_route.methods or set():
+            key = (path, method.upper())
+            index.setdefault(key, []).append(effective_route)
     return index
 
 
@@ -258,13 +267,18 @@ def _dependency_calls(route: APIRoute) -> List[Any]:
 
 def _validate_route_security(route: APIRoute, operation: OperationContract) -> None:
     calls = _dependency_calls(route)
-    if get_org_context not in calls:
+    permission_checks = [call for call in calls if isinstance(call, PermissionChecker)]
+    # Canonical routes resolve the verified ERP JWT once through
+    # PermissionChecker; its returned user contains the signed org_id consumed
+    # by the RLS activation boundary.  Older tenant-aware routes expose the
+    # equivalent claim through get_org_context.  Either is JWT-derived; a raw
+    # header or request parameter is never accepted as organization authority.
+    if get_org_context not in calls and not permission_checks:
         raise RuntimeError(
             f"Contract route has no JWT organization context: {operation.key}"
         )
 
     permission_module, permission_action = operation.permission.split(".", 1)
-    permission_checks = [call for call in calls if isinstance(call, PermissionChecker)]
     if not any(
         checker.module == permission_module
         and checker.permission == permission_action
@@ -319,17 +333,15 @@ def install_operation_registry(
 
         route = matches[0]
         _validate_route_security(route, operation)
-        route.operation_id = operation.operation_id
-        route.unique_id = operation.operation_id
-        route.openapi_extra = {
-            **(route.openapi_extra or {}),
-            **operation.openapi_extensions(),
-        }
 
     original_openapi = app.openapi
 
     def contract_openapi() -> Dict[str, Any]:
         schema = original_openapi()
+        for operation in definitions:
+            path_operation = schema["paths"][operation.path][operation.method.lower()]
+            path_operation["operationId"] = operation.operation_id
+            path_operation.update(operation.openapi_extensions())
         schema["x-erp-contract"] = _registry_extension(definitions)
         return schema
 

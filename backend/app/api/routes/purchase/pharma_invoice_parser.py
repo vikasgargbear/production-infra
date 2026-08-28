@@ -3,7 +3,7 @@ Custom pharmaceutical invoice parser for better extraction
 """
 import pdfplumber
 import re
-from datetime import datetime, date, timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import List, Dict, Any, Optional
 import logging
@@ -28,15 +28,15 @@ def parse_pharma_invoice(pdf_path: str) -> Dict[str, Any]:
                 "success": True,
                 "extracted_data": {
                     "invoice_number": "",
-                    "invoice_date": date.today().isoformat(),
+                    "invoice_date": None,
                     "supplier_name": "",
                     "supplier_gstin": "",
                     "supplier_address": "",
                     "drug_license": "",
-                    "subtotal": Decimal("0"),
-                    "tax_amount": Decimal("0"),
-                    "discount_amount": Decimal("0"),
-                    "grand_total": Decimal("0"),
+                    "subtotal": None,
+                    "tax_amount": None,
+                    "discount_amount": None,
+                    "grand_total": None,
                     "items": []
                 },
                 "confidence_score": 0.8,
@@ -136,13 +136,13 @@ def parse_pharma_invoice(pdf_path: str) -> Dict[str, Any]:
                                     "hsn_code": hsns[i].strip() if i < len(hsns) else "",
                                     "batch_number": batches[i].strip() if i < len(batches) else "",
                                     "expiry_date": "",
-                                    "quantity": 0,
-                                    "unit": "strip",
-                                    "cost_price": Decimal("0"),
-                                    "mrp": Decimal("0"),
-                                    "discount_percent": 0,
-                                    "tax_percent": 12,
-                                    "amount": Decimal("0")
+                                    "quantity": None,
+                                    "unit": None,
+                                    "cost_price": None,
+                                    "mrp": None,
+                                    "discount_percent": None,
+                                    "tax_percent": None,
+                                    "amount": None,
                                 }
                             
                                 # Parse expiry date for this item
@@ -192,8 +192,8 @@ def parse_pharma_invoice(pdf_path: str) -> Dict[str, Any]:
                                 # Only add if we have a valid product item (not footer text)
                                 if (item["product_name"] and 
                                     len(item["product_name"]) > 2 and
-                                    item["quantity"] > 0 and  # Must have quantity
-                                    item["amount"] > 0 and    # Must have amount
+                                    item["quantity"] is not None and item["quantity"] > 0 and
+                                    item["amount"] is not None and item["amount"] > 0 and
                                     not any(keyword in item["product_name"].lower() for keyword in 
                                            ['bank', 'gst', 'ifsc', 'terms', 'condition', 'dispute', 
                                             'tax declaration', 'ack.', 'a/c no', 'bill'])): 
@@ -215,8 +215,8 @@ def parse_pharma_invoice(pdf_path: str) -> Dict[str, Any]:
                 )
             
             # Extract tax amounts - look for both percentage and amount patterns
-            cgst_amount = Decimal("0")
-            sgst_amount = Decimal("0")
+            cgst_amount = None
+            sgst_amount = None
             
             # Look for tax amounts in format "C.G.S.T. 6.0 452.94"
             cgst_matches = re.findall(r'C\.?G\.?S\.?T\.?\s*\d+\.?\d*\s+(\d+(?:\.\d+)?)', text)
@@ -227,15 +227,20 @@ def parse_pharma_invoice(pdf_path: str) -> Dict[str, Any]:
             if sgst_matches:
                 sgst_amount = sum((Decimal(x) for x in sgst_matches), Decimal("0"))
             
-            result["extracted_data"]["tax_amount"] = cgst_amount + sgst_amount
+            if cgst_amount is not None or sgst_amount is not None:
+                result["extracted_data"]["tax_amount"] = (
+                    (cgst_amount or Decimal("0")) + (sgst_amount or Decimal("0"))
+                )
 
             for item in result["extracted_data"]["items"]:
                 for field in ("cost_price", "mrp", "amount"):
-                    item[field] = money_json(item.get(field, 0))
+                    if item.get(field) is not None:
+                        item[field] = money_json(item[field])
             for field in ("subtotal", "tax_amount", "discount_amount", "grand_total"):
-                result["extracted_data"][field] = money_json(
-                    result["extracted_data"].get(field, 0)
-                )
+                if result["extracted_data"].get(field) is not None:
+                    result["extracted_data"][field] = money_json(
+                        result["extracted_data"][field]
+                    )
             
             return result
     
@@ -246,15 +251,15 @@ def parse_pharma_invoice(pdf_path: str) -> Dict[str, Any]:
             "message": "Failed to parse invoice. Please enter details manually.",
             "extracted_data": {
                 "invoice_number": "",
-                "invoice_date": date.today().isoformat(),
+                "invoice_date": None,
                 "supplier_name": "",
                 "supplier_gstin": "",
                 "supplier_address": "",
                 "drug_license": "",
-                "subtotal": "0.00",
-                "tax_amount": "0.00",
-                "discount_amount": "0.00",
-                "grand_total": "0.00",
+                "subtotal": None,
+                "tax_amount": None,
+                "discount_amount": None,
+                "grand_total": None,
                 "items": []
             },
             "confidence_score": 0,

@@ -20,7 +20,6 @@ export const UI_LABELS = {
         CREATE_PAYMENT: 'Create Payment',
         CREATE_NOTE: 'Create Note',
         SAVE: 'Save',
-        SAVE_DRAFT: 'Save Draft',
         CANCEL: 'Cancel',
         CLOSE: 'Close',
         PROCEED: 'Proceed to Review',

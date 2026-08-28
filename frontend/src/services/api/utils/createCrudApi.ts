@@ -1,11 +1,11 @@
 /**
  * CRUD API Factory
- * Generates standard getAll/getById/create/update/delete methods.
- * Modules spread these and add domain-specific methods on top.
+ * Generates standard reads and fail-closed legacy mutation placeholders.
+ * A module must override a mutation with a named canonical adapter.
  */
 
 import { apiHelpers } from '../apiClient';
-import { cleanData } from './dataUtils';
+import { rejectCanonicalWrite } from '../canonicalWritePolicy';
 import type { AxiosResponse } from 'axios';
 
 export interface CrudApiConfig {
@@ -15,11 +15,9 @@ export interface CrudApiConfig {
 }
 
 export function createCrudApi(config: CrudApiConfig) {
-  const { basePath, useCleanData = true, createPath = basePath } = config;
+  const { basePath, createPath = basePath } = config;
   // Strip trailing slash for ID-based endpoints to avoid double slashes
   const base = basePath.replace(/\/$/, '');
-
-  const prepare = (data: any) => (useCleanData ? cleanData(data) : data);
 
   return {
     getAll: (params?: any): Promise<AxiosResponse> => {
@@ -30,16 +28,13 @@ export function createCrudApi(config: CrudApiConfig) {
       return apiHelpers.get(`${base}/${id}`);
     },
 
-    create: (data: any): Promise<AxiosResponse> => {
-      return apiHelpers.post(createPath, prepare(data));
-    },
+    create: (_data: any): Promise<AxiosResponse> =>
+      rejectCanonicalWrite(`Creating a legacy ${createPath} record`),
 
-    update: (id: number | string, data: any): Promise<AxiosResponse> => {
-      return apiHelpers.put(`${base}/${id}`, prepare(data));
-    },
+    update: (_id: number | string, _data: any): Promise<AxiosResponse> =>
+      rejectCanonicalWrite(`Editing a legacy ${base} record`),
 
-    delete: (id: number | string): Promise<AxiosResponse> => {
-      return apiHelpers.delete(`${base}/${id}`);
-    },
+    delete: (_id: number | string): Promise<AxiosResponse> =>
+      rejectCanonicalWrite(`Deleting a legacy ${base} record`),
   };
 }

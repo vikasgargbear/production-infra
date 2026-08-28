@@ -4,6 +4,7 @@
 
 import { apiHelpers } from '../../apiClient';
 import type { AxiosResponse } from 'axios';
+import { rejectCanonicalWrite } from '../../canonicalWritePolicy';
 
 // ============================================
 // Type Definitions
@@ -42,39 +43,17 @@ export const companyApi = {
     },
 
     updateCompanyInfo: (data: Partial<CompanyData>): Promise<AxiosResponse> => {
-        return apiHelpers.put('/company/info', data);
+        void data;
+        return rejectCanonicalWrite('Updating the company profile');
     },
 
     uploadLogo: (fileOrBase64: File | string): Promise<AxiosResponse> => {
-        if (typeof fileOrBase64 === 'string') {
-            return apiHelpers.post('/company/logo', { logo: fileOrBase64 });
-        }
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                apiHelpers.post('/company/logo', { logo: reader.result as string })
-                    .then(resolve)
-                    .catch(reject);
-            };
-            reader.onerror = reject;
-            reader.readAsDataURL(fileOrBase64);
-        });
+        void fileOrBase64;
+        return rejectCanonicalWrite('Updating the company logo');
     },
 
     uploadQRCode: (fileOrBase64: File | string): Promise<AxiosResponse> => {
-        if (typeof fileOrBase64 === 'string') {
-            return apiHelpers.post('/company/qr-code', { qr_code: fileOrBase64 });
-        }
-        // Convert File to base64 then send as JSON
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                apiHelpers.post('/company/qr-code', { qr_code: reader.result as string })
-                    .then(resolve)
-                    .catch(reject);
-            };
-            reader.onerror = reject;
-            reader.readAsDataURL(fileOrBase64);
-        });
+        void fileOrBase64;
+        return rejectCanonicalWrite('Updating the company payment QR code');
     }
 };

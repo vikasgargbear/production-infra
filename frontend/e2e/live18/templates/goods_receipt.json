@@ -1,0 +1,43 @@
+{
+  "template_schema": "aasopharma.live18.ui-template.v1",
+  "operation_id": "goods_receipt",
+  "lifecycle_mode": "combined_actor_confirmation",
+  "steps": {
+    "missing_required_steps": [
+      {"actor":"requester","action":"goto","value":"/#/purchase/purchase-history"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Purchase Orders","exact":true}},
+      {"actor":"requester","action":"fill","locator":{"kind":"placeholder","name":"Search purchase orders by number, canonical UUID, or supplier...","exact":true},"value":"{{resource_purchase_order}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Record canonical receipt for purchase order {{resource_purchase_order}}","exact":true}},
+      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Required: select at least one PO line and record physical receipt time, batch, expiry, quantities, MRP unit, destination, and QC disposition.","exact":true},"value":"Required: select at least one PO line and record physical receipt time, batch, expiry, quantities, MRP unit, destination, and QC disposition."},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Review stock impact","exact":true}},
+      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Receipt date and time is required","exact":true},"value":"Receipt date and time is required"}
+    ],
+    "prepare_steps": [
+      {"actor":"requester","action":"goto","value":"/#/purchase/purchase-history"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Purchase Orders","exact":true}},
+      {"actor":"requester","action":"fill","locator":{"kind":"placeholder","name":"Search purchase orders by number, canonical UUID, or supplier...","exact":true},"value":"{{resource_purchase_order}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Record canonical receipt for purchase order {{resource_purchase_order}}","exact":true}},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Physical receipt time","exact":true},"value":"{{fact.clock.business_datetime_local}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"testId","name":"receive-po-product-{{fact.identity.product_id}}"}},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Manufacturer batch number","exact":true},"value":"LIVE18-GRN-{{run_token}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Expires on","exact":true},"value":"{{fact.choice.goods_receipt_expiry_date}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Received billed qty","exact":true},"value":"{{scalar.goods_receipt_received_quantity}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Accepted billed qty","exact":true},"value":"{{scalar.goods_receipt_accepted_quantity}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Rejected qty","exact":true},"value":"{{scalar.goods_receipt_rejected_quantity}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Accepted free qty","exact":true},"value":"{{scalar.goods_receipt_free_quantity}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"MRP","exact":true},"value":"{{scalar.goods_receipt_mrp}}"},
+      {"actor":"requester","action":"select","locator":{"kind":"label","name":"MRP unit","exact":true},"value":"{{fact.identity.uom_conversion_id}}"},
+      {"actor":"requester","action":"select","locator":{"kind":"label","name":"Destination location","exact":true},"value":"{{fact.identity.saleable_location_id}}"},
+      {"actor":"requester","action":"select","locator":{"kind":"label","name":"QC disposition","exact":true},"value":"{{scalar.goods_receipt_qc_status}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Review stock impact","exact":true}}
+    ],
+    "approval_steps": [
+      {"actor":"requester","action":"expectText","locator":{"kind":"role","role":"dialog","name":"Approve this exact stock receipt?","exact":true},"value":"{{command_request_id}}"},
+      {"actor":"requester","action":"expectText","locator":{"kind":"testId","name":"canonical-immutable-preview"},"value":"{{scalar.goods_receipt_accepted_quantity}}"}
+    ],
+    "execute_steps": [
+      {"actor":"requester","action":"expectText","locator":{"kind":"role","role":"dialog","name":"Approve this exact stock receipt?","exact":true},"value":"{{command_request_id}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Approve and post receipt","exact":true}}
+    ]
+  }
+}

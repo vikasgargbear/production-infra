@@ -1,80 +1,123 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Package, Save, AlertCircle, TrendingUp, TrendingDown, Settings,
-  Plus, X, Trash2, Upload, Download, Loader2, RefreshCw
+  Package, AlertCircle, TrendingUp, TrendingDown, Settings,
+  Plus, X, Trash2, Upload, Download, Loader2, CheckCircle
 } from 'lucide-react';
 import {
-  GlobalDocumentFlow, ProductSearch, BatchSelector, Select, DatePicker,
+  GlobalDocumentFlow, ProductSearch, BatchSelector, Select,
   NotesSection, useToast
 } from '../../global';
-import { stockApi } from '../../../services/api';
-import offlineDB from '../../../services/offline/core/offlineDatabase';
-import documentNumberGenerator from '../../../services/offline/documents/documentNumberGenerator';
-import syncEngine from '../../../services/offline/sync/syncEngine';
-import { ADJUSTMENT_TYPES, ADJUSTMENT_TYPE_LABELS, ADJUSTMENT_REASONS } from '../../../constants/stockAdjustment';
+import {
+  prepareCanonicalAction,
+} from '../../../services/api/canonicalOperatorActions';
+import type { CanonicalCommandPreview } from '../../../services/api/canonicalOperatorActions';
+import { canonicalBusinessContextApi } from '../../../services/api/modules/org/canonicalBusinessContext.api';
+import { parseStockAdjustmentCsv, type StockAdjustmentCsvResult } from './utils/stockAdjustmentCsv';
+import { clientUuid } from '../../../utils/clientUuid';
+import { formatCalendarDate, requireCalendarDate } from '../../../utils/calendarDate';
+import {
+  buildCycleCountPayload,
+  approveCycleCountReview,
+  executeApprovedCycleCount,
+  loadAndVerifyCycleCountReadback,
+  loadCycleCountEligibility,
+  loadCycleCountReview,
+  type CycleCountEvidence,
+  type CycleCountUom,
+} from './utils/canonicalStockAdjustmentCommand';
+import {
+  isCanonicalUtcEventTimestamp,
+  requireCanonicalUtcEventTimestamp,
+} from './utils/canonicalEventTimestamp';
+
+type AdjustmentItem = {
+  id: string;
+  product_id: string;
+  product_name: string;
+  product_code: string;
+  batch_id: string;
+  batch_number: string;
+  branch_id: string;
+  location_id: string;
+  quantity_available: string;
+  stock_balance_row_version: number;
+  counted_quantity: string;
+  uom_conversion_id: string;
+  uom_multiplier: string;
+  uom_options: CycleCountUom[];
+  unit: string;
+  expiry_date?: string;
+};
 
 const EnhancedStockAdjustmentFlow = ({ onClose }) => {
   const [currentStep, setCurrentStep] = useState(1);
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [refreshing, setRefreshing] = useState(false);
   const toast = useToast();
 
   // Refs
   const productSearchRef = useRef(null);
-  const reasonSelectRef = useRef(null);
-  const datePickerRef = useRef(null);
+  const prepareIdentityRef = useRef(clientUuid());
 
   // Adjustment data state
   const [adjustmentData, setAdjustmentData] = useState<{
-    adjustment_no: string;
     adjustment_type: string;
     reason: string;
     adjustment_date: string;
+    counted_at: string;
     notes: string;
-    items: any[];
+    items: AdjustmentItem[];
   }>({
-    adjustment_no: '',
-    adjustment_type: '',
-    reason: '',
-    adjustment_date: new Date().toISOString().split('T')[0],
+    adjustment_type: 'increase',
+    reason: 'cycle_count',
+    adjustment_date: '',
+    counted_at: '',
     notes: '',
     items: []
   });
 
-  const [adjustmentReasons, setAdjustmentReasons] = useState<Record<string, any[]>>({ increase: [], decrease: [] });
+  const [evidenceOptions, setEvidenceOptions] = useState<CycleCountEvidence[]>([]);
+  const [selectedEvidenceId, setSelectedEvidenceId] = useState('');
+  const [countedByMembershipId, setCountedByMembershipId] = useState('');
   const [showProductSearch, setShowProductSearch] = useState(false);
   const [showBulkUpload, setShowBulkUpload] = useState(false);
+  const [csvPreview, setCsvPreview] = useState<StockAdjustmentCsvResult | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<any | null>(null);
   const [showBatchSelector, setShowBatchSelector] = useState(false);
 
-  // Generate adjustment number
-  const generateAdjustmentNumber = () => {
-    const timestamp = Date.now();
-    return `ADJ-${new Date().getFullYear()}-${timestamp.toString().slice(-6)}`;
-  };
+  // Canonical command state: prepare → confirm modal → execute
+  const [preparedPreview, setPreparedPreview] = useState<CanonicalCommandPreview | null>(null);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [isPreparing, setIsPreparing] = useState(false);
+  const [isCommitting, setIsCommitting] = useState(false);
+  const [committedRef, setCommittedRef] = useState<string | null>(null);
+  const [awaitingIndependentApproval, setAwaitingIndependentApproval] = useState(false);
+  const [reviewCommandId, setReviewCommandId] = useState('');
+  const [reviewPreview, setReviewPreview] = useState<CanonicalCommandPreview | null>(null);
 
-  // Initialize adjustment number
+  // The organization clock, not the browser clock, owns the command business date.
   useEffect(() => {
-    setAdjustmentData(prev => ({
-      ...prev,
-      adjustment_no: generateAdjustmentNumber()
-    }));
-  }, []);
-
-  // Use constants for adjustment reasons - enterprise pattern
-  useEffect(() => {
-    setAdjustmentReasons(ADJUSTMENT_REASONS);
+    let active = true;
+    canonicalBusinessContextApi.get()
+      .then(context => {
+        if (!active) return;
+        setAdjustmentData(prev => ({ ...prev, adjustment_date: context.business_date }));
+      })
+      .catch((cause: any) => {
+        if (!active) return;
+        setError(cause?.message || 'Could not load the organization business date.');
+      });
+    return () => { active = false; };
   }, []);
 
   // Auto-open product search when both adjustment type and reason are selected
   useEffect(() => {
-    if (adjustmentData.adjustment_type && adjustmentData.reason && !adjustmentData.items.length && !showBulkUpload) {
+    if (adjustmentData.adjustment_type && adjustmentData.reason && adjustmentData.adjustment_date
+        && !adjustmentData.items.length && !showBulkUpload) {
       setShowProductSearch(true);
     }
-  }, [adjustmentData.adjustment_type, adjustmentData.reason, adjustmentData.items.length, showBulkUpload]);
+  }, [adjustmentData.adjustment_type, adjustmentData.reason, adjustmentData.adjustment_date,
+    adjustmentData.items.length, showBulkUpload]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -83,21 +126,18 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
         switch (e.key) {
           case 'u':
             e.preventDefault();
-            setShowBulkUpload(!showBulkUpload);
-            setShowProductSearch(false);
+            toast.info('CSV posting is unavailable until every row can be resolved by the canonical eligibility API.');
             break;
           case 'a':
             e.preventDefault();
-            if (adjustmentData.adjustment_type && adjustmentData.reason) {
+            if (adjustmentData.adjustment_type && adjustmentData.reason && adjustmentData.adjustment_date) {
               setShowProductSearch(true);
               setShowBulkUpload(false);
             }
             break;
           case 's':
             e.preventDefault();
-            if (currentStep === 2) {
-              handleSubmit();
-            } else {
+            if (currentStep === 1) {
               handleProceedToReview();
             }
             break;
@@ -107,7 +147,12 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
       // ESC key handling with stopPropagation
       if (e.key === 'Escape') {
         e.stopPropagation();
-        if (showProductSearch) {
+        if (showConfirmModal) {
+          setShowConfirmModal(false);
+        } else if (showBatchSelector) {
+          setShowBatchSelector(false);
+          setSelectedProduct(null);
+        } else if (showProductSearch) {
           setShowProductSearch(false);
         } else if (showBulkUpload) {
           setShowBulkUpload(false);
@@ -121,7 +166,8 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [currentStep, showProductSearch, showBulkUpload, adjustmentData.adjustment_type, adjustmentData.reason, onClose]);
+  }, [currentStep, showProductSearch, showBulkUpload, showBatchSelector, showConfirmModal,
+    adjustmentData.adjustment_type, adjustmentData.reason, adjustmentData.adjustment_date, onClose]);
 
   // Step 1: Product selection - just store the product and show batch selector
   const handleProductSelect = (product) => {
@@ -138,107 +184,127 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
     setShowBatchSelector(true);
   };
 
-  // Step 2: Quick batch selection - just add with default qty of 1
-  const handleBatchSelect = (batch) => {
+  // Resolve the server-owned membership, evidence, location, stock, and UOM facts.
+  const handleBatchSelect = async (batch) => {
     if (!batch || !selectedProduct) return;
-
-    const newItem = {
-      id: Date.now(),
-      product_id: selectedProduct.product_id,
-      product_name: selectedProduct.product_name || selectedProduct.name,
-      product_code: selectedProduct.product_code || selectedProduct.code,
-      batch_id: batch.batch_id,
-      batch_number: batch.batch_number,
-      quantity_available: batch.quantity_available || 0,
-      adjustment_quantity: 1, // Default quantity, editable in table
-      unit: selectedProduct.unit || batch.base_uom || 'Units',
-      expiry_date: batch.expiry_date,
-      after_adjustment: adjustmentData.adjustment_type === 'increase'
-        ? (batch.quantity_available || 0) + 1
-        : Math.max(0, (batch.quantity_available || 0) - 1)
-    };
-
-    setAdjustmentData(prev => ({
-      ...prev,
-      items: [...prev.items, newItem]
-    }));
-
-    // Reset states
-    setSelectedProduct(null);
-    setShowBatchSelector(false);
-
-    toast.success(`Added ${selectedProduct.product_name} - edit quantity in table`);
-  };
-
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    try {
-      // Just fetch fresh data - it will overwrite the stored data
-      const [increaseResponse, decreaseResponse] = await Promise.all([
-        (stockApi as any).getMovementReasons('increase'),
-        (stockApi as any).getMovementReasons('decrease')
-      ]);
-
-      const reasons = {
-        increase: Array.isArray(increaseResponse?.data) ? increaseResponse.data : increaseResponse?.data?.reasons || [],
-        decrease: Array.isArray(decreaseResponse?.data) ? decreaseResponse.data : decreaseResponse?.data?.reasons || []
-      };
-
-      setAdjustmentReasons(reasons);
-      // offlineStorage.storeOffline('adjustment_reasons', reasons, { persistent: true });
-
-      toast.success('Adjustment reasons refreshed');
-    } catch (error) {
-      toast.error('Failed to refresh reasons');
-    } finally {
-      setRefreshing(false);
-    }
-  };
-
-  const updateItemQuantity = (itemId: any, quantity: any) => {
-    // Don't allow empty string or deletion to make it 0
-    if (quantity === '' || quantity === null || quantity === undefined) {
-      // Keep minimum value of 1
-      quantity = 1;
-    }
-
-    const qty = parseInt(quantity) || 1; // Default to 1 instead of 0
-    if (qty <= 0) {
-      // Minimum quantity is 1
+    if (typeof selectedProduct.product_name !== 'string' || !selectedProduct.product_name.trim()
+      || typeof selectedProduct.product_code !== 'string' || !selectedProduct.product_code.trim()) {
+      toast.error('This product is missing its canonical name or product code.');
       return;
     }
+    if (!adjustmentData.adjustment_date) {
+      toast.error('Wait for the organization business date before selecting stock.');
+      return;
+    }
+    setIsLoading(true);
+    setError(null);
+    try {
+      const eligibility = await loadCycleCountEligibility({
+        branchId: String(batch.branch_id || ''),
+        locationId: String(batch.location_id || ''),
+        batchId: String(batch.batch_id || ''),
+        adjustmentDate: adjustmentData.adjustment_date,
+      });
+      const existing = adjustmentData.items[0];
+      if (existing && (
+        existing.branch_id !== eligibility.branch_id
+        || existing.location_id !== eligibility.location_id
+      )) {
+        throw new Error('One cycle count can cover only one branch and saleable location.');
+      }
+      if (countedByMembershipId && countedByMembershipId !== eligibility.counted_by_membership_id) {
+        throw new Error('Cycle-count authority changed. Refresh and start the count again.');
+      }
+      const availableEvidence = evidenceOptions.length === 0
+        ? eligibility.evidence
+        : evidenceOptions.filter(current => eligibility.evidence.some(
+          candidate => candidate.evidence_attachment_id === current.evidence_attachment_id,
+        ));
+      if (availableEvidence.length === 0) {
+        throw new Error('The selected batches do not share one unused verified cycle-count sheet.');
+      }
+      const newItem: AdjustmentItem = {
+        id: `${eligibility.product_id}:${eligibility.batch_id}`,
+        product_id: eligibility.product_id,
+        product_name: selectedProduct.product_name,
+        product_code: selectedProduct.product_code,
+        batch_id: eligibility.batch_id,
+        batch_number: batch.batch_number,
+        branch_id: eligibility.branch_id,
+        location_id: eligibility.location_id,
+        quantity_available: eligibility.system_base_quantity,
+        stock_balance_row_version: eligibility.stock_balance_row_version,
+        counted_quantity: '',
+        uom_conversion_id: '',
+        uom_multiplier: '',
+        uom_options: eligibility.uom_conversions,
+        unit: '',
+        expiry_date: batch.expiry_date,
+      };
+      setAdjustmentData(prev => ({ ...prev, items: [...prev.items, newItem] }));
+      setEvidenceOptions(availableEvidence);
+      setSelectedEvidenceId(current => (
+        availableEvidence.some(item => item.evidence_attachment_id === current)
+          ? current
+          : ''
+      ));
+      setCountedByMembershipId(eligibility.counted_by_membership_id);
+      setSelectedProduct(null);
+      setShowBatchSelector(false);
+      toast.info(`Added ${newItem.product_name}. Select the count UOM and verified evidence, then enter the exact physical count.`);
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail?.message || err?.message
+        || 'This batch is not eligible for a canonical cycle count.';
+      setError(msg);
+      toast.error(msg);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
+  const updateItemQuantity = (itemId: string, quantity: string) => {
     setAdjustmentData(prev => ({
       ...prev,
       items: prev.items.map(item => {
         if (item.id === itemId) {
-          return {
-            ...item,
-            adjustment_quantity: qty,
-            after_adjustment: adjustmentData.adjustment_type === 'increase'
-              ? item.quantity_available + qty
-              : Math.max(0, item.quantity_available - qty)
-          };
+          return { ...item, counted_quantity: quantity };
         }
         return item;
       })
     }));
   };
 
-  const handleRemoveItem = (itemId: any) => {
+  const updateItemUom = (itemId: string, uomConversionId: string) => {
     setAdjustmentData(prev => ({
       ...prev,
-      items: prev.items.filter(item => item.id !== itemId)
+      items: prev.items.map(item => {
+        if (item.id !== itemId) return item;
+        const uom = item.uom_options.find(option => option.uom_conversion_id === uomConversionId);
+        return uom ? {
+          ...item,
+          uom_conversion_id: uom.uom_conversion_id,
+          uom_multiplier: uom.multiplier,
+          unit: uom.from_uom_code,
+          counted_quantity: '',
+        } : item;
+      }),
     }));
   };
 
+  const handleRemoveItem = (itemId: any) => {
+    setAdjustmentData(prev => {
+      const items = prev.items.filter(item => item.id !== itemId);
+      if (items.length === 0) {
+        setEvidenceOptions([]);
+        setSelectedEvidenceId('');
+        setCountedByMembershipId('');
+      }
+      return { ...prev, items };
+    });
+  };
+
   const downloadTemplate = () => {
-    const csvContent = `Product Code,Product Name,Adjustment Quantity,Reason,Notes
-PARA500,Paracetamol 500mg,50,physical_count,Found extra stock during count
-AMOX250,Amoxicillin 250mg,-10,damage,Water damage in storage
-VITC100,Vitamin C Tablets,100,physical_count,Stock correction
-COUGH100,Cough Syrup 100ml,-25,expiry,Expired products removed
-Note: Use positive numbers for increase and negative for decrease. Reason codes: physical_count, found_stock, return_from_customer, damage, expiry, theft, sample, other_decrease`;
+    const csvContent = 'product_id,batch_id,product_name,adjustment_quantity,reason,product_code,current_stock,notes\n';
 
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
@@ -251,110 +317,58 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
     window.URL.revokeObjectURL(url);
   };
 
-  const handleBulkUpload = async (e: any) => {
-    const file = e.target.files[0];
+  const handleBulkUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = async (event) => {
-      try {
-        const text = event.target?.result as string;
-        if (!text) return;
-        const lines = text.split('\n');
-        const headers = lines[0].split(',').map((h: any) => h.trim());
-
-        const newItems: any[] = [];
-        for (let i = 1; i < lines.length; i++) {
-          if (!lines[i].trim()) continue;
-
-          const values = lines[i].split(',').map((v: any) => v.trim());
-          const productCode = values[0];
-          const productName = values[1];
-          const adjustmentQty = parseInt(values[2]) || 0;
-          const reason = values[3] || 'physical_count';
-          const itemNotes = values[4] || '';
-
-          if (!productCode || adjustmentQty === 0) continue;
-
-          let currentStock = 0;
-          try {
-            const stockResponse = await (stockApi as any).getCurrentStock({
-              product_code: productCode,
-              include_batches: false
-            });
-            currentStock = stockResponse.data?.[0]?.quantity_available || 0;
-          } catch (stockError) {
-            currentStock = 0;
-          }
-
-          const isIncrease = adjustmentQty > 0;
-          newItems.push({
-            id: Date.now() + i,
-            product_code: productCode,
-            product_name: productName,
-            product_id: i,
-            quantity_available: currentStock,
-            adjustment_quantity: Math.abs(adjustmentQty),
-            adjustment_type: isIncrease ? 'increase' : 'decrease',
-            reason: reason,
-            unit: 'Units',
-            after_adjustment: isIncrease
-              ? currentStock + Math.abs(adjustmentQty)
-              : Math.max(0, currentStock - Math.abs(adjustmentQty)),
-            notes: itemNotes
-          });
-        }
-
-        const increaseItems = newItems.filter(item => item.adjustment_type === 'increase');
-        const decreaseItems = newItems.filter(item => item.adjustment_type === 'decrease');
-
-        if (increaseItems.length > 0 && decreaseItems.length > 0) {
-          toast.info(`Loaded ${newItems.length} items: ${increaseItems.length} increases and ${decreaseItems.length} decreases. Please process them separately.`);
-          const firstType = newItems[0].adjustment_type;
-          setAdjustmentData(prev => ({
-            ...prev,
-            adjustment_type: firstType,
-            reason: newItems[0].reason || '',
-            items: newItems.filter(item => item.adjustment_type === firstType)
-          }));
-        } else {
-          const itemType = newItems[0].adjustment_type;
-          setAdjustmentData(prev => ({
-            ...prev,
-            adjustment_type: itemType,
-            reason: newItems[0].reason || '',
-            items: newItems
-          }));
-          toast.success(`Successfully loaded ${newItems.length} ${itemType} adjustments from CSV`);
-        }
-
-        setShowBulkUpload(false);
-      } catch (error) {
-        toast.error('Failed to parse CSV file. Please check the format.');
-      }
+    reader.onload = (event) => {
+      const text = typeof event.target?.result === 'string' ? event.target.result : '';
+      setCsvPreview(parseStockAdjustmentCsv(text));
     };
+    reader.onerror = () => setCsvPreview({
+      rows: [],
+      errors: ['The selected CSV could not be read.'],
+      adjustmentType: null,
+      reason: null,
+    });
 
     reader.readAsText(file);
+    e.target.value = '';
   };
 
   const validateAdjustment = () => {
-    if (!adjustmentData.adjustment_type) {
-      toast.error('Please select adjustment type');
+    if (!adjustmentData.adjustment_date) {
+      toast.error('The organization business date is unavailable.');
       return false;
     }
-
-    if (!adjustmentData.reason) {
-      toast.error('Please select a reason');
+    if (!isCanonicalUtcEventTimestamp(adjustmentData.counted_at)) {
+      toast.error('Enter the exact physical count time as canonical UTC: YYYY-MM-DDTHH:mm:ss.sssZ.');
       return false;
     }
-
     if (adjustmentData.items.length === 0) {
       toast.error('Please add at least one product');
       return false;
     }
-
+    if (!countedByMembershipId || !selectedEvidenceId) {
+      toast.error('A live verified cycle-count membership and evidence sheet are required.');
+      return false;
+    }
+    if (adjustmentData.items.some(item => !item.uom_conversion_id || !item.counted_quantity)) {
+      toast.error('Select a count UOM and enter the exact physical count for every selected batch.');
+      return false;
+    }
     return true;
   };
+
+  const isAdjustmentValid = () => Boolean(
+    Boolean(adjustmentData.adjustment_date)
+    && isCanonicalUtcEventTimestamp(adjustmentData.counted_at)
+    && adjustmentData.items.length > 0
+    && Boolean(countedByMembershipId)
+    && Boolean(selectedEvidenceId)
+    && adjustmentData.items.every(item => Boolean(item.uom_conversion_id) && Boolean(item.counted_quantity))
+  );
 
   const handleProceedToReview = () => {
     if (validateAdjustment()) {
@@ -363,70 +377,105 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
     }
   };
 
-  const handleSubmit = async () => {
+  // Step 1: Prepare the canonical command — does NOT mutate any data yet.
+  const handlePrepare = async () => {
     if (!validateAdjustment()) return;
-
-    setSaving(true);
+    setIsPreparing(true);
+    setError(null);
     try {
-      const tempId = `LOCAL_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      const adjustmentNumber = await documentNumberGenerator.generateAdjustmentNumber();
-
-      const adjustmentPayload = {
-        adjustment_type: adjustmentData.adjustment_type,
-        reason: adjustmentData.reason,
-        notes: adjustmentData.notes,
-        adjustment_date: new Date(adjustmentData.adjustment_date).toISOString(),
+      const payload = buildCycleCountPayload({
+        idempotencyKey: `erp-web-inventory-adjustment-prepare:${prepareIdentityRef.current}`,
+        adjustmentDate: adjustmentData.adjustment_date,
+        countedAt: requireCanonicalUtcEventTimestamp(
+          adjustmentData.counted_at,
+          'Physical count time',
+        ),
+        countedByMembershipId,
+        evidenceAttachmentId: selectedEvidenceId,
         items: adjustmentData.items.map(item => ({
-          product_id: item.product_id,
-          quantity: adjustmentData.adjustment_type === 'decrease' ? -item.adjustment_quantity : item.adjustment_quantity,
-          batch_number: null
-        }))
-      };
-
-      // 1. Save locally first (offline-first)
-      const localRecord = {
-        temp_id: tempId,
-        _localId: tempId,
-        adjustment_number: adjustmentNumber,
-        ...adjustmentPayload,
-        sync_status: 'pending',
-        created_at: new Date().toISOString(),
-        created_offline: true
-      };
-
-      const db = await offlineDB.init();
-      await db.put('stock_adjustments', localRecord);
-
-      // 2. Update local stock optimistically
-      const stockUpdates = adjustmentData.items.map(item => ({
-        product_id: item.product_id,
-        batch_id: item.batch_id,
-        quantity: item.adjustment_quantity
-      }));
-
-      if (adjustmentData.adjustment_type === 'increase') {
-        await offlineDB.addStockLocally(stockUpdates);
-      } else {
-        await offlineDB.deductStockLocally(stockUpdates);
-      }
-
-      // 3. Add to sync queue
-      await offlineDB.addToSyncQueue('stock_adjustment', tempId, 'create', localRecord);
-
-      toast.success(`Stock adjustment saved${navigator.onLine ? '' : ' (offline)'}. ${!navigator.onLine ? 'Will sync when online.' : ''}`);
-
-      // 4. Background sync if online
-      if (navigator.onLine) {
-        syncEngine.startSync().catch(() => {});
-      }
-
-      setTimeout(() => onClose(), 1500);
-
-    } catch (error) {
-      console.error('[StockAdjustment] Save failed:', error);
-      toast.error('Failed to save stock adjustment');
+          productId: item.product_id,
+          batchId: item.batch_id,
+          branchId: item.branch_id,
+          locationId: item.location_id,
+          uomConversionId: item.uom_conversion_id,
+          uomMultiplier: item.uom_multiplier,
+          countedQuantity: item.counted_quantity,
+          systemBaseQuantity: item.quantity_available,
+          stockBalanceRowVersion: item.stock_balance_row_version,
+        })),
+      });
+      const prepared = await prepareCanonicalAction('inventory.adjustment.prepare', payload);
+      setPreparedPreview(prepared.data);
+      setShowConfirmModal(true);
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail?.message || err?.message || 'Failed to prepare adjustment. No data was changed.';
+      setError(msg);
+      toast.error(msg);
     } finally {
-      setSaving(false);
+      setIsPreparing(false);
+    }
+  };
+
+  const handleSubmitForApproval = () => {
+    if (!preparedPreview) return;
+    setAwaitingIndependentApproval(true);
+    setShowConfirmModal(false);
+    toast.info(`Command ${preparedPreview.command_request_id} awaits approval by a different authorized user.`);
+  };
+
+  // Execution remains requester-owned and succeeds only after a distinct user approves.
+  const handleExecute = async () => {
+    if (!preparedPreview) return;
+    setIsCommitting(true);
+    setError(null);
+    try {
+      const executed = await executeApprovedCycleCount(
+        preparedPreview,
+      );
+      const readback = await loadAndVerifyCycleCountReadback(preparedPreview, executed);
+      const ref = String(readback.inventory_document_id);
+      setCommittedRef(ref);
+      setShowConfirmModal(false);
+      toast.success(`Stock adjustment ${ref} posted and reconciled successfully`);
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail?.message || err?.message || 'Adjustment execution failed. Check server status before retrying.';
+      setError(msg);
+      toast.error(msg);
+    } finally {
+      setIsCommitting(false);
+    }
+  };
+
+  const handleLoadIndependentReview = async () => {
+    setIsPreparing(true);
+    setError(null);
+    try {
+      setReviewPreview(await loadCycleCountReview(reviewCommandId.trim()));
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail?.message || err?.message || 'Cycle-count review is unavailable.';
+      setReviewPreview(null);
+      setError(msg);
+      toast.error(msg);
+    } finally {
+      setIsPreparing(false);
+    }
+  };
+
+  const handleApproveIndependentReview = async () => {
+    if (!reviewPreview) return;
+    setIsCommitting(true);
+    setError(null);
+    try {
+      await approveCycleCountReview(reviewPreview);
+      toast.success(`Cycle-count command ${reviewPreview.command_request_id} approved. The requester can now execute it.`);
+      setReviewPreview(null);
+      setReviewCommandId('');
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail?.message || err?.message || 'Independent approval failed.';
+      setError(msg);
+      toast.error(msg);
+    } finally {
+      setIsCommitting(false);
     }
   };
 
@@ -460,6 +509,82 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
         </div>
       )}
 
+      <section className="rounded-lg border border-gray-200 bg-white p-5" aria-labelledby="cycle-count-review-heading">
+        <h3 id="cycle-count-review-heading" className="font-semibold text-gray-900">Independent cycle-count approval</h3>
+        <p className="mt-1 text-sm text-gray-600">
+          A different authorized user must review the immutable stock and valuation preview. Paste the command UUID supplied by the requester.
+        </p>
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+          <input
+            value={reviewCommandId}
+            onChange={(event) => setReviewCommandId(event.target.value)}
+            placeholder="Canonical command UUID"
+            aria-label="Cycle-count command UUID to review"
+            className="min-h-11 flex-1 rounded-lg border border-gray-300 px-3 font-mono text-sm"
+          />
+          <button
+            type="button"
+            onClick={handleLoadIndependentReview}
+            disabled={!reviewCommandId.trim() || isPreparing}
+            className="min-h-11 rounded-lg border border-blue-600 bg-white px-4 text-sm font-medium text-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Load immutable preview
+          </button>
+        </div>
+        {reviewPreview && (
+          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4" data-testid="canonical-immutable-preview">
+            <p className="font-mono text-xs text-gray-700">{reviewPreview.command_request_id}</p>
+            <p className="mt-2 text-sm text-gray-800">
+              {Array.isArray(reviewPreview.inventory_impact) ? reviewPreview.inventory_impact.length : 0} stock line(s);{' '}
+              {Array.isArray(reviewPreview.financial_impact) ? reviewPreview.financial_impact.length : 0} valuation entry.
+            </p>
+            {Array.isArray(reviewPreview.inventory_impact) && (
+              <div className="mt-3 overflow-x-auto rounded border border-amber-200 bg-white">
+                <table className="min-w-full text-xs">
+                  <thead className="bg-gray-50 text-left text-gray-600">
+                    <tr>
+                      <th className="px-2 py-2">Product / batch</th>
+                      <th className="px-2 py-2 text-right">System</th>
+                      <th className="px-2 py-2 text-right">Counted</th>
+                      <th className="px-2 py-2 text-right">Gain</th>
+                      <th className="px-2 py-2 text-right">Value</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(reviewPreview.inventory_impact as Array<Record<string, unknown>>).map((impact, index) => (
+                      <tr key={`${String(impact.batch_id)}-${index}`} className="border-t border-gray-100">
+                        <td className="px-2 py-2 font-mono">
+                          {String(impact.product_id)}<br />{String(impact.batch_id)}
+                        </td>
+                        <td className="px-2 py-2 text-right">{String(impact.system_base_quantity)}</td>
+                        <td className="px-2 py-2 text-right">{String(impact.counted_base_quantity)}</td>
+                        <td className="px-2 py-2 text-right">{String(impact.variance_base_quantity)}</td>
+                        <td className="px-2 py-2 text-right">₹{String(impact.variance_value)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {Array.isArray(reviewPreview.financial_impact) && (reviewPreview.financial_impact as Array<Record<string, unknown>>).map((impact, index) => (
+              <p key={index} className="mt-2 text-xs text-gray-700">
+                Valuation: debit <span className="font-mono">{String(impact.debit_account_id)}</span>, credit{' '}
+                <span className="font-mono">{String(impact.credit_account_id)}</span>, amount ₹{String(impact.amount)}.
+              </p>
+            ))}
+            <p className="mt-1 break-all font-mono text-xs text-gray-600">{reviewPreview.preview_hash}</p>
+            <button
+              type="button"
+              onClick={handleApproveIndependentReview}
+              disabled={isCommitting}
+              className="mt-3 min-h-11 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              Approve exact preview
+            </button>
+          </div>
+        )}
+      </section>
+
       {/* Type & Details Section */}
       <div className="mb-6">
         <h3 className="text-lg font-medium text-gray-900 mb-3 flex items-center">
@@ -468,104 +593,61 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
         </h3>
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
 
-          {/* Adjustment Type Selection */}
-          <div className="flex items-center space-x-4 mb-6">
-            <button
-              onClick={() => {
-                setAdjustmentData(prev => ({ ...prev, adjustment_type: 'increase', reason: '', items: [] }));
-                // Auto-focus reason dropdown after selection
-                setTimeout(() => {
-                  const selectElement = document.querySelector('[data-reason-select]') as HTMLElement;
-                  if (selectElement) selectElement.focus();
-                }, 100);
-              }}
-              className={`flex-1 flex items-center justify-center space-x-2 p-3 rounded-lg border-2 transition-all ${adjustmentData.adjustment_type === 'increase'
-                ? 'border-green-500 bg-green-50 text-green-700'
-                : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
-                }`}
-            >
-              <TrendingUp className="w-5 h-5" />
-              <span className="font-medium">Increase Stock</span>
-            </button>
-
-            <button
-              onClick={() => {
-                setAdjustmentData(prev => ({ ...prev, adjustment_type: 'decrease', reason: '', items: [] }));
-                // Auto-focus reason dropdown after selection
-                setTimeout(() => {
-                  const selectElement = document.querySelector('[data-reason-select]') as HTMLElement;
-                  if (selectElement) selectElement.focus();
-                }, 100);
-              }}
-              className={`flex-1 flex items-center justify-center space-x-2 p-3 rounded-lg border-2 transition-all ${adjustmentData.adjustment_type === 'decrease'
-                ? 'border-red-500 bg-red-50 text-red-700'
-                : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
-                }`}
-            >
-              <TrendingDown className="w-5 h-5" />
-              <span className="font-medium">Decrease Stock</span>
-            </button>
+          <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+            <div className="flex items-center gap-2 font-semibold">
+              <TrendingUp className="h-5 w-5" />
+              Verified signed cycle count
+            </div>
+            <p className="mt-1">
+              A command may contain gains or ordinary shortages, but never both. Damage, expiry,
+              regulated stock, recalls, transfer, opening stock, returns, samples, and reversals use separate canonical workflows.
+            </p>
           </div>
-
-          {/* Reason and Date Row */}
-          {adjustmentData.adjustment_type && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Reason for Adjustment
-                  <button
-                    onClick={handleRefresh}
-                    disabled={refreshing}
-                    className="ml-2 text-blue-600 hover:text-blue-700"
-                    title="Refresh reasons"
-                  >
-                    {refreshing ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-                  </button>
-                </label>
-                <Select
-                  data-reason-select
-                  value={adjustmentData.reason}
-                  onChange={(value) => {
-                    setAdjustmentData(prev => ({ ...prev, reason: String(value || '') }));
-                    // Auto-focus date picker after selecting reason
-                    if (value) {
-                      setTimeout(() => {
-                        const dateElement = document.querySelector('[data-date-picker]') as HTMLElement;
-                        if (dateElement) dateElement.focus();
-                      }, 100);
-                    }
-                  }}
-                  options={[
-                    { value: '', label: 'Select reason...' },
-                    ...(Array.isArray(adjustmentReasons[adjustmentData.adjustment_type])
-                      ? adjustmentReasons[adjustmentData.adjustment_type].map(r => ({
-                        value: r.value || r,
-                        label: r.label || r
-                      }))
-                      : [])
-                  ]}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Adjustment Date
-                </label>
-                <DatePicker
-                  data-date-picker
-                  value={adjustmentData.adjustment_date ? new Date(adjustmentData.adjustment_date) : null}
-                  onChange={(date) => {
-                    setAdjustmentData(prev => ({ ...prev, adjustment_date: typeof date === 'string' ? date : new Date(date).toISOString().split('T')[0] }));
-                    // Auto-open product search after date selection if reason is set
-                    if (adjustmentData.reason && !adjustmentData.items.length) {
-                      setTimeout(() => setShowProductSearch(true), 100);
-                    }
-                  }}
-                  maxDate={new Date()}
-                />
+          <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700">Organization business date</label>
+              <div className="flex min-h-11 items-center rounded-lg border border-gray-300 bg-gray-50 px-3 font-mono text-sm text-gray-800">
+                {adjustmentData.adjustment_date || 'Loading…'}
               </div>
             </div>
-          )}
+            <div>
+              <label htmlFor="cycle-count-completed-at" className="block text-sm font-medium text-gray-700">
+                Physical count completed at (UTC)
+              </label>
+              <input
+                id="cycle-count-completed-at"
+                type="text"
+                value={adjustmentData.counted_at}
+                onChange={(event) => setAdjustmentData(prev => ({
+                  ...prev,
+                  counted_at: event.target.value,
+                }))}
+                placeholder="YYYY-MM-DDTHH:mm:ss.sssZ"
+                aria-describedby="cycle-count-time-help"
+                aria-invalid={Boolean(adjustmentData.counted_at)
+                  && !isCanonicalUtcEventTimestamp(adjustmentData.counted_at)}
+                className="mt-1 min-h-11 w-full rounded-lg border border-gray-300 px-3 font-mono text-sm"
+              />
+              <span id="cycle-count-time-help" className="mt-1 block text-xs font-normal text-gray-500">
+                Enter the exact timestamp from the retained count evidence. The browser does not supply or convert this time.
+              </span>
+            </div>
+            <div>
+              <Select
+                label="Verified physical count sheet"
+                value={selectedEvidenceId}
+                onChange={(value) => setSelectedEvidenceId(String(value || ''))}
+                disabled={evidenceOptions.length === 0}
+                options={[
+                  { value: '', label: evidenceOptions.length === 0 ? 'Select an eligible batch first' : 'Select verified evidence...' },
+                  ...evidenceOptions.map(item => ({
+                    value: item.evidence_attachment_id,
+                    label: `${item.status} · ${item.document_date} · ${item.evidence_attachment_id.slice(0, 8)}`,
+                  })),
+                ]}
+              />
+            </div>
+          </div>
         </div>
       </div>
 
@@ -579,7 +661,9 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
             </h3>
             <button
               onClick={() => setShowBulkUpload(false)}
-              className="text-gray-500 hover:text-gray-700"
+              className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+              aria-label="Close bulk upload"
+              title="Close bulk upload"
             >
               <X className="w-4 h-4" />
             </button>
@@ -603,7 +687,7 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
                   Drop CSV file here or <span className="text-blue-600 font-medium">browse</span>
                 </p>
                 <p className="text-xs text-gray-500 mt-1">
-                  Supports both positive and negative adjustments
+                  File parsing is preview-only; posting stays disabled until every row is resolved by the live eligibility API
                 </p>
               </label>
             </div>
@@ -618,9 +702,67 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
               </button>
 
               <div className="text-xs text-gray-500">
-                <span className="font-medium">Format:</span> Product Code, Name, Quantity (+/-), Reason, Notes
+                <span className="font-medium">Required:</span> product_id, batch_id, product_name, adjustment_quantity, reason
               </div>
             </div>
+
+            {csvPreview && (
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-4" aria-live="polite">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="font-medium text-gray-900">CSV validation preview</p>
+                    <p className="text-sm text-gray-600">
+                      {csvPreview.rows.length} valid row{csvPreview.rows.length === 1 ? '' : 's'}; no inventory data has been changed.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled
+                    title="CSV rows cannot post until canonical batch, location, UOM, membership, and evidence resolution is implemented"
+                    className="inline-flex min-h-11 cursor-not-allowed items-center rounded-lg bg-gray-300 px-4 py-2 text-sm font-medium text-gray-700"
+                  >
+                    Server resolution required
+                  </button>
+                </div>
+
+                {csvPreview.errors.length > 0 && (
+                  <div className="mt-3 rounded-md border border-red-200 bg-red-50 p-3" role="alert">
+                    <p className="text-sm font-medium text-red-800">Fix these CSV errors</p>
+                    <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-red-700">
+                      {csvPreview.errors.map((message, index) => <li key={`${message}-${index}`}>{message}</li>)}
+                    </ul>
+                  </div>
+                )}
+
+                {csvPreview.rows.length > 0 && (
+                  <div className="mt-3 overflow-x-auto rounded-md border border-gray-200 bg-white">
+                    <table className="min-w-full text-sm">
+                      <thead className="bg-gray-50 text-left text-xs uppercase text-gray-500">
+                        <tr>
+                          <th className="px-3 py-2">Product</th>
+                          <th className="px-3 py-2">Batch UUID</th>
+                          <th className="px-3 py-2 text-right">Quantity</th>
+                          <th className="px-3 py-2">Reason</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {csvPreview.rows.map((row, index) => (
+                          <tr key={`${row.productId}-${row.batchId}-${index}`}>
+                            <td className="px-3 py-2">
+                              <div className="font-medium text-gray-900">{row.productName}</div>
+                              <div className="font-mono text-xs text-gray-500">{row.productId}</div>
+                            </td>
+                            <td className="px-3 py-2 font-mono text-xs text-gray-600">{row.batchId}</td>
+                            <td className="px-3 py-2 text-right font-medium">{row.adjustmentQuantity}</td>
+                            <td className="px-3 py-2">{row.reason}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -639,18 +781,16 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
                   setShowProductSearch(true);
                   setShowBulkUpload(false);
                 }}
-                disabled={!adjustmentData.reason}
+                disabled={!adjustmentData.reason || !adjustmentData.adjustment_date}
                 className="flex items-center space-x-2 px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Plus className="w-4 h-4" />
                 <span>Add Product</span>
               </button>
               <button
-                onClick={() => {
-                  setShowBulkUpload(!showBulkUpload);
-                  setShowProductSearch(false);
-                }}
-                className="flex items-center space-x-2 px-3 py-1.5 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700"
+                disabled
+                title="CSV posting requires server resolution of every batch, location, UOM, membership, and evidence identity"
+                className="flex min-h-[44px] cursor-not-allowed items-center space-x-2 rounded-lg border border-gray-300 bg-gray-100 px-3 py-1.5 text-sm text-gray-500"
               >
                 <Upload className="w-4 h-4" />
                 <span>Bulk Upload</span>
@@ -666,7 +806,9 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
                   <h4 className="font-medium text-gray-900">Search Product</h4>
                   <button
                     onClick={() => setShowProductSearch(false)}
-                    className="text-gray-500 hover:text-gray-700"
+                    className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+                    aria-label="Close product search"
+                    title="Close product search"
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -711,7 +853,9 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
                         setShowBatchSelector(false);
                         setSelectedProduct(null);
                       }}
-                      className="p-1.5 hover:bg-gray-200 rounded-lg transition-colors"
+                      className="inline-flex min-h-11 min-w-11 items-center justify-center p-1.5 hover:bg-gray-200 rounded-lg transition-colors"
+                      aria-label="Close batch selector"
+                      title="Close batch selector"
                     >
                       <X className="h-5 w-5 text-gray-500" />
                     </button>
@@ -729,7 +873,7 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
                         setSelectedProduct(null);
                       }}
                       showExpiryStatus={true}
-                      filterExpired={false}
+                      filterExpired={true}
                       maxHeight="none"
                       className="w-full"
                     />
@@ -747,9 +891,9 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
                       <tr>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
                         <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Batch</th>
-                        <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Current Stock</th>
-                        <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Adjustment Qty</th>
-                        <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">New Stock</th>
+                        <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">System Stock (base)</th>
+                        <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Count UOM</th>
+                        <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Physical Count</th>
                         <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>
                       </tr>
                     </thead>
@@ -764,32 +908,51 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
                           </td>
                           <td className="px-4 py-3 text-center">
                             <div>
-                              <div className="font-medium">{item.batch_number || 'Default'}</div>
+                              <div className="font-medium">{item.batch_number || 'Batch identity unavailable'}</div>
                               {item.expiry_date && (
-                                <div className="text-xs text-gray-500">Exp: {new Date(item.expiry_date).toLocaleDateString()}</div>
+                                <div className="text-xs text-gray-500">Exp: {formatCalendarDate(requireCalendarDate(item.expiry_date, 'Batch expiry date'))}</div>
                               )}
                             </div>
                           </td>
-                          <td className="px-4 py-3 text-center">{item.quantity_available}</td>
-                          <td className="px-4 py-3 text-center">
-                            <input
-                              type="number"
-                              value={item.adjustment_quantity}
-                              onChange={(e) => updateItemQuantity(item.id, e.target.value)}
-                              min="1"
-                              className="w-24 px-2 py-1 border border-gray-300 rounded text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            />
+                          <td
+                            className="px-4 py-3 text-center"
+                            data-testid={`cycle-count-system-base-${item.batch_id}`}
+                          >
+                            {item.quantity_available === null ? '—' : item.quantity_available}
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <span className={`font-medium ${adjustmentData.adjustment_type === 'increase' ? 'text-green-600' : 'text-red-600'
-                              }`}>
-                              {item.after_adjustment}
-                            </span>
+                            <select
+                              value={item.uom_conversion_id}
+                              onChange={(event) => updateItemUom(item.id, event.target.value)}
+                              className="min-h-11 rounded border border-gray-300 bg-white px-2 text-sm"
+                              aria-label={`Count UOM for ${item.product_name}`}
+                            >
+                              <option value="">Select count UOM</option>
+                              {item.uom_options.map(option => (
+                                <option key={option.uom_conversion_id} value={option.uom_conversion_id}>
+                                  {option.from_uom_code} (×{String(option.multiplier)} {option.to_uom_code})
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              value={item.counted_quantity}
+                              onChange={(e) => updateItemQuantity(item.id, e.target.value)}
+                              placeholder="0.000000"
+                              aria-label={`Exact physical count in ${item.unit} for ${item.product_name}`}
+                              className="w-24 px-2 py-1 border border-gray-300 rounded text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                            <div className="mt-1 text-xs text-gray-500">{item.unit}</div>
                           </td>
                           <td className="px-4 py-3 text-center">
                             <button
                               onClick={() => handleRemoveItem(item.id)}
-                              className="p-1 text-red-600 hover:text-red-800 hover:bg-red-50 rounded"
+                              className="inline-flex min-h-11 min-w-11 items-center justify-center p-1 text-red-600 hover:text-red-800 hover:bg-red-50 rounded"
+                              aria-label={`Remove ${item.product_name}`}
+                              title={`Remove ${item.product_name}`}
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -816,18 +979,97 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
   // Review content for step 2
   const reviewContent = (
     <div className="space-y-6">
-      {/* Warning Message */}
-      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-        <div className="flex items-start space-x-3">
-          <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-medium text-amber-800">Please Review Carefully</p>
-            <p className="text-sm text-amber-700 mt-1">
-              Stock adjustments cannot be reversed. Make sure all quantities and products are correct before confirming.
-            </p>
+      {/* Error State */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex items-start space-x-3">
+            <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-red-800">Could not prepare adjustment</p>
+              <p className="text-sm text-red-700 mt-1">{error}</p>
+            </div>
           </div>
         </div>
-      </div>
+      )}
+
+      {/* Success State */}
+      {committedRef && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+          <div className="flex items-start space-x-3">
+            <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-green-800">Adjustment posted</p>
+              <p className="text-sm text-green-700 mt-1">
+                Stock adjustment <strong data-testid="canonical-posted-resource-id">{committedRef}</strong> has been committed to inventory.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Canonical Confirm Modal */}
+      {showConfirmModal && preparedPreview && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="adjustment-confirm-title"
+        >
+          <div className="absolute inset-0 bg-black bg-opacity-50" onClick={() => !isCommitting && setShowConfirmModal(false)} />
+          <div className="relative bg-white rounded-lg shadow-2xl w-full max-w-lg p-6">
+            <div className="flex items-center space-x-3 mb-4">
+              <AlertCircle className="w-6 h-6 text-amber-600" />
+              <h3 id="adjustment-confirm-title" className="text-lg font-semibold text-gray-900">Confirm Stock Adjustment</h3>
+            </div>
+            <p className="text-sm text-gray-700 mb-2">
+              You are about to post a verified <strong>signed cycle-count variance</strong>
+              for <strong>{adjustmentData.items.length}</strong> product(s) on{' '}
+              <strong>{adjustmentData.adjustment_date}</strong>.
+            </p>
+            <p className="text-xs text-gray-500 mb-4">
+              Command ID: <span className="font-mono">{preparedPreview.command_request_id}</span>
+            </p>
+            {Array.isArray(preparedPreview.inventory_impact) && (
+              <div className="mb-4 max-h-44 overflow-auto rounded border border-gray-200">
+                {(preparedPreview.inventory_impact as Array<Record<string, unknown>>).map((impact, index) => (
+                  <div key={`${String(impact.batch_id)}-${index}`} className="border-b border-gray-100 p-2 text-xs last:border-b-0">
+                    <span className="font-mono">{String(impact.batch_id)}</span>: {String(impact.system_base_quantity)} →{' '}
+                    {String(impact.counted_base_quantity)} base units; {String(impact.variance_effect)} {String(impact.variance_base_quantity)}; value ₹{String(impact.variance_value)}
+                  </div>
+                ))}
+              </div>
+            )}
+            <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded p-3 mb-6">
+              {awaitingIndependentApproval
+                ? 'Execute only after a different authorized user approved this exact hash. Execution permanently posts stock and its valuation journal.'
+                : 'Submitting preserves this exact preview for a different authorized user. It does not post stock.'}
+            </p>
+            <div className="flex space-x-3">
+              <button
+                onClick={() => setShowConfirmModal(false)}
+                disabled={isCommitting}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={awaitingIndependentApproval ? handleExecute : handleSubmitForApproval}
+                disabled={isCommitting}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center space-x-2"
+              >
+                {isCommitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>{awaitingIndependentApproval ? 'Executing...' : 'Submitting...'}</span>
+                  </>
+                ) : (
+                  <span>{awaitingIndependentApproval ? 'Post Approved Cycle Count Once' : 'Submit for Independent Approval'}</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Summary Card */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
@@ -852,13 +1094,15 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
           </div>
           <div>
             <p className="text-sm text-gray-600">Reason</p>
-            <p className="font-medium">
-              {adjustmentReasons[adjustmentData.adjustment_type]?.find(r => r.value === adjustmentData.reason)?.label}
-            </p>
+            <p className="font-medium">Verified physical cycle count</p>
           </div>
           <div>
             <p className="text-sm text-gray-600">Date</p>
-            <p className="font-medium">{new Date(adjustmentData.adjustment_date).toLocaleDateString()}</p>
+            <p className="font-medium">{adjustmentData.adjustment_date}</p>
+          </div>
+          <div>
+            <p className="text-sm text-gray-600">Physical count time (UTC)</p>
+            <p className="break-all font-mono text-sm font-medium">{adjustmentData.counted_at}</p>
           </div>
           <div>
             <p className="text-sm text-gray-600">Total Items</p>
@@ -873,9 +1117,9 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
                 <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Batch</th>
-                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Current Stock</th>
-                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Adjustment</th>
-                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">New Stock</th>
+                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">System (base)</th>
+                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Count UOM</th>
+                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Physical Count</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
@@ -886,19 +1130,16 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
                     <div className="text-sm text-gray-500">{item.product_code}</div>
                   </td>
                   <td className="px-4 py-3 text-center">
-                    <div className="font-medium">{item.batch_number || 'Default'}</div>
+                        <div className="font-medium">{item.batch_number || 'Batch identity unavailable'}</div>
                     {item.expiry_date && (
-                      <div className="text-xs text-gray-500">Exp: {new Date(item.expiry_date).toLocaleDateString()}</div>
+                      <div className="text-xs text-gray-500">Exp: {formatCalendarDate(requireCalendarDate(item.expiry_date, 'Batch expiry date'))}</div>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-center">{item.quantity_available}</td>
+                  <td className="px-4 py-3 text-center">{item.quantity_available === null ? '—' : item.quantity_available}</td>
                   <td className="px-4 py-3 text-center">
-                    <span className={`font-medium ${adjustmentData.adjustment_type === 'increase' ? 'text-green-600' : 'text-red-600'
-                      }`}>
-                      {adjustmentData.adjustment_type === 'increase' ? '+' : '-'}{item.adjustment_quantity}
-                    </span>
+                    <span className="font-medium">{item.unit} × {String(item.uom_multiplier)}</span>
                   </td>
-                  <td className="px-4 py-3 text-center font-medium">{item.after_adjustment}</td>
+                  <td className="px-4 py-3 text-center font-medium">{item.counted_quantity} {item.unit}</td>
                 </tr>
               ))}
             </tbody>
@@ -930,24 +1171,26 @@ Note: Use positive numbers for increase and negative for decrease. Reason codes:
       createContent={createContent}
       reviewContent={reviewContent}
       onClose={onClose}
-      onSave={handleSubmit}
-      isSaving={saving}
-      additionalActions={[
-        {
-          label: "Refresh",
-          onClick: handleRefresh,
-          icon: refreshing ? Loader2 : RefreshCw,
-          disabled: refreshing
-        },
-        {
-          label: "Bulk Adjust",
-          icon: Upload,
-          onClick: () => {
-            setShowBulkUpload(!showBulkUpload);
-            setShowProductSearch(false);
-          }
-        }
-      ]}
+      canProceedToReview={isAdjustmentValid}
+      keyboardShortcuts={{
+        1: [
+          { key: 'Ctrl+A', action: 'Add Product' },
+          { key: 'Ctrl+U', action: 'Bulk Upload' },
+          { key: 'Esc', action: 'Close' }
+        ],
+        2: [
+          { key: 'Esc', action: 'Back' }
+        ]
+      }}
+      onSave={committedRef ? undefined : awaitingIndependentApproval
+        ? () => setShowConfirmModal(true)
+        : handlePrepare}
+      isSaving={isPreparing || isCommitting}
+      saveLabel={committedRef
+        ? 'Adjustment Posted'
+        : awaitingIndependentApproval ? 'Execute Approved Count' : 'Prepare Cycle Count'}
+      footerTotals={{ itemCount: adjustmentData.items.length }}
+      additionalActions={[]}
     />
   );
 };

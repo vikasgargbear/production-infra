@@ -1,0 +1,49 @@
+{
+  "template_schema": "aasopharma.live23.ui-variant-template.v1",
+  "scenario_id": "purchase_return_final",
+  "operation_id": "purchase_return",
+  "lifecycle_mode": "split",
+  "steps": {
+    "missing_required_steps": [
+      {"actor":"requester","action":"goto","value":"/#/returns/purchase-return"},
+      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Required: select an exact supplier invoice, return line and quantities, reason, GST treatment, verified destination, transport mode, and distance.","exact":true},"value":"Required: select an exact supplier invoice, return line and quantities, reason, GST treatment, verified destination, transport mode, and distance."},
+      {"actor":"requester","action":"expectDisabled","locator":{"kind":"role","role":"button","name":"Proceed to Review","exact":true}}
+    ],
+    "prepare_steps": [
+      {"actor":"requester","action":"goto","value":"/#/returns/purchase-return"},
+      {"actor":"requester","action":"fill","locator":{"kind":"placeholder","name":"Search supplier by name, phone, or code...","exact":true},"value":"{{fact.display.supplier_code}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"testId","name":"entity-search-option-{{fact.identity.supplier_account_id}}"}},
+      {"actor":"requester","action":"click","locator":{"kind":"testId","name":"select-supplier-invoice-{{resource_supplier_invoice}}"}},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"checkbox","name":"Return {{fact.display.product_name}}","exact":true}},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Billed quantity for {{fact.display.product_name}}","exact":true},"value":"{{fact.choice.purchase_return_final_billed_quantity}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Free quantity for {{fact.display.product_name}}","exact":true},"value":"{{fact.choice.purchase_return_final_free_quantity}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"combobox","name":"Return Reason","exact":true}},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"option","name":"{{scalar.purchase_return_reason_label}}","exact":true}},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"combobox","name":"GST treatment","exact":true}},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"option","name":"{{scalar.purchase_return_gst_treatment_label}}","exact":true}},
+      {"actor":"requester","action":"select","locator":{"kind":"label","name":"Supplier destination","exact":true},"value":"{{fact.identity.supplier_destination_address_id}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"combobox","name":"Transport mode","exact":true}},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"option","name":"{{scalar.purchase_return_transport_mode_label}}","exact":true}},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Distance (km)","exact":true},"value":"{{scalar.purchase_return_distance_km}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Proceed to Review","exact":true}},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Prepare Immutable Return","exact":true}}
+    ],
+    "approval_steps": [
+      {"actor":"reviewer","action":"goto","value":"/#/returns/approval-inbox"},
+      {"actor":"reviewer","action":"click","locator":{"kind":"role","role":"button","name":"Refresh","exact":true}},
+      {"actor":"reviewer","action":"click","locator":{"kind":"testId","name":"review-return-{{command_request_id}}"}},
+      {"actor":"reviewer","action":"expectText","locator":{"kind":"label","name":"Immutable canonical return preview","exact":true},"value":"{{command_request_id}}"},
+      {"actor":"reviewer","action":"expectText","locator":{"kind":"testId","name":"canonical-immutable-preview"},"value":"{{fact.display.product_name}}"},
+      {"actor":"reviewer","action":"click","locator":{"kind":"role","role":"checkbox","name":"I reviewed the exact source, evidence, inventory, financial and tax impacts.","exact":true}},
+      {"actor":"reviewer","action":"click","locator":{"kind":"role","role":"button","name":"Approve — requester posts later","exact":true}}
+    ],
+    "execute_steps": [
+      {"actor":"requester","action":"goto","value":"/#/returns/resume-post"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Refresh","exact":true}},
+      {"actor":"requester","action":"click","locator":{"kind":"testId","name":"open-return-{{command_request_id}}"}},
+      {"actor":"requester","action":"expectText","locator":{"kind":"label","name":"Immutable canonical return preview","exact":true},"value":"{{command_request_id}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"checkbox","name":"Post this exact approved preview. This creates inventory, GST and ledger effects.","exact":true}},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Post Approved Return","exact":true}}
+    ]
+  }
+}

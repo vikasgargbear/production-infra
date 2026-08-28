@@ -1,10 +1,12 @@
 """Contract tests for the reviewed agent-facing OpenAPI allowlist."""
 
 from dataclasses import replace
+from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI
 
+from app.core import api_contract
 from app.core.api_contract import (
     OPERATION_REGISTRY,
     OperationRisk,
@@ -62,6 +64,26 @@ def test_installer_rejects_route_without_enforced_security_dependencies():
         install_operation_registry(unsafe_app, (claimed_safe,))
 
 
+def test_route_index_uses_effective_paths_from_lazy_included_routers(monkeypatch):
+    nested = FastAPI()
+
+    @nested.get("/local")
+    async def nested_read():
+        return {"ok": True}
+
+    route = next(item for item in nested.routes if getattr(item, "path", None) == "/local")
+    effective = SimpleNamespace(
+        original_route=route,
+        path="/api/nested/local",
+        methods=route.methods,
+    )
+    monkeypatch.setattr(api_contract, "iter_route_contexts", lambda _routes: (effective,))
+
+    index = api_contract._route_index(nested)
+
+    assert index[("/api/nested/local", "GET")] == [effective]
+
+
 def test_openapi_contains_only_the_reviewed_mcp_allowlist():
     schema = app.openapi()
     contract_extension = schema["x-erp-contract"]
@@ -97,6 +119,10 @@ def test_invoice_calculation_preview_is_authenticated_but_not_mcp_exported():
         contract.path != "/api/calculations/invoice"
         for contract in OPERATION_REGISTRY
     )
+    response_schema = operation["responses"]["200"]["content"][
+        "application/json"
+    ]["schema"]
+    assert response_schema["$ref"].endswith("/InvoiceCalculationPreviewResponse")
 
 
 def test_sales_order_preview_is_authenticated_but_not_mcp_exported():
@@ -109,8 +135,23 @@ def test_sales_order_preview_is_authenticated_but_not_mcp_exported():
         contract.path != "/api/calculations/sales-order"
         for contract in OPERATION_REGISTRY
     )
-    request_schema = schema["components"]["schemas"]["OrderCreate"]
+    request_schema = schema["components"]["schemas"]["SalesOrderCalculationRequest"]
     assert request_schema["properties"]["items"]["maxItems"] == 200
+    entity_schema = schema["components"]["schemas"]["SalesOrderCalculationLine"]
+    assert entity_schema["properties"]["product_id"]["format"] == "uuid"
+    assert "gst_percent" not in entity_schema["properties"]
+    assert "tax_percent" not in entity_schema["properties"]
+    response_schema = operation["responses"]["200"]["content"][
+        "application/json"
+    ]["schema"]
+    assert response_schema["$ref"].endswith("/InvoiceCalculationPreviewResponse")
+    line_schema = schema["components"]["schemas"]["CanonicalSalesCalculationPreviewLine"]
+    totals_schema = schema["components"]["schemas"]["InvoiceCalculationPreviewTotals"]
+    assert line_schema["additionalProperties"] is False
+    assert totals_schema["additionalProperties"] is False
+    assert line_schema["properties"]["free_supply_tax_treatment"]["enum"] == [
+        "excluded_from_taxable_value", "included_at_unit_rate"
+    ]
 
 
 @pytest.mark.parametrize("contract", OPERATION_REGISTRY)

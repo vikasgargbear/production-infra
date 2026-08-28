@@ -1,0 +1,183 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aasopharma.internal/schemas/calculation-input-v1.schema.json",
+  "title": "AASOPharma canonical trade calculation input v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "aggregate_version", "calculation_kind", "document", "operation", "original",
+    "resource_id", "resource_type", "reversal", "schema", "schema_version",
+    "serializer_version"
+  ],
+  "properties": {
+    "aggregate_version": {"type": "integer", "minimum": 1},
+    "calculation_kind": {"enum": ["document", "reversal"]},
+    "document": {"oneOf": [{"$ref": "#/$defs/document"}, {"type": "null"}]},
+    "operation": {"$ref": "calculation-output-v1.schema.json#/$defs/operation"},
+    "original": {"oneOf": [{"$ref": "calculation-output-v1.schema.json"}, {"type": "null"}]},
+    "resource_id": {"type": "string", "format": "uuid"},
+    "resource_type": {"$ref": "calculation-output-v1.schema.json#/$defs/resourceType"},
+    "reversal": {"oneOf": [{"$ref": "#/$defs/reversal"}, {"type": "null"}]},
+    "schema": {"const": "aasopharma.trade-calculation-input"},
+    "schema_version": {"const": "1"},
+    "serializer_version": {"const": "aasopharma-jcs-decimal-v1"}
+  },
+  "oneOf": [
+    {
+      "properties": {"calculation_kind": {"const": "document"}, "document": {"$ref": "#/$defs/document"}, "original": {"type": "null"}, "reversal": {"type": "null"}},
+      "required": ["document"]
+    },
+    {
+      "properties": {"calculation_kind": {"const": "reversal"}, "document": {"type": "null"}, "original": {"$ref": "calculation-output-v1.schema.json"}, "reversal": {"$ref": "#/$defs/reversal"}},
+      "required": ["original", "reversal"]
+    }
+  ],
+  "$defs": {
+    "decimal": {"type": "string", "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"},
+    "discount": {
+      "type": "object", "additionalProperties": false,
+      "required": ["basis", "kind", "value"],
+      "properties": {
+        "basis": {"enum": ["price_value", "taxable_value"]},
+        "kind": {"enum": ["none", "percent", "amount"]},
+        "value": {"$ref": "#/$defs/decimal"}
+      }
+    },
+    "product": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "base_billed_quantity", "base_free_quantity", "billed_quantity", "cess_rate",
+        "document_discount_eligible", "free_quantity", "free_supply_tax_treatment",
+        "gst_rate", "line_discount", "line_id", "price_basis", "quoted_unit_rate",
+        "tax_charge_mechanism", "taxability_snapshot", "uom_conversion_factor"
+      ],
+      "properties": {
+        "base_billed_quantity": {"$ref": "#/$defs/decimal"},
+        "base_free_quantity": {"$ref": "#/$defs/decimal"},
+        "billed_quantity": {"$ref": "#/$defs/decimal"},
+        "cess_rate": {"$ref": "#/$defs/decimal"},
+        "document_discount_eligible": {"type": "boolean"},
+        "free_quantity": {"$ref": "#/$defs/decimal"},
+        "free_supply_tax_treatment": {"enum": ["excluded_from_taxable_value", "included_at_unit_rate"]},
+        "gst_rate": {"$ref": "#/$defs/decimal"},
+        "line_discount": {"$ref": "#/$defs/discount"},
+        "line_id": {"type": "string", "format": "uuid"},
+        "price_basis": {"enum": ["tax_exclusive", "tax_inclusive"]},
+        "quoted_unit_rate": {"$ref": "#/$defs/decimal"},
+        "tax_charge_mechanism": {"enum": ["normal", "reverse_charge"]},
+        "taxability_snapshot": {"enum": ["taxable", "zero_rated", "exempt", "nil_rated", "non_gst"]},
+        "uom_conversion_factor": {"$ref": "#/$defs/decimal"}
+      }
+    },
+    "charge": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "cess_rate", "charge_code", "document_discount_eligible", "gst_rate", "line_id",
+        "price_basis", "quoted_amount", "tax_charge_mechanism", "taxability_snapshot"
+      ],
+      "properties": {
+        "cess_rate": {"$ref": "#/$defs/decimal"},
+        "charge_code": {"type": "string", "minLength": 1, "maxLength": 64},
+        "document_discount_eligible": {"type": "boolean"},
+        "gst_rate": {"$ref": "#/$defs/decimal"},
+        "line_id": {"type": "string", "format": "uuid"},
+        "price_basis": {"enum": ["tax_exclusive", "tax_inclusive"]},
+        "quoted_amount": {"$ref": "#/$defs/decimal"},
+        "tax_charge_mechanism": {"enum": ["normal", "reverse_charge"]},
+        "taxability_snapshot": {"enum": ["taxable", "zero_rated", "exempt", "nil_rated", "non_gst"]}
+      }
+    },
+    "document": {
+      "type": "object", "additionalProperties": false,
+      "required": ["charges", "document_discount", "gst_tax_treatment", "gst_type", "products", "rounding_policy", "tax_charge_mechanism", "zero_rated_mode"],
+      "properties": {
+        "charges": {"type": "array", "items": {"$ref": "#/$defs/charge"}},
+        "document_discount": {"$ref": "#/$defs/discount"},
+        "gst_tax_treatment": {"enum": ["statutory", "commercial_only"]},
+        "gst_type": {"enum": ["intra_state", "inter_state"]},
+        "products": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/product"}},
+        "rounding_policy": {"enum": ["none", "nearest_rupee"]},
+        "tax_charge_mechanism": {"enum": ["normal", "reverse_charge"]},
+        "zero_rated_mode": {"enum": ["not_applicable", "without_payment", "with_igst"]}
+      }
+    },
+    "productReversal": {
+      "type": "object", "additionalProperties": false,
+      "required": ["final_residual", "line_id", "reversed_base_billed_quantity", "reversed_base_free_quantity", "reversed_billed_quantity", "reversed_free_quantity", "value_basis"],
+      "properties": {
+        "final_residual": {"type": "boolean"},
+        "line_id": {"type": "string", "format": "uuid"},
+        "reversed_base_billed_quantity": {"$ref": "#/$defs/decimal"},
+        "reversed_base_free_quantity": {"$ref": "#/$defs/decimal"},
+        "reversed_billed_quantity": {"$ref": "#/$defs/decimal"},
+        "reversed_free_quantity": {"$ref": "#/$defs/decimal"},
+        "value_basis": {"enum": ["billed_quantity", "base_quantity"]}
+      }
+    },
+    "chargeReversal": {
+      "type": "object", "additionalProperties": false,
+      "required": ["final_residual", "line_id", "ratio"],
+      "properties": {
+        "final_residual": {"type": "boolean"},
+        "line_id": {"type": "string", "format": "uuid"},
+        "ratio": {"$ref": "#/$defs/decimal"}
+      }
+    },
+    "priorProductReversal": {
+      "type": "object", "additionalProperties": false,
+      "required": ["cess_amount", "cgst_amount", "document_discount_amount", "gross_price_amount", "gst_taxable_value", "igst_amount", "line_discount_amount", "line_id", "net_value_amount", "reversed_base_billed_quantity", "reversed_base_free_quantity", "reversed_billed_quantity", "reversed_free_quantity", "sgst_amount", "value_basis"],
+      "properties": {
+        "cess_amount": {"$ref": "#/$defs/decimal"},
+        "cgst_amount": {"$ref": "#/$defs/decimal"},
+        "document_discount_amount": {"$ref": "#/$defs/decimal"},
+        "gross_price_amount": {"$ref": "#/$defs/decimal"},
+        "gst_taxable_value": {"$ref": "#/$defs/decimal"},
+        "igst_amount": {"$ref": "#/$defs/decimal"},
+        "line_discount_amount": {"$ref": "#/$defs/decimal"},
+        "line_id": {"type": "string", "format": "uuid"},
+        "net_value_amount": {"$ref": "#/$defs/decimal"},
+        "reversed_base_billed_quantity": {"$ref": "#/$defs/decimal"},
+        "reversed_base_free_quantity": {"$ref": "#/$defs/decimal"},
+        "reversed_billed_quantity": {"$ref": "#/$defs/decimal"},
+        "reversed_free_quantity": {"$ref": "#/$defs/decimal"},
+        "sgst_amount": {"$ref": "#/$defs/decimal"},
+        "value_basis": {"enum": ["billed_quantity", "base_quantity"]}
+      }
+    },
+    "priorChargeReversal": {
+      "type": "object", "additionalProperties": false,
+      "required": ["cess_amount", "cgst_amount", "document_discount_amount", "gross_price_amount", "gst_taxable_value", "igst_amount", "line_id", "net_value_amount", "reversed_ratio", "sgst_amount"],
+      "properties": {
+        "cess_amount": {"$ref": "#/$defs/decimal"},
+        "cgst_amount": {"$ref": "#/$defs/decimal"},
+        "document_discount_amount": {"$ref": "#/$defs/decimal"},
+        "gross_price_amount": {"$ref": "#/$defs/decimal"},
+        "gst_taxable_value": {"$ref": "#/$defs/decimal"},
+        "igst_amount": {"$ref": "#/$defs/decimal"},
+        "line_id": {"type": "string", "format": "uuid"},
+        "net_value_amount": {"$ref": "#/$defs/decimal"},
+        "reversed_ratio": {"$ref": "#/$defs/decimal"},
+        "sgst_amount": {"$ref": "#/$defs/decimal"}
+      }
+    },
+    "priorState": {
+      "type": "object", "additionalProperties": false,
+      "required": ["charges", "products", "rounding_adjustment"],
+      "properties": {
+        "charges": {"type": "array", "items": {"$ref": "#/$defs/priorChargeReversal"}},
+        "products": {"type": "array", "items": {"$ref": "#/$defs/priorProductReversal"}},
+        "rounding_adjustment": {"$ref": "#/$defs/decimal"}
+      }
+    },
+    "reversal": {
+      "type": "object", "additionalProperties": false,
+      "required": ["charges", "gst_tax_treatment", "prior_state", "products"],
+      "properties": {
+        "charges": {"type": "array", "items": {"$ref": "#/$defs/chargeReversal"}},
+        "gst_tax_treatment": {"enum": ["statutory", "commercial_only"]},
+        "prior_state": {"$ref": "#/$defs/priorState"},
+        "products": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/productReversal"}}
+      }
+    }
+  }
+}

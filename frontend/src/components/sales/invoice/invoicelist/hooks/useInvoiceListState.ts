@@ -37,6 +37,8 @@ const initialState: InvoiceListState = {
     filters: {
         searchQuery: '',
         dateFilter: 'all',
+        dateFrom: '',
+        dateTo: '',
         statusFilter: 'all'
     },
     ui: {

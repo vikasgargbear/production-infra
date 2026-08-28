@@ -2,7 +2,7 @@
  * useFeatureFlags Hook
  * 
  * Provides access to feature flags and business configuration settings.
- * Caches settings locally for offline support and performance.
+ * Reads settings from the live API. Browser storage is never an authority.
  * 
  * Usage:
  * const { customerMode, isB2BOnly, loading } = useFeatureFlags();
@@ -10,6 +10,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import apiClient from '../services/api/apiClient';
+import { rejectCanonicalWrite } from '../services/api/canonicalWritePolicy';
 
 // ============================================
 // Types
@@ -62,6 +63,9 @@ export interface UseFeatureFlagsResult {
     updateFeature: (key: string, value: any) => Promise<boolean>;
 }
 
+export const updateFeatureFlag = (_key: string, _value: unknown): Promise<never> =>
+    rejectCanonicalWrite('Updating feature settings');
+
 // ============================================
 // Default Values
 // ============================================
@@ -91,30 +95,12 @@ const DEFAULT_FEATURES: FeatureFlags = {
     ewayBillThreshold: 50000,
 };
 
-// Local storage key for caching
-const CACHE_KEY = 'pharma_feature_flags';
-const CACHE_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
-
 // ============================================
 // Hook Implementation
 // ============================================
 
 export function useFeatureFlags(): UseFeatureFlagsResult {
-    const [features, setFeatures] = useState<FeatureFlags>(() => {
-        // Try to load from cache on initial render
-        try {
-            const cached = localStorage.getItem(CACHE_KEY);
-            if (cached) {
-                const { data, timestamp } = JSON.parse(cached);
-                if (Date.now() - timestamp < CACHE_EXPIRY_MS) {
-                    return { ...DEFAULT_FEATURES, ...data };
-                }
-            }
-        } catch {
-            // Ignore cache errors
-        }
-        return DEFAULT_FEATURES;
-    });
+    const [features, setFeatures] = useState<FeatureFlags>(DEFAULT_FEATURES);
 
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -124,35 +110,15 @@ export function useFeatureFlags(): UseFeatureFlagsResult {
             setLoading(true);
             setError(null);
 
-            // Try to fetch from API, fallback to defaults if not available
-            try {
-                const response = await apiClient.get('/settings/features');
-                if (response?.data?.features) {
-                    const fetchedFeatures = response.data.features;
-                    const mergedFeatures = { ...DEFAULT_FEATURES, ...fetchedFeatures };
-                    setFeatures(mergedFeatures);
-
-                    // Cache the result
-                    try {
-                        localStorage.setItem(CACHE_KEY, JSON.stringify({
-                            data: fetchedFeatures,
-                            timestamp: Date.now()
-                        }));
-                    } catch {
-                        // Storage full or blocked
-                    }
-                    return;
-                }
-            } catch {
-                // API not available, use defaults
+            const response = await apiClient.get('/settings/features');
+            if (!response?.data?.features || typeof response.data.features !== 'object') {
+                throw new Error('Feature settings returned an invalid canonical response');
             }
-
-            // Use defaults if API fetch fails
-            setFeatures(DEFAULT_FEATURES);
+            setFeatures({ ...DEFAULT_FEATURES, ...response.data.features });
         } catch (err: any) {
             console.error('Failed to fetch feature flags:', err);
             setError(err.message || 'Failed to load feature settings');
-            // Keep using cached/default values
+            setFeatures(DEFAULT_FEATURES);
         } finally {
             setLoading(false);
         }
@@ -160,30 +126,8 @@ export function useFeatureFlags(): UseFeatureFlagsResult {
 
     const updateFeature = useCallback(async (key: string, value: any): Promise<boolean> => {
         try {
-            // Try to update via API
-            try {
-                await apiClient.patch('/settings/features', { [key]: value });
-            } catch {
-                // API not available - just update locally
-            }
-
-            // Update local state
+            await updateFeatureFlag(key, value);
             setFeatures(prev => ({ ...prev, [key]: value }));
-
-            // Update cache
-            try {
-                const cached = localStorage.getItem(CACHE_KEY);
-                if (cached) {
-                    const { data, timestamp } = JSON.parse(cached);
-                    localStorage.setItem(CACHE_KEY, JSON.stringify({
-                        data: { ...data, [key]: value },
-                        timestamp
-                    }));
-                }
-            } catch {
-                // Ignore cache errors
-            }
-
             return true;
         } catch (err: any) {
             console.error('Failed to update feature:', err);

@@ -11,4 +11,3 @@ export { default as FullScreenModal } from './FullScreenModal';
 export { default as DocumentImportModal } from './DocumentImportModal';
 export { default as GenericSuccessModal } from './GenericSuccessModal';
 export { default as PDFUploadModal } from './PDFUploadModal';
-export { default as ShareModal } from './ShareModal';

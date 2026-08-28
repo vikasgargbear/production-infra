@@ -42,20 +42,6 @@ export interface PurchaseOrderItem extends BasePurchaseItem {
     notes?: string;
 }
 
-/** Purchase Entry Item - for recording received invoices */
-/** Purchase Entry Item - for recording received invoices */
-export interface PurchaseEntryItem extends BasePurchaseItem {
-    batch_number?: string;
-    expiry_date?: string;
-    manufacturing_date?: string | null;
-    mrp_per_unit?: number;
-    sale_price_per_unit?: number;
-    cost_per_unit?: number;
-    // unit_price is inherited from BasePurchaseItem (number)
-    mrp?: number;
-    selling_price?: number;
-}
-
 /** GRN Item - for goods receipt note */
 export interface GRNItem extends BasePurchaseItem {
     batch_number?: string;
@@ -145,26 +131,6 @@ export interface PurchaseOrder extends Omit<BasePurchaseDocument, 'items'> {
  * Omits purchase_order_id since it's auto-generated
  */
 export type NewPurchaseOrder = Omit<PurchaseOrder, 'purchase_order_id'>;
-
-/** Purchase Entry document */
-export interface PurchaseEntry extends Omit<BasePurchaseDocument, 'items'> {
-    purchase_number: string;
-    supplier_invoice_number: string;
-    invoice_date: string;
-    items: PurchaseEntryItem[];
-
-    // Transport
-    transport_company?: string;
-    vehicle_number?: string;
-    lr_number?: string;
-
-    // Payment
-    payment_methods?: Array<{
-        method: string;
-        amount: number;
-        reference?: string;
-    }>;
-}
 
 /** GRN document */
 export interface GRN extends Omit<BasePurchaseDocument, 'items'> {

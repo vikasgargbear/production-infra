@@ -1,0 +1,50 @@
+{
+  "template_schema": "aasopharma.live18.ui-template.v1",
+  "operation_id": "expense_claim",
+  "release_status": "deferred",
+  "release_blocker_code": "EXPENSE_EVIDENCE_STORAGE_DEFERRED",
+  "lifecycle_mode": "split",
+  "steps": {
+    "missing_required_steps": [
+      {"actor":"requester","action":"goto","value":"/#/payment/expense-claims"},
+      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Required: select a branch, exact claim period, reimbursement liability, verified unused receipt, expense account, merchant, description, amount, and business purpose.","exact":true},"value":"Required: select a branch, exact claim period, reimbursement liability, verified unused receipt, expense account, merchant, description, amount, and business purpose."},
+      {"actor":"requester","action":"expectDisabled","locator":{"kind":"role","role":"button","name":"Prepare immutable preview","exact":true}}
+    ],
+    "prepare_steps": [
+      {"actor":"requester","action":"goto","value":"/#/payment/expense-claims"},
+      {"actor":"requester","action":"select","locator":{"kind":"label","name":"Branch","exact":true},"value":"{{fact.identity.branch_id}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Receipt date","exact":true},"value":"{{fact.clock.expense_receipt_document_date}}"},
+      {"actor":"requester","action":"setInputFiles","locator":{"kind":"label","name":"Receipt PDF","exact":true},"value":"{{scalar.expense_receipt_pdf_path}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Upload and verify receipt","exact":true}},
+      {"actor":"requester","action":"expectText","locator":{"kind":"testId","name":"expense-receipt-upload-result"},"value":"Receipt verified and selected."},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Period start","exact":true},"value":"{{fact.clock.expense_receipt_document_date}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Period end","exact":true},"value":"{{fact.clock.expense_receipt_document_date}}"},
+      {"actor":"requester","action":"select","locator":{"kind":"label","name":"Reimbursement liability","exact":true},"value":"{{fact.identity.expense_reimbursement_account_id}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Business purpose","exact":true},"value":"{{scalar.expense_claim_purpose}}"},
+      {"actor":"requester","action":"select","locator":{"kind":"label","name":"Expense account","exact":true},"value":"{{fact.identity.expense_account_id}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Merchant","exact":true},"value":"{{scalar.expense_claim_merchant}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Description","exact":true},"value":"{{scalar.expense_claim_description}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Gross INR amount","exact":true},"value":"{{scalar.expense_claim_amount}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Prepare immutable preview","exact":true}}
+    ],
+    "approval_steps": [
+      {"actor":"reviewer","action":"goto","value":"/#/payment/expense-claims"},
+      {"actor":"reviewer","action":"click","locator":{"kind":"role","role":"button","name":"2. Independent approval","exact":true}},
+      {"actor":"reviewer","action":"fill","locator":{"kind":"label","name":"Command ID","exact":true},"value":"{{command_request_id}}"},
+      {"actor":"reviewer","action":"click","locator":{"kind":"role","role":"button","name":"Load immutable review","exact":true}},
+      {"actor":"reviewer","action":"expectText","locator":{"kind":"text","name":"{{preview_hash}}","exact":true},"value":"{{preview_hash}}"},
+      {"actor":"reviewer","action":"expectText","locator":{"kind":"testId","name":"canonical-immutable-preview"},"value":"{{scalar.expense_claim_merchant}}"},
+      {"actor":"reviewer","action":"click","locator":{"kind":"role","role":"checkbox","name":"I independently reviewed the exact claimant, receipts, accounts, dates, tax treatment, and amount.","exact":true}},
+      {"actor":"reviewer","action":"click","locator":{"kind":"role","role":"button","name":"Approve exact preview","exact":true}}
+    ],
+    "execute_steps": [
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"3. Execute & verify","exact":true}},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Command ID","exact":true},"value":"{{command_request_id}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Check status / recover","exact":true}},
+      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"{{preview_hash}}","exact":true},"value":"{{preview_hash}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"checkbox","name":"I am the original requester and authorize one idempotent execution of this approved preview.","exact":true}},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Execute approved claim","exact":true}},
+      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Posted and reconciled","exact":true},"value":"Posted and reconciled"}
+    ]
+  }
+}

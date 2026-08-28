@@ -42,7 +42,7 @@ export interface InvoiceItem {
     pack_size?: string;
     pack_type?: string;
 
-    // Calculated values (canonical names from enterpriseCalculator)
+    // Calculated values use canonical server preview names.
     // Note: discount_amount is in Discounts section above
     subtotal?: number;             // unit_price × quantity (pre-discount)
     taxable_amount?: number;       // subtotal - discount_amount (post-discount)

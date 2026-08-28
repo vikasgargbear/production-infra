@@ -111,10 +111,11 @@ export function useEntityMaster<T extends { is_active?: boolean }>(
     const {
         entityName,
         idField,
-        api,
+        api: {
+            getAll,
+        },
         searchFields,
         filterField,
-        softDelete = true,
         extractData
     } = config;
 
@@ -175,7 +176,7 @@ export function useEntityMaster<T extends { is_active?: boolean }>(
         try {
             setIsLoading(true);
             setError(null);
-            const response = await api.getAll();
+            const response = await getAll();
 
             const data = extractData
                 ? extractData(response)
@@ -188,7 +189,7 @@ export function useEntityMaster<T extends { is_active?: boolean }>(
         } finally {
             setIsLoading(false);
         }
-    }, [api, entityName, extractData]);
+    }, [getAll, entityName, extractData]);
 
     // Load on mount
     useEffect(() => {
@@ -216,47 +217,8 @@ export function useEntityMaster<T extends { is_active?: boolean }>(
     const handleDelete = useCallback(async (id: string | number): Promise<void> => {
         const entity = entities.find(e => e[idField] === id);
         if (!entity) return;
-
-        if (softDelete) {
-            // Soft delete: toggle is_active
-            const isCurrentlyActive = entity.is_active !== false;
-            const action = isCurrentlyActive ? 'deactivate' : 'reactivate';
-            const confirmMessage = isCurrentlyActive
-                ? `Are you sure you want to deactivate this ${entityName}? It will be marked as inactive but all data will be preserved.`
-                : `Are you sure you want to reactivate this ${entityName}?`;
-
-            if (!window.confirm(confirmMessage)) return;
-
-            try {
-                await api.update(id, {
-                    ...entity,
-                    is_active: !isCurrentlyActive
-                } as Partial<T>);
-                toast.success(`${entityLabel} ${action}d successfully`);
-                await loadEntities();
-            } catch (err) {
-                toast.error(`Failed to ${action} ${entityName}.`);
-            }
-        } else {
-            // Hard delete
-            if (!api.delete) {
-                toast.error('Delete not supported');
-                return;
-            }
-
-            if (!window.confirm(`Are you sure you want to delete this ${entityName}? This cannot be undone.`)) {
-                return;
-            }
-
-            try {
-                await api.delete(id);
-                toast.success(`${entityLabel} deleted successfully`);
-                await loadEntities();
-            } catch (err) {
-                toast.error(`Failed to delete ${entityName}.`);
-            }
-        }
-    }, [entities, idField, entityName, entityLabel, api, softDelete, toast, loadEntities]);
+        toast.warning(`${entityLabel} status and deletion are unavailable until reviewed canonical commands exist.`);
+    }, [entities, idField, entityLabel, toast]);
 
     const handleSaved = useCallback((): void => {
         setEditingEntity(null);
@@ -267,30 +229,8 @@ export function useEntityMaster<T extends { is_active?: boolean }>(
 
     const handleBulkDelete = useCallback(async (): Promise<void> => {
         if (selectedIds.length === 0) return;
-
-        const action = softDelete ? 'deactivate' : 'delete';
-        const confirmMessage = softDelete
-            ? `Are you sure you want to deactivate ${selectedIds.length} ${entityName}s? They will be marked as inactive but data will be preserved.`
-            : `Are you sure you want to delete ${selectedIds.length} ${entityName}s? This cannot be undone.`;
-
-        if (!window.confirm(confirmMessage)) return;
-
-        try {
-            if (softDelete) {
-                await Promise.all(selectedIds.map(id =>
-                    api.update(id, { is_active: false } as Partial<T>)
-                ));
-            } else if (api.delete) {
-                await Promise.all(selectedIds.map(id => api.delete!(id)));
-            }
-
-            toast.success(`${selectedIds.length} ${entityName}s ${action}d successfully`);
-            setSelectedIds([]);
-            await loadEntities();
-        } catch (err) {
-            toast.error(`Failed to ${action} some ${entityName}s.`);
-        }
-    }, [selectedIds, entityName, softDelete, api, toast, loadEntities]);
+        toast.warning(`Bulk ${entityName} status changes are unavailable until a reviewed canonical command exists.`);
+    }, [selectedIds.length, entityName, toast]);
 
     // ========================================
     // Return

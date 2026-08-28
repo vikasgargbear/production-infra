@@ -1,5 +1,7 @@
 import asyncio
 import importlib
+from datetime import datetime, timezone
+from types import SimpleNamespace
 from uuid import UUID
 
 import pytest
@@ -7,11 +9,19 @@ from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 
 from app.api.routes.auth import oauth
+from app.core.auth.jwt_auth import decode_jwt
 from app.core.auth.supabase_auth import SupabaseAuthService
 from app.main import app
 
 
 AUTH_USER_ID = "8d19f4e8-3e4b-46a8-b7d9-87f30ddaf41c"
+ORG_ID = "9e1b4f9e-2dcc-47f5-8dfa-938005806841"
+ERP_USER_ID = UUID("9f43f231-c0ec-4be5-a116-cabae4c45eb9")
+ROLE_ID = UUID("71aa0ceb-6499-4de7-932a-d3743991d23e")
+BRANCH_IDS = [
+    UUID("ec9e5e5c-206f-45d6-93dd-1bdb5d4436a1"),
+    UUID("08eb1210-7d9d-4d85-9301-8f3987794c69"),
+]
 supabase_auth_module = importlib.import_module("app.core.auth.supabase_auth")
 
 
@@ -28,7 +38,7 @@ def _identity(**overrides):
         "id": AUTH_USER_ID,
         "email": "operator@example.com",
         "email_confirmed_at": "2026-08-19T08:00:00Z",
-        "app_metadata": {"provider": "google"},
+        "app_metadata": {"provider": "google", "org_id": ORG_ID},
     }
     identity.update(overrides)
     return identity
@@ -36,15 +46,15 @@ def _identity(**overrides):
 
 def _membership(**overrides):
     membership = {
-        "user_id": 42,
+        "user_id": ERP_USER_ID,
         "auth_user_id": UUID(AUTH_USER_ID),
         "username": "operator",
         "email": "operator@example.com",
         "full_name": "ERP Operator",
-        "org_id": UUID("9e1b4f9e-2dcc-47f5-8dfa-938005806841"),
+        "org_id": UUID(ORG_ID),
         "is_active": True,
-        "role_id": 7,
-        "branch_ids": [5, 9],
+        "role_id": ROLE_ID,
+        "branch_ids": BRANCH_IDS,
         "is_admin": False,
         "org_name": "AASO Pharma",
         "org_active": True,
@@ -54,6 +64,15 @@ def _membership(**overrides):
     }
     membership.update(overrides)
     return membership
+
+
+@pytest.fixture(autouse=True)
+def _open_canonical_session_authority(monkeypatch):
+    monkeypatch.setattr(
+        oauth,
+        "require_canonical_session_authority",
+        lambda _db: True,
+    )
 
 
 def test_exchange_requires_bearer_credentials():
@@ -116,16 +135,142 @@ def test_exchange_requires_auth_user_id_membership_not_email_lookup(monkeypatch)
     monkeypatch.setattr(
         oauth.UserRepository,
         "find_by_auth_user_id",
-        lambda auth_user_id, _db: looked_up.append(auth_user_id),
+        lambda auth_user_id, organization_id, _db: looked_up.append(
+            (auth_user_id, organization_id)
+        ),
     )
 
     with pytest.raises(HTTPException) as exc_info:
         _run(oauth.exchange_supabase_session(_credentials(), db=object()))
 
     assert exc_info.value.status_code == 403
-    assert exc_info.value.detail["error"] == "erp_membership_required"
-    assert looked_up == [UUID(AUTH_USER_ID)]
+    assert exc_info.value.detail["error"] == "invalid_organization_assignment"
+    assert looked_up == [(UUID(AUTH_USER_ID), UUID(ORG_ID))]
     assert not hasattr(oauth.UserRepository, "find_by_email")
+
+
+def test_exchange_returns_forbidden_for_database_membership_denial(monkeypatch):
+    async def verified_identity(_token):
+        return _identity()
+
+    monkeypatch.setattr(
+        oauth.supabase_auth,
+        "get_user_from_access_token",
+        verified_identity,
+    )
+
+    def deny_membership(*_args):
+        raise oauth.MembershipContextDenied
+
+    monkeypatch.setattr(
+        oauth.UserRepository,
+        "find_by_auth_user_id",
+        deny_membership,
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        _run(oauth.exchange_supabase_session(_credentials(), db=object()))
+
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail["error"] == "invalid_organization_assignment"
+
+
+def test_exchange_reports_maintenance_before_membership_lookup_when_fenced(
+    monkeypatch,
+):
+    async def verified_identity(_token):
+        return _identity()
+
+    membership_lookups = []
+    monkeypatch.setattr(
+        oauth.supabase_auth,
+        "get_user_from_access_token",
+        verified_identity,
+    )
+    monkeypatch.setattr(
+        oauth,
+        "require_canonical_session_authority",
+        lambda _db: (_ for _ in ()).throw(
+            HTTPException(
+                status_code=503,
+                detail={
+                    "error": "erp_maintenance",
+                    "message": "ERP maintenance is in progress. Please retry shortly.",
+                },
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        oauth.UserRepository,
+        "find_by_auth_user_id",
+        lambda *_args: membership_lookups.append(True),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        _run(oauth.exchange_supabase_session(_credentials(), db=object()))
+
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.detail == {
+        "error": "erp_maintenance",
+        "message": "ERP maintenance is in progress. Please retry shortly.",
+    }
+    assert membership_lookups == []
+
+
+def test_exchange_without_assignment_returns_typed_onboarding_state(monkeypatch):
+    async def verified_identity(_token):
+        return _identity(app_metadata={"provider": "google"})
+
+    monkeypatch.setattr(
+        oauth.supabase_auth,
+        "get_user_from_access_token",
+        verified_identity,
+    )
+    monkeypatch.setattr(
+        oauth,
+        "_resolved_organization_assignment",
+        lambda *_args: None,
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        _run(oauth.exchange_supabase_session(_credentials(), db=object()))
+
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail["error"] == "onboarding_required"
+    assert exc_info.value.detail["allowed_actions"] == [
+        "create_organization",
+        "accept_invitation",
+    ]
+
+
+def test_closed_authority_precedes_missing_organization_assignment(monkeypatch):
+    async def verified_identity(_token):
+        return _identity(app_metadata={"provider": "google"})
+
+    monkeypatch.setattr(
+        oauth.supabase_auth,
+        "get_user_from_access_token",
+        verified_identity,
+    )
+    monkeypatch.setattr(
+        oauth,
+        "require_canonical_session_authority",
+        lambda _db: (_ for _ in ()).throw(
+            HTTPException(
+                status_code=503,
+                detail={
+                    "error": "erp_maintenance",
+                    "message": "ERP maintenance is in progress. Please retry shortly.",
+                },
+            )
+        ),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        _run(oauth.exchange_supabase_session(_credentials(), db=object()))
+
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.detail["error"] == "erp_maintenance"
 
 
 @pytest.mark.parametrize(
@@ -133,13 +278,9 @@ def test_exchange_requires_auth_user_id_membership_not_email_lookup(monkeypatch)
     [
         ({"is_active": False}, "Account is disabled"),
         ({"org_active": False}, "Organization is disabled"),
-        (
-            {"email": "different-erp-user@example.com"},
-            "ERP membership email does not match identity",
-        ),
     ],
 )
-def test_exchange_rejects_inactive_or_cross_identity_membership(
+def test_exchange_rejects_inactive_membership(
     monkeypatch, membership_overrides, expected_detail
 ):
     async def verified_identity(_token):
@@ -183,9 +324,10 @@ def test_exchange_issues_tenant_scoped_token_from_verified_mapping(monkeypatch):
     monkeypatch.setattr(
         oauth.UserRepository,
         "find_by_auth_user_id",
-        lambda auth_user_id, _db: _membership(auth_user_id=auth_user_id),
+        lambda auth_user_id, _organization_id, _db: _membership(
+            auth_user_id=auth_user_id
+        ),
     )
-    monkeypatch.setattr(oauth.UserRepository, "update_last_login", lambda *_args: True)
     monkeypatch.setattr(oauth, "create_access_token", create_token)
 
     result = _run(oauth.exchange_supabase_session(_credentials(), db=object()))
@@ -193,10 +335,37 @@ def test_exchange_issues_tenant_scoped_token_from_verified_mapping(monkeypatch):
     assert result["access_token"] == "erp-access-token"
     assert captured["supabase_token"] == "supabase-access-token"
     assert captured["claims"]["auth_user_id"] == AUTH_USER_ID
+    assert captured["claims"]["user_id"] == str(ERP_USER_ID)
     assert captured["claims"]["org_id"] == "9e1b4f9e-2dcc-47f5-8dfa-938005806841"
-    assert captured["claims"]["branch_ids"] == ["5", "9"]
+    assert captured["claims"]["role_id"] == str(ROLE_ID)
+    assert captured["claims"]["branch_ids"] == [str(value) for value in BRANCH_IDS]
     assert captured["claims"]["branch_scope"] == "multi"
+    assert captured["claims"]["permissions"] == {"sales.read": True}
     assert captured["claims"]["auth_provider"] == "google"
+
+
+def test_exchange_encodes_canonical_uuid_claims(monkeypatch):
+    async def verified_identity(_token):
+        return _identity()
+
+    monkeypatch.setattr(
+        oauth.supabase_auth,
+        "get_user_from_access_token",
+        verified_identity,
+    )
+    monkeypatch.setattr(
+        oauth.UserRepository,
+        "find_by_auth_user_id",
+        lambda *_args: _membership(),
+    )
+
+    result = _run(oauth.exchange_supabase_session(_credentials(), db=object()))
+    claims = decode_jwt(result["access_token"], check_blacklist=False)
+
+    assert claims["user_id"] == str(ERP_USER_ID)
+    assert claims["role_id"] == str(ROLE_ID)
+    assert claims["branch_ids"] == [str(value) for value in BRANCH_IDS]
+    assert claims["permissions"] == {"sales.read": True}
 
 
 def test_supabase_identity_lookup_fails_closed_without_configuration():
@@ -251,3 +420,199 @@ def test_supabase_identity_lookup_uses_only_token_and_anon_key(monkeypatch):
     }
     assert "must-not-be-used" not in captured["headers"].values()
     assert captured["client_kwargs"] == {"timeout": 10.0}
+
+
+def test_consent_proposal_is_subject_and_preregistered_client_bound(monkeypatch):
+    async def verified_identity(_token):
+        return _identity()
+
+    grant_id = UUID("44444444-4444-4444-4444-444444444444")
+    row = SimpleNamespace(
+        _mapping={
+            "org_id": UUID(ORG_ID),
+            "organization_name": "AASO Pharma",
+            "membership_id": UUID("33333333-3333-3333-3333-333333333333"),
+            "agent_grant_id": grant_id,
+            "client_id": "client-1",
+            "client_display_name": "Reviewed Assistant",
+            "branch_id": None,
+            "branch_name": None,
+            "consent_version": "v1",
+            "expires_at": datetime(2099, 1, 1, tzinfo=timezone.utc),
+            "capability_code": "master.products.search",
+            "operation_mode": "read",
+            "risk_class": "read_only",
+            "approval_policy": "none",
+            "maximum_amount": None,
+            "currency_code": None,
+            "allow_sensitive_read": False,
+        }
+    )
+    captured = {}
+
+    class Database:
+        def __init__(self):
+            self.calls = []
+
+        def execute(self, statement, params):
+            self.calls.append((str(statement), params))
+
+    database = Database()
+    monkeypatch.setenv("MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS", "client-1,client-2")
+    monkeypatch.setattr(oauth.supabase_auth, "get_user_from_access_token", verified_identity)
+    monkeypatch.setattr(
+        oauth,
+        "_mcp_consent_proposal_rows",
+        lambda _db, subject, organization_id, client_id: captured.update(
+            {
+                "subject": subject,
+                "organization_id": organization_id,
+                "client_id": client_id,
+            }
+        ) or [row],
+    )
+
+    result = _run(
+        oauth.get_mcp_consent_proposal("client-1", _credentials(), db=database)
+    )
+
+    assert result.subject == UUID(AUTH_USER_ID)
+    assert result.agent_grant_id == grant_id
+    assert result.client_display_name == "Reviewed Assistant"
+    assert result.capabilities[0].capability_code == "master.products.search"
+    assert captured == {
+        "subject": UUID(AUTH_USER_ID),
+        "organization_id": UUID(ORG_ID),
+        "client_id": "client-1",
+    }
+    assert database.calls == [
+        (
+            "SELECT erp_security.activate_context(:auth_user_id, :org_id)",
+            {"auth_user_id": UUID(AUTH_USER_ID), "org_id": UUID(ORG_ID)},
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    "app_metadata",
+    [
+        {"provider": "google"},
+        {"provider": "google", "organization_id": ORG_ID},
+        {"provider": "google", "org_id": "not-a-uuid"},
+    ],
+)
+def test_consent_proposal_requires_exact_canonical_app_metadata_org_id(
+    monkeypatch, app_metadata
+):
+    async def verified_identity(_token):
+        return _identity(app_metadata=app_metadata)
+
+    monkeypatch.setenv("MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS", "client-1")
+    monkeypatch.setattr(oauth.supabase_auth, "get_user_from_access_token", verified_identity)
+    monkeypatch.setattr(
+        oauth,
+        "_mcp_consent_proposal_rows",
+        lambda *_args: pytest.fail("invalid organization metadata must not reach the database"),
+    )
+
+    with pytest.raises(HTTPException) as denied:
+        _run(oauth.get_mcp_consent_proposal("client-1", _credentials(), db=object()))
+
+    assert denied.value.status_code == 403
+    expected_error = (
+        "invalid_organization_assignment"
+        if app_metadata.get("org_id") == "not-a-uuid"
+        else "onboarding_required"
+    )
+    assert denied.value.detail["error"] == expected_error
+
+
+def test_consent_proposal_query_is_explicitly_organization_bound():
+    captured = {}
+
+    class Result:
+        @staticmethod
+        def fetchall():
+            return []
+
+    class Database:
+        @staticmethod
+        def execute(statement, params):
+            captured.update({"statement": str(statement), "params": params})
+            return Result()
+
+    subject = UUID(AUTH_USER_ID)
+    organization_id = UUID(ORG_ID)
+    rows = oauth._mcp_consent_proposal_rows(
+        Database(), subject, organization_id, "client-1"
+    )
+
+    assert rows == []
+    assert "grant_row.org_id=:organization_id" in captured["statement"]
+    assert captured["params"] == {
+        "subject": subject,
+        "organization_id": organization_id,
+        "client_id": "client-1",
+    }
+
+
+def test_consent_proposal_rejects_wrong_client_before_database_lookup(monkeypatch):
+    monkeypatch.setenv("MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS", "client-1")
+    monkeypatch.setattr(
+        oauth,
+        "_mcp_consent_proposal_rows",
+        lambda *_args: pytest.fail("wrong client must not reach the database"),
+    )
+
+    with pytest.raises(HTTPException) as denied:
+        _run(oauth.get_mcp_consent_proposal("wrong-client", _credentials(), db=object()))
+
+    assert denied.value.status_code == 403
+    assert denied.value.detail == "OAuth client is not pre-registered"
+
+
+def test_consent_proposal_rejects_stale_cloud_session_during_maintenance(monkeypatch):
+    async def verified_identity(_token):
+        return _identity()
+
+    monkeypatch.setenv("MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS", "client-1")
+    monkeypatch.setattr(oauth.supabase_auth, "get_user_from_access_token", verified_identity)
+    monkeypatch.setattr(
+        oauth,
+        "require_canonical_session_authority",
+        lambda _db: (_ for _ in ()).throw(
+            HTTPException(
+                status_code=503,
+                detail={"error": "erp_maintenance", "message": "maintenance"},
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        oauth,
+        "_mcp_consent_proposal_rows",
+        lambda *_args: pytest.fail("maintenance must precede grant lookup"),
+    )
+
+    with pytest.raises(HTTPException) as blocked:
+        _run(oauth.get_mcp_consent_proposal("client-1", _credentials(), db=object()))
+
+    assert blocked.value.status_code == 503
+    assert blocked.value.detail["error"] == "erp_maintenance"
+
+
+def test_consent_proposal_sql_requires_live_canonical_authority():
+    source = (oauth.__file__ and open(oauth.__file__, encoding="utf-8").read()) or ""
+    for fragment in (
+        "automation.agent_grants",
+        "automation.agent_grant_capabilities",
+        "core.memberships",
+        "core.access_grants",
+        "erp_security.activate_context(:auth_user_id, :org_id)",
+        "grant_row.org_id=:organization_id",
+        "grant_row.status='active'",
+        "grant_row.expires_at>transaction_timestamp()",
+        "access_grant.valid_from_at<=transaction_timestamp()",
+        "capability.status='active'",
+    ):
+        assert fragment in source
+    assert "SUPABASE_SERVICE_ROLE_KEY" not in source

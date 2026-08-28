@@ -24,20 +24,12 @@ payment/
 ├── entry/                          # Payment entry forms
 │   ├── ModularPaymentEntry.tsx    # Main entry (933 lines)
 │   ├── EnterprisePaymentEntry.tsx # Enterprise (796 lines)
-│   ├── PaymentMade.tsx
-│   └── PaymentReceived.tsx
+│   └── PaymentMade.tsx
 │
 ├── tracking/                       # Payment tracking
 │   ├── PaymentTracking.tsx
 │   ├── PaymentHistory.tsx
 │   └── PaymentDashboard.tsx
-│
-├── notes/                          # Credit/Debit notes
-│   ├── CreditNoteFlow.tsx
-│   ├── CreditNoteFormPage.tsx
-│   ├── CreditNoteFormPageCompact.tsx
-│   ├── CreditNoteReviewPage.tsx
-│   └── DebitNoteFlow.tsx
 │
 ├── reports/                        # Financial reports
 │   ├── FinancialReportsSimple.tsx
@@ -74,4 +66,8 @@ import PaymentDashboard from './payment/tracking/PaymentDashboard';
 
 ---
 
-**Last Updated:** January 4, 2026
+Credit and debit note mutation screens are intentionally absent until their
+reviewed canonical commands are available. `CreditDebitFlow.tsx` exposes that
+boundary instead of falling back to legacy endpoints.
+
+**Last Updated:** August 24, 2026

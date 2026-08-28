@@ -1,314 +1,378 @@
-"""
-Schema Validator - Enforces Single Source of Truth from Database Schema Doc
+"""Static SQL column validation against canonical domain catalogs.
 
-Prevents schema errors by validating SQL queries against the canonical schema.
-Fails fast in development to catch column name mismatches.
-
-Usage:
-    from app.core.utils.schema_validator import validate_query
-    
-    # This will throw if 'gstin' doesn't exist in parties.customers
-    validate_query('''
-        SELECT customer_name, gstin FROM parties.customers
-    ''')
+This utility is used by CI and focused query-contract tests. It does not inspect
+a live database and does not accept Markdown, retired captures, or legacy DDL as
+schema authority.
 """
 
+from __future__ import annotations
+
+import ast
 import hashlib
 import json
-import re
-from typing import Dict, Iterable, Set, List, Tuple, Optional
-from pathlib import Path
 import logging
+from pathlib import Path
+import re
+from typing import Any, Iterable
+
 
 logger = logging.getLogger(__name__)
-
-# Cache for parsed schema
-_SCHEMA_CACHE: Optional[Dict[str, Set[str]]] = None
+_SCHEMA_CACHE: dict[str, set[str]] | None = None
 
 
-def _default_schema_doc_paths() -> List[Path]:
-    """Return checked-in schema documents in deterministic order."""
+def _default_canonical_domain_paths() -> list[Path]:
     repository_root = Path(__file__).resolve().parents[4]
-    schema_directory = repository_root / "docs" / "backend" / "database" / "schemas"
-    return sorted(schema_directory.glob("*.md"))
+    return sorted(
+        (repository_root / "database" / "canonical" / "domains").glob("*.json")
+    )
 
 
-def _default_live_evidence_path() -> Path:
+def _default_alembic_sql_paths() -> list[Path]:
     repository_root = Path(__file__).resolve().parents[4]
-    return repository_root / "database" / "live-schema-evidence.json"
+    return sorted((repository_root / "backend" / "alembic" / "sql").glob("*.sql"))
 
 
-def _load_live_verified_columns(path: Optional[Path] = None) -> Dict[str, Set[str]]:
-    """Load the deliberately narrow query contract proven by a live capture."""
-    evidence_path = path or _default_live_evidence_path()
-    if not evidence_path.is_file():
-        return {}
-
-    evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
-    if evidence.get("evidence_state") != "captured_not_baselined":
-        raise ValueError("Live schema evidence must remain captured_not_baselined")
-
-    for hash_field in ("artifact_sha256", "capture_sql_sha256"):
-        value = evidence.get(hash_field, "")
-        if not re.fullmatch(r"[0-9a-f]{64}", value):
-            raise ValueError(f"Live schema evidence has invalid {hash_field}")
-
-    verified = evidence.get("query_contract_verification", {}).get("verified_columns")
-    if not isinstance(verified, dict):
-        raise ValueError("Live schema evidence has no verified_columns mapping")
-
-    schema_map: Dict[str, Set[str]] = {}
-    qualified_table = re.compile(r"^[A-Za-z_]\w*\.[A-Za-z_]\w*$")
-    identifier = re.compile(r"^[A-Za-z_]\w*$")
-    for table, columns in verified.items():
-        if not qualified_table.fullmatch(table) or not isinstance(columns, list):
-            raise ValueError("Live schema evidence contains an invalid table contract")
-        if not columns or any(
-            not isinstance(column, str) or not identifier.fullmatch(column)
-            for column in columns
-        ):
-            raise ValueError(f"Live schema evidence contains invalid columns for {table}")
-        schema_map[table] = set(columns)
-
+def _parse_canonical_domains(paths: Iterable[Path]) -> dict[str, set[str]]:
+    schema_map: dict[str, set[str]] = {}
+    for domain_path in paths:
+        document = json.loads(domain_path.read_text(encoding="utf-8"))
+        tables = document.get("tables", [])
+        if not isinstance(tables, list):
+            raise ValueError(f"{domain_path}: tables must be an array")
+        for table in tables:
+            if not isinstance(table, dict):
+                raise ValueError(f"{domain_path}: table entries must be objects")
+            name = table.get("name")
+            columns = table.get("columns")
+            if not isinstance(name, str) or "." not in name:
+                raise ValueError(f"{domain_path}: invalid qualified table name {name!r}")
+            if not isinstance(columns, list) or not columns:
+                raise ValueError(f"{domain_path}: {name} has no column contract")
+            if name in schema_map:
+                raise ValueError(f"duplicate canonical table contract: {name}")
+            parsed_columns = {
+                column[0]
+                for column in columns
+                if isinstance(column, list)
+                and column
+                and isinstance(column[0], str)
+            }
+            if len(parsed_columns) != len(columns):
+                raise ValueError(f"{domain_path}: {name} has invalid or duplicate columns")
+            schema_map[name] = parsed_columns
     return schema_map
 
 
-def _parse_schema_docs(paths: Iterable[Path]) -> Dict[str, Set[str]]:
-    """Parse schema-qualified Markdown table headings and their column tables."""
-    schema_map: Dict[str, Set[str]] = {}
-    table_heading = re.compile(r"^###\s+([A-Za-z_]\w*\.[A-Za-z_]\w*)\s*$")
+_QUALIFIED_RELATION = r'"?([a-z_][a-z0-9_]*)"?\."?([a-z_][a-z0-9_]*)"?'
+_CREATE_TABLE = re.compile(
+    rf"(?i)\bCREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?{_QUALIFIED_RELATION}\s*\("
+)
+_ALTER_TABLE = re.compile(
+    rf"(?is)\bALTER\s+TABLE\s+{_QUALIFIED_RELATION}\s+(.*?);"
+)
+_ADD_COLUMN = re.compile(
+    r'(?i)\bADD\s+COLUMN\s+"?([a-z_][a-z0-9_]*)"?\s+'
+)
 
-    for schema_path in paths:
-        current_table = None
 
-        with schema_path.open("r", encoding="utf-8") as schema_file:
-            for raw_line in schema_file:
-                line = raw_line.strip()
-                heading_match = table_heading.match(line)
-                if heading_match:
-                    current_table = heading_match.group(1)
-                    schema_map.setdefault(current_table, set())
+def _matching_parenthesis(source: str, opening_index: int) -> int:
+    depth = 0
+    quote: str | None = None
+    index = opening_index
+    while index < len(source):
+        character = source[index]
+        if quote:
+            if character == quote:
+                if index + 1 < len(source) and source[index + 1] == quote:
+                    index += 2
                     continue
+                quote = None
+            index += 1
+            continue
+        if character in {"'", '"'}:
+            quote = character
+        elif character == "(":
+            depth += 1
+        elif character == ")":
+            depth -= 1
+            if depth == 0:
+                return index
+        index += 1
+    raise ValueError("Alembic CREATE TABLE statement has unbalanced parentheses")
 
-                if line.startswith("### ") or line.startswith("---"):
-                    current_table = None
+
+def _top_level_items(body: str) -> list[str]:
+    items: list[str] = []
+    start = 0
+    depth = 0
+    quote: str | None = None
+    index = 0
+    while index < len(body):
+        character = body[index]
+        if quote:
+            if character == quote:
+                if index + 1 < len(body) and body[index + 1] == quote:
+                    index += 2
                     continue
+                quote = None
+            index += 1
+            continue
+        if character in {"'", '"'}:
+            quote = character
+        elif character == "(":
+            depth += 1
+        elif character == ")":
+            depth -= 1
+        elif character == "," and depth == 0:
+            items.append(body[start:index])
+            start = index + 1
+        index += 1
+    items.append(body[start:])
+    return items
 
-                if current_table is None or not line.startswith("|"):
+
+def _parse_alembic_schema_additions(
+    paths: Iterable[Path], schema_map: dict[str, set[str]]
+) -> dict[str, set[str]]:
+    """Layer current post-baseline table/column DDL over reviewed catalogs."""
+    result = {table: set(columns) for table, columns in schema_map.items()}
+    canonical_schemas = {table.split(".", 1)[0] for table in result}
+    for sql_path in paths:
+        source = sql_path.read_text(encoding="utf-8")
+        for match in _CREATE_TABLE.finditer(source):
+            if match.group(1) not in canonical_schemas:
+                continue
+            table = f"{match.group(1)}.{match.group(2)}"
+            closing = _matching_parenthesis(source, match.end() - 1)
+            columns: set[str] = set()
+            for item in _top_level_items(source[match.end():closing]):
+                token = item.strip().split(None, 1)[0].strip('"') if item.strip() else ""
+                if token.upper() in {
+                    "CONSTRAINT", "PRIMARY", "FOREIGN", "UNIQUE", "CHECK", "EXCLUDE"
+                }:
                     continue
+                if re.fullmatch(r"[a-z_][a-z0-9_]*", token):
+                    columns.add(token)
+            if not columns:
+                raise ValueError(f"{sql_path}: {table} has no parseable columns")
+            if table in result and not columns.issubset(result[table]):
+                # The immutable baseline is represented by the domain catalogs;
+                # later CREATE TABLE statements must not redefine it differently.
+                raise ValueError(f"{sql_path}: conflicting CREATE TABLE for {table}")
+            result.setdefault(table, set()).update(columns)
+        for match in _ALTER_TABLE.finditer(source):
+            if match.group(1) not in canonical_schemas:
+                continue
+            table = f"{match.group(1)}.{match.group(2)}"
+            additions = set(_ADD_COLUMN.findall(match.group(3)))
+            if additions:
+                if table not in result:
+                    raise ValueError(f"{sql_path}: ADD COLUMN targets unknown table {table}")
+                result[table].update(additions)
+    return result
 
-                parts = [part.strip() for part in line.split("|")]
-                if len(parts) < 3:
-                    continue
 
-                column_name = parts[1].strip("`")
-                if (
-                    not column_name
-                    or column_name.lower() in {"column", "field"}
-                    or set(column_name) <= {"-", ":"}
-                ):
-                    continue
-
-                schema_map[current_table].add(column_name)
-
-    return {table: columns for table, columns in schema_map.items() if columns}
-
-
-def parse_schema_doc(required: bool = False) -> Dict[str, Set[str]]:
-    """
-    Parse the 07-DATABASE-SCHEMA.md file to extract all table columns.
-    
-    Returns:
-        Dict mapping "schema.table" -> Set of valid column names
-    """
+def parse_schema_catalog(required: bool = False) -> dict[str, set[str]]:
+    """Load the reviewed canonical table and column contracts."""
     global _SCHEMA_CACHE
-    
+
     if _SCHEMA_CACHE is not None:
         return _SCHEMA_CACHE
-    
-    schema_paths = _default_schema_doc_paths()
-    if not schema_paths:
-        message = "No schema documentation found under docs/backend/database/schemas"
+
+    paths = _default_canonical_domain_paths()
+    if not paths:
+        message = "No canonical domain catalogs found under database/canonical/domains"
         if required:
             raise FileNotFoundError(message)
         logger.warning("%s. Skipping validation.", message)
         return {}
 
-    schema_map = _parse_schema_docs(schema_paths)
+    schema_map = _parse_alembic_schema_additions(
+        _default_alembic_sql_paths(), _parse_canonical_domains(paths)
+    )
     if not schema_map:
-        message = "Schema documentation contains no usable table definitions"
+        message = "Canonical domain catalogs contain no table definitions"
         if required:
             raise ValueError(message)
         logger.warning("%s. Skipping validation.", message)
         return {}
 
-    for table, columns in _load_live_verified_columns().items():
-        schema_map.setdefault(table, set()).update(columns)
-    
     _SCHEMA_CACHE = schema_map
-    logger.info("Parsed schema docs: %s tables", len(schema_map))
+    logger.info("Parsed canonical schema catalog: %s tables", len(schema_map))
     return schema_map
 
 
-def extract_tables_and_columns(sql: str) -> List[Tuple[str, str]]:
-    """
-    Extract table.column references from SQL query.
-    
-    Returns:
-        List of (table_name, column_name) tuples
-    """
-    references = []
-    
-    # Pattern 1: alias.column (e.g., "c.customer_name")
-    # We need to track aliases to their actual tables
-    alias_map = {}
-    
-    # Find table aliases from FROM/JOIN clauses
-    # Pattern: FROM schema.table alias or FROM table alias
-    from_pattern = r'(?:FROM|JOIN)\s+(?:(\w+)\.)?(\w+)(?:\s+(?:AS\s+)?(\w+))?'
+def extract_tables_and_columns(sql: str) -> list[tuple[str, str]]:
+    """Extract resolvable alias.column references from one SQL string."""
+    references: list[tuple[str, str]] = []
+    alias_map: dict[str, set[str]] = {}
+    table_tokens: set[str] = set()
+    derived_aliases = {
+        match.group(1).lower()
+        for match in re.finditer(
+            r"\)\s+(?:AS\s+)?(\w+)\s+ON\b", sql, re.IGNORECASE
+        )
+    }
+
+    from_pattern = r"(?:FROM|JOIN)\s+(?:(\w+)\.)?(\w+)(?:\s+(?:AS\s+)?(\w+))?"
+    reserved_aliases = {
+        "cross", "full", "group", "having", "inner", "join", "left", "limit",
+        "on", "order", "outer", "right", "union", "where",
+    }
     for match in re.finditer(from_pattern, sql, re.IGNORECASE):
         schema = match.group(1)
         table = match.group(2)
         alias = match.group(3) or table
-        
+        if alias.lower() in reserved_aliases:
+            alias = table
         full_table = f"{schema}.{table}" if schema else table
-        alias_map[alias.lower()] = full_table
-    
-    # Find column references
-    # Pattern: identifier.column or just column
-    column_pattern = r'\b(\w+)\.(\w+)\b'
-    for match in re.finditer(column_pattern, sql):
+        alias_map.setdefault(alias.lower(), set()).add(full_table)
+        table_tokens.add(full_table.lower())
+
+    for match in re.finditer(r"\b(\w+)\.(\w+)\b", sql):
         table_or_alias = match.group(1).lower()
         column = match.group(2)
-        
-        # Skip common SQL keywords used as prefixes
-        if table_or_alias in ['current_timestamp', 'current_date', 'information_schema']:
+        if f"{table_or_alias}.{column}".lower() in table_tokens:
             continue
-        
-        # Resolve alias to actual table
-        actual_table = alias_map.get(table_or_alias, table_or_alias)
-        
-        references.append((actual_table, column))
-    
+        if table_or_alias in derived_aliases:
+            continue
+        if table_or_alias in {"current_timestamp", "current_date", "information_schema"}:
+            continue
+        candidates = alias_map.get(table_or_alias)
+        references.append(
+            (next(iter(candidates)) if candidates and len(candidates) == 1 else table_or_alias, column)
+        )
+
     return references
 
 
-def validate_query(sql: str, strict: bool = True) -> Dict[str, any]:
+def _module_sql_strings(tree: ast.AST) -> list[tuple[str, int]]:
+    """Return complete static SQL strings, including reconstructed f-strings.
+
+    Formatted values cannot add relation or column identifiers to production
+    queries. Replacing them with bind-like literals preserves the surrounding
+    SQL structure while avoiding validation of incomplete f-string fragments.
     """
-    Validate SQL query against schema doc.
-    
-    Args:
-        sql: SQL query string
-        strict: If True, raises error on validation failure. If False, returns warnings.
-    
-    Returns:
-        Dict with validation results
-    
-    Raises:
-        ValueError: If strict=True and validation fails
-    """
-    schema = parse_schema_doc()
-    
+    strings: list[tuple[str, int]] = []
+
+    class Visitor(ast.NodeVisitor):
+        def visit_JoinedStr(self, node: ast.JoinedStr) -> None:  # noqa: N802
+            parts: list[str] = []
+            for value in node.values:
+                if isinstance(value, ast.Constant) and isinstance(value.value, str):
+                    parts.append(value.value)
+                elif isinstance(value, ast.FormattedValue):
+                    parts.append(":dynamic_value")
+            strings.append(("".join(parts), node.lineno))
+            # Do not visit Constant children as independent SQL fragments.
+
+        def visit_Constant(self, node: ast.Constant) -> None:  # noqa: N802
+            if isinstance(node.value, str):
+                strings.append((node.value, node.lineno))
+
+    Visitor().visit(tree)
+    return strings
+
+
+def validate_query(
+    sql: str,
+    strict: bool = True,
+    schema_override: dict[str, set[str]] | None = None,
+) -> dict[str, Any]:
+    """Validate resolvable SQL column references against canonical catalogs."""
+    schema = schema_override if schema_override is not None else parse_schema_catalog()
     if not schema:
-        return {"valid": True, "warnings": ["Schema doc not found - skipping validation"]}
-    
-    # Extract table.column references
+        return {
+            "valid": True,
+            "errors": [],
+            "warnings": ["Canonical schema catalog not found - skipping validation"],
+            "references_checked": 0,
+        }
+
+    errors: list[str] = []
+    warnings: list[str] = []
     references = extract_tables_and_columns(sql)
-    
-    errors = []
-    warnings = []
-    
     for table, column in references:
-        # Skip if table not in our schema (might be from CTE or subquery)
-        if table not in schema:
-            # Check if maybe it's just the table name without schema
-            possible_tables = [t for t in schema.keys() if t.endswith(f".{table}")]
+        if table in schema:
+            actual_table = table
+        else:
+            possible_tables = [name for name in schema if name.endswith(f".{table}")]
             if len(possible_tables) == 1:
                 actual_table = possible_tables[0]
             elif len(possible_tables) > 1:
-                warnings.append(f"Ambiguous table '{table}' (could be: {', '.join(possible_tables)})")
+                warnings.append(
+                    f"Ambiguous table '{table}' (could be: {', '.join(possible_tables)})"
+                )
                 continue
             else:
-                # Table not in schema doc - might be subquery/CTE, skip
+                # CTEs and subqueries do not have an independent catalog entry.
                 continue
-        else:
-            actual_table = table
-        
-        # Check if column exists in table
         if column not in schema[actual_table]:
             errors.append(
-                f"❌ Column '{column}' does not exist in table '{actual_table}'. "
-                f"Valid columns: {', '.join(sorted(schema[actual_table]))}"
+                f"Column '{column}' does not exist in canonical table "
+                f"'{actual_table}'. Valid columns: "
+                f"{', '.join(sorted(schema[actual_table]))}"
             )
-    
-    if errors:
-        error_msg = f"\n🚨 SCHEMA VALIDATION ERROR:\n" + "\n".join(errors) + f"\n\nQuery:\n{sql}\n"
-        if strict:
-            raise ValueError(error_msg)
-        else:
-            warnings.extend(errors)
-    
+
+    if errors and strict:
+        raise ValueError(
+            "SCHEMA VALIDATION ERROR:\n" + "\n".join(errors) + f"\n\nQuery:\n{sql}\n"
+        )
+    warnings.extend(errors if not strict else [])
     return {
-        "valid": len(errors) == 0,
+        "valid": not errors,
         "errors": errors,
         "warnings": warnings,
-        "references_checked": len(references)
+        "references_checked": len(references),
     }
 
 
-def validate_module(module_path: Path) -> Dict[str, any]:
-    """
-    Validate all SQL queries in a Python module.
-    
-    Args:
-        module_path: Path to Python file
-    
-    Returns:
-        Dict with validation summary
-    """
+def validate_module(module_path: Path) -> dict[str, Any]:
+    """Validate SQL strings discoverable in a Python module."""
     if not module_path.exists():
         return {"error": f"File not found: {module_path}"}
-    
-    content = module_path.read_text()
-    
-    # Extract SQL from text() calls and triple-quoted strings
-    sql_pattern = r'(?:text\(["""\']{1,3}|["""\']{3})(.*?)(?:["""\']{1,3}\)|["""\']{3})'
-    
-    results = {
+
+    content = module_path.read_text(encoding="utf-8")
+    results: dict[str, Any] = {
         "file": str(module_path),
         "total_queries": 0,
         "valid_queries": 0,
-        "errors": []
+        "errors": [],
     }
-    
-    for match in re.finditer(sql_pattern, content, re.DOTALL):
-        sql = match.group(1)
-        
-        # Skip if not SQL (simple heuristic)
-        if not any(keyword in sql.upper() for keyword in ['SELECT', 'INSERT', 'UPDATE', 'DELETE']):
+
+    try:
+        tree = ast.parse(content, filename=str(module_path))
+    except SyntaxError as exc:
+        return {**results, "errors": [{"line": exc.lineno or 1, "query_sha256": "", "query": "", "issues": [str(exc)]}]}
+
+    for sql, line_number in _module_sql_strings(tree):
+        if not re.search(r"(?i)\b(?:SELECT|INSERT|UPDATE|DELETE)\b", sql):
             continue
-        
+        if not re.search(r"(?i)\b(?:FROM|INTO|UPDATE)\b", sql):
+            continue
         results["total_queries"] += 1
-        query_metadata = {
-            "line": content.count("\n", 0, match.start()) + 1,
-            "query_sha256": hashlib.sha256(" ".join(sql.split()).encode("utf-8")).hexdigest(),
+        metadata = {
+            "line": line_number,
+            "query_sha256": hashlib.sha256(
+                " ".join(sql.split()).encode("utf-8")
+            ).hexdigest(),
         }
-        
         try:
             validation = validate_query(sql, strict=False)
-            if validation["valid"]:
-                results["valid_queries"] += 1
-            else:
-                results["errors"].append({
-                    "query": sql[:100] + "..." if len(sql) > 100 else sql,
-                    "issues": validation["errors"],
-                    **query_metadata,
-                })
-        except Exception as e:
+        except Exception as exc:  # Report malformed catalog/query facts per file.
             results["errors"].append({
                 "query": sql[:100] + "..." if len(sql) > 100 else sql,
-                "issues": [str(e)],
-                **query_metadata,
+                "issues": [str(exc)],
+                **metadata,
             })
-    
+            continue
+        if validation["valid"]:
+            results["valid_queries"] += 1
+        else:
+            results["errors"].append({
+                "query": sql[:100] + "..." if len(sql) > 100 else sql,
+                "issues": validation["errors"],
+                **metadata,
+            })
+
     return results

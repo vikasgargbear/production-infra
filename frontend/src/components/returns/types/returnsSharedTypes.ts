@@ -26,49 +26,41 @@ export type RefundMethod =
     | 'bank_refund'
     | 'original_payment';
 
-/** Return reason */
-export type ReturnReason =
-    | 'damaged'
-    | 'expired'
-    | 'wrong_product'
-    | 'wrong_quantity'
-    | 'quality_issue'
-    | 'pricing_error'
-    | 'customer_request'
-    | 'other';
+/** Exact reason_code supplied by the effective canonical GST adjustment rule. */
+export type ReturnReason = string;
 
 // ==================== BASE RETURN ITEM ====================
 
 /** Base return item fields */
 export interface BaseReturnItem {
-    product_id: number;
+    product_id: number | string;
     product_name: string;
     product_code?: string;
-    batch_id?: number;
+    batch_id?: number | string;
     batch_number?: string;
 
     // Quantities
-    original_quantity: number;
-    return_quantity: number;
+    original_quantity: number | string;
+    return_quantity: number | string;
 
     // Pricing
-    unit_price: number;
-    discount_amount?: number;
-    discount_percent?: number;
+    unit_price: number | string;
+    discount_amount?: number | string;
+    discount_percent?: number | string;
 
     // Tax
-    tax_percent?: number;
-    cgst_rate?: number;
-    sgst_rate?: number;
-    igst_rate?: number;
+    tax_percent?: number | string;
+    cgst_rate?: number | string;
+    sgst_rate?: number | string;
+    igst_rate?: number | string;
 
     // Selection state
     selected?: boolean;
 
     // Calculated values
-    taxable_amount?: number;
-    tax_amount?: number;
-    total_amount?: number;
+    taxable_amount?: number | string;
+    tax_amount?: number | string;
+    total_amount?: number | string;
 
     // Reason
     return_reason?: ReturnReason | string;
@@ -157,15 +149,4 @@ export const REFUND_METHODS = {
     CASH_REFUND: 'cash_refund' as RefundMethod,
     BANK_REFUND: 'bank_refund' as RefundMethod,
     ORIGINAL_PAYMENT: 'original_payment' as RefundMethod
-} as const;
-
-export const RETURN_REASONS = {
-    DAMAGED: 'damaged' as ReturnReason,
-    EXPIRED: 'expired' as ReturnReason,
-    WRONG_PRODUCT: 'wrong_product' as ReturnReason,
-    WRONG_QUANTITY: 'wrong_quantity' as ReturnReason,
-    QUALITY_ISSUE: 'quality_issue' as ReturnReason,
-    PRICING_ERROR: 'pricing_error' as ReturnReason,
-    CUSTOMER_REQUEST: 'customer_request' as ReturnReason,
-    OTHER: 'other' as ReturnReason
 } as const;

@@ -26,7 +26,9 @@ const initialState: PurchaseListHistoryState = {
     filters: {
         searchQuery: '',
         dateFilter: 'all',
-        statusFilter: 'all'
+        statusFilter: 'all',
+        dateFrom: '',
+        dateTo: ''
     },
     ui: {
         showFilters: false,

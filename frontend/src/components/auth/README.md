@@ -1,8 +1,9 @@
 # Auth Module
 
-**Status:** ✅ Modernized (Jan 2026)
+**Status:** Cloud-authoritative
 
-Single authentication entry point with offline support.
+Single authentication entry point backed by the live Supabase/session-exchange
+boundary. Authentication never falls back to cached credentials.
 
 ---
 
@@ -19,8 +20,8 @@ auth/
 
 - Email/password login
 - Google OAuth integration
-- Offline login with cached credentials
-- Online/offline status indicator
+- Cloud API health gating
+- Server-confirmed Supabase session exchange
 
 ## 📍 Related Files
 
@@ -37,4 +38,4 @@ const { login, loginWithGoogle, logout, user, isAuthenticated } = useAuth();
 
 ---
 
-**Last Updated:** January 4, 2026
+**Last Updated:** August 24, 2026

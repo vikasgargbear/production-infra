@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Wallet, TrendingUp, CreditCard, Clock, DollarSign, CheckCircle,
-  XCircle, AlertCircle, Download, RefreshCw, Loader2
+  XCircle, AlertCircle, RefreshCw, Loader2
 } from 'lucide-react';
 import { Bar, Line, Doughnut } from 'react-chartjs-2';
 import {
@@ -17,9 +17,16 @@ import {
   Legend,
   Filler
 } from 'chart.js';
-import { format, subDays } from 'date-fns';
+import { format } from 'date-fns';
 import apiClient from '../../services/api/apiClient';
 import { formatCurrency } from '../../utils/formatters';
+import { useCanonicalBusinessDate } from '../../hooks/useCanonicalBusinessDate';
+import { addCalendarDays } from '../../utils/calendarDate';
+import { isValidReportDateRange } from './utils/reportDateRange';
+import {
+  PaymentAnalyticsData,
+  projectPaymentAnalytics,
+} from './utils/paymentAnalyticsProjection';
 
 ChartJS.register(
   CategoryScale,
@@ -34,44 +41,6 @@ ChartJS.register(
   Filler
 );
 
-interface PaymentData {
-  id: string;
-  amount: number;
-  method: string;
-  status: string;
-  date: string;
-  reference: string;
-  customer: string;
-  type: 'received' | 'sent';
-}
-
-interface PaymentSummary {
-  totalReceived: number;
-  totalSent: number;
-  netFlow: number;
-  pendingPayments: number;
-  completedPayments: number;
-  failedPayments: number;
-  avgTransactionValue: number;
-}
-
-interface PaymentAnalyticsData {
-  payments: PaymentData[];
-  summary: PaymentSummary;
-  methodBreakdown: { [key: string]: number };
-  statusBreakdown: { [key: string]: number };
-  trends: {
-    labels: string[];
-    received: number[];
-    sent: number[];
-  };
-  dailyFlow: {
-    labels: string[];
-    inflow: number[];
-    outflow: number[];
-  };
-}
-
 const PaymentAnalytics: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -79,40 +48,22 @@ const PaymentAnalytics: React.FC = () => {
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
   const [selectedMethod, setSelectedMethod] = useState('all');
   const [selectedStatus, setSelectedStatus] = useState('all');
-  const [data, setData] = useState<PaymentAnalyticsData>({
-    payments: [],
-    summary: {
-      totalReceived: 0,
-      totalSent: 0,
-      netFlow: 0,
-      pendingPayments: 0,
-      completedPayments: 0,
-      failedPayments: 0,
-      avgTransactionValue: 0
-    },
-    methodBreakdown: {},
-    statusBreakdown: {},
-    trends: { labels: [], received: [], sent: [] },
-    dailyFlow: { labels: [], inflow: [], outflow: [] }
-  });
+  const [data, setData] = useState<PaymentAnalyticsData | null>(null);
+  const {
+    businessDate,
+    loading: businessDateLoading,
+    error: businessDateError,
+  } = useCanonicalBusinessDate();
 
   useEffect(() => {
-    // Set default date range to last 30 days
-    const end = new Date();
-    const start = subDays(end, 30);
+    if (!businessDate) return;
     setDateRange({
-      start: format(start, 'yyyy-MM-dd'),
-      end: format(end, 'yyyy-MM-dd')
+      start: addCalendarDays(businessDate, -29),
+      end: businessDate,
     });
-  }, []);
+  }, [businessDate]);
 
-  useEffect(() => {
-    if (dateRange.start && dateRange.end) {
-      loadPaymentData();
-    }
-  }, [dateRange, selectedMethod, selectedStatus]);
-
-  const loadPaymentData = async () => {
+  const loadPaymentData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -139,50 +90,28 @@ const PaymentAnalytics: React.FC = () => {
         })
       ]);
 
-      const payments = paymentsResponse.data?.payments || [];
-      const analytics = analyticsResponse.data || {};
-      const trends = trendsResponse.data || {};
-
-      setData({
-        payments,
-        summary: {
-          totalReceived: analytics.total_received || 0,
-          totalSent: analytics.total_sent || 0,
-          netFlow: analytics.net_flow || 0,
-          pendingPayments: analytics.pending_payments || 0,
-          completedPayments: analytics.completed_payments || 0,
-          failedPayments: analytics.failed_payments || 0,
-          avgTransactionValue: analytics.avg_transaction_value || 0
-        },
-        methodBreakdown: analytics.method_breakdown || {},
-        statusBreakdown: analytics.status_breakdown || {},
-        trends: trends.monthly || { labels: [], received: [], sent: [] },
-        dailyFlow: trends.daily || { labels: [], inflow: [], outflow: [] }
-      });
+      setData(projectPaymentAnalytics(
+        paymentsResponse.data,
+        analyticsResponse.data,
+        trendsResponse.data,
+      ));
     } catch (err) {
       console.error('Error loading payment data:', err);
-      setError('Failed to load payment analytics. Please try again.');
-      // Set empty state instead of mock data
-      setData({
-        payments: [],
-        summary: {
-          totalReceived: 0,
-          totalSent: 0,
-          netFlow: 0,
-          pendingPayments: 0,
-          completedPayments: 0,
-          failedPayments: 0,
-          avgTransactionValue: 0
-        },
-        methodBreakdown: {},
-        statusBreakdown: {},
-        trends: { labels: [], received: [], sent: [] },
-        dailyFlow: { labels: [], inflow: [], outflow: [] }
-      });
+      setError(err instanceof Error ? err.message : 'Failed to load payment analytics.');
+      setData(null);
     } finally {
       setLoading(false);
     }
-  };
+  }, [dateRange, selectedMethod, selectedStatus]);
+
+  useEffect(() => {
+    if (dateRange.start && dateRange.end && isValidReportDateRange(dateRange.start, dateRange.end)) {
+      void loadPaymentData();
+    } else if (dateRange.start && dateRange.end) {
+      setData(null);
+      setError('Start date must not be after end date.');
+    }
+  }, [dateRange, loadPaymentData]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -191,7 +120,7 @@ const PaymentAnalytics: React.FC = () => {
   };
 
   const filteredPayments = useMemo(() => {
-    let filtered = data.payments;
+    let filtered = data?.payments ?? [];
 
     if (selectedMethod !== 'all') {
       filtered = filtered.filter(p => p.method === selectedMethod);
@@ -202,11 +131,11 @@ const PaymentAnalytics: React.FC = () => {
     }
 
     return filtered.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [data.payments, selectedMethod, selectedStatus]);
+  }, [data, selectedMethod, selectedStatus]);
 
   const methodChartData = useMemo(() => {
-    const methods = Object.keys(data.methodBreakdown);
-    const values = Object.values(data.methodBreakdown);
+    const methods = Object.keys(data?.methodBreakdown ?? {});
+    const values = Object.values(data?.methodBreakdown ?? {});
 
     return {
       labels: methods.map(method => method.charAt(0).toUpperCase() + method.slice(1)),
@@ -223,15 +152,15 @@ const PaymentAnalytics: React.FC = () => {
         borderWidth: 0
       }]
     };
-  }, [data.methodBreakdown]);
+  }, [data]);
 
   const trendsChartData = useMemo(() => {
     return {
-      labels: data.trends.labels.length > 0 ? data.trends.labels : ['No Data'],
+      labels: data?.trends.labels ?? [],
       datasets: [
         {
           label: 'Payments Received',
-          data: data.trends.received.length > 0 ? data.trends.received : [0],
+          data: data?.trends.received ?? [],
           borderColor: 'rgb(34, 197, 94)',
           backgroundColor: 'rgba(34, 197, 94, 0.1)',
           tension: 0.3,
@@ -239,7 +168,7 @@ const PaymentAnalytics: React.FC = () => {
         },
         {
           label: 'Payments Sent',
-          data: data.trends.sent.length > 0 ? data.trends.sent : [0],
+          data: data?.trends.sent ?? [],
           borderColor: 'rgb(239, 68, 68)',
           backgroundColor: 'rgba(239, 68, 68, 0.1)',
           tension: 0.3,
@@ -247,27 +176,27 @@ const PaymentAnalytics: React.FC = () => {
         }
       ]
     };
-  }, [data.trends]);
+  }, [data]);
 
   const dailyFlowChartData = useMemo(() => {
     return {
-      labels: data.dailyFlow.labels.length > 0 ? data.dailyFlow.labels : ['No Data'],
+      labels: data?.dailyFlow.labels ?? [],
       datasets: [
         {
           label: 'Inflow',
-          data: data.dailyFlow.inflow.length > 0 ? data.dailyFlow.inflow : [0],
+          data: data?.dailyFlow.inflow ?? [],
           backgroundColor: 'rgba(34, 197, 94, 0.8)',
           borderWidth: 0
         },
         {
           label: 'Outflow',
-          data: data.dailyFlow.outflow.length > 0 ? data.dailyFlow.outflow : [0],
+          data: data?.dailyFlow.outflow ?? [],
           backgroundColor: 'rgba(239, 68, 68, 0.8)',
           borderWidth: 0
         }
       ]
     };
-  }, [data.dailyFlow]);
+  }, [data]);
 
   const getStatusIcon = (status: string) => {
     switch (status.toLowerCase()) {
@@ -299,8 +228,8 @@ const PaymentAnalytics: React.FC = () => {
     }
   };
 
-  const paymentMethods = ['all', 'cash', 'card', 'upi', 'bank', 'check'];
-  const paymentStatuses = ['all', 'completed', 'pending', 'failed'];
+  const paymentMethods = ['all', ...Object.keys(data?.methodBreakdown ?? {})];
+  const paymentStatuses = ['all', ...Object.keys(data?.statusBreakdown ?? {})];
 
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
@@ -315,15 +244,11 @@ const PaymentAnalytics: React.FC = () => {
             <div className="flex gap-2">
               <button
                 onClick={handleRefresh}
-                disabled={refreshing}
+                disabled={refreshing || businessDateLoading || Boolean(businessDateError) || !dateRange.start || !dateRange.end}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 disabled:opacity-50"
               >
                 {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                 Refresh
-              </button>
-              <button className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2">
-                <Download className="h-4 w-4" />
-                Export Report
               </button>
             </div>
           </div>
@@ -331,9 +256,10 @@ const PaymentAnalytics: React.FC = () => {
           {/* Filters */}
           <div className="flex flex-wrap gap-4 mt-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Date Range</label>
+              <span className="block text-sm font-medium text-gray-700 mb-1">Date Range</span>
               <div className="flex gap-2">
                 <input
+                  aria-label="Payment period start date"
                   type="date"
                   value={dateRange.start}
                   onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
@@ -341,6 +267,7 @@ const PaymentAnalytics: React.FC = () => {
                 />
                 <span className="flex items-center text-gray-500">to</span>
                 <input
+                  aria-label="Payment period end date"
                   type="date"
                   value={dateRange.end}
                   onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
@@ -349,8 +276,9 @@ const PaymentAnalytics: React.FC = () => {
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
+              <label htmlFor="payment-analytics-method" className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
               <select
+                id="payment-analytics-method"
                 value={selectedMethod}
                 onChange={(e) => setSelectedMethod(e.target.value)}
                 className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -363,8 +291,9 @@ const PaymentAnalytics: React.FC = () => {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+              <label htmlFor="payment-analytics-status" className="block text-sm font-medium text-gray-700 mb-1">Status</label>
               <select
+                id="payment-analytics-status"
                 value={selectedStatus}
                 onChange={(e) => setSelectedStatus(e.target.value)}
                 className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -380,7 +309,7 @@ const PaymentAnalytics: React.FC = () => {
         </div>
 
         {/* Loading State */}
-        {loading && (
+        {(loading || businessDateLoading) && (
           <div className="p-12 text-center">
             <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-600" />
             <p className="text-gray-600">Loading payment analytics...</p>
@@ -388,12 +317,12 @@ const PaymentAnalytics: React.FC = () => {
         )}
 
         {/* Error State */}
-        {error && (
+        {(error || businessDateError) && (
           <div className="p-6 border-b border-gray-200">
             <div className="bg-red-50 border border-red-200 rounded-lg p-4">
               <div className="flex items-center">
                 <AlertCircle className="w-5 h-5 text-red-500 mr-2" />
-                <span className="text-red-700">{error}</span>
+                <span className="text-red-700">{error || businessDateError}</span>
                 <button
                   onClick={() => setError(null)}
                   className="ml-auto text-red-500 hover:text-red-700"
@@ -406,7 +335,7 @@ const PaymentAnalytics: React.FC = () => {
         )}
 
         {/* Summary Cards */}
-        {!loading && (
+        {!loading && data && (
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-6 border-b border-gray-200">
             <div className="p-4 border border-gray-200 rounded-lg">
               <Wallet className="h-8 w-8 text-green-600 mb-2" />
@@ -434,7 +363,7 @@ const PaymentAnalytics: React.FC = () => {
         )}
 
         {/* Status Summary */}
-        {!loading && (
+        {!loading && data && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-6 border-b border-gray-200">
             <div className="p-4 border border-green-200 rounded-lg bg-green-50">
               <CheckCircle className="h-8 w-8 text-green-600 mb-2" />
@@ -455,7 +384,7 @@ const PaymentAnalytics: React.FC = () => {
         )}
 
         {/* Charts */}
-        {!loading && Object.keys(data.methodBreakdown).length > 0 && (
+        {!loading && data && Object.keys(data.methodBreakdown).length > 0 && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 p-6 border-b border-gray-200">
             <div>
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Payment Methods</h3>
@@ -494,7 +423,9 @@ const PaymentAnalytics: React.FC = () => {
                     tooltip: {
                       callbacks: {
                         label: (context) => {
-                          return `${context.dataset.label}: ${formatCurrency(context.parsed.y)}`;
+                          return typeof context.parsed.y === 'number'
+                            ? `${context.dataset.label}: ${formatCurrency(context.parsed.y)}`
+                            : `${context.dataset.label}: Unavailable`;
                         }
                       }
                     }
@@ -524,7 +455,9 @@ const PaymentAnalytics: React.FC = () => {
                     tooltip: {
                       callbacks: {
                         label: (context) => {
-                          return `${context.dataset.label}: ${formatCurrency(context.parsed.y)}`;
+                          return typeof context.parsed.y === 'number'
+                            ? `${context.dataset.label}: ${formatCurrency(context.parsed.y)}`
+                            : `${context.dataset.label}: Unavailable`;
                         }
                       }
                     }
@@ -544,7 +477,7 @@ const PaymentAnalytics: React.FC = () => {
         )}
 
         {/* Empty State */}
-        {!loading && data.payments.length === 0 && !error && (
+        {!loading && data && data.payments.length === 0 && !error && !businessDateError && (
           <div className="p-12 text-center border-b border-gray-200">
             <Wallet className="w-16 h-16 text-gray-300 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">No Payment Data Found</h3>

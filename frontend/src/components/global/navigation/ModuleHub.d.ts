@@ -18,6 +18,11 @@ export interface ModuleHubProps {
   icon?: React.ComponentType<any>;
   modules: ModuleItem[];
   defaultModule?: string;
+  /**
+   * Called when the user switches sub-modules inside the hub.
+   * Used by the parent (App.tsx) to keep window.location.hash in sync.
+   */
+  onActiveModuleChange?: (moduleId: string | null) => void;
 }
 
 declare const ModuleHub: React.FC<ModuleHubProps>;

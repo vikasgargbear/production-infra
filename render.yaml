@@ -6,20 +6,27 @@ services:
     region: singapore
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
-    healthCheckPath: /ready
+    healthCheckPath: /health
+    maxShutdownDelaySeconds: 60
     autoDeployTrigger: "off"
     envVars:
       - key: APP_ENV
         value: production
-      - key: ENV
-        value: production
-      - key: DEBUG
-        value: "false"
+      - key: CANONICAL_APPLICATION_PROVIDER
+        value: render
       - key: LOG_LEVEL
         value: INFO
       - key: LOG_FORMAT
         value: json
       - key: DATABASE_URL
+        sync: false
+      - key: ERP_CALCULATOR_DATABASE_URL
+        sync: false
+      - key: TAX_PROVIDER_DATABASE_URL
+        sync: false
+      - key: TAX_PROVIDER_INTERNAL_SERVICE_TOKEN
+        sync: false
+      - key: TAX_PROVIDER_INTERNAL_HMAC_SECRET
         sync: false
       - key: JWT_SECRET_KEY
         sync: false
@@ -29,9 +36,21 @@ services:
         sync: false
       - key: SUPABASE_URL
         sync: false
+      - key: EVIDENCE_STORAGE_EXPECTED_PROJECT_REF
+        sync: false
       - key: SUPABASE_ANON_KEY
         sync: false
-      - key: SUPABASE_SERVICE_ROLE_KEY
+      - key: EVIDENCE_STORAGE_ENABLED
+        sync: false
+      - key: EVIDENCE_STORAGE_SERVICE_AUTH_USER_ID
+        sync: false
+      - key: EVIDENCE_STORAGE_SERVICE_EMAIL
+        sync: false
+      - key: EVIDENCE_STORAGE_SERVICE_PASSWORD
+        sync: false
+      - key: MCP_INTERNAL_SERVICE_TOKEN
+        sync: false
+      - key: MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS
         sync: false
       - key: SMTP_HOST
         sync: false
@@ -40,6 +59,30 @@ services:
       - key: SMTP_USER
         sync: false
       - key: SMTP_PASSWORD
+        sync: false
+
+  - type: web
+    name: aasopharma-mcp-pilot
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./backend/mcp_runtime/Dockerfile
+    dockerContext: ./backend/mcp_runtime
+    healthCheckPath: /health
+    maxShutdownDelaySeconds: 60
+    autoDeployTrigger: "off"
+    envVars:
+      - key: SUPABASE_OAUTH_ISSUER
+        sync: false
+      - key: MCP_RESOURCE_SERVER_URL
+        sync: false
+      - key: ERP_API_BASE_URL
+        sync: false
+      - key: MCP_INTERNAL_SERVICE_TOKEN
+        sync: false
+      - key: MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS
+        sync: false
+      - key: MCP_ALLOWED_ORIGINS
         sync: false
 
   - type: web

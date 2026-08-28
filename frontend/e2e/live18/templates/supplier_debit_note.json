@@ -1,0 +1,42 @@
+{
+  "template_schema": "aasopharma.live18.ui-template.v1",
+  "operation_id": "supplier_debit_note",
+  "lifecycle_mode": "split",
+  "steps": {
+    "missing_required_steps": [
+      {"actor":"requester","action":"goto","value":"/#/credit-debit-note"},
+      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Required: select the exact posted source, reviewed GST rule, explicit billed and free quantities, and business reason.","exact":true},"value":"Required: select the exact posted source, reviewed GST rule, explicit billed and free quantities, and business reason."},
+      {"actor":"requester","action":"expectDisabled","locator":{"kind":"role","role":"button","name":"Prepare immutable preview","exact":true}}
+    ],
+    "prepare_steps": [
+      {"actor":"requester","action":"goto","value":"/#/credit-debit-note"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"radio","name":"Supplier debit","exact":true}},
+      {"actor":"requester","action":"select","locator":{"kind":"label","name":"Posted supplier invoice","exact":true},"value":"{{resource_supplier_invoice}}"},
+      {"actor":"requester","action":"select","locator":{"kind":"label","name":"Reviewed GST rule","exact":true},"value":"{{fact.identity.purchase_adjustment_rule_id}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Business reason","exact":true},"value":"{{scalar.supplier_debit_note_reason}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Billed quantity for {{fact.display.product_name}}","exact":true},"value":"{{fact.choice.supplier_debit_note_billed_quantity}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Free quantity for {{fact.display.product_name}}","exact":true},"value":"{{fact.choice.supplier_debit_note_free_quantity}}"},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"GSTR-2B supplier credit-note line UUID","exact":true},"value":"{{fact.identity.supplier_credit_note_portal_line_id}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Prepare immutable preview","exact":true}}
+    ],
+    "approval_steps": [
+      {"actor":"reviewer","action":"goto","value":"/#/credit-debit-note"},
+      {"actor":"reviewer","action":"click","locator":{"kind":"role","role":"button","name":"2. Independent approval","exact":true}},
+      {"actor":"reviewer","action":"fill","locator":{"kind":"label","name":"Command ID","exact":true},"value":"{{command_request_id}}"},
+      {"actor":"reviewer","action":"click","locator":{"kind":"role","role":"button","name":"Load review","exact":true}},
+      {"actor":"reviewer","action":"expectText","locator":{"kind":"text","name":"{{preview_hash}}","exact":true},"value":"{{preview_hash}}"},
+      {"actor":"reviewer","action":"expectText","locator":{"kind":"testId","name":"canonical-immutable-preview"},"value":"{{scalar.supplier_debit_note_reason}}"},
+      {"actor":"reviewer","action":"click","locator":{"kind":"role","role":"checkbox","name":"I independently reviewed the exact immutable preview and approve this command.","exact":true}},
+      {"actor":"reviewer","action":"click","locator":{"kind":"role","role":"button","name":"Approve exact preview","exact":true}}
+    ],
+    "execute_steps": [
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"3. Execute & verify","exact":true}},
+      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Command ID","exact":true},"value":"{{command_request_id}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Check status","exact":true}},
+      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"{{preview_hash}}","exact":true},"value":"{{preview_hash}}"},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"checkbox","name":"I am the requester and authorize one idempotent execution of this approved preview.","exact":true}},
+      {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Execute approved note","exact":true}},
+      {"actor":"requester","action":"expectText","locator":{"kind":"text","name":"Posted and reconciled","exact":true},"value":"Posted and reconciled"}
+    ]
+  }
+}

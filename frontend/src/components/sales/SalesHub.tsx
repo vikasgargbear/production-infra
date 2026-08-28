@@ -13,11 +13,29 @@ import { usePermissions } from '../../hooks/usePermissions';
 interface SalesHubProps {
   open?: boolean;
   onClose?: () => void;
+  /**
+   * Deep-link sub-module to open on mount (e.g. "invoice").
+   * Comes from the URL hash (#/sales/<subpage>).
+   */
+  initialSubpage?: string | null;
+  /**
+   * Called when the user switches sub-modules inside the hub.
+   * The parent (App) uses this to keep the URL hash in sync.
+   */
+  onSubpageChange?: (subpage: string | null) => void;
 }
 
-const SalesHub: React.FC<SalesHubProps> = ({ open = true, onClose }) => {
+const SalesHub: React.FC<SalesHubProps> = ({ open = true, onClose, initialSubpage, onSubpageChange }) => {
   const { hasPermission } = usePermissions();
   const canCreate = hasPermission('sales', 'create');
+
+  /** All valid sub-module IDs for deep-linking into SalesHub. */
+  const SALES_SUBPAGE_IDS = ['invoice', 'challan', 'sales-order', 'sales-history'] as const;
+
+  const defaultModule = (() => {
+    if (initialSubpage && SALES_SUBPAGE_IDS.includes(initialSubpage as any)) return initialSubpage;
+    return canCreate ? 'invoice' : 'sales-history';
+  })();
 
   const salesModules: Module[] = useMemo(() => {
     const modules: Module[] = [];
@@ -76,7 +94,8 @@ const SalesHub: React.FC<SalesHubProps> = ({ open = true, onClose }) => {
       subtitle=""
       icon={ReceiptText}
       modules={salesModules}
-      defaultModule={canCreate ? 'invoice' : 'sales-history'}
+      defaultModule={defaultModule}
+      onActiveModuleChange={onSubpageChange}
     />
   );
 };

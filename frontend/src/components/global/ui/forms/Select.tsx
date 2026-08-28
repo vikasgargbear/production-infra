@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, ChangeEvent, ReactNode, MouseEvent } from 'react';
+import React, { useState, useRef, useEffect, useId, ChangeEvent, ReactNode, MouseEvent, KeyboardEvent } from 'react';
 import { ChevronDown, Check, Search, X } from 'lucide-react';
 
 // ==================== TYPE DEFINITIONS ====================
@@ -49,8 +49,11 @@ const Select: React.FC<SelectProps> = ({
 }) => {
     const [isOpen, setIsOpen] = useState<boolean>(false);
     const [searchQuery, setSearchQuery] = useState<string>('');
+    const [activeIndex, setActiveIndex] = useState<number>(-1);
     const dropdownRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
+    const triggerRef = useRef<HTMLButtonElement>(null);
+    const listboxId = `select-listbox-${useId().replace(/:/g, '')}`;
 
     useEffect(() => {
         const handleClickOutside = (event: Event) => {
@@ -76,9 +79,25 @@ const Select: React.FC<SelectProps> = ({
         acc[group].push(option);
         return acc;
     }, {});
+    const selectableOptions = filteredOptions.filter(option => !option.disabled);
+    const hasValue = value !== undefined && value !== null && value !== ''
+        && (!Array.isArray(value) || value.length > 0);
+
+    useEffect(() => {
+        if (!isOpen) {
+            setActiveIndex(-1);
+            return;
+        }
+        const selectedIndex = selectableOptions.findIndex(option => multiple && Array.isArray(value)
+            ? value.includes(option.value)
+            : value === option.value);
+        setActiveIndex(selectedIndex >= 0 ? selectedIndex : (selectableOptions.length ? 0 : -1));
+    // `isSelected` is intentionally derived from the current option/value props.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isOpen, searchQuery, value, options]);
 
     const getDisplayValue = (): string => {
-        if (!value || (Array.isArray(value) && value.length === 0)) {
+        if (!hasValue) {
             return placeholder;
         }
 
@@ -112,6 +131,48 @@ const Select: React.FC<SelectProps> = ({
     const handleClear = (e: MouseEvent): void => {
         e.stopPropagation();
         onChange(multiple ? [] : null);
+        triggerRef.current?.focus();
+    };
+
+    const closeAndRestoreFocus = (): void => {
+        setIsOpen(false);
+        setSearchQuery('');
+        triggerRef.current?.focus();
+    };
+
+    const handleTriggerKeyDown = (event: KeyboardEvent<HTMLButtonElement>): void => {
+        if (disabled) return;
+        if (event.key === 'Escape' && isOpen) {
+            event.preventDefault();
+            closeAndRestoreFocus();
+            return;
+        }
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            event.preventDefault();
+            if (!isOpen) {
+                setIsOpen(true);
+                return;
+            }
+            const delta = event.key === 'ArrowDown' ? 1 : -1;
+            setActiveIndex(current => {
+                if (!selectableOptions.length) return -1;
+                const start = current < 0 ? (delta > 0 ? -1 : 0) : current;
+                return (start + delta + selectableOptions.length) % selectableOptions.length;
+            });
+            return;
+        }
+        if ((event.key === 'Enter' || event.key === ' ') && isOpen && activeIndex >= 0) {
+            event.preventDefault();
+            handleSelect(selectableOptions[activeIndex]);
+            return;
+        }
+        if (event.key === 'Home' && isOpen && selectableOptions.length) {
+            event.preventDefault();
+            setActiveIndex(0);
+        } else if (event.key === 'End' && isOpen && selectableOptions.length) {
+            event.preventDefault();
+            setActiveIndex(selectableOptions.length - 1);
+        }
     };
 
     const isSelected = (option: SelectOption): boolean => {
@@ -136,8 +197,20 @@ const Select: React.FC<SelectProps> = ({
                 </label>
             )}
 
-            <div
-                onClick={() => !disabled && setIsOpen(!isOpen)}
+            <button
+                ref={triggerRef}
+                type="button"
+                role="combobox"
+                aria-expanded={isOpen}
+                aria-controls={listboxId}
+                aria-haspopup="listbox"
+                aria-label={label || placeholder}
+                aria-required={required || undefined}
+                aria-invalid={Boolean(error) || undefined}
+                aria-activedescendant={isOpen && activeIndex >= 0 ? `${listboxId}-option-${activeIndex}` : undefined}
+                disabled={disabled}
+                onClick={() => setIsOpen(!isOpen)}
+                onKeyDown={handleTriggerKeyDown}
                 className={`
           w-full border rounded-lg cursor-pointer
           flex items-center justify-between
@@ -147,23 +220,27 @@ const Select: React.FC<SelectProps> = ({
           ${error ? 'border-red-500' : ''}
         `}
             >
-                <span className={`flex-1 truncate ${!value ? 'text-gray-400' : ''}`}>
+                <span className={`flex-1 truncate text-left ${!hasValue ? 'text-gray-400' : ''}`}>
                     {getDisplayValue()}
                 </span>
 
                 <div className="flex items-center gap-1">
-                    {clearable && value && !disabled && (
-                        <X
-                            className="w-4 h-4 text-gray-400 hover:text-gray-600"
-                            onClick={handleClear}
-                        />
-                    )}
                     <ChevronDown
                         className={`w-4 h-4 text-gray-400 transition-transform ${isOpen ? 'transform rotate-180' : ''
                             }`}
                     />
                 </div>
-            </div>
+            </button>
+            {clearable && hasValue && !disabled && (
+                <button
+                    type="button"
+                    aria-label={`Clear ${label || 'selection'}`}
+                    onClick={handleClear}
+                    className="absolute right-8 top-1/2 -translate-y-1/2 rounded p-1 text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                    <X className="w-4 h-4" />
+                </button>
+            )}
 
             {error && (
                 <p className="mt-1 text-sm text-red-600">{error}</p>
@@ -180,6 +257,21 @@ const Select: React.FC<SelectProps> = ({
                                     type="text"
                                     value={searchQuery}
                                     onChange={(e: ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
+                                    onKeyDown={(event) => {
+                                        if (event.key === 'Escape') {
+                                            event.preventDefault();
+                                            closeAndRestoreFocus();
+                                        } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                                            event.preventDefault();
+                                            const delta = event.key === 'ArrowDown' ? 1 : -1;
+                                            setActiveIndex(current => selectableOptions.length
+                                                ? (Math.max(current, 0) + delta + selectableOptions.length) % selectableOptions.length
+                                                : -1);
+                                        } else if (event.key === 'Enter' && activeIndex >= 0) {
+                                            event.preventDefault();
+                                            handleSelect(selectableOptions[activeIndex]);
+                                        }
+                                    }}
                                     placeholder="Search..."
                                     className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                     onClick={(e: MouseEvent) => e.stopPropagation()}
@@ -189,7 +281,7 @@ const Select: React.FC<SelectProps> = ({
                         </div>
                     )}
 
-                    <div className="max-h-60 overflow-y-auto">
+                    <div id={listboxId} role="listbox" aria-multiselectable={multiple || undefined} className="max-h-60 overflow-y-auto">
                         {filteredOptions.length === 0 ? (
                             <div className="px-3 py-2 text-sm text-gray-500 text-center">
                                 No options found
@@ -202,14 +294,21 @@ const Select: React.FC<SelectProps> = ({
                                             {group}
                                         </div>
                                     )}
-                                    {groupOptions.map((option) => (
-                                        <div
+                                    {groupOptions.map((option) => {
+                                        const optionIndex = selectableOptions.indexOf(option);
+                                        return (
+                                        <button
+                                            type="button"
                                             key={String(option.value)}
+                                            id={optionIndex >= 0 ? `${listboxId}-option-${optionIndex}` : undefined}
+                                            role="option"
+                                            aria-selected={isSelected(option)}
+                                            disabled={option.disabled}
                                             onClick={() => handleSelect(option)}
                                             className={`
-                        px-3 py-2 cursor-pointer flex items-center justify-between
+                        w-full px-3 py-2 cursor-pointer flex items-center justify-between text-left
                         ${option.disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50'}
-                        ${isSelected(option) ? 'bg-blue-50' : ''}
+                        ${isSelected(option) || optionIndex === activeIndex ? 'bg-blue-50' : ''}
                       `}
                                         >
                                             <div className="flex items-center gap-2">
@@ -233,8 +332,8 @@ const Select: React.FC<SelectProps> = ({
                                             {!multiple && isSelected(option) && (
                                                 <Check className="w-4 h-4 text-blue-600" />
                                             )}
-                                        </div>
-                                    ))}
+                                        </button>
+                                    );})}
                                 </div>
                             ))
                         )}
