@@ -7,6 +7,7 @@ const validSupplier = {
     city: 'Mumbai',
     state_code: '27',
     pincode: '400001',
+    credit_days: 30,
 };
 
 describe('supplier creation client contract', () => {
@@ -47,6 +48,17 @@ describe('supplier creation client contract', () => {
         })).toEqual([
             'Phone number must be a valid 10-digit Indian mobile number',
             'Pincode must be exactly 6 digits',
+        ]);
+    });
+
+    it('rejects malformed email and payment terms locally', () => {
+        expect(validateSupplierMandatoryFields({
+            ...validSupplier,
+            email: 'not-an-email',
+            credit_days: 181,
+        })).toEqual([
+            'Email address is invalid',
+            'Payment days must be a whole number from 0 to 180',
         ]);
     });
 });

@@ -1,12 +1,14 @@
 export interface SupplierMandatoryFields {
     supplier_name: string;
     phone: string;
+    email?: string;
     address_line1: string;
     city: string;
     state_code: string;
     pincode: string;
     gst_number?: string;
     pan_number?: string;
+    credit_days?: number | '';
 }
 
 const indianPhone = (value: string): boolean => {
@@ -27,6 +29,9 @@ export const validateSupplierMandatoryFields = (
     } else if (!indianPhone(form.phone)) {
         errors.push('Phone number must be a valid 10-digit Indian mobile number');
     }
+    if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+        errors.push('Email address is invalid');
+    }
     if (!form.address_line1.trim()) errors.push('Building / street address is required');
     if (!form.city.trim()) errors.push('City is required');
     if (!/^\d{2}$/.test(form.state_code.trim())) {
@@ -46,6 +51,12 @@ export const validateSupplierMandatoryFields = (
     }
     if (form.pan_number && !/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(form.pan_number)) {
         errors.push('Invalid PAN format');
+    }
+    if (form.credit_days === '') {
+        errors.push('Payment days are required');
+    } else if (form.credit_days !== undefined
+        && (!Number.isInteger(form.credit_days) || form.credit_days < 0 || form.credit_days > 180)) {
+        errors.push('Payment days must be a whole number from 0 to 180');
     }
     return errors;
 };

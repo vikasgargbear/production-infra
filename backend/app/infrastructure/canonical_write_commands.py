@@ -69,6 +69,50 @@ def delete_product_draft(
     )
 
 
+def configure_product_draft(db: Session, **parameters: Any) -> dict[str, Any]:
+    """Replace the complete unused-draft setup through one database owner."""
+
+    return dict(
+        db.execute(
+            text(
+                """
+                SELECT product_id,product_code,product_name,new_row_version
+                  FROM erp_master_commands.configure_product_draft(
+                    :org_id,:product_id,:expected_row_version,:category_id,
+                    :manufacturer_party_id,:base_uom_code,:dosage_form,
+                    :strength_display,:hsn_code,:cold_chain_required,
+                    :minimum_storage_celsius,:maximum_storage_celsius,
+                    :shelf_life_days,:gtin,
+                    CAST(:pack_conversions AS jsonb),CAST(:ingredients AS jsonb)
+                  )
+                """
+            ),
+            parameters,
+        ).mappings().one()
+    )
+
+
+def activate_configured_product(db: Session, **parameters: Any) -> dict[str, Any]:
+    """Delegate activation to the regulatory command after canonical readiness."""
+
+    return dict(
+        db.execute(
+            text(
+                """
+                SELECT product_id,product_code,product_name,new_row_version,
+                       idempotency_replayed
+                  FROM erp_master_commands.activate_configured_product(
+                    :org_id,:product_id,:expected_row_version,
+                    :manufacturer_traceability_code,:idempotency_key_hash,
+                    transaction_timestamp()+interval '24 hours'
+                  )
+                """
+            ),
+            parameters,
+        ).mappings().one()
+    )
+
+
 def create_party_address(db: Session, **parameters: Any) -> dict[str, Any]:
     return dict(
         db.execute(

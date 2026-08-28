@@ -417,13 +417,13 @@ test.describe('live ERP pilot', () => {
     await page.getByRole('button', { name: 'Create Product', exact: true }).click();
     await expect(page.getByText('Internal product code is generated automatically after saving.')).toBeVisible();
     await expect(page.getByRole('textbox', { name: /product code/i })).toHaveCount(0);
-    await page.getByRole('button', { name: 'Save draft', exact: true }).click();
+    await page.getByRole('button', { name: 'Save & continue', exact: true }).click();
     await expect(page.getByText(/String must contain at least 1 character/)).toBeVisible();
     expect(masterPosts.product).toHaveLength(0);
     await page.getByLabel('Product name').fill(productName);
     await page.getByLabel('Product kind').selectOption('consumable');
     const productWrite = await expectSuccessfulWrite(page, /\/api\/products\/?(?:\?|$)/, async () => {
-      await doubleClickInOneBrowserTurn(page.getByRole('button', { name: 'Save draft', exact: true }));
+      await doubleClickInOneBrowserTurn(page.getByRole('button', { name: 'Save & continue', exact: true }));
     });
     await expect.poll(() => masterPosts.product.length).toBe(1);
     await page.waitForTimeout(300);
@@ -435,9 +435,10 @@ test.describe('live ERP pilot', () => {
     expect(productCreated.product_name).toBe(productName);
     expect(productCreated.lifecycle_status).toBe('draft');
     await expect(page.getByText(
-      `Product ${productCreated.product_code} created as a draft. Classification and activation are required before use.`,
+      `${productCreated.product_code} saved as a draft. Continue with reviewed classification.`,
       { exact: true },
     )).toBeVisible();
+    await page.getByRole('button', { name: 'Close product setup', exact: true }).click();
     await expect(page.getByText('INVOICE ITEMS', { exact: true })).toHaveCount(0);
 
     // Create the supplier through the purchase-order inline flow and prove the
@@ -480,7 +481,7 @@ test.describe('live ERP pilot', () => {
     await returnHome(page);
     await openHomeAction(page, 'Master Management');
     await chooseHubModule(page, 'Master', 'Products');
-    await page.getByPlaceholder('Search products').fill(productCreated.product_code);
+    await page.getByPlaceholder(/Search name, salt, code/).fill(productCreated.product_code);
     const productRow = page.getByRole('row').filter({ hasText: productName });
     await expect(productRow).toContainText(productCreated.product_code);
     const productReadback = await authorizedJsonGet(
@@ -497,9 +498,9 @@ test.describe('live ERP pilot', () => {
       is_active: false,
     }));
     await productRow.getByRole('button', { name: `Edit draft ${productName}`, exact: true }).click();
-    await expect(page.getByLabel('Immutable product code')).toHaveText(productCreated.product_code);
+    await expect(page.getByText(productCreated.product_code, { exact: false }).first()).toBeVisible();
     await expect(page.getByRole('textbox', { name: 'Product code', exact: true })).toHaveCount(0);
-    await page.getByRole('button', { name: 'Close product form', exact: true }).click();
+    await page.getByRole('button', { name: 'Close product setup', exact: true }).click();
 
     await chooseHubModule(page, 'Master', 'Customers');
     await page.getByPlaceholder(/Search customers/).fill(customerCreated.customer_code);

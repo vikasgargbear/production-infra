@@ -57,6 +57,10 @@ const nextToastId = createRuntimeIdCounter();
 export const ToastProvider: React.FC<ToastProviderProps> = ({ children }) => {
     const [toasts, setToasts] = useState<ToastItem[]>([]);
 
+    const removeToast = useCallback((id: number) => {
+        setToasts(prev => prev.filter(toast => toast.id !== id));
+    }, []);
+
     const addToast = useCallback((message: string, type: ToastType = 'info', duration: number = 4000, options: ToastOptions = {}) => {
         const id = nextToastId();
         const newToast: ToastItem = {
@@ -76,11 +80,7 @@ export const ToastProvider: React.FC<ToastProviderProps> = ({ children }) => {
                 removeToast(id);
             }, duration);
         }
-    }, []);
-
-    const removeToast = useCallback((id: number) => {
-        setToasts(prev => prev.filter(toast => toast.id !== id));
-    }, []);
+    }, [removeToast]);
 
     const toast: ToastMethods = {
         success: (message, duration = 4000, options = {}) => addToast(message, 'success', duration, options),
@@ -209,7 +209,7 @@ const Toast: React.FC<ToastProps> = ({ toast, removeToast }) => {
         ${colors[toast.type]}
         ${isExiting ? 'animate-slide-out' : 'animate-slide-in'}
         transition-all duration-300 ease-out
-        min-w-[320px] max-w-[420px]
+        min-w-0 max-w-[420px] sm:min-w-[320px]
         shadow-lg hover:shadow-xl
         transform hover:scale-[1.02]
       `}
@@ -230,7 +230,8 @@ const Toast: React.FC<ToastProps> = ({ toast, removeToast }) => {
             </div>
             <button
                 onClick={handleRemove}
-                className="p-1 hover:bg-black/10 rounded-lg transition-colors flex-shrink-0"
+                aria-label="Dismiss notification"
+                className="-mr-2 -mt-2 grid min-h-11 min-w-11 flex-shrink-0 place-items-center rounded-lg transition-colors hover:bg-black/10"
             >
                 <X className="w-4 h-4" />
             </button>
@@ -242,7 +243,7 @@ const Toast: React.FC<ToastProps> = ({ toast, removeToast }) => {
 
 const ToastContainer: React.FC<ToastContainerProps> = ({ toasts, removeToast }) => {
     return (
-        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 space-y-3 max-w-md w-full px-4 pointer-events-none">
+        <div aria-live="polite" aria-atomic="false" className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 space-y-3 max-w-md w-full px-4 pointer-events-none">
             {toasts.map(toast => (
                 <div key={toast.id} className="pointer-events-auto">
                     <Toast toast={toast} removeToast={removeToast} />

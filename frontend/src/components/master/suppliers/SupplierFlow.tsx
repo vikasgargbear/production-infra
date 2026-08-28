@@ -116,10 +116,6 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
 
         // Validation
         const validationErrors = validateSupplierMandatoryFields(formData);
-        if (formData.credit_days === '') {
-            validationErrors.push('Payment days are required');
-        }
-
         if (validationErrors.length > 0) {
             setErrors(validationErrors);
             setSaving(false);
@@ -169,39 +165,33 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
 
     if (!isOpen) return null;
 
-    const inputClass = "w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors";
+    const inputClass = "min-h-12 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-base outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-100";
 
     return (
-        <div className="fixed inset-0 bg-gray-50 z-50 overflow-hidden flex flex-col">
+        <div className="fixed inset-0 z-50 flex min-w-0 flex-col overflow-hidden bg-gray-50">
             {/* Header - STANDARD: full-width, py-4, right-aligned save */}
-            <header className="bg-white border-b border-gray-200 shrink-0 px-6 py-4">
+            <header className="shrink-0 border-b border-gray-200 bg-white px-3 py-3 sm:px-6 sm:py-4">
                 <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
+                    <div className="flex min-w-0 items-center gap-3">
                         <button
                             onClick={onClose}
-                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                            className="grid min-h-11 min-w-11 place-items-center rounded-lg hover:bg-gray-100"
+                            aria-label="Close supplier form"
                         >
                             <ArrowLeft className="w-5 h-5 text-gray-600" />
                         </button>
-                        <div>
-                            <h1 className="text-xl font-semibold text-gray-900">Add New Supplier</h1>
-                            <p className="text-sm text-gray-500">Create supplier profile</p>
+                        <div className="min-w-0">
+                            <h1 className="truncate text-lg font-semibold text-gray-950 sm:text-xl">Create supplier</h1>
+                            <p className="truncate text-sm text-gray-500">Legal identity, address, tax registration and payment terms</p>
                         </div>
                     </div>
-                    <button
-                        onClick={handleSave}
-                        disabled={saving}
-                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-                    >
-                        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                        Save Supplier
-                    </button>
+                    <span className="hidden rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-800 sm:inline">Canonical supplier account</span>
                 </div>
             </header>
 
             {/* Scrollable Content */}
-            <main className="flex-1 overflow-y-auto py-6" ref={formRef}>
-                <div className="max-w-6xl mx-auto px-6 space-y-8">
+            <main className="flex-1 overflow-y-auto py-5 pb-28" ref={formRef}>
+                <div className="mx-auto max-w-6xl space-y-5 px-3 sm:px-6">
                     {/* Error Display */}
                     {errors.length > 0 && (
                         <div className="bg-red-50 border border-red-200 rounded-xl p-4">
@@ -218,7 +208,7 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
                     )}
 
                     {/* Basic Information */}
-                    <section className="bg-white rounded-xl border border-gray-200 p-6">
+                    <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
                         <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
                             <Building2 className="w-5 h-5 text-blue-600" />
                             Basic Information
@@ -228,11 +218,13 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
                         </p>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label htmlFor="supplier-name" className="block text-sm font-medium text-gray-700 mb-1">
                                     Supplier Name <span className="text-red-500">*</span>
                                 </label>
                                 <input
                                     type="text"
+                                    id="supplier-name"
+                                    autoComplete="organization"
                                     required
                                     value={formData.supplier_name}
                                     onChange={(e) => setFormData({ ...formData, supplier_name: e.target.value })}
@@ -244,20 +236,22 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
                     </section>
 
                     {/* Contact Information */}
-                    <section className="bg-white rounded-xl border border-gray-200 p-6">
+                    <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
                         <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
                             <Phone className="w-5 h-5 text-blue-600" />
                             Contact Information
                         </h2>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label htmlFor="supplier-phone" className="block text-sm font-medium text-gray-700 mb-1">
                                     Phone <span className="text-red-500">*</span>
                                 </label>
                                 <input
                                     type="tel"
+                                    id="supplier-phone"
                                     required
                                     inputMode="tel"
+                                    autoComplete="tel"
                                     value={formData.phone}
                                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                                     className={inputClass}
@@ -265,9 +259,11 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                                <label htmlFor="supplier-email" className="block text-sm font-medium text-gray-700 mb-1">Email</label>
                                 <input
                                     type="email"
+                                    id="supplier-email"
+                                    autoComplete="email"
                                     value={formData.email}
                                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                                     className={inputClass}
@@ -279,9 +275,10 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
                         {/* Contact Person row */}
                         <div className="grid grid-cols-1 gap-4 mt-4">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Contact Person</label>
+                                <label htmlFor="supplier-contact" className="block text-sm font-medium text-gray-700 mb-1">Contact Person</label>
                                 <input
                                     type="text"
+                                    id="supplier-contact"
                                     value={formData.contact_person}
                                     onChange={(e) => setFormData({ ...formData, contact_person: e.target.value })}
                                     className={inputClass}
@@ -292,41 +289,42 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
                     </section>
 
                     {/* Address */}
-                    <section className="bg-white rounded-xl border border-gray-200 p-6">
+                    <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
                         <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
                             <MapPin className="w-5 h-5 text-blue-600" />
                             Address
                         </h2>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <label className="text-sm font-medium text-gray-700">Building / Street Address *
-                                <input value={formData.address_line1} onChange={(event) => setFormData({ ...formData, address_line1: event.target.value })} className={`${inputClass} mt-1`} />
+                            <label htmlFor="supplier-address-line1" className="text-sm font-medium text-gray-700">Building / Street Address *
+                                <input id="supplier-address-line1" autoComplete="street-address" value={formData.address_line1} onChange={(event) => setFormData({ ...formData, address_line1: event.target.value })} className={`${inputClass} mt-1`} />
                             </label>
-                            <label className="text-sm font-medium text-gray-700">Area / Additional
-                                <input value={formData.address_line2} onChange={(event) => setFormData({ ...formData, address_line2: event.target.value })} className={`${inputClass} mt-1`} />
+                            <label htmlFor="supplier-address-line2" className="text-sm font-medium text-gray-700">Area / Additional
+                                <input id="supplier-address-line2" value={formData.address_line2} onChange={(event) => setFormData({ ...formData, address_line2: event.target.value })} className={`${inputClass} mt-1`} />
                             </label>
-                            <label className="text-sm font-medium text-gray-700">City *
-                                <input value={formData.city} onChange={(event) => setFormData({ ...formData, city: event.target.value })} className={`${inputClass} mt-1`} />
+                            <label htmlFor="supplier-city" className="text-sm font-medium text-gray-700">City *
+                                <input id="supplier-city" autoComplete="address-level2" value={formData.city} onChange={(event) => setFormData({ ...formData, city: event.target.value })} className={`${inputClass} mt-1`} />
                             </label>
-                            <label className="text-sm font-medium text-gray-700">GST state code (2 digits) *
-                                <GSTJurisdictionSelect value={formData.state_code} onChange={(stateCode) => setFormData({ ...formData, state_code: stateCode })} className={`${inputClass} mt-1`} required />
+                            <label htmlFor="supplier-state-code" className="text-sm font-medium text-gray-700">GST state code (2 digits) *
+                                <GSTJurisdictionSelect id="supplier-state-code" value={formData.state_code} onChange={(stateCode) => setFormData({ ...formData, state_code: stateCode })} className={`${inputClass} mt-1`} required />
                             </label>
-                            <label className="text-sm font-medium text-gray-700">Pincode *
-                                <input type="text" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} value={formData.pincode} onChange={(event) => setFormData({ ...formData, pincode: event.target.value.replace(/\D/g, '').slice(0, 6) })} className={`${inputClass} mt-1`} />
+                            <label htmlFor="supplier-pincode" className="text-sm font-medium text-gray-700">Pincode *
+                                <input id="supplier-pincode" type="text" inputMode="numeric" autoComplete="postal-code" pattern="[0-9]{6}" maxLength={6} value={formData.pincode} onChange={(event) => setFormData({ ...formData, pincode: event.target.value.replace(/\D/g, '').slice(0, 6) })} className={`${inputClass} mt-1`} />
                             </label>
                         </div>
                     </section>
 
                     {/* Tax & Compliance */}
-                    <section className="bg-white rounded-xl border border-gray-200 p-6">
+                    <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
                         <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
                             <FileText className="w-5 h-5 text-blue-600" />
                             Tax & Compliance
                         </h2>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">GSTIN</label>
+                                <label htmlFor="supplier-gstin" className="block text-sm font-medium text-gray-700 mb-1">GSTIN</label>
                                 <input
                                     type="text"
+                                    id="supplier-gstin"
                                     value={formData.gst_number}
                                     onChange={(e) => setFormData({ ...formData, gst_number: e.target.value.toUpperCase() })}
                                     className={inputClass}
@@ -335,9 +333,10 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">PAN</label>
+                                <label htmlFor="supplier-pan" className="block text-sm font-medium text-gray-700 mb-1">PAN</label>
                                 <input
                                     type="text"
+                                    id="supplier-pan"
                                     value={formData.pan_number}
                                     onChange={(e) => setFormData({ ...formData, pan_number: e.target.value.toUpperCase() })}
                                     className={inputClass}
@@ -352,16 +351,17 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
                     </section>
 
                     {/* Payment terms */}
-                    <section className="bg-white rounded-xl border border-gray-200 p-6">
+                    <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
                         <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
                             <Banknote className="w-5 h-5 text-blue-600" />
                             Payment Terms
                         </h2>
                         <div className="max-w-sm">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Payment days *</label>
+                                <label htmlFor="supplier-payment-days" className="block text-sm font-medium text-gray-700 mb-1">Payment days *</label>
                                 <input
                                     type="number"
+                                    id="supplier-payment-days"
                                     inputMode="numeric"
                                     min={0}
                                     max={180}
@@ -380,19 +380,19 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
             </main>
 
             {/* Sticky Footer - STANDARD: full-width, py-4, right-aligned */}
-            <footer className="bg-white border-t border-gray-200 shrink-0 px-6 py-4">
+            <footer className="absolute inset-x-0 bottom-0 shrink-0 border-t border-gray-200 bg-white/95 px-3 py-3 shadow-[0_-8px_24px_rgba(0,0,0,0.06)] backdrop-blur sm:px-6">
                 <div className="flex items-center justify-end gap-3">
                     <button
                         onClick={onClose}
                         disabled={saving}
-                        className="px-6 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                        className="min-h-12 rounded-lg border border-gray-300 px-5 py-2 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                     >
                         Cancel
                     </button>
                     <button
                         onClick={handleSave}
                         disabled={saving}
-                        className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                        className="flex min-h-12 min-w-40 items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 py-2 text-base font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
                     >
                         {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                         {saving ? 'Saving...' : 'Save Supplier'}

@@ -172,14 +172,140 @@ export const productUpdateSchema = z.object({
   }
 });
 
+export const productPackConversionSchema = z.object({
+  uom_code: z.string().trim().min(1).max(16),
+  multiplier: z.number().positive(),
+}).strict();
+
+export const productIngredientSchema = z.object({
+  ingredient_id: z.string().uuid(),
+  ingredient_role: z.enum(['active', 'excipient']).default('active'),
+  strength_value: z.number().positive().optional(),
+  strength_uom_code: z.string().trim().min(1).max(16).optional(),
+  basis_quantity: z.number().positive().optional(),
+  basis_uom_code: z.string().trim().min(1).max(16).optional(),
+}).strict().superRefine((row, context) => {
+  const strength = [row.strength_value, row.strength_uom_code, row.basis_quantity, row.basis_uom_code];
+  if (row.ingredient_role === 'active' && strength.some(value => value === undefined)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: 'Strength and basis are required for an active ingredient' });
+  }
+  if (row.ingredient_role === 'excipient' && strength.some(value => value !== undefined)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: 'Excipient rows cannot claim an unreviewed strength' });
+  }
+});
+
+export const productSetupSchema = z.object({
+  row_version: z.number().int().positive(),
+  category_id: z.string().uuid().optional(),
+  manufacturer_party_id: z.string().uuid(),
+  base_uom_code: z.string().trim().min(1).max(16),
+  dosage_form: z.string().trim().max(64).optional(),
+  strength_display: z.string().trim().max(128).optional(),
+  hsn_code: z.string().regex(/^[0-9]{4,8}$/),
+  cold_chain_required: z.boolean(),
+  minimum_storage_celsius: z.number().min(-100).max(100).optional(),
+  maximum_storage_celsius: z.number().min(-100).max(100).optional(),
+  shelf_life_days: z.number().int().positive().max(36500).optional(),
+  gtin: z.string().regex(/^[0-9]{8,14}$/).optional(),
+  pack_conversions: z.array(productPackConversionSchema).max(12),
+  ingredients: z.array(productIngredientSchema).max(32),
+}).strict().superRefine((setup, context) => {
+  if (setup.cold_chain_required && (
+    setup.minimum_storage_celsius === undefined
+    || setup.maximum_storage_celsius === undefined
+    || setup.minimum_storage_celsius >= setup.maximum_storage_celsius
+  )) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['minimum_storage_celsius'], message: 'Enter a valid cold-chain temperature range' });
+  }
+  if (!setup.cold_chain_required && (
+    setup.minimum_storage_celsius !== undefined || setup.maximum_storage_celsius !== undefined
+  )) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['cold_chain_required'], message: 'Enable cold-chain handling before entering temperatures' });
+  }
+  const packUnits = setup.pack_conversions.map(row => row.uom_code);
+  if (packUnits.includes(setup.base_uom_code) || new Set(packUnits).size !== packUnits.length) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['pack_conversions'], message: 'Pack units must be unique and different from the base unit' });
+  }
+  const ingredients = setup.ingredients.map(row => row.ingredient_id);
+  if (new Set(ingredients).size !== ingredients.length) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['ingredients'], message: 'Each ingredient can appear only once' });
+  }
+});
+
 export type ProductCreateInput = z.infer<typeof productCreateSchema>;
 export type ProductUpdateInput = z.infer<typeof productUpdateSchema>;
+export type ProductSetupInput = z.infer<typeof productSetupSchema>;
+
+export interface ProductSetupOptions {
+  business_date: string;
+  ingredient_reference_ready: boolean;
+  hsn_reference_ready: boolean;
+  categories: Array<{ category_id: string; code: string; name: string; parent_id: string | null }>;
+  units: Array<{ code: string; name: string; symbol: string; dimension: string; decimal_places: number }>;
+  manufacturers: Array<{ manufacturer_party_id: string; legal_name: string; supplier_code: string }>;
+}
+
+export interface ProductIngredientOption {
+  ingredient_id: string;
+  canonical_name: string;
+  salt_or_form: string | null;
+  drugs_rules_schedule: 'NONE' | 'G' | 'H' | 'H1' | 'X';
+  ndps_classification: string;
+  schedule_h2_applicable_from: string | null;
+  ruleset_version: string;
+}
+
+export interface ProductHsnOption {
+  tax_code_version_id: string;
+  hsn_code: string;
+  description: string;
+  taxability: string;
+  cgst_rate: string;
+  sgst_rate: string;
+  igst_rate: string;
+  cess_rate: string;
+  ruleset_version: string;
+}
+
+export interface ProductSetupRead {
+  product_id: string;
+  product_code: string;
+  product_name: string;
+  generic_name: string | null;
+  product_kind: 'medicine' | 'medical_device' | 'consumable';
+  category_id: string | null;
+  category_name: string | null;
+  manufacturer_party_id: string | null;
+  manufacturer_name: string | null;
+  base_uom_code: string;
+  dosage_form: string | null;
+  strength_display: string | null;
+  hsn_code: string | null;
+  cold_chain_required: boolean;
+  minimum_storage_celsius: string | null;
+  maximum_storage_celsius: string | null;
+  shelf_life_days: number | null;
+  gtin: string | null;
+  status: 'draft' | 'active' | 'blocked';
+  row_version: number;
+  missing_fields: string[];
+  recommended_fields: string[];
+  ready_to_activate: boolean;
+  pack_conversions: Array<{ uom_code: string; uom_name: string; multiplier: string }>;
+  ingredients: Array<ProductIngredientOption & {
+    ingredient_role: 'active' | 'excipient';
+    strength_value: string | null;
+    strength_uom_code: string | null;
+    basis_quantity: string | null;
+    basis_uom_code: string | null;
+  }>;
+}
 
 export interface ProductMutationResponse {
   product_id: string;
   product_code: string;
   product_name: string;
-  lifecycle_status: 'draft';
+  lifecycle_status: 'draft' | 'active';
   row_version?: number;
   message: string;
 }

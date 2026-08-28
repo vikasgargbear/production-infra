@@ -24,6 +24,7 @@ from ..web_operator_actions import (
 from .mcp_canonical_reads import (
     CanonicalDelegation,
     _require_operation,
+    _search_tsquery,
     get_canonical_delegation,
 )
 
@@ -244,7 +245,7 @@ def canonical_customer_search(
     db: Session = Depends(get_db),
 ) -> CustomerSearchResponse:
     _require_operation(context, "parties.customers.search")
-    search = _nonempty(search_term, "search_term")
+    search = " ".join(_nonempty(search_term, "search_term").casefold().split())
     rows = [
         _mapping(row)
         for row in db.execute(
@@ -309,11 +310,15 @@ def canonical_customer_search(
                  WHERE customer.org_id=:org_id
                    AND customer.status IN ('active','on_hold')
                    AND party.status IN ('active','blocked')
-                   AND (customer.customer_code ILIKE :pattern
-                        OR party.legal_name ILIKE :pattern
-                        OR COALESCE(party.trade_name,'') ILIKE :pattern
-                        OR COALESCE(registration.registration_number,'') ILIKE :pattern
-                        OR COALESCE(contact.phone,'') ILIKE :pattern)
+                   AND (pg_catalog.lower(customer.customer_code) LIKE :prefix
+                        OR pg_catalog.lower(party.legal_name) LIKE :prefix
+                        OR pg_catalog.lower(COALESCE(party.trade_name,'')) LIKE :prefix
+                        OR pg_catalog.lower(COALESCE(registration.registration_number,'')) LIKE :prefix
+                        OR COALESCE(contact.phone,'') LIKE :prefix
+                        OR (:tsquery<>'' AND pg_catalog.to_tsvector(
+                             'simple'::pg_catalog.regconfig,
+                             COALESCE(party.legal_name,'')||' '||COALESCE(party.trade_name,'')
+                           ) @@ pg_catalog.to_tsquery('simple'::pg_catalog.regconfig,:tsquery)))
                  ORDER BY _exact_match DESC, party.legal_name, customer.id
                  LIMIT :limit
                 """
@@ -321,7 +326,8 @@ def canonical_customer_search(
             {
                 "org_id": context.organization_id,
                 "search": search,
-                "pattern": f"%{search}%",
+                "prefix": f"{search}%",
+                "tsquery": _search_tsquery(search),
                 "limit": limit,
             },
         ).fetchall()

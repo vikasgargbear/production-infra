@@ -4,16 +4,19 @@ import React from 'react';
 import Outstanding from '../components/ledger/Outstanding';
 import CustomerMaster from '../components/master/masters/CustomerMaster';
 import SupplierMaster from '../components/master/masters/SupplierMaster';
+import ProductMaster from '../components/master/masters/ProductMaster';
 import CustomerAnalytics from '../components/reports/CustomerAnalytics';
 import FinancialReport from '../components/reports/FinancialReport';
 import { ToastProvider } from '../components/global';
+import { EscapeKeyProvider } from '../contexts/EscapeKeyContext';
 
-type Surface = 'customer-aging' | 'supplier-aging' | 'customers' | 'suppliers' | 'financial' | 'customer-activity';
+type Surface = 'customer-aging' | 'supplier-aging' | 'products' | 'customers' | 'suppliers' | 'financial' | 'customer-activity';
 
 const surfaceFromLocation = (): Surface => {
   const requested = new URLSearchParams(window.location.search).get('surface');
   return requested === 'supplier-aging'
     || requested === 'customers'
+    || requested === 'products'
     || requested === 'suppliers'
     || requested === 'financial'
     || requested === 'customer-activity'
@@ -38,11 +41,13 @@ const CanonicalReadSurfacesSmokePage: React.FC = () => {
   return (
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
+      <EscapeKeyProvider>
       <div className="min-h-screen bg-gray-50" data-testid="canonical-read-surfaces-harness">
         <nav aria-label="Canonical read surfaces" className="sticky top-0 z-50 flex gap-2 overflow-x-auto border-b border-gray-200 bg-white p-3">
           {([
             ['customer-aging', 'Customer aging'],
             ['supplier-aging', 'Supplier aging'],
+            ['products', 'Products'],
             ['customers', 'Customers'],
             ['suppliers', 'Suppliers'],
             ['financial', 'Financial'],
@@ -61,11 +66,13 @@ const CanonicalReadSurfacesSmokePage: React.FC = () => {
         </nav>
         {surface === 'customer-aging' && <Outstanding embedded partyType="customer" />}
         {surface === 'supplier-aging' && <Outstanding embedded partyType="supplier" />}
+        {surface === 'products' && <ProductMaster />}
         {surface === 'customers' && <CustomerMaster />}
         {surface === 'suppliers' && <SupplierMaster />}
         {surface === 'financial' && <FinancialReport />}
         {surface === 'customer-activity' && <CustomerAnalytics />}
       </div>
+      </EscapeKeyProvider>
       </ToastProvider>
     </QueryClientProvider>
   );

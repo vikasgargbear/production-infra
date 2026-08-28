@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Edit, Package, Plus, Search, Trash2 } from 'lucide-react';
 import { productsApi } from '../../../services/api';
 import type { CanonicalProductRead } from '../../../services/api/modules/master/canonicalMasterReads';
@@ -8,6 +8,8 @@ import ProductDraftDeleteDialog from './ProductDraftDeleteDialog';
 const Products: React.FC = () => {
   const [products, setProducts] = useState<CanonicalProductRead[]>([]);
   const [search, setSearch] = useState('');
+  const [offset, setOffset] = useState(0);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
@@ -18,32 +20,30 @@ const Products: React.FC = () => {
   const [deleteTrigger, setDeleteTrigger] = useState<HTMLElement | null>(null);
   const newDraftButtonRef = useRef<HTMLButtonElement>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (query = search, nextOffset = offset) => {
     setLoading(true);
     setError(null);
     try {
-      const response = await productsApi.getAll({ limit: 100, include_inactive: true });
+      const response = await productsApi.getAll({
+        limit: 50,
+        offset: nextOffset,
+        search: query.trim(),
+        include_inactive: true,
+      });
       setProducts(response.data.products);
+      setTotal(response.data.total);
     } catch {
       setError('Failed to load products.');
       setProducts([]);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [search, offset]);
 
-  useEffect(() => { void load(); }, [load]);
-
-  const filtered = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    if (!query) return products;
-    return products.filter(product => [
-      product.product_name,
-      product.product_code,
-      product.generic_name,
-      product.hsn_code,
-    ].some(value => value?.toLowerCase().includes(query)));
-  }, [products, search]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void load(search, offset); }, search.trim() ? 220 : 0);
+    return () => window.clearTimeout(timer);
+  }, [search, offset, load]);
 
   const closeEditor = () => {
     setEditorOpen(false);
@@ -74,7 +74,7 @@ const Products: React.FC = () => {
     try {
       await productsApi.delete(product.product_id, product.row_version);
       setPendingDelete(null);
-      await load();
+      await load(search, offset);
     } catch (deleteError: any) {
       const detail = deleteError?.response?.data?.detail;
       setDeleteError(typeof detail === 'string' ? detail : 'Failed to delete the product draft. It may already be referenced.');
@@ -100,7 +100,7 @@ const Products: React.FC = () => {
       <main className="mx-auto max-w-6xl px-6 py-6">
         <div className="relative mb-5 max-w-md">
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-          <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search products" className="w-full border border-gray-300 py-2 pl-9 pr-3" />
+          <input aria-label="Search products by name, generic, code, barcode, manufacturer, or ingredient" value={search} onChange={event => { setSearch(event.target.value); setOffset(0); }} placeholder="Search name, salt, code, barcode or manufacturer" className="min-h-12 w-full rounded-lg border border-gray-300 py-2 pl-9 pr-3 text-base outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100" />
         </div>
 
         {error && <p className="mb-4 border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
@@ -109,7 +109,7 @@ const Products: React.FC = () => {
         ) : (
           <>
           <div className="space-y-3 md:hidden">
-            {filtered.map(product => {
+            {products.map(product => {
               const isDraft = product.status === 'draft';
               return (
                 <article key={product.product_id} className="border border-gray-200 bg-white p-4">
@@ -155,7 +155,7 @@ const Products: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {filtered.map(product => {
+                {products.map(product => {
                   const isDraft = product.status === 'draft';
                   return (
                   <tr key={product.product_id}>
@@ -187,9 +187,10 @@ const Products: React.FC = () => {
                 })}
               </tbody>
             </table>
-            {filtered.length === 0 && <p className="py-12 text-center text-sm text-gray-500">No products found.</p>}
+            {products.length === 0 && <p className="py-12 text-center text-sm text-gray-500">No products match “{search.trim()}”. Try a product code, generic name, manufacturer, ingredient or barcode.</p>}
           </div>
-          {filtered.length === 0 && <p className="py-12 text-center text-sm text-gray-500 md:hidden">No products found.</p>}
+          {products.length === 0 && <p className="py-12 text-center text-sm text-gray-500 md:hidden">No products match “{search.trim()}”.</p>}
+          {total > 0 && <div className="mt-5 flex flex-wrap items-center justify-between gap-3 text-sm text-gray-600"><p>Showing {offset + 1}–{Math.min(offset + products.length, total)} of {total} ranked results</p><div className="flex gap-2"><button type="button" disabled={offset === 0 || loading} onClick={() => setOffset(current => Math.max(0, current - 50))} className="min-h-11 rounded-lg border border-gray-300 bg-white px-4 disabled:opacity-40">Previous</button><button type="button" disabled={offset + products.length >= total || loading} onClick={() => setOffset(current => current + 50)} className="min-h-11 rounded-lg border border-gray-300 bg-white px-4 disabled:opacity-40">Next</button></div></div>}
           </>
         )}
       </main>
@@ -199,7 +200,7 @@ const Products: React.FC = () => {
           open
           product={editingProduct}
           onClose={closeEditor}
-          onProductCreated={() => { closeEditor(); void load(); }}
+          onProductCreated={() => { closeEditor(); setOffset(0); void load(search, 0); }}
         />
       )}
       <ProductDraftDeleteDialog
