@@ -229,9 +229,10 @@ class Live18IdentityBoundary(NamedTuple):
 def _live18_authority() -> tuple[
     tuple[tuple[str, str, str, str], ...],
     tuple[tuple[str, str, str, str], ...],
+    tuple[tuple[str, str, str, str], ...],
     tuple[str, ...],
 ]:
-    """Derive durable published and temporary ready-run MCP authorities."""
+    """Derive the durable demo and bounded temporary MCP authorities."""
     contract = json.loads(OPERATOR_CONTRACT_PATH.read_text(encoding="utf-8"))
     matrix = json.loads(LIVE18_MATRIX_PATH.read_text(encoding="utf-8"))
     operations = matrix.get("operations", [])
@@ -310,10 +311,16 @@ def _live18_authority() -> tuple[
         "automation.command.execute",
         "automation.command.view",
     }))
-    return capabilities(published), capabilities(ready), permissions
+    return (
+        capabilities(set(by_operation)),
+        capabilities(published),
+        capabilities(ready),
+        permissions,
+    )
 
 
 (
+    DEMO_BASELINE_REQUESTER_CAPABILITIES,
     LIVE18_PUBLISHED_REQUESTER_CAPABILITIES,
     LIVE18_REQUESTER_CAPABILITIES,
     LIVE18_REQUESTER_PERMISSIONS,
@@ -341,7 +348,7 @@ def _baseline_capability_bounds(
 
 
 LIVE18_BASELINE_OPERATOR_CAPABILITY_BOUNDS = _baseline_capability_bounds(
-    LIVE18_PUBLISHED_REQUESTER_CAPABILITIES
+    DEMO_BASELINE_REQUESTER_CAPABILITIES
     + (("inventory.destructions.get", "read", "read_only", "none"),)
 )
 LIVE18_BASELINE_REVIEWER_CAPABILITY_BOUNDS = _baseline_capability_bounds(

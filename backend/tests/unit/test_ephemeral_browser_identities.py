@@ -1215,12 +1215,23 @@ def test_live18_profile_derives_every_prepare_permission_from_generated_contract
         )
         if capability.endswith(".prepare")
     }
+    baseline_capabilities = {
+        capability: approval
+        for capability, _, _, approval in (
+            identities.DEMO_BASELINE_REQUESTER_CAPABILITIES
+        )
+        if capability.endswith(".prepare")
+    }
 
     assert matrix["operation_count"] == 18
     assert matrix["required_operation_count"] == 17
     assert len(operations) == 16
     assert set(published_capabilities) == published_operations
     assert set(capabilities) == operations
+    assert baseline_capabilities == {
+        operation: action["approval_policy"]
+        for operation, action in actions.items()
+    }
     assert operations < set(actions)
     assert "finance.expense_claim.prepare" in actions
     assert "finance.expense_claim.prepare" in published_capabilities
@@ -1242,7 +1253,14 @@ def test_seeded_boundary_requires_every_typed_operator_capability_bound():
         for row in identities.LIVE18_BASELINE_OPERATOR_CAPABILITY_BOUNDS
     }
 
-    assert len(bounds) == 21
+    assert len(bounds) == 26
+    assert {
+        "finance.adjustment_note.reversal.prepare",
+        "finance.customer_cheque_bounce.prepare",
+        "finance.customer_cheque_clearance.prepare",
+        "procurement.purchase_return.reversal.prepare",
+        "sales.return.reversal.prepare",
+    }.issubset(bounds)
     assert bounds["finance.expense_claim.prepare"] == {
         "capability_code": "finance.expense_claim.prepare",
         "operation_mode": "write",
