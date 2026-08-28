@@ -144,7 +144,7 @@ def test_exchange_requires_auth_user_id_membership_not_email_lookup(monkeypatch)
         _run(oauth.exchange_supabase_session(_credentials(), db=object()))
 
     assert exc_info.value.status_code == 403
-    assert exc_info.value.detail["error"] == "erp_membership_required"
+    assert exc_info.value.detail["error"] == "invalid_organization_assignment"
     assert looked_up == [(UUID(AUTH_USER_ID), UUID(ORG_ID))]
     assert not hasattr(oauth.UserRepository, "find_by_email")
 
@@ -172,7 +172,7 @@ def test_exchange_returns_forbidden_for_database_membership_denial(monkeypatch):
         _run(oauth.exchange_supabase_session(_credentials(), db=object()))
 
     assert exc_info.value.status_code == 403
-    assert exc_info.value.detail["error"] == "erp_membership_required"
+    assert exc_info.value.detail["error"] == "invalid_organization_assignment"
 
 
 def test_exchange_reports_maintenance_before_membership_lookup_when_fenced(
@@ -217,7 +217,7 @@ def test_exchange_reports_maintenance_before_membership_lookup_when_fenced(
     assert membership_lookups == []
 
 
-def test_exchange_requires_admin_assigned_organization(monkeypatch):
+def test_exchange_without_assignment_returns_typed_onboarding_state(monkeypatch):
     async def verified_identity(_token):
         return _identity(app_metadata={"provider": "google"})
 
@@ -226,12 +226,21 @@ def test_exchange_requires_admin_assigned_organization(monkeypatch):
         "get_user_from_access_token",
         verified_identity,
     )
+    monkeypatch.setattr(
+        oauth,
+        "_resolved_organization_assignment",
+        lambda *_args: None,
+    )
 
     with pytest.raises(HTTPException) as exc_info:
         _run(oauth.exchange_supabase_session(_credentials(), db=object()))
 
     assert exc_info.value.status_code == 403
-    assert exc_info.value.detail["error"] == "erp_organization_assignment_required"
+    assert exc_info.value.detail["error"] == "onboarding_required"
+    assert exc_info.value.detail["allowed_actions"] == [
+        "create_organization",
+        "accept_invitation",
+    ]
 
 
 def test_closed_authority_precedes_missing_organization_assignment(monkeypatch):
@@ -510,7 +519,12 @@ def test_consent_proposal_requires_exact_canonical_app_metadata_org_id(
         _run(oauth.get_mcp_consent_proposal("client-1", _credentials(), db=object()))
 
     assert denied.value.status_code == 403
-    assert denied.value.detail["error"] == "erp_organization_assignment_required"
+    expected_error = (
+        "invalid_organization_assignment"
+        if app_metadata.get("org_id") == "not-a-uuid"
+        else "onboarding_required"
+    )
+    assert denied.value.detail["error"] == expected_error
 
 
 def test_consent_proposal_query_is_explicitly_organization_bound():

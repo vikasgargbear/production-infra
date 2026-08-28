@@ -66,21 +66,93 @@ def _configured_mcp_client_ids() -> tuple[str, ...]:
     )
 
 
-def _canonical_organization_assignment(identity: dict[str, Any]) -> UUID:
-    """Resolve the sole supported cloud-to-ERP organization assignment claim."""
+ONBOARDING_REQUIRED_DETAIL = {
+    "error": "onboarding_required",
+    "message": "Create an ERP organization or accept an invitation to continue.",
+    "allowed_actions": ["create_organization", "accept_invitation"],
+}
+INVALID_ASSIGNMENT_DETAIL = {
+    "error": "invalid_organization_assignment",
+    "message": "Your signed ERP organization assignment is invalid or inactive.",
+}
+
+
+def _signed_organization_assignment(identity: dict[str, Any]) -> Optional[UUID]:
+    """Read the server-controlled Supabase organization claim, when present."""
     app_metadata = identity.get("app_metadata")
+    if not isinstance(app_metadata, dict) or "org_id" not in app_metadata:
+        return None
     try:
-        if not isinstance(app_metadata, dict):
-            raise TypeError("Supabase app_metadata is not an object")
         return UUID(str(app_metadata["org_id"]))
-    except (KeyError, TypeError, ValueError) as exc:
+    except (TypeError, ValueError) as exc:
         raise HTTPException(
             status_code=403,
-            detail={
-                "error": "erp_organization_assignment_required",
-                "message": "Your identity is not assigned to an ERP organization.",
-            },
+            detail=INVALID_ASSIGNMENT_DETAIL,
         ) from exc
+
+
+def _resolved_organization_assignment(
+    identity: dict[str, Any],
+    auth_user_id: UUID,
+    db: Session,
+) -> Optional[UUID]:
+    """Resolve a tenant without accepting any client-controlled organization hint."""
+    signed_assignment = _signed_organization_assignment(identity)
+    if signed_assignment is not None:
+        return signed_assignment
+
+    try:
+        rows = db.execute(
+            text(
+                """
+                SELECT org_id, resolution
+                  FROM erp_core_commands.resolve_auth_organization(
+                      :verified_auth_user_id
+                  )
+                """
+            ),
+            {"verified_auth_user_id": auth_user_id},
+        ).mappings().all()
+    except SQLAlchemyError as exc:
+        logger.error("Canonical organization resolution is unavailable: %s", exc)
+        raise HTTPException(
+            status_code=503,
+            detail="Canonical ERP organization authority is unavailable",
+        ) from exc
+
+    if len(rows) != 1:
+        raise HTTPException(
+            status_code=503,
+            detail="Canonical ERP organization authority returned an invalid result",
+        )
+    row = rows[0]
+    if (
+        row["org_id"] is not None
+        and row["resolution"] == "exactly_one_active_membership"
+    ):
+        return UUID(str(row["org_id"]))
+    if row["resolution"] == "multiple_active_memberships":
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "organization_selection_required",
+                "message": "Select an ERP organization before continuing.",
+            },
+        )
+    if row["resolution"] != "no_active_membership" or row["org_id"] is not None:
+        raise HTTPException(
+            status_code=503,
+            detail="Canonical ERP organization authority returned an invalid result",
+        )
+    return None
+
+
+def _canonical_organization_assignment(identity: dict[str, Any]) -> UUID:
+    """Resolve the signed organization claim for OAuth consent endpoints."""
+    organization_id = _signed_organization_assignment(identity)
+    if organization_id is not None:
+        return organization_id
+    raise HTTPException(status_code=403, detail=ONBOARDING_REQUIRED_DETAIL)
 
 
 def _mcp_consent_proposal_rows(
@@ -174,25 +246,31 @@ async def exchange_supabase_session(
 
     require_canonical_session_authority(db)
 
-    organization_id = _canonical_organization_assignment(identity)
+    organization_id = _resolved_organization_assignment(identity, auth_user_id, db)
+    if organization_id is None:
+        raise HTTPException(status_code=403, detail=ONBOARDING_REQUIRED_DETAIL)
 
     try:
         user_data = UserRepository.find_by_auth_user_id(auth_user_id, organization_id, db)
     except MembershipContextDenied as exc:
+        detail = (
+            INVALID_ASSIGNMENT_DETAIL
+            if _signed_organization_assignment(identity) is not None
+            else ONBOARDING_REQUIRED_DETAIL
+        )
         raise HTTPException(
             status_code=403,
-            detail={
-                "error": "erp_membership_required",
-                "message": "Your identity is not linked to an active ERP organization.",
-            },
+            detail=detail,
         ) from exc
     if not user_data:
+        detail = (
+            INVALID_ASSIGNMENT_DETAIL
+            if _signed_organization_assignment(identity) is not None
+            else ONBOARDING_REQUIRED_DETAIL
+        )
         raise HTTPException(
             status_code=403,
-            detail={
-                "error": "erp_membership_required",
-                "message": "Your identity is not linked to an ERP organization.",
-            },
+            detail=detail,
         )
     if not user_data["is_active"]:
         raise HTTPException(status_code=403, detail="Account is disabled")

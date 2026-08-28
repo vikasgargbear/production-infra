@@ -141,6 +141,11 @@ CANONICAL_MASTER_WRITES = {
 CANONICAL_MASTER_PREFIXES = (
     "/api/products", "/api/customers", "/api/suppliers",
 )
+AUTHENTICATED_ONBOARDING_WRITES = {
+    ("POST", "/api/auth/onboarding/organizations"): "create_organization",
+    ("POST", "/api/auth/onboarding/invitations/accept"): "accept_invitation",
+    ("POST", "/api/auth/onboarding/invitations"): "create_invitation",
+}
 ALLOWED_EFFECTIVE_MUTATIONS = {
     ("POST", "/api/auth/logout"),
     ("POST", "/api/auth/oauth/supabase/session"),
@@ -167,6 +172,7 @@ ALLOWED_EFFECTIVE_MUTATIONS = {
     ("PUT", "/api/company/info"),
     ("POST", "/api/calculations/invoice"),
     ("POST", "/api/calculations/sales-order"),
+    *AUTHENTICATED_ONBOARDING_WRITES,
 }
 
 
@@ -321,6 +327,27 @@ def test_every_effective_mutation_has_an_explicit_reviewed_owner():
     assert company_routes
     assert all(route.endpoint.__module__ == "app.api.routes.org.company_assets" for route in company_routes)
     assert all(route.endpoint.__name__ == "reject_company_mutation" for route in company_routes)
+
+
+def test_onboarding_writes_have_exact_reviewed_owners_and_bearer_security():
+    routes = _routes()
+    schema = importlib.import_module("app.main").app.openapi()
+    mounted_onboarding = {
+        (method, route.path): route
+        for route in routes
+        if route.path.startswith("/api/auth/onboarding")
+        for method in set(route.methods or ()) & MUTATION_METHODS
+    }
+
+    assert set(mounted_onboarding) == set(AUTHENTICATED_ONBOARDING_WRITES)
+    for route_key, endpoint_name in AUTHENTICATED_ONBOARDING_WRITES.items():
+        method, path = route_key
+        route = mounted_onboarding[route_key]
+        assert route.endpoint.__module__ == "app.api.routes.auth.onboarding"
+        assert route.endpoint.__name__ == endpoint_name
+        assert schema["paths"][path][method.lower()]["security"] == [
+            {"HTTPBearer": []}
+        ]
 
 
 def test_only_canonical_collection_aging_and_feature_reads_remain_available():

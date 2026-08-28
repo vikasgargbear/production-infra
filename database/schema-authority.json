@@ -126,6 +126,8 @@
     "backend/alembic/versions/20260828_0046_customer_advance_bounce_integrity.py",
     "backend/alembic/sql/20260828_0046_customer_advance_bounce_integrity.sql",
     "backend/scripts/generate_customer_advance_bounce_integrity_migration.py",
+    "backend/alembic/versions/20260828_0047_authenticated_organization_onboarding.py",
+    "backend/alembic/sql/20260828_0047_authenticated_organization_onboarding.sql",
     "database/canonical/operations/automation/requester_command_status.sql",
     "backend/scripts/generate_requester_command_status_migration.py",
     "database/canonical/session_authority/generate_session_authority.py",

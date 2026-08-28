@@ -34,6 +34,7 @@ export interface AuthState {
     token: string | null;
     isAuthenticated: boolean;
     isLoading: boolean;
+    onboardingRequired: boolean;
 }
 
 export interface LoginResult {
@@ -41,6 +42,7 @@ export interface LoginResult {
     user?: User;
     error?: string;
     authorizationFailure?: boolean;
+    onboardingRequired?: boolean;
     maintenanceFailure?: boolean;
     superseded?: boolean;
 }
@@ -56,6 +58,17 @@ export interface AuthContextValue extends AuthState {
     hasCloudSession: boolean;
     sessionExchangeError: string | null;
     retrySessionExchange: () => Promise<LoginResult>;
+    createOrganization: (input: CreateOrganizationInput) => Promise<LoginResult>;
+    acceptInvitation: (invitationToken: string) => Promise<LoginResult>;
+}
+
+export interface CreateOrganizationInput {
+    legal_name: string;
+    trade_name: string;
+    address_line1: string;
+    city: string;
+    state_code: string;
+    postal_code: string;
 }
 
 interface JWTPayload {
@@ -88,6 +101,11 @@ interface ErpSessionResponse {
 
 function isErpMaintenance(data: any): boolean {
     return data?.detail?.error === 'erp_maintenance';
+}
+
+
+function isOnboardingRequired(response: Response, data: any): boolean {
+    return response.status === 403 && data?.detail?.error === 'onboarding_required';
 }
 
 async function requestErpSession(accessToken: string): Promise<ErpSessionResponse> {
@@ -159,6 +177,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         token: null,
         isAuthenticated: false,
         isLoading: true,
+        onboardingRequired: false,
     });
     const [isOnline, setIsOnline] = useState(navigator.onLine);
     const [hasCloudSession, setHasCloudSession] = useState(false);
@@ -175,7 +194,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         clearErpSessionStorage();
         setHasCloudSession(false);
         setSessionExchangeError(null);
-        setState({ user: null, token: null, isAuthenticated: false, isLoading: false });
+        setState({
+            user: null,
+            token: null,
+            isAuthenticated: false,
+            isLoading: false,
+            onboardingRequired: false,
+        });
     }, []);
 
     const preserveCloudSessionFailure = useCallback((result: LoginResult) => {
@@ -184,13 +209,25 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setState((previous) => {
             if (result.maintenanceFailure) {
                 clearErpSessionStorage();
-                return { user: null, token: null, isAuthenticated: false, isLoading: false };
+                return {
+                    user: null,
+                    token: null,
+                    isAuthenticated: false,
+                    isLoading: false,
+                    onboardingRequired: false,
+                };
             }
             if (previous.isAuthenticated && !result.authorizationFailure) {
                 return { ...previous, isLoading: false };
             }
             clearErpSessionStorage();
-            return { user: null, token: null, isAuthenticated: false, isLoading: false };
+            return {
+                user: null,
+                token: null,
+                isAuthenticated: false,
+                isLoading: false,
+                onboardingRequired: result.onboardingRequired === true,
+            };
         });
     }, []);
 
@@ -212,10 +249,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             try {
                 const { response, data } = await requestErpSession(accessToken);
                 if (!response.ok) {
+                    const onboardingRequired = isOnboardingRequired(response, data);
                     return applyFailure({
                         success: false,
                         error: errorMessage(data, 'ERP access is not authorized'),
                         authorizationFailure: response.status === 401 || response.status === 403,
+                        onboardingRequired,
                         maintenanceFailure: isErpMaintenance(data),
                     });
                 }
@@ -246,7 +285,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 saveErpSession(data.access_token, user);
                 setHasCloudSession(true);
                 setSessionExchangeError(null);
-                setState({ user, token: data.access_token, isAuthenticated: true, isLoading: false });
+                setState({
+                    user,
+                    token: data.access_token,
+                    isAuthenticated: true,
+                    isLoading: false,
+                    onboardingRequired: false,
+                });
                 return { success: true, user };
             } catch {
                 return applyFailure({
@@ -335,6 +380,64 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
     }, [clearErpSession, exchangeSupabaseSession, preserveCloudSessionFailure]);
 
+    const completeOnboarding = useCallback(async (
+        path: string,
+        payload: object,
+    ): Promise<LoginResult> => {
+        if (!navigator.onLine) {
+            return { success: false, error: 'An internet connection is required to continue.' };
+        }
+        try {
+            const { data, error } = await getSupabaseClient().auth.getSession();
+            const accessToken = data.session?.access_token;
+            if (error || !accessToken) {
+                const result = {
+                    success: false,
+                    error: error?.message || 'Your Google session has ended. Please sign in again.',
+                };
+                clearErpSession();
+                return result;
+            }
+            const response = await fetch(`${getApiBaseUrl()}${path}`, {
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${accessToken}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(payload),
+            });
+            const body = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                return {
+                    success: false,
+                    error: errorMessage(body, 'Organization onboarding could not be completed.'),
+                };
+            }
+            setSessionExchangeError(null);
+            return exchangeSupabaseSession(accessToken);
+        } catch (error) {
+            return {
+                success: false,
+                error: error instanceof Error
+                    ? error.message
+                    : 'Organization onboarding could not be completed.',
+            };
+        }
+    }, [clearErpSession, exchangeSupabaseSession]);
+
+    const createOrganization = useCallback((input: CreateOrganizationInput) => (
+        completeOnboarding('/api/auth/onboarding/organizations', {
+            ...input,
+            trade_name: input.trade_name.trim() || null,
+        })
+    ), [completeOnboarding]);
+
+    const acceptInvitation = useCallback((invitationToken: string) => (
+        completeOnboarding('/api/auth/onboarding/invitations/accept', {
+            invitation_token: invitationToken.trim(),
+        })
+    ), [completeOnboarding]);
+
     useEffect(() => {
         removeLegacyErpSessionKeys();
 
@@ -402,6 +505,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         hasCloudSession,
         sessionExchangeError,
         retrySessionExchange,
+        createOrganization,
+        acceptInvitation,
     };
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

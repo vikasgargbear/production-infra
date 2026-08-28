@@ -1435,6 +1435,7 @@ def test_live18_is_opt_in_exact_sha_external_fixture_and_always_cleaned():
     assert "secrets.CANONICAL_DEMO_EXPENSE_RECEIPT_SHA256" in live18
     assert 'printf \'%s\' "$LIVE18_REVIEWED_SCALARS_JSON" > "$LIVE18_REVIEWED_SCALARS_INPUT_PATH"' in live18
     assert 'key = "stock_adjustment_loss_quantity"' in live18
+    assert 'values.pop("stock_adjustment_gain_quantity", None)' in live18
     assert 'values[key] = reviewed' in live18
     assert 'reviewed stock-adjustment choices disagree' in live18
     assert ".values.expense_receipt_pdf_path=$path" in live18

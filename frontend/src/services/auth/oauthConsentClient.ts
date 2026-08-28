@@ -140,11 +140,34 @@ export function authorizationIdFromLocation(location: Location): string | null {
 }
 
 
+const INVITATION_QUERY_KEYS = ['invitation_token', 'invite_token', 'invite'] as const;
+const INVITATION_TOKEN_PATTERN = /^[A-Za-z0-9._~-]{8,2048}$/;
+
+
+export function invitationTokenFromLocation(location: Location): string | null {
+    const query = new URLSearchParams(location.search);
+    for (const key of INVITATION_QUERY_KEYS) {
+        const value = query.get(key)?.trim() || '';
+        if (INVITATION_TOKEN_PATTERN.test(value)) return value;
+    }
+    if (location.pathname === '/accept-invitation') {
+        const invitationLinkToken = query.get('token')?.trim() || '';
+        if (INVITATION_TOKEN_PATTERN.test(invitationLinkToken)) return invitationLinkToken;
+    }
+    return null;
+}
+
+
 export function googleAuthReturnUrl(location: Location): string {
     const authorizationId = authorizationIdFromLocation(location);
-    if (!authorizationId) return location.origin;
-    const query = new URLSearchParams({ authorization_id: authorizationId });
-    return `${location.origin}/oauth/consent?${query.toString()}`;
+    if (authorizationId) {
+        const query = new URLSearchParams({ authorization_id: authorizationId });
+        return `${location.origin}/oauth/consent?${query.toString()}`;
+    }
+    const invitationToken = invitationTokenFromLocation(location);
+    if (!invitationToken) return location.origin;
+    const query = new URLSearchParams({ invitation_token: invitationToken });
+    return `${location.origin}/?${query.toString()}`;
 }
 
 

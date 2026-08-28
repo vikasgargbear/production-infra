@@ -3,6 +3,7 @@ import {
     authorizationIdFromLocation,
     getOAuthConsentApi,
     googleAuthReturnUrl,
+    invitationTokenFromLocation,
     loadMcpConsentProposal,
     parseStandardScopes,
 } from '../oauthConsentClient';
@@ -84,6 +85,37 @@ test('preserves only a valid consent authorization id for Google login', () => {
     } as Location;
     expect(authorizationIdFromLocation(unrelated)).toBeNull();
     expect(googleAuthReturnUrl(unrelated)).toBe('https://erp.example.com');
+});
+
+
+test('preserves only a supported organization invitation token for Google login', () => {
+    const invited = {
+        origin: 'https://erp.example.com',
+        pathname: '/',
+        search: '?invite_token=invite_abc12345&untrusted=value',
+    } as Location;
+    expect(invitationTokenFromLocation(invited)).toBe('invite_abc12345');
+    expect(googleAuthReturnUrl(invited)).toBe(
+        'https://erp.example.com/?invitation_token=invite_abc12345',
+    );
+
+    const backendInvitationLink = {
+        origin: 'https://erp.example.com',
+        pathname: '/accept-invitation',
+        search: '?token=opaque_invitation_123456789',
+    } as Location;
+    expect(invitationTokenFromLocation(backendInvitationLink)).toBe('opaque_invitation_123456789');
+    expect(googleAuthReturnUrl(backendInvitationLink)).toBe(
+        'https://erp.example.com/?invitation_token=opaque_invitation_123456789',
+    );
+
+    const invalid = {
+        origin: 'https://erp.example.com',
+        pathname: '/',
+        search: '?invitation_token=%3Cscript%3E',
+    } as Location;
+    expect(invitationTokenFromLocation(invalid)).toBeNull();
+    expect(googleAuthReturnUrl(invalid)).toBe('https://erp.example.com');
 });
 
 

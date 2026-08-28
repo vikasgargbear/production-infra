@@ -1485,6 +1485,10 @@ jobs:
           values = payload.get("values")
           if not isinstance(values, dict):
               raise SystemExit("reviewed scalar transport must contain a values object")
+          # This key belonged to the retired stock-gain fixture. It is not valid
+          # authority for the current loss-based cycle count and must not leak
+          # into the compiler's strict reviewed-scalar set.
+          values.pop("stock_adjustment_gain_quantity", None)
           key = "stock_adjustment_loss_quantity"
           reviewed = os.environ["LIVE18_REVIEWED_STOCK_ADJUSTMENT_LOSS_QUANTITY"]
           existing = values.get(key)

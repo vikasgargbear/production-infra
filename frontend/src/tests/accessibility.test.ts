@@ -71,10 +71,10 @@ describe('LoginPage accessibility', () => {
     expect(submitBtn).toBeInTheDocument();
   });
 
-  it('Google sign-in button is present and labelled', () => {
+  it('Google onboarding button is present and labelled', () => {
     const { default: LoginPage } = require('../components/auth/LoginPage');
     render(React.createElement(LoginPage));
-    expect(screen.getByRole('button', { name: /sign in with google/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /continue with google/i })).toBeInTheDocument();
   });
 });
 

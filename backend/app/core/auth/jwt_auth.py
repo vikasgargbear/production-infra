@@ -2,6 +2,8 @@
 JWT Authentication utilities
 """
 import os
+import hashlib
+import hmac
 import uuid
 from datetime import datetime, timedelta
 from typing import Optional
@@ -29,6 +31,10 @@ if not SECRET_KEY or SECRET_KEY == "your-secret-key-here":
 ALGORITHM = "HS256"
 TOKEN_ISSUER = "aasopharma-api"
 TOKEN_AUDIENCE = "aasopharma-api"
+INVITATION_TOKEN_ISSUER = "aasopharma-organization-invitations"
+INVITATION_TOKEN_AUDIENCE = "aasopharma-organization-onboarding"
+INVITATION_TOKEN_USE = "organization_invitation"
+INVITATION_SIGNING_LABEL = b"aasopharma-organization-invitation-v1"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 if IS_PRODUCTION else 1440  # 1h prod, 24h dev
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
@@ -96,6 +102,48 @@ def decode_jwt(token: str, check_blacklist: bool = True) -> dict:
             raise JWTError("Token has been revoked")
     
     return payload
+
+
+def _invitation_signing_key() -> bytes:
+    """Derive a purpose-separated invitation key from the ERP signing secret."""
+    return hmac.new(
+        str(SECRET_KEY).encode("utf-8"),
+        INVITATION_SIGNING_LABEL,
+        hashlib.sha256,
+    ).digest()
+
+
+def encode_organization_invitation_token(claims: dict) -> str:
+    """Sign an organization invitation that cannot be used as an ERP token."""
+    return jwt.encode(claims, _invitation_signing_key(), algorithm=ALGORITHM)
+
+
+def decode_organization_invitation_token(token: str) -> dict:
+    """Verify the dedicated organization-invitation token contract."""
+    claims = jwt.decode(
+        token,
+        _invitation_signing_key(),
+        algorithms=[ALGORITHM],
+        issuer=INVITATION_TOKEN_ISSUER,
+        audience=INVITATION_TOKEN_AUDIENCE,
+        options={
+            "require": [
+                "exp",
+                "iat",
+                "jti",
+                "token_use",
+                "invitation_id",
+                "organization_id",
+                "inviting_membership_id",
+                "requested_role_id",
+                "requested_scope_kind",
+                "email",
+            ]
+        },
+    )
+    if claims.get("token_use") != INVITATION_TOKEN_USE:
+        raise JWTError("Invalid invitation token use")
+    return claims
 
 
 # ==============================================================================

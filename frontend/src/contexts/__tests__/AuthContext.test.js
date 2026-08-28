@@ -136,6 +136,24 @@ test('Google login returns to the exact consent request without carrying other q
 });
 
 
+test('Google login preserves an organization invitation through the OAuth redirect', async () => {
+    window.history.replaceState({}, '', '/?invitation_token=invite_abc12345&untrusted=value');
+    mockSignInWithOAuth.mockResolvedValue({ data: {}, error: null });
+    render(<AuthProvider><Probe /></AuthProvider>);
+    await waitFor(() => expect(currentAuth.isLoading).toBe(false));
+
+    await act(async () => currentAuth.loginWithGoogle());
+
+    expect(mockSignInWithOAuth).toHaveBeenCalledWith({
+        provider: 'google',
+        options: {
+            redirectTo: `${window.location.origin}/?invitation_token=invite_abc12345`,
+            queryParams: { prompt: 'select_account' },
+        },
+    });
+});
+
+
 test('Supabase token refresh silently renews the ERP session', async () => {
     render(<AuthProvider><Probe /></AuthProvider>);
     await waitFor(() => expect(mockAuthStateCallback).toBeDefined());
@@ -538,6 +556,123 @@ test('explicit retry rechecks membership with the same cloud token after provisi
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(currentAuth.isAuthenticated).toBe(true);
     expect(currentAuth.sessionExchangeError).toBeNull();
+});
+
+
+test('typed membership failure exposes organization onboarding without treating maintenance as onboarding', async () => {
+    render(<AuthProvider><Probe /></AuthProvider>);
+    await waitFor(() => expect(currentAuth.isLoading).toBe(false));
+    fetch.mockResolvedValueOnce({
+        ok: false,
+        status: 403,
+        json: async () => ({
+            detail: {
+                error: 'onboarding_required',
+                message: 'Create an organization or accept an invitation.',
+            },
+        }),
+    });
+
+    await act(async () => currentAuth.handleOAuthCallback('new-google-user-access'));
+
+    expect(currentAuth.hasCloudSession).toBe(true);
+    expect(currentAuth.onboardingRequired).toBe(true);
+    expect(currentAuth.isAuthenticated).toBe(false);
+});
+
+
+test('organization creation uses the Supabase bearer and exchanges a new ERP session', async () => {
+    render(<AuthProvider><Probe /></AuthProvider>);
+    await waitFor(() => expect(currentAuth.isLoading).toBe(false));
+    mockGetSession.mockResolvedValue({
+        data: { session: { access_token: 'new-owner-supabase-access' } },
+        error: null,
+    });
+    fetch
+        .mockResolvedValueOnce({
+            ok: true,
+            status: 201,
+            json: async () => ({ organization_id: 'org-1', membership_id: 'membership-1' }),
+        })
+        .mockResolvedValueOnce({
+            ok: true,
+            status: 200,
+            json: async () => ({ access_token: token() }),
+        });
+    let result;
+    await act(async () => {
+        result = await currentAuth.createOrganization({
+            legal_name: 'Acme Pharma Private Limited',
+            trade_name: 'Acme Pharma',
+            address_line1: '42 Market Road',
+            city: 'Mumbai',
+            state_code: '27',
+            postal_code: '400001',
+        });
+    });
+
+    expect(fetch).toHaveBeenNthCalledWith(
+        1,
+        expect.stringContaining('/api/auth/onboarding/organizations'),
+        {
+            method: 'POST',
+            headers: {
+                Authorization: 'Bearer new-owner-supabase-access',
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                legal_name: 'Acme Pharma Private Limited',
+                trade_name: 'Acme Pharma',
+                address_line1: '42 Market Road',
+                city: 'Mumbai',
+                state_code: '27',
+                postal_code: '400001',
+            }),
+        },
+    );
+    expect(fetch).toHaveBeenNthCalledWith(
+        2,
+        expect.stringContaining('/api/auth/oauth/supabase/session'),
+        expect.objectContaining({ headers: { Authorization: 'Bearer new-owner-supabase-access' } }),
+    );
+    expect(result).toEqual(expect.objectContaining({ success: true }));
+    expect(currentAuth.isAuthenticated).toBe(true);
+});
+
+
+test('invitation acceptance uses the URL token contract and exchanges an ERP session', async () => {
+    render(<AuthProvider><Probe /></AuthProvider>);
+    await waitFor(() => expect(currentAuth.isLoading).toBe(false));
+    mockGetSession.mockResolvedValue({
+        data: { session: { access_token: 'invitee-supabase-access' } },
+        error: null,
+    });
+    fetch
+        .mockResolvedValueOnce({
+            ok: true,
+            status: 200,
+            json: async () => ({ organization_id: 'org-1', membership_id: 'membership-2' }),
+        })
+        .mockResolvedValueOnce({
+            ok: true,
+            status: 200,
+            json: async () => ({ access_token: token() }),
+        });
+    await act(async () => currentAuth.acceptInvitation(' invite_abc12345 '));
+
+    expect(fetch).toHaveBeenNthCalledWith(
+        1,
+        expect.stringContaining('/api/auth/onboarding/invitations/accept'),
+        expect.objectContaining({
+            headers: {
+                Authorization: 'Bearer invitee-supabase-access',
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ invitation_token: 'invite_abc12345' }),
+        }),
+    );
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(currentAuth.isAuthenticated).toBe(true);
 });
 
 
