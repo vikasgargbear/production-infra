@@ -84,6 +84,7 @@ export const ordersApi = {
       }
       return {
         order_id: row.document_id,
+        branch_id: row.branch_id,
         order_number: row.document_number,
         order_date: row.document_date,
         customer_id: row.party_account_id,

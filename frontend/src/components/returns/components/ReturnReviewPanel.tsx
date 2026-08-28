@@ -61,7 +61,7 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
 
     return (
         <div className="flex h-full flex-col bg-gray-50">
-            <div className="flex-1 overflow-y-auto p-6">
+            <div className="flex-1 overflow-y-auto p-3 sm:p-6">
                 <div className="mx-auto max-w-6xl space-y-5">
                     <section className="border border-gray-200 bg-white p-6" aria-labelledby="sales-return-review-heading">
                         <div className="flex flex-wrap items-start justify-between gap-4">
@@ -91,7 +91,8 @@ export const ReturnReviewPanel = React.memo<ReturnReviewPanelProps>(({
                             <div><dt className="text-gray-500">GST treatment</dt><dd className="font-medium">{returnData.gst_tax_treatment || 'Unavailable'}</dd></div>
                         </dl>
 
-                        <div className="mt-5 overflow-x-auto">
+                        <div className="mt-5 space-y-3 md:hidden">{selectedItems.map((item, index) => <article key={String(item.id ?? item.invoice_item_id ?? index)} className="rounded-lg border border-gray-200 p-3 text-sm"><h3 className="font-semibold">{item.product_name || 'Unavailable'}</h3><p className="text-xs text-gray-500">HSN {item.hsn_code || '—'} · batch {item.batch_number || '—'}</p><dl className="mt-3 grid grid-cols-2 gap-2"><div><dt className="text-gray-500">Billed / free</dt><dd>{displayQuantity(item.return_paid_qty, `Sales return lines[${index}].billed_quantity`)} / {displayQuantity(item.return_free_qty, `Sales return lines[${index}].free_quantity`)}</dd></div><div className="text-right"><dt className="text-gray-500">Amount</dt><dd className="font-semibold">{displayLineAmount(item, index)}</dd></div></dl></article>)}</div>
+                        <div className="mt-5 hidden overflow-x-auto md:block">
                             <table className="w-full text-sm">
                                 <thead>
                                     <tr className="border-b border-gray-200 text-left text-gray-600">

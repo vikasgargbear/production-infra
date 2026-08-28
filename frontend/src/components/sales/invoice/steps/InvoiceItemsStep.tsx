@@ -159,14 +159,14 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
 
                 {/* Content - Consistent max-width like Purchase */}
                 <div className="flex-1 overflow-y-auto bg-gray-50">
-                    <div className="max-w-6xl mx-auto px-6 py-6">
+                    <div className="mx-auto max-w-6xl px-3 py-4 sm:px-6 sm:py-6">
 
                         <p className="mb-6 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
                             Required: select a customer, exact saved delivery address, product batch, billed and free quantities, free-supply tax treatment when free quantity is positive, and direct-issue distance.
                         </p>
 
                         {/* Date Section */}
-                        <div className="grid grid-cols-3 gap-4 mb-6">
+                        <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
                             <StandardDatePicker
                                 label="Invoice Date"
                                 value={invoice.invoice_date}
@@ -221,7 +221,7 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                                 </h3>
                                 <button
                                     onClick={() => setShowCustomerModal(true)}
-                                    className="min-w-[140px] px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
+                                    className="min-h-12 rounded-lg bg-blue-600 px-4 text-sm font-medium text-white transition-colors hover:bg-blue-700"
                                 >
                                     Create Customer
                                 </button>
@@ -250,7 +250,7 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                                 </h3>
                                 <button
                                     onClick={() => setShowProductModal(true)}
-                                    className="min-w-[140px] px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
+                                    className="min-h-12 rounded-lg bg-blue-600 px-4 text-sm font-medium text-white transition-colors hover:bg-blue-700"
                                 >
                                     Create Product
                                 </button>

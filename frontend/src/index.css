@@ -10,12 +10,18 @@
   --erp-muted: #57534e;
   --erp-action: #2563eb;
   --erp-action-hover: #1d4ed8;
+  --erp-control-height: 3rem;
+  --erp-control-radius: 0.5rem;
+  --erp-body-size: 1rem;
+  --erp-body-line-height: 1.5;
 }
 
 body {
   margin: 0;
   background: var(--erp-canvas);
   color: var(--erp-text);
+  font-size: var(--erp-body-size);
+  line-height: var(--erp-body-line-height);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
     sans-serif;
@@ -29,6 +35,36 @@ input,
 select,
 textarea {
   -webkit-tap-highlight-color: transparent;
+}
+
+@media (max-width: 767px) {
+  input,
+  select,
+  textarea {
+    /* Prevent iOS focus zoom and keep data-entry text readable. */
+    font-size: var(--erp-body-size);
+  }
+}
+
+@layer components {
+  .erp-mobile-control {
+    min-height: var(--erp-control-height);
+    border-radius: var(--erp-control-radius);
+    font-size: var(--erp-body-size);
+  }
+
+  .erp-action-footer {
+    @apply sticky bottom-0 z-20 border-t border-gray-200 bg-white px-3 pt-3 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] sm:px-6 sm:py-4;
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+  }
+
+  .erp-primary-action {
+    @apply inline-flex min-h-12 items-center justify-center rounded-lg bg-blue-600 px-4 font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-400;
+  }
+
+  .erp-secondary-action {
+    @apply inline-flex min-h-12 items-center justify-center rounded-lg px-4 font-medium text-gray-700 transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50;
+  }
 }
 
 code {

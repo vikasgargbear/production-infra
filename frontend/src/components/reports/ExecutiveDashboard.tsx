@@ -199,9 +199,9 @@ const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ embedded = fals
         )}
 
         <div className={embedded ? '' : 'flex-1 overflow-y-auto'}>
-          <div className="mx-auto max-w-7xl px-6 py-6">
+          <div className="mx-auto max-w-7xl px-3 py-4 sm:px-6 sm:py-6">
             <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="grid grid-cols-4 gap-2 sm:flex sm:items-center" aria-label="Dashboard period">
+              <div className="grid grid-cols-2 gap-2 min-[400px]:grid-cols-4 sm:flex sm:items-center" aria-label="Dashboard period">
                 {([
                   ['7days', '7 Days'], ['30days', '30 Days'],
                   ['month', 'This Month'], ['90days', '90 Days'],
@@ -209,7 +209,7 @@ const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ embedded = fals
                   <button
                     key={value} type="button" aria-pressed={dateRange === value}
                     onClick={() => setDateRange(value)}
-                    className={`min-h-11 border px-2 py-2 text-sm font-medium sm:px-4 ${
+                    className={`min-h-12 rounded-lg border px-2 py-2 text-sm font-medium sm:px-4 ${
                       dateRange === value
                         ? 'border-blue-200 bg-blue-50 text-blue-700'
                         : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'

@@ -31,6 +31,7 @@ import { usePermissions } from './hooks/usePermissions';
 import { useHashRouter } from './hooks/useHashRouter';
 
 const MobileNavigationSmokePage = lazy(() => import('./e2e/MobileNavigationSmokePage'));
+const MobileWorkflowSmokePage = lazy(() => import('./e2e/MobileWorkflowSmokePage'));
 
 // ---------------------------------------------------------------------------
 // Tab / module definitions
@@ -123,9 +124,12 @@ const AppContent = (): JSX.Element => {
 
   if (
     process.env.REACT_APP_ENABLE_E2E_HARNESS === 'true'
-    && window.location.pathname === '/e2e/mobile-navigation'
+    && window.location.pathname.startsWith('/e2e/mobile-')
   ) {
-    return <Suspense fallback={<LoadingSpinner />}><MobileNavigationSmokePage /></Suspense>;
+    const Harness = window.location.pathname === '/e2e/mobile-workflows'
+      ? MobileWorkflowSmokePage
+      : MobileNavigationSmokePage;
+    return <Suspense fallback={<LoadingSpinner />}><Harness /></Suspense>;
   }
   if (isLoading) {
     return (

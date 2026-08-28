@@ -5,7 +5,7 @@
  * Streamlined layout following CustomerFlow/ProductFlow pattern.
  */
 
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
     Building2, Phone, MapPin, FileText,
     AlertTriangle, ArrowLeft, Loader2, Save,
@@ -66,6 +66,7 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
     const isOpen = open ?? show ?? isOpenProp ?? true;
 
     const formRef = useRef<HTMLDivElement>(null);
+    const errorRef = useRef<HTMLDivElement>(null);
     const submissionInFlightRef = useRef(false);
     const idempotencyKeyRef = useRef(newMasterCreateIdempotencyKey('supplier'));
     const [saving, setSaving] = useState(false);
@@ -91,6 +92,10 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
         credit_days: '',
         ...initialData
     });
+
+    useEffect(() => {
+        if (errors.length > 0) errorRef.current?.focus();
+    }, [errors]);
 
     // Enable Enter-as-Tab navigation
     useEnterAsTab({
@@ -205,7 +210,7 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
                 <div className="mx-auto max-w-6xl space-y-4 px-3 sm:space-y-8 sm:px-6">
                     {/* Error Display */}
                     {errors.length > 0 && (
-                        <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                        <div ref={errorRef} tabIndex={-1} role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 outline-none focus:ring-2 focus:ring-red-500">
                             <div className="flex items-start gap-3">
                                 <AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
                                 <div>
@@ -381,7 +386,7 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
             </main>
 
             {/* Sticky Footer - STANDARD: full-width, py-4, right-aligned */}
-            <footer className="shrink-0 border-t border-gray-200 bg-white px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-6 sm:py-4">
+            <footer className="shrink-0 border-t border-gray-200 bg-white px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:hidden">
                 <div className="flex items-center justify-end gap-2 sm:gap-3">
                     <button
                         onClick={onClose}

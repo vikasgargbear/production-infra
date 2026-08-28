@@ -57,6 +57,7 @@ const ProductFlow: React.FC<ProductFlowProps> = ({
   const isOpen = open ?? show ?? true;
   const isEditing = product?.product_id !== undefined;
   const formRef = useRef<HTMLDivElement>(null);
+  const errorRef = useRef<HTMLDivElement>(null);
   const submissionInFlightRef = useRef(false);
   const idempotencyKeyRef = useRef(newMasterCreateIdempotencyKey('product'));
   const toast = useToast();
@@ -70,6 +71,10 @@ const ProductFlow: React.FC<ProductFlowProps> = ({
   useEffect(() => {
     if (isOpen) setForm(initialForm(product, initialProductName));
   }, [isOpen, product, initialProductName]);
+
+  useEffect(() => {
+    if (errors.length > 0) errorRef.current?.focus();
+  }, [errors]);
 
   const payload = useMemo(() => ({
     product_name: form.product_name,
@@ -149,7 +154,7 @@ const ProductFlow: React.FC<ProductFlowProps> = ({
       <main className="flex-1 overflow-y-auto px-3 py-4 sm:px-6 sm:py-6">
         <div className="mx-auto max-w-4xl space-y-6">
           {errors.length > 0 && (
-            <div className="border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <div ref={errorRef} tabIndex={-1} role="alert" className="border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 outline-none focus:ring-2 focus:ring-red-500">
               {errors.map(error => <p key={error}>{error}</p>)}
             </div>
           )}

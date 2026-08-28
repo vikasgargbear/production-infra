@@ -715,7 +715,9 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
                   </div>
 
                   {returnData.items.length > 0 ? (
-                    <div className="overflow-x-auto">
+                    <>
+                    <div className="space-y-3 md:hidden" data-testid="purchase-return-mobile-lines">{returnData.items.map((item, index) => <article key={String(item.id)} className={`rounded-lg border p-3 ${item.selected ? 'border-blue-300 bg-blue-50' : 'border-gray-200 bg-white'}`}><label className="flex min-h-12 cursor-pointer items-center gap-3"><input aria-label={`Mobile return ${item.product_name}`} type="checkbox" checked={item.selected} onChange={event => updateReturnItem(index, 'selected', event.target.checked)} className="h-5 w-5 rounded" /><span><strong className="block">{item.product_name}</strong><span className="text-xs text-gray-600">{item.batch_number} · {item.from_location_code}</span></span></label><div className="mt-3 grid grid-cols-2 gap-3"><label className="text-sm font-medium">Billed quantity<input aria-label={`Mobile billed quantity for ${item.product_name}`} inputMode="decimal" value={String(item.return_paid_qty ?? '')} onChange={event => updateReturnItem(index, 'return_paid_qty', event.target.value)} className="mt-1 min-h-12 w-full rounded-lg border border-gray-300 px-3 text-right text-base" /><span className="mt-1 block text-xs text-gray-500">Max {item.returnable_billed_quantity}</span></label><label className="text-sm font-medium">Free quantity<input aria-label={`Mobile free quantity for ${item.product_name}`} inputMode="decimal" value={String(item.return_free_qty ?? '')} onChange={event => updateReturnItem(index, 'return_free_qty', event.target.value)} className="mt-1 min-h-12 w-full rounded-lg border border-gray-300 px-3 text-right text-base" /><span className="mt-1 block text-xs text-gray-500">Max {item.returnable_free_quantity}</span></label></div></article>)}</div>
+                    <div className="hidden overflow-x-auto md:block">
                       <table className="w-full border-collapse text-sm">
                         <thead><tr className="border-b border-gray-200 text-left text-gray-600">
                           <th className="p-2">Return</th><th className="p-2">Product / batch</th>
@@ -732,6 +734,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
                         ))}</tbody>
                       </table>
                     </div>
+                    </>
                   ) : (
                     <div className="border border-dashed border-gray-300 px-4 py-8 text-center text-sm text-gray-600">
                       This invoice has no exact receipt allocation remaining to return.
@@ -1000,11 +1003,11 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
                     <div className="mt-3">
                       <p className="break-all">Command: {preparedApproval.preview.command_request_id}</p>
                       <p className="break-all">Preview hash: {preparedApproval.preview.preview_hash}</p>
-                      <div className="mt-3 grid gap-3 md:grid-cols-3">
+                      <details className="mt-3 rounded-lg border border-blue-200 bg-white p-3"><summary className="flex min-h-11 cursor-pointer items-center text-sm font-medium">Technical impact details</summary><div className="mt-3 grid gap-3 md:grid-cols-3">
                         <pre className="overflow-auto rounded border border-blue-200 bg-white p-2 text-xs">{JSON.stringify(preparedApproval.preview.inventory_impact || [], null, 2)}</pre>
                         <pre className="overflow-auto rounded border border-blue-200 bg-white p-2 text-xs">{JSON.stringify(preparedApproval.preview.financial_impact || [], null, 2)}</pre>
                         <pre className="overflow-auto rounded border border-blue-200 bg-white p-2 text-xs">{JSON.stringify(preparedApproval.preview.tax_impact || [], null, 2)}</pre>
-                      </div>
+                      </div></details>
                     </div>
                   )}
                 </div>

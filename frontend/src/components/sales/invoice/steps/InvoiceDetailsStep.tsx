@@ -225,9 +225,9 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                         )}
                                     </div>
 
-                                    <div className="grid grid-cols-12 gap-4 items-end">
+                                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-12 sm:items-end sm:gap-4">
                                         {/* Discount Type Toggle - No label */}
-                                        <div className="col-span-4">
+                                        <div className="col-span-1 sm:col-span-4">
                                             <div className="flex rounded-lg border border-gray-300 overflow-hidden">
                                                 <button
                                                     onClick={() => setInvoice(prev => ({
@@ -236,7 +236,7 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                                         discount_amount: 0,
                                                         discount_percent: prev.discount_percent || 0
                                                     }))}
-                                                    className={`flex-1 px-4 py-2.5 text-sm font-medium transition-colors ${(invoice.discount_type || 'percentage') === 'percentage'
+                                                    className={`min-h-12 flex-1 px-3 text-sm font-medium transition-colors ${(invoice.discount_type || 'percentage') === 'percentage'
                                                         ? 'bg-blue-600 text-white'
                                                         : 'bg-white text-gray-600 hover:bg-gray-50'
                                                         }`}
@@ -250,7 +250,7 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                                         discount_percent: 0,
                                                         discount_amount: prev.discount_amount || 0
                                                     }))}
-                                                    className={`flex-1 px-4 py-2.5 text-sm font-medium transition-colors ${invoice.discount_type === 'fixed'
+                                                    className={`min-h-12 flex-1 px-3 text-sm font-medium transition-colors ${invoice.discount_type === 'fixed'
                                                         ? 'bg-blue-600 text-white'
                                                         : 'bg-white text-gray-600 hover:bg-gray-50'
                                                         }`}
@@ -261,13 +261,14 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                         </div>
 
                                         {/* Discount Value */}
-                                        <div className="col-span-4">
+                                        <div className="col-span-1 sm:col-span-4">
                                             <div className="relative">
                                                 {invoice.discount_type === 'fixed' && (
                                                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">₹</span>
                                                 )}
                                                 <input
-                                                    type="number"
+                                                    type="text"
+                                                    inputMode="decimal"
                                                     min="0"
                                                     max={invoice.discount_type === 'percentage' || !invoice.discount_type ? 100 : undefined}
                                                     step={invoice.discount_type === 'percentage' || !invoice.discount_type ? 0.5 : 1}
@@ -283,7 +284,7 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                                         }
                                                     }}
                                                     onFocus={(e) => e.target.select()}
-                                                    className={`w-full ${invoice.discount_type === 'fixed' ? 'pl-8' : 'pl-4'} pr-8 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
+                                                    className={`min-h-12 w-full ${invoice.discount_type === 'fixed' ? 'pl-8' : 'pl-4'} rounded-lg border border-gray-300 pr-8 text-base focus:border-transparent focus:ring-2 focus:ring-blue-500`}
                                                     placeholder="Enter value"
                                                 />
                                                 {(invoice.discount_type === 'percentage' || !invoice.discount_type) && (
@@ -293,7 +294,7 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                         </div>
 
                                         {/* Clear Button */}
-                                        <div className="col-span-4">
+                                        <div className="col-span-1 sm:col-span-4">
                                             {((invoice.discount_percent || 0) > 0 || (invoice.discount_amount || 0) > 0) ? (
                                                 <button
                                                     onClick={() => setInvoice(prev => ({
@@ -301,7 +302,7 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                                         discount_percent: 0,
                                                         discount_amount: 0
                                                     }))}
-                                                    className="px-4 py-2.5 text-sm font-medium text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-gray-300"
+                                                    className="min-h-12 w-full rounded-lg border border-gray-300 px-4 text-sm font-medium text-gray-600 transition-colors hover:bg-red-50 hover:text-red-600 sm:w-auto"
                                                 >
                                                     Clear Discount
                                                 </button>

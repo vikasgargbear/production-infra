@@ -49,6 +49,19 @@ type AdjustmentItem = {
   expiry_date?: string;
 };
 
+const utcTimestampToLocalInput = (value: string): string => {
+  if (!value || !isCanonicalUtcEventTimestamp(value)) return '';
+  const date = new Date(value);
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
+};
+
+const localInputToUtcTimestamp = (value: string): string => {
+  if (!value) return '';
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? '' : parsed.toISOString();
+};
+
 const EnhancedStockAdjustmentFlow = ({ onClose }) => {
   const [currentStep, setCurrentStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
@@ -612,24 +625,23 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
             </div>
             <div>
               <label htmlFor="cycle-count-completed-at" className="block text-sm font-medium text-gray-700">
-                Physical count completed at (UTC)
+                Physical count completed at
               </label>
               <input
                 id="cycle-count-completed-at"
-                type="text"
-                value={adjustmentData.counted_at}
+                type="datetime-local"
+                value={utcTimestampToLocalInput(adjustmentData.counted_at)}
                 onChange={(event) => setAdjustmentData(prev => ({
                   ...prev,
-                  counted_at: event.target.value,
+                  counted_at: localInputToUtcTimestamp(event.target.value),
                 }))}
-                placeholder="YYYY-MM-DDTHH:mm:ss.sssZ"
                 aria-describedby="cycle-count-time-help"
                 aria-invalid={Boolean(adjustmentData.counted_at)
                   && !isCanonicalUtcEventTimestamp(adjustmentData.counted_at)}
-                className="mt-1 min-h-11 w-full rounded-lg border border-gray-300 px-3 font-mono text-sm"
+                className="mt-1 min-h-12 w-full rounded-lg border border-gray-300 px-3 text-base"
               />
               <span id="cycle-count-time-help" className="mt-1 block text-xs font-normal text-gray-500">
-                Enter the exact timestamp from the retained count evidence. The browser does not supply or convert this time.
+                Enter the local date and time shown on the retained count evidence. It will be submitted as <span className="font-mono">{adjustmentData.counted_at || 'UTC after selection'}</span>.
               </span>
             </div>
             <div>
@@ -654,7 +666,7 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
       {/* Bulk Upload Section */}
       {showBulkUpload && (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-3">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <h3 className="text-lg font-medium text-gray-900 flex items-center">
               <Upload className="w-5 h-5 mr-2 text-purple-600" />
               Bulk Upload
@@ -775,14 +787,14 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
               <Package className="w-5 h-5 mr-2 text-blue-600" />
               Products to Adjust
             </h3>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => {
                   setShowProductSearch(true);
                   setShowBulkUpload(false);
                 }}
                 disabled={!adjustmentData.reason || !adjustmentData.adjustment_date}
-                className="flex items-center space-x-2 px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex min-h-12 items-center space-x-2 rounded-lg bg-blue-600 px-3 text-sm text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Plus className="w-4 h-4" />
                 <span>Add Product</span>
@@ -885,7 +897,10 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
             {/* Selected Products Table */}
             {adjustmentData.items.length > 0 ? (
               <div>
-                <div className="overflow-x-auto">
+                <div className="space-y-3 md:hidden" data-testid="stock-adjustment-mobile-lines">
+                  {adjustmentData.items.map(item => <article key={item.id} className="rounded-lg border border-gray-200 bg-white p-3"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><h4 className="truncate font-semibold">{item.product_name}</h4><p className="text-sm text-gray-500">{item.product_code} · {item.batch_number || 'Batch unavailable'}</p>{item.expiry_date && <p className="text-xs text-gray-500">Expires {formatCalendarDate(requireCalendarDate(item.expiry_date, 'Batch expiry date'))}</p>}</div><button onClick={() => handleRemoveItem(item.id)} className="inline-flex min-h-12 min-w-12 items-center justify-center rounded-lg text-red-600 hover:bg-red-50" aria-label={`Remove ${item.product_name}`}><Trash2 className="h-4 w-4" /></button></div><dl className="mt-3 grid grid-cols-2 gap-2 text-sm"><div><dt className="text-gray-500">System stock</dt><dd className="font-semibold">{item.quantity_available === null ? '—' : item.quantity_available}</dd></div><div><dt className="text-gray-500">Batch</dt><dd>{item.batch_number || 'Unavailable'}</dd></div></dl><label className="mt-3 block text-sm font-medium">Count UOM<select value={item.uom_conversion_id} onChange={event => updateItemUom(item.id, event.target.value)} className="mt-1 min-h-12 w-full rounded-lg border border-gray-300 bg-white px-3 text-base" aria-label={`Mobile count UOM for ${item.product_name}`}><option value="">Select count UOM</option>{item.uom_options.map(option => <option key={option.uom_conversion_id} value={option.uom_conversion_id}>{option.from_uom_code} (×{String(option.multiplier)} {option.to_uom_code})</option>)}</select></label><label className="mt-3 block text-sm font-medium">Physical count<input type="text" inputMode="decimal" value={item.counted_quantity} onChange={event => updateItemQuantity(item.id, event.target.value)} placeholder="0.000000" aria-label={`Mobile exact physical count in ${item.unit} for ${item.product_name}`} className="mt-1 min-h-12 w-full rounded-lg border border-gray-300 px-3 text-right text-base" /></label></article>)}
+                </div>
+                <div className="hidden overflow-x-auto md:block">
                   <table className="w-full">
                     <thead className="bg-gray-50">
                       <tr>
@@ -943,7 +958,7 @@ const EnhancedStockAdjustmentFlow = ({ onClose }) => {
                               onChange={(e) => updateItemQuantity(item.id, e.target.value)}
                               placeholder="0.000000"
                               aria-label={`Exact physical count in ${item.unit} for ${item.product_name}`}
-                              className="w-24 px-2 py-1 border border-gray-300 rounded text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              className="min-h-11 w-24 rounded border border-gray-300 px-2 text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
                             <div className="mt-1 text-xs text-gray-500">{item.unit}</div>
                           </td>

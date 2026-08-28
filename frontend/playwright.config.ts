@@ -51,7 +51,7 @@ export default defineConfig({
     },
     {
       name: 'mobile-chrome',
-      testMatch: /(?:mobile-navigation|live-production-smoke)\.spec\.ts/,
+      testMatch: /(?:mobile-navigation|mobile-workflows|live-production-smoke)\.spec\.ts/,
       use: {
         ...devices['Pixel 7'],
         ...(browserChannel ? { channel: browserChannel } : {})

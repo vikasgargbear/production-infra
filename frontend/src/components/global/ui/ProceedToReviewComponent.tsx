@@ -49,7 +49,7 @@ const ProceedToReviewComponent: React.FC<ProceedToReviewComponentProps> = ({
         : totalAmount.toFixed(2);
 
     return (
-        <div className={`sticky bottom-0 z-20 border-t border-gray-200 bg-white px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgba(15,23,42,0.08)] sm:px-6 sm:py-4 ${className}`}>
+        <div className={`erp-action-footer ${className}`}>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 {/* Left side - Totals or back button */}
                 <div className="min-w-0 text-sm text-gray-600">
@@ -74,7 +74,7 @@ const ProceedToReviewComponent: React.FC<ProceedToReviewComponentProps> = ({
                         <button
                             onClick={onBack}
                             disabled={disabled || saving}
-                            className="flex min-h-12 min-w-11 flex-1 items-center justify-center gap-2 rounded-lg px-4 text-gray-700 transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none sm:px-6"
+                            className="erp-secondary-action min-w-11 flex-1 gap-2 sm:flex-none sm:px-6"
                         >
                             <ArrowLeft className="w-4 h-4" />
                             {backText}
@@ -86,7 +86,7 @@ const ProceedToReviewComponent: React.FC<ProceedToReviewComponentProps> = ({
                         <button
                             onClick={onReset}
                             disabled={disabled || saving}
-                            className="min-h-12 min-w-11 flex-1 rounded-lg px-4 text-gray-700 transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none sm:px-6"
+                            className="erp-secondary-action min-w-11 flex-1 sm:flex-none sm:px-6"
                         >
                             {resetText}
                         </button>
@@ -96,7 +96,7 @@ const ProceedToReviewComponent: React.FC<ProceedToReviewComponentProps> = ({
                     <button
                         onClick={onProceed}
                         disabled={!canProceed || disabled || saving}
-                        className="flex min-h-12 min-w-0 flex-[2] items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-400 sm:flex-none sm:px-8"
+                        className="erp-primary-action min-w-0 flex-[2] gap-2 sm:flex-none sm:px-8"
                     >
                         {saving ? (
                             <>

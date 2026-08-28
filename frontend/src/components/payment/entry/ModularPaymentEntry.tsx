@@ -93,6 +93,11 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
     invoiceByOpenItem: Map<string, { invoice_id: string; due: string | number }>;
   } | null>(null);
   const outstandingRequestSequence = React.useRef(0);
+  const messageRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (messageType === 'error' && message) messageRef.current?.focus();
+  }, [message, messageType]);
 
   // Auto-apply allocation when amount changes ONLY if user explicitly selected an auto method
   React.useEffect(() => {
@@ -515,13 +520,13 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
         />
 
         {/* Keyboard Shortcuts Help */}
-        <div className="border-b border-gray-200 bg-white px-4 py-2 text-xs text-gray-600">
+        <div className="hidden border-b border-gray-200 bg-white px-4 py-2 text-xs text-gray-600 md:block">
           Keyboard shortcuts: <strong>Ctrl+N</strong> - Add Customer | <strong>Esc</strong> - Close
         </div>
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto bg-gray-50">
-          <div className="max-w-6xl mx-auto px-6 py-6">
+          <div className="mx-auto max-w-6xl px-3 py-4 sm:px-6 sm:py-6">
 
             {/* Loading State */}
             {isLoading && (
@@ -542,7 +547,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                   <p className="text-red-700 mb-4">{error}</p>
                   <button
                     onClick={() => setError(null)}
-                    className="px-4 py-2 bg-red-100 text-red-700 rounded-md hover:bg-red-200 text-sm"
+                    className="min-h-12 rounded-md bg-red-100 px-4 text-sm text-red-700 hover:bg-red-200"
                   >
                     Dismiss
                   </button>
@@ -552,13 +557,13 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
 
             {/* Message Display */}
             {message && (
-              <div className={`mb-4 px-4 py-3 rounded-lg flex items-start text-sm ${messageType === 'success' ? 'bg-blue-50 text-blue-800 border border-blue-200' :
+              <div ref={messageRef} tabIndex={-1} role={messageType === 'error' ? 'alert' : 'status'} className={`mb-4 flex items-start rounded-lg px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-red-500 ${messageType === 'success' ? 'bg-blue-50 text-blue-800 border border-blue-200' :
                 messageType === 'error' ? 'bg-red-50 text-red-800 border border-red-200' :
                   'bg-blue-50 text-blue-800 border border-blue-200'
                 }`}>
                 {messageType === 'success' && <CheckCircle className="w-4 h-4 mr-2 flex-shrink-0 mt-0.5" />}
                 <div className="flex-1">{message}</div>
-                <button onClick={clearMessage} className="ml-2 hover:opacity-70">
+                <button onClick={clearMessage} aria-label="Dismiss payment message" className="ml-2 inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg hover:bg-black/5">
                   <X className="w-3 h-3" />
                 </button>
               </div>
@@ -575,12 +580,12 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                 {selectedCustomer && (
                   <div className="mb-6">
                     <div className="mb-4">
-                      <div className="flex items-center justify-between mb-3">
+                      <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider flex items-center">
                           <FileText className="w-4 h-4 mr-2" />
                           OUTSTANDING INVOICES
                         </h3>
-                        <div className="flex items-center space-x-3">
+                        <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:space-x-3">
                           {/* FIFO Quick Allocation Button */}
                           {outstandingInvoices && outstandingInvoices.length > 0 && payment.amount && isPositiveExactMoney(payment.amount) && (
                             <button
@@ -588,7 +593,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                                 setPaymentField('allocation_method', 'fifo');
                                 applyAllocationMethod('fifo');
                               }}
-                              className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-1"
+                              className="flex min-h-12 items-center justify-center space-x-1 rounded-lg bg-blue-600 px-3 text-xs font-medium text-white transition-colors hover:bg-blue-700"
                             >
                               <span>📅</span>
                               <span>Auto FIFO</span>
@@ -605,7 +610,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                                 applyAllocationMethod(e.target.value);
                               }
                             }}
-                            className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="min-h-12 min-w-0 rounded-lg border border-gray-300 bg-white px-3 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
                           >
                             <option value="manual">Manual</option>
                             <option value="fifo">FIFO (Oldest First)</option>
@@ -617,7 +622,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                     </div>
 
                     {/* Invoice Display Tile - Like payment amount tile */}
-                    <Card className="p-6 bg-white border border-gray-200">
+                    <Card className="border border-gray-200 bg-white p-3 sm:p-6">
                       {/* Loading state */}
                       {isLoading && (
                         <div className="flex flex-col items-center justify-center py-8">
@@ -683,8 +688,45 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
                             <span>{outstandingInvoices.length} invoices • Outstanding: ₹{exactMoneySum(outstandingInvoices.map(inv => inv.amount_due))}</span>
                           </div>
 
-                          {/* Simple table */}
-                          <div className="overflow-x-auto">
+                          {/* Mobile invoice cards keep selection and amounts within thumb reach. */}
+                          <div className="space-y-3 md:hidden" data-testid="customer-receipt-mobile-allocations">
+                            {outstandingInvoices.map((invoice: any) => {
+                              const invoiceId = String(invoice.invoice_id);
+                              const isSelected = selectedInvoiceIds.has(invoiceId);
+                              const autoAllocation = payment.allocations?.find((allocation: any) => (
+                                allocation.invoice_id === invoiceId || allocation.invoice_number === invoice.invoice_number
+                              ));
+                              return (
+                                <article key={invoiceId} className={`rounded-lg border p-3 ${isSelected || autoAllocation ? 'border-blue-300 bg-blue-50' : 'border-gray-200 bg-white'}`}>
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div className="min-w-0">
+                                      <h4 className="truncate font-semibold text-gray-900">{invoice.invoice_number}</h4>
+                                      <p className="text-sm text-gray-600">{new Date(invoice.invoice_date).toLocaleDateString()}</p>
+                                    </div>
+                                    {payment.allocation_method === 'manual' && (
+                                      <label className="inline-flex min-h-12 min-w-12 cursor-pointer items-center justify-center rounded-lg border border-gray-300 bg-white" aria-label={`Select invoice ${invoice.invoice_number}`}>
+                                        <input
+                                          type="checkbox"
+                                          checked={isSelected}
+                                          onChange={(event) => handleManualInvoiceSelection(event.target.checked, invoiceId, invoice)}
+                                          className="h-5 w-5 rounded border-gray-300"
+                                        />
+                                      </label>
+                                    )}
+                                  </div>
+                                  <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                                    <div><dt className="text-gray-500">Outstanding</dt><dd className="font-semibold text-red-700">₹{invoice.amount_due}</dd></div>
+                                    <div className="text-right"><dt className="text-gray-500">Allocate now</dt><dd className="font-semibold text-green-700">{payment.allocation_method === 'manual' ? (isSelected ? `₹${manualAllocations[invoiceId] ?? 'Unavailable'}` : '—') : (autoAllocation ? `₹${autoAllocation.amount}` : '—')}</dd></div>
+                                    <div><dt className="text-gray-500">Invoice total</dt><dd>₹{invoice.total_amount}</dd></div>
+                                    <div className="text-right"><dt className="text-gray-500">Already paid</dt><dd>₹{centsToMoney(moneyToCents(invoice.total_amount) - moneyToCents(invoice.amount_due))}</dd></div>
+                                  </dl>
+                                </article>
+                              );
+                            })}
+                          </div>
+
+                          {/* Desktop table */}
+                          <div className="hidden overflow-x-auto md:block">
                             <table className="w-full text-sm">
                               <thead>
                                 <tr className="border-b bg-gray-50">

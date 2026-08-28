@@ -61,6 +61,7 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
     const { customerMode, isB2BOnly, isB2COnly, features } = useFeatureFlags();
 
     const formRef = useRef<HTMLDivElement>(null);
+    const errorRef = useRef<HTMLDivElement>(null);
     const submissionInFlightRef = useRef(false);
     const idempotencyKeyRef = useRef(newMasterCreateIdempotencyKey('customer'));
     const [saving, setSaving] = useState(false);
@@ -107,6 +108,10 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
             setFormData(prev => ({ ...prev, customer_type: 'individual' }));
         }
     }, [customerMode, isB2BOnly, isB2COnly, features.default_customer_type]);
+
+    useEffect(() => {
+        if (errors.length > 0) errorRef.current?.focus();
+    }, [errors]);
 
     useEnterAsTab({
         containerRef: formRef,
@@ -289,7 +294,7 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
 
                     {/* Error Messages */}
                     {errors.length > 0 && (
-                        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                        <div ref={errorRef} tabIndex={-1} role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 outline-none focus:ring-2 focus:ring-red-500">
                             <div className="flex gap-2">
                                 <AlertCircle className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
                                 <div className="text-sm text-red-600">
@@ -586,7 +591,7 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
             </div>
 
             {/* Sticky Footer - STANDARD: py-4, full-width, right-aligned */}
-            <div className="flex-shrink-0 border-t border-gray-200 bg-white px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-6 sm:py-4">
+            <div className="flex-shrink-0 border-t border-gray-200 bg-white px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:hidden">
                 <div className="flex items-center justify-end gap-2 sm:gap-3">
                     <button
                         onClick={onClose}

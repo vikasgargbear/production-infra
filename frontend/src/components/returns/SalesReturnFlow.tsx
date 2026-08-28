@@ -477,11 +477,11 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
           />
 
           {/* Keyboard Shortcuts Bar */}
-          <KeyboardShortcuts shortcuts={SHORTCUT_SETS.RETURNS} />
+          <div className="hidden md:block"><KeyboardShortcuts shortcuts={SHORTCUT_SETS.RETURNS} /></div>
 
           {/* Content */}
           <div className="flex-1 overflow-y-auto bg-blue-50">
-            <div className="max-w-6xl mx-auto px-6 py-6 space-y-6">
+            <div className="mx-auto max-w-6xl space-y-6 px-3 py-4 sm:px-6 sm:py-6">
               <p className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
                 Required: select an exact posted invoice, return line and quantities, condition, quarantine destination, reason, and GST treatment.
               </p>
@@ -541,7 +541,7 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
                 /* EXPANDED HEADER - Full form for editing */
                 <>
                   {/* Return Info - 3-column grid with consistent h-10 heights */}
-                  <div className="grid grid-cols-2 gap-4 mb-6">
+                  <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <StandardDatePicker
                       label="Return Date"
                       value={returnData.return_date || ''}
@@ -603,7 +603,7 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
                       </h3>
                       <button
                         onClick={() => dispatch({ type: 'TOGGLE_CUSTOMER_MODAL' })}
-                        className="min-w-[140px] px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
+                        className="min-h-12 rounded-lg bg-blue-600 px-4 text-sm font-medium text-white transition-colors hover:bg-blue-700"
                       >
                         Create Customer
                       </button>

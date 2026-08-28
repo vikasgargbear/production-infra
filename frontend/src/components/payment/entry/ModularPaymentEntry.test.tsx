@@ -168,7 +168,8 @@ describe('ModularPaymentEntry canonical retry boundary', () => {
       invoice_number: 'B-INVOICE', invoice_date: '2026-08-24',
       total_amount: '50.00', allocated: '0.00', due: '50.00', payment_status: 'pending',
     }] } }));
-    expect(await screen.findByText('B-INVOICE')).toBeInTheDocument();
+    expect((await screen.findAllByText('B-INVOICE')).length).toBeGreaterThan(0);
+    expect(screen.getByTestId('customer-receipt-mobile-allocations')).not.toBeNull();
 
     await act(async () => resolveFirst({ data: { invoice_count: 1, invoices: [{
       invoice_id: '0198ea37-2b22-7c8d-9123-123456789ab1',
@@ -178,6 +179,6 @@ describe('ModularPaymentEntry canonical retry boundary', () => {
       total_amount: '75.00', allocated: '0.00', due: '75.00', payment_status: 'pending',
     }] } }));
     expect(screen.queryByText('A-INVOICE')).toBeNull();
-    expect(screen.getByText('B-INVOICE')).toBeInTheDocument();
+    expect(screen.getAllByText('B-INVOICE').length).toBeGreaterThan(0);
   });
 });

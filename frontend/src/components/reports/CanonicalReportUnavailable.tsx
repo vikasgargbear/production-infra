@@ -12,10 +12,10 @@ const CanonicalReportUnavailable: React.FC<CanonicalReportUnavailableProps> = ({
   reason,
   missingFacts,
 }) => (
-  <main className="min-h-screen bg-gray-50 p-6">
+  <main className="min-h-screen bg-gray-50 p-3 sm:p-6">
     <section
       aria-labelledby="canonical-report-unavailable-title"
-      className="mx-auto max-w-3xl rounded-lg border border-amber-200 bg-white p-6"
+      className="mx-auto max-w-3xl rounded-lg border border-amber-200 bg-white p-4 sm:p-6"
     >
       <div className="flex items-start gap-3">
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-2">
@@ -23,7 +23,7 @@ const CanonicalReportUnavailable: React.FC<CanonicalReportUnavailableProps> = ({
         </div>
         <div>
           <h1 id="canonical-report-unavailable-title" className="text-xl font-semibold text-gray-950">
-            {title} unavailable
+            {title} · Coming soon
           </h1>
           <p className="mt-2 text-sm leading-6 text-gray-700">{reason}</p>
         </div>

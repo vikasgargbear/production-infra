@@ -250,10 +250,10 @@ const SalesReport: React.FC = () => {
   };
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen">
+    <div className="min-h-screen bg-gray-50 p-3 sm:p-6">
       {/* Header */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
-        <div className="flex justify-between items-start">
+      <div className="mb-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Sales Report</h1>
             <p className="text-gray-600 mt-1">Analyze sales performance and trends</p>
@@ -261,7 +261,7 @@ const SalesReport: React.FC = () => {
           <div className="flex gap-2">
             <button
               onClick={() => window.print()}
-              className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2"
+              className="flex min-h-12 items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 text-gray-700 hover:bg-gray-50"
             >
               <Printer className="h-4 w-4" />
               Print
@@ -278,7 +278,7 @@ const SalesReport: React.FC = () => {
               type="date"
               value={dateRange.start}
               onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              className="min-h-12 w-full rounded-lg border border-gray-300 px-3 text-base focus:ring-2 focus:ring-blue-500"
             />
           </div>
           <div>
@@ -288,7 +288,7 @@ const SalesReport: React.FC = () => {
               type="date"
               value={dateRange.end}
               onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              className="min-h-12 w-full rounded-lg border border-gray-300 px-3 text-base focus:ring-2 focus:ring-blue-500"
             />
           </div>
         </div>
@@ -339,9 +339,9 @@ const SalesReport: React.FC = () => {
       </div>}
 
       {/* Chart */}
-      {!error && !businessDateError && <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+      {!error && !businessDateError && <div className="mb-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Sales Trend</h3>
-        <div style={{ height: '400px' }}>
+        <div className="h-[280px] sm:h-[400px]">
           {chartData && <Line data={chartData} options={chartOptions} />}
         </div>
       </div>}
@@ -351,7 +351,9 @@ const SalesReport: React.FC = () => {
         <div className="p-6 border-b border-gray-200">
           <h3 className="text-lg font-semibold text-gray-900">Sales Data</h3>
         </div>
-        <div className="overflow-x-auto">
+        {tableData.length === 0 && !loading ? <p className="p-6 text-center text-sm text-gray-500">No sales were posted in this period.</p> : null}
+        <div className="space-y-3 p-3 md:hidden">{tableData.map((row, index) => <article key={`${row.date}-${index}`} className="rounded-lg border border-gray-200 p-3"><div className="flex items-start justify-between gap-3"><h4 className="font-semibold">{row.date}</h4><p className="font-semibold">{row.sales}</p></div><dl className="mt-3 grid grid-cols-3 gap-2 text-sm"><div><dt className="text-gray-500">Orders</dt><dd>{row.orders}</dd></div><div><dt className="text-gray-500">Customers</dt><dd>{row.customers}</dd></div><div className="text-right"><dt className="text-gray-500">Average</dt><dd>{row.avgOrder}</dd></div></dl></article>)}</div>
+        <div className="hidden overflow-x-auto md:block">
           <table className="w-full">
             <thead className="bg-gray-50">
               <tr>

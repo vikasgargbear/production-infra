@@ -41,7 +41,7 @@ export function buildHash(tab: string, subpage?: string | null): string {
   return `#/${tab}`;
 }
 
-const RESERVED_PATHS = new Set(['/oauth/consent', '/e2e/mobile-navigation']);
+const RESERVED_PATHS = new Set(['/oauth/consent', '/e2e/mobile-navigation', '/e2e/mobile-workflows']);
 
 /** Convert an old pathname deep link into the one canonical hash route. */
 export function normalizePathnameRoute(

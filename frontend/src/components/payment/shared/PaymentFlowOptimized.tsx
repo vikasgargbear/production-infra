@@ -8,8 +8,18 @@ import {
   getCustomerReceiptContext,
   type CustomerReceiptContext,
 } from '../../../services/api/modules/finance/customerReceipts.api';
+import { ordersApi } from '../../../services/api/modules/sales/orders.api';
 
 type CanonicalBankAccount = CustomerReceiptContext['settlement_accounts'][number];
+type ApprovedOrderOption = {
+  order_id: string;
+  branch_id: string;
+  order_number: string;
+  order_date: string;
+  customer_id: string;
+  customer_name: string;
+  total_amount: string;
+};
 
 const PaymentFlowOptimized: React.FC = () => {
   const {
@@ -25,6 +35,9 @@ const PaymentFlowOptimized: React.FC = () => {
   const [bankAccounts, setBankAccounts] = useState<CanonicalBankAccount[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<CustomerReceiptContext['payment_methods']>([]);
   const [bankAccountsError, setBankAccountsError] = useState('');
+  const [approvedOrders, setApprovedOrders] = useState<ApprovedOrderOption[]>([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const [ordersError, setOrdersError] = useState('');
 
   const amountRef = useRef<HTMLInputElement>(null);
   const customerSearchRef = useRef<any>(null);
@@ -72,6 +85,32 @@ const PaymentFlowOptimized: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    let active = true;
+    if (payment.receipt_purpose !== 'customer_advance' || !selectedCustomer) {
+      setApprovedOrders([]);
+      setOrdersError('');
+      return () => { active = false; };
+    }
+    setOrdersLoading(true);
+    setOrdersError('');
+    ordersApi.listApprovedForDispatch(selectedCustomer.customer_name || '', 50)
+      .then(rows => {
+        if (!active) return;
+        const customerId = String(selectedCustomer.customer_id || '');
+        const eligible = rows.filter(row => String(row.customer_id) === customerId) as ApprovedOrderOption[];
+        setApprovedOrders(eligible);
+        if (!eligible.length) setOrdersError('No approved goods order is available for this customer.');
+      })
+      .catch(error => {
+        if (!active) return;
+        setApprovedOrders([]);
+        setOrdersError(error instanceof Error ? error.message : 'Approved goods orders could not be loaded.');
+      })
+      .finally(() => { if (active) setOrdersLoading(false); });
+    return () => { active = false; };
+  }, [payment.receipt_purpose, selectedCustomer]);
+
   const handleFieldChange = (field: string, value: string): void => {
     setPaymentField(field, value);
     if (errors[field]) {
@@ -103,11 +142,11 @@ const PaymentFlowOptimized: React.FC = () => {
     <div className="space-y-4">
       {/* Customer Selection - Standard Pattern */}
       <div className="space-y-2">
-        <div className="flex items-center justify-between mb-3">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider">CUSTOMER</h3>
           <button
             onClick={() => window.dispatchEvent(new CustomEvent('openCustomerModal'))}
-            className="min-w-[140px] px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
+            className="min-h-12 rounded-lg bg-blue-600 px-4 text-sm font-medium text-white transition-colors hover:bg-blue-700"
           >
             Create Customer
           </button>
@@ -144,7 +183,7 @@ const PaymentFlowOptimized: React.FC = () => {
                   value={payment.payment_date}
                   max={payment.business_date || undefined}
                   onChange={(e) => handleFieldChange('payment_date', e.target.value)}
-                  className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="min-h-12 w-full rounded-lg border border-gray-300 pl-10 pr-3 text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
             </div>
@@ -158,11 +197,12 @@ const PaymentFlowOptimized: React.FC = () => {
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xl text-green-600 font-bold">₹</span>
                 <input
                   ref={amountRef}
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   value={payment.amount}
                   onChange={(e) => handleFieldChange('amount', e.target.value)}
                   onFocus={(e) => e.target.select()}
-                  className={`w-full pl-10 pr-3 py-2.5 text-xl font-semibold border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${errors.amount ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                  className={`min-h-12 w-full rounded-lg border pl-10 pr-3 text-xl font-semibold focus:outline-none focus:ring-2 focus:ring-green-500 ${errors.amount ? 'border-red-500 bg-red-50' : 'border-gray-300'
                     }`}
                   placeholder="0"
                   min="0.01"
@@ -178,7 +218,7 @@ const PaymentFlowOptimized: React.FC = () => {
           {/* Payment Mode Selection */}
           <div className="space-y-2">
             <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">PAYMENT METHOD</h3>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2 min-[400px]:grid-cols-3">
               {paymentMethods.map((method) => {
                 const label = method === 'bank_transfer'
                   ? 'Bank Transfer'
@@ -188,7 +228,7 @@ const PaymentFlowOptimized: React.FC = () => {
                   key={method}
                   type="button"
                   onClick={() => handlePaymentModeSelect(method)}
-                  className={`min-h-11 p-2.5 rounded-lg border transition-all ${payment.payment_mode === method
+                  className={`min-h-12 rounded-lg border p-2.5 transition-all ${payment.payment_mode === method
                     ? 'border-blue-500 bg-blue-50'
                     : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
                     }`}
@@ -204,26 +244,38 @@ const PaymentFlowOptimized: React.FC = () => {
               <select value={payment.receipt_purpose} onChange={(event) => {
                 handleFieldChange('receipt_purpose', event.target.value);
                 setPaymentField('allocation_method', event.target.value === 'customer_advance' ? 'advance' : 'manual');
-              }} className="mt-1 min-h-11 w-full rounded-lg border border-gray-300 bg-white px-3">
+                setPaymentField('sales_order_id', '');
+                setPaymentField('branch_id', '');
+              }} className="mt-1 min-h-12 w-full rounded-lg border border-gray-300 bg-white px-3 text-base">
                 <option value="invoice_settlement">Invoice settlement</option>
                 <option value="customer_advance">Goods-order customer advance</option>
               </select>
             </label>
-            <label className="text-sm font-medium text-gray-700">Verified evidence ID
+            <label className="text-sm font-medium text-gray-700">Verified receipt evidence reference
               <input value={payment.evidence_attachment_id} onChange={(event) => handleFieldChange('evidence_attachment_id', event.target.value)}
-                className="mt-1 min-h-11 w-full rounded-lg border border-gray-300 px-3" placeholder="Canonical attachment UUID" />
+                autoComplete="off" className="mt-1 min-h-12 w-full rounded-lg border border-gray-300 px-3 text-base" placeholder="Paste the reference from verified evidence" />
+              <span className="mt-1 block text-xs font-normal text-amber-700">Use the immutable reference supplied by the approved receipt-evidence workflow. Upload is not available on this screen.</span>
             </label>
           </div>
 
-          {payment.receipt_purpose === 'customer_advance' && <div className="grid gap-3 sm:grid-cols-2">
-            <label className="text-sm font-medium text-gray-700">Approved goods order ID
-              <input value={payment.sales_order_id} onChange={(event) => handleFieldChange('sales_order_id', event.target.value)}
-                className="mt-1 min-h-11 w-full rounded-lg border border-gray-300 px-3" placeholder="Canonical sales-order UUID" />
+          {payment.receipt_purpose === 'customer_advance' && <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
+            <label className="text-sm font-medium text-gray-700">Approved goods order
+              <select
+                value={payment.sales_order_id}
+                onChange={(event) => {
+                  const order = approvedOrders.find(candidate => candidate.order_id === event.target.value);
+                  setPaymentField('sales_order_id', order?.order_id || '');
+                  setPaymentField('branch_id', order?.branch_id || '');
+                }}
+                disabled={ordersLoading}
+                className="mt-1 min-h-12 w-full rounded-lg border border-gray-300 bg-white px-3 text-base"
+              >
+                <option value="">{ordersLoading ? 'Loading approved orders…' : 'Select approved goods order'}</option>
+                {approvedOrders.map(order => <option key={order.order_id} value={order.order_id}>{order.order_number} · {order.order_date} · ₹{order.total_amount}</option>)}
+              </select>
             </label>
-            <label className="text-sm font-medium text-gray-700">Order branch ID
-              <input value={payment.branch_id} onChange={(event) => handleFieldChange('branch_id', event.target.value)}
-                className="mt-1 min-h-11 w-full rounded-lg border border-gray-300 px-3" placeholder="Canonical branch UUID" />
-            </label>
+            {ordersError && <p role="alert" className="mt-2 text-sm text-red-700">{ordersError}</p>}
+            {payment.sales_order_id && <p className="mt-2 text-xs text-blue-800">The order’s canonical branch is selected automatically.</p>}
           </div>}
 
           {/* Canonical settlement identity */}
@@ -239,7 +291,7 @@ const PaymentFlowOptimized: React.FC = () => {
                 setPaymentField('bank_account_id', account?.bank_account_id || '');
                 setPaymentField('settlement_account_id', account?.settlement_account_id || '');
               }}
-              className="min-h-11 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="min-h-12 w-full rounded-lg border border-gray-300 bg-white px-3 text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">Select bank settlement account</option>
               {bankAccounts.map(account => (
@@ -253,13 +305,13 @@ const PaymentFlowOptimized: React.FC = () => {
 
           {payment.payment_mode === 'cheque' && <div className="grid gap-3 rounded-lg border border-blue-200 bg-blue-50 p-3 sm:grid-cols-2">
             <label className="text-sm font-medium text-gray-700">Instrument number
-              <input value={payment.instrument_number} onChange={(event) => handleFieldChange('instrument_number', event.target.value)} className="mt-1 min-h-11 w-full rounded-lg border border-gray-300 px-3" />
+              <input inputMode="numeric" value={payment.instrument_number} onChange={(event) => handleFieldChange('instrument_number', event.target.value)} className="mt-1 min-h-12 w-full rounded-lg border border-gray-300 px-3 text-base" />
             </label>
             <label className="text-sm font-medium text-gray-700">Instrument date
-              <input type="date" value={payment.instrument_date} onChange={(event) => handleFieldChange('instrument_date', event.target.value)} className="mt-1 min-h-11 w-full rounded-lg border border-gray-300 px-3" />
+              <input type="date" value={payment.instrument_date} onChange={(event) => handleFieldChange('instrument_date', event.target.value)} className="mt-1 min-h-12 w-full rounded-lg border border-gray-300 px-3 text-base" />
             </label>
             <label className="text-sm font-medium text-gray-700">Drawee bank
-              <input value={payment.drawee_bank_name} onChange={(event) => handleFieldChange('drawee_bank_name', event.target.value)} className="mt-1 min-h-11 w-full rounded-lg border border-gray-300 px-3" />
+              <input value={payment.drawee_bank_name} onChange={(event) => handleFieldChange('drawee_bank_name', event.target.value)} className="mt-1 min-h-12 w-full rounded-lg border border-gray-300 px-3 text-base" />
             </label>
             <label className="flex min-h-11 items-center gap-2 text-sm font-medium text-gray-700">
               <input type="checkbox" checked={payment.account_payee_confirmed} onChange={(event) => setPaymentField('account_payee_confirmed', event.target.checked)} />Account-payee confirmed
@@ -277,7 +329,7 @@ const PaymentFlowOptimized: React.FC = () => {
                 type="text"
                 value={payment.reference_number || ''}
                 onChange={(e) => handleFieldChange('reference_number', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="min-h-12 w-full rounded-lg border border-gray-300 px-3 text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
                 required
                 placeholder="Enter bank, UPI, or gateway reference"
               />

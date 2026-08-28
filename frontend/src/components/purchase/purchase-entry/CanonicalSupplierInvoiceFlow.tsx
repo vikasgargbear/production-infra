@@ -273,7 +273,7 @@ const CanonicalSupplierInvoiceFlow: React.FC<{ onClose?: () => void }> = ({ onCl
   return (
     <div className="h-full overflow-y-auto bg-slate-50">
       <ModuleHeader title="Supplier Invoice" documentNumber={invoiceNumber} status={prepared ? 'review' : 'active'} icon={FileCheck2} iconColor="text-blue-600" onClose={onClose || (() => {})} showSaveDraft={false} onSaveDraft={() => {}} additionalActions={[{ label: '', title: 'Refresh posted receipts', icon: RefreshCw, variant: 'ghost', onClick: loadReceipts, disabled: loadingReceipts } as any]} />
-      <main className="mx-auto max-w-6xl space-y-4 p-6">
+      <main className="mx-auto max-w-6xl space-y-4 p-3 sm:p-6">
         {!prepared ? (
           <>
             <section className="rounded-lg border border-slate-200 bg-white p-5">
@@ -302,7 +302,6 @@ const CanonicalSupplierInvoiceFlow: React.FC<{ onClose?: () => void }> = ({ onCl
               {businessDateError && <p role="alert" className="mt-3 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">{businessDateError} Enter both dates explicitly before continuing.</p>}
               {selectedReceipt && <p className="mt-3 text-xs text-slate-500">PO {selectedReceipt.purchase_order_number}; {selectedReceipt.remaining_line_count} unallocated line(s). The backend requires one exact parsed GSTR-2B match.</p>}
               <button type="button" onClick={loadContext} disabled={loading || businessDateLoading || !businessDate || !selectedReceiptId || !invoiceNumber.trim() || !invoiceDate || !receivedDate} className="mt-4 inline-flex min-h-11 items-center rounded-md bg-blue-600 px-4 font-medium text-white disabled:bg-slate-300">{loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Load canonical evidence</button>
-              {!context && <button type="button" disabled className="ml-3 mt-4 inline-flex min-h-11 items-center rounded-md bg-slate-300 px-4 font-medium text-white">Review server calculation</button>}
             </section>
 
             {context && (
@@ -311,7 +310,16 @@ const CanonicalSupplierInvoiceFlow: React.FC<{ onClose?: () => void }> = ({ onCl
                 {context.blocking_reasons.map((reason) => <p key={reason} className="mt-3 rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{reason}</p>)}
                 {context.ready && (
                   <>
-                    <div className="mt-4 overflow-x-auto rounded border border-slate-200">
+                    <div className="mt-4 space-y-3 md:hidden" data-testid="supplier-invoice-mobile-lines">
+                      {context.lines.map(line => <article key={line.goods_receipt_line_id} className="rounded-lg border border-slate-200 bg-white p-3">
+                        <h3 className="font-semibold text-slate-900">{line.product_name}</h3>
+                        <p className="text-xs text-slate-500">{line.sku} · HSN {line.hsn_code} · {line.uom_code}</p>
+                        <dl className="mt-3 grid grid-cols-2 gap-2 text-sm"><div><dt className="text-slate-500">Billed / free</dt><dd className="font-mono">{line.remaining_billed_quantity} / {line.remaining_free_quantity}</dd></div><div className="text-right"><dt className="text-slate-500">Receipt value</dt><dd className="font-mono">₹{line.remaining_capitalized_value}</dd></div></dl>
+                        <label className="mt-3 block text-sm font-medium">Quoted rate<input aria-label={`Mobile quoted rate for ${line.product_name}`} value={rates[line.goods_receipt_line_id] || ''} onChange={(event) => { setRates(current => ({ ...current, [line.goods_receipt_line_id]: event.target.value })); resetReview(); }} inputMode="decimal" className="mt-1 min-h-12 w-full rounded-lg border border-slate-300 px-3 text-base" /></label>
+                        <label className="mt-3 block text-sm font-medium">Landed-cost basis<select aria-label={`Mobile landed-cost basis for ${line.product_name}`} value={allocationMethods[line.goods_receipt_line_id] || ''} onChange={(event) => { setAllocationMethods(current => ({ ...current, [line.goods_receipt_line_id]: event.target.value as LandedCostAllocationMethod })); resetReview(); }} className="mt-1 min-h-12 w-full rounded-lg border border-slate-300 bg-white px-3 text-base"><option value="">Review basis</option><option value="direct">Direct</option><option value="quantity_weighted">Quantity weighted</option><option value="value_weighted">Value weighted</option></select></label>
+                      </article>)}
+                    </div>
+                    <div className="mt-4 hidden overflow-x-auto rounded border border-slate-200 md:block">
                       <table className="w-full text-sm">
                         <thead className="bg-slate-50 text-left text-slate-600"><tr><th className="p-3">Product</th><th className="p-3">Billed / Free</th><th className="p-3">Receipt value</th><th className="p-3">Quoted rate</th><th className="p-3">Landed-cost basis</th></tr></thead>
                         <tbody>{context.lines.map((line) => <tr key={line.goods_receipt_line_id} className="border-t border-slate-200"><td className="p-3"><p className="font-medium">{line.product_name}</p><p className="text-xs text-slate-500">{line.sku} · HSN {line.hsn_code} · {line.uom_code}</p></td><td className="p-3 font-mono">{line.remaining_billed_quantity} / {line.remaining_free_quantity}</td><td className="p-3 font-mono">₹{line.remaining_capitalized_value}</td><td className="p-3"><input aria-label={`Quoted rate for ${line.product_name}`} value={rates[line.goods_receipt_line_id] || ''} onChange={(event) => { setRates((current) => ({ ...current, [line.goods_receipt_line_id]: event.target.value })); resetReview(); }} inputMode="decimal" className="min-h-11 w-36 rounded border border-slate-300 px-3 font-mono" /></td><td className="p-3"><select aria-label={`Landed-cost basis for ${line.product_name}`} value={allocationMethods[line.goods_receipt_line_id] || ''} onChange={(event) => { setAllocationMethods((current) => ({ ...current, [line.goods_receipt_line_id]: event.target.value as LandedCostAllocationMethod })); resetReview(); }} className="min-h-11 rounded border border-slate-300 bg-white px-3"><option value="">Review basis</option><option value="direct">Direct</option><option value="quantity_weighted">Quantity weighted</option><option value="value_weighted">Value weighted</option></select></td></tr>)}</tbody>
@@ -332,12 +340,13 @@ const CanonicalSupplierInvoiceFlow: React.FC<{ onClose?: () => void }> = ({ onCl
             <h2 className="mt-3 text-lg font-semibold">Immutable backend preview</h2>
             <p aria-label="Canonical command ID" className="mt-1 break-all font-mono text-xs text-slate-600">Command: {prepared.command_request_id}</p>
             <p className="mt-1 break-all text-xs text-slate-500">{prepared.preview_hash}</p>
-            <div className="mt-4 grid gap-4 md:grid-cols-3">
-              <div className="rounded border border-slate-200 p-3"><p className="text-xs text-slate-500">Financial impact</p><pre className="mt-2 whitespace-pre-wrap text-xs">{JSON.stringify(prepared.financial_impact, null, 2)}</pre></div>
-              <div className="rounded border border-slate-200 p-3"><p className="text-xs text-slate-500">Tax / ITC impact</p><pre className="mt-2 whitespace-pre-wrap text-xs">{JSON.stringify(prepared.tax_impact, null, 2)}</pre></div>
-              <div className="rounded border border-slate-200 p-3"><p className="text-xs text-slate-500">Inventory impact</p><pre className="mt-2 whitespace-pre-wrap text-xs">{JSON.stringify(prepared.inventory_impact, null, 2)}</pre></div>
+            <div className="mt-4 grid grid-cols-3 gap-2 text-center text-sm">
+              <div className="rounded border border-slate-200 p-3"><p className="text-xs text-slate-500">Financial</p><p className="font-semibold">{Array.isArray(prepared.financial_impact) ? prepared.financial_impact.length : 0} entry</p></div>
+              <div className="rounded border border-slate-200 p-3"><p className="text-xs text-slate-500">Tax / ITC</p><p className="font-semibold">{Array.isArray(prepared.tax_impact) ? prepared.tax_impact.length : 0} entry</p></div>
+              <div className="rounded border border-slate-200 p-3"><p className="text-xs text-slate-500">Inventory</p><p className="font-semibold">{Array.isArray(prepared.inventory_impact) ? prepared.inventory_impact.length : 0} entry</p></div>
             </div>
-            <button type="button" onClick={approveAndPost} disabled={loading} className="mt-5 inline-flex min-h-11 items-center rounded-md bg-emerald-600 px-5 font-semibold text-white disabled:bg-slate-300">{loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{executedResourceId.current ? 'Reconcile posted invoice' : 'Approve and post supplier invoice'}</button>
+            <details className="mt-4 rounded border border-slate-200 p-3"><summary className="flex min-h-11 cursor-pointer items-center text-sm font-medium">Technical impact details</summary><div className="mt-3 grid gap-4 md:grid-cols-3"><pre className="overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify(prepared.financial_impact, null, 2)}</pre><pre className="overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify(prepared.tax_impact, null, 2)}</pre><pre className="overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify(prepared.inventory_impact, null, 2)}</pre></div></details>
+            <button type="button" onClick={approveAndPost} disabled={loading} className="sticky bottom-3 mt-5 inline-flex min-h-12 w-full items-center justify-center rounded-md bg-emerald-600 px-5 font-semibold text-white shadow-lg disabled:bg-slate-300 sm:static sm:w-auto sm:shadow-none">{loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{executedResourceId.current ? 'Reconcile posted invoice' : 'Approve and post supplier invoice'}</button>
           </section>
         )}
       </main>
