@@ -66,6 +66,7 @@ export interface CanonicalInvoiceDetail {
   invoice_number: string;
   invoice_date: string;
   status: string;
+  archival_snapshot_state: 'unavailable' | 'captured';
   seller_legal_name: string;
   seller_gstin: string;
   seller_address: string;
@@ -78,6 +79,10 @@ export interface CanonicalInvoiceDetail {
   customer_drug_license_numbers: string[];
   billing_address: string;
   shipping_address: string;
+  seller_gst_evidence: Record<string, unknown>;
+  customer_gst_evidence: Record<string, unknown>;
+  seller_drug_licence_evidence: Record<string, unknown>;
+  customer_drug_licence_evidence: Record<string, unknown>;
   due_date: string | null;
   currency_code: string;
   tax_charge_mechanism: 'normal' | 'reverse_charge';
