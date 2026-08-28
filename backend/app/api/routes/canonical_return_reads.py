@@ -20,6 +20,10 @@ from sqlalchemy.orm import Session
 
 from ...core.database import get_db
 from ...core.security.permissions import PermissionChecker
+from ...domain.operator_actions import (
+    RETURN_SOURCE_CAPABILITIES,
+    return_source_failure_detail,
+)
 from .web_operator_actions import (
     WEB_CLIENT_ID,
     _command_context,
@@ -140,6 +144,42 @@ class ReturnReasonChoice(StrictRead):
         if len(set(self.supported_gst_treatments)) != len(self.supported_gst_treatments):
             raise ValueError("return reason repeats a GST treatment")
         return self
+
+
+class ReturnSourceCapability(StrictRead):
+    source_kind: Literal[
+        "dispatch_allocated", "direct_issue", "invoiced", "uninvoiced"
+    ]
+    status: Literal["supported", "blocked"]
+    code: Optional[Literal["RETURN_SOURCE_AUTHORITY_UNAVAILABLE"]] = None
+    retryable: bool = False
+    required_authority: list[str] = Field(default_factory=list)
+
+
+def _return_source_capabilities(
+    side: Literal["sales", "purchase"],
+) -> list[ReturnSourceCapability]:
+    operation_key = (
+        "sales.return.prepare"
+        if side == "sales"
+        else "procurement.purchase_return.prepare"
+    )
+    contract = RETURN_SOURCE_CAPABILITIES[operation_key]
+    supported = [
+        ReturnSourceCapability(source_kind=source_kind, status="supported")
+        for source_kind in contract["supported"]
+    ]
+    blocked = [
+        ReturnSourceCapability(
+            source_kind=source_kind,
+            status="blocked",
+            code=failure["code"],
+            retryable=failure["retryable"],
+            required_authority=list(failure["required_authority"]),
+        )
+        for source_kind, failure in contract["blocked"].items()
+    ]
+    return [*supported, *blocked]
 
 
 PurchaseReturnTransportMode = Literal[
@@ -267,6 +307,7 @@ def _effective_return_reason_choices(
 
 
 class SalesReturnableAllocation(StrictRead):
+    fulfillment_source: Literal["dispatch_allocated"] = "dispatch_allocated"
     original_invoice_line_id: UUID
     invoice_dispatch_allocation_id: UUID
     dispatch_id: UUID
@@ -323,7 +364,9 @@ class SalesReturnContext(StrictRead):
     customer_name: str
     customer_registered: bool
     return_date: date
+    blocked_source_line_count: int = Field(ge=0)
     lines: list[SalesReturnableAllocation]
+    source_capabilities: list["ReturnSourceCapability"]
     quarantine_locations: list[ReturnLocation]
     statutory_itc_reversal_evidence: list[ReturnAttachmentEvidence]
     return_reason_choices: list[ReturnReasonChoice]
@@ -446,6 +489,7 @@ class PurchaseReturnContext(StrictRead):
     supplier_name: str
     return_date: date
     lines: list[PurchaseReturnableAllocation]
+    source_capabilities: list["ReturnSourceCapability"]
     supplier_destinations: list[SupplierAddress]
     logistics_modes: list[PurchaseReturnLogisticsMode]
     transporter_choices: list[PurchaseReturnTransporterChoice]
@@ -484,8 +528,9 @@ class PurchaseReturnContext(StrictRead):
 
 class PostedReturnLine(StrictRead):
     return_line_id: UUID
+    source_kind: Literal["dispatch_allocated", "direct_issue", "invoiced", "uninvoiced"]
     source_line_id: UUID
-    source_allocation_id: UUID
+    source_allocation_id: Optional[UUID]
     product_id: UUID
     batch_id: UUID
     location_id: UUID
@@ -519,7 +564,7 @@ class PostedReturnReadback(StrictRead):
     return_number: str
     return_date: date
     status: Literal["posted"]
-    source_document_id: UUID
+    source_document_id: Optional[UUID]
     branch_id: UUID
     party_account_id: UUID
     gst_tax_treatment: Literal["commercial_only", "statutory"]
@@ -616,6 +661,12 @@ def sales_return_context(
                invoice.invoice_date, invoice.branch_id,
                invoice.customer_account_id,
                party.legal_name AS customer_name,
+               (
+                   SELECT count(DISTINCT provenance.invoice_line_id)
+                     FROM erp_automation_reads.sales_invoice_direct_issue_provenance(
+                         invoice.org_id, invoice.branch_id, invoice.id
+                     ) AS provenance
+               ) AS blocked_source_line_count,
                EXISTS (
                    SELECT 1
                      FROM parties.tax_registrations registration
@@ -666,7 +717,8 @@ def sales_return_context(
     lines = _rows(
         db,
         """
-        SELECT line.id AS original_invoice_line_id,
+        SELECT 'dispatch_allocated'::text AS fulfillment_source,
+               line.id AS original_invoice_line_id,
                allocation.id AS invoice_dispatch_allocation_id,
                dispatch.id AS dispatch_id, dispatch_line.id AS dispatch_line_id,
                line.product_id, product.name AS product_name, product.sku,
@@ -752,6 +804,20 @@ def sales_return_context(
             "customer_account_id": header["customer_account_id"],
         },
     )
+    if not lines and header["blocked_source_line_count"] > 0:
+        raise HTTPException(
+            status_code=409,
+            detail=return_source_failure_detail(
+                "sales.return.prepare",
+                "direct_issue",
+                "This invoice contains only direct-issued quantity, whose return authority is not yet executable",
+            ),
+        )
+    if not lines:
+        raise HTTPException(
+            status_code=409,
+            detail="Invoice has no dispatch-allocated quantity remaining",
+        )
     locations = _rows(
         db,
         """
@@ -791,6 +857,7 @@ def sales_return_context(
             **header,
             "return_date": return_date,
             "lines": lines,
+            "source_capabilities": _return_source_capabilities("sales"),
             "quarantine_locations": locations,
             "statutory_itc_reversal_evidence": evidence,
             "return_reason_choices": reason_choices,
@@ -1090,6 +1157,7 @@ def purchase_return_context(
             **public_header,
             "return_date": return_date,
             "lines": lines,
+            "source_capabilities": _return_source_capabilities("purchase"),
             "supplier_destinations": addresses,
             "logistics_modes": _purchase_return_logistics_modes(
                 carrier_choices_available=bool(transporters),
@@ -1201,7 +1269,13 @@ def _posted_return_readback(
     lines = _rows(
         db,
         f"""
-        SELECT line.id AS return_line_id, line.{source_line} AS source_line_id,
+        SELECT line.id AS return_line_id,
+               CASE
+                   WHEN line.{source_allocation} IS NULL
+                   THEN '{"direct_issue" if side == "sales" else "uninvoiced"}'
+                   ELSE '{"dispatch_allocated" if side == "sales" else "invoiced"}'
+               END AS source_kind,
+               line.{source_line} AS source_line_id,
                line.{source_allocation} AS source_allocation_id,
                line.product_id, line.batch_id, line.{location} AS location_id,
                line.billed_quantity, line.free_quantity,

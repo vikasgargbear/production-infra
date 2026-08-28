@@ -1792,6 +1792,8 @@ def prepare_action(
     try:
         payload = PREPARE_PAYLOAD_MODELS[operation_key].model_validate(raw_payload)
         validate_prepare_payload_semantics(operation_key, payload)
+    except OperatorActionError as exc:
+        _raise_action(exc, operation=operation_key)
     except (ValidationError, ValueError) as exc:
         errors = exc.errors(include_url=False) if isinstance(exc, ValidationError) else []
         record_operator_action(

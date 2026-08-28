@@ -29,6 +29,7 @@ const sales = () => ({
   items: [{
     selected: true,
     original_invoice_line_id: ids.line,
+    fulfillment_source: 'dispatch_allocated',
     invoice_dispatch_allocation_id: ids.allocation,
     batch_id: ids.batch,
     to_location_id: ids.location,
@@ -94,10 +95,30 @@ describe('canonical return command builders', () => {
     );
     expect(payload.lines[0]).toMatchObject({
       original_invoice_line_id: ids.line,
+      fulfillment_source: 'dispatch_allocated',
       invoice_dispatch_allocation_id: ids.allocation,
       billed_quantity: '900719925474.123456',
       free_quantity: '0.000001',
     });
+  });
+
+  it('keeps unavailable return sources fail-closed before browser submission', () => {
+    const direct = sales() as any;
+    direct.items[0].fulfillment_source = 'direct_issue';
+    delete direct.items[0].invoice_dispatch_allocation_id;
+    expect(() => buildSalesReturnPreparePayload(
+      direct,
+      'erp-web-sales-return-prepare:blocked-direct',
+    )).toThrow(/Direct-issued sales returns are blocked/);
+
+    const uninvoiced = purchase() as any;
+    uninvoiced.return_source_kind = 'uninvoiced';
+    delete uninvoiced.supplier_invoice_id;
+    delete uninvoiced.items[0].supplier_invoice_receipt_allocation_id;
+    expect(() => buildPurchaseReturnPreparePayload(
+      uninvoiced,
+      'erp-web-purchase-return-prepare:blocked-uninvoiced',
+    )).toThrow(/Uninvoiced purchase returns are blocked/);
   });
 
   it('rejects sales quantity beyond the exact source remainder', () => {

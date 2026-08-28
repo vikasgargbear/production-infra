@@ -568,8 +568,15 @@ def _prepare_actions() -> dict[str, OperatorAction]:
     sales_return_line = _object(
         {
             "original_invoice_line_id": _uuid("Original posted sales invoice line."),
+            "fulfillment_source": _string(
+                "Exact source lineage of the original invoice line. "
+                "dispatch_allocated is executable; direct_issue is represented so callers "
+                "receive the canonical fail-closed capability result instead of guessing an allocation.",
+                enum=["dispatch_allocated", "direct_issue"],
+            ),
             "invoice_dispatch_allocation_id": _uuid(
-                "Exact original invoice-to-dispatch allocation. Direct-issued returns remain unavailable in the pilot."
+                "Exact original invoice-to-dispatch allocation. Required for dispatch_allocated; "
+                "forbidden for direct_issue, which remains capability-blocked."
             ),
             "billed_quantity": _decimal("Exact billed quantity returned, cumulatively bounded by the original line."),
             "free_quantity": _decimal("Exact free-supply quantity returned, cumulatively bounded by the original line."),
@@ -584,7 +591,7 @@ def _prepare_actions() -> dict[str, OperatorAction]:
         },
         (
             "original_invoice_line_id",
-            "invoice_dispatch_allocation_id",
+            "fulfillment_source",
             "billed_quantity",
             "free_quantity",
             "batch_allocation",
@@ -812,8 +819,9 @@ def _prepare_actions() -> dict[str, OperatorAction]:
     purchase_return.update(
         {
             "return_source_kind": _string(
-                "Explicit reviewed pilot source; only posted supplier-invoiced receipts are supported.",
-                enum=["invoiced"],
+                "Exact source lineage. invoiced is executable; uninvoiced is represented so callers "
+                "receive the canonical fail-closed capability result instead of inventing invoice allocation.",
+                enum=["invoiced", "uninvoiced"],
             ),
             "original_supplier_invoice_id": _uuid(
                 "Original posted supplier invoice required by the invoiced-only pilot."
@@ -1207,6 +1215,7 @@ def _prepare_actions() -> dict[str, OperatorAction]:
             "supplier_challan_date",
             "recipient_itc_reversal_evidence_attachment_id",
             "recipient_itc_reversal_confirmed_at",
+            "original_supplier_invoice_id",
             "supplier_credit_note_portal_line_id",
             "counterparty_portal_document_line_id",
             "supplier_invoice_receipt_allocation_id",
@@ -1216,11 +1225,44 @@ def _prepare_actions() -> dict[str, OperatorAction]:
         required = tuple(
             field for field in transport_properties if field not in optional_fields
         )
-        return _object(
+        schema = _object(
             transport_properties,
             required,
             "Prepare and independently validate a single business command without posting it.",
         )
+        if operation_key == "sales.return.prepare":
+            schema["x-aasopharma-source-capabilities"] = {
+                "supported": ["dispatch_allocated"],
+                "blocked": {
+                    "direct_issue": {
+                        "code": "RETURN_SOURCE_AUTHORITY_UNAVAILABLE",
+                        "retryable": False,
+                        "required_authority": [
+                            "direct_invoice_issue_lineage_lock",
+                            "direct_issue_cumulative_return_ceiling",
+                            "direct_issue_return_cost_reversal",
+                            "postgres_runtime_acceptance",
+                        ],
+                    }
+                },
+            }
+        elif operation_key == "procurement.purchase_return.prepare":
+            schema["x-aasopharma-source-capabilities"] = {
+                "supported": ["invoiced"],
+                "blocked": {
+                    "uninvoiced": {
+                        "code": "RETURN_SOURCE_AUTHORITY_UNAVAILABLE",
+                        "retryable": False,
+                        "required_authority": [
+                            "goods_receipt_only_return_resolution",
+                            "uninvoiced_cumulative_receipt_ceiling",
+                            "commercial_only_zero_gst_debit_posting",
+                            "postgres_runtime_acceptance",
+                        ],
+                    }
+                },
+            }
+        return schema
 
     return {
         tool_name: OperatorAction(

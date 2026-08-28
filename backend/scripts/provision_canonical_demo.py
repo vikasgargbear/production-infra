@@ -5502,6 +5502,7 @@ def sales_return_payload(
         "lines": [
             {
                 "original_invoice_line_id": invoice_line_id,
+                "fulfillment_source": "dispatch_allocated",
                 "invoice_dispatch_allocation_id": allocation["invoice_dispatch_allocation_id"],
                 "billed_quantity": str(billed_quantity),
                 "free_quantity": "0",

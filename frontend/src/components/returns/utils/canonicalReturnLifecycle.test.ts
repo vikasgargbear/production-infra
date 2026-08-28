@@ -27,6 +27,7 @@ it('prepares only and exposes the immutable distinct-approver waiting state', as
     items: [{
       selected: true,
       original_invoice_line_id: 'd3000000-0000-7000-8000-000000000003',
+      fulfillment_source: 'dispatch_allocated',
       invoice_dispatch_allocation_id: 'd3000000-0000-7000-8000-000000000004',
       batch_id: 'd3000000-0000-7000-8000-000000000005',
       to_location_id: 'd3000000-0000-7000-8000-000000000006',

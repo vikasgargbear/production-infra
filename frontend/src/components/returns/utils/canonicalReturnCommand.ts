@@ -150,6 +150,15 @@ export function buildSalesReturnPreparePayload(data: ReturnRecord, durableKey: s
       if (seen.has(lineId)) throw new Error('One return command cannot repeat an original invoice line.');
       seen.add(lineId);
       const { billed, free } = quantities(item, label);
+      const fulfillmentSource = String(item.fulfillment_source ?? '');
+      if (fulfillmentSource === 'direct_issue') {
+        throw new Error(
+          'Direct-issued sales returns are blocked until canonical lineage, cumulative ceiling, cost reversal, and PostgreSQL acceptance authority are available.',
+        );
+      }
+      if (fulfillmentSource !== 'dispatch_allocated') {
+        throw new Error(`${label}.fulfillment_source is not an executable canonical source.`);
+      }
       const condition = String(item.return_condition ?? '');
       if (!['sealed_resaleable', 'opened', 'damaged', 'expired', 'recalled', 'quality_hold'].includes(condition)) {
         throw new Error(`${label}.return_condition is not canonical.`);
@@ -157,6 +166,7 @@ export function buildSalesReturnPreparePayload(data: ReturnRecord, durableKey: s
       const batchId = requiredUuid(item.batch_id, `${label}.batch_id`);
       return {
         original_invoice_line_id: lineId,
+        fulfillment_source: fulfillmentSource,
         invoice_dispatch_allocation_id: requiredUuid(
           item.invoice_dispatch_allocation_id,
           `${label}.invoice_dispatch_allocation_id`,
@@ -185,6 +195,15 @@ export function buildSalesReturnPreparePayload(data: ReturnRecord, durableKey: s
 }
 
 export function buildPurchaseReturnPreparePayload(data: ReturnRecord, durableKey: string) {
+  const returnSourceKind = String(data.return_source_kind ?? 'invoiced');
+  if (returnSourceKind === 'uninvoiced') {
+    throw new Error(
+      'Uninvoiced purchase returns are blocked until goods-receipt-only concurrency, zero-GST debit posting, and PostgreSQL acceptance authority are available.',
+    );
+  }
+  if (returnSourceKind !== 'invoiced') {
+    throw new Error('Purchase return source kind is not canonical.');
+  }
   const { reasonCode, treatment } = returnAuthority(
     data.return_reason,
     data.gst_tax_treatment,
@@ -267,7 +286,7 @@ export function buildPurchaseReturnPreparePayload(data: ReturnRecord, durableKey
     idempotency_key: idempotencyKey(durableKey, 'Purchase return prepare'),
     branch_id: requiredUuid(data.branch_id, 'Purchase return branch'),
     return_date: requiredDate(data.return_date, 'Purchase return date'),
-    return_source_kind: 'invoiced',
+    return_source_kind: returnSourceKind,
     original_supplier_invoice_id: requiredUuid(data.supplier_invoice_id, 'Original supplier invoice'),
     reason_code: reasonCode,
     gst_tax_treatment: treatment,
