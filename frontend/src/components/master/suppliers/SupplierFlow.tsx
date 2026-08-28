@@ -15,7 +15,12 @@ import { suppliersApi } from '../../../services/api';
 import useEscapeKey from '../../../hooks/useEscapeKey';
 import { useEnterAsTab } from '../../../hooks/useEnterAsTab';
 import { toast } from 'react-toastify';
-import { validateSupplierMandatoryFields } from './supplierValidation';
+import {
+    validateSupplierFields,
+    validateSupplierMandatoryFields,
+    type SupplierField,
+    type SupplierFieldErrors,
+} from './supplierValidation';
 import GSTJurisdictionSelect from '../../global/ui/forms/GSTJurisdictionSelect';
 import { newMasterCreateIdempotencyKey } from '../../../services/api/modules/master/masterCreationContract';
 import type { CanonicalSupplierCreateResponse } from '../../../services/api/modules/master/masterCreationContract';
@@ -52,6 +57,32 @@ interface SupplierFormData {
     credit_days: number | '';
 }
 
+const SUPPLIER_FIELD_IDS: Record<SupplierField, string> = {
+    supplier_name: 'supplier-name',
+    phone: 'supplier-phone',
+    email: 'supplier-email',
+    address_line1: 'supplier-address-line1',
+    city: 'supplier-city',
+    state_code: 'supplier-state-code',
+    pincode: 'supplier-pincode',
+    gst_number: 'supplier-gstin',
+    pan_number: 'supplier-pan',
+    credit_days: 'supplier-payment-days',
+};
+
+const API_FIELD_NAMES: Record<string, SupplierField> = {
+    supplier_name: 'supplier_name',
+    primary_phone: 'phone',
+    primary_email: 'email',
+    address_line1: 'address_line1',
+    city: 'city',
+    state_code: 'state_code',
+    pincode: 'pincode',
+    gst_number: 'gst_number',
+    pan_number: 'pan_number',
+    payment_days: 'credit_days',
+};
+
 // ==================== COMPONENT ====================
 
 const SupplierFlow: React.FC<SupplierFlowProps> = ({
@@ -70,6 +101,7 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
     const idempotencyKeyRef = useRef(newMasterCreateIdempotencyKey('supplier'));
     const [saving, setSaving] = useState(false);
     const [errors, setErrors] = useState<string[]>([]);
+    const [fieldErrors, setFieldErrors] = useState<SupplierFieldErrors>({});
     const [formData, setFormData] = useState<SupplierFormData>({
         // Basic Info
         supplier_name: '',
@@ -108,16 +140,36 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
         'SupplierFlow-Main'
     );
 
+    const updateField = <K extends keyof SupplierFormData>(field: K, value: SupplierFormData[K]) => {
+        setFormData(previous => ({ ...previous, [field]: value }));
+        if (field in SUPPLIER_FIELD_IDS) {
+            setFieldErrors(previous => ({ ...previous, [field]: undefined }));
+        }
+    };
+
+    const focusFirstInvalidField = (invalidFields: SupplierFieldErrors) => {
+        const firstField = (Object.keys(SUPPLIER_FIELD_IDS) as SupplierField[])
+            .find(field => Boolean(invalidFields[field]));
+        if (!firstField) return;
+        window.setTimeout(() => {
+            document.getElementById(SUPPLIER_FIELD_IDS[firstField])?.focus();
+        }, 0);
+    };
+
     // Save supplier
     const handleSave = async () => {
         if (submissionInFlightRef.current) return;
         setSaving(true);
         setErrors([]);
+        setFieldErrors({});
 
         // Validation
         const validationErrors = validateSupplierMandatoryFields(formData);
         if (validationErrors.length > 0) {
+            const invalidFields = validateSupplierFields(formData);
             setErrors(validationErrors);
+            setFieldErrors(invalidFields);
+            focusFirstInvalidField(invalidFields);
             setSaving(false);
             return;
         }
@@ -152,7 +204,17 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
             if (typeof detail === 'string') {
                 setErrors([detail]);
             } else if (Array.isArray(detail)) {
-                setErrors(detail.map((e: any) => e.msg || JSON.stringify(e)));
+                const apiFieldErrors: SupplierFieldErrors = {};
+                const messages = detail.map((entry: any) => {
+                    const fieldName = Array.isArray(entry?.loc) ? entry.loc[entry.loc.length - 1] : undefined;
+                    const field = typeof fieldName === 'string' ? API_FIELD_NAMES[fieldName] : undefined;
+                    const message = typeof entry === 'string' ? entry : entry.msg || JSON.stringify(entry);
+                    if (field) apiFieldErrors[field] = message;
+                    return message;
+                });
+                setErrors(messages);
+                setFieldErrors(apiFieldErrors);
+                focusFirstInvalidField(apiFieldErrors);
             } else {
                 setErrors(['Failed to create supplier. Please try again.']);
             }
@@ -166,6 +228,18 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
     if (!isOpen) return null;
 
     const inputClass = "min-h-12 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-base outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-100";
+    const invalidClass = "border-red-500 bg-red-50 focus:ring-red-500";
+    const fieldClass = (field: SupplierField, baseClass: string) => `${baseClass} ${fieldErrors[field] ? invalidClass : ''}`;
+    const fieldError = (field: SupplierField) => fieldErrors[field] ? (
+        <p id={`${SUPPLIER_FIELD_IDS[field]}-error`} className="mt-1 text-xs text-red-600" role="alert">
+            {fieldErrors[field]}
+        </p>
+    ) : null;
+    const fieldA11y = (field: SupplierField) => ({
+        id: SUPPLIER_FIELD_IDS[field],
+        'aria-invalid': Boolean(fieldErrors[field]) || undefined,
+        'aria-describedby': fieldErrors[field] ? `${SUPPLIER_FIELD_IDS[field]}-error` : undefined,
+    });
 
     return (
         <div className="fixed inset-0 z-50 flex min-w-0 flex-col overflow-hidden bg-gray-50">
@@ -222,15 +296,16 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
                                     Supplier Name <span className="text-red-500">*</span>
                                 </label>
                                 <input
+                                    {...fieldA11y('supplier_name')}
                                     type="text"
-                                    id="supplier-name"
                                     autoComplete="organization"
                                     required
                                     value={formData.supplier_name}
-                                    onChange={(e) => setFormData({ ...formData, supplier_name: e.target.value })}
-                                    className={inputClass}
+                                    onChange={(e) => updateField('supplier_name', e.target.value)}
+                                    className={fieldClass('supplier_name', inputClass)}
                                     placeholder="e.g., ABC Pharmaceuticals"
                                 />
+                                {fieldError('supplier_name')}
                             </div>
                         </div>
                     </section>
@@ -247,28 +322,30 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
                                     Phone <span className="text-red-500">*</span>
                                 </label>
                                 <input
+                                    {...fieldA11y('phone')}
                                     type="tel"
-                                    id="supplier-phone"
                                     required
                                     inputMode="tel"
                                     autoComplete="tel"
                                     value={formData.phone}
-                                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                                    className={inputClass}
+                                    onChange={(e) => updateField('phone', e.target.value)}
+                                    className={fieldClass('phone', inputClass)}
                                     placeholder="Business phone"
                                 />
+                                {fieldError('phone')}
                             </div>
                             <div>
                                 <label htmlFor="supplier-email" className="block text-sm font-medium text-gray-700 mb-1">Email</label>
                                 <input
+                                    {...fieldA11y('email')}
                                     type="email"
-                                    id="supplier-email"
                                     autoComplete="email"
                                     value={formData.email}
-                                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                                    className={inputClass}
+                                    onChange={(e) => updateField('email', e.target.value)}
+                                    className={fieldClass('email', inputClass)}
                                     placeholder="email@example.com"
                                 />
+                                {fieldError('email')}
                             </div>
                         </div>
 
@@ -280,7 +357,7 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
                                     type="text"
                                     id="supplier-contact"
                                     value={formData.contact_person}
-                                    onChange={(e) => setFormData({ ...formData, contact_person: e.target.value })}
+                                    onChange={(e) => updateField('contact_person', e.target.value)}
                                     className={inputClass}
                                     placeholder="Contact person name"
                                 />
@@ -296,19 +373,23 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
                         </h2>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <label htmlFor="supplier-address-line1" className="text-sm font-medium text-gray-700">Building / Street Address *
-                                <input id="supplier-address-line1" autoComplete="street-address" value={formData.address_line1} onChange={(event) => setFormData({ ...formData, address_line1: event.target.value })} className={`${inputClass} mt-1`} />
+                                <input {...fieldA11y('address_line1')} autoComplete="street-address" value={formData.address_line1} onChange={(event) => updateField('address_line1', event.target.value)} className={fieldClass('address_line1', `${inputClass} mt-1`)} />
+                                {fieldError('address_line1')}
                             </label>
                             <label htmlFor="supplier-address-line2" className="text-sm font-medium text-gray-700">Area / Additional
-                                <input id="supplier-address-line2" value={formData.address_line2} onChange={(event) => setFormData({ ...formData, address_line2: event.target.value })} className={`${inputClass} mt-1`} />
+                                <input id="supplier-address-line2" value={formData.address_line2} onChange={(event) => updateField('address_line2', event.target.value)} className={`${inputClass} mt-1`} />
                             </label>
                             <label htmlFor="supplier-city" className="text-sm font-medium text-gray-700">City *
-                                <input id="supplier-city" autoComplete="address-level2" value={formData.city} onChange={(event) => setFormData({ ...formData, city: event.target.value })} className={`${inputClass} mt-1`} />
+                                <input {...fieldA11y('city')} autoComplete="address-level2" value={formData.city} onChange={(event) => updateField('city', event.target.value)} className={fieldClass('city', `${inputClass} mt-1`)} />
+                                {fieldError('city')}
                             </label>
                             <label htmlFor="supplier-state-code" className="text-sm font-medium text-gray-700">GST state code (2 digits) *
-                                <GSTJurisdictionSelect id="supplier-state-code" value={formData.state_code} onChange={(stateCode) => setFormData({ ...formData, state_code: stateCode })} className={`${inputClass} mt-1`} required />
+                                <GSTJurisdictionSelect {...fieldA11y('state_code')} value={formData.state_code} onChange={(stateCode) => updateField('state_code', stateCode)} className={fieldClass('state_code', `${inputClass} mt-1`)} required />
+                                {fieldError('state_code')}
                             </label>
                             <label htmlFor="supplier-pincode" className="text-sm font-medium text-gray-700">Pincode *
-                                <input id="supplier-pincode" type="text" inputMode="numeric" autoComplete="postal-code" pattern="[0-9]{6}" maxLength={6} value={formData.pincode} onChange={(event) => setFormData({ ...formData, pincode: event.target.value.replace(/\D/g, '').slice(0, 6) })} className={`${inputClass} mt-1`} />
+                                <input {...fieldA11y('pincode')} type="text" inputMode="numeric" autoComplete="postal-code" pattern="[0-9]{6}" maxLength={6} value={formData.pincode} onChange={(event) => updateField('pincode', event.target.value.replace(/\D/g, '').slice(0, 6))} className={fieldClass('pincode', `${inputClass} mt-1`)} />
+                                {fieldError('pincode')}
                             </label>
                         </div>
                     </section>
@@ -323,26 +404,28 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
                             <div>
                                 <label htmlFor="supplier-gstin" className="block text-sm font-medium text-gray-700 mb-1">GSTIN</label>
                                 <input
+                                    {...fieldA11y('gst_number')}
                                     type="text"
-                                    id="supplier-gstin"
                                     value={formData.gst_number}
-                                    onChange={(e) => setFormData({ ...formData, gst_number: e.target.value.toUpperCase() })}
-                                    className={inputClass}
+                                    onChange={(e) => updateField('gst_number', e.target.value.toUpperCase())}
+                                    className={fieldClass('gst_number', inputClass)}
                                     placeholder="15 characters"
                                     maxLength={15}
                                 />
+                                {fieldError('gst_number')}
                             </div>
                             <div>
                                 <label htmlFor="supplier-pan" className="block text-sm font-medium text-gray-700 mb-1">PAN</label>
                                 <input
+                                    {...fieldA11y('pan_number')}
                                     type="text"
-                                    id="supplier-pan"
                                     value={formData.pan_number}
-                                    onChange={(e) => setFormData({ ...formData, pan_number: e.target.value.toUpperCase() })}
-                                    className={inputClass}
+                                    onChange={(e) => updateField('pan_number', e.target.value.toUpperCase())}
+                                    className={fieldClass('pan_number', inputClass)}
                                     placeholder="10 characters"
                                     maxLength={10}
                                 />
+                                {fieldError('pan_number')}
                             </div>
                         </div>
                         <p className="mt-3 text-xs text-gray-500">
@@ -360,16 +443,17 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
                             <div>
                                 <label htmlFor="supplier-payment-days" className="block text-sm font-medium text-gray-700 mb-1">Payment days *</label>
                                 <input
+                                    {...fieldA11y('credit_days')}
                                     type="number"
-                                    id="supplier-payment-days"
                                     inputMode="numeric"
                                     min={0}
                                     max={180}
                                     value={formData.credit_days}
-                                    onChange={(e) => setFormData({ ...formData, credit_days: e.target.value === '' ? '' : Number(e.target.value) })}
-                                    className={inputClass}
+                                    onChange={(e) => updateField('credit_days', e.target.value === '' ? '' : Number(e.target.value))}
+                                    className={fieldClass('credit_days', inputClass)}
                                     placeholder="Enter 0–180"
                                 />
+                                {fieldError('credit_days')}
                             </div>
                         </div>
                         <p className="mt-3 text-xs text-gray-500">

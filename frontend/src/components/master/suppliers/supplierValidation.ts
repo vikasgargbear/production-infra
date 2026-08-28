@@ -11,6 +11,14 @@ export interface SupplierMandatoryFields {
     credit_days?: number | '';
 }
 
+export type SupplierField = keyof SupplierMandatoryFields;
+export type SupplierFieldErrors = Partial<Record<SupplierField, string>>;
+
+interface SupplierValidationIssue {
+    field: SupplierField;
+    message: string;
+}
+
 const indianPhone = (value: string): boolean => {
     const digits = value.replace(/\D/g, '');
     const localDigits = digits.length === 12 && digits.startsWith('91')
@@ -19,44 +27,57 @@ const indianPhone = (value: string): boolean => {
     return /^[6-9]\d{9}$/.test(localDigits);
 };
 
-export const validateSupplierMandatoryFields = (
+const supplierValidationIssues = (
     form: SupplierMandatoryFields,
-): string[] => {
-    const errors: string[] = [];
-    if (!form.supplier_name.trim()) errors.push('Supplier name is required');
+): SupplierValidationIssue[] => {
+    const issues: SupplierValidationIssue[] = [];
+    const add = (field: SupplierField, message: string) => issues.push({ field, message });
+
+    if (!form.supplier_name.trim()) add('supplier_name', 'Supplier name is required');
     if (!form.phone.trim()) {
-        errors.push('Phone number is required');
+        add('phone', 'Phone number is required');
     } else if (!indianPhone(form.phone)) {
-        errors.push('Phone number must be a valid 10-digit Indian mobile number');
+        add('phone', 'Phone number must be a valid 10-digit Indian mobile number');
     }
     if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
-        errors.push('Email address is invalid');
+        add('email', 'Email address is invalid');
     }
-    if (!form.address_line1.trim()) errors.push('Building / street address is required');
-    if (!form.city.trim()) errors.push('City is required');
+    if (!form.address_line1.trim()) add('address_line1', 'Building / street address is required');
+    if (!form.city.trim()) add('city', 'City is required');
     if (!/^\d{2}$/.test(form.state_code.trim())) {
-        errors.push('GST state code must contain exactly 2 digits');
+        add('state_code', 'GST state code must contain exactly 2 digits');
     }
     if (!form.pincode.trim()) {
-        errors.push('Pincode is required');
+        add('pincode', 'Pincode is required');
     } else if (!/^\d{6}$/.test(form.pincode.trim())) {
-        errors.push('Pincode must be exactly 6 digits');
+        add('pincode', 'Pincode must be exactly 6 digits');
     }
     if (form.gst_number && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(form.gst_number)) {
-        errors.push('Invalid GSTIN format');
+        add('gst_number', 'Invalid GSTIN format');
     }
     if (form.gst_number && /^\d{2}$/.test(form.state_code.trim())
         && form.gst_number.slice(0, 2) !== form.state_code.trim()) {
-        errors.push('GSTIN state code must match the address GST state code');
+        add('gst_number', 'GSTIN state code must match the address GST state code');
     }
     if (form.pan_number && !/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(form.pan_number)) {
-        errors.push('Invalid PAN format');
+        add('pan_number', 'Invalid PAN format');
     }
     if (form.credit_days === '') {
-        errors.push('Payment days are required');
+        add('credit_days', 'Payment days are required');
     } else if (form.credit_days !== undefined
         && (!Number.isInteger(form.credit_days) || form.credit_days < 0 || form.credit_days > 180)) {
-        errors.push('Payment days must be a whole number from 0 to 180');
+        add('credit_days', 'Payment days must be a whole number from 0 to 180');
     }
-    return errors;
+    return issues;
 };
+
+export const validateSupplierFields = (
+    form: SupplierMandatoryFields,
+): SupplierFieldErrors => supplierValidationIssues(form).reduce<SupplierFieldErrors>(
+    (errors, issue) => ({ ...errors, [issue.field]: errors[issue.field] ?? issue.message }),
+    {},
+);
+
+export const validateSupplierMandatoryFields = (
+    form: SupplierMandatoryFields,
+): string[] => supplierValidationIssues(form).map(({ message }) => message);
