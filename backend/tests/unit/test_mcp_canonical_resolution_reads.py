@@ -91,6 +91,7 @@ def test_resolution_policies_match_operator_contract_and_are_published():
         "finance.profit_loss.get",
         "finance.trial_balance.get",
         "gst.settings.get",
+        "master.product_catalog.search",
         "master.products.search",
         "master.suppliers.search",
     }
