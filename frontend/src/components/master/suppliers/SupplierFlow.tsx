@@ -234,10 +234,11 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
                         </p>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label htmlFor="supplier-name" className="block text-sm font-medium text-gray-700 mb-1">
                                     Supplier Name <span className="text-red-500">*</span>
                                 </label>
                                 <input
+                                    id="supplier-name"
                                     type="text"
                                     required
                                     value={formData.supplier_name}

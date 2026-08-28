@@ -6,6 +6,16 @@ const viewports = [
 ] as const;
 
 async function openFlow(page: Page, flow: string, viewport: typeof viewports[number]) {
+  await page.route('**/api/settings/features', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ features: { customer_mode: 'hybrid', require_gst_for_b2b: false, default_customer_type: 'organization' } }),
+  }));
+  await page.route('**/api/canonical/reference/gst-jurisdictions**', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify([]),
+  }));
   await page.setViewportSize({ width: viewport.width, height: viewport.height });
   await page.goto(`/e2e/mobile-workflows?flow=${flow}`);
   await expect(page.locator('html')).toBeAttached();
@@ -64,8 +74,8 @@ for (const viewport of viewports) {
       const returnSelection = page.getByRole('checkbox', { name: 'Mobile return Paracetamol 500 mg' });
       await expect(returnSelection).toBeVisible();
       await expectTapTarget(returnSelection.locator('..'));
-      const billed = page.getByLabel('Billed quantity');
-      const free = page.getByLabel('Free quantity');
+      const billed = page.getByRole('textbox', { name: 'Billed quantity', exact: true });
+      const free = page.getByRole('textbox', { name: 'Free quantity', exact: true });
       await expectTapTarget(billed);
       await expectTapTarget(free);
       await expect(billed).toHaveAttribute('inputmode', 'decimal');

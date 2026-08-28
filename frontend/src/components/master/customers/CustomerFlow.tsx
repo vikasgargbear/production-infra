@@ -253,7 +253,7 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
     const labelClass = "block text-xs font-medium text-gray-600 mb-1";
 
     return (
-        <div ref={formRef} className="h-full bg-white flex flex-col">
+        <div ref={formRef} className="fixed inset-0 z-50 flex flex-col bg-white">
             {/* Header - STANDARD: py-4 */}
             <div className="flex-shrink-0 bg-white border-b border-gray-200 px-3 py-3 sm:px-6 sm:py-4">
                 <div className="flex items-center justify-between">
@@ -351,13 +351,13 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
 
                             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                                 <div className="col-span-1 sm:col-span-2">
-                                    <label className={labelClass}>Customer Name *</label>
+                                    <label htmlFor="customer-name" className={labelClass}>Customer Name *</label>
                                     <div className="relative">
                                         <User className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                                         <input
-                                            type="tel"
-                                            inputMode="tel"
-                                            autoComplete="tel"
+                                            id="customer-name"
+                                            type="text"
+                                            autoComplete={isBusinessCustomer ? 'organization' : 'name'}
                                             value={formData.customer_name}
                                             onChange={(e) => updateField('customer_name', e.target.value)}
                                             className={inputClass}
