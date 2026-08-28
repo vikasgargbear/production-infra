@@ -40,6 +40,7 @@ describe('canonical invoice web transport', () => {
         ]);
         expect(get).toHaveBeenCalledWith(
             '/canonical/invoices/10000000-0000-4000-8000-000000000002',
+            { preserveExactDecimals: true },
         );
         expect(response.data).toEqual(expect.objectContaining({
             success: true,
@@ -67,5 +68,6 @@ describe('canonical invoice web transport', () => {
             preserveExactDecimals: true,
         });
         expect(get.mock.calls[2][1]).toEqual({ preserveExactDecimals: true });
+        expect(get.mock.calls[0][1]).toEqual({ preserveExactDecimals: true });
     });
 });
