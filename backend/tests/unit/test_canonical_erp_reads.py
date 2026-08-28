@@ -375,6 +375,114 @@ def test_order_and_challan_import_details_include_canonical_batch_allocations(mo
     assert challan_params == {"org_id": org_id, "challan_id": challan_id}
 
 
+def test_challan_import_route_projects_its_required_source_kind(monkeypatch) -> None:
+    org_id = uuid4()
+    challan_id = uuid4()
+    dispatch_line_id = uuid4()
+    command_id = uuid4()
+    inventory_document_id = uuid4()
+    inventory_line_id = uuid4()
+    product_id = uuid4()
+    batch_id = uuid4()
+    branch_id = uuid4()
+    conversion_id = uuid4()
+    customer_id = uuid4()
+    location_id = uuid4()
+    now = datetime(2026, 8, 29, 0, 0, 0)
+
+    monkeypatch.setattr(canonical_erp_reads, "_activate", lambda *_args: org_id)
+
+    def fake_rows(_db, sql, params):
+        assert params == {"org_id": org_id, "challan_id": challan_id}
+        item = {
+            "id": dispatch_line_id,
+            "product_id": product_id,
+            "product_name": "Canonical Product",
+            "product_code": "PROD-1",
+            "hsn_code": "30049099",
+            "branch_id": branch_id,
+            "uom_conversion_id": conversion_id,
+            "uom_code": "EA",
+            "unit": "EA",
+            "quantity": "2.000000",
+            "dispatched_quantity": "2.000000",
+            "free_quantity": "0.000000",
+            "free_supply_tax_treatment": "excluded_from_taxable_value",
+            "unit_price": "100.0000",
+            "discount_percent": "5.000000",
+            "tax_rate": "12.000000",
+            "gst_percent": "12.000000",
+            "taxable_amount": "190.00",
+            "cgst_amount": "11.40",
+            "sgst_amount": "11.40",
+            "igst_amount": "0.00",
+            "line_total": "212.80",
+            "batch_id": batch_id,
+            "batch_number": "BATCH-1",
+            "expiry_date": date(2028, 9, 1),
+            "mrp": "150.0000",
+            "batch_allocations": [{
+                "source_kind": "dispatch_allocation",
+                "allocation_id": dispatch_line_id,
+                "source_line_id": dispatch_line_id,
+                "command_request_id": command_id,
+                "inventory_document_id": inventory_document_id,
+                "inventory_document_line_id": inventory_line_id,
+                "invoice_dispatch_allocation_id": None,
+                "dispatch_id": challan_id,
+                "dispatch_line_id": dispatch_line_id,
+                "batch_id": batch_id,
+                "batch_number": "BATCH-1",
+                "expiry_date": date(2028, 9, 1),
+                "from_location_id": location_id,
+                "base_quantity": "2.000000",
+                "base_billed_quantity": "2.000000",
+                "base_free_quantity": "0.000000",
+                "billed_quantity": "2.000000",
+                "free_quantity": "0.000000",
+            }],
+        }
+        if "'source_document_kind', 'delivery_challan'" in sql:
+            item["source_document_kind"] = "delivery_challan"
+        return [{
+            "challan_id": challan_id,
+            "id": challan_id,
+            "challan_number": "DC-1",
+            "challan_date": date(2026, 8, 29),
+            "status": "posted",
+            "customer_id": customer_id,
+            "customer_name": "Customer",
+            "customer_phone": None,
+            "customer_email": None,
+            "delivery_address": "Address",
+            "delivery_city": "Jaipur",
+            "delivery_state": "08",
+            "delivery_pincode": "302001",
+            "transport_company": None,
+            "vehicle_number": None,
+            "lr_number": None,
+            "items": [item],
+            "source_item_count": 1,
+            "importable_item_count": 1,
+            "total_amount": "212.80",
+            "created_at": now,
+            "updated_at": now,
+        }]
+
+    monkeypatch.setattr(canonical_erp_reads, "_rows", fake_rows)
+    result = canonical_erp_reads.canonical_challan_compatibility_detail(
+        challan_id=challan_id, user={}, db=object(),
+    )
+    route = next(
+        route for route in canonical_erp_reads.router.routes
+        if isinstance(route, APIRoute)
+        and route.path == "/canonical/challans/{challan_id}/import-detail"
+    )
+    response = route.response_model.model_validate(result)
+
+    assert response.items[0].source_document_kind == "delivery_challan"
+
+
 def test_order_and_challan_import_routes_publish_strict_authoritative_contracts() -> None:
     routes = {
         route.path: route for route in canonical_erp_reads.router.routes

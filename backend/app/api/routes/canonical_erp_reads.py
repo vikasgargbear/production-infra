@@ -4133,7 +4133,9 @@ def canonical_challan_compatibility_detail(
           ) contact ON true
           LEFT JOIN LATERAL (
               SELECT jsonb_agg(jsonb_build_object(
-                         'id', line.id, 'product_id', line.product_id,
+                         'id', line.id,
+                         'source_document_kind', 'delivery_challan',
+                         'product_id', line.product_id,
                          'product_name', product.name, 'product_code', product.sku,
                          'hsn_code', product.hsn_code, 'branch_id', dispatch.branch_id,
                          'uom_conversion_id', conversion.id, 'uom_code', line.uom_code,
