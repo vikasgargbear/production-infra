@@ -54,9 +54,10 @@ def _seed_tax_release(connection, fixture) -> str:
     connection.exec_driver_sql('SET LOCAL ROLE "erp_migration_owner"')
     existing = connection.scalar(text("""
         SELECT tax_version.code
-          FROM tax.tax_code_versions tax_version
+         FROM tax.tax_code_versions tax_version
           JOIN core.reference_data_releases release ON release.id=tax_version.release_id
          WHERE tax_version.status='active' AND tax_version.code_kind='hsn'
+           AND release.dataset_kind='hsn_sac_tax'
            AND tax_version.default_supply_type='goods' AND release.status='active'
            AND CURRENT_DATE BETWEEN tax_version.effective_from AND COALESCE(tax_version.effective_to,'infinity'::date)
            AND CURRENT_DATE BETWEEN release.effective_from AND COALESCE(release.effective_to,'infinity'::date)
