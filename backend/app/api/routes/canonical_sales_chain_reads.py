@@ -31,10 +31,6 @@ class CanonicalSalesOrderLineReadback(BaseModel):
     taxable_amount: Money
     total_tax: Money
     line_total: Money
-    reservation_id: UUID
-    batch_id: UUID
-    location_id: UUID
-    reserved_base_quantity: Quantity
 
 
 class CanonicalSalesOrderReadback(BaseModel):
@@ -52,11 +48,6 @@ class CanonicalSalesOrderReadback(BaseModel):
     def reconcile(self):
         if sum((Decimal(line.line_total) for line in self.lines), Decimal("0")) + Decimal(self.rounding_adjustment) != Decimal(self.total_amount):
             raise ValueError("sales-order header total does not reconcile to its lines")
-        for line in self.lines:
-            if Decimal(line.reserved_base_quantity) != (
-                Decimal(line.base_billed_quantity) + Decimal(line.base_free_quantity)
-            ):
-                raise ValueError("sales-order reservation does not reconcile to billed and free base quantities")
         return self
 
 
@@ -123,7 +114,9 @@ class CanonicalSalesDispatchValuationReadback(CanonicalSalesDispatchReadback):
 
 
 @router.get("/canonical/sales-orders/{order_id}/acceptance-readback", response_model=CanonicalSalesOrderReadback)
-def sales_order_acceptance_readback(order_id: UUID, user: dict = SALES_USER, db: Session = Depends(get_db)):
+def sales_order_acceptance_readback(
+    order_id: UUID, user: dict = SALES_USER, db: Session = Depends(get_db)
+) -> CanonicalSalesOrderReadback:
     org_id = _activate(db, user)
     rows = _rows(db, """
         SELECT document.id AS sales_order_id, document.order_number, document.status,
@@ -145,15 +138,9 @@ def sales_order_acceptance_readback(order_id: UUID, user: dict = SALES_USER, db:
                          'quoted_unit_rate', to_char(line.quoted_unit_rate, 'FM999999999999999990.0000'),
                          'taxable_amount', to_char(line.gst_taxable_value, 'FM999999999999999990.00'),
                          'total_tax', to_char(line.cgst_amount+line.sgst_amount+line.igst_amount+line.cess_amount, 'FM999999999999999990.00'),
-                         'line_total', to_char(line.line_total, 'FM999999999999999990.00'),
-                         'reservation_id', reservation.id, 'batch_id', reservation.batch_id,
-                         'location_id', reservation.location_id,
-                         'reserved_base_quantity', to_char(reservation.quantity, 'FM999999999999999990.000000')
+                         'line_total', to_char(line.line_total, 'FM999999999999999990.00')
                      ) ORDER BY line.line_number, line.id) AS items
                 FROM sales.order_lines line
-                JOIN inventory.reservations reservation
-                  ON reservation.org_id=line.org_id AND reservation.order_line_id=line.id
-                 AND reservation.status='active' AND reservation.expires_at>transaction_timestamp()
                WHERE line.org_id=document.org_id AND line.order_id=document.id
                  AND line.line_kind='product' AND line.product_id IS NOT NULL
           ) lines ON true
@@ -161,7 +148,7 @@ def sales_order_acceptance_readback(order_id: UUID, user: dict = SALES_USER, db:
     """, {"org_id": org_id, "order_id": order_id})
     if len(rows) != 1:
         raise HTTPException(status_code=404, detail="Approved canonical sales order readback not found")
-    return rows[0]
+    return CanonicalSalesOrderReadback.model_validate(rows[0])
 
 
 def _sales_dispatch_valuation_acceptance_readback(

@@ -76,8 +76,7 @@ def test_order_and_dispatch_schemas_require_exact_strings_and_canonical_uuids():
             "billed_quantity": "1.125000", "free_quantity": "0.250000",
             "base_billed_quantity": "11.250000", "base_free_quantity": "2.500000",
             "quoted_unit_rate": "84.1250", "taxable_amount": "150.00",
-            "total_tax": "18.00", "line_total": "168.00", "reservation_id": ids[3],
-            "batch_id": ids[4], "location_id": ids[5], "reserved_base_quantity": "13.750000",
+            "total_tax": "18.00", "line_total": "168.00",
         }],
     }
     dispatch = {
@@ -112,7 +111,6 @@ def test_order_and_dispatch_schemas_require_exact_strings_and_canonical_uuids():
 
 @pytest.mark.parametrize("target,field,value,message", [
     ("order", "total_amount", "167.99", "header total"),
-    ("order_line", "reserved_base_quantity", "13.749999", "reservation"),
     ("dispatch", "inventory_base_quantity", "13.749999", "inventory quantity"),
     ("dispatch_valuation", "inventory_value", "84.12", "inventory value"),
     ("dispatch_line", "ledger_base_quantity", "13.749999", "ledger quantity"),
@@ -126,8 +124,7 @@ def test_order_and_dispatch_readbacks_fail_closed_for_arithmetic_drift(target, f
                  "free_quantity": "0.250000", "base_billed_quantity": "10.000000",
                  "base_free_quantity": "2.500000", "quoted_unit_rate": "100.0000",
                  "taxable_amount": "100.00", "total_tax": "12.00", "line_total": "112.00",
-                 "reservation_id": ids[3], "batch_id": ids[4], "location_id": ids[5],
-                 "reserved_base_quantity": "12.500000"}]}
+             }]}
     dispatch = {"dispatch_id": ids[6], "challan_number": "DC-1", "sales_order_id": ids[0],
                 "status": "posted", "customer_name": "Customer", "inventory_document_id": ids[7],
                 "inventory_base_quantity": "12.500000", "inventory_value": "84.13", "lines": [{
@@ -362,6 +359,49 @@ def test_dispatch_readback_uses_canonical_stock_ledger_columns(monkeypatch):
     assert captured["params"] == {"org_id": org_id, "dispatch_id": dispatch_id}
     assert "inventory_value" not in result.model_dump()
     assert "ledger_value" not in result.lines[0].model_dump()
+
+
+def test_sales_order_readback_does_not_require_an_inventory_reservation(monkeypatch):
+    order_id, org_id = uuid4(), uuid4()
+    ids = [uuid4() for _ in range(2)]
+    row = {
+        "sales_order_id": order_id,
+        "order_number": "SO-1",
+        "status": "approved",
+        "customer_name": "Customer",
+        "requested_delivery_date": "2026-08-30",
+        "total_amount": "112.00",
+        "rounding_adjustment": "0.00",
+        "lines": [{
+            "sales_order_line_id": ids[0],
+            "product_id": ids[1],
+            "billed_quantity": "1.000000",
+            "free_quantity": "0.000000",
+            "base_billed_quantity": "1.000000",
+            "base_free_quantity": "0.000000",
+            "quoted_unit_rate": "100.0000",
+            "taxable_amount": "100.00",
+            "total_tax": "12.00",
+            "line_total": "112.00",
+        }],
+    }
+    captured = {}
+
+    monkeypatch.setattr(reads, "_activate", lambda db, user: org_id)
+
+    def fake_rows(db, sql, params):
+        captured.update(sql=sql, params=params)
+        return [row]
+
+    monkeypatch.setattr(reads, "_rows", fake_rows)
+
+    result = reads.sales_order_acceptance_readback(
+        order_id, {"org_id": str(org_id)}, object()
+    )
+
+    assert result.sales_order_id == order_id
+    assert "inventory.reservations" not in captured["sql"]
+    assert captured["params"] == {"org_id": org_id, "order_id": order_id}
 
 
 def test_dispatch_readback_fails_closed_when_lines_span_sales_orders(monkeypatch):
