@@ -37,6 +37,33 @@ def _oauth_claims(**overrides) -> dict:
     return claims
 
 
+def test_deployment_mcp_url_overrides_a_stale_manifest_endpoint(monkeypatch) -> None:
+    deployed_url = "https://deployed-mcp.example.test/mcp"
+    monkeypatch.setattr(exercise, "MCP_URL", "https://stale.example.test/mcp")
+    monkeypatch.setenv("PHARMA_CANONICAL_MCP_URL", deployed_url)
+
+    assert exercise._deployment_mcp_url() == deployed_url
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "http://mcp.example.test/mcp",
+        "https://mcp.example.test",
+        "https://mcp.example.test/mcp/",
+        "https://mcp.example.test/mcp?target=other",
+        "https://user:password@mcp.example.test/mcp",
+    ],
+)
+def test_deployment_mcp_url_rejects_ambiguous_or_unsafe_bindings(
+    monkeypatch, value: str
+) -> None:
+    monkeypatch.setenv("PHARMA_CANONICAL_MCP_URL", value)
+
+    with pytest.raises(exercise.ExerciseError, match="one HTTPS origin"):
+        exercise._deployment_mcp_url()
+
+
 def test_oauth_claim_preflight_accepts_canonical_web_metadata_shape() -> None:
     claims = _oauth_claims()
 

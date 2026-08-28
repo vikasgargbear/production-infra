@@ -577,6 +577,7 @@ def test_remote_identity_success_retains_only_nonsecret_cleanup_state(
         "22222222-2222-4222-8222-222222222222"
     )
     observed_api_origins = []
+    observed_mcp_urls = []
     observed_fixture_run_tokens = []
     observed_fact_resolution = []
 
@@ -590,6 +591,7 @@ def test_remote_identity_success_retains_only_nonsecret_cleanup_state(
                 handle.write(f"{key}={value}\n")
 
     def provision_mcp(state_path, _browser_state_path, fixture_run_token):
+        observed_mcp_urls.append(os.environ["PHARMA_CANONICAL_MCP_URL"])
         observed_fixture_run_tokens.append(fixture_run_token)
         state_path.write_text(
             json.dumps({"version": 1, "client_id": deployed_client_id}) + "\n",
@@ -661,6 +663,7 @@ def test_remote_identity_success_retains_only_nonsecret_cleanup_state(
     )
     assert os.environ["MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS"] == deployed_client_id
     assert observed_api_origins == [request["api_origin"]]
+    assert observed_mcp_urls == [request["mcp_url"]]
     assert observed_fixture_run_tokens == ["1234-2"]
 
 

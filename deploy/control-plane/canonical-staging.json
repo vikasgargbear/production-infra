@@ -127,7 +127,7 @@
         "mcp": {
           "id": "64896a64-7eae-4ece-a8a4-bc4499c7c7e0",
           "name": "aasopharma-mcp-pilot",
-          "origin": "https://pharma-backend-production-0c09.up.railway.app",
+          "origin": "https://aasopharma-mcp-pilot-production.up.railway.app",
           "kind": "web_service",
           "health": "/health",
           "readiness": "/ready",

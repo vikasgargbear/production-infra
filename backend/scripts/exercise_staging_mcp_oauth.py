@@ -90,6 +90,32 @@ def _required(name: str) -> str:
     return value
 
 
+def _deployment_mcp_url() -> str:
+    """Resolve the MCP resource bound by the deployment gate.
+
+    Hosted acceptance must follow the endpoint selected and provenance-checked by
+    its calling workflow. The manifest value remains only the default contract
+    for direct invocations; an explicit deployment binding always wins.
+    """
+
+    candidate = os.getenv("PHARMA_CANONICAL_MCP_URL", "").strip() or MCP_URL
+    parsed = urlparse(candidate)
+    if (
+        parsed.scheme != "https"
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.path != "/mcp"
+        or parsed.params
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ExerciseError(
+            "PHARMA_CANONICAL_MCP_URL must be one HTTPS origin followed by /mcp"
+        )
+    return candidate
+
+
 def _pkce() -> tuple[str, str]:
     verifier = secrets.token_urlsafe(64)
     digest = hashlib.sha256(verifier.encode("ascii")).digest()
@@ -110,6 +136,7 @@ def _start_authorization(
     client_id: str,
     challenge: str,
     state: str,
+    mcp_url: str,
 ) -> str:
     response = session.get(
         f"{ISSUER}/oauth/authorize",
@@ -121,7 +148,7 @@ def _start_authorization(
             "state": state,
             "code_challenge": challenge,
             "code_challenge_method": "S256",
-            "resource": MCP_URL,
+            "resource": mcp_url,
             "prompt": "consent",
         },
         allow_redirects=False,
@@ -203,6 +230,7 @@ def _exchange_token(
     client_id: str,
     verifier: str,
     redirect_url: str,
+    mcp_url: str,
 ) -> dict[str, Any]:
     query = parse_qs(urlparse(redirect_url).query)
     codes = query.get("code", [])
@@ -216,7 +244,7 @@ def _exchange_token(
             "code": codes[0],
             "redirect_uri": CALLBACK_URL,
             "code_verifier": verifier,
-            "resource": MCP_URL,
+            "resource": mcp_url,
         },
         timeout=20,
     )
@@ -424,7 +452,7 @@ def _verify_sales_order_readback(
 
 
 def _exercise_mcp(
-    access_token: str, *, business_flow: bool
+    access_token: str, *, business_flow: bool, mcp_url: str
 ) -> tuple[list[str], dict[str, Any] | None]:
     session = requests.Session()
     session.headers.update(
@@ -436,7 +464,7 @@ def _exercise_mcp(
     )
     initialized = _jsonrpc_response(
         session.post(
-            MCP_URL,
+            mcp_url,
             json={
                 "jsonrpc": "2.0",
                 "id": 1,
@@ -454,13 +482,13 @@ def _exercise_mcp(
     if isinstance(session_id, str) and session_id:
         session.headers["Mcp-Session-Id"] = session_id
     session.post(
-        MCP_URL,
+        mcp_url,
         json={"jsonrpc": "2.0", "method": "notifications/initialized"},
         timeout=30,
     ).raise_for_status()
     listed = _jsonrpc_response(
         session.post(
-            MCP_URL,
+            mcp_url,
             json={"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
             timeout=30,
         )
@@ -475,7 +503,7 @@ def _exercise_mcp(
         return names, None
     called = _jsonrpc_response(
         session.post(
-            MCP_URL,
+            mcp_url,
             json={
                 "jsonrpc": "2.0",
                 "id": 3,
@@ -497,7 +525,7 @@ def _exercise_mcp(
         nonlocal next_id
         response = _jsonrpc_response(
             session.post(
-                MCP_URL,
+                mcp_url,
                 json={
                     "jsonrpc": "2.0",
                     "id": next_id,
@@ -664,8 +692,8 @@ def _reconcile_database(workflow: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _wait_for_mcp_readiness() -> None:
-    readiness_url = MCP_URL.removesuffix("/mcp") + "/ready"
+def _wait_for_mcp_readiness(mcp_url: str) -> None:
+    readiness_url = mcp_url.removesuffix("/mcp") + "/ready"
     last_detail = "no response"
     for attempt in range(1, 6):
         try:
@@ -694,6 +722,7 @@ def main() -> int:
     email = _required("CANONICAL_STAGING_MCP_TEST_EMAIL")
     password = _required("CANONICAL_STAGING_MCP_TEST_PASSWORD")
     anon_key = _required("SUPABASE_ANON_KEY")
+    mcp_url = _deployment_mcp_url()
     session = requests.Session()
     session.headers.update({"apikey": anon_key})
     login = session.post(
@@ -718,7 +747,11 @@ def main() -> int:
     _, denial_challenge = _pkce()
     denial_state = secrets.token_urlsafe(24)
     denial_id = _start_authorization(
-        session, client_id=client_id, challenge=denial_challenge, state=denial_state
+        session,
+        client_id=client_id,
+        challenge=denial_challenge,
+        state=denial_state,
+        mcp_url=mcp_url,
     )
     _authorization_details(session, denial_id, user_access_token)
     _assert_denial_redirect(
@@ -728,7 +761,11 @@ def main() -> int:
     verifier, approval_challenge = _pkce()
     approval_state = secrets.token_urlsafe(24)
     approval_id = _start_authorization(
-        session, client_id=client_id, challenge=approval_challenge, state=approval_state
+        session,
+        client_id=client_id,
+        challenge=approval_challenge,
+        state=approval_state,
+        mcp_url=mcp_url,
     )
     _authorization_details(session, approval_id, user_access_token)
     approved_redirect = _decide(session, approval_id, user_access_token, "approve")
@@ -739,6 +776,7 @@ def main() -> int:
         client_id=client_id,
         verifier=verifier,
         redirect_url=approved_redirect,
+        mcp_url=mcp_url,
     )
     _validate_oauth_access_token_claims(
         token["access_token"],
@@ -746,9 +784,11 @@ def main() -> int:
         organization_id=DEMO_ORG_ID,
     )
 
-    _wait_for_mcp_readiness()
+    _wait_for_mcp_readiness(mcp_url)
     tool_names, workflow = _exercise_mcp(
-        token["access_token"], business_flow=exercise_mode == "business_flow"
+        token["access_token"],
+        business_flow=exercise_mode == "business_flow",
+        mcp_url=mcp_url,
     )
     reconciliation = (
         _reconcile_database(workflow)
@@ -760,7 +800,7 @@ def main() -> int:
     evidence = {
         "project_ref": PROJECT_REF,
         "issuer": ISSUER,
-        "resource": MCP_URL,
+        "resource": mcp_url,
         "client_id": client_id,
         "client_type": "public",
         "pkce_method": "S256",
