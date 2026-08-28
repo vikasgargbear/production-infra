@@ -2,7 +2,15 @@ import React from 'react';
 
 // Import centralized types - single source of truth
 import type { Invoice, InvoiceItem, CompanyInfo } from '../types/invoiceTypes';
-import { addExactDecimals, compareExactDecimals, formatExactCurrency, formatExactDecimal, normalizeExactDecimal } from '../../../../utils/exactDecimal';
+import {
+  addExactDecimals,
+  compareExactDecimals,
+  exactDecimalString,
+  exactDecimalUnits,
+  formatExactCurrency,
+  formatExactDecimal,
+  normalizeExactDecimal,
+} from '../../../../utils/exactDecimal';
 import { canonicalInvoicePreviewUnavailableReason } from '../../utils/canonicalSalesPreviewFacts';
 
 // ==================== COMPONENT PROPS ====================
@@ -41,6 +49,18 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
   const moneyOptions = { scale: 2, maximumWholeDigits: 20, allowNegative: true } as const;
   const quantityOptions = { scale: 6, maximumWholeDigits: 20, allowNegative: false } as const;
   const formatCurrency = (amount: unknown): string => formatExactCurrency(amount, 'Invoice preview money');
+  const formatRateCurrency = (amount: unknown, label: string): string => {
+    // Canonical rates cross JSON at four decimals. Round only their display
+    // projection to money precision using base-10 integer units; invoice state
+    // and the posting command retain the original authoritative rate string.
+    const units = exactDecimalUnits(amount, label, {
+      scale: 4,
+      maximumWholeDigits: 20,
+      allowNegative: false,
+    });
+    const roundedMinorUnits = units / 100n + (units % 100n >= 50n ? 1n : 0n);
+    return formatExactCurrency(exactDecimalString(roundedMinorUnits, 2), label);
+  };
 
   const formatDate = (date: string): string => {
     return new Date(date).toLocaleDateString('en-IN', {
@@ -387,7 +407,9 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
                       }) : '-'}
                     </td>
                     <td className="py-2 px-1 text-right" style={{ verticalAlign: 'middle' }}>
-                      {item.mrp == null ? 'Not available' : formatCurrency(item.mrp)}
+                      {item.mrp == null
+                        ? 'Not available'
+                        : formatRateCurrency(item.mrp, 'Invoice preview MRP')}
                     </td>
                     <td className="py-2 px-1 text-right font-medium tabular-nums" style={{ verticalAlign: 'middle' }}>
                       {formatExactDecimal(item.quantity, 'Invoice billed quantity', quantityOptions)}
@@ -396,7 +418,7 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
                       {compareExactDecimals(freeQty, 0, 'Invoice free quantity', quantityOptions) > 0 ? formatExactDecimal(freeQty, 'Invoice free quantity', quantityOptions) : '-'}
                     </td>
                     <td className="py-2 px-1 text-right" style={{ verticalAlign: 'middle' }}>
-                      {formatCurrency(unitPrice)}
+                      {formatRateCurrency(unitPrice, 'Invoice preview unit rate')}
                     </td>
                     <td className="py-2 px-1 text-right" style={{ verticalAlign: 'middle' }}>
                       {compareExactDecimals(discount, 0, 'Invoice discount percent', quantityOptions) > 0 ? `${formatExactDecimal(discount, 'Invoice discount percent', quantityOptions)}%` : '-'}
