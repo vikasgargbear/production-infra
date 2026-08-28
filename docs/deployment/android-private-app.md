@@ -17,11 +17,16 @@ different reviewed Railway frontend. The value must be an HTTPS origin on port
 ## Security and navigation contract
 
 - Cleartext HTTP, mixed content, backups, and WebView debugging are disabled.
-- The WebView intercepts only a PKCE Google authorize request on the exact
+- On Android, the primary Google sign-in path uses Credential Manager's native
+  account picker. The native plugin sends the Google ID token and the unhashed
+  nonce to Supabase `signInWithIdToken`; the ERP never accepts an unverified
+  Google token directly.
+- If Credential Manager or its Google provider is unavailable, the WebView may
+  fall back to the reviewed PKCE authorize request on the exact
   `AASOPHARMA_SUPABASE_HOST`. It validates the callback route and opens that
-  authorize URL with an Android `ACTION_VIEW` browsable intent. A missing
-  browser or invalid request fails closed; Google OAuth never falls back into
-  an embedded WebView.
+  authorize URL with an Android `ACTION_VIEW` browsable intent. Cancellation or
+  an invalid native credential fails closed and never opens Chrome. Google
+  OAuth never runs inside the embedded WebView.
 - OAuth returns through an HTTPS Android App Link on the configured frontend
   host. Custom URL schemes are intentionally unsupported.
 - Accepted return routes are `/`, `/?invitation_token=<token>`, and
@@ -45,6 +50,7 @@ export ANDROID_HOME=/path/to/android-sdk
 export ANDROID_SDK_ROOT="$ANDROID_HOME"
 export CAPACITOR_SERVER_URL=https://aasopharma-erp-pilot-production-eb9b.up.railway.app
 export AASOPHARMA_SUPABASE_HOST=rgihahbmkrmhitjdjvev.supabase.co
+export AASOPHARMA_GOOGLE_WEB_CLIENT_ID=323677199056-omdr0k93cn9mc6mopulgk2n4la0f6biv.apps.googleusercontent.com
 
 npm ci
 npm run typecheck
@@ -85,6 +91,27 @@ keytool -genkeypair -v \
 Do not commit the keystore, passwords, generated APKs, or a `.env` containing
 these values.
 
+## Configure native Google sign-in
+
+Credential Manager uses the Google web OAuth client ID as the server client ID.
+The ID is public configuration, not a client secret. The checked-in default is
+the same web client used by the canonical Supabase Google provider and can be
+overridden with `AASOPHARMA_GOOGLE_WEB_CLIENT_ID`.
+
+In that Google Cloud project's Google Auth Platform client configuration,
+register an Android OAuth client with both:
+
+```text
+Package name: com.aasopharma.erp
+SHA-1: the SHA-1 fingerprint of the permanent release signing certificate
+```
+
+Keep the existing web OAuth client first in Supabase's comma-separated Google
+client ID list. Add the Android client ID to the same list if it is not already
+present. Never put an OAuth client secret in the APK. Confirm `openid`, email,
+and profile are the only login scopes unless a separately reviewed feature
+requires more.
+
 ## Build and verify a signed release APK
 
 Release tasks deliberately fail when any signing value is absent. Increment
@@ -94,6 +121,7 @@ Release tasks deliberately fail when any signing value is absent. Increment
 cd frontend
 export CAPACITOR_SERVER_URL=https://aasopharma-erp-pilot-production-eb9b.up.railway.app
 export AASOPHARMA_SUPABASE_HOST=rgihahbmkrmhitjdjvev.supabase.co
+export AASOPHARMA_GOOGLE_WEB_CLIENT_ID=323677199056-omdr0k93cn9mc6mopulgk2n4la0f6biv.apps.googleusercontent.com
 export AASOPHARMA_ANDROID_VERSION_CODE=1
 export AASOPHARMA_ANDROID_VERSION_NAME=1.0.0
 export AASOPHARMA_ANDROID_KEYSTORE=/secure/path/aasopharma-android-release.jks
@@ -186,8 +214,11 @@ Run these checks on at least one supported physical Android device before
 distribution:
 
 1. Fresh-install the signed release and confirm the reviewed Railway origin.
-2. Start Google sign-in and confirm consent opens in the system browser, then
-   the verified HTTPS callback returns to the existing app task.
+2. Start Google sign-in and confirm Android's native account picker opens. A
+   successful selection must return directly to the existing app task without
+   Chrome. On a device without Credential Manager/Google support, confirm the
+   fallback opens the system browser and the verified HTTPS callback returns
+   to the existing app task.
 3. Complete organization creation and invitation acceptance separately.
 4. Navigate through at least three ERP screens. Confirm Back walks WebView
    history, then exits only when history is empty.

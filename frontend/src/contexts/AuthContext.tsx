@@ -11,6 +11,13 @@ import { getApiBaseUrl } from '../config/apiBase';
 import { getSupabaseClient } from '../services/auth/supabaseClient';
 import { googleAuthReturnUrl } from '../services/auth/oauthConsentClient';
 import {
+    clearNativeGoogleCredentialState,
+    isNativeGoogleAuthAvailable,
+    nativeGoogleAuthErrorCode,
+    shouldUseGoogleBrowserFallback,
+    signInWithNativeGoogle,
+} from '../services/mobile/nativeGoogleAuth';
+import {
     clearErpSessionStorage,
     removeLegacyErpSessionKeys,
     saveErpSession,
@@ -330,6 +337,36 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         if (!navigator.onLine) {
             return { success: false, error: 'An internet connection is required to sign in.' };
         }
+
+        if (isNativeGoogleAuthAvailable()) {
+            try {
+                const credential = await signInWithNativeGoogle();
+                const { data, error } = await getSupabaseClient().auth.signInWithIdToken({
+                    provider: 'google',
+                    token: credential.idToken,
+                    nonce: credential.nonce,
+                });
+                if (error) return { success: false, error: error.message };
+                if (!data.session) {
+                    return { success: false, error: 'Google did not create a cloud session.' };
+                }
+                setHasCloudSession(true);
+                return exchangeSupabaseSession(data.session.access_token);
+            } catch (error) {
+                if (nativeGoogleAuthErrorCode(error) === 'AUTH_CANCELLED') {
+                    return { success: false };
+                }
+                if (!shouldUseGoogleBrowserFallback(error)) {
+                    return {
+                        success: false,
+                        error: error instanceof Error
+                            ? error.message
+                            : 'Native Google sign-in failed',
+                    };
+                }
+            }
+        }
+
         try {
             const { error } = await getSupabaseClient().auth.signInWithOAuth({
                 provider: 'google',
@@ -342,9 +379,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         } catch (error) {
             return { success: false, error: error instanceof Error ? error.message : 'Google login failed' };
         }
-    }, []);
+    }, [exchangeSupabaseSession]);
 
     const logout = useCallback(() => {
+        void clearNativeGoogleCredentialState().catch(() => undefined);
         try {
             void getSupabaseClient().auth.signOut().catch(() => undefined);
         } catch {

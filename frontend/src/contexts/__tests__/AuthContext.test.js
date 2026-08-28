@@ -5,10 +5,14 @@ import AuthContext, { AuthProvider } from '../AuthContext';
 
 const mockSignInWithPassword = jest.fn();
 const mockSignInWithOAuth = jest.fn();
+const mockSignInWithIdToken = jest.fn();
 const mockSignOut = jest.fn();
 const mockGetSession = jest.fn();
 const mockUnsubscribe = jest.fn();
 let mockAuthStateCallback;
+let mockNativeGoogleAvailable = false;
+const mockSignInWithNativeGoogle = jest.fn();
+const mockClearNativeGoogleCredentialState = jest.fn();
 
 
 jest.mock('../../services/auth/supabaseClient', () => ({
@@ -16,6 +20,7 @@ jest.mock('../../services/auth/supabaseClient', () => ({
         auth: {
             signInWithPassword: mockSignInWithPassword,
             signInWithOAuth: mockSignInWithOAuth,
+            signInWithIdToken: mockSignInWithIdToken,
             signOut: mockSignOut,
             getSession: mockGetSession,
             onAuthStateChange: (callback) => {
@@ -24,6 +29,19 @@ jest.mock('../../services/auth/supabaseClient', () => ({
             },
         },
     }),
+}));
+
+jest.mock('../../services/mobile/nativeGoogleAuth', () => ({
+    clearNativeGoogleCredentialState: () => mockClearNativeGoogleCredentialState(),
+    isNativeGoogleAuthAvailable: () => mockNativeGoogleAvailable,
+    nativeGoogleAuthErrorCode: (error) => error?.code || null,
+    shouldUseGoogleBrowserFallback: (error) => [
+        'CONFIGURATION_MISSING',
+        'NATIVE_AUTH_UNAVAILABLE',
+        'NATIVE_SIGN_IN_FAILED',
+        'NO_CREDENTIAL',
+    ].includes(error?.code),
+    signInWithNativeGoogle: () => mockSignInWithNativeGoogle(),
 }));
 
 function token(overrides = {}) {
@@ -55,11 +73,13 @@ function Probe() {
 beforeEach(() => {
     jest.clearAllMocks();
     mockAuthStateCallback = undefined;
+    mockNativeGoogleAvailable = false;
     localStorage.clear();
     sessionStorage.clear();
     window.history.replaceState({}, '', '/');
     mockGetSession.mockResolvedValue({ data: { session: null }, error: null });
     mockSignOut.mockResolvedValue({ error: null });
+    mockClearNativeGoogleCredentialState.mockResolvedValue(undefined);
     global.fetch = jest.fn().mockResolvedValue({
         ok: true,
         json: async () => ({ access_token: token() }),
@@ -111,6 +131,52 @@ test('Google login uses Supabase PKCE redirect on the current origin', async () 
             queryParams: { prompt: 'select_account' },
         },
     });
+});
+
+
+test('Android Google login exchanges a native ID token without opening browser OAuth', async () => {
+    mockNativeGoogleAvailable = true;
+    mockSignInWithNativeGoogle.mockResolvedValue({
+        idToken: 'header.google.signature',
+        nonce: 'raw-native-nonce',
+    });
+    mockSignInWithIdToken.mockResolvedValue({
+        data: { session: { access_token: 'native-supabase-access' } },
+        error: null,
+    });
+    render(<AuthProvider><Probe /></AuthProvider>);
+    await waitFor(() => expect(currentAuth.isLoading).toBe(false));
+
+    let result;
+    await act(async () => {
+        result = await currentAuth.loginWithGoogle();
+    });
+
+    expect(mockSignInWithIdToken).toHaveBeenCalledWith({
+        provider: 'google',
+        token: 'header.google.signature',
+        nonce: 'raw-native-nonce',
+    });
+    expect(mockSignInWithOAuth).not.toHaveBeenCalled();
+    expect(result).toEqual(expect.objectContaining({ success: true }));
+});
+
+
+test('dismissing the Android account picker does not unexpectedly open Chrome', async () => {
+    mockNativeGoogleAvailable = true;
+    mockSignInWithNativeGoogle.mockRejectedValue(
+        Object.assign(new Error('cancelled'), { code: 'AUTH_CANCELLED' }),
+    );
+    render(<AuthProvider><Probe /></AuthProvider>);
+    await waitFor(() => expect(currentAuth.isLoading).toBe(false));
+
+    let result;
+    await act(async () => {
+        result = await currentAuth.loginWithGoogle();
+    });
+
+    expect(result).toEqual({ success: false });
+    expect(mockSignInWithOAuth).not.toHaveBeenCalled();
 });
 
 
