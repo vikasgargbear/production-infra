@@ -92,7 +92,7 @@ const Products: React.FC = () => {
             <h1 className="text-xl font-semibold text-gray-900">Products</h1>
           </div>
           <button ref={newDraftButtonRef} type="button" onClick={() => setEditorOpen(true)} className="flex min-h-11 items-center gap-2 bg-blue-600 px-4 py-2 text-white hover:bg-blue-700">
-            <Plus className="h-4 w-4" /> New draft
+            <Plus className="h-4 w-4" /> Create product
           </button>
         </div>
       </header>
