@@ -72,15 +72,21 @@ def test_web_authority_reconcile_keeps_secrets_out_of_command_arguments() -> Non
     assert "::add-mask::" not in source
 
 
-def test_auth_identity_is_attested_before_restricted_owner_role() -> None:
+def test_web_authority_reconcile_uses_canonical_identity_binding_only() -> None:
     source = WORKFLOW.read_text(encoding="utf-8")
 
-    auth_query = '"SELECT count(*) FROM auth.users WHERE id=%s"'
-    assert source.index(auth_query) < source.index(
-        "supports_membership_options = _enter_migration_owner(cursor)"
-    )
+    assert "FROM auth.users" not in source
+    assert "user_row.auth_user_id=%s" in source
+    assert "reviewed web identity lacks one active canonical membership authority" in source
+
+
+def test_web_authority_reconcile_rolls_back_before_role_cleanup_on_failure() -> None:
+    source = WORKFLOW.read_text(encoding="utf-8")
+
     assert "except BaseException:" in source
+    assert "connection.rollback()" in source
     assert "else:\n                      _leave_migration_owner" in source
+    assert "finally:\n                      _leave_migration_owner" not in source
 
 
 def test_embedded_remote_reconciler_is_valid_python() -> None:
