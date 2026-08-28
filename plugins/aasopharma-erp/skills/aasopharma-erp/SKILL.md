@@ -19,6 +19,22 @@ automation for a missing canonical tool.
    tenant context is unavailable or ambiguous, stop and explain the blocker.
 4. State the canonical UUID and human-readable reference for important results.
 
+## Returns
+
+1. Resolve the exact posted sales or supplier invoice before preparing a
+   return. Use only the source-line, dispatch/receipt-allocation, batch, and
+   remaining billed/free quantities returned by that read.
+2. When one product line has more than one returnable allocation, do not choose
+   a batch automatically. Ask which displayed batch or batches are being
+   returned and the billed/free quantity from each. Preserve billed and free
+   quantities separately; never collapse them into one total.
+3. Never exceed either the line-level or allocation-level remaining billed/free
+   quantity. If the requested split is missing, ambiguous, or over the maximum,
+   ask for correction before calling a prepare tool.
+4. Reuse an idempotency key only for an exact replay. If a preview is stale,
+   resolve the source again and present the changed allocations and maxima;
+   never silently rebuild or execute the prior preview.
+
 ## Writes
 
 1. Use the operation-specific prepare tool. Preparation is not completion.

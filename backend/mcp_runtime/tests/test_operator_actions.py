@@ -269,6 +269,41 @@ def test_return_source_capabilities_are_explicit_without_becoming_executable() -
     ] == "RETURN_SOURCE_AUTHORITY_UNAVAILABLE"
 
 
+def test_return_prepare_transport_requires_exact_line_batch_and_split_quantities() -> None:
+    sales_line = PREPARE_ACTIONS["erp_sales_return_prepare"].input_schema[
+        "properties"
+    ]["lines"]["items"]
+    assert {
+        "original_invoice_line_id",
+        "fulfillment_source",
+        "invoice_dispatch_allocation_id",
+        "billed_quantity",
+        "free_quantity",
+        "batch_allocation",
+    } <= set(sales_line["properties"])
+    assert "Exact original invoice-to-dispatch allocation" in sales_line[
+        "properties"
+    ]["invoice_dispatch_allocation_id"]["description"]
+
+    purchase_line = PREPARE_ACTIONS["erp_purchase_return_prepare"].input_schema[
+        "properties"
+    ]["lines"]["items"]
+    assert {
+        "goods_receipt_line_id",
+        "supplier_invoice_receipt_allocation_id",
+        "billed_quantity",
+        "free_quantity",
+        "batch_allocation",
+    } <= set(purchase_line["properties"])
+    assert "Exact posted supplier-invoice allocation" in purchase_line[
+        "properties"
+    ]["supplier_invoice_receipt_allocation_id"]["description"]
+    for line in (sales_line, purchase_line):
+        assert line["properties"]["billed_quantity"]["type"] == "string"
+        assert line["properties"]["free_quantity"]["type"] == "string"
+        assert line["properties"]["batch_allocation"]["additionalProperties"] is False
+
+
 def test_inventory_adjustment_is_a_hidden_typed_cycle_count_gain() -> None:
     schema = PREPARE_ACTIONS["erp_inventory_adjustment_prepare"].input_schema
     properties = schema["properties"]

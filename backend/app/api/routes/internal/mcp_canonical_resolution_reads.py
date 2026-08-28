@@ -576,6 +576,25 @@ class SalesInvoiceDispatchAllocation(StrictDTO):
             tolerance_units=1,
         ):
             raise ValueError("dispatch entered quantities do not reconcile")
+        if (
+            self.returned_base_billed_quantity < 0
+            or self.returned_base_free_quantity < 0
+            or self.returned_base_billed_quantity
+            > self.allocated_base_billed_quantity
+            or self.returned_base_free_quantity > self.allocated_base_free_quantity
+            or not _allocation_quantities_match(
+                self.remaining_base_billed_quantity,
+                self.allocated_base_billed_quantity
+                - self.returned_base_billed_quantity,
+                tolerance_units=0,
+            )
+            or not _allocation_quantities_match(
+                self.remaining_base_free_quantity,
+                self.allocated_base_free_quantity - self.returned_base_free_quantity,
+                tolerance_units=0,
+            )
+        ):
+            raise ValueError("dispatch returnable quantities do not reconcile")
         return self
 
 
@@ -650,6 +669,8 @@ class SalesInvoiceLine(StrictDTO):
     line_total: Decimal
     dispatch_allocations: list[SalesInvoiceDispatchAllocation]
     direct_issue_allocations: list[SalesInvoiceDirectIssueAllocation]
+    return_allocation_candidate_count: int = 0
+    return_allocation_selection_required: bool = False
 
     @model_validator(mode="after")
     def validate_allocation_authority(self):
@@ -666,6 +687,11 @@ class SalesInvoiceLine(StrictDTO):
         allocations = [*self.dispatch_allocations, *self.direct_issue_allocations]
         if any(value.invoice_line_id != self.invoice_line_id for value in allocations):
             raise ValueError("allocation invoice line identity does not match")
+        if any(
+            value.product_id != self.product_id
+            for value in self.dispatch_allocations
+        ):
+            raise ValueError("allocation product identity does not match invoice line")
         if len({value.inventory_document_line_id for value in allocations}) != len(
             allocations
         ):
@@ -719,6 +745,49 @@ class SalesInvoiceLine(StrictDTO):
             )
         ):
             raise ValueError("allocation totals do not reconcile to invoice line")
+        if self.dispatch_allocations and (
+            not _allocation_quantities_match(
+                sum(
+                    value.returned_base_billed_quantity
+                    for value in self.dispatch_allocations
+                ),
+                self.returned_base_billed_quantity,
+                tolerance_units=0,
+            )
+            or not _allocation_quantities_match(
+                sum(
+                    value.returned_base_free_quantity
+                    for value in self.dispatch_allocations
+                ),
+                self.returned_base_free_quantity,
+                tolerance_units=0,
+            )
+            or not _allocation_quantities_match(
+                sum(
+                    value.remaining_base_billed_quantity
+                    for value in self.dispatch_allocations
+                ),
+                self.returnable_base_billed_quantity,
+                tolerance_units=0,
+            )
+            or not _allocation_quantities_match(
+                sum(
+                    value.remaining_base_free_quantity
+                    for value in self.dispatch_allocations
+                ),
+                self.returnable_base_free_quantity,
+                tolerance_units=0,
+            )
+        ):
+            raise ValueError("dispatch return totals do not reconcile to invoice line")
+        returnable_allocations = [
+            value
+            for value in self.dispatch_allocations
+            if value.remaining_base_billed_quantity > 0
+            or value.remaining_base_free_quantity > 0
+        ]
+        self.return_allocation_candidate_count = len(returnable_allocations)
+        self.return_allocation_selection_required = len(returnable_allocations) > 1
         return self
 
 
@@ -1155,6 +1224,29 @@ class SupplierInvoiceReceiptAllocation(StrictDTO):
     remaining_base_billed_quantity: Decimal
     remaining_base_free_quantity: Decimal
 
+    @model_validator(mode="after")
+    def validate_returnable_quantities(self):
+        if (
+            self.returned_base_billed_quantity < 0
+            or self.returned_base_free_quantity < 0
+            or self.returned_base_billed_quantity
+            > self.allocated_base_billed_quantity
+            or self.returned_base_free_quantity > self.allocated_base_free_quantity
+            or not _allocation_quantities_match(
+                self.remaining_base_billed_quantity,
+                self.allocated_base_billed_quantity
+                - self.returned_base_billed_quantity,
+                tolerance_units=0,
+            )
+            or not _allocation_quantities_match(
+                self.remaining_base_free_quantity,
+                self.allocated_base_free_quantity - self.returned_base_free_quantity,
+                tolerance_units=0,
+            )
+        ):
+            raise ValueError("receipt-allocation returnable quantities do not reconcile")
+        return self
+
 
 class GoodsReceiptLine(StrictDTO):
     goods_receipt_line_id: UUID
@@ -1217,6 +1309,97 @@ class SupplierInvoiceLine(StrictDTO):
     landed_cost_allocation_method: Optional[str]
     line_total: Decimal
     receipt_allocations: list[SupplierInvoiceReceiptAllocation]
+    return_allocation_candidate_count: int = 0
+    return_allocation_selection_required: bool = False
+
+    @model_validator(mode="after")
+    def validate_receipt_return_authority(self):
+        if self.line_kind == "product" and not self.receipt_allocations:
+            raise ValueError(
+                "posted supplier product line requires receipt-allocation lineage"
+            )
+        if self.line_kind != "product" and self.receipt_allocations:
+            raise ValueError("non-product supplier line cannot have receipt allocations")
+        if any(
+            value.supplier_invoice_line_id != self.supplier_invoice_line_id
+            for value in self.receipt_allocations
+        ):
+            raise ValueError(
+                "receipt allocation supplier-invoice line identity does not match"
+            )
+        if any(
+            value.product_id != self.product_id
+            for value in self.receipt_allocations
+        ):
+            raise ValueError("receipt allocation product identity does not match invoice line")
+        allocation_ids = {
+            value.supplier_invoice_receipt_allocation_id
+            for value in self.receipt_allocations
+        }
+        if len(allocation_ids) != len(self.receipt_allocations):
+            raise ValueError("receipt allocation identities must be unique")
+        if self.receipt_allocations and (
+            not _allocation_quantities_match(
+                sum(
+                    value.allocated_base_billed_quantity
+                    for value in self.receipt_allocations
+                ),
+                self.base_billed_quantity,
+                tolerance_units=0,
+            )
+            or not _allocation_quantities_match(
+                sum(
+                    value.allocated_base_free_quantity
+                    for value in self.receipt_allocations
+                ),
+                self.base_free_quantity,
+                tolerance_units=0,
+            )
+            or not _allocation_quantities_match(
+                sum(
+                    value.returned_base_billed_quantity
+                    for value in self.receipt_allocations
+                ),
+                self.returned_base_billed_quantity,
+                tolerance_units=0,
+            )
+            or not _allocation_quantities_match(
+                sum(
+                    value.returned_base_free_quantity
+                    for value in self.receipt_allocations
+                ),
+                self.returned_base_free_quantity,
+                tolerance_units=0,
+            )
+            or not _allocation_quantities_match(
+                sum(
+                    value.remaining_base_billed_quantity
+                    for value in self.receipt_allocations
+                ),
+                self.returnable_base_billed_quantity,
+                tolerance_units=0,
+            )
+            or not _allocation_quantities_match(
+                sum(
+                    value.remaining_base_free_quantity
+                    for value in self.receipt_allocations
+                ),
+                self.returnable_base_free_quantity,
+                tolerance_units=0,
+            )
+        ):
+            raise ValueError(
+                "receipt-allocation return totals do not reconcile to invoice line"
+            )
+        returnable_allocations = [
+            value
+            for value in self.receipt_allocations
+            if value.remaining_base_billed_quantity > 0
+            or value.remaining_base_free_quantity > 0
+        ]
+        self.return_allocation_candidate_count = len(returnable_allocations)
+        self.return_allocation_selection_required = len(returnable_allocations) > 1
+        return self
 
 
 class SupplierInvoiceLandedCostAdjustment(StrictDTO):
