@@ -50,6 +50,8 @@ const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose })
         setSameAsBilling,
         saving,
         submissionUnavailableReason,
+        calculationStatus,
+        calculationUnavailableReason,
         preparedPreview,
         reviewOpen,
         message,
@@ -145,6 +147,9 @@ const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose })
     const deliveryAddressReady = Boolean(
         resolvedSalesOrderDeliveryAddress(order.shipping_address_data),
     );
+    const calculationReady = calculationStatus === 'authoritative';
+    const orderSubmissionUnavailableReason = submissionUnavailableReason
+        || calculationUnavailableReason;
 
     return (
         <>
@@ -187,6 +192,18 @@ const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose })
                             />
                         </div>
 
+                        {order.items.length > 0 && calculationUnavailableReason && (
+                            <div
+                                id="sales-order-calculation-status"
+                                role={calculationStatus === 'error' ? 'alert' : 'status'}
+                                aria-live="polite"
+                                className={`border-t px-4 py-2 text-sm ${calculationStatus === 'error'
+                                    ? 'border-red-200 bg-red-50 text-red-900'
+                                    : 'border-blue-200 bg-blue-50 text-blue-900'}`}
+                            >
+                                {calculationUnavailableReason}
+                            </div>
+                        )}
                         <DocumentFooter
                             totalItems={order.items.length}
                             totalAmount={order.total_amount}
@@ -194,7 +211,9 @@ const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose })
                             onContinue={() => setCurrentStep(2)}
                             cancelLabel="Cancel"
                             continueLabel="Continue"
-                            continueDisabled={!order.customer_id || !deliveryAddressReady || order.items.length === 0 || !order.order_date || !order.expected_delivery_date}
+                            continueDisabled={!order.customer_id || !deliveryAddressReady
+                                || order.items.length === 0 || !order.order_date
+                                || !order.expected_delivery_date || !calculationReady}
                             continueButtonColor="blue"
                         />
                     </div>
@@ -278,10 +297,10 @@ const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose })
                             />
                         </div>
 
-                        {submissionUnavailableReason && <div id="sales-order-submission-status" role="alert" className="border-t border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
-                            {submissionUnavailableReason}
+                        {orderSubmissionUnavailableReason && <div id="sales-order-submission-status" role="alert" className="border-t border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+                            {orderSubmissionUnavailableReason}
                         </div>}
-                        <fieldset disabled={Boolean(submissionUnavailableReason)} aria-describedby={submissionUnavailableReason ? "sales-order-submission-status" : undefined}>
+                        <fieldset disabled={Boolean(orderSubmissionUnavailableReason)} aria-describedby={orderSubmissionUnavailableReason ? "sales-order-submission-status" : undefined}>
                             <DocumentFooter
                                 totalItems={order.items.length}
                                 totalAmount={order.total_amount}
