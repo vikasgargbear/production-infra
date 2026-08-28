@@ -70,11 +70,11 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
 
                 {/* Content */}
                 <div className="flex-1 overflow-y-auto bg-gray-50">
-                    <div className="max-w-6xl mx-auto px-6 py-6">
+                    <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6 sm:py-6">
 
                         {/* 1. Delivery - Address first, then options */}
                         <div className="mb-6">
-                            <div className="flex items-center justify-between mb-3">
+                            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                                 <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider flex items-center">
                                     <FileText className="w-4 h-4 mr-2" />
                                     DELIVERY
@@ -82,7 +82,7 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                 {selectedCustomer && (
                                     <button
                                         onClick={() => setAddAddressMode(true)}
-                                        className="min-w-[140px] px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium flex items-center justify-center gap-1"
+                                        className="flex min-h-11 items-center justify-center gap-1 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
                                     >
                                         <Plus className="w-3.5 h-3.5" />
                                         New Address
@@ -212,10 +212,10 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                         </div>
 
                         <div className="mb-6">
-                            <div className="rounded-lg border border-gray-200 bg-white p-6">
+                            <div className="rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
                                 {/* Bill Discount - Expanded Grid (no Type label) */}
                                 <div className="border-t border-gray-100 pt-5 mb-4">
-                                    <div className="flex items-center gap-3 mb-4">
+                                    <div className="mb-4 flex flex-wrap items-center gap-3">
                                         <h4 className="text-sm font-semibold text-gray-700">Bill Discount</h4>
                                         {canonicalSchemeDiscount !== undefined
                                             && compareExactDecimals(canonicalSchemeDiscount, '0', 'Invoice scheme discount', moneyOptions) > 0 && (
@@ -225,10 +225,10 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                         )}
                                     </div>
 
-                                    <div className="grid grid-cols-12 gap-4 items-end">
+                                    <div className="grid grid-cols-1 items-end gap-4 sm:grid-cols-12">
                                         {/* Discount Type Toggle - No label */}
-                                        <div className="col-span-4">
-                                            <div className="flex rounded-lg border border-gray-300 overflow-hidden">
+                                        <div className="sm:col-span-5 lg:col-span-4">
+                                            <div className="grid grid-cols-2 overflow-hidden rounded-lg border border-gray-300">
                                                 <button
                                                     onClick={() => setInvoice(prev => ({
                                                         ...prev,
@@ -236,7 +236,7 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                                         discount_amount: 0,
                                                         discount_percent: prev.discount_percent || 0
                                                     }))}
-                                                    className={`flex-1 px-4 py-2.5 text-sm font-medium transition-colors ${(invoice.discount_type || 'percentage') === 'percentage'
+                                                    className={`min-h-11 min-w-0 px-2 py-2.5 text-sm font-medium transition-colors sm:px-3 ${(invoice.discount_type || 'percentage') === 'percentage'
                                                         ? 'bg-blue-600 text-white'
                                                         : 'bg-white text-gray-600 hover:bg-gray-50'
                                                         }`}
@@ -250,7 +250,7 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                                         discount_percent: 0,
                                                         discount_amount: prev.discount_amount || 0
                                                     }))}
-                                                    className={`flex-1 px-4 py-2.5 text-sm font-medium transition-colors ${invoice.discount_type === 'fixed'
+                                                    className={`min-h-11 min-w-0 px-2 py-2.5 text-sm font-medium transition-colors sm:px-3 ${invoice.discount_type === 'fixed'
                                                         ? 'bg-blue-600 text-white'
                                                         : 'bg-white text-gray-600 hover:bg-gray-50'
                                                         }`}
@@ -261,7 +261,7 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                         </div>
 
                                         {/* Discount Value */}
-                                        <div className="col-span-4">
+                                        <div className="sm:col-span-4 lg:col-span-4">
                                             <div className="relative">
                                                 {invoice.discount_type === 'fixed' && (
                                                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">₹</span>
@@ -283,7 +283,7 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                                         }
                                                     }}
                                                     onFocus={(e) => e.target.select()}
-                                                    className={`w-full ${invoice.discount_type === 'fixed' ? 'pl-8' : 'pl-4'} pr-8 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
+                                                    className={`min-h-11 w-full ${invoice.discount_type === 'fixed' ? 'pl-8' : 'pl-4'} rounded-lg border border-gray-300 py-2.5 pr-8 text-right focus:border-transparent focus:ring-2 focus:ring-blue-500`}
                                                     placeholder="Enter value"
                                                 />
                                                 {(invoice.discount_type === 'percentage' || !invoice.discount_type) && (
@@ -293,7 +293,7 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                         </div>
 
                                         {/* Clear Button */}
-                                        <div className="col-span-4">
+                                        <div className="sm:col-span-3 lg:col-span-4">
                                             {((invoice.discount_percent || 0) > 0 || (invoice.discount_amount || 0) > 0) ? (
                                                 <button
                                                     onClick={() => setInvoice(prev => ({
@@ -301,7 +301,7 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                                         discount_percent: 0,
                                                         discount_amount: 0
                                                     }))}
-                                                    className="px-4 py-2.5 text-sm font-medium text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-gray-300"
+                                                    className="min-h-11 w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-600 transition-colors hover:bg-red-50 hover:text-red-600 sm:w-auto"
                                                 >
                                                     Clear Discount
                                                 </button>

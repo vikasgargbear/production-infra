@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import type { ComponentProps } from 'react';
 import ChallanDetailsStep from './ChallanDetailsStep';
 import type { Challan } from '../types/challanTypes';
@@ -92,12 +92,18 @@ test('renders an accessible same-tier batch choice and applies its canonical ide
     const setChallan = jest.fn();
     render(<ChallanDetailsStep {...stepProps({ setChallan })} />);
 
-    const choice = screen.getByRole('combobox', { name: /Batch for Canonical Product/i });
+    const choices = screen.getAllByRole('combobox', { name: /Batch for Canonical Product/i });
+    const choice = choices[0];
     expect(screen.getByText(/FEFO batches are selected by default/i)).toBeTruthy();
-    expect(screen.getAllByRole('option').map(option => option.textContent)).toEqual([
+    expect(within(choice).getAllByRole('option').map(option => option.textContent)).toEqual([
         expect.stringContaining('BATCH-A'),
         expect.stringContaining('BATCH-B'),
     ]);
+    expect(within(choice).getAllByRole('option')[0].textContent).toContain('2 available');
+    const mobileCards = screen.getByTestId('dispatch-batch-cards');
+    expect(within(mobileCards).getByText('1')).toBeTruthy();
+    expect(within(mobileCards).getByText('0')).toBeTruthy();
+    expect(within(mobileCards).queryByText('1.000000')).toBeNull();
     fireEvent.change(choice, { target: { value: alternateBatch } });
     const update = setChallan.mock.calls[0][0] as (previous: Challan) => Challan;
     expect(update(challan).items[0]).toMatchObject({

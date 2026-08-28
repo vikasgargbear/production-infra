@@ -129,6 +129,44 @@ ${companyName ? `\n---\n${companyName}` : ''}`;
         URL.revokeObjectURL(url);
     };
 
+    const documentActions = (document: Invoice) => {
+        const label = salesDocumentLabel(document.document_type);
+        const iconButton = 'flex min-h-11 min-w-11 items-center justify-center rounded-md transition-colors';
+        return (
+            <div className="flex flex-wrap items-center justify-end gap-1">
+                <button type="button" onClick={() => setViewingDocument(document)}
+                    className={`${iconButton} text-gray-700 hover:bg-gray-100`}
+                    title="View summary" aria-label={`View ${label} ${document.invoice_number}`}>
+                    <Eye className="h-4 w-4" />
+                </button>
+                <button type="button" onClick={() => handlePrint(document)}
+                    className={`${iconButton} text-gray-700 hover:bg-gray-100`}
+                    title={document.document_type === 'invoice' ? 'Print canonical invoice' : 'Print summary'}
+                    aria-label={`Print ${label} ${document.invoice_number}`}>
+                    <Printer className="h-4 w-4" />
+                </button>
+                <button type="button" onClick={() => handleDownload(document)}
+                    className={`${iconButton} text-gray-700 hover:bg-gray-100`}
+                    title={document.document_type === 'invoice' ? 'Download canonical invoice PDF' : 'Download summary CSV'}
+                    aria-label={`Download ${label} ${document.invoice_number}`}>
+                    <Download className="h-4 w-4" />
+                </button>
+                <button type="button" onClick={() => handleWhatsApp(document)} disabled={!document.customer_phone}
+                    className={`${iconButton} text-green-700 hover:bg-green-50 disabled:cursor-not-allowed disabled:text-gray-300`}
+                    title={document.customer_phone ? 'Open WhatsApp composer' : 'Customer phone unavailable'}
+                    aria-label={`Share ${label} ${document.invoice_number} via WhatsApp`}>
+                    <MessageCircle className="h-4 w-4" />
+                </button>
+                <button type="button" onClick={() => handleEmail(document)} disabled={!document.customer_email}
+                    className={`${iconButton} text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:text-gray-300`}
+                    title={document.customer_email ? 'Open email composer' : 'Customer email unavailable'}
+                    aria-label={`Email ${label} ${document.invoice_number}`}>
+                    <Mail className="h-4 w-4" />
+                </button>
+            </div>
+        );
+    };
+
     const columns = [
         {
             key: 'select',
@@ -200,43 +238,7 @@ ${companyName ? `\n---\n${companyName}` : ''}`;
         },
         {
             key: 'actions', header: 'Actions', align: 'center' as const, width: '230px',
-            render: (_: unknown, document: Invoice) => {
-                const label = salesDocumentLabel(document.document_type);
-                const iconButton = 'flex min-h-11 min-w-11 items-center justify-center rounded-md transition-colors';
-                return (
-                    <div className="flex items-center justify-center gap-0.5">
-                        <button type="button" onClick={() => setViewingDocument(document)}
-                            className={`${iconButton} text-gray-700 hover:bg-gray-100`}
-                            title="View summary" aria-label={`View ${label} ${document.invoice_number}`}>
-                            <Eye className="h-4 w-4" />
-                        </button>
-                        <button type="button" onClick={() => handlePrint(document)}
-                            className={`${iconButton} text-gray-700 hover:bg-gray-100`}
-                            title={document.document_type === 'invoice' ? 'Print canonical invoice' : 'Print summary'}
-                            aria-label={`Print ${label} ${document.invoice_number}`}>
-                            <Printer className="h-4 w-4" />
-                        </button>
-                        <button type="button" onClick={() => handleDownload(document)}
-                            className={`${iconButton} text-gray-700 hover:bg-gray-100`}
-                            title={document.document_type === 'invoice' ? 'Download canonical invoice PDF' : 'Download summary CSV'}
-                            aria-label={`Download ${label} ${document.invoice_number}`}>
-                            <Download className="h-4 w-4" />
-                        </button>
-                        <button type="button" onClick={() => handleWhatsApp(document)} disabled={!document.customer_phone}
-                            className={`${iconButton} text-green-700 hover:bg-green-50 disabled:cursor-not-allowed disabled:text-gray-300`}
-                            title={document.customer_phone ? 'Open WhatsApp composer' : 'Customer phone unavailable'}
-                            aria-label={`Share ${label} ${document.invoice_number} via WhatsApp`}>
-                            <MessageCircle className="h-4 w-4" />
-                        </button>
-                        <button type="button" onClick={() => handleEmail(document)} disabled={!document.customer_email}
-                            className={`${iconButton} text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:text-gray-300`}
-                            title={document.customer_email ? 'Open email composer' : 'Customer email unavailable'}
-                            aria-label={`Email ${label} ${document.invoice_number}`}>
-                            <Mail className="h-4 w-4" />
-                        </button>
-                    </div>
-                );
-            },
+            render: (_: unknown, document: Invoice) => documentActions(document),
         },
     ];
 
@@ -247,7 +249,48 @@ ${companyName ? `\n---\n${companyName}` : ''}`;
                     {documentActionError}
                 </div>
             )}
-            <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+            <div className="space-y-3 md:hidden" data-testid="sales-history-cards">
+                {loading ? (
+                    <div className="rounded-lg border border-gray-200 bg-white p-6 text-center text-sm text-gray-600">Loading…</div>
+                ) : invoices.length === 0 ? (
+                    <div className="rounded-lg border border-gray-200 bg-white p-6 text-center text-sm text-gray-600">
+                        No {salesDocumentLabel(documentType).toLowerCase()} records found
+                    </div>
+                ) : invoices.map(document => {
+                    const status = salesDocumentStatus(document);
+                    return (
+                        <article key={document.id} className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+                            <div className="flex min-w-0 items-start gap-3">
+                                <input type="checkbox"
+                                    aria-label={`Select ${salesDocumentLabel(document.document_type)} ${document.invoice_number}`}
+                                    checked={selectedIds.has(document.id)} onChange={() => onToggleSelect(document.id)}
+                                    className="mt-1 h-4 w-4 shrink-0 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                                <div className="min-w-0 flex-1">
+                                    <p className="break-words font-medium text-gray-900">{document.invoice_number}</p>
+                                    <p className="mt-1 break-words text-sm text-gray-700">{document.customer_name}</p>
+                                    <p className="mt-1 text-xs text-gray-500">{formatDate(document.invoice_date)}</p>
+                                </div>
+                                <div className="shrink-0 text-right">
+                                    <p className="whitespace-nowrap font-semibold tabular-nums text-gray-900">
+                                        {salesHistoryAmountLabel(document.total_amount)}
+                                    </p>
+                                    <div className="mt-1"><StatusBadge status={salesStatusTone(status)} label={salesStatusLabel(status)} /></div>
+                                </div>
+                            </div>
+                            {document.document_type === 'invoice' && document.pending_amount !== null
+                                && compareExactDecimals(document.pending_amount, '0.00', 'Outstanding amount', { scale: 2, maximumWholeDigits: 20 }) > 0 && (
+                                <p className="mt-3 text-right text-xs text-red-700">
+                                    {formatExactCurrency(document.pending_amount, 'Outstanding amount')} pending
+                                </p>
+                            )}
+                            <div className="mt-3 border-t border-gray-100 pt-2">
+                                {documentActions(document)}
+                            </div>
+                        </article>
+                    );
+                })}
+            </div>
+            <div className="hidden overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm md:block">
                 <DataTable columns={columns} data={invoices} keyField="id" loading={loading}
                     emptyMessage={`No ${salesDocumentLabel(documentType).toLowerCase()} records found`} />
             </div>
@@ -285,7 +328,7 @@ ${companyName ? `\n---\n${companyName}` : ''}`;
                                 </React.Fragment>
                             ))}
                         </dl>
-                        <footer className="flex justify-end gap-2 border-t border-gray-200 px-5 py-4">
+                        <footer className="flex flex-col justify-end gap-2 border-t border-gray-200 px-5 py-4 sm:flex-row">
                             <button type="button" onClick={() => handlePrint(viewingDocument)}
                                 className="min-h-11 rounded-md border border-gray-300 px-4 text-sm font-medium text-gray-700 hover:bg-gray-50">
                                 {viewingDocument.document_type === 'invoice' ? 'Print Invoice' : 'Print Summary'}

@@ -187,7 +187,12 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
     };
 
     const formatCurrency = (amount: number | string): string => {
-        return `${currencySymbol}${(parseFloat(String(amount)) || 0).toFixed(2)}`;
+        const numericAmount = Number(amount);
+        const formatted = new Intl.NumberFormat('en-IN', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        }).format(Number.isFinite(numericAmount) ? numericAmount : 0);
+        return `${currencySymbol}${formatted}`;
     };
 
     const calculateItemTotal = (item: ItemsTableItem): number => {
@@ -299,17 +304,17 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
 
                         <div className="mt-4 grid grid-cols-2 gap-3">
                             <label className="text-xs font-medium text-gray-600">Quantity
-                                <input type="number" min="0" step={QUANTITY_INPUT_STEP} inputMode="decimal" value={item.quantity || 0} onChange={(event) => updateMobileQuantity(index, 'quantity', event.target.value)} readOnly={readOnly} aria-invalid={mobileQuantityErrors[`${index}-quantity`] ? true : undefined} aria-describedby={mobileQuantityErrors[`${index}-quantity`] ? `mobile-quantity-error-${index}` : undefined} className="mt-1 min-h-11 w-full border border-gray-300 px-3 text-base text-gray-900" />
+                                <input type="number" min="0" step={QUANTITY_INPUT_STEP} inputMode="decimal" value={item.quantity || 0} onChange={(event) => updateMobileQuantity(index, 'quantity', event.target.value)} readOnly={readOnly} aria-invalid={mobileQuantityErrors[`${index}-quantity`] ? true : undefined} aria-describedby={mobileQuantityErrors[`${index}-quantity`] ? `mobile-quantity-error-${index}` : undefined} className="mt-1 min-h-11 w-full border border-gray-300 px-3 text-right text-base text-gray-900" />
                                 {mobileQuantityErrors[`${index}-quantity`] && <span id={`mobile-quantity-error-${index}`} role="alert" className="mt-1 block text-xs text-red-700">{mobileQuantityErrors[`${index}-quantity`]}</span>}
                             </label>
                             <label className="text-xs font-medium text-gray-600">Rate
-                                <input type="number" min="0" step="0.01" inputMode="decimal" value={item.unit_price || 0} onChange={(event) => onUpdateItem?.(index, 'unit_price', preserveExactDecimals ? event.target.value : Number(event.target.value))} readOnly={readOnly} className="mt-1 min-h-11 w-full border border-gray-300 px-3 text-base text-gray-900" />
+                                <input type="number" min="0" step="0.01" inputMode="decimal" value={item.unit_price || 0} onChange={(event) => onUpdateItem?.(index, 'unit_price', preserveExactDecimals ? event.target.value : Number(event.target.value))} readOnly={readOnly} className="mt-1 min-h-11 w-full border border-gray-300 px-3 text-right text-base text-gray-900" />
                             </label>
                             <label className="text-xs font-medium text-gray-600">Discount %
-                                <input type="number" min="0" max="100" step="0.01" inputMode="decimal" value={item.discount_percent || item.discount || 0} onChange={(event) => onUpdateItem?.(index, 'discount_percent', preserveExactDecimals ? event.target.value : Number(event.target.value))} readOnly={readOnly} className="mt-1 min-h-11 w-full border border-gray-300 px-3 text-base text-gray-900" />
+                                <input type="number" min="0" max="100" step="0.01" inputMode="decimal" value={item.discount_percent || item.discount || 0} onChange={(event) => onUpdateItem?.(index, 'discount_percent', preserveExactDecimals ? event.target.value : Number(event.target.value))} readOnly={readOnly} className="mt-1 min-h-11 w-full border border-gray-300 px-3 text-right text-base text-gray-900" />
                             </label>
                             <label className="text-xs font-medium text-gray-600">Free quantity
-                                <input type="number" min="0" step={QUANTITY_INPUT_STEP} inputMode="decimal" value={item.free_quantity || item.free || 0} onChange={(event) => updateMobileQuantity(index, 'free_quantity', event.target.value)} readOnly={readOnly} aria-invalid={mobileQuantityErrors[`${index}-free_quantity`] ? true : undefined} aria-describedby={mobileQuantityErrors[`${index}-free_quantity`] ? `mobile-free-quantity-error-${index}` : undefined} className="mt-1 min-h-11 w-full border border-gray-300 px-3 text-base text-gray-900" />
+                                <input type="number" min="0" step={QUANTITY_INPUT_STEP} inputMode="decimal" value={item.free_quantity || item.free || 0} onChange={(event) => updateMobileQuantity(index, 'free_quantity', event.target.value)} readOnly={readOnly} aria-invalid={mobileQuantityErrors[`${index}-free_quantity`] ? true : undefined} aria-describedby={mobileQuantityErrors[`${index}-free_quantity`] ? `mobile-free-quantity-error-${index}` : undefined} className="mt-1 min-h-11 w-full border border-gray-300 px-3 text-right text-base text-gray-900" />
                                 {mobileQuantityErrors[`${index}-free_quantity`] && <span id={`mobile-free-quantity-error-${index}`} role="alert" className="mt-1 block text-xs text-red-700">{mobileQuantityErrors[`${index}-free_quantity`]}</span>}
                             </label>
                             {showFreeSupplyTaxTreatment && (
@@ -319,7 +324,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                             )}
                         </div>
 
-                        <div className="mt-4 flex items-center justify-between border-t border-gray-100 pt-3 text-sm">
+                        <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 pt-3 text-sm">
                             <span className="text-gray-500">MRP {formatCurrency(item.mrp || 0)}</span>
                             <span className="font-semibold text-gray-900">Line total {formatCurrency(calculateItemTotal(item))}</span>
                         </div>
@@ -333,16 +338,16 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                     <tr className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b-2 border-blue-200">
                         <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">#</th>
                         <th className="min-w-72 px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Product / batch</th>
-                        <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                        <th className="px-3 py-3 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">
                             Qty
                             <div className="text-[10px] font-normal text-gray-500">Enter/Tab →</div>
                         </th>
-                        <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Rate</th>
-                        <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Discount %</th>
-                        <th className="min-w-64 px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                        <th className="px-3 py-3 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">Rate</th>
+                        <th className="px-3 py-3 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">Discount %</th>
+                        <th className="min-w-64 px-3 py-3 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">
                             {showFreeSupplyTaxTreatment ? 'Free qty / value' : 'Free qty'}
                         </th>
-                        <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">GST %</th>
+                        <th className="px-3 py-3 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">GST %</th>
                         <th className="px-3 py-3 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">Line total</th>
                         {!readOnly && (
                             <th className="px-3 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Action</th>
@@ -375,7 +380,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                                         <span>MRP {formatCurrency(item.mrp || 0)}</span>
                                     </div>
                                 </td>
-                                <td className="px-3 py-2">
+                                <td className="px-3 py-2 text-right">
                                     <EditableCell
                                         ref={(el) => setFieldRef(index, 'quantity', el)}
                                         value={item.quantity || 0}
@@ -394,7 +399,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                                         ariaLabel={`${item.product_name || item.name || `Item ${index + 1}`} quantity`}
                                     />
                                 </td>
-                                <td className="px-3 py-2 text-center">
+                                <td className="px-3 py-2 text-right">
                                     <EditableCell
                                         ref={(el) => setFieldRef(index, 'unit_price', el)}
                                         value={item.unit_price || 0}
@@ -413,7 +418,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                                         ariaLabel={`${item.product_name || item.name || `Item ${index + 1}`} rate`}
                                     />
                                 </td>
-                                <td className="px-3 py-2 text-center">
+                                <td className="px-3 py-2 text-right">
                                     <EditableCell
                                         ref={(el) => setFieldRef(index, 'discount_percent', el)}
                                         value={item.discount_percent || item.discount || 0}
@@ -431,7 +436,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                                         ariaLabel={`${item.product_name || item.name || `Item ${index + 1}`} discount percent`}
                                     />
                                 </td>
-                                <td className="min-w-64 px-3 py-2">
+                                <td className="min-w-64 px-3 py-2 text-right">
                                     <EditableCell
                                         ref={(el) => setFieldRef(index, 'free', el)}
                                         value={item.free_quantity || item.free || 0}
@@ -455,7 +460,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                                         </div>
                                     )}
                                 </td>
-                                <td className="px-3 py-2 text-center">
+                                <td className="px-3 py-2 text-right">
                                     <span className="text-sm text-gray-900 font-medium" title="Tax percentage from product master data (read-only)">
                                         {item.gst_percent || item.tax_rate || 0}%
                                     </span>

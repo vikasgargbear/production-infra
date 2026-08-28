@@ -29,6 +29,27 @@ test('mobile item card exposes every editable value without horizontal scrolling
   expect(onUpdateItem).toHaveBeenCalledWith(0, 'quantity', 2);
 });
 
+test('groups line money in the Indian system with exactly two decimals', () => {
+  render(
+    <ItemsTable
+      items={[{
+        product_name: 'High Value Carton',
+        quantity: 1,
+        unit_price: 1234567,
+        mrp: 1234567,
+        gst_percent: 0,
+      }]}
+      onUpdateItem={jest.fn()}
+    />,
+  );
+
+  expect(screen.getAllByText('MRP ₹12,34,567.00')).toHaveLength(2);
+  expect(screen.getAllByText('Line total ₹12,34,567.00')).toHaveLength(1);
+  ['Quantity', 'Rate', 'Discount %', 'Free quantity'].forEach(label => {
+    expect(screen.getByLabelText(label).className.split(/\s+/)).toContain('text-right');
+  });
+});
+
 test('fractional billed and free quantities remain visible and editable at canonical precision', () => {
   const onUpdateItem = jest.fn();
   render(

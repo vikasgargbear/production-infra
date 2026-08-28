@@ -39,4 +39,16 @@ describe('desktop canonical sales and purchase UX boundaries', () => {
     expect(sources).not.toMatch(/\bparseFloat\s*\(/);
     expect(sources).not.toMatch(/\.toFixed\s*\(/);
   });
+
+  it('keeps sales entry controls responsive at phone widths', () => {
+    const invoiceItems = read('invoice/steps/InvoiceItemsStep.tsx');
+    const invoiceDetails = read('invoice/steps/InvoiceDetailsStep.tsx');
+    const dispatchDetails = read('challan/steps/ChallanDetailsStep.tsx');
+
+    expect(invoiceItems).toContain('grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3');
+    expect(invoiceDetails).toContain('grid grid-cols-1 items-end gap-4 sm:grid-cols-12');
+    expect(invoiceDetails).toContain('grid grid-cols-2 overflow-hidden');
+    expect(dispatchDetails).toContain('data-testid="dispatch-batch-cards"');
+    expect(dispatchDetails).toContain('min-h-11 w-full max-w-full');
+  });
 });

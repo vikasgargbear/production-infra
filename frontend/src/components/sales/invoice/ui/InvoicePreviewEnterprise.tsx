@@ -340,20 +340,21 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
 
         {/* Items Table */}
         <div>
-          <table className="w-full border-collapse text-[10px]">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px] table-auto border-collapse text-[10px]">
             <thead>
               <tr className="border-y-2 border-gray-800">
                 <th className="text-center py-2 px-1 font-semibold text-gray-800 uppercase text-[9px] tracking-wider" style={{ width: '3%' }}>#</th>
-                <th className="text-left py-2 px-2 font-semibold text-gray-800 uppercase text-[9px] tracking-wider" style={{ width: '28%' }}>Product</th>
+                <th className="w-full min-w-52 px-2 py-2 text-left text-[9px] font-semibold uppercase tracking-wider text-gray-800">Product</th>
                 <th className="text-center py-2 px-1 font-semibold text-gray-800 uppercase text-[9px] tracking-wider" style={{ width: '7%' }}>Pack</th>
                 <th className="text-center py-2 px-1 font-semibold text-gray-800 uppercase text-[9px] tracking-wider" style={{ width: '6%' }}>HSN</th>
                 <th className="text-center py-2 px-1 font-semibold text-gray-800 uppercase text-[9px] tracking-wider" style={{ width: '6%' }}>Exp</th>
                 <th className="text-right py-2 px-1 font-semibold text-gray-800 uppercase text-[9px] tracking-wider" style={{ width: '8%' }}>MRP</th>
-                <th className="text-center py-2 px-1 font-semibold text-gray-800 uppercase text-[9px] tracking-wider" style={{ width: '5%' }}>Qty</th>
-                <th className="text-center py-2 px-1 font-semibold text-gray-800 uppercase text-[9px] tracking-wider" style={{ width: '5%' }}>Free</th>
+                <th className="text-right py-2 px-1 font-semibold text-gray-800 uppercase text-[9px] tracking-wider" style={{ width: '5%' }}>Qty</th>
+                <th className="text-right py-2 px-1 font-semibold text-gray-800 uppercase text-[9px] tracking-wider" style={{ width: '5%' }}>Free</th>
                 <th className="text-right py-2 px-1 font-semibold text-gray-800 uppercase text-[9px] tracking-wider" style={{ width: '8%' }}>Rate</th>
-                <th className="text-center py-2 px-1 font-semibold text-gray-800 uppercase text-[9px] tracking-wider" style={{ width: '6%' }}>Disc%</th>
-                <th className="text-center py-2 px-1 font-semibold text-gray-800 uppercase text-[9px] tracking-wider" style={{ width: '6%' }}>GST%</th>
+                <th className="text-right py-2 px-1 font-semibold text-gray-800 uppercase text-[9px] tracking-wider" style={{ width: '6%' }}>Disc%</th>
+                <th className="text-right py-2 px-1 font-semibold text-gray-800 uppercase text-[9px] tracking-wider" style={{ width: '6%' }}>GST%</th>
                 <th className="text-right py-2 px-2 font-semibold text-gray-800 uppercase text-[9px] tracking-wider" style={{ width: '10%' }}>Amount</th>
               </tr>
             </thead>
@@ -368,8 +369,8 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
                 return (
                   <tr key={index} className="border-b border-gray-200" style={{ lineHeight: '1.2' }}>
                     <td className="py-2 px-1 text-center text-gray-500" style={{ verticalAlign: 'middle' }}>{index + 1}</td>
-                    <td className="py-2 px-2" style={{ verticalAlign: 'middle' }}>
-                      <span className="font-medium text-gray-900">{item.product_name}</span>
+                    <td className="w-full min-w-52 px-2 py-2" style={{ verticalAlign: 'middle' }}>
+                      <span className="break-words font-medium text-gray-900">{item.product_name}</span>
                     </td>
                     <td className="py-2 px-1 text-center text-gray-600" style={{ verticalAlign: 'middle' }}>
                       {item.packages_per_box && item.units_per_pack
@@ -388,19 +389,19 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
                     <td className="py-2 px-1 text-right" style={{ verticalAlign: 'middle' }}>
                       {item.mrp == null ? 'Not available' : formatCurrency(item.mrp)}
                     </td>
-                    <td className="py-2 px-1 text-center font-medium" style={{ verticalAlign: 'middle' }}>
-                      {item.quantity}
+                    <td className="py-2 px-1 text-right font-medium tabular-nums" style={{ verticalAlign: 'middle' }}>
+                      {formatExactDecimal(item.quantity, 'Invoice billed quantity', quantityOptions)}
                     </td>
-                    <td className="py-2 px-1 text-center text-green-600 font-medium" style={{ verticalAlign: 'middle' }}>
+                    <td className="py-2 px-1 text-right text-green-600 font-medium tabular-nums" style={{ verticalAlign: 'middle' }}>
                       {compareExactDecimals(freeQty, 0, 'Invoice free quantity', quantityOptions) > 0 ? formatExactDecimal(freeQty, 'Invoice free quantity', quantityOptions) : '-'}
                     </td>
                     <td className="py-2 px-1 text-right" style={{ verticalAlign: 'middle' }}>
                       {formatCurrency(unitPrice)}
                     </td>
-                    <td className="py-2 px-1 text-center" style={{ verticalAlign: 'middle' }}>
+                    <td className="py-2 px-1 text-right" style={{ verticalAlign: 'middle' }}>
                       {compareExactDecimals(discount, 0, 'Invoice discount percent', quantityOptions) > 0 ? `${formatExactDecimal(discount, 'Invoice discount percent', quantityOptions)}%` : '-'}
                     </td>
-                    <td className="py-2 px-1 text-center" style={{ verticalAlign: 'middle' }}>
+                    <td className="py-2 px-1 text-right" style={{ verticalAlign: 'middle' }}>
                       {compareExactDecimals(gstPercent, 0, 'Invoice GST percent', quantityOptions) > 0 ? `${formatExactDecimal(gstPercent, 'Invoice GST percent', quantityOptions)}%` : '-'}
                     </td>
                     <td className="py-2 px-2 text-right font-semibold" style={{ verticalAlign: 'middle' }}>
@@ -410,7 +411,8 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
                 );
               })}
             </tbody>
-          </table>
+            </table>
+          </div>
 
           {/* Bottom Section - Summary and Notes */}
           <div className="grid grid-cols-2 gap-5 mt-6">
