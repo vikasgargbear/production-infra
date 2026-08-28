@@ -54,10 +54,34 @@ ACTIONS = {
 }
 LOCATOR_KINDS = {"role", "label", "placeholder", "text", "testId"}
 COMMUNICATION_ACTION = re.compile(r"whats?app|e-?mail|sms|text message|phone|call|tel:", re.I)
+AUTHORITATIVE_SELECTOR_KEYS = (
+    "branch_code", "branch_name", "customer_code", "customer_name",
+    "supplier_code", "supplier_name", "product_code", "product_name",
+    "uom_code", "count_uom_code", "source_location_code", "source_location_name",
+    "quarantine_location_code", "quarantine_location_name",
+    "destination_branch_code", "destination_branch_name",
+    "destination_location_code", "destination_location_name",
+    "bank_name", "bank_account_holder", "bank_ledger_code", "bank_ledger_name",
+    "cash_on_hand_account_id", "cash_on_hand_account_code",
+    "cash_on_hand_account_name", "cheques_in_hand_account_id",
+    "cheques_in_hand_account_code", "cheques_in_hand_account_name",
+    "customer_advance_account_id", "customer_advance_account_code",
+    "customer_advance_account_name",
+    "delivery_address_id", "delivery_address_row_version",
+    "direct_issue_batch_id", "direct_issue_batch_number",
+    "direct_issue_available_base_quantity", "sales_uom_multiplier",
+    "supplier_destination_address_id",
+)
 
 
 class FixtureCompileError(RuntimeError):
     pass
+
+
+def _authoritative_selector_row(row: tuple[Any, ...]) -> dict[str, Any]:
+    if len(row) != len(AUTHORITATIVE_SELECTOR_KEYS) + 2:
+        raise FixtureCompileError("authoritative selector fact columns drifted")
+    return dict(zip(AUTHORITATIVE_SELECTOR_KEYS, row[:-2]))
 
 
 def _object(path: Path, label: str) -> dict[str, Any]:
@@ -928,6 +952,7 @@ def resolve_authoritative_facts(
             cursor.execute("SELECT erp_security.activate_context(%s::uuid,%s::uuid)", (auth_user_id, org_id))
             cursor.execute(sql, params)
             rows = cursor.fetchall()
+            selector_row: dict[str, Any] = {}
             variant_customer_rows: list[tuple[Any, ...]] = []
             if live23_identities <= set(identities):
                 cursor.execute(
@@ -946,12 +971,14 @@ def resolve_authoritative_facts(
                 variant_customer_rows = cursor.fetchall()
             cycle_count_rows: list[tuple[Any, ...]] = []
             if len(rows) == 1:
+                selector_row = _authoritative_selector_row(rows[0])
                 cursor.execute(
                     cycle_count_sql,
                     (
                         auth_user_id,
                         identities["branch_id"], identities["saleable_location_id"],
-                        rows[0][24], identities["product_id"],
+                        selector_row["direct_issue_batch_id"],
+                        identities["product_id"],
                         identities["count_uom_conversion_id"],
                         identities["cycle_count_evidence_attachment_id"],
                         cycle_count_authority.storage_object_path,
@@ -1030,24 +1057,6 @@ def resolve_authoritative_facts(
         raise FixtureCompileError(
             "run-scoped inter-state and SEZ customer authority must resolve exactly once"
         )
-    keys = (
-        "branch_code", "branch_name", "customer_code", "customer_name",
-        "supplier_code", "supplier_name", "product_code", "product_name",
-        "uom_code", "count_uom_code", "source_location_code", "source_location_name",
-        "quarantine_location_code", "quarantine_location_name",
-        "destination_branch_code", "destination_branch_name",
-        "destination_location_code", "destination_location_name",
-        "bank_name", "bank_account_holder", "bank_ledger_code", "bank_ledger_name",
-        "cash_on_hand_account_id", "cash_on_hand_account_code",
-        "cash_on_hand_account_name", "cheques_in_hand_account_id",
-        "cheques_in_hand_account_code", "cheques_in_hand_account_name",
-        "customer_advance_account_id", "customer_advance_account_code",
-        "customer_advance_account_name",
-        "delivery_address_id", "delivery_address_row_version",
-        "direct_issue_batch_id", "direct_issue_batch_number",
-        "direct_issue_available_base_quantity", "sales_uom_multiplier",
-        "supplier_destination_address_id",
-    )
     if len(supplier_invoice_rows) != 1:
         raise FixtureCompileError(
             "run-scoped supplier-invoice GSTR-2B authority resolved "
@@ -1107,7 +1116,7 @@ def resolve_authoritative_facts(
     ) = bank_reconciliation_rows[0]
     if resolved_statement_reference != bank_statement_reference:
         raise FixtureCompileError("run-scoped bank statement authority drifted")
-    resolved = dict(zip(keys, rows[0][:-2]))
+    resolved = dict(selector_row)
     (
         sales_adjustment_rule_id,
         sales_adjustment_reason_code,

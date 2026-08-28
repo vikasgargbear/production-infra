@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from scripts.compile_live18_browser_fixture import (
+    AUTHORITATIVE_SELECTOR_KEYS,
     FixtureCompileError,
     MAX_SCALAR_BYTES,
     SCALAR_SCHEMA,
@@ -15,9 +16,23 @@ from scripts.compile_live18_browser_fixture import (
     supplier_invoice_chain_choices,
     validate_reviewed_scalar_pack,
     _compile_value,
+    _authoritative_selector_row,
     _validate_compiled_steps,
     _operation_facts,
 )
+
+
+def test_authoritative_selector_uses_named_batch_identity_after_account_fields():
+    row = tuple(f"value-{index}" for index in range(len(AUTHORITATIVE_SELECTOR_KEYS))) + (
+        "2026-08-28",
+        "2026-08-28T12:00",
+    )
+
+    resolved = _authoritative_selector_row(row)
+
+    assert resolved["cash_on_hand_account_name"] == "value-24"
+    assert resolved["direct_issue_batch_id"] == "value-33"
+    assert resolved["direct_issue_batch_id"] != resolved["cash_on_hand_account_name"]
 
 
 def test_authoritative_fact_evidence_is_bound_to_exact_identity_and_run(
