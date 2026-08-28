@@ -256,7 +256,11 @@ const AppContent = (): JSX.Element => {
 const App = (): JSX.Element => {
   if (process.env.REACT_APP_ENABLE_E2E_HARNESS === 'true') {
     if (window.location.pathname === '/e2e/mobile-navigation') {
-      return <Suspense fallback={<LoadingSpinner />}><MobileNavigationSmokePage /></Suspense>;
+      return (
+        <AuthProvider>
+          <Suspense fallback={<LoadingSpinner />}><MobileNavigationSmokePage /></Suspense>
+        </AuthProvider>
+      );
     }
     if (window.location.pathname === '/e2e/canonical-reads') {
       return <Suspense fallback={<LoadingSpinner />}><CanonicalReadSurfacesSmokePage /></Suspense>;
