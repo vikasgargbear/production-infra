@@ -186,7 +186,7 @@ DECLARE actor_id uuid;
 BEGIN
   IF NEW.status<>'active' THEN RETURN NEW; END IF;
   -- Authenticated self-service onboarding owns the reserved first-branch code
-  -- MAIN.  Canonical demos, imports and administrative fixtures provision
+  -- MAIN.  Canonical seed scripts, imports and administrative fixtures provision
   -- explicitly named branches and must retain their reviewed master data.
   IF NEW.code<>'MAIN' THEN RETURN NEW; END IF;
   IF EXISTS(SELECT 1 FROM finance.accounts account WHERE account.org_id=NEW.org_id) THEN

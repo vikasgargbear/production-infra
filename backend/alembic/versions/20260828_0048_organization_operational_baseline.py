@@ -24,7 +24,7 @@ SQL_PATH = (
     / "sql"
     / "20260828_0048_organization_operational_baseline.sql"
 )
-EXPECTED_SQL_SHA256 = "1614b12bd6e9cd57793562bf379b68d5091dd36c1e85ad52bb8365b9080fa0b2"
+EXPECTED_SQL_SHA256 = "eea929f5a7b2fd1a80ba25b654389a5e9b420b94c21ed2e508745a115e3b2012"
 
 
 def _reviewed_sql() -> str:
