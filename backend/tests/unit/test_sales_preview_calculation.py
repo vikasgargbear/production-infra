@@ -22,7 +22,8 @@ def test_sales_preview_uses_only_explicit_server_resolved_rate() -> None:
 
     assert totals["taxable_amount"] == Decimal("100.00")
     assert totals["igst_amount"] == Decimal("18.00")
-    assert totals["final_amount"] == Decimal("118")
+    assert totals["final_amount"] == Decimal("118.00")
+    assert totals["round_off_amount"] == Decimal("0.00")
     assert totals["calculated_items"][0]["gst_percent"] == Decimal("18.00")
 
 
@@ -46,7 +47,30 @@ def test_sales_preview_allocates_exact_document_discount_and_gst() -> None:
     assert totals["taxable_amount"] == Decimal("135.00")
     assert totals["cgst_amount"] == Decimal("12.15")
     assert totals["sgst_amount"] == Decimal("12.15")
-    assert totals["final_amount"] == Decimal("159")
+    assert totals["final_amount"] == Decimal("159.30")
+    assert totals["round_off_amount"] == Decimal("0.00")
+
+
+def test_sales_preview_preserves_paise_for_canonical_no_rounding_policy() -> None:
+    totals = calculate_sales_totals(
+        [
+            _line(
+                quantity="2.000000",
+                unit_price="100.000000",
+                discount_percent="5.000000",
+                resolved_gst_percent="12.000000",
+            )
+        ],
+        "CGST/SGST",
+    )
+
+    assert totals["subtotal_amount"] == Decimal("200.00")
+    assert totals["discount_amount"] == Decimal("10.00")
+    assert totals["taxable_amount"] == Decimal("190.00")
+    assert totals["cgst_amount"] == Decimal("11.40")
+    assert totals["sgst_amount"] == Decimal("11.40")
+    assert totals["round_off_amount"] == Decimal("0.00")
+    assert totals["final_amount"] == Decimal("212.80")
 
 
 @pytest.mark.parametrize("rate", ["-0.01", "100.01", "nan", "infinity"])
