@@ -238,8 +238,12 @@ WITH business_clock AS MATERIALIZED (
      WHERE :party_type='supplier' AND invoice.org_id=:org_id
        AND invoice.status='posted'
 ), open_documents AS (
-    SELECT document.*, item.id AS open_item_id, item.document_number,
-           item.document_date, item.due_date, item.principal_amount,
+    SELECT document.org_id, document.branch_id, document.document_id,
+           document.document_kind, document.party_account_id,
+           document.party_id, document.party_code, document.account_status,
+           document.party_name, document.limit_amount,
+           document.document_number, document.document_date,
+           item.id AS open_item_id, item.due_date, item.principal_amount,
            COALESCE(allocation.settled_amount,0) AS settled_amount,
            item.principal_amount-COALESCE(allocation.settled_amount,0)
              AS outstanding_amount,

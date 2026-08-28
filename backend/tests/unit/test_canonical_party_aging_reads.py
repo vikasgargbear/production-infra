@@ -144,6 +144,8 @@ def test_sql_is_org_branch_status_allocation_and_reversal_scoped():
         "item.currency_code='INR'",
     ):
         assert fragment in sql
+    assert "SELECT document.*" not in sql
+    assert "item.document_number" not in sql
     assert "account.status IN ('active','on_hold')" not in sql
     assert "party.status='active'" not in sql
 
