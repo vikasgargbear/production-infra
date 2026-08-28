@@ -25,6 +25,7 @@ const order = {
     discount_percent: '0', gst_percent: '18', free_supply_tax_treatment: 'excluded_from_taxable_value',
   }],
 };
+const policy = { default_rounding_policy: 'none' };
 
 beforeEach(() => jest.clearAllMocks());
 
@@ -32,11 +33,12 @@ test('preserves UUIDs, six-place quantities and >2^53 rates into exact API strin
   salesOrderCalculationsApi.preview.mockResolvedValue({ data: exactInvoiceResponse({
     line_items: [exactSalesLine({ quantity: '0.123456' })],
   }) });
-  const result = await calculateSalesOrderPreview(order, true);
+  const result = await calculateSalesOrderPreview(order, true, policy);
   expect(salesOrderCalculationsApi.preview).toHaveBeenCalledWith(expect.objectContaining({
     branch_id: order.items[0].branch_id,
     customer_id: order.customer_id,
     discount_amount: '0.00',
+    rounding_policy: 'none',
     items: [expect.objectContaining({ quantity: '0.123456', unit_price: '9007199254740993.000000' })],
   }));
   expect(salesOrderCalculationsApi.preview.mock.calls[0][0].items[0]).not.toHaveProperty('tax_percent');
@@ -44,7 +46,7 @@ test('preserves UUIDs, six-place quantities and >2^53 rates into exact API strin
 });
 
 test('rejects blank customer sentinel before transport', async () => {
-  await expect(calculateSalesOrderPreview({ ...order, customer_id: 0 }, true)).rejects.toThrow(/canonical UUID/);
+  await expect(calculateSalesOrderPreview({ ...order, customer_id: 0 }, true, policy)).rejects.toThrow(/canonical UUID/);
   expect(salesOrderCalculationsApi.preview).not.toHaveBeenCalled();
 });
 
@@ -54,20 +56,20 @@ test('keeps zero billed-quantity drafts out of the calculation transport', async
     items: [{ ...order.items[0], quantity: '0.000000', free_quantity: '0.000000' }],
   };
 
-  expect(isSalesOrderPreviewReady(zeroQuantityOrder)).toBe(false);
-  await expect(calculateSalesOrderPreview(zeroQuantityOrder, true)).rejects.toThrow(
+  expect(isSalesOrderPreviewReady(zeroQuantityOrder, policy)).toBe(false);
+  await expect(calculateSalesOrderPreview(zeroQuantityOrder, true, policy)).rejects.toThrow(
     'Sales order calculation items[0].quantity must be greater than zero.',
   );
   expect(salesOrderCalculationsApi.preview).not.toHaveBeenCalled();
 });
 
 test('recognizes a complete positive sales-order draft as preview-ready', () => {
-  expect(isSalesOrderPreviewReady(order)).toBe(true);
+  expect(isSalesOrderPreviewReady(order, policy)).toBe(true);
 });
 
 test('rejects numeric authoritative response decimals', async () => {
   salesOrderCalculationsApi.preview.mockResolvedValue({ data: exactInvoiceResponse({
     line_items: [exactSalesLine({ quantity: 0.123456 })],
   }) });
-  await expect(calculateSalesOrderPreview(order, true)).rejects.toThrow('exact decimal string');
+  await expect(calculateSalesOrderPreview(order, true, policy)).rejects.toThrow('exact decimal string');
 });

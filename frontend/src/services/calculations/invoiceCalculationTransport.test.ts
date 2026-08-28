@@ -137,7 +137,7 @@ describe('invoice calculation exact-decimal transport', () => {
       delivery_charges: '0.00',
     };
 
-    const response = await salesOrderCalculationsApi.preview({
+    const request = {
       branch_id: ids.branch,
       customer_id: ids.customer,
       order_date: '2026-08-27',
@@ -146,8 +146,10 @@ describe('invoice calculation exact-decimal transport', () => {
       delivery_charges: '0.00',
       other_charges: '0.00',
       discount_amount: '0.00',
-    });
-    const normalized = normalizeSalesOrderPreview(order as any, response.data);
+      rounding_policy: 'none' as const,
+    };
+    const response = await salesOrderCalculationsApi.preview(request);
+    const normalized = normalizeSalesOrderPreview(order as any, response.data, request);
 
     expect((response.config as typeof response.config & {
       preserveExactDecimals?: boolean;

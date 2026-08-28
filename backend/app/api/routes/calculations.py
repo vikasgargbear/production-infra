@@ -173,6 +173,7 @@ def preview_sales_order_totals(
             discount_type=order_data.discount_type,
             discount_percent=order_data.discount_percent,
             discount_amount=order_data.discount_amount,
+            rounding_policy=order_data.rounding_policy,
         )
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

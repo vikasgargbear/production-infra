@@ -103,6 +103,7 @@ class SalesOrderCalculationRequest(BaseModel):
     discount_type: Literal["percentage", "amount", "fixed"] = "percentage"
     discount_percent: Decimal = Field(default=Decimal("0"), ge=0, le=100)
     discount_amount: Decimal = Field(default=Decimal("0"), ge=0)
+    rounding_policy: Literal["none", "nearest_rupee"]
 
     model_config = ConfigDict(extra="forbid")
 

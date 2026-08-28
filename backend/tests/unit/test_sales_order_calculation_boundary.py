@@ -1,5 +1,6 @@
 """Tests for the shared sales-order preview/commit calculation boundary."""
 
+from decimal import Decimal
 from types import SimpleNamespace
 from uuid import UUID, uuid4
 
@@ -14,6 +15,7 @@ def test_sales_order_uuid_lines_preserve_free_supply_treatment():
         "branch_id": str(branch_id),
         "customer_id": str(customer_id),
         "order_date": "2026-08-25",
+        "rounding_policy": "none",
         "items": [
             {
                 "product_id": str(product_id), "batch_id": str(batch_id),
@@ -69,6 +71,7 @@ def test_sales_order_rejects_browser_owned_gst_rates():
         "branch_id": str(branch_id),
         "customer_id": str(customer_id),
         "order_date": "2026-08-25",
+        "rounding_policy": "none",
         "items": [{
             "product_id": str(product_id),
             "quantity": "2",
@@ -82,3 +85,24 @@ def test_sales_order_rejects_browser_owned_gst_rates():
     payload["items"][0]["tax_percent"] = "18"
     with pytest.raises(ValidationError, match="extra_forbidden"):
         SalesOrderCalculationRequest.model_validate(payload)
+
+
+def test_sales_order_preview_uses_the_explicit_canonical_rounding_policy():
+    line = {
+        "quantity": "2",
+        "free_quantity": "0",
+        "free_supply_tax_treatment": "excluded_from_taxable_value",
+        "unit_price": "100",
+        "discount_percent": "5",
+        "resolved_gst_percent": "12",
+    }
+
+    none = calculate_sales_totals([line], "CGST/SGST", rounding_policy="none")
+    nearest = calculate_sales_totals(
+        [line], "CGST/SGST", rounding_policy="nearest_rupee"
+    )
+
+    assert none["final_amount"] == Decimal("212.80")
+    assert none["round_off_amount"] == Decimal("0.00")
+    assert nearest["final_amount"] == Decimal("213")
+    assert nearest["round_off_amount"] == Decimal("0.20")

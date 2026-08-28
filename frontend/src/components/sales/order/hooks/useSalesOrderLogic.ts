@@ -219,7 +219,7 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
             ...sourceOrder,
             items,
         };
-        if (!items || items.length === 0 || !isSalesOrderPreviewReady(orderData)) {
+        if (!items || items.length === 0 || !isSalesOrderPreviewReady(orderData, documentPolicy)) {
             setOrder(prev => ({
                 ...prev,
                 items: items.map(item => ({
@@ -246,7 +246,7 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
         }
 
         try {
-            const result = await calculateSalesOrderPreview(orderData, true);
+            const result = await calculateSalesOrderPreview(orderData, true, documentPolicy);
 
             if (requestId !== calculationRequestRef.current) {
                 return;
@@ -297,7 +297,7 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
             console.error('Calculation error:', error);
             toast.error('Unable to calculate order totals. Please review the entered item values.');
         }
-    }, [order]);
+    }, [documentPolicy, order]);
 
     // Handle customer selection
     const handleCustomerSelect = useCallback(async (customer: Customer | null): Promise<void> => {

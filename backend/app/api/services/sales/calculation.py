@@ -47,6 +47,7 @@ def calculate_sales_totals(
     discount_type: str = "percentage",
     discount_percent: object = Decimal("0"),
     discount_amount: object = Decimal("0"),
+    rounding_policy: str = "nearest_rupee",
 ) -> dict[str, Any]:
     """Calculate exact invoice/order totals from server-resolved line rates."""
     if not isinstance(items, list) or not items:
@@ -59,6 +60,9 @@ def calculate_sales_totals(
     normalized_discount_type = str(discount_type or "percentage").strip().lower()
     if normalized_discount_type not in {"percentage", "amount", "fixed"}:
         raise ValueError("discount_type must be 'percentage', 'amount', or 'fixed'")
+    normalized_rounding_policy = str(rounding_policy).strip().lower()
+    if normalized_rounding_policy not in {"none", "nearest_rupee"}:
+        raise ValueError("rounding_policy must be 'none' or 'nearest_rupee'")
     document_discount_percent = decimal_value(
         discount_percent,
         "discount_percent",
@@ -227,7 +231,11 @@ def calculate_sales_totals(
         + insurance_value
         + other_value
     )
-    final_amount = rupees(amount_before_round)
+    final_amount = (
+        rupees(amount_before_round)
+        if normalized_rounding_policy == "nearest_rupee"
+        else amount_before_round
+    )
     return {
         "subtotal_amount": money(gross_subtotal),
         "discount_amount": money(item_discount),

@@ -125,6 +125,7 @@ export interface SalesOrderCalculationRequest {
     discount_type?: 'percentage' | 'amount' | 'fixed';
     discount_percent?: CalculationDecimalString;
     discount_amount?: CalculationDecimalString;
+    rounding_policy: 'none' | 'nearest_rupee';
 }
 
 export interface ChallanCalculationRequest {

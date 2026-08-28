@@ -17,6 +17,7 @@ import {
 import { isCanonicalUuid } from '../../utils/canonicalUuid';
 import { compareExactDecimals } from '../../utils/exactDecimal';
 import { requireCalendarDate } from '../../utils/calendarDate';
+import type { CanonicalDocumentPolicy } from '../api/modules/org/canonicalBusinessContext.api';
 
 const required = <T>(value: T | null | undefined | '', label: string): T => {
     if (value === undefined || value === null || value === '') {
@@ -88,7 +89,13 @@ export interface SalesOrderPreviewResult {
     gst_type: 'CGST/SGST' | 'IGST';
 }
 
-function toRequest(order: Order): SalesOrderCalculationRequest {
+type SalesOrderPreviewPolicy = Pick<CanonicalDocumentPolicy, 'default_rounding_policy'>;
+
+function toRequest(
+    order: Order,
+    policy: SalesOrderPreviewPolicy | null,
+): SalesOrderCalculationRequest {
+    if (!policy) throw new Error('Canonical sales-order rounding policy is unavailable.');
     const branchId = requiredCanonicalUuid(
         order.items[0]?.branch_id, 'Sales order branch',
     );
@@ -129,6 +136,7 @@ function toRequest(order: Order): SalesOrderCalculationRequest {
             required(order.document_discount_amount, 'Sales order document discount amount'),
             'Sales order document discount amount',
         ),
+        rounding_policy: policy.default_rounding_policy,
     };
 }
 
@@ -140,9 +148,12 @@ function toRequest(order: Order): SalesOrderCalculationRequest {
  * calculation requests. The final command builder still owns user-facing
  * submission validation.
  */
-export function isSalesOrderPreviewReady(order: Order): boolean {
+export function isSalesOrderPreviewReady(
+    order: Order,
+    policy: SalesOrderPreviewPolicy | null,
+): boolean {
     try {
-        toRequest(order);
+        toRequest(order, policy);
         return true;
     } catch {
         return false;
@@ -152,7 +163,7 @@ export function isSalesOrderPreviewReady(order: Order): boolean {
 export function normalizeSalesOrderPreview(
     order: Order,
     data: Awaited<ReturnType<typeof salesOrderCalculationsApi.preview>>['data'],
-    request = toRequest(order),
+    request: SalesOrderCalculationRequest,
 ): SalesOrderPreviewResult {
     const invoiceRequest: InvoiceCalculationRequest = {
         branch_id: request.branch_id,
@@ -191,9 +202,10 @@ export function normalizeSalesOrderPreview(
 export async function calculateSalesOrderPreview(
     order: Order,
     isOnline: boolean,
+    policy: SalesOrderPreviewPolicy | null,
 ): Promise<SalesOrderPreviewResult> {
     if (!isOnline) throw new Error('Sales order preview requires the live API');
-    const request = toRequest(order);
+    const request = toRequest(order, policy);
     const response = await salesOrderCalculationsApi.preview(request);
     return normalizeSalesOrderPreview(order, response.data, request);
 }
