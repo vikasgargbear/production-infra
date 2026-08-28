@@ -21,10 +21,14 @@ from typing import Any
 import psycopg2
 
 try:
-    from scripts.canonical_demo_ids import canonical_live18_cycle_count_authority
+    from scripts.canonical_demo_ids import (
+        canonical_live18_cycle_count_authority,
+        canonical_live18_destruction_authority,
+    )
 except ModuleNotFoundError:  # Direct execution places this script directory on sys.path.
     from canonical_demo_ids import (  # type: ignore[no-redef]
         canonical_live18_cycle_count_authority,
+        canonical_live18_destruction_authority,
     )
 
 
@@ -442,6 +446,13 @@ def resolve_authoritative_facts(
     cycle_count_authority = canonical_live18_cycle_count_authority(
         org_id, run_id, run_attempt
     )
+    destruction_authority = canonical_live18_destruction_authority(
+        org_id,
+        run_id,
+        run_attempt,
+        gst_registration_id="d3200000-0000-7000-8000-000000000005",
+        itc_reversal_rule_version="cgst-act-section-17-5-h-2022-01-01",
+    )
     supplier_invoice_number = f"DEMO-UI-SUP-{run_token}"
     bank_statement_reference = f"DEMO-UI-BANK-{run_token}"
     supplier_invoice_sql = """
@@ -750,6 +761,7 @@ def resolve_authoritative_facts(
           AND lot.batch_id=balance.batch_id AND lot.lineage_status='exact'
           AND lot.remaining_base_quantity>0
         JOIN tax.registrations registration ON registration.org_id=balance.org_id
+          AND registration.id=%s
           AND registration.status='active' AND registration.registration_type='regular'
         JOIN tax.registration_branches association ON association.org_id=registration.org_id
           AND association.registration_id=registration.id
@@ -757,19 +769,23 @@ def resolve_authoritative_facts(
         JOIN core.organizations organization ON organization.id=balance.org_id
           AND organization.status='active'
         JOIN tax.return_periods period ON period.org_id=registration.org_id
+          AND period.id=%s
           AND period.registration_id=registration.id AND period.status='open'
           AND (transaction_timestamp() AT TIME ZONE organization.timezone)::date
               BETWEEN period.period_start AND period.period_end
         JOIN tax.returns filing ON filing.org_id=period.org_id
+          AND filing.id=%s
           AND filing.return_period_id=period.id AND filing.return_type='gstr3b'
           AND filing.status='draft'
         JOIN tax.itc_reversal_rule_versions rule ON rule.status='active'
+          AND rule.id=%s
           AND rule.event_kind='goods_destroyed' AND rule.legal_section='17(5)(h)'
           AND rule.gstr3b_table_code='4' AND rule.gstr3b_row_code='B(1)'
           AND rule.effective_from<=(transaction_timestamp() AT TIME ZONE organization.timezone)::date
           AND (rule.effective_to IS NULL OR rule.effective_to>=
                (transaction_timestamp() AT TIME ZONE organization.timezone)::date)
         JOIN core.attachments certificate ON certificate.org_id=balance.org_id
+          AND certificate.id=%s
           AND certificate.storage_object_path=%s
           AND certificate.evidence_kind='inventory_destruction_certificate'
           AND certificate.status IN ('verified','retained')
@@ -777,6 +793,7 @@ def resolve_authoritative_facts(
           AND certificate.document_date=(transaction_timestamp() AT TIME ZONE organization.timezone)::date
           AND certificate.retention_until>=certificate.document_date
         JOIN core.attachments reversal ON reversal.org_id=balance.org_id
+          AND reversal.id=%s
           AND reversal.storage_object_path=%s
           AND reversal.evidence_kind='inventory_destruction_itc_reversal'
           AND reversal.status IN ('verified','retained')
@@ -956,8 +973,14 @@ def resolve_authoritative_facts(
                 (
                     identities["quarantine_location_id"],
                     identities["uom_conversion_id"],
-                    f"demo/{run_token}/licensed-incineration-certificate-{run_token}.pdf",
-                    f"demo/{run_token}/section-17-5-h-working-{run_token}.json",
+                    destruction_authority.gst_registration_id,
+                    destruction_authority.return_period_id,
+                    destruction_authority.gstr3b_return_id,
+                    destruction_authority.itc_reversal_rule_id,
+                    destruction_authority.certificate_attachment_id,
+                    destruction_authority.certificate_storage_object_path,
+                    destruction_authority.itc_reversal_attachment_id,
+                    destruction_authority.itc_reversal_storage_object_path,
                     org_id, identities["branch_id"], identities["product_id"],
                 ),
             )
