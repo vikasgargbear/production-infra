@@ -2609,15 +2609,17 @@ class SqlAlchemyOperatorActionService:
             f"aasopharma:{context.organization_id}:{context.membership_id}:"
             f"finance.customer_receipt.prepare:{idempotency_key}"
         )
+        identifier_names = [
+            "payment_id",
+            "command_request_id",
+            "journal_id",
+            "event_id",
+        ]
+        if payload.get("receipt_purpose") == "customer_advance":
+            identifier_names.append("customer_advance_open_item_id")
         identifiers = {
             name: uuid5(NAMESPACE_URL, identity + f":{name}")
-            for name in (
-                "payment_id",
-                "command_request_id",
-                "journal_id",
-                "event_id",
-                "customer_advance_open_item_id",
-            )
+            for name in identifier_names
         }
         normalized = {key: _json_value(value) for key, value in payload.items()}
         normalized.update({key: str(value) for key, value in identifiers.items()})

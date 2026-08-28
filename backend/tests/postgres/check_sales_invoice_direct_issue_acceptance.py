@@ -707,6 +707,51 @@ def _reconcile(runtime_dsn: str, invoice_id: UUID, batch_ids: list[UUID]) -> Non
         }
 
 
+def _reconcile_customer_receipt(
+    runtime_dsn: str, payment_id: UUID, open_item_id: str
+) -> None:
+    with psycopg2.connect(runtime_dsn) as connection, connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT erp_security.activate_context(%s,%s)",
+            (fixture.IDS["operator_auth_user"], fixture.IDS["org"]),
+        )
+        cursor.execute(
+            """
+            SELECT payment.status,payment.direction,payment.payment_purpose,
+                   payment.amount,allocation.amount,allocation.status,
+                   item.status,item.principal_amount,
+                   (SELECT coalesce(sum(active.amount),0)
+                      FROM finance.allocations AS active
+                     WHERE active.org_id=item.org_id
+                       AND active.open_item_id=item.id
+                       AND active.status='posted'
+                       AND active.reversal_of_allocation_id IS NULL)
+              FROM finance.payments AS payment
+              JOIN finance.allocations AS allocation
+                ON allocation.org_id=payment.org_id
+               AND allocation.payment_id=payment.id
+              JOIN finance.open_items AS item
+                ON item.org_id=allocation.org_id
+               AND item.id=allocation.open_item_id
+             WHERE payment.org_id=%s
+               AND payment.id=%s
+               AND item.id=%s
+            """,
+            (fixture.IDS["org"], payment_id, open_item_id),
+        )
+        assert cursor.fetchone() == (
+            "posted",
+            "receipt",
+            "commercial_settlement",
+            Decimal("500.00"),
+            Decimal("500.00"),
+            "posted",
+            "open",
+            EXPECTED["grand_total"],
+            Decimal("500.00"),
+        )
+
+
 def main() -> None:
     register_adapter(UUID, lambda value: AsIs(f"'{value}'::uuid"))
     admin_url = os.environ["DATABASE_URL"]
@@ -829,7 +874,72 @@ def main() -> None:
         assert replayed.idempotency_replayed is True
         assert replayed.resource_id == executed.resource_id == invoice_id
 
+        with psycopg2.connect(admin_dsn) as connection, connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT item.id
+                  FROM finance.open_items AS item
+                  JOIN finance.accounting_events AS event
+                    ON event.org_id=item.org_id
+                   AND event.id=item.accounting_event_id
+                 WHERE event.org_id=%s
+                   AND event.sales_invoice_id=%s
+                   AND item.item_side='receivable'
+                """,
+                (fixture.IDS["org"], invoice_id),
+            )
+            open_item_id = str(cursor.fetchone()[0])
+
+        receipt_operation = "finance.customer_receipt.prepare"
+        receipt_policy = ACTION_POLICIES[receipt_operation]
+        receipt_payload = fixture.customer_receipt_payload(
+            open_item_id, business_date=business_date
+        )
+        receipt_key = f"pg15-customer-receipt-{uuid4()}"
+        receipt_model = PREPARE_PAYLOAD_MODELS[receipt_operation].model_validate(
+            {**receipt_payload, "idempotency_key": receipt_key}
+        )
+        receipt_values = receipt_model.model_dump(mode="python", exclude_none=True)
+        receipt_values.pop("idempotency_key")
+        receipt_prepared = service.prepare(
+            policy=receipt_policy,
+            payload=receipt_values,
+            idempotency_key=receipt_key,
+            context=_context(receipt_operation, receipt_policy.permission),
+        )
+        receipt_approval = service.approve(
+            command_request_id=receipt_prepared.command_request_id,
+            preview_hash=receipt_prepared.preview_hash,
+            idempotency_key=f"approve-{receipt_prepared.command_request_id}",
+            context=_context(
+                "automation.command.approve", "automation.command.approve"
+            ),
+        )
+        assert receipt_approval.status == "approved"
+        receipt_executed = service.execute(
+            command_request_id=receipt_prepared.command_request_id,
+            preview_hash=receipt_prepared.preview_hash,
+            idempotency_key=f"execute-{receipt_prepared.command_request_id}",
+            context=_context(
+                "automation.command.execute", "automation.command.execute"
+            ),
+        )
+        assert receipt_executed.status == "succeeded"
+        receipt_replayed = service.execute(
+            command_request_id=receipt_prepared.command_request_id,
+            preview_hash=receipt_prepared.preview_hash,
+            idempotency_key=f"execute-{receipt_prepared.command_request_id}",
+            context=_context(
+                "automation.command.execute", "automation.command.execute"
+            ),
+        )
+        assert receipt_replayed.idempotency_replayed is True
+        assert receipt_replayed.resource_id == receipt_executed.resource_id
+
     _reconcile(runtime_dsn, invoice_id, batch_ids)
+    _reconcile_customer_receipt(
+        runtime_dsn, receipt_executed.resource_id, open_item_id
+    )
     print(f"sales-invoice direct-issue PostgreSQL 15 acceptance passed: {invoice_id}")
 
 

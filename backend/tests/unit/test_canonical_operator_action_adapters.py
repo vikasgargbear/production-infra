@@ -3171,6 +3171,7 @@ def test_customer_receipt_prepare_is_one_runtime_transaction_with_exact_allocati
     )
     request = json.loads(resolve_execution[1]["request_json"])
     assert request["payment_method"] == "upi"
+    assert "customer_advance_open_item_id" not in request
     assert request["allocations"][0]["allocation_id"]
     preview = json.loads(persist_execution[1]["preview_bytes"])
     assert preview["operation"] == "finance.payment.post"
