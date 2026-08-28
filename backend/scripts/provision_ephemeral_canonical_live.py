@@ -31,6 +31,7 @@ from exercise_staging_mcp_oauth import (  # noqa: E402
     ISSUER,
     _authorization_details,
     _decide,
+    _deployment_mcp_url,
     _exchange_token,
     _exercise_mcp,
     _pkce,
@@ -244,7 +245,13 @@ def _append_environment(values: dict[str, str]) -> None:
             handle.write(f"{key}={value}\n")
 
 
-def _oauth_token(email: str, password: str, anon_key: str, client_id: str) -> str:
+def _oauth_token(
+    email: str,
+    password: str,
+    anon_key: str,
+    client_id: str,
+    mcp_url: str,
+) -> str:
     session = requests.Session()
     session.headers.update({"apikey": anon_key})
     login = session.post(
@@ -263,12 +270,20 @@ def _oauth_token(email: str, password: str, anon_key: str, client_id: str) -> st
     verifier, challenge = _pkce()
     state = secrets.token_urlsafe(24)
     authorization_id = _start_authorization(
-        session, client_id=client_id, challenge=challenge, state=state
+        session,
+        client_id=client_id,
+        challenge=challenge,
+        state=state,
+        mcp_url=mcp_url,
     )
     _authorization_details(session, authorization_id, user_token)
     redirect = _decide(session, authorization_id, user_token, "approve")
     token = _exchange_token(
-        session, client_id=client_id, verifier=verifier, redirect_url=redirect
+        session,
+        client_id=client_id,
+        verifier=verifier,
+        redirect_url=redirect,
+        mcp_url=mcp_url,
     )
     access_token = token.get("access_token")
     if not isinstance(access_token, str) or not access_token:
@@ -1092,14 +1107,17 @@ def provision(
         ),
     }
     anon_key = _required("SUPABASE_ANON_KEY")
+    mcp_url = _deployment_mcp_url()
     tokens = {
-        role: _oauth_token(email, password, anon_key, client_id)
+        role: _oauth_token(email, password, anon_key, client_id, mcp_url)
         for role, (email, password) in credentials.items()
     }
     for token in tokens.values():
         _mask(token)
     for role, token in tokens.items():
-        tool_names, workflow = _exercise_mcp(token, business_flow=False)
+        tool_names, workflow = _exercise_mcp(
+            token, business_flow=False, mcp_url=mcp_url
+        )
         if not tool_names or workflow is not None:
             raise CanonicalLiveIdentityError(
                 f"Deployed MCP rejected the boundary-only {role} OAuth verification"

@@ -108,7 +108,7 @@ def test_live_api_mcp_authority_is_ephemeral_and_command_bound():
 
     assert "_reconcile_client" in provisioner
     assert "_exchange_token" in provisioner
-    assert "_exercise_mcp(token, business_flow=False)" in provisioner
+    assert "business_flow=False, mcp_url=mcp_url" in provisioner
     assert "transaction_timestamp()+interval '2 hours'" in provisioner
     assert '"temporary_grants"' in provisioner
     assert "state_path.unlink(missing_ok=True)" in provisioner

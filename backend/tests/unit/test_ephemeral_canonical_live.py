@@ -165,16 +165,25 @@ def test_pkce_token_comes_from_real_authorization_code_exchange(monkeypatch):
 
     monkeypatch.setattr(MODULE.requests, "Session", Session)
     monkeypatch.setattr(MODULE, "_pkce", lambda: ("verifier", "challenge"))
-    monkeypatch.setattr(MODULE, "_start_authorization", lambda *_args, **_kwargs: "auth-id")
+    observed_resources = []
+
+    def start_authorization(*_args, **kwargs):
+        observed_resources.append(("authorize", kwargs["mcp_url"]))
+        return "auth-id"
+
+    monkeypatch.setattr(MODULE, "_start_authorization", start_authorization)
     monkeypatch.setattr(MODULE, "_authorization_details", lambda *_args: {"authorization_id": "auth-id"})
     monkeypatch.setattr(MODULE, "_decide", lambda *_args: "https://callback/?code=one")
     monkeypatch.setattr(
         MODULE,
         "_exchange_token",
-        lambda *_args, **_kwargs: {
-            "access_token": "oauth-access",
-            "refresh_token": "oauth-refresh",
-        },
+        lambda *_args, **kwargs: (
+            observed_resources.append(("token", kwargs["mcp_url"]))
+            or {
+                "access_token": "oauth-access",
+                "refresh_token": "oauth-refresh",
+            }
+        ),
     )
     validated = []
     monkeypatch.setattr(
@@ -183,9 +192,14 @@ def test_pkce_token_comes_from_real_authorization_code_exchange(monkeypatch):
         lambda token, **kwargs: validated.append((token, kwargs)),
     )
 
-    assert MODULE._oauth_token("user@example", "password", "anon", "client") == (
-        "oauth-access"
-    )
+    mcp_url = "https://deployed-mcp.example.test/mcp"
+    assert MODULE._oauth_token(
+        "user@example", "password", "anon", "client", mcp_url
+    ) == "oauth-access"
+    assert observed_resources == [
+        ("authorize", mcp_url),
+        ("token", mcp_url),
+    ]
     assert validated == [
         (
             "oauth-access",
