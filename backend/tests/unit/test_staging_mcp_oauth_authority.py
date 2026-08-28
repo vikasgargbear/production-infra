@@ -32,6 +32,193 @@ def test_oauth_callback_derives_from_sole_active_provider() -> None:
     assert all("onrender.com" not in uri for uri in provision.REDIRECT_URIS)
 
 
+@pytest.mark.parametrize(
+    "callback_uri",
+    [
+        provision.CHATGPT_STABLE_CALLBACK,
+        provision.REVIEWED_CHATGPT_CALLBACK,
+    ],
+)
+def test_chatgpt_callback_accepts_only_official_exact_shapes(
+    callback_uri: str,
+) -> None:
+    assert provision._reviewed_chatgpt_callback_uri(callback_uri) == callback_uri
+
+
+@pytest.mark.parametrize(
+    "callback_uri",
+    [
+        "",
+        " https://chatgpt.com/connector/oauth/real-id",
+        "http://chatgpt.com/connector/oauth/real-id",
+        "https://example.com/connector/oauth/real-id",
+        "https://chatgpt.com:443/connector/oauth/real-id",
+        "https://chatgpt.com/connector/oauth/real-id?next=bad",
+        "https://chatgpt.com/connector/oauth/real-id#fragment",
+        "https://chatgpt.com/connector/oauth/{callback_id}",
+        "https://chatgpt.com/connector/oauth/callback_id",
+        "https://chatgpt.com/connector/oauth/replace-me",
+        "https://chatgpt.com/connector/oauth/one/two",
+        "https://chatgpt.com/connector_platform_oauth_redirect/",
+    ],
+)
+def test_chatgpt_callback_rejects_absent_placeholder_or_non_exact_uri(
+    callback_uri: str,
+) -> None:
+    with pytest.raises(provision.ProvisioningError, match="ChatGPT|CHATGPT"):
+        provision._reviewed_chatgpt_callback_uri(callback_uri)
+
+
+def test_chatgpt_authority_requires_callback_before_auth_mutation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv(provision.CHATGPT_CALLBACK_ENV, raising=False)
+    monkeypatch.setattr(
+        provision,
+        "_auth_admin_authority",
+        lambda *_args: pytest.fail("missing callback reached Supabase authority"),
+    )
+
+    with pytest.raises(
+        provision.ProvisioningError,
+        match=f"{provision.CHATGPT_CALLBACK_ENV} is required",
+    ):
+        provision.main(["--mode", "chatgpt-client-authority-only"])
+
+
+def test_chatgpt_authority_rejects_another_well_formed_callback_before_auth_mutation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        provision.CHATGPT_CALLBACK_ENV,
+        "https://chatgpt.com/connector/oauth/another-valid-shape",
+    )
+    monkeypatch.setattr(
+        provision,
+        "_auth_admin_authority",
+        lambda *_args: pytest.fail("unreviewed callback reached Supabase authority"),
+    )
+
+    with pytest.raises(provision.ProvisioningError, match="reviewed ChatGPT"):
+        provision.main(["--mode", "chatgpt-client-authority-only"])
+
+
+def test_chatgpt_authority_reconciles_exact_predefined_public_client_only(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    callback_uri = provision.REVIEWED_CHATGPT_CALLBACK
+    github_env = tmp_path / "github-env"
+    evidence_dir = tmp_path / "evidence"
+    monkeypatch.setenv(provision.CHATGPT_CALLBACK_ENV, callback_uri)
+    monkeypatch.setenv("CANONICAL_STAGING_PROJECT_REF", provision.PROJECT_REF)
+    monkeypatch.setenv("SUPABASE_URL", provision.SUPABASE_URL)
+    monkeypatch.setenv("SUPABASE_ACCESS_TOKEN", "management-token")
+    monkeypatch.setenv("REVIEWED_SHA", "b" * 40)
+    monkeypatch.setenv("GITHUB_ENV", str(github_env))
+    monkeypatch.setenv("CANONICAL_DEMO_EVIDENCE_DIR", str(evidence_dir))
+    monkeypatch.delenv("PSYCOPG_DATABASE_URL", raising=False)
+    monkeypatch.delenv(provision.WEB_TEST_AUTH_USER_ENV, raising=False)
+    monkeypatch.setattr(provision, "_auth_admin_authority", lambda _token: _auth_admin())
+
+    reconciled_redirects: list[tuple[str, ...]] = []
+
+    def reconcile(_authority, *, redirect_uris):
+        reconciled_redirects.append(redirect_uris)
+        return {"client_id": "chatgpt-predefined-public-client"}
+
+    monkeypatch.setattr(provision, "_reconcile_client", reconcile)
+    monkeypatch.setattr(
+        provision,
+        "_reconcile_test_user",
+        lambda *_args: pytest.fail("ChatGPT authority mode created an Auth identity"),
+    )
+    monkeypatch.setattr(
+        provision,
+        "_bind_demo",
+        lambda *_args: pytest.fail("ChatGPT authority mode touched the database"),
+    )
+    monkeypatch.setattr(
+        provision.secrets,
+        "token_urlsafe",
+        lambda *_args: pytest.fail("ChatGPT authority mode generated a secret"),
+    )
+
+    assert provision.main(["--mode", "chatgpt-client-authority-only"]) == 0
+    expected_redirects = (*provision.REDIRECT_URIS, callback_uri)
+    assert reconciled_redirects == [expected_redirects]
+    assert github_env.read_text(encoding="utf-8") == (
+        "MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS=chatgpt-predefined-public-client\n"
+    )
+    evidence = json.loads(
+        (evidence_dir / "canonical-staging-oauth-client.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert evidence == {
+        "application_provider": "railway",
+        "chatgpt_callback_uri": callback_uri,
+        "client_id": "chatgpt-predefined-public-client",
+        "client_name": provision.CLIENT_NAME,
+        "client_registration_method": "predefined",
+        "client_type": "public",
+        "demo_grant_bound": False,
+        "dynamic_client_registration": False,
+        "oauth_client_secret_issued": False,
+        "pkce_code_challenge_method": "S256",
+        "project_ref": provision.PROJECT_REF,
+        "provisioning_mode": "chatgpt-client-authority-only",
+        "redirect_uris": list(expected_redirects),
+        "resource_parameter_required": True,
+        "reviewed_sha": "b" * 40,
+        "test_identity_reconciled": False,
+        "token_endpoint_auth_method": "none",
+        "web_test_grant_bound": False,
+    }
+
+
+def test_chatgpt_callback_is_patched_onto_the_reviewed_public_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    callback_uri = provision.REVIEWED_CHATGPT_CALLBACK
+    existing_client = {
+        "client_id": "reviewed-public-client",
+        "redirect_uris": list(provision.REDIRECT_URIS),
+        "client_type": "public",
+        "token_endpoint_auth_method": "none",
+    }
+    calls: list[tuple[str, str, dict | None, dict | None]] = []
+
+    def request(_authority, method, path, *, payload=None, params=None):
+        calls.append((method, path, payload, params))
+        if method == "GET":
+            return {"clients": [existing_client]}
+        return {"client_id": existing_client["client_id"], **payload}
+
+    monkeypatch.setattr(provision, "_auth_admin_json", request)
+    redirect_uris = (*provision.REDIRECT_URIS, callback_uri)
+
+    client = provision._reconcile_client(
+        _auth_admin(),
+        redirect_uris=redirect_uris,
+    )
+
+    assert client["client_id"] == "reviewed-public-client"
+    assert calls == [
+        ("GET", "oauth/clients", None, {"per_page": 100}),
+        (
+            "PATCH",
+            "oauth/clients/reviewed-public-client",
+            {
+                "name": provision.CLIENT_NAME,
+                "redirect_uris": list(redirect_uris),
+                "client_type": "public",
+                "token_endpoint_auth_method": "none",
+            },
+            None,
+        ),
+    ]
+
+
 def test_client_authority_only_does_not_create_identity_or_bind_database(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

@@ -11,6 +11,7 @@ import secrets
 import sys
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 from uuid import NAMESPACE_URL, UUID, uuid5
 import psycopg2
 import requests
@@ -60,6 +61,7 @@ CLIENT_NAME = "AASOPharma canonical staging MCP"
 WEB_CLIENT_ID = "aasopharma-erp-web"
 WEB_CLIENT_NAME = "AASOPharma canonical staging web"
 WEB_TEST_AUTH_USER_ENV = "CANONICAL_STAGING_WEB_TEST_AUTH_USER_ID"
+CHATGPT_CALLBACK_ENV = "CHATGPT_MCP_OAUTH_CALLBACK_URI"
 UNISSUED_CLIENT_ID = "disabled-unissued-canonical-staging"
 ACTIVE_PROVIDER = active_provider_name(_DEPLOYMENT_MANIFEST)
 ACTIVE_PROVIDER_SERVICES = active_provider_services(_DEPLOYMENT_MANIFEST)
@@ -71,6 +73,9 @@ REDIRECT_URIS = (
     "https://claude.ai/api/mcp/auth_callback",
     "https://claude.com/api/mcp/auth_callback",
 )
+CHATGPT_STABLE_CALLBACK = "https://chatgpt.com/connector_platform_oauth_redirect"
+CHATGPT_CALLBACK_PATH_PREFIX = "/connector/oauth/"
+REVIEWED_CHATGPT_CALLBACK = "https://chatgpt.com/connector/oauth/_MPTGhIZ1AcM"
 TEST_EMAIL = "mcp-e2e@canonical-staging.aasopharma.invalid"
 TEST_USER_ID = "d3000000-0000-7000-8000-00000000002a"
 TEST_MEMBERSHIP_ID = "d3000000-0000-7000-8000-00000000002b"
@@ -190,7 +195,11 @@ def _client_shape(client: dict[str, Any]) -> tuple[Any, ...]:
     )
 
 
-def _reconcile_client(authority: SupabaseAuthAdminAuthority) -> dict[str, Any]:
+def _reconcile_client(
+    authority: SupabaseAuthAdminAuthority,
+    *,
+    redirect_uris: tuple[str, ...] = REDIRECT_URIS,
+) -> dict[str, Any]:
     endpoint = "oauth/clients"
     listed = _auth_admin_json(
         authority,
@@ -210,7 +219,7 @@ def _reconcile_client(authority: SupabaseAuthAdminAuthority) -> dict[str, Any]:
         )
     payload = {
         "name": CLIENT_NAME,
-        "redirect_uris": list(REDIRECT_URIS),
+        "redirect_uris": list(redirect_uris),
         "client_type": "public",
         "token_endpoint_auth_method": "none",
     }
@@ -888,8 +897,70 @@ def _reviewed_client_id(client: dict[str, Any]) -> str:
     return client_id
 
 
+def _reviewed_chatgpt_callback_uri(value: str) -> str:
+    """Accept only an exact production callback copied from ChatGPT app management."""
+
+    if value != value.strip() or len(value) > 512 or any(
+        character.isspace() for character in value
+    ):
+        raise ProvisioningError(
+            f"{CHATGPT_CALLBACK_ENV} must be one exact ChatGPT callback URI"
+        )
+    try:
+        parsed = urlsplit(value)
+        port = parsed.port
+    except ValueError as exc:
+        raise ProvisioningError(
+            f"{CHATGPT_CALLBACK_ENV} must be one exact ChatGPT callback URI"
+        ) from exc
+    if (
+        parsed.scheme != "https"
+        or parsed.netloc != "chatgpt.com"
+        or parsed.query
+        or parsed.fragment
+        or parsed.username is not None
+        or parsed.password is not None
+        or port is not None
+    ):
+        raise ProvisioningError(
+            f"{CHATGPT_CALLBACK_ENV} must be one exact ChatGPT callback URI"
+        )
+    if value == CHATGPT_STABLE_CALLBACK:
+        return value
+    if not parsed.path.startswith(CHATGPT_CALLBACK_PATH_PREFIX):
+        raise ProvisioningError(
+            f"{CHATGPT_CALLBACK_ENV} must match the callback shown by ChatGPT app management"
+        )
+    callback_id = parsed.path.removeprefix(CHATGPT_CALLBACK_PATH_PREFIX)
+    if (
+        not re.fullmatch(r"[A-Za-z0-9._~-]{1,200}", callback_id)
+        or callback_id.lower()
+        in {"callback_id", "callback-id", "replace-me", "generated-by-chatgpt"}
+    ):
+        raise ProvisioningError(
+            f"{CHATGPT_CALLBACK_ENV} must contain the real callback ID shown by ChatGPT"
+        )
+    return value
+
+
+def _redirect_uris_for_mode(mode: str) -> tuple[str, ...]:
+    if mode != "chatgpt-client-authority-only":
+        return REDIRECT_URIS
+    callback_uri = _reviewed_chatgpt_callback_uri(_required(CHATGPT_CALLBACK_ENV))
+    if not secrets.compare_digest(callback_uri, REVIEWED_CHATGPT_CALLBACK):
+        raise ProvisioningError(
+            f"{CHATGPT_CALLBACK_ENV} does not match the reviewed ChatGPT app callback"
+        )
+    return (*REDIRECT_URIS, callback_uri)
+
+
 def _write_client_evidence(
-    *, client_id: str, mode: str, demo_bound: bool, reviewed_sha: str | None = None
+    *,
+    client_id: str,
+    mode: str,
+    demo_bound: bool,
+    redirect_uris: tuple[str, ...] = REDIRECT_URIS,
+    reviewed_sha: str | None = None,
 ) -> None:
     evidence_path = Path(os.getenv("CANONICAL_DEMO_EVIDENCE_DIR", "staging-evidence"))
     evidence_path.mkdir(parents=True, exist_ok=True)
@@ -900,13 +971,24 @@ def _write_client_evidence(
         "client_name": CLIENT_NAME,
         "client_type": "public",
         "token_endpoint_auth_method": "none",
-        "redirect_uris": list(REDIRECT_URIS),
+        "redirect_uris": list(redirect_uris),
         "dynamic_client_registration": False,
         "provisioning_mode": mode,
         "demo_grant_bound": demo_bound,
         "web_test_grant_bound": demo_bound,
-        "test_identity_reconciled": mode != "client-authority-only",
+        "test_identity_reconciled": mode
+        not in {"client-authority-only", "chatgpt-client-authority-only"},
     }
+    if mode == "chatgpt-client-authority-only":
+        evidence.update(
+            {
+                "chatgpt_callback_uri": redirect_uris[-1],
+                "client_registration_method": "predefined",
+                "oauth_client_secret_issued": False,
+                "pkce_code_challenge_method": "S256",
+                "resource_parameter_required": True,
+            }
+        )
     if reviewed_sha is not None:
         if not re.fullmatch(r"[0-9a-f]{40}", reviewed_sha):
             raise ProvisioningError("REVIEWED_SHA must be one exact lowercase commit SHA")
@@ -932,6 +1014,7 @@ def _mode(argv: list[str] | None = None) -> str:
         "--mode",
         choices=(
             "complete",
+            "chatgpt-client-authority-only",
             "client-authority-only",
             "client-only",
             "bind-existing-demo",
@@ -943,12 +1026,17 @@ def _mode(argv: list[str] | None = None) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     mode = _mode(argv)
+    redirect_uris = _redirect_uris_for_mode(mode)
     if _required("CANONICAL_STAGING_PROJECT_REF") != PROJECT_REF:
         raise ProvisioningError("Refusing OAuth provisioning outside the reviewed staging project")
     if _required("SUPABASE_URL") != SUPABASE_URL:
         raise ProvisioningError("SUPABASE_URL does not match the reviewed staging project")
     management_token = _required("SUPABASE_ACCESS_TOKEN")
-    reviewed_sha = _required("REVIEWED_SHA") if mode == "client-authority-only" else None
+    reviewed_sha = (
+        _required("REVIEWED_SHA")
+        if mode in {"client-authority-only", "chatgpt-client-authority-only"}
+        else None
+    )
     if reviewed_sha is not None and not re.fullmatch(r"[0-9a-f]{40}", reviewed_sha):
         raise ProvisioningError("REVIEWED_SHA must be one exact lowercase commit SHA")
     existing_password = os.getenv("CANONICAL_STAGING_MCP_TEST_PASSWORD", "").strip()
@@ -958,21 +1046,31 @@ def main(argv: list[str] | None = None) -> int:
         )
     database_url = (
         _reviewed_database_url(_required("PSYCOPG_DATABASE_URL"))
-        if mode not in {"client-authority-only", "client-only"}
+        if mode
+        not in {
+            "client-authority-only",
+            "chatgpt-client-authority-only",
+            "client-only",
+        }
         else ""
     )
     auth_admin = _auth_admin_authority(management_token)
     mask_auth_admin_secret(auth_admin)
     print("Resolved the staging project Auth Admin secret")
-    client = _reconcile_client(auth_admin)
+    client = (
+        _reconcile_client(auth_admin, redirect_uris=redirect_uris)
+        if mode == "chatgpt-client-authority-only"
+        else _reconcile_client(auth_admin)
+    )
     client_id = _reviewed_client_id(client)
     print("Reconciled the reviewed public OAuth client")
-    if mode == "client-authority-only":
+    if mode in {"client-authority-only", "chatgpt-client-authority-only"}:
         _write_github_env({"MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS": client_id})
         _write_client_evidence(
             client_id=client_id,
             mode=mode,
             demo_bound=False,
+            redirect_uris=redirect_uris,
             reviewed_sha=reviewed_sha,
         )
         print(
@@ -1032,6 +1130,7 @@ def main(argv: list[str] | None = None) -> int:
         client_id=client_id,
         mode=mode,
         demo_bound=demo_bound,
+        redirect_uris=redirect_uris,
     )
     print(
         json.dumps(
