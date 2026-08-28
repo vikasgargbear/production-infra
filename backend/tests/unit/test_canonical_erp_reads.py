@@ -487,8 +487,10 @@ def test_canonical_sales_detail_openapi_publishes_only_exact_decimal_strings() -
             "sgst_amount": 2, "igst_amount": 2, "line_total": 2, "mrp": 4,
         },
         "CanonicalInvoiceDetailResponse": {
-            "taxable_amount": 2, "cgst_amount": 2, "sgst_amount": 2,
-            "igst_amount": 2, "cess_amount": 2, "total_amount": 2,
+            "subtotal_amount": 2, "discount_amount": 2, "charges_amount": 2,
+            "net_value_amount": 2, "taxable_amount": 2, "cgst_amount": 2,
+            "sgst_amount": 2, "igst_amount": 2, "cess_amount": 2,
+            "rounding_adjustment": 2, "total_amount": 2,
         },
         "CanonicalSalesOrderImportDetail": {"total_amount": 2},
         "CanonicalChallanImportDetail": {"total_amount": 2},
@@ -1275,6 +1277,14 @@ def test_sales_invoice_reads_project_authoritative_gst_header_totals() -> None:
         assert "igst_total" in source and "AS igst_amount" in source
         assert "cess_total" in source and "AS cess_amount" in source
     assert "COALESCE(document.cess_total, 0) AS cess_amount," in list_source
+    for field in (
+        "subtotal", "discount_total", "charges_total", "net_value_total",
+        "rounding_adjustment", "tax_charge_mechanism",
+    ):
+        assert f"invoice.{field}" in detail_source
+    assert "AS seller_drug_license_numbers" in detail_source
+    assert "AS customer_drug_license_numbers" in detail_source
+    assert "valid_from<=invoice.invoice_date" in detail_source
 
 
 def test_sales_invoice_detail_projects_executed_batch_allocations() -> None:
@@ -1427,12 +1437,17 @@ def test_sales_invoice_detail_response_validates_zero_one_and_many_allocations()
         "invoice_date": date(2026, 8, 24), "status": "draft",
         "seller_legal_name": "Canonical Seller Private Limited",
         "seller_gstin": "27ABCDE1234F1Z5", "seller_address": "Seller Address",
+        "seller_drug_license_numbers": ["MH-MZ6-20B"],
         "customer_id": uuid4(), "customer_name": "Customer",
         "customer_phone": None, "customer_email": None,
-        "customer_gst_number": None, "billing_address": "Address",
+        "customer_gst_number": None, "customer_drug_license_numbers": [],
+        "billing_address": "Address",
         "shipping_address": "Address", "due_date": None, "currency_code": "INR",
+        "tax_charge_mechanism": "normal", "subtotal_amount": 300,
+        "discount_amount": 0, "charges_amount": 0, "net_value_amount": 300,
         "taxable_amount": 300, "cgst_amount": 18, "sgst_amount": 18,
-        "igst_amount": 0, "cess_amount": 0, "total_amount": 336,
+        "igst_amount": 0, "cess_amount": 0, "rounding_adjustment": 0,
+        "total_amount": 336,
         "items": [item([]), item([direct]), item([direct, direct_two]), item([dispatch])],
         "created_at": datetime(2026, 8, 24, 17, 0),
         "updated_at": datetime(2026, 8, 24, 17, 0),

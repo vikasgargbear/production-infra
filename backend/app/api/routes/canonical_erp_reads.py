@@ -3225,20 +3225,28 @@ class CanonicalInvoiceDetailResponse(BaseModel):
     seller_legal_name: str
     seller_gstin: str
     seller_address: str
+    seller_drug_license_numbers: list[str]
     customer_id: UUID
     customer_name: str
     customer_phone: Optional[str]
     customer_email: Optional[str]
     customer_gst_number: Optional[str]
+    customer_drug_license_numbers: list[str]
     billing_address: str
     shipping_address: str
     due_date: Optional[date]
     currency_code: str
+    tax_charge_mechanism: Literal["normal", "reverse_charge"]
+    subtotal_amount: ExactMoney
+    discount_amount: ExactMoney
+    charges_amount: ExactMoney
+    net_value_amount: ExactMoney
     taxable_amount: ExactMoney
     cgst_amount: ExactMoney
     sgst_amount: ExactMoney
     igst_amount: ExactMoney
     cess_amount: ExactMoney
+    rounding_adjustment: ExactMoney
     total_amount: ExactMoney
     items: list[CanonicalInvoiceDetailItem]
     created_at: datetime
@@ -3262,18 +3270,29 @@ def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> di
                invoice.seller_legal_name_snapshot AS seller_legal_name,
                invoice.seller_gstin_snapshot AS seller_gstin,
                invoice.seller_address_snapshot AS seller_address,
+               COALESCE(seller_license.license_numbers, ARRAY[]::text[])
+                   AS seller_drug_license_numbers,
                invoice.customer_account_id AS customer_id,
                party.legal_name AS customer_name,
                contact.phone AS customer_phone, contact.email AS customer_email,
                invoice.buyer_gstin_snapshot AS customer_gst_number,
+               COALESCE(customer_license.license_numbers, ARRAY[]::text[])
+                   AS customer_drug_license_numbers,
                invoice.buyer_address_snapshot AS billing_address,
                invoice.buyer_address_snapshot AS shipping_address,
                invoice.due_date, invoice.currency_code,
+               invoice.tax_charge_mechanism,
+               to_char(invoice.subtotal, 'FM999999999999999990.00') AS subtotal_amount,
+               to_char(invoice.discount_total, 'FM999999999999999990.00') AS discount_amount,
+               to_char(invoice.charges_total, 'FM999999999999999990.00') AS charges_amount,
+               to_char(invoice.net_value_total, 'FM999999999999999990.00') AS net_value_amount,
                to_char(invoice.gst_taxable_total, 'FM999999999999999990.00') AS taxable_amount,
                to_char(invoice.cgst_total, 'FM999999999999999990.00') AS cgst_amount,
                to_char(invoice.sgst_total, 'FM999999999999999990.00') AS sgst_amount,
                to_char(invoice.igst_total, 'FM999999999999999990.00') AS igst_amount,
                to_char(invoice.cess_total, 'FM999999999999999990.00') AS cess_amount,
+               to_char(invoice.rounding_adjustment, 'FM999999999999999990.00')
+                   AS rounding_adjustment,
                to_char(invoice.grand_total, 'FM999999999999999990.00') AS total_amount,
                COALESCE(lines.items, '[]'::jsonb) AS items,
                invoice.created_at, invoice.updated_at
@@ -3289,6 +3308,31 @@ def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> di
                WHERE org_id=party.org_id AND party_id=party.id AND status='active'
                ORDER BY is_primary DESC, id LIMIT 1
           ) contact ON true
+          LEFT JOIN LATERAL (
+              SELECT array_agg(license_number ORDER BY license_type_code, id)
+                         AS license_numbers
+                FROM compliance.licenses
+               WHERE org_id=invoice.org_id
+                 AND organization_subject_id=invoice.org_id
+                 AND license_type_code IN (
+                     'drug_wholesale_form_20b', 'drug_wholesale_form_21b',
+                     'drug_schedule_x_wholesale_form_20g'
+                 )
+                 AND status='active' AND valid_from<=invoice.invoice_date
+                 AND (valid_until IS NULL OR valid_until>=invoice.invoice_date)
+          ) seller_license ON true
+          LEFT JOIN LATERAL (
+              SELECT array_agg(license_number ORDER BY license_type_code, id)
+                         AS license_numbers
+                FROM compliance.licenses
+               WHERE org_id=invoice.org_id AND party_id=party.id
+                 AND license_type_code IN (
+                     'drug_wholesale_form_20b', 'drug_wholesale_form_21b',
+                     'drug_schedule_x_wholesale_form_20g'
+                 )
+                 AND status='active' AND valid_from<=invoice.invoice_date
+                 AND (valid_until IS NULL OR valid_until>=invoice.invoice_date)
+          ) customer_license ON true
           LEFT JOIN LATERAL (
               SELECT jsonb_agg(jsonb_build_object(
                          'id', line.id, 'source_document_kind', 'sales_order',
