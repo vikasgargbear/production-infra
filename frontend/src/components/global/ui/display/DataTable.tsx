@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   ChevronUp,
   ChevronDown,
@@ -8,7 +8,6 @@ import {
   ChevronsLeft,
   ChevronsRight,
   Search,
-  Filter,
   Download,
   RefreshCw,
 } from 'lucide-react';
@@ -245,6 +244,14 @@ export function DataTable<T extends Record<string, any>>({
     }
   };
 
+  const getHeaderAlignmentClass = (align?: 'left' | 'center' | 'right') => {
+    switch (align) {
+      case 'center': return 'justify-center';
+      case 'right': return 'justify-end';
+      default: return 'justify-start';
+    }
+  };
+
   // Table classes
   const tableClasses = [
     'min-w-full divide-y divide-app-200',
@@ -334,7 +341,7 @@ export function DataTable<T extends Record<string, any>>({
                   style={{ width: column.width }}
                   onClick={() => column.sortable !== false && handleSort(String(column.key))}
                 >
-                  <div className="flex items-center gap-1">
+                  <div className={`flex items-center gap-1 ${getHeaderAlignmentClass(column.align)}`}>
                     {column.header}
                     {column.sortable !== false && renderSortIcon(String(column.key))}
                   </div>

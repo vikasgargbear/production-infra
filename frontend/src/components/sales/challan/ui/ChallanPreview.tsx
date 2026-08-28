@@ -50,8 +50,8 @@ const ChallanPreview: React.FC<ChallanPreviewProps> = ({
                 }
             `}</style>
 
-            <div id="challan-preview" className="p-8 font-sans print-colors">
-                <div className="mb-6 flex items-start justify-between border-b-2 border-gray-800 pb-4">
+            <div id="challan-preview" className="p-4 font-sans print-colors sm:p-8">
+                <div className="mb-6 flex flex-col gap-4 border-b-2 border-gray-800 pb-4 sm:flex-row sm:items-start sm:justify-between">
                     <div className="flex items-start gap-3">
                         {companyInfo?.logo ? (
                             <img src={companyInfo.logo} alt={companyName} className="h-14 w-14 object-contain" />
@@ -68,7 +68,7 @@ const ChallanPreview: React.FC<ChallanPreviewProps> = ({
                             </p>
                         </div>
                     </div>
-                    <div className="text-right">
+                    <div className="text-left sm:text-right">
                         <h1 className="text-xl font-bold uppercase text-gray-900">Delivery Challan</h1>
                         <p className="mt-1 text-sm text-gray-600">
                             No: {challan.challan_number || 'Assigned after posting'}
@@ -77,7 +77,7 @@ const ChallanPreview: React.FC<ChallanPreviewProps> = ({
                     </div>
                 </div>
 
-                <div className="mb-6 grid grid-cols-2 gap-4">
+                <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div className="rounded-lg border border-gray-300 bg-gray-50 p-4">
                         <h3 className="mb-2 text-xs font-bold uppercase text-gray-700">Customer</h3>
                         <p className="font-semibold text-gray-900">{challan.customer_name}</p>
@@ -99,11 +99,11 @@ const ChallanPreview: React.FC<ChallanPreviewProps> = ({
                 )}
 
                 <div className="mb-6 overflow-x-auto">
-                    <table className="w-full border border-gray-300">
+                    <table className="w-full min-w-[720px] table-auto border border-gray-300">
                         <thead className="bg-gray-100">
                             <tr>
                                 <th className="border-r px-3 py-2 text-left text-xs uppercase text-gray-700">#</th>
-                                <th className="border-r px-3 py-2 text-left text-xs uppercase text-gray-700">Product</th>
+                                <th className="w-full min-w-56 border-r px-3 py-2 text-left text-xs uppercase text-gray-700">Product</th>
                                 <th className="border-r px-3 py-2 text-left text-xs uppercase text-gray-700">Batch</th>
                                 <th className="border-r px-3 py-2 text-left text-xs uppercase text-gray-700">Expiry</th>
                                 <th className="border-r px-3 py-2 text-right text-xs uppercase text-gray-700">Billed qty</th>
@@ -115,8 +115,8 @@ const ChallanPreview: React.FC<ChallanPreviewProps> = ({
                             {challan.items.map((item, index) => (
                                 <tr key={String(item.source_order_line_id)} className="border-t">
                                     <td className="border-r px-3 py-2 text-sm">{index + 1}</td>
-                                    <td className="border-r px-3 py-2 text-sm">
-                                        <div className="font-medium">{item.product_name}</div>
+                                    <td className="w-full min-w-56 border-r px-3 py-2 text-sm">
+                                        <div className="break-words font-medium">{item.product_name}</div>
                                         <div className="break-all text-[10px] text-gray-500">{item.source_order_line_id}</div>
                                     </td>
                                     <td className="border-r px-3 py-2 text-sm">{item.batch_number}</td>

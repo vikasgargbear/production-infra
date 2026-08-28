@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { formatExactDecimal } from '../../../../utils/exactDecimal';
+import { formatExactCurrency, formatExactDecimal } from '../../../../utils/exactDecimal';
 import { CheckCircle, AlertCircle } from 'lucide-react';
 import {
     NotesSection,
@@ -53,11 +53,11 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
     companyInfo,
     documentPolicy,
 }) => {
-    const money = (value: unknown, label: string) => formatExactDecimal(
+    const money = (value: unknown, label: string) => formatExactCurrency(value, label);
+    const quantity = (value: unknown, label: string) => formatExactDecimal(
         value,
         label,
-        { scale: 2, maximumWholeDigits: 20, allowNegative: true },
-        2,
+        { scale: 6, maximumWholeDigits: 14 },
     );
     const previewUnavailableReason = canonicalOrderPreviewUnavailableReason(order);
     const messageNotice = message && (
@@ -77,7 +77,7 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
         </div>;
     }
     return (
-        <div className="max-w-6xl mx-auto p-6">
+        <div className="mx-auto max-w-6xl p-4 sm:p-6">
             {documentPolicy && <p className="mb-4 rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-700">
                 Server policy: {documentPolicy.default_price_basis.replace('_', ' ')} pricing · {documentPolicy.default_rounding_policy} rounding · {documentPolicy.default_zero_rated_payment_mode.replace(/_/g, ' ')} zero-rated mode
             </p>}
@@ -126,7 +126,7 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
                 companyInfo={companyInfo as any}
                 showPrintOptions={true}
             >
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 print-container order-preview-container">
+                <div className="order-preview-container print-container rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-8">
                     {/* Header */}
                     <div className="mb-4 pb-3 border-b-2 border-blue-300 print-header">
                         <div className="flex justify-between items-start">
@@ -256,11 +256,11 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
                     <div className="mb-8">
                         <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider mb-4">Order Items</h3>
                         <div className="overflow-x-auto">
-                            <table className="w-full border border-gray-200 print-table">
+                            <table className="print-table w-full min-w-[620px] table-auto border border-gray-200">
                                 <thead className="bg-gray-50">
                                     <tr>
-                                        <th className="text-left py-2 px-3 text-xs font-medium text-blue-700 border-b">Item Details</th>
-                                        <th className="text-center py-2 px-3 text-xs font-medium text-blue-700 border-b">Qty</th>
+                                        <th className="w-full min-w-64 px-3 py-2 text-left text-xs font-medium text-blue-700 border-b">Item Details</th>
+                                        <th className="px-3 py-2 text-right text-xs font-medium text-blue-700 border-b">Qty</th>
                                         <th className="text-right py-2 px-3 text-xs font-medium text-blue-700 border-b">Rate</th>
                                         <th className="text-right py-2 px-3 text-xs font-medium text-blue-700 border-b">GST %</th>
                                         <th className="text-right py-2 px-3 text-xs font-medium text-blue-700 border-b">Amount</th>
@@ -269,11 +269,11 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
                                 <tbody>
                                     {order.items.map((item, index) => (
                                         <tr key={index} className="border-b hover:bg-gray-50">
-                                            <td className="py-2 px-3">
+                                            <td className="w-full min-w-64 px-3 py-2">
                                                 <p className="text-sm font-medium">{item.product_name}</p>
                                                 <p className="text-xs text-gray-500">Batch: {item.batch_number}</p>
                                             </td>
-                                            <td className="text-center py-2 px-3 text-sm font-medium">{item.quantity}</td>
+                                            <td className="whitespace-nowrap px-3 py-2 text-right text-sm font-medium tabular-nums">{quantity(item.quantity, `Order item ${index + 1} quantity`)}</td>
                                             <td className="text-right py-2 px-3 text-sm">₹{formatExactDecimal(
                                                 item.unit_price,
                                                 `Order item ${index + 1} rate`,
@@ -281,7 +281,7 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
                                                 2,
                                             )}</td>
                                             <td className="text-right py-2 px-3 text-sm">{item.gst_percent}%</td>
-                                            <td className="text-right py-2 px-3 text-sm font-medium">₹{money(item.calculated_total, `Order item ${index + 1} total`)}</td>
+                                            <td className="whitespace-nowrap px-3 py-2 text-right text-sm font-medium tabular-nums">{money(item.calculated_total, `Order item ${index + 1} total`)}</td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -289,24 +289,24 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
                         </div>
 
                         {/* Summary */}
-                        <div className="mt-4 grid grid-cols-2 gap-4">
+                        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
                             <div className="bg-gray-50 p-4 rounded-lg">
                                 <h4 className="text-sm font-semibold text-blue-700 mb-2">GST Breakdown</h4>
                                 <div className="space-y-1">
                                     {order.gst_type === 'IGST' ? (
                                         <div className="flex justify-between text-sm">
                                             <span className="text-gray-600">IGST</span>
-                                            <span className="font-medium">₹{money(order.igst_amount, 'Order IGST')}</span>
+                                            <span className="font-medium">{money(order.igst_amount, 'Order IGST')}</span>
                                         </div>
                                     ) : order.gst_type === 'CGST/SGST' ? (
                                         <>
                                             <div className="flex justify-between text-sm">
                                                 <span className="text-gray-600">CGST</span>
-                                                <span className="font-medium">₹{money(order.cgst_amount, 'Order CGST')}</span>
+                                                <span className="font-medium">{money(order.cgst_amount, 'Order CGST')}</span>
                                             </div>
                                             <div className="flex justify-between text-sm">
                                                 <span className="text-gray-600">SGST</span>
-                                                <span className="font-medium">₹{money(order.sgst_amount, 'Order SGST')}</span>
+                                                <span className="font-medium">{money(order.sgst_amount, 'Order SGST')}</span>
                                             </div>
                                         </>
                                     ) : (
@@ -316,7 +316,7 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
                                     )}
                                     <div className="flex justify-between text-sm border-t pt-1">
                                         <span className="text-blue-700 font-medium">Total GST</span>
-                                        <span className="font-semibold">₹{money(order.tax_amount, 'Order total GST')}</span>
+                                        <span className="font-semibold">{money(order.tax_amount, 'Order total GST')}</span>
                                     </div>
                                 </div>
                             </div>
@@ -326,15 +326,15 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
                                 <div className="space-y-1">
                                     <div className="flex justify-between text-sm">
                                         <span className="text-gray-600">Sub Total</span>
-                                        <span className="font-medium">₹{money(order.subtotal_amount, 'Order subtotal')}</span>
+                                        <span className="font-medium">{money(order.subtotal_amount, 'Order subtotal')}</span>
                                     </div>
                                     <div className="flex justify-between text-sm">
                                         <span className="text-gray-600">Total GST</span>
-                                        <span className="font-medium">₹{money(order.tax_amount, 'Order total GST')}</span>
+                                        <span className="font-medium">{money(order.tax_amount, 'Order total GST')}</span>
                                     </div>
                                     <div className="flex justify-between text-sm border-t pt-1">
                                         <span className="text-blue-700 font-semibold">Grand Total</span>
-                                        <span className="font-bold text-lg text-blue-700">₹{money(order.total_amount, 'Order grand total')}</span>
+                                        <span className="font-bold text-lg text-blue-700">{money(order.total_amount, 'Order grand total')}</span>
                                     </div>
                                 </div>
                             </div>
@@ -342,11 +342,11 @@ const OrderReviewStep: React.FC<OrderReviewStepProps> = ({
 
                         {/* Amount in Words */}
                         <div className="mt-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                            <p className="text-sm"><span className="font-medium">Exact Amount:</span> ₹{money(order.total_amount, 'Order grand total')}</p>
+                            <p className="text-sm"><span className="font-medium">Exact Amount:</span> {money(order.total_amount, 'Order grand total')}</p>
                         </div>
 
                         {/* Terms & Signature */}
-                        <div className="grid grid-cols-2 gap-6 mt-4 pt-3 border-t border-gray-200">
+                        <div className="mt-4 grid grid-cols-1 gap-6 border-t border-gray-200 pt-3 sm:grid-cols-2">
                             <div>
                                 <h4 className="text-xs font-semibold text-gray-700 mb-2">Terms & Conditions</h4>
                                 <p className="text-xs text-gray-600">

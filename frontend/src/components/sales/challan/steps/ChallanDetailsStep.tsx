@@ -16,6 +16,7 @@ import {
     applyDispatchBatchChoice,
     eligibleDispatchBatchChoices,
 } from '../utils/dispatchBatchChoice';
+import { formatExactDecimal } from '../../../../utils/exactDecimal';
 
 interface ChallanDetailsStepProps {
     challan: Challan;
@@ -63,6 +64,11 @@ const ChallanDetailsStep: React.FC<ChallanDetailsStepProps> = ({
     onClose,
     onContinue,
 }) => {
+    const quantity = (value: unknown, label: string) => formatExactDecimal(
+        value,
+        label,
+        { scale: 6, maximumWholeDigits: 14 },
+    );
     const ready = Boolean(
         challan.challan_date
         && challan.source_order_id
@@ -94,8 +100,8 @@ const ChallanDetailsStep: React.FC<ChallanDetailsStepProps> = ({
                     className="flex-1 overflow-y-auto bg-gray-50"
                     ref={challanFormRef as unknown as React.RefObject<HTMLDivElement>}
                 >
-                    <div className="mx-auto max-w-6xl px-6 py-6">
-                        <div className="mb-6 grid grid-cols-2 gap-4">
+                    <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6 sm:py-6">
+                        <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
                             <StandardDatePicker
                                 label="Dispatch date"
                                 value={challan.challan_date}
@@ -149,12 +155,61 @@ const ChallanDetailsStep: React.FC<ChallanDetailsStepProps> = ({
                                     FEFO batches are selected by default. If needed, choose another sufficiently stocked batch with the same expiry date.
                                 </p>
 
-                                <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
-                                    <table className="w-full">
+                                <div className="space-y-3 md:hidden" data-testid="dispatch-batch-cards">
+                                    {challan.items.map((item, itemIndex) => {
+                                        const choices = eligibleDispatchBatchChoices(item, challan.items);
+                                        return (
+                                            <article key={`mobile-${String(item.id)}`} className="rounded-lg border border-gray-200 bg-white p-4">
+                                                <div className="min-w-0">
+                                                    <div className="flex items-start gap-2 font-medium text-gray-900">
+                                                        <Package className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" />
+                                                        <span className="min-w-0 break-words">{item.product_name}</span>
+                                                    </div>
+                                                    <p className="mt-1 text-xs text-gray-500">{item.uom_code || item.unit}</p>
+                                                </div>
+                                                <div className="mt-3">
+                                                    <span className="mb-1 block text-xs font-medium text-gray-600">Batch</span>
+                                                    {choices.length > 1 ? (
+                                                        <select
+                                                            aria-label={`Batch for ${item.product_name}, allocation ${itemIndex + 1}`}
+                                                            value={String(item.batch_id)}
+                                                            onChange={event => selectBatch(item.id, event.target.value)}
+                                                            className="min-h-11 w-full max-w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
+                                                        >
+                                                            {choices.map(candidate => (
+                                                                <option key={candidate.batch_id} value={candidate.batch_id}>
+                                                                    {candidate.batch_number} · expires {candidate.expiry_date} · {quantity(candidate.available_quantity, 'Available batch quantity')} available
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                    ) : (
+                                                        <div className="break-words text-sm">
+                                                            <div>{item.batch_number}</div>
+                                                            <div className="text-xs text-gray-500">FEFO · expires {item.expiry_date}</div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <dl className="mt-3 grid grid-cols-2 gap-3 border-t border-gray-100 pt-3 text-sm">
+                                                    <div>
+                                                        <dt className="text-xs text-gray-500">Billed qty</dt>
+                                                        <dd className="mt-1 text-right font-medium tabular-nums">{quantity(item.quantity, 'Dispatch billed quantity')}</dd>
+                                                    </div>
+                                                    <div>
+                                                        <dt className="text-xs text-gray-500">Free qty</dt>
+                                                        <dd className="mt-1 text-right font-medium tabular-nums">{quantity(item.free_quantity, 'Dispatch free quantity')}</dd>
+                                                    </div>
+                                                </dl>
+                                            </article>
+                                        );
+                                    })}
+                                </div>
+
+                                <div className="hidden overflow-x-auto rounded-lg border border-gray-200 bg-white md:block">
+                                    <table className="w-full min-w-[760px] table-auto">
                                         <thead className="bg-gray-50">
                                             <tr>
-                                                <th className="px-3 py-2 text-left text-xs uppercase text-gray-600">Product</th>
-                                                <th className="px-3 py-2 text-left text-xs uppercase text-gray-600">Batch</th>
+                                                <th className="w-full min-w-64 px-3 py-2 text-left text-xs uppercase text-gray-600">Product</th>
+                                                <th className="min-w-72 px-3 py-2 text-left text-xs uppercase text-gray-600">Batch</th>
                                                 <th className="px-3 py-2 text-right text-xs uppercase text-gray-600">Billed qty</th>
                                                 <th className="px-3 py-2 text-right text-xs uppercase text-gray-600">Free qty</th>
                                                 <th className="px-3 py-2 text-left text-xs uppercase text-gray-600">Unit</th>
@@ -165,23 +220,23 @@ const ChallanDetailsStep: React.FC<ChallanDetailsStepProps> = ({
                                                 const choices = eligibleDispatchBatchChoices(item, challan.items);
                                                 return (
                                                     <tr key={String(item.id)} className="border-t border-gray-200">
-                                                        <td className="px-3 py-3 text-sm">
+                                                        <td className="w-full min-w-64 px-3 py-3 text-sm">
                                                             <div className="flex items-center gap-2 font-medium">
                                                                 <Package className="h-4 w-4 text-gray-400" />
                                                                 {item.product_name}
                                                             </div>
                                                         </td>
-                                                        <td className="px-3 py-3 text-sm">
+                                                        <td className="min-w-72 px-3 py-3 text-sm">
                                                             {choices.length > 1 ? (
                                                                 <select
                                                                     aria-label={`Batch for ${item.product_name}, allocation ${itemIndex + 1}`}
                                                                     value={String(item.batch_id)}
                                                                     onChange={event => selectBatch(item.id, event.target.value)}
-                                                                    className="min-h-11 rounded-lg border border-gray-300 bg-white px-3 py-2"
+                                                                    className="min-h-11 w-full max-w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
                                                                 >
                                                                     {choices.map(candidate => (
                                                                         <option key={candidate.batch_id} value={candidate.batch_id}>
-                                                                            {candidate.batch_number} · expires {candidate.expiry_date} · {candidate.available_quantity} available
+                                                                            {candidate.batch_number} · expires {candidate.expiry_date} · {quantity(candidate.available_quantity, 'Available batch quantity')} available
                                                                         </option>
                                                                     ))}
                                                                 </select>
@@ -192,8 +247,8 @@ const ChallanDetailsStep: React.FC<ChallanDetailsStepProps> = ({
                                                                 </div>
                                                             )}
                                                         </td>
-                                                        <td className="px-3 py-3 text-right text-sm">{item.quantity}</td>
-                                                        <td className="px-3 py-3 text-right text-sm">{item.free_quantity}</td>
+                                                        <td className="whitespace-nowrap px-3 py-3 text-right text-sm tabular-nums">{quantity(item.quantity, 'Dispatch billed quantity')}</td>
+                                                        <td className="whitespace-nowrap px-3 py-3 text-right text-sm tabular-nums">{quantity(item.free_quantity, 'Dispatch free quantity')}</td>
                                                         <td className="px-3 py-3 text-sm">{item.uom_code || item.unit}</td>
                                                     </tr>
                                                 );
