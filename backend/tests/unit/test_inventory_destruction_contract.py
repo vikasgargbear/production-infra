@@ -192,6 +192,23 @@ def test_demo_provisions_destruction_sequence_and_mcp_readback_authority() -> No
     assert "demo cross-table audit requires unique command requests" in provisioner
 
 
+def test_demo_destruction_fixture_reconciles_no_reset_lineage_without_join_multiplication() -> None:
+    provisioner = (
+        ROOT / "backend/scripts/provision_canonical_demo.py"
+    ).read_text(encoding="utf-8")
+    for fragment in (
+        "WITH credit_lot_authority AS (",
+        "returned_stock_lineage AS (",
+        "application.application_kind='sales_return_restoration'",
+        "application.application_kind='destruction_reversal'",
+        "CROSS JOIN credit_lot_authority",
+        "CROSS JOIN returned_stock_lineage",
+        "stock[0] != stock[14] - stock[15]",
+    ):
+        assert fragment in provisioner
+    assert "JOIN tax.input_credit_applications restoration" not in provisioner
+
+
 def test_rest_readback_requires_posted_destruction_ledger_and_journal() -> None:
     route = (
         ROOT / "backend/app/api/routes/web_operator_actions.py"

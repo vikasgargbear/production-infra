@@ -4306,25 +4306,54 @@ def seed_inventory_destruction_ui_fixture(
             cursor.execute("SELECT set_config(%s,%s,true)", (setting, value))
         cursor.execute(
             """
+            WITH credit_lot_authority AS (
+              SELECT count(*) AS lot_count,
+                     COALESCE(sum(lot.remaining_base_quantity),0) AS remaining_base_quantity,
+                     COALESCE(sum(lot.remaining_cgst_amount),0) AS remaining_cgst_amount,
+                     COALESCE(sum(lot.remaining_sgst_amount),0) AS remaining_sgst_amount,
+                     COALESCE(sum(lot.remaining_igst_amount),0) AS remaining_igst_amount,
+                     COALESCE(sum(lot.remaining_cess_amount),0) AS remaining_cess_amount
+                FROM tax.input_credit_lots lot
+               WHERE lot.org_id=%s AND lot.batch_id=%s
+                 AND lot.lineage_status='exact' AND lot.remaining_base_quantity>0
+            ), returned_stock_lineage AS (
+              SELECT count(*) FILTER (
+                       WHERE application.application_kind='sales_return_restoration'
+                     ) AS restoration_count,
+                     COALESCE(sum(application.applied_base_quantity) FILTER (
+                       WHERE application.application_kind='sales_return_restoration'
+                     ),0) AS restored_base_quantity,
+                     COALESCE(sum(application.applied_base_quantity) FILTER (
+                       WHERE application.application_kind='destruction_reversal'
+                     ),0) AS destroyed_base_quantity
+                FROM tax.input_credit_applications application
+                JOIN tax.input_credit_lots lot ON lot.org_id=application.org_id
+                  AND lot.id=application.input_credit_lot_id
+               WHERE application.org_id=%s AND lot.batch_id=%s
+                 AND application.status='posted'
+                 AND ((application.application_kind='sales_return_restoration'
+                       AND application.application_direction='restore')
+                   OR (application.application_kind='destruction_reversal'
+                       AND application.application_direction='consume'))
+            )
             SELECT balance.on_hand_quantity,balance.inventory_value,balance.average_unit_cost,
                    batch.batch_number,batch.status,location.id,location.name,
-                   count(DISTINCT lot.id),sum(lot.remaining_base_quantity),
-                   sum(lot.remaining_cgst_amount),sum(lot.remaining_sgst_amount),
-                   sum(lot.remaining_igst_amount),sum(lot.remaining_cess_amount),
-                   count(DISTINCT restoration.id),
-                   sum(restoration.applied_base_quantity)
+                   credit_lot_authority.lot_count,
+                   credit_lot_authority.remaining_base_quantity,
+                   credit_lot_authority.remaining_cgst_amount,
+                   credit_lot_authority.remaining_sgst_amount,
+                   credit_lot_authority.remaining_igst_amount,
+                   credit_lot_authority.remaining_cess_amount,
+                   returned_stock_lineage.restoration_count,
+                   returned_stock_lineage.restored_base_quantity,
+                   returned_stock_lineage.destroyed_base_quantity
               FROM inventory.stock_balances balance
               JOIN inventory.batches batch ON batch.org_id=balance.org_id AND batch.id=balance.batch_id
               JOIN inventory.locations location ON location.org_id=balance.org_id
                 AND location.id=balance.location_id AND location.location_type='quarantine'
                 AND NOT location.allows_sale
-              JOIN tax.input_credit_lots lot ON lot.org_id=balance.org_id
-                AND lot.batch_id=balance.batch_id AND lot.lineage_status='exact'
-                AND lot.remaining_base_quantity>0
-              JOIN tax.input_credit_applications restoration ON restoration.org_id=lot.org_id
-                AND restoration.input_credit_lot_id=lot.id
-                AND restoration.application_kind='sales_return_restoration'
-                AND restoration.application_direction='restore' AND restoration.status='posted'
+              CROSS JOIN credit_lot_authority
+              CROSS JOIN returned_stock_lineage
              WHERE balance.org_id=%s AND balance.branch_id=%s AND balance.location_id=%s
                AND balance.product_id=%s AND balance.batch_id=%s
                AND balance.on_hand_quantity>0 AND balance.inventory_value>0
@@ -4338,10 +4367,9 @@ def seed_inventory_destruction_ui_fixture(
                   AND returned_ledger.quantity_delta>0
                   AND returned_document.document_type='sales_return_receipt'
                   AND returned_document.status='posted')
-             GROUP BY balance.on_hand_quantity,balance.inventory_value,balance.average_unit_cost,
-                      batch.batch_number,batch.status,location.id,location.name
             """,
             (
+                IDS["org"], batch_id, IDS["org"], batch_id,
                 IDS["org"], IDS["branch"], IDS["quarantine_location"],
                 IDS["product"], batch_id,
             ),
@@ -4350,7 +4378,7 @@ def seed_inventory_destruction_ui_fixture(
         if (
             stock is None
             or stock[0] > stock[8]
-            or stock[0] != stock[14]
+            or stock[0] != stock[14] - stock[15]
             or stock[0] <= 0
             or stock[1] <= 0
             or stock[2] <= 0
@@ -4359,7 +4387,11 @@ def seed_inventory_destruction_ui_fixture(
             or sum(Decimal(value or 0) for value in stock[9:13]) <= 0
         ):
             raise RuntimeError(
-                "destruction fixture lacks exact returned stock and restored ITC lineage"
+                "destruction fixture lacks exact returned stock and restored ITC lineage: "
+                f"on_hand={None if stock is None else stock[0]},"
+                f"restored={None if stock is None else stock[14]},"
+                f"destroyed={None if stock is None else stock[15]},"
+                f"remaining_credit={None if stock is None else stock[8]}"
             )
         for attachment_id, filename, evidence_kind, digest_text in (
             (
