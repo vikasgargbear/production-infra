@@ -59,7 +59,8 @@ test('preselects join and accepts an invitation token from the query URL', async
 
     const joinChoice = screen.getByRole('button', { name: 'Join with invitation' });
     expect(joinChoice).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByLabelText('Invitation token')).toHaveValue('invite_abc12345');
+    expect(screen.getByText('Organization invitation detected')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Invitation token')).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Accept invitation and join' }));
 

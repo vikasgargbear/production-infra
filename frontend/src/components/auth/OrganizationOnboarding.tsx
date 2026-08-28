@@ -86,7 +86,7 @@ const OrganizationOnboarding: React.FC = () => {
                 </div>
             )}
 
-            <div className="grid grid-cols-2 gap-3" aria-label="Organization setup options">
+            <div className="grid gap-3 sm:grid-cols-2" aria-label="Organization setup options">
                 <button
                     type="button"
                     aria-pressed={mode === 'create'}
@@ -169,7 +169,7 @@ const OrganizationOnboarding: React.FC = () => {
                             className="w-full rounded-md border border-gray-300 px-3 py-2.5 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid gap-3 sm:grid-cols-2">
                         <div>
                             <label htmlFor="organization-state-code" className="mb-1 block text-sm font-medium text-gray-800">
                                 GST state code
@@ -221,26 +221,33 @@ const OrganizationOnboarding: React.FC = () => {
                 </form>
             ) : (
                 <form onSubmit={handleAcceptInvitation} className="space-y-4" aria-label="Join with invitation">
-                    <div>
-                        <label htmlFor="organization-invitation-token" className="mb-1 block text-sm font-medium text-gray-800">
-                            Invitation token
-                        </label>
-                        <input
-                            id="organization-invitation-token"
-                            value={invitationToken}
-                            onChange={(event) => setInvitationToken(event.target.value)}
-                            autoComplete="off"
-                            minLength={8}
-                            maxLength={2048}
-                            required
-                            disabled={loading}
-                            aria-describedby="organization-invitation-help"
-                            className="w-full rounded-md border border-gray-300 px-3 py-2.5 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                        <p id="organization-invitation-help" className="mt-1 text-xs text-gray-500">
-                            Open your invitation link or paste the token shared by your administrator.
-                        </p>
-                    </div>
+                    {initialInvitationToken ? (
+                        <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-950">
+                            <p className="font-semibold">Organization invitation detected</p>
+                            <p className="mt-1">Continue to join with the Google account that received this invitation.</p>
+                        </div>
+                    ) : (
+                        <div>
+                            <label htmlFor="organization-invitation-token" className="mb-1 block text-sm font-medium text-gray-800">
+                                Invitation token
+                            </label>
+                            <input
+                                id="organization-invitation-token"
+                                value={invitationToken}
+                                onChange={(event) => setInvitationToken(event.target.value)}
+                                autoComplete="off"
+                                minLength={8}
+                                maxLength={2048}
+                                required
+                                disabled={loading}
+                                aria-describedby="organization-invitation-help"
+                                className="min-h-11 w-full rounded-md border border-gray-300 px-3 py-2.5 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                            <p id="organization-invitation-help" className="mt-1 text-xs text-gray-500">
+                                Ask your administrator for the invitation link. Opening it fills this securely.
+                            </p>
+                        </div>
+                    )}
                     <button
                         type="submit"
                         disabled={loading || !isOnline || !invitationToken.trim()}

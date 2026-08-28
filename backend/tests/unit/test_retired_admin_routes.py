@@ -33,13 +33,20 @@ def test_frontend_has_no_retired_user_or_role_api_client() -> None:
     assert "'/roles'" not in production_sources
 
 
-def test_admin_ui_documents_the_canonical_fail_closed_boundary() -> None:
+def test_admin_ui_uses_only_the_bounded_canonical_invitation_surface() -> None:
     user_screen = (
         REPO_ROOT / "frontend/src/components/master/settings/UserManagement.tsx"
+    ).read_text()
+    invitation_client = (
+        REPO_ROOT
+        / "frontend/src/services/api/modules/org/organizationInvitations.api.ts"
     ).read_text()
     role_screen = (
         REPO_ROOT / "frontend/src/components/master/settings/RoleManagement.tsx"
     ).read_text()
 
-    assert "Do not reconnect this screen to the retired /users CRUD routes" in user_screen
+    assert "organizationInvitations.api" in user_screen
+    assert "/auth/onboarding/invitations/context" in invitation_client
+    assert "/auth/onboarding/invitations" in invitation_client
+    assert "'/users'" not in user_screen
     assert "Do not reconnect this screen to the retired /roles CRUD routes" in role_screen

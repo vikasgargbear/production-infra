@@ -361,11 +361,90 @@ def test_accept_invitation_binds_verified_email_and_signed_claims(monkeypatch):
     assert "accept_organization_invitation" in captured["statement"]
 
 
+def test_invitation_context_returns_active_human_readable_role_and_branch_choices():
+    branch_id = UUID("44444444-4444-4444-8444-444444444444")
+
+    class Result:
+        def __init__(self, rows):
+            self.rows = rows
+
+        def mappings(self):
+            return self
+
+        def all(self):
+            return self.rows
+
+    class Database:
+        def __init__(self):
+            self.calls = []
+
+        def execute(self, statement, parameters=None):
+            sql = str(statement)
+            self.calls.append((sql, parameters))
+            if "FROM core.organizations" in sql:
+                return Result([{
+                    "organization_id": ORG_ID,
+                    "organization_name": "Northwind Pharma Private Limited",
+                }])
+            if "FROM core.roles" in sql:
+                return Result([{
+                    "role_id": ROLE_ID,
+                    "role_code": "organization_owner",
+                    "role_name": "Organization Owner",
+                    "description": "Organization-wide administration.",
+                }])
+            if "FROM core.branches" in sql:
+                return Result([{
+                    "branch_id": branch_id,
+                    "branch_code": "MAIN",
+                    "branch_name": "Main Branch",
+                    "city": "Mumbai",
+                    "state_code": "27",
+                }])
+            return Result([])
+
+    database = Database()
+    result = onboarding.invitation_context(
+        {
+            "org_id": str(ORG_ID),
+            "auth_user_id": str(AUTH_USER_ID),
+            "permissions": {
+                "core.user.manage": True,
+                "core.access.manage": True,
+            },
+        },
+        database,
+    )
+
+    assert result.organization_name == "Northwind Pharma Private Limited"
+    assert result.roles[0].role_id == ROLE_ID
+    assert result.roles[0].role_name == "Organization Owner"
+    assert result.branches[0].branch_id == branch_id
+    assert result.branches[0].branch_code == "MAIN"
+    statements = "\n".join(sql for sql, _parameters in database.calls)
+    assert "erp_security.activate_context" in statements
+    assert "status='active'" in statements
+
+
+def test_invitation_manager_requires_canonical_user_management_permission():
+    with pytest.raises(HTTPException) as denied:
+        onboarding._invitation_manager({"is_admin": False, "permissions": {}})
+
+    assert denied.value.status_code == 403
+    assert onboarding._invitation_manager({
+        "is_admin": False,
+        "permissions": {"core.user.manage": True},
+    })["permissions"]["core.user.manage"] is True
+
+
 def test_onboarding_routes_are_explicitly_authenticated_in_openapi():
     schema = app.openapi()
     assert schema["paths"]["/api/auth/onboarding/organizations"]["post"]["security"] == [
         {"HTTPBearer": []}
     ]
     assert schema["paths"]["/api/auth/onboarding/invitations/accept"]["post"][
+        "security"
+    ] == [{"HTTPBearer": []}]
+    assert schema["paths"]["/api/auth/onboarding/invitations/context"]["get"][
         "security"
     ] == [{"HTTPBearer": []}]
