@@ -464,7 +464,7 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
             </main>
 
             {/* Sticky Footer - STANDARD: full-width, py-4, right-aligned */}
-            <footer className="absolute inset-x-0 bottom-0 shrink-0 border-t border-gray-200 bg-white/95 px-3 py-3 shadow-[0_-8px_24px_rgba(0,0,0,0.06)] backdrop-blur sm:px-6">
+            <footer className="absolute inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] shrink-0 border-t border-gray-200 bg-white/95 px-3 py-3 shadow-[0_-8px_24px_rgba(0,0,0,0.06)] backdrop-blur sm:px-6 md:bottom-0">
                 <div className="flex items-center justify-end gap-3">
                     <button
                         onClick={onClose}
