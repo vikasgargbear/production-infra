@@ -12,6 +12,7 @@ import os
 
 from fastapi import Request, HTTPException
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import TimeoutError as SQLAlchemyTimeoutError
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from ..core.env import is_production
@@ -19,6 +20,21 @@ from ..core.env import is_production
 logger = logging.getLogger(__name__)
 
 _IS_PRODUCTION = is_production()
+ERP_BUSY_DETAIL = {
+    "error": "erp_busy",
+    "message": "ERP is temporarily busy. Please retry shortly.",
+}
+ERP_BUSY_RETRY_AFTER_SECONDS = "2"
+
+
+def database_busy_response() -> JSONResponse:
+    """Return a typed, retryable response when the reviewed DB pool is full."""
+
+    return JSONResponse(
+        status_code=503,
+        headers={"Retry-After": ERP_BUSY_RETRY_AFTER_SECONDS},
+        content={"detail": ERP_BUSY_DETAIL},
+    )
 
 
 class ErrorHandlerMiddleware(BaseHTTPMiddleware):
@@ -35,6 +51,19 @@ class ErrorHandlerMiddleware(BaseHTTPMiddleware):
         except HTTPException:
             # Let FastAPI handle HTTPExceptions normally
             raise
+        except SQLAlchemyTimeoutError as exc:
+            logger.warning(
+                "Database pool unavailable on %s %s: %s",
+                request.method,
+                request.url.path,
+                exc,
+                extra={
+                    "event_type": "database_pool_busy",
+                    "method": request.method,
+                    "path": str(request.url.path),
+                },
+            )
+            return database_busy_response()
         except Exception as exc:
             # Log full details server-side
             logger.error(
@@ -76,6 +105,20 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
     FastAPI exception handler for unhandled exceptions.
     Register with: app.add_exception_handler(Exception, global_exception_handler)
     """
+    if isinstance(exc, SQLAlchemyTimeoutError):
+        logger.warning(
+            "Database pool unavailable on %s %s: %s",
+            request.method,
+            request.url.path,
+            exc,
+            extra={
+                "event_type": "database_pool_busy",
+                "method": request.method,
+                "path": str(request.url.path),
+            },
+        )
+        return database_busy_response()
+
     logger.error(
         f"Unhandled exception on {request.method} {request.url.path}: "
         f"{type(exc).__name__}: {exc}",

@@ -13,13 +13,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import text
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import SQLAlchemyError, TimeoutError as SQLAlchemyTimeoutError
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from ....core.auth.jwt_auth import create_access_token
 from ....core.auth.session_authority import require_canonical_session_authority
 from ....core.auth.supabase_auth import supabase_auth
-from ....core.database import get_db
+from ....core.database import SessionLocal, get_db
 from ....repositories.user_repository import MembershipContextDenied, UserRepository
 from ...services.auth import build_erp_token_claims
 
@@ -113,6 +114,9 @@ def _resolved_organization_assignment(
             ),
             {"verified_auth_user_id": auth_user_id},
         ).mappings().all()
+    except SQLAlchemyTimeoutError:
+        # Preserve the typed pool-saturation response from the global handler.
+        raise
     except SQLAlchemyError as exc:
         logger.error("Canonical organization resolution is unavailable: %s", exc)
         raise HTTPException(
@@ -145,6 +149,60 @@ def _resolved_organization_assignment(
             detail="Canonical ERP organization authority returned an invalid result",
         )
     return None
+
+
+def _load_verified_erp_membership(
+    identity: dict[str, Any],
+    auth_user_id: UUID,
+) -> Dict[str, Any]:
+    """Resolve one ERP membership with thread-owned session lifetime.
+
+    The public route must await Supabase, but SQLAlchemy is synchronous.  Keep
+    all database work and cleanup inside one worker thread so a full direct
+    connection pool cannot block the sole Uvicorn event loop.
+    """
+
+    with SessionLocal() as db:
+        require_canonical_session_authority(db)
+
+        organization_id = _resolved_organization_assignment(
+            identity,
+            auth_user_id,
+            db,
+        )
+        if organization_id is None:
+            raise HTTPException(status_code=403, detail=ONBOARDING_REQUIRED_DETAIL)
+
+        try:
+            user_data = UserRepository.find_by_auth_user_id(
+                auth_user_id,
+                organization_id,
+                db,
+            )
+        except MembershipContextDenied as exc:
+            detail = (
+                INVALID_ASSIGNMENT_DETAIL
+                if _signed_organization_assignment(identity) is not None
+                else ONBOARDING_REQUIRED_DETAIL
+            )
+            raise HTTPException(status_code=403, detail=detail) from exc
+        if not user_data:
+            detail = (
+                INVALID_ASSIGNMENT_DETAIL
+                if _signed_organization_assignment(identity) is not None
+                else ONBOARDING_REQUIRED_DETAIL
+            )
+            raise HTTPException(status_code=403, detail=detail)
+        if not user_data["is_active"]:
+            raise HTTPException(status_code=403, detail="Account is disabled")
+        if not user_data["org_active"]:
+            raise HTTPException(status_code=403, detail="Organization is disabled")
+
+        # Detach the response from the closing SQLAlchemy session before it is
+        # returned to the event-loop thread.
+        detached_user_data = dict(user_data)
+        detached_user_data["email"] = str(identity["email"])
+        return detached_user_data
 
 
 def _canonical_organization_assignment(identity: dict[str, Any]) -> UUID:
@@ -225,7 +283,6 @@ def _mcp_consent_proposal_rows(
 @router.post("/supabase/session")
 async def exchange_supabase_session(
     credentials: HTTPAuthorizationCredentials = Depends(bearer),
-    db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     """Exchange a verified Supabase identity for a tenant-scoped ERP token."""
     if not credentials:
@@ -244,39 +301,11 @@ async def exchange_supabase_session(
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=401, detail="Invalid Supabase identity") from exc
 
-    require_canonical_session_authority(db)
-
-    organization_id = _resolved_organization_assignment(identity, auth_user_id, db)
-    if organization_id is None:
-        raise HTTPException(status_code=403, detail=ONBOARDING_REQUIRED_DETAIL)
-
-    try:
-        user_data = UserRepository.find_by_auth_user_id(auth_user_id, organization_id, db)
-    except MembershipContextDenied as exc:
-        detail = (
-            INVALID_ASSIGNMENT_DETAIL
-            if _signed_organization_assignment(identity) is not None
-            else ONBOARDING_REQUIRED_DETAIL
-        )
-        raise HTTPException(
-            status_code=403,
-            detail=detail,
-        ) from exc
-    if not user_data:
-        detail = (
-            INVALID_ASSIGNMENT_DETAIL
-            if _signed_organization_assignment(identity) is not None
-            else ONBOARDING_REQUIRED_DETAIL
-        )
-        raise HTTPException(
-            status_code=403,
-            detail=detail,
-        )
-    if not user_data["is_active"]:
-        raise HTTPException(status_code=403, detail="Account is disabled")
-    if not user_data["org_active"]:
-        raise HTTPException(status_code=403, detail="Organization is disabled")
-    user_data["email"] = str(identity["email"])
+    user_data = await run_in_threadpool(
+        _load_verified_erp_membership,
+        identity,
+        auth_user_id,
+    )
 
     token_data = build_erp_token_claims(user_data)
     token_data["auth_user_id"] = str(auth_user_id)

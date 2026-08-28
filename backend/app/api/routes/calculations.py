@@ -95,7 +95,7 @@ def _preview_response(
     response_model=InvoiceCalculationPreviewResponse,
     response_model_exclude_none=True,
 )
-async def preview_invoice_totals(
+def preview_invoice_totals(
     invoice_data: InvoiceCalculationRequest,
     user: dict = Depends(PermissionChecker("sales", "view")),
     db: Session = Depends(get_db),
@@ -143,7 +143,7 @@ async def preview_invoice_totals(
     response_model=InvoiceCalculationPreviewResponse,
     response_model_exclude_none=True,
 )
-async def preview_sales_order_totals(
+def preview_sales_order_totals(
     order_data: SalesOrderCalculationRequest,
     user: dict = Depends(PermissionChecker("sales", "view")),
     db: Session = Depends(get_db),

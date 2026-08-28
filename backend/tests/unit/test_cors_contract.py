@@ -18,6 +18,7 @@ from uuid import uuid4
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import TimeoutError as SQLAlchemyTimeoutError
 
 
 # ---------------------------------------------------------------------------
@@ -153,6 +154,29 @@ def test_unhandled_error_from_allowed_origin_has_exact_cors_headers() -> None:
     assert resp.json() == {
         "detail": "An internal error occurred. Please try again or contact support.",
         "error_code": "INTERNAL_ERROR",
+    }
+
+
+def test_database_pool_timeout_is_typed_retryable_503() -> None:
+    client = _make_client(ALLOWED_ORIGIN)
+
+    @client.app.get("/__database_pool_busy_contract__")
+    def database_pool_busy_contract():
+        raise SQLAlchemyTimeoutError("reviewed pool is full")
+
+    resp = client.get(
+        "/__database_pool_busy_contract__",
+        headers={"Origin": ALLOWED_ORIGIN},
+    )
+
+    assert resp.status_code == 503
+    assert resp.headers["retry-after"] == "2"
+    assert resp.headers.get("access-control-allow-origin") == ALLOWED_ORIGIN
+    assert resp.json() == {
+        "detail": {
+            "error": "erp_busy",
+            "message": "ERP is temporarily busy. Please retry shortly.",
+        },
     }
 
 

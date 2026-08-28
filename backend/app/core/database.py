@@ -350,6 +350,9 @@ DATABASE_POOL_SIZE = _bounded_pool_setting(
 DATABASE_MAX_OVERFLOW = _bounded_pool_setting(
     "DATABASE_MAX_OVERFLOW", default=20, minimum=0, maximum=40
 )
+DATABASE_POOL_TIMEOUT_SECONDS = _bounded_pool_setting(
+    "DATABASE_POOL_TIMEOUT_SECONDS", default=5, minimum=1, maximum=8
+)
 validate_direct_database_connection_budget(
     DATABASE_TRANSPORT_REQUIREMENT,
     DATABASE_POOL_SIZE,
@@ -365,7 +368,10 @@ if IS_SUPABASE_POOLER:
         max_overflow=DATABASE_MAX_OVERFLOW,
         pool_pre_ping=True,       # Always test connections
         pool_recycle=30,          # Recycle every 30 seconds
-        pool_timeout=20,          # Increased from 10 seconds
+        # Fail before the browser's 12-second session-exchange deadline.  A
+        # timed-out HTTP client cannot cancel synchronous PostgreSQL work, so
+        # waiting longer here would amplify one busy request into retries.
+        pool_timeout=DATABASE_POOL_TIMEOUT_SECONDS,
         echo=False,
         connect_args={
             "connect_timeout": 10,
@@ -381,7 +387,7 @@ else:
         max_overflow=DATABASE_MAX_OVERFLOW,
         pool_pre_ping=True,
         pool_recycle=3600,        # Recycle every hour
-        pool_timeout=20,          # Increased from 30
+        pool_timeout=DATABASE_POOL_TIMEOUT_SECONDS,
         echo=False,
         connect_args={
             "connect_timeout": 10,

@@ -3,6 +3,7 @@ import socket
 import pytest
 
 from app.core.database import (
+    DATABASE_POOL_TIMEOUT_SECONDS,
     _bounded_pool_setting,
     attest_database_transport,
     classify_database_connection,
@@ -11,6 +12,10 @@ from app.core.database import (
     validate_database_transport_requirement,
     validate_direct_database_peer,
 )
+
+
+def test_pool_wait_fails_before_browser_session_deadline():
+    assert 1 <= DATABASE_POOL_TIMEOUT_SECONDS <= 8
 
 
 def test_supabase_direct_connection_uses_project_host_and_5432():

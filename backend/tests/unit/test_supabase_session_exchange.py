@@ -1,5 +1,7 @@
 import asyncio
 import importlib
+import threading
+import time
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from uuid import UUID
@@ -7,11 +9,12 @@ from uuid import UUID
 import pytest
 from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
+from sqlalchemy.exc import TimeoutError as SQLAlchemyTimeoutError
 
 from app.api.routes.auth import oauth
 from app.core.auth.jwt_auth import decode_jwt
 from app.core.auth.supabase_auth import SupabaseAuthService
-from app.main import app
+from app.main import app, health_check
 
 
 AUTH_USER_ID = "8d19f4e8-3e4b-46a8-b7d9-87f30ddaf41c"
@@ -68,6 +71,14 @@ def _membership(**overrides):
 
 @pytest.fixture(autouse=True)
 def _open_canonical_session_authority(monkeypatch):
+    class SessionOwner:
+        def __enter__(self):
+            return object()
+
+        def __exit__(self, _exc_type, _exc, _traceback):
+            return False
+
+    monkeypatch.setattr(oauth, "SessionLocal", SessionOwner)
     monkeypatch.setattr(
         oauth,
         "require_canonical_session_authority",
@@ -77,7 +88,7 @@ def _open_canonical_session_authority(monkeypatch):
 
 def test_exchange_requires_bearer_credentials():
     with pytest.raises(HTTPException) as exc_info:
-        _run(oauth.exchange_supabase_session(credentials=None, db=object()))
+        _run(oauth.exchange_supabase_session(credentials=None))
 
     assert exc_info.value.status_code == 401
     assert exc_info.value.headers == {"WWW-Authenticate": "Bearer"}
@@ -116,7 +127,7 @@ def test_exchange_rejects_unverified_or_malformed_identity(
     )
 
     with pytest.raises(HTTPException) as exc_info:
-        _run(oauth.exchange_supabase_session(_credentials(), db=object()))
+        _run(oauth.exchange_supabase_session(_credentials()))
 
     assert exc_info.value.status_code in {401, 403}
     assert exc_info.value.detail == expected_detail
@@ -141,7 +152,7 @@ def test_exchange_requires_auth_user_id_membership_not_email_lookup(monkeypatch)
     )
 
     with pytest.raises(HTTPException) as exc_info:
-        _run(oauth.exchange_supabase_session(_credentials(), db=object()))
+        _run(oauth.exchange_supabase_session(_credentials()))
 
     assert exc_info.value.status_code == 403
     assert exc_info.value.detail["error"] == "invalid_organization_assignment"
@@ -169,7 +180,7 @@ def test_exchange_returns_forbidden_for_database_membership_denial(monkeypatch):
     )
 
     with pytest.raises(HTTPException) as exc_info:
-        _run(oauth.exchange_supabase_session(_credentials(), db=object()))
+        _run(oauth.exchange_supabase_session(_credentials()))
 
     assert exc_info.value.status_code == 403
     assert exc_info.value.detail["error"] == "invalid_organization_assignment"
@@ -207,7 +218,7 @@ def test_exchange_reports_maintenance_before_membership_lookup_when_fenced(
     )
 
     with pytest.raises(HTTPException) as exc_info:
-        _run(oauth.exchange_supabase_session(_credentials(), db=object()))
+        _run(oauth.exchange_supabase_session(_credentials()))
 
     assert exc_info.value.status_code == 503
     assert exc_info.value.detail == {
@@ -233,7 +244,7 @@ def test_exchange_without_assignment_returns_typed_onboarding_state(monkeypatch)
     )
 
     with pytest.raises(HTTPException) as exc_info:
-        _run(oauth.exchange_supabase_session(_credentials(), db=object()))
+        _run(oauth.exchange_supabase_session(_credentials()))
 
     assert exc_info.value.status_code == 403
     assert exc_info.value.detail["error"] == "onboarding_required"
@@ -267,7 +278,7 @@ def test_closed_authority_precedes_missing_organization_assignment(monkeypatch):
     )
 
     with pytest.raises(HTTPException) as exc_info:
-        _run(oauth.exchange_supabase_session(_credentials(), db=object()))
+        _run(oauth.exchange_supabase_session(_credentials()))
 
     assert exc_info.value.status_code == 503
     assert exc_info.value.detail["error"] == "erp_maintenance"
@@ -298,7 +309,7 @@ def test_exchange_rejects_inactive_membership(
     )
 
     with pytest.raises(HTTPException) as exc_info:
-        _run(oauth.exchange_supabase_session(_credentials(), db=object()))
+        _run(oauth.exchange_supabase_session(_credentials()))
 
     assert exc_info.value.status_code == 403
     assert exc_info.value.detail == expected_detail
@@ -330,7 +341,7 @@ def test_exchange_issues_tenant_scoped_token_from_verified_mapping(monkeypatch):
     )
     monkeypatch.setattr(oauth, "create_access_token", create_token)
 
-    result = _run(oauth.exchange_supabase_session(_credentials(), db=object()))
+    result = _run(oauth.exchange_supabase_session(_credentials()))
 
     assert result["access_token"] == "erp-access-token"
     assert captured["supabase_token"] == "supabase-access-token"
@@ -359,13 +370,153 @@ def test_exchange_encodes_canonical_uuid_claims(monkeypatch):
         lambda *_args: _membership(),
     )
 
-    result = _run(oauth.exchange_supabase_session(_credentials(), db=object()))
+    result = _run(oauth.exchange_supabase_session(_credentials()))
     claims = decode_jwt(result["access_token"], check_blacklist=False)
 
     assert claims["user_id"] == str(ERP_USER_ID)
     assert claims["role_id"] == str(ROLE_ID)
     assert claims["branch_ids"] == [str(value) for value in BRANCH_IDS]
     assert claims["permissions"] == {"sales.read": True}
+
+
+@pytest.mark.asyncio
+async def test_exchange_keeps_event_loop_responsive_and_closes_owned_session(
+    monkeypatch,
+):
+    started = threading.Event()
+    release = threading.Event()
+    lifecycle = []
+
+    class OwnedSession:
+        def __enter__(self):
+            lifecycle.append("entered")
+            return self
+
+        def __exit__(self, _exc_type, _exc, _traceback):
+            lifecycle.append("closed")
+            return False
+
+    async def verified_identity(_token):
+        return _identity()
+
+    def blocking_authority(_db):
+        started.set()
+        assert release.wait(timeout=1.0)
+
+    monkeypatch.setattr(oauth, "SessionLocal", OwnedSession)
+    monkeypatch.setattr(
+        oauth.supabase_auth,
+        "get_user_from_access_token",
+        verified_identity,
+    )
+    monkeypatch.setattr(oauth, "require_canonical_session_authority", blocking_authority)
+    monkeypatch.setattr(
+        oauth.UserRepository,
+        "find_by_auth_user_id",
+        lambda *_args: _membership(),
+    )
+
+    began_at = time.monotonic()
+
+    async def probe_health():
+        await asyncio.sleep(0.05)
+        return time.monotonic(), await health_check()
+
+    health_task = asyncio.create_task(probe_health())
+    failsafe = threading.Timer(0.4, release.set)
+    failsafe.start()
+    try:
+        result = await oauth.exchange_supabase_session(_credentials())
+        health_at, health = await health_task
+    finally:
+        release.set()
+        failsafe.cancel()
+
+    assert started.is_set()
+    assert health_at - began_at < 0.2
+    assert health["status"] == "healthy"
+    assert result["access_token"]
+    assert lifecycle == ["entered", "closed"]
+
+
+@pytest.mark.asyncio
+async def test_concurrent_exchanges_close_every_thread_owned_session(monkeypatch):
+    lifecycle_lock = threading.Lock()
+    created = 0
+    closed = 0
+
+    class OwnedSession:
+        def __enter__(self):
+            nonlocal created
+            with lifecycle_lock:
+                created += 1
+            return self
+
+        def __exit__(self, _exc_type, _exc, _traceback):
+            nonlocal closed
+            with lifecycle_lock:
+                closed += 1
+            return False
+
+    async def verified_identity(_token):
+        return _identity()
+
+    monkeypatch.setattr(oauth, "SessionLocal", OwnedSession)
+    monkeypatch.setattr(
+        oauth.supabase_auth,
+        "get_user_from_access_token",
+        verified_identity,
+    )
+    monkeypatch.setattr(
+        oauth.UserRepository,
+        "find_by_auth_user_id",
+        lambda *_args: _membership(),
+    )
+
+    results = await asyncio.gather(*(
+        oauth.exchange_supabase_session(_credentials(f"token-{index}"))
+        for index in range(6)
+    ))
+
+    assert all(result["access_token"] for result in results)
+    assert created == 6
+    assert closed == 6
+
+
+@pytest.mark.asyncio
+async def test_pool_timeout_still_closes_thread_owned_session(monkeypatch):
+    lifecycle = []
+
+    class OwnedSession:
+        def __enter__(self):
+            lifecycle.append("entered")
+            return self
+
+        def __exit__(self, _exc_type, _exc, _traceback):
+            lifecycle.append("closed")
+            return False
+
+    async def verified_identity(_token):
+        return _identity()
+
+    monkeypatch.setattr(oauth, "SessionLocal", OwnedSession)
+    monkeypatch.setattr(
+        oauth.supabase_auth,
+        "get_user_from_access_token",
+        verified_identity,
+    )
+    monkeypatch.setattr(
+        oauth,
+        "require_canonical_session_authority",
+        lambda _db: (_ for _ in ()).throw(
+            SQLAlchemyTimeoutError("reviewed pool is full")
+        ),
+    )
+
+    with pytest.raises(SQLAlchemyTimeoutError):
+        await oauth.exchange_supabase_session(_credentials())
+
+    assert lifecycle == ["entered", "closed"]
 
 
 def test_supabase_identity_lookup_fails_closed_without_configuration():
