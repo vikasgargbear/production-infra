@@ -562,7 +562,7 @@ export interface ImportData {
     };
     delivery_type?: string;
     delivery_charges?: number;
-    source?: string;
+    source_type?: string;
 }
 
 /** Data returned after invoice creation */

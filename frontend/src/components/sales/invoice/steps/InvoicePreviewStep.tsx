@@ -9,6 +9,7 @@ import InvoicePreview from '../ui/InvoicePreviewEnterprise';
 // Shared Types
 import { Customer, Invoice, CompanyInfo } from '../types/invoiceTypes';
 import { canonicalInvoicePreviewUnavailableReason } from '../../utils/canonicalSalesPreviewFacts';
+import { invoicePreviewValidationError } from '../utils/canonicalInvoiceCommand';
 
 // ==================== COMPONENT PROPS ====================
 
@@ -37,7 +38,14 @@ const InvoicePreviewStep: React.FC<InvoicePreviewStepProps> = ({
     onThermalPrint,
     saving
 }) => {
-    const previewUnavailableReason = canonicalInvoicePreviewUnavailableReason(invoice);
+    // Use the same fail-closed boundary as final submission. The calculation
+    // preview alone cannot authorize Generate when canonical company, party,
+    // address, allocation, or item context is incomplete.
+    const previewUnavailableReason = invoicePreviewValidationError(
+        companyInfo,
+        invoice as any,
+        selectedCustomer as any,
+    ) || canonicalInvoicePreviewUnavailableReason(invoice);
     if (previewUnavailableReason) {
         return (
             <div className="flex h-full flex-col bg-gray-50">
