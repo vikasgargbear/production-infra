@@ -735,25 +735,28 @@ jobs:
           }
 
   live-erp:
-    needs: [canonical-free-staging]
+    needs: [canonical-free-staging, railway-canonical-staging]
     if: >-
       always() && github.event_name == 'workflow_dispatch' && inputs.run_live_erp &&
       (!(inputs.deploy_canonical_staging || inputs.provision_canonical_demo) ||
-       needs.canonical-free-staging.result == 'success')
+       (inputs.live18_provider == 'render' &&
+        needs.canonical-free-staging.result == 'success') ||
+       (inputs.live18_provider == 'railway' &&
+        !inputs.provision_canonical_demo &&
+        needs.railway-canonical-staging.result == 'success'))
     runs-on: ubuntu-latest
     environment: canonical-staging
     concurrency:
       group: canonical-staging-live-browser-identities
       cancel-in-progress: false
     env:
-      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
       REVIEWED_DEPLOY_SHA: ${{ inputs.canonical_staging_deploy_sha }}
       PHARMA_CANONICAL_LIVE_WRITE_ACK: "true"
       PHARMA_CANONICAL_LIVE_TARGET_KIND: disposable_test
       PHARMA_CANONICAL_LIVE_PROJECT_REF: rgihahbmkrmhitjdjvev
       PHARMA_CANONICAL_LIVE_ALLOWED_PROJECT_REF: rgihahbmkrmhitjdjvev
       PHARMA_CANONICAL_PRODUCTION_PROJECT_REFS: ${{ vars.CANONICAL_PRODUCTION_PROJECT_REFS }}
-      PHARMA_CANONICAL_LIVE_API_BASE_URL: https://aasopharma-api-pilot.onrender.com
+      PHARMA_CANONICAL_LIVE_API_BASE_URL: ${{ inputs.live18_provider == 'railway' && vars.RAILWAY_API_URL || 'https://aasopharma-api-pilot.onrender.com' }}
       CANONICAL_STAGING_PROJECT_REF: ${{ vars.CANONICAL_STAGING_PROJECT_REF }}
       CANONICAL_EPHEMERAL_DATABASE_TRANSPORT: direct_ipv4
       SUPABASE_URL: ${{ vars.SUPABASE_URL }}
@@ -762,7 +765,7 @@ jobs:
       SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
       ERP_RUNTIME_PASSWORD: ${{ secrets.ERP_RUNTIME_PASSWORD }}
       PHARMA_CANONICAL_LIVE_SERVICE_TOKEN: ${{ secrets.MCP_INTERNAL_SERVICE_TOKEN }}
-      PHARMA_CANONICAL_MCP_URL: https://aasopharma-mcp-pilot.onrender.com/mcp
+      PHARMA_CANONICAL_MCP_URL: ${{ inputs.live18_provider == 'railway' && format('{0}/mcp', vars.RAILWAY_MCP_URL) || 'https://aasopharma-mcp-pilot.onrender.com/mcp' }}
       PHARMA_CANONICAL_LIVE_TEST_ORG_ID: d3000000-0000-7000-8000-000000000001
       PHARMA_CANONICAL_LIVE_FIXTURE_INPUT_PATH: ${{ github.workspace }}/.live-secrets/fixture-inputs.json
       PHARMA_CANONICAL_LIVE_FIXTURE_IDENTITY_EVIDENCE_PATH: ${{ github.workspace }}/canonical-live-fixture-identities.json
@@ -780,12 +783,20 @@ jobs:
       - name: Install pinned ephemeral identity reconciler dependencies
         run: python3 -m pip install psycopg2-binary==2.9.9 requests==2.34.2
       - name: Bind the canonical live run to one reviewed deployed SHA
+        env:
+          LIVE_FRONTEND_ORIGIN: ${{ inputs.live18_provider == 'railway' && vars.RAILWAY_FRONTEND_URL || 'https://aasopharma-erp-pilot.onrender.com' }}
+          LIVE_API_ORIGIN: ${{ inputs.live18_provider == 'railway' && vars.RAILWAY_API_URL || 'https://aasopharma-api-pilot.onrender.com' }}
+          LIVE_MCP_ORIGIN: ${{ inputs.live18_provider == 'railway' && vars.RAILWAY_MCP_URL || 'https://aasopharma-mcp-pilot.onrender.com' }}
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$REVIEWED_DEPLOY_SHA"
-          PYTHONPATH=backend python3 backend/scripts/verify_render_pilot_sha.py \
+          PYTHONPATH=backend python3 backend/scripts/verify_live18_deployment_sha.py \
+            --provider '${{ inputs.live18_provider }}' \
             --commit-sha "$REVIEWED_DEPLOY_SHA" \
-            > render-pilot-live-sha.json
+            --frontend-origin "$LIVE_FRONTEND_ORIGIN" \
+            --api-origin "$LIVE_API_ORIGIN" \
+            --mcp-origin "$LIVE_MCP_ORIGIN" \
+            > live-erp-deployed-sha.json
       - name: Build the masked exact erp_runtime connection
         run: |
           set -euo pipefail
@@ -852,18 +863,22 @@ jobs:
         with:
           name: canonical-live-reconciliation-evidence
           path: |
-            render-pilot-live-sha.json
+            live-erp-deployed-sha.json
             canonical-live-fixture-identities.json
             canonical-live-pytest.txt
           if-no-files-found: error
           retention-days: 30
 
   live-browser-erp:
-    needs: [canonical-free-staging]
+    needs: [canonical-free-staging, railway-canonical-staging]
     if: >-
       always() && github.event_name == 'workflow_dispatch' && inputs.run_live_erp &&
       (!(inputs.deploy_canonical_staging || inputs.provision_canonical_demo) ||
-       needs.canonical-free-staging.result == 'success')
+       (inputs.live18_provider == 'render' &&
+        needs.canonical-free-staging.result == 'success') ||
+       (inputs.live18_provider == 'railway' &&
+        !inputs.provision_canonical_demo &&
+        needs.railway-canonical-staging.result == 'success'))
     runs-on: ubuntu-latest
     environment: canonical-staging
     timeout-minutes: 60
@@ -874,9 +889,8 @@ jobs:
       run:
         working-directory: frontend
     env:
-      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
       REVIEWED_DEPLOY_SHA: ${{ inputs.canonical_staging_deploy_sha }}
-      PLAYWRIGHT_LIVE_BASE_URL: https://aasopharma-erp-pilot.onrender.com
+      PLAYWRIGHT_LIVE_BASE_URL: ${{ inputs.live18_provider == 'railway' && vars.RAILWAY_FRONTEND_URL || 'https://aasopharma-erp-pilot.onrender.com' }}
       PLAYWRIGHT_LIVE_EXPECTED_ORG_ID: d3000000-0000-7000-8000-000000000001
       CANONICAL_STAGING_PROJECT_REF: ${{ vars.CANONICAL_STAGING_PROJECT_REF }}
       CANONICAL_EPHEMERAL_DATABASE_TRANSPORT: direct_ipv4
@@ -899,13 +913,20 @@ jobs:
           cache-dependency-path: backend/requirements.txt
       - name: Bind the live browser run to one reviewed deployed SHA
         working-directory: ${{ github.workspace }}
+        env:
+          LIVE_API_ORIGIN: ${{ inputs.live18_provider == 'railway' && vars.RAILWAY_API_URL || 'https://aasopharma-api-pilot.onrender.com' }}
+          LIVE_MCP_ORIGIN: ${{ inputs.live18_provider == 'railway' && vars.RAILWAY_MCP_URL || 'https://aasopharma-mcp-pilot.onrender.com' }}
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$REVIEWED_DEPLOY_SHA"
           test -n "$PLAYWRIGHT_LIVE_EXPECTED_ORG_ID"
-          PYTHONPATH=backend python3 backend/scripts/verify_render_pilot_sha.py \
+          PYTHONPATH=backend python3 backend/scripts/verify_live18_deployment_sha.py \
+            --provider '${{ inputs.live18_provider }}' \
             --commit-sha "$REVIEWED_DEPLOY_SHA" \
-            > render-pilot-browser-sha.json
+            --frontend-origin "$PLAYWRIGHT_LIVE_BASE_URL" \
+            --api-origin "$LIVE_API_ORIGIN" \
+            --mcp-origin "$LIVE_MCP_ORIGIN" \
+            > live-browser-deployed-sha.json
       - name: Refuse any browser target except reviewed canonical staging
         run: |
           set -euo pipefail
@@ -954,18 +975,22 @@ jobs:
         with:
           name: live-erp-browser-evidence
           path: |
-            render-pilot-browser-sha.json
+            live-browser-deployed-sha.json
             frontend/playwright-report
             frontend/test-results
           if-no-files-found: ignore
           retention-days: 30
 
   live-browser-erp-two-user-approvals:
-    needs: [canonical-free-staging]
+    needs: [canonical-free-staging, railway-canonical-staging]
     if: >-
       always() && github.event_name == 'workflow_dispatch' && inputs.run_live_erp_two_user_approvals &&
       (!(inputs.deploy_canonical_staging || inputs.provision_canonical_demo) ||
-       needs.canonical-free-staging.result == 'success')
+       (inputs.live18_provider == 'render' &&
+        needs.canonical-free-staging.result == 'success') ||
+       (inputs.live18_provider == 'railway' &&
+        !inputs.provision_canonical_demo &&
+        needs.railway-canonical-staging.result == 'success'))
     runs-on: ubuntu-latest
     environment: canonical-staging
     timeout-minutes: 45
@@ -976,9 +1001,8 @@ jobs:
       run:
         working-directory: frontend
     env:
-      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
       REVIEWED_DEPLOY_SHA: ${{ inputs.canonical_staging_deploy_sha }}
-      PLAYWRIGHT_LIVE_BASE_URL: "https://aasopharma-erp-pilot.onrender.com"
+      PLAYWRIGHT_LIVE_BASE_URL: ${{ inputs.live18_provider == 'railway' && vars.RAILWAY_FRONTEND_URL || 'https://aasopharma-erp-pilot.onrender.com' }}
       PLAYWRIGHT_LIVE_EXPECTED_ORG_ID: "d3000000-0000-7000-8000-000000000001"
       CANONICAL_STAGING_PROJECT_REF: ${{ vars.CANONICAL_STAGING_PROJECT_REF }}
       CANONICAL_EPHEMERAL_DATABASE_TRANSPORT: direct_ipv4
@@ -1007,12 +1031,19 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Bind two-user approvals to one reviewed deployed SHA
         working-directory: ${{ github.workspace }}
+        env:
+          LIVE_API_ORIGIN: ${{ inputs.live18_provider == 'railway' && vars.RAILWAY_API_URL || 'https://aasopharma-api-pilot.onrender.com' }}
+          LIVE_MCP_ORIGIN: ${{ inputs.live18_provider == 'railway' && vars.RAILWAY_MCP_URL || 'https://aasopharma-mcp-pilot.onrender.com' }}
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$REVIEWED_DEPLOY_SHA"
-          PYTHONPATH=backend python3 backend/scripts/verify_render_pilot_sha.py \
+          PYTHONPATH=backend python3 backend/scripts/verify_live18_deployment_sha.py \
+            --provider '${{ inputs.live18_provider }}' \
             --commit-sha "$REVIEWED_DEPLOY_SHA" \
-            > render-pilot-two-user-sha.json
+            --frontend-origin "$PLAYWRIGHT_LIVE_BASE_URL" \
+            --api-origin "$LIVE_API_ORIGIN" \
+            --mcp-origin "$LIVE_MCP_ORIGIN" \
+            > live-two-user-deployed-sha.json
       - name: Refuse any browser target except reviewed canonical staging
         run: |
           set -euo pipefail
@@ -1089,7 +1120,7 @@ jobs:
         with:
           name: live-erp-two-user-approval-evidence
           path: |
-            render-pilot-two-user-sha.json
+            live-two-user-deployed-sha.json
             frontend/playwright-report
             frontend/test-results
           if-no-files-found: ignore
