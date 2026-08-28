@@ -21,7 +21,7 @@ describe('canonical master mutation endpoints', () => {
       .mockResolvedValueOnce({ data: {
         product_id: '11111111-1111-7111-8111-111111111111',
         product_code: 'GENERATED-PRODUCT', product_name: 'E2E product',
-        lifecycle_status: 'draft', message: 'Draft created',
+        lifecycle_status: 'draft', row_version: 1, message: 'Draft created',
       } })
       .mockResolvedValueOnce({ data: {
         supplier_id: '22222222-2222-7222-8222-222222222222',
@@ -71,14 +71,34 @@ describe('canonical master mutation endpoints', () => {
     const addressId = '33333333-3333-7333-8333-333333333333';
 
     productsApi.update(productId, { row_version: 3, product_name: 'Renamed draft' });
+    productsApi.saveSetup(productId, {
+      row_version: 4,
+      manufacturer_party_id: '44444444-4444-7444-8444-444444444444',
+      base_uom_code: 'EA',
+      hsn_code: '3004',
+      cold_chain_required: false,
+      pack_conversions: [],
+      ingredients: [],
+    });
     productsApi.delete(productId, 3);
-    (apiHelpers.post as jest.Mock).mockReset().mockResolvedValueOnce({ data: {
+    (apiHelpers.post as jest.Mock).mockReset()
+      .mockResolvedValueOnce({ data: {
+        product_id: productId, product_code: 'GENERATED-PRODUCT',
+        product_name: 'E2E product', row_version: 5,
+        lifecycle_status: 'active', message: 'Product activated',
+      } })
+      .mockResolvedValueOnce({ data: {
       customer_id: customerId,
       party_id: '44444444-4444-7444-8444-444444444444',
       customer_code: 'GENERATED-CUSTOMER', customer_name: 'E2E customer',
       customer_type: 'organization', primary_phone: '9876543210',
       is_active: true, status: 'active', message: 'Customer created',
     } }).mockReturnValueOnce(undefined).mockReturnValueOnce(undefined);
+    await productsApi.activate(
+      productId,
+      4,
+      'erp-web-master-product-activate:55555555-5555-4555-8555-555555555555',
+    );
     await customersApi.create({
       customer_name: 'E2E customer',
       customer_type: 'organization',
@@ -97,10 +117,22 @@ describe('canonical master mutation endpoints', () => {
       row_version: 3,
       product_name: 'Renamed draft',
     });
+    expect(apiHelpers.put).toHaveBeenNthCalledWith(2, `/products/${productId}/setup`, {
+      row_version: 4,
+      manufacturer_party_id: '44444444-4444-7444-8444-444444444444',
+      base_uom_code: 'EA',
+      hsn_code: '3004',
+      cold_chain_required: false,
+      pack_conversions: [],
+      ingredients: [],
+    });
     expect(apiHelpers.delete).toHaveBeenCalledWith(`/products/${productId}`, {
       params: { row_version: 3 },
     });
-    expect(apiHelpers.post).toHaveBeenNthCalledWith(1, '/customers/', {
+    expect(apiHelpers.post).toHaveBeenNthCalledWith(1, `/products/${productId}/activate`, {
+      row_version: 4,
+    }, { headers: { 'X-Idempotency-Key': 'erp-web-master-product-activate:55555555-5555-4555-8555-555555555555' } });
+    expect(apiHelpers.post).toHaveBeenNthCalledWith(2, '/customers/', {
       customer_name: 'E2E customer',
       customer_type: 'organization',
       primary_phone: '9876543210',
@@ -108,10 +140,10 @@ describe('canonical master mutation endpoints', () => {
       credit_days: 0,
     }, { headers: { 'X-Idempotency-Key': 'erp-web-master-customer-create:33333333-3333-4333-8333-333333333333' } });
     expect(apiHelpers.post).toHaveBeenNthCalledWith(
-      2, `/customers/${customerId}/addresses/`, address,
+      3, `/customers/${customerId}/addresses/`, address,
     );
     expect(apiHelpers.put).toHaveBeenNthCalledWith(
-      2, `/customers/${customerId}/addresses/${addressId}`, {
+      3, `/customers/${customerId}/addresses/${addressId}`, {
         ...address,
         row_version: 4,
       },

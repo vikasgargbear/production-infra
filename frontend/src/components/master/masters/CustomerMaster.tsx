@@ -44,8 +44,8 @@ type Customer = Omit<BaseCustomer, 'credit_limit' | 'current_outstanding'> & {
   address_line_1?: string;
 };
 
-export const loadCustomersWithCanonicalAging = async () => {
-  const customersResponse = await customersApi.getAll();
+export const loadCustomersWithCanonicalAging = async (search = '') => {
+  const customersResponse = await customersApi.getAll({ limit: 1000, search });
   const responseData = customersResponse.data as any;
   const customerRows: Customer[] = (Array.isArray(responseData)
     ? responseData
@@ -252,6 +252,7 @@ const CustomerMaster: React.FC = () => {
     },
     searchFields: ['customer_name', 'customer_code', 'primary_phone', 'gst_number'],
     filterField: 'customer_type',
+    serverSearch: true,
     softDelete: true
   });
 

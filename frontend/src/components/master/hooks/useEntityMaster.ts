@@ -54,7 +54,7 @@ export interface UseEntityMasterConfig<T> {
 
     /** API functions */
     api: {
-        getAll: () => Promise<ApiResponse<T[]>>;
+        getAll: (search?: string) => Promise<ApiResponse<T[]>>;
         update: (id: string | number, data: Partial<T>) => Promise<ApiResponse<T>>;
         delete?: (id: string | number) => Promise<ApiResponse<void>>;
     };
@@ -67,6 +67,9 @@ export interface UseEntityMasterConfig<T> {
 
     /** Custom data extractor if API response is non-standard */
     extractData?: (response: ApiResponse<T[]>) => T[];
+
+    /** Search the canonical API's full data set instead of one loaded page. */
+    serverSearch?: boolean;
 }
 
 export interface UseEntityMasterReturn<T> {
@@ -116,7 +119,8 @@ export function useEntityMaster<T extends { is_active?: boolean }>(
         },
         searchFields,
         filterField,
-        extractData
+        extractData,
+        serverSearch = false,
     } = config;
 
     const toast = useToast();
@@ -176,7 +180,7 @@ export function useEntityMaster<T extends { is_active?: boolean }>(
         try {
             setIsLoading(true);
             setError(null);
-            const response = await getAll();
+            const response = await getAll(serverSearch ? searchTerm.trim() : undefined);
 
             const data = extractData
                 ? extractData(response)
@@ -189,19 +193,21 @@ export function useEntityMaster<T extends { is_active?: boolean }>(
         } finally {
             setIsLoading(false);
         }
-    }, [getAll, entityName, extractData]);
+    }, [getAll, entityName, extractData, searchTerm, serverSearch]);
 
     // Load on mount
     useEffect(() => {
-        loadEntities();
-    }, [loadEntities]);
+        const delay = serverSearch && searchTerm.trim() ? 180 : 0;
+        const timer = window.setTimeout(() => void loadEntities(), delay);
+        return () => window.clearTimeout(timer);
+    }, [loadEntities, searchTerm, serverSearch]);
 
     // ========================================
     // Filtered Data
     // ========================================
 
     const filteredEntities = filterByType(
-        filterBySearch(entities, searchTerm, searchFields),
+        serverSearch ? entities : filterBySearch(entities, searchTerm, searchFields),
         filterField,
         filterValue
     );

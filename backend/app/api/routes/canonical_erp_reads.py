@@ -9,7 +9,9 @@ only a non-transactional draft.
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
+import re
 from datetime import date, datetime, timedelta
 from decimal import Decimal, ROUND_DOWN, ROUND_HALF_UP
 from typing import Annotated, Any, Dict, Literal, Optional
@@ -83,12 +85,19 @@ def _execute_canonical_product_create(
 ):
     return db.execute(
         text("""
-            SELECT product_id,product_code,idempotency_replayed
-              FROM erp_master_commands.create_product_draft(
+            WITH created AS MATERIALIZED (
+              SELECT product_id,product_code,idempotency_replayed
+                FROM erp_master_commands.create_product_draft(
                 :org_id,:name,:generic_name,:product_kind,
                 :idempotency_key_hash,
                 transaction_timestamp()+interval '24 hours'
               )
+            )
+            SELECT created.product_id,created.product_code,
+                   created.idempotency_replayed,product.row_version
+              FROM created
+              JOIN catalog.products product
+                ON product.org_id=:org_id AND product.id=created.product_id
         """),
         {
             "org_id": org_id,
@@ -417,17 +426,167 @@ class CanonicalProductDraftUpdate(BaseModel):
         return self
 
 
+class ProductPackConversionWrite(BaseModel):
+    uom_code: str = Field(min_length=1, max_length=16)
+    multiplier: Decimal = Field(gt=0, max_digits=20, decimal_places=6)
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+
+class ProductIngredientWrite(BaseModel):
+    ingredient_id: UUID
+    ingredient_role: Literal["active", "excipient"] = "active"
+    strength_value: Optional[Decimal] = Field(default=None, gt=0, max_digits=20, decimal_places=6)
+    strength_uom_code: Optional[str] = Field(default=None, max_length=16)
+    basis_quantity: Optional[Decimal] = Field(default=None, gt=0, max_digits=20, decimal_places=6)
+    basis_uom_code: Optional[str] = Field(default=None, max_length=16)
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    @model_validator(mode="after")
+    def require_active_strength(self):
+        if self.ingredient_role == "active" and any(value is None for value in (
+            self.strength_value,
+            self.strength_uom_code,
+            self.basis_quantity,
+            self.basis_uom_code,
+        )):
+            raise ValueError("Active ingredients require strength and basis")
+        if self.ingredient_role == "excipient" and any(value is not None for value in (
+            self.strength_value,
+            self.strength_uom_code,
+            self.basis_quantity,
+            self.basis_uom_code,
+        )):
+            raise ValueError("Excipient rows do not accept an invented strength")
+        return self
+
+
+class CanonicalProductSetupWrite(BaseModel):
+    row_version: int = Field(ge=1)
+    category_id: Optional[UUID] = None
+    manufacturer_party_id: UUID
+    base_uom_code: str = Field(min_length=1, max_length=16)
+    dosage_form: Optional[str] = Field(default=None, max_length=64)
+    strength_display: Optional[str] = Field(default=None, max_length=128)
+    hsn_code: str = Field(pattern=r"^[0-9]{4,8}$")
+    cold_chain_required: bool = False
+    minimum_storage_celsius: Optional[Decimal] = Field(default=None, ge=-100, le=100)
+    maximum_storage_celsius: Optional[Decimal] = Field(default=None, ge=-100, le=100)
+    shelf_life_days: Optional[int] = Field(default=None, ge=1, le=36500)
+    gtin: Optional[str] = Field(default=None, pattern=r"^[0-9]{8,14}$")
+    pack_conversions: list[ProductPackConversionWrite] = Field(default_factory=list, max_length=12)
+    ingredients: list[ProductIngredientWrite] = Field(default_factory=list, max_length=32)
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    @model_validator(mode="after")
+    def validate_setup(self):
+        if self.cold_chain_required:
+            if (
+                self.minimum_storage_celsius is None
+                or self.maximum_storage_celsius is None
+                or self.minimum_storage_celsius >= self.maximum_storage_celsius
+            ):
+                raise ValueError("Cold-chain products require a valid storage range")
+        elif self.minimum_storage_celsius is not None or self.maximum_storage_celsius is not None:
+            raise ValueError("Storage temperatures require cold-chain handling")
+        pack_units = [item.uom_code for item in self.pack_conversions]
+        if self.base_uom_code in pack_units or len(pack_units) != len(set(pack_units)):
+            raise ValueError("Pack units must be unique and different from the base unit")
+        ingredient_ids = [item.ingredient_id for item in self.ingredients]
+        if len(ingredient_ids) != len(set(ingredient_ids)):
+            raise ValueError("Each ingredient can appear only once")
+        return self
+
+
+class CanonicalProductActivationWrite(BaseModel):
+    row_version: int = Field(ge=1)
+    manufacturer_traceability_code: Optional[str] = Field(default=None, max_length=128)
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+
+def _product_search_tsquery(search: str) -> str:
+    tokens = re.findall(r"[a-z0-9]+", search.casefold())[:8]
+    return " & ".join(f"{token}:*" for token in tokens)
+
+
 @router.get("/products")
 @router.get("/products/")
-def products(limit: int = Query(100, ge=1, le=500), skip: int = Query(0, ge=0),
+def products(limit: int = Query(50, ge=1, le=200), skip: int = Query(0, ge=0),
              offset: Optional[int] = Query(None, ge=0),
-             search: str = "", include_inactive: bool = False,
+             search: str = Query("", max_length=100), include_inactive: bool = False,
              user: dict = MASTER_USER, db: Session = Depends(get_db)):
     org_id = _activate(db, user)
     effective_offset = offset if offset is not None else skip
+    normalized_search = " ".join((search if isinstance(search, str) else "").casefold().split())
+    search_tsquery = _product_search_tsquery(normalized_search)
+    parameters = {
+        "org_id": org_id,
+        "search": normalized_search,
+        "prefix": f"{normalized_search}%",
+        "tsquery": search_tsquery,
+        "include_drafts": include_inactive,
+        "limit": limit,
+        "skip": effective_offset,
+    }
     rows = _rows(db, """
+        WITH ranked AS MATERIALIZED (
+          SELECT p.id,
+                 CASE
+                   WHEN :search='' THEN 0
+                   WHEN pg_catalog.lower(p.sku)=:search THEN 100
+                   WHEN p.gtin=:search THEN 98
+                   WHEN pg_catalog.lower(p.name)=:search THEN 95
+                   WHEN pg_catalog.lower(p.name) LIKE :prefix THEN 85
+                   WHEN pg_catalog.lower(COALESCE(p.generic_name,'')) LIKE :prefix THEN 78
+                   WHEN pg_catalog.lower(COALESCE(manufacturer.legal_name,'')) LIKE :prefix THEN 72
+                   WHEN COALESCE(composition.normalized_names,'') LIKE :prefix THEN 68
+                   WHEN :tsquery<>'' AND pg_catalog.to_tsvector(
+                     'simple'::pg_catalog.regconfig,
+                     COALESCE(p.sku,'')||' '||COALESCE(p.name,'')||' '||
+                     COALESCE(p.generic_name,'')||' '||COALESCE(p.gtin,'')
+                   ) @@ pg_catalog.to_tsquery('simple'::pg_catalog.regconfig,:tsquery) THEN 60
+                   WHEN COALESCE(composition.search_document,''::pg_catalog.tsvector)
+                          @@ pg_catalog.to_tsquery('simple'::pg_catalog.regconfig,:tsquery) THEN 55
+                   ELSE 0
+                 END AS search_rank
+            FROM catalog.products p
+            LEFT JOIN parties.parties manufacturer
+              ON manufacturer.org_id=p.org_id AND manufacturer.id=p.manufacturer_party_id
+            LEFT JOIN LATERAL (
+              SELECT pg_catalog.lower(pg_catalog.string_agg(ingredient.normalized_name,' ' ORDER BY ingredient.normalized_name)) AS normalized_names,
+                     pg_catalog.to_tsvector('simple'::pg_catalog.regconfig,
+                       pg_catalog.string_agg(ingredient.canonical_name,' ' ORDER BY ingredient.canonical_name)) AS search_document
+                FROM catalog.product_ingredients link
+                JOIN catalog.ingredients ingredient ON ingredient.id=link.ingredient_id
+               WHERE link.org_id=p.org_id AND link.product_id=p.id AND link.status='active'
+                 AND link.valid_until IS NULL AND ingredient.status='active'
+            ) composition ON true
+           WHERE p.org_id=:org_id
+             AND (p.status IN ('active','blocked') OR (:include_drafts AND p.status='draft'))
+             AND (
+               :search='' OR pg_catalog.lower(p.sku)=:search OR p.gtin=:search
+               OR pg_catalog.lower(p.name)=:search
+               OR pg_catalog.lower(p.name) LIKE :prefix
+               OR pg_catalog.lower(COALESCE(p.generic_name,'')) LIKE :prefix
+               OR pg_catalog.lower(COALESCE(manufacturer.legal_name,'')) LIKE :prefix
+               OR COALESCE(composition.normalized_names,'') LIKE :prefix
+               OR (:tsquery<>'' AND pg_catalog.to_tsvector(
+                 'simple'::pg_catalog.regconfig,
+                 COALESCE(p.sku,'')||' '||COALESCE(p.name,'')||' '||
+                 COALESCE(p.generic_name,'')||' '||COALESCE(p.gtin,'')
+               ) @@ pg_catalog.to_tsquery('simple'::pg_catalog.regconfig,:tsquery))
+               OR (:tsquery<>'' AND COALESCE(composition.search_document,''::pg_catalog.tsvector)
+                    @@ pg_catalog.to_tsquery('simple'::pg_catalog.regconfig,:tsquery))
+             )
+           ORDER BY search_rank DESC,p.name,p.id LIMIT :limit OFFSET :skip
+        )
         SELECT p.id AS product_id, p.sku AS product_code, p.name AS product_name,
                p.generic_name, p.product_kind AS product_type, p.base_uom_code AS unit,
+               p.gtin, p.category_id, category.name AS category_name,
+               p.manufacturer_party_id, manufacturer.legal_name AS manufacturer_name,
                conversion.id AS uom_conversion_id,
                tax_version.taxability,
                (CASE WHEN tax_version.taxability IS NULL THEN NULL
@@ -439,9 +598,14 @@ def products(limit: int = Query(100, ge=1, le=500), skip: int = Query(0, ge=0),
                p.status='active' AS is_active, p.status, p.row_version,
                p.created_at, p.updated_at,
                COALESCE(stock.current_stock, 0)::text AS current_stock
-          FROM catalog.products p
+          FROM ranked
+          JOIN catalog.products p ON p.org_id=:org_id AND p.id=ranked.id
           JOIN core.organizations organization
             ON organization.id=p.org_id AND organization.status='active'
+          LEFT JOIN catalog.categories category
+            ON category.org_id=p.org_id AND category.id=p.category_id
+          LEFT JOIN parties.parties manufacturer
+            ON manufacturer.org_id=p.org_id AND manufacturer.id=p.manufacturer_party_id
           LEFT JOIN LATERAL (
               SELECT SUM(balance.on_hand_quantity) AS current_stock
                 FROM inventory.stock_balances balance
@@ -464,27 +628,322 @@ def products(limit: int = Query(100, ge=1, le=500), skip: int = Query(0, ge=0),
                  AND (effective_to IS NULL OR effective_to>=(transaction_timestamp() AT TIME ZONE organization.timezone)::date)
                ORDER BY effective_from DESC, version_number DESC, id LIMIT 1
           ) tax_version ON true
-         WHERE p.org_id=:org_id
-           AND (p.status IN ('active','blocked') OR (:include_drafts AND p.status='draft'))
-           AND (:search='' OR p.name ILIKE :pattern OR p.sku ILIKE :pattern
-                OR COALESCE(p.generic_name,'') ILIKE :pattern)
-         ORDER BY p.name, p.id LIMIT :limit OFFSET :skip
-    """, {"org_id": org_id, "search": search.strip(), "pattern": f"%{search.strip()}%",
-            "include_drafts": include_inactive,
-            "limit": limit, "skip": effective_offset})
+         ORDER BY ranked.search_rank DESC,p.name,p.id
+    """, parameters)
     total = db.execute(text("""
         SELECT COUNT(*) FROM catalog.products product
+        LEFT JOIN parties.parties manufacturer
+          ON manufacturer.org_id=product.org_id AND manufacturer.id=product.manufacturer_party_id
+        LEFT JOIN LATERAL (
+          SELECT pg_catalog.lower(pg_catalog.string_agg(ingredient.normalized_name,' ' ORDER BY ingredient.normalized_name)) AS normalized_names,
+                 pg_catalog.to_tsvector('simple'::pg_catalog.regconfig,
+                   pg_catalog.string_agg(ingredient.canonical_name,' ' ORDER BY ingredient.canonical_name)) AS search_document
+            FROM catalog.product_ingredients link
+            JOIN catalog.ingredients ingredient ON ingredient.id=link.ingredient_id
+           WHERE link.org_id=product.org_id AND link.product_id=product.id
+             AND link.status='active' AND link.valid_until IS NULL AND ingredient.status='active'
+        ) composition ON true
          WHERE product.org_id=:org_id
            AND (product.status IN ('active','blocked') OR (:include_drafts AND product.status='draft'))
-           AND (:search='' OR product.name ILIKE :pattern OR product.sku ILIKE :pattern
-                OR COALESCE(product.generic_name,'') ILIKE :pattern)
-    """), {
-        "org_id": org_id,
-        "include_drafts": include_inactive,
-        "search": search.strip(),
-        "pattern": f"%{search.strip()}%",
-    }).scalar_one()
+           AND (
+             :search='' OR pg_catalog.lower(product.sku)=:search OR product.gtin=:search
+             OR pg_catalog.lower(product.name)=:search
+             OR pg_catalog.lower(product.name) LIKE :prefix
+             OR pg_catalog.lower(COALESCE(product.generic_name,'')) LIKE :prefix
+             OR pg_catalog.lower(COALESCE(manufacturer.legal_name,'')) LIKE :prefix
+             OR COALESCE(composition.normalized_names,'') LIKE :prefix
+             OR (:tsquery<>'' AND pg_catalog.to_tsvector(
+               'simple'::pg_catalog.regconfig,
+               COALESCE(product.sku,'')||' '||COALESCE(product.name,'')||' '||
+               COALESCE(product.generic_name,'')||' '||COALESCE(product.gtin,'')
+             ) @@ pg_catalog.to_tsquery('simple'::pg_catalog.regconfig,:tsquery))
+             OR (:tsquery<>'' AND COALESCE(composition.search_document,''::pg_catalog.tsvector)
+                  @@ pg_catalog.to_tsquery('simple'::pg_catalog.regconfig,:tsquery))
+           )
+    """), parameters).scalar_one()
     return {"products": rows, "total": total, "offset": effective_offset, "limit": limit}
+
+
+@router.get("/products/setup-options")
+def product_setup_options(
+    manufacturer_search: str = Query("", max_length=100),
+    user: dict = MASTER_USER,
+    db: Session = Depends(get_db),
+):
+    """Return only canonical references that can be selected during setup."""
+
+    org_id = _activate(db, user)
+    search = " ".join(manufacturer_search.casefold().split())
+    business_date = db.execute(text(
+        "SELECT erp_core_commands.current_organization_business_date()"
+    )).scalar_one()
+    categories = _rows(db, """
+        SELECT id AS category_id,code,name,parent_id
+          FROM catalog.categories
+         WHERE org_id=:org_id AND status='active'
+         ORDER BY name,id
+    """, {"org_id": org_id})
+    units = _rows(db, """
+        SELECT code,name,symbol,dimension,decimal_places
+          FROM catalog.units_of_measure
+         WHERE status='active'
+         ORDER BY CASE code WHEN 'EA' THEN 0 WHEN 'PK' THEN 1 ELSE 2 END,name,code
+    """, {})
+    manufacturers = _rows(db, """
+        SELECT party.id AS manufacturer_party_id,party.legal_name,
+               supplier.supplier_code
+          FROM parties.parties party
+          JOIN parties.supplier_accounts supplier
+            ON supplier.org_id=party.org_id AND supplier.party_id=party.id
+         WHERE party.org_id=:org_id AND party.status='active'
+           AND supplier.status IN ('active','on_hold')
+           AND (:search='' OR pg_catalog.lower(party.legal_name) LIKE :prefix
+                OR pg_catalog.lower(supplier.supplier_code)=:search)
+         ORDER BY CASE WHEN pg_catalog.lower(supplier.supplier_code)=:search THEN 0
+                       WHEN pg_catalog.lower(party.legal_name)=:search THEN 1 ELSE 2 END,
+                  party.legal_name,party.id LIMIT 100
+    """, {"org_id": org_id, "search": search, "prefix": f"{search}%"})
+    reference = db.execute(text("""
+        SELECT
+          EXISTS(
+            SELECT 1 FROM core.reference_data_releases release
+             WHERE release.dataset_kind='ingredient_classification'
+               AND release.status='active'
+               AND :business_date BETWEEN release.effective_from
+                                      AND COALESCE(release.effective_to,'infinity'::date)
+          ) AS ingredient_reference_ready,
+          EXISTS(
+            SELECT 1 FROM core.reference_data_releases release
+             WHERE release.dataset_kind='hsn_sac_tax' AND release.status='active'
+               AND :business_date BETWEEN release.effective_from
+                                      AND COALESCE(release.effective_to,'infinity'::date)
+          ) AS hsn_reference_ready
+    """), {"business_date": business_date}).mappings().one()
+    return {
+        "business_date": business_date,
+        "categories": categories,
+        "units": units,
+        "manufacturers": manufacturers,
+        **dict(reference),
+    }
+
+
+@router.get("/products/setup-options/ingredients")
+def product_setup_ingredients(
+    search: str = Query("", max_length=100),
+    limit: int = Query(20, ge=1, le=50),
+    user: dict = MASTER_USER,
+    db: Session = Depends(get_db),
+):
+    _activate(db, user)
+    normalized = " ".join(search.casefold().split())
+    return _rows(db, """
+        SELECT ingredient.id AS ingredient_id,ingredient.canonical_name,
+               ingredient.salt_or_form,ingredient.drugs_rules_schedule,
+               ingredient.ndps_classification,ingredient.schedule_h2_applicable_from,
+               release.ruleset_version
+          FROM catalog.ingredients ingredient
+          JOIN core.reference_data_releases release ON release.id=ingredient.release_id
+         WHERE ingredient.status='active' AND release.status='active'
+           AND release.dataset_kind='ingredient_classification'
+           AND erp_core_commands.current_organization_business_date()
+                 BETWEEN ingredient.effective_from AND COALESCE(ingredient.effective_to,'infinity'::date)
+           AND erp_core_commands.current_organization_business_date()
+                 BETWEEN release.effective_from AND COALESCE(release.effective_to,'infinity'::date)
+           AND (:search='' OR ingredient.normalized_name LIKE :prefix
+                OR pg_catalog.lower(COALESCE(ingredient.salt_or_form,'')) LIKE :prefix)
+         ORDER BY CASE WHEN ingredient.normalized_name=:search THEN 0 ELSE 1 END,
+                  ingredient.normalized_name,ingredient.id LIMIT :limit
+    """, {"search": normalized, "prefix": f"{normalized}%", "limit": limit})
+
+
+@router.get("/products/setup-options/hsn")
+def product_setup_hsn_codes(
+    search: str = Query("", max_length=100),
+    limit: int = Query(20, ge=1, le=50),
+    user: dict = MASTER_USER,
+    db: Session = Depends(get_db),
+):
+    _activate(db, user)
+    normalized = " ".join(search.casefold().split())
+    tsquery = _product_search_tsquery(normalized)
+    return _rows(db, """
+        SELECT tax_version.id AS tax_code_version_id,tax_version.code AS hsn_code,
+               tax_version.description,tax_version.taxability,
+               tax_version.cgst_rate::text,tax_version.sgst_rate::text,
+               tax_version.igst_rate::text,tax_version.cess_rate::text,
+               release.ruleset_version
+          FROM tax.tax_code_versions tax_version
+          JOIN core.reference_data_releases release ON release.id=tax_version.release_id
+         WHERE tax_version.code_kind='hsn' AND tax_version.default_supply_type='goods'
+           AND tax_version.status='active' AND release.dataset_kind='hsn_sac_tax'
+           AND release.status='active'
+           AND erp_core_commands.current_organization_business_date()
+                 BETWEEN tax_version.effective_from AND COALESCE(tax_version.effective_to,'infinity'::date)
+           AND erp_core_commands.current_organization_business_date()
+                 BETWEEN release.effective_from AND COALESCE(release.effective_to,'infinity'::date)
+           AND (:search='' OR tax_version.code LIKE :prefix
+                OR (:tsquery<>'' AND pg_catalog.to_tsvector(
+                    'simple'::pg_catalog.regconfig,tax_version.description
+                   ) @@ pg_catalog.to_tsquery('simple'::pg_catalog.regconfig,:tsquery)))
+         ORDER BY CASE WHEN tax_version.code=:search THEN 0
+                       WHEN tax_version.code LIKE :prefix THEN 1 ELSE 2 END,
+                  tax_version.code,tax_version.version_number DESC LIMIT :limit
+    """, {"search": normalized, "prefix": f"{normalized}%", "tsquery": tsquery, "limit": limit})
+
+
+@router.get("/products/{product_id}/setup")
+def product_setup(
+    product_id: UUID,
+    user: dict = MASTER_USER,
+    db: Session = Depends(get_db),
+):
+    org_id = _activate(db, user)
+    row = db.execute(text("""
+        SELECT product.id AS product_id,product.sku AS product_code,
+               product.name AS product_name,product.generic_name,
+               product.product_kind,product.category_id,category.name AS category_name,
+               product.manufacturer_party_id,manufacturer.legal_name AS manufacturer_name,
+               product.base_uom_code,product.dosage_form,product.strength_display,
+               CASE WHEN product.hsn_code='0000' THEN NULL ELSE product.hsn_code END AS hsn_code,
+               product.cold_chain_required,product.minimum_storage_celsius::text,
+               product.maximum_storage_celsius::text,product.shelf_life_days,
+               product.gtin,product.status,product.row_version,
+               erp_master_commands.product_setup_missing_fields(
+                 :org_id,product.id,erp_core_commands.current_organization_business_date()
+               ) AS missing_fields
+          FROM catalog.products product
+          LEFT JOIN catalog.categories category
+            ON category.org_id=product.org_id AND category.id=product.category_id
+          LEFT JOIN parties.parties manufacturer
+            ON manufacturer.org_id=product.org_id AND manufacturer.id=product.manufacturer_party_id
+         WHERE product.org_id=:org_id AND product.id=:product_id
+    """), {"org_id": org_id, "product_id": product_id}).mappings().one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Product draft not found")
+    conversions = _rows(db, """
+        SELECT conversion.from_uom_code AS uom_code,unit.name AS uom_name,
+               conversion.multiplier::text
+          FROM catalog.uom_conversions conversion
+          JOIN catalog.units_of_measure unit ON unit.code=conversion.from_uom_code
+         WHERE conversion.org_id=:org_id AND conversion.product_id=:product_id
+           AND conversion.status='active' AND conversion.valid_until IS NULL
+           AND conversion.from_uom_code<>conversion.to_uom_code
+         ORDER BY unit.name,unit.code
+    """, {"org_id": org_id, "product_id": product_id})
+    ingredients = _rows(db, """
+        SELECT link.ingredient_id,ingredient.canonical_name,ingredient.salt_or_form,
+               link.ingredient_role,link.strength_value::text,link.strength_uom_code,
+               link.basis_quantity::text,link.basis_uom_code,
+               ingredient.drugs_rules_schedule,ingredient.ndps_classification,
+               ingredient.schedule_h2_applicable_from,release.ruleset_version
+          FROM catalog.product_ingredients link
+          JOIN catalog.ingredients ingredient ON ingredient.id=link.ingredient_id
+          JOIN core.reference_data_releases release ON release.id=ingredient.release_id
+         WHERE link.org_id=:org_id AND link.product_id=:product_id
+           AND link.status='active' AND link.valid_until IS NULL
+         ORDER BY link.sequence_number,link.ingredient_id
+    """, {"org_id": org_id, "product_id": product_id})
+    payload = dict(row)
+    payload["missing_fields"] = list(payload["missing_fields"] or [])
+    payload["ready_to_activate"] = not payload["missing_fields"]
+    payload["pack_conversions"] = conversions
+    payload["ingredients"] = ingredients
+    payload["recommended_fields"] = [
+        field for field, value in (
+            ("category_id", payload["category_id"]),
+            ("shelf_life_days", payload["shelf_life_days"]),
+            ("gtin", payload["gtin"]),
+        ) if value is None
+    ]
+    return payload
+
+
+@router.put("/products/{product_id}/setup")
+def configure_product_setup(
+    product_id: UUID,
+    setup: CanonicalProductSetupWrite,
+    user: dict = Depends(PermissionChecker("master", "update")),
+    db: Session = Depends(get_db),
+):
+    org_id = _activate(db, user)
+    try:
+        configured = canonical_write_commands.configure_product_draft(
+            db,
+            org_id=org_id,
+            product_id=product_id,
+            expected_row_version=setup.row_version,
+            category_id=setup.category_id,
+            manufacturer_party_id=setup.manufacturer_party_id,
+            base_uom_code=setup.base_uom_code,
+            dosage_form=setup.dosage_form,
+            strength_display=setup.strength_display,
+            hsn_code=setup.hsn_code,
+            cold_chain_required=setup.cold_chain_required,
+            minimum_storage_celsius=setup.minimum_storage_celsius,
+            maximum_storage_celsius=setup.maximum_storage_celsius,
+            shelf_life_days=setup.shelf_life_days,
+            gtin=setup.gtin,
+            pack_conversions=json.dumps(
+                [item.model_dump(mode="json") for item in setup.pack_conversions],
+                separators=(",", ":"),sort_keys=True,
+            ),
+            ingredients=json.dumps(
+                [item.model_dump(mode="json") for item in setup.ingredients],
+                separators=(",", ":"),sort_keys=True,
+            ),
+        )
+        db.commit()
+    except DBAPIError as exc:
+        db.rollback()
+        _raise_master_create_database_error(exc)
+    return {
+        "product_id": configured["product_id"],
+        "product_code": configured["product_code"],
+        "product_name": configured["product_name"],
+        "row_version": configured["new_row_version"],
+        "lifecycle_status": "draft",
+        "message": "Product setup saved and checked",
+    }
+
+
+@router.post("/products/{product_id}/activate")
+def activate_product_setup(
+    product_id: UUID,
+    activation: CanonicalProductActivationWrite,
+    response: Response,
+    idempotency_key: str = Header(
+        ...,alias="X-Idempotency-Key",min_length=8,max_length=128,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+    ),
+    user: dict = Depends(PermissionChecker("master", "update")),
+    db: Session = Depends(get_db),
+):
+    org_id = _activate(db, user)
+    try:
+        activated = canonical_write_commands.activate_configured_product(
+            db,
+            org_id=org_id,
+            product_id=product_id,
+            expected_row_version=activation.row_version,
+            manufacturer_traceability_code=activation.manufacturer_traceability_code,
+            idempotency_key_hash=hashlib.sha256(idempotency_key.encode("utf-8")).digest(),
+        )
+        db.commit()
+    except DBAPIError as exc:
+        db.rollback()
+        _raise_master_create_database_error(exc)
+    _set_master_idempotency_headers(
+        response,idempotency_key,activated["idempotency_replayed"]
+    )
+    return {
+        "product_id": activated["product_id"],
+        "product_code": activated["product_code"],
+        "product_name": activated["product_name"],
+        "row_version": activated["new_row_version"],
+        "lifecycle_status": "active",
+        "message": "Product activated and ready for purchasing and sale",
+    }
 
 
 @router.post("/products/", status_code=status.HTTP_201_CREATED)
@@ -528,6 +987,7 @@ def create_product_draft(
         "product_name": product.product_name,
         "idempotency_replayed": created["idempotency_replayed"],
         "lifecycle_status": "draft",
+        "row_version": created["row_version"],
         "message": "Product draft created; classification is required before sale",
     }
 
@@ -880,8 +1340,10 @@ _PARTY_CONTACTS = """
 @router.get("/customers")
 @router.get("/customers/")
 def customers(limit: int = Query(100, ge=1, le=1000), skip: int = Query(0, ge=0),
-              search: str = "", user: dict = MASTER_USER, db: Session = Depends(get_db)):
+              search: str = Query("", max_length=100), user: dict = MASTER_USER, db: Session = Depends(get_db)):
     org_id = _activate(db, user)
+    normalized_search = " ".join((search if isinstance(search, str) else "").casefold().split())
+    search_tsquery = _product_search_tsquery(normalized_search)
     rows = _rows(db, f"""
         SELECT account.id AS customer_id, account.customer_code,
                party.legal_name AS customer_name, party.trade_name,
@@ -930,10 +1392,22 @@ def customers(limit: int = Query(100, ge=1, le=1000), skip: int = Query(0, ge=0)
                  AND item.item_side='receivable' AND item.status<>'reversed'
           ) outstanding ON true
          WHERE account.org_id=:org_id AND account.status IN ('active','on_hold')
-           AND (:search='' OR party.legal_name ILIKE :pattern
-                OR account.customer_code ILIKE :pattern OR COALESCE(contact.phone,'') ILIKE :pattern)
-         ORDER BY party.legal_name, account.id LIMIT :limit OFFSET :skip
-    """, {"org_id": org_id, "search": search.strip(), "pattern": f"%{search.strip()}%",
+           AND (:search='' OR pg_catalog.lower(party.legal_name) LIKE :prefix
+                OR pg_catalog.lower(account.customer_code) LIKE :prefix
+                OR COALESCE(contact.phone,'') LIKE :prefix
+                OR pg_catalog.lower(COALESCE(contact.email,'')) LIKE :prefix
+                OR pg_catalog.lower(COALESCE(registration.registration_number,'')) LIKE :prefix
+                OR (:tsquery<>'' AND pg_catalog.to_tsvector(
+                      'simple'::pg_catalog.regconfig,
+                      COALESCE(party.legal_name,'')||' '||COALESCE(party.trade_name,'')
+                    ) @@ pg_catalog.to_tsquery('simple'::pg_catalog.regconfig,:tsquery)))
+         ORDER BY CASE WHEN pg_catalog.lower(account.customer_code)=:search THEN 0
+                       WHEN COALESCE(contact.phone,'')=:search THEN 1
+                       WHEN pg_catalog.lower(COALESCE(registration.registration_number,''))=:search THEN 2
+                       WHEN pg_catalog.lower(party.legal_name)=:search THEN 3 ELSE 4 END,
+                  party.legal_name, account.id LIMIT :limit OFFSET :skip
+    """, {"org_id": org_id, "search": normalized_search, "prefix": f"{normalized_search}%",
+            "tsquery": search_tsquery,
             "limit": limit, "skip": skip})
     total = db.execute(text(f"""
         SELECT COUNT(*)
@@ -942,13 +1416,20 @@ def customers(limit: int = Query(100, ge=1, le=1000), skip: int = Query(0, ge=0)
             ON party.org_id=account.org_id AND party.id=account.party_id
           {_PARTY_CONTACTS}
          WHERE account.org_id=:org_id AND account.status IN ('active','on_hold')
-           AND (:search='' OR party.legal_name ILIKE :pattern
-                OR account.customer_code ILIKE :pattern
-                OR COALESCE(contact.phone,'') ILIKE :pattern)
+           AND (:search='' OR pg_catalog.lower(party.legal_name) LIKE :prefix
+                OR pg_catalog.lower(account.customer_code) LIKE :prefix
+                OR COALESCE(contact.phone,'') LIKE :prefix
+                OR pg_catalog.lower(COALESCE(contact.email,'')) LIKE :prefix
+                OR pg_catalog.lower(COALESCE(registration.registration_number,'')) LIKE :prefix
+                OR (:tsquery<>'' AND pg_catalog.to_tsvector(
+                      'simple'::pg_catalog.regconfig,
+                      COALESCE(party.legal_name,'')||' '||COALESCE(party.trade_name,'')
+                    ) @@ pg_catalog.to_tsquery('simple'::pg_catalog.regconfig,:tsquery)))
     """), {
         "org_id": org_id,
-        "search": search.strip(),
-        "pattern": f"%{search.strip()}%",
+        "search": normalized_search,
+        "prefix": f"{normalized_search}%",
+        "tsquery": search_tsquery,
     }).scalar_one()
     return {
         "customers": [
@@ -1148,10 +1629,12 @@ def update_customer_address(
 @router.get("/suppliers")
 @router.get("/suppliers/")
 def suppliers(limit: int = Query(100, ge=1, le=1000), skip: int = Query(0, ge=0),
-              search: str = "", user: dict = MASTER_USER, db: Session = Depends(get_db)):
+              search: str = Query("", max_length=100), user: dict = MASTER_USER, db: Session = Depends(get_db)):
     org_id = _activate(db, user)
+    normalized_search = " ".join((search if isinstance(search, str) else "").casefold().split())
+    search_tsquery = _product_search_tsquery(normalized_search)
     rows = _rows(db, f"""
-        SELECT account.id AS supplier_id, account.supplier_code,
+        SELECT account.id AS supplier_id,account.party_id,account.supplier_code,
                party.legal_name AS supplier_name, party.trade_name,
                contact.phone AS primary_phone, contact.email AS primary_email,
                registration.registration_number AS gst_number,
@@ -1190,10 +1673,22 @@ def suppliers(limit: int = Query(100, ge=1, le=1000), skip: int = Query(0, ge=0)
                  AND item.item_side='payable' AND item.status<>'reversed'
           ) outstanding ON true
          WHERE account.org_id=:org_id AND account.status IN ('active','on_hold')
-           AND (:search='' OR party.legal_name ILIKE :pattern
-                OR account.supplier_code ILIKE :pattern OR COALESCE(contact.phone,'') ILIKE :pattern)
-         ORDER BY party.legal_name, account.id LIMIT :limit OFFSET :skip
-    """, {"org_id": org_id, "search": search.strip(), "pattern": f"%{search.strip()}%",
+           AND (:search='' OR pg_catalog.lower(party.legal_name) LIKE :prefix
+                OR pg_catalog.lower(account.supplier_code) LIKE :prefix
+                OR COALESCE(contact.phone,'') LIKE :prefix
+                OR pg_catalog.lower(COALESCE(contact.email,'')) LIKE :prefix
+                OR pg_catalog.lower(COALESCE(registration.registration_number,'')) LIKE :prefix
+                OR (:tsquery<>'' AND pg_catalog.to_tsvector(
+                      'simple'::pg_catalog.regconfig,
+                      COALESCE(party.legal_name,'')||' '||COALESCE(party.trade_name,'')
+                    ) @@ pg_catalog.to_tsquery('simple'::pg_catalog.regconfig,:tsquery)))
+         ORDER BY CASE WHEN pg_catalog.lower(account.supplier_code)=:search THEN 0
+                       WHEN COALESCE(contact.phone,'')=:search THEN 1
+                       WHEN pg_catalog.lower(COALESCE(registration.registration_number,''))=:search THEN 2
+                       WHEN pg_catalog.lower(party.legal_name)=:search THEN 3 ELSE 4 END,
+                  party.legal_name, account.id LIMIT :limit OFFSET :skip
+    """, {"org_id": org_id, "search": normalized_search, "prefix": f"{normalized_search}%",
+            "tsquery": search_tsquery,
             "limit": limit, "skip": skip})
     return [_money_fields(row, ("current_outstanding",)) for row in rows]
 

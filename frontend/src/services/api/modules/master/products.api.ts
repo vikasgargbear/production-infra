@@ -10,8 +10,14 @@ import {
   productCreateSchema,
   productUpdateSchema,
   ProductCreateInput,
+  ProductHsnOption,
+  ProductIngredientOption,
   ProductMutationResponse,
+  ProductSetupInput,
+  ProductSetupOptions,
+  ProductSetupRead,
   ProductUpdateInput,
+  productSetupSchema,
 } from '../../../../types/models/product';
 import type { AxiosResponse } from 'axios';
 import { decodeCanonicalProductList } from './canonicalMasterReads';
@@ -73,6 +79,46 @@ export const productsApi = {
   ): Promise<AxiosResponse<ProductMutationResponse>> => {
     return apiHelpers.put(`/products/${productId}`, productUpdateSchema.parse(data));
   },
+
+  getSetupOptions: (manufacturerSearch = '') => apiHelpers.get<ProductSetupOptions>(
+    '/products/setup-options',
+    { params: { manufacturer_search: manufacturerSearch } },
+  ),
+
+  searchIngredients: (search: string) => apiHelpers.get<ProductIngredientOption[]>(
+    '/products/setup-options/ingredients',
+    { params: { search, limit: 20 } },
+  ),
+
+  searchHsnCodes: (search: string) => apiHelpers.get<ProductHsnOption[]>(
+    '/products/setup-options/hsn',
+    { params: { search, limit: 20 } },
+  ),
+
+  getSetup: (productId: number | string) => apiHelpers.get<ProductSetupRead>(
+    `/products/${productId}/setup`,
+  ),
+
+  saveSetup: (productId: number | string, data: ProductSetupInput) => (
+    apiHelpers.put<ProductMutationResponse>(
+      `/products/${productId}/setup`,
+      productSetupSchema.parse(data),
+    )
+  ),
+
+  activate: (
+    productId: number | string,
+    rowVersion: number,
+    idempotencyKey: string,
+    manufacturerTraceabilityCode?: string,
+  ) => apiHelpers.post<ProductMutationResponse>(
+    `/products/${productId}/activate`,
+    {
+      row_version: rowVersion,
+      ...(manufacturerTraceabilityCode ? { manufacturer_traceability_code: manufacturerTraceabilityCode } : {}),
+    },
+    masterCreateRequestConfig(idempotencyKey),
+  ),
 
   delete: (productId: number | string, rowVersion: number) => {
     return apiHelpers.delete(`/products/${productId}`, {

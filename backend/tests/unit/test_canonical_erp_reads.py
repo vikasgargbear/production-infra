@@ -173,6 +173,8 @@ def test_canonical_router_covers_reads_and_bounded_master_writes() -> None:
     assert {route.path for route in routes} >= {path.removeprefix("/api") for path in CRITICAL_UI_READS}
     writes = [route for route in routes if not route.methods <= {"GET", "HEAD"}]
     assert [(route.path, route.methods) for route in writes] == [
+        ("/products/{product_id}/setup", {"PUT"}),
+        ("/products/{product_id}/activate", {"POST"}),
         ("/products/", {"POST"}),
         ("/products/{product_id}", {"PUT"}),
         ("/products/{product_id}", {"DELETE"}),
@@ -1885,6 +1887,7 @@ class ProductDraftDatabase:
                 "product_id": uuid4(),
                 "product_code": "PROD-000001",
                 "idempotency_replayed": False,
+                "row_version": 1,
             }
             return SimpleNamespace(
                 mappings=lambda: SimpleNamespace(one=lambda: row)

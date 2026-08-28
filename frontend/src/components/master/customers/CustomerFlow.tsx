@@ -201,6 +201,10 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
         } else if (!/^\d{10}$/.test(formData.primary_phone.replace(/\D/g, ''))) {
             newFieldErrors.primary_phone = 'Enter a valid 10-digit phone number';
         }
+        if (formData.primary_email.trim()
+            && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.primary_email.trim())) {
+            newFieldErrors.primary_email = 'Enter a valid email address';
+        }
         if (!formData.address.address_line1.trim()) newFieldErrors.address_line1 = 'Address is required';
         if (!formData.address.city.trim()) newFieldErrors.city = 'City is required';
         if (!/^\d{2}$/.test(formData.address.state_code)) {
@@ -320,8 +324,8 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
     if (!open) return null;
 
     // Compact input classes - STANDARD: py-2.5 for all inputs
-    const inputClass = "w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm";
-    const inputNoIconClass = "w-full px-3 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm";
+    const inputClass = "min-h-12 w-full rounded-lg border border-gray-300 bg-white py-2 pl-9 pr-3 text-base outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100";
+    const inputNoIconClass = "min-h-12 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-base outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100";
     const invalidClass = "border-red-500 bg-red-50 focus:ring-red-500";
     const fieldClass = (field: CustomerField, baseClass: string) => `${baseClass} ${fieldErrors[field] ? invalidClass : ''}`;
     const fieldError = (field: CustomerField) => fieldErrors[field] ? (
@@ -334,45 +338,29 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
         'aria-invalid': Boolean(fieldErrors[field]) || undefined,
         'aria-describedby': fieldErrors[field] ? `${CUSTOMER_FIELD_IDS[field]}-error` : undefined,
     });
-    const labelClass = "block text-xs font-medium text-gray-600 mb-1";
+    const labelClass = "mb-1 block text-sm font-medium text-gray-800";
 
     return (
-        <div ref={formRef} className="h-full bg-white flex flex-col">
+        <div ref={formRef} className="fixed inset-0 z-50 flex min-w-0 flex-col bg-gray-50">
             {/* Header - STANDARD: py-4 */}
-            <div className="flex-shrink-0 bg-white border-b border-gray-200 px-6 py-4">
+            <div className="flex-shrink-0 border-b border-gray-200 bg-white px-3 py-3 sm:px-6 sm:py-4">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                        <button
+                        <button aria-label="Close customer form"
                             onClick={onClose}
-                            className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+                            className="grid min-h-11 min-w-11 place-items-center rounded-lg hover:bg-gray-100"
                         >
                             <ArrowLeft className="w-5 h-5 text-gray-600" />
                         </button>
-                        <h1 className="text-xl font-semibold text-gray-900">New Customer</h1>
+                        <div><h1 className="text-lg font-semibold text-gray-950 sm:text-xl">Create customer</h1><p className="text-sm text-gray-500">Identity, billing address, tax registration and credit terms</p></div>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                        <button
-                            onClick={onClose}
-                            disabled={saving}
-                            className="px-3 py-1.5 text-sm border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50"
-                        >
-                            Cancel
-                        </button>
-                        <button
-                            onClick={handleSave}
-                            disabled={saving}
-                            className="px-4 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-1.5 disabled:opacity-50"
-                        >
-                            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                            {saving ? 'Saving...' : 'Save Customer'}
-                        </button>
-                    </div>
+                    <span className="hidden rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-800 sm:inline">Canonical customer account</span>
                 </div>
             </div>
 
             {/* Content */}
-            <div className="flex-1 overflow-y-auto px-4 py-4">
+            <div className="flex-1 overflow-y-auto px-3 py-5 pb-28 sm:px-6">
                 <div className="max-w-6xl mx-auto">
 
                     {/* Error Messages */}
@@ -397,7 +385,7 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                                         setIsBusinessCustomer(true);
                                         updateField('customer_type', 'organization');
                                     }}
-                                    className={`px-4 py-1.5 text-sm rounded-md transition-all ${isBusinessCustomer ? 'bg-white shadow text-blue-600 font-medium' : 'text-gray-600'
+                                    className={`min-h-11 px-4 py-2 text-sm rounded-md transition-all ${isBusinessCustomer ? 'bg-white shadow text-blue-600 font-medium' : 'text-gray-600'
                                         }`}
                                 >
                                     <Building className="inline w-4 h-4 mr-1" />
@@ -409,7 +397,7 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                                         setIsBusinessCustomer(false);
                                         updateField('customer_type', 'individual');
                                     }}
-                                    className={`px-4 py-1.5 text-sm rounded-md transition-all ${!isBusinessCustomer ? 'bg-white shadow text-green-600 font-medium' : 'text-gray-600'
+                                    className={`min-h-11 px-4 py-2 text-sm rounded-md transition-all ${!isBusinessCustomer ? 'bg-white shadow text-green-600 font-medium' : 'text-gray-600'
                                         }`}
                                 >
                                     <User className="inline w-4 h-4 mr-1" />
@@ -423,7 +411,7 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                     <div className="space-y-4">
 
                         {/* Basic Information */}
-                        <div className="bg-gray-50 rounded-lg p-4">
+                        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
                             <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-1.5 mb-3">
                                 <User className="w-4 h-4 text-blue-600" />
                                 Basic Information
@@ -432,8 +420,8 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                                 Internal customer code is generated automatically after saving.
                             </p>
 
-                            <div className="grid grid-cols-3 gap-3">
-                                <div className="col-span-3 sm:col-span-2">
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                                <div className="sm:col-span-2">
                                     <label htmlFor="customer-name" className={labelClass}>Customer Name *</label>
                                     <div className="relative">
                                         <User className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -461,7 +449,9 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                                         <Phone className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                                         <input
                                             {...fieldA11y('primary_phone')}
-                                            type="text"
+                                            type="tel"
+                                            inputMode="tel"
+                                            autoComplete="tel"
                                             value={formData.primary_phone}
                                             onChange={(e) => updateField('primary_phone', e.target.value)}
                                             className={fieldClass('primary_phone', inputClass)}
@@ -479,6 +469,7 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                                         <input
                                             {...fieldA11y('primary_email')}
                                             type="email"
+                                            autoComplete="email"
                                             value={formData.primary_email}
                                             onChange={(e) => updateField('primary_email', e.target.value)}
                                             className={fieldClass('primary_email', inputClass)}
@@ -492,7 +483,7 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
 
                         {/* Contact Person - B2B Only */}
                         {isBusinessCustomer && (
-                            <div className="bg-gray-50 rounded-lg p-4">
+                        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
                                 <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-1.5 mb-3">
                                     <Users className="w-4 h-4 text-purple-600" />
                                     Contact Person
@@ -518,7 +509,7 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                         )}
 
                         {/* Address */}
-                        <div className="bg-gray-50 rounded-lg p-4">
+                        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
                             <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-1.5 mb-3">
                                 <MapPin className="w-4 h-4 text-blue-600" />
                                 Address
@@ -532,6 +523,7 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                                         {...fieldA11y('address_line1')}
                                         type="text"
                                         value={formData.address.address_line1}
+                                        autoComplete="street-address"
                                         onChange={(e) => updateAddress('address_line1', e.target.value)}
                                         className={fieldClass('address_line1', inputNoIconClass)}
                                         placeholder="Building, street address"
@@ -554,13 +546,14 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                                 </div>
 
                                 {/* Row 3: City, GST state code, Pincode */}
-                                <div className="grid grid-cols-3 gap-3">
+                                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                                     <div>
                                         <label htmlFor="customer-city" className={labelClass}>City *</label>
                                         <input
                                             {...fieldA11y('city')}
                                             type="text"
-                                            value={formData.address.city}
+                                        value={formData.address.city}
+                                        autoComplete="address-level2"
                                             onChange={(e) => updateAddress('city', e.target.value)}
                                             className={fieldClass('city', inputNoIconClass)}
                                             placeholder="City"
@@ -584,10 +577,12 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                                             {...fieldA11y('pincode')}
                                             type="text"
                                             value={formData.address.pincode}
-                                            onChange={(e) => updateAddress('pincode', e.target.value)}
+                                            onChange={(e) => updateAddress('pincode', e.target.value.replace(/\D/g, '').slice(0, 6))}
                                             className={fieldClass('pincode', inputNoIconClass)}
                                             placeholder="6-digit"
                                             maxLength={6}
+                                            inputMode="numeric"
+                                            autoComplete="postal-code"
                                         />
                                         {fieldError('pincode')}
                                     </div>
@@ -597,7 +592,7 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
 
                         {/* Compliance - B2B Only */}
                         {isBusinessCustomer && (
-                            <div className="bg-gray-50 rounded-lg p-4">
+                        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
                                 <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-1.5 mb-3">
                                     <Shield className="w-4 h-4 text-red-600" />
                                     Compliance & Licenses
@@ -647,7 +642,7 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
                         )}
 
                         {/* Credit terms are explicit for every canonical customer account. */}
-                        <div className="bg-gray-50 rounded-lg p-4">
+                        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
                                 <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-1.5 mb-3">
                                     <CreditCard className="w-4 h-4 text-blue-600" />
                                     Credit & Payment Terms
@@ -690,19 +685,19 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
             </div>
 
             {/* Sticky Footer - STANDARD: py-4, full-width, right-aligned */}
-            <div className="flex-shrink-0 bg-white border-t border-gray-200 px-6 py-4">
+            <div className="absolute inset-x-0 bottom-0 flex-shrink-0 border-t border-gray-200 bg-white/95 px-3 py-3 shadow-[0_-8px_24px_rgba(0,0,0,0.06)] backdrop-blur sm:px-6">
                 <div className="flex items-center justify-end gap-3">
                     <button
                         onClick={onClose}
                         disabled={saving}
-                        className="px-6 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                        className="min-h-12 rounded-lg border border-gray-300 px-5 py-2 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                     >
                         Cancel
                     </button>
                     <button
                         onClick={handleSave}
                         disabled={saving}
-                        className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 disabled:opacity-50 transition-colors"
+                        className="flex min-h-12 min-w-40 items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 py-2 text-base font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
                     >
                         {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                         {saving ? 'Saving...' : 'Save Customer'}

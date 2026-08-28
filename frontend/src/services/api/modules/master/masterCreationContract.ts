@@ -4,13 +4,18 @@ import { isCanonicalUuid } from '../../../../utils/canonicalUuid';
 export type MasterEntityKind = 'customer' | 'supplier' | 'product';
 
 const IDEMPOTENCY_KEY_PATTERN = /^erp-web-master-(customer|supplier|product)-create:[0-9a-f-]{36}$/i;
+const PRODUCT_ACTIVATION_KEY_PATTERN = /^erp-web-master-product-activate:[0-9a-f-]{36}$/i;
 
 export const newMasterCreateIdempotencyKey = (kind: MasterEntityKind): string => (
   `erp-web-master-${kind}-create:${clientUuid()}`
 );
 
+export const newProductActivationIdempotencyKey = (): string => (
+  `erp-web-master-product-activate:${clientUuid()}`
+);
+
 export const masterCreateRequestConfig = (idempotencyKey: string) => {
-  if (!IDEMPOTENCY_KEY_PATTERN.test(idempotencyKey) || idempotencyKey.length > 128) {
+  if (!(IDEMPOTENCY_KEY_PATTERN.test(idempotencyKey) || PRODUCT_ACTIVATION_KEY_PATTERN.test(idempotencyKey)) || idempotencyKey.length > 128) {
     throw new Error('Master creation requires a bounded browser-generated idempotency key.');
   }
   return { headers: { 'X-Idempotency-Key': idempotencyKey } };
@@ -105,6 +110,7 @@ export interface CanonicalProductDraftCreateResponse {
   product_code: string;
   product_name: string;
   lifecycle_status: 'draft';
+  row_version: number;
   message: string;
 }
 
@@ -120,6 +126,9 @@ export const decodeCanonicalProductDraftCreateResponse = (
     product_code: text(payload.product_code, 'Generated product code'),
     product_name: text(payload.product_name, 'Created product name'),
     lifecycle_status: 'draft',
+    row_version: Number.isSafeInteger(payload.row_version) && Number(payload.row_version) > 0
+      ? Number(payload.row_version)
+      : (() => { throw new Error('Created product row version is invalid'); })(),
     message: text(payload.message, 'Product creation message'),
   };
 };

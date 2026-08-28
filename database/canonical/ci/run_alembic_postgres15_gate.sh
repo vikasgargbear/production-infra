@@ -169,6 +169,8 @@ PYTHONPATH=backend \
 PYTHONPATH=backend \
   python backend/tests/postgres/check_canonical_master_write_function_runtime_role.py
 PYTHONPATH=backend \
+  python backend/tests/postgres/check_canonical_product_setup_runtime_role.py
+PYTHONPATH=backend \
   python backend/tests/postgres/check_canonical_gst_jurisdiction_runtime_role.py
 PYTHONPATH=backend \
   python backend/tests/postgres/check_runtime_deployment_readiness.py

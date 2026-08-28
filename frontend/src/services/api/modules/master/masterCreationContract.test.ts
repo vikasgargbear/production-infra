@@ -58,18 +58,22 @@ describe('backend-generated master identity contract', () => {
   it('requires a generated code and draft lifecycle in product responses', () => {
     expect(decodeCanonicalProductDraftCreateResponse({
       product_id: ids.product, product_code: 'P-100', product_name: 'Product',
-      lifecycle_status: 'draft', message: 'Draft created',
+      lifecycle_status: 'draft', row_version: 1, message: 'Draft created',
     })).toEqual({
       product_id: ids.product, product_code: 'P-100', product_name: 'Product',
-      lifecycle_status: 'draft', message: 'Draft created',
+      lifecycle_status: 'draft', row_version: 1, message: 'Draft created',
     });
     expect(() => decodeCanonicalProductDraftCreateResponse({
       product_id: ids.product, product_code: '', product_name: 'Product',
-      lifecycle_status: 'draft', message: 'Draft created',
+      lifecycle_status: 'draft', row_version: 1, message: 'Draft created',
     })).toThrow('Generated product code is required');
     expect(() => decodeCanonicalProductDraftCreateResponse({
       product_id: ids.product, product_code: 'P-100', product_name: 'Product',
-      lifecycle_status: 'active', message: 'Created',
+      lifecycle_status: 'active', row_version: 1, message: 'Created',
     })).toThrow('must remain a draft');
+    expect(() => decodeCanonicalProductDraftCreateResponse({
+      product_id: ids.product, product_code: 'P-100', product_name: 'Product',
+      lifecycle_status: 'draft', message: 'Draft created',
+    })).toThrow('row version is invalid');
   });
 });

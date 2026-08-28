@@ -53,8 +53,8 @@ interface Supplier {
   outstanding_available?: boolean;
 }
 
-export const loadCanonicalSuppliers = async () => {
-  const response = await suppliersApi.getAll();
+export const loadCanonicalSuppliers = async (search = '') => {
+  const response = await suppliersApi.getAll({ limit: 1000, search });
   const rows = response.data as Supplier[];
   let agingRows: Record<string, unknown>[] | null = null;
   try {
@@ -261,6 +261,7 @@ const SupplierMaster: React.FC = () => {
     },
     searchFields: ['supplier_name', 'supplier_code', 'primary_phone', 'gst_number'],
     filterField: 'supplier_type',
+    serverSearch: true,
     softDelete: true
   });
 

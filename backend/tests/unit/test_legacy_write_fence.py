@@ -133,6 +133,8 @@ CANONICAL_MASTER_WRITES = {
     ("POST", "/api/products/"): "create_product_draft",
     ("PUT", "/api/products/{product_id}"): "update_product_draft",
     ("DELETE", "/api/products/{product_id}"): "delete_product_draft",
+    ("PUT", "/api/products/{product_id}/setup"): "configure_product_setup",
+    ("POST", "/api/products/{product_id}/activate"): "activate_product_setup",
     ("POST", "/api/customers/"): "create_customer",
     ("POST", "/api/suppliers/"): "create_supplier",
     ("POST", "/api/customers/{customer_id:uuid}/addresses/"): "create_customer_address",

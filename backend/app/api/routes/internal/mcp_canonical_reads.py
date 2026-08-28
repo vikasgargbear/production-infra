@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
+import re
 from typing import Any, Literal, Optional
 from uuid import UUID
 
@@ -67,6 +68,11 @@ class SupplierSearchResponse(BaseModel):
     requires_selection: bool
     returned_count: int
     suppliers: list[SupplierSearchItem]
+
+
+def _search_tsquery(value: str) -> str:
+    tokens = re.findall(r"[a-z0-9]+", value.casefold())[:8]
+    return " & ".join(f"{token}:*" for token in tokens)
 
 
 def _uuid_claim(claims: dict[str, Any], name: str) -> UUID:
@@ -374,7 +380,7 @@ def canonical_product_search(
     db: Session = Depends(get_db),
 ):
     _require_operation(context, "master.products.search")
-    search = q.strip()
+    search = " ".join(q.casefold().split())
     rows = db.execute(
         text(
             """
@@ -417,18 +423,53 @@ def canonical_product_search(
                        LIMIT 50
                     ) AS conversion
               ) AS conversions ON true
+              LEFT JOIN parties.parties AS manufacturer
+                ON manufacturer.org_id=product.org_id
+               AND manufacturer.id=product.manufacturer_party_id
+              LEFT JOIN LATERAL (
+                  SELECT pg_catalog.to_tsvector(
+                           'simple'::pg_catalog.regconfig,
+                           pg_catalog.string_agg(
+                             ingredient.canonical_name,' '
+                             ORDER BY ingredient.canonical_name
+                           )
+                         ) AS search_document
+                    FROM catalog.product_ingredients AS composition
+                    JOIN catalog.ingredients AS ingredient
+                      ON ingredient.id=composition.ingredient_id
+                   WHERE composition.org_id=product.org_id
+                     AND composition.product_id=product.id
+                     AND composition.status='active'
+                     AND composition.valid_until IS NULL
+                     AND ingredient.status='active'
+              ) AS composition ON true
              WHERE product.org_id=:org_id AND product.status IN ('active','blocked')
-               AND (:search='' OR name ILIKE :pattern OR COALESCE(generic_name,'') ILIKE :pattern
-                    OR sku ILIKE :pattern OR hsn_code ILIKE :pattern
-                    OR COALESCE(gtin,'') ILIKE :pattern)
-             ORDER BY product.name, product.id
+               AND (:search='' OR pg_catalog.lower(product.name) LIKE :prefix
+                    OR pg_catalog.lower(COALESCE(product.generic_name,'')) LIKE :prefix
+                    OR pg_catalog.lower(product.sku) LIKE :prefix
+                    OR product.hsn_code LIKE :prefix OR COALESCE(product.gtin,'') LIKE :prefix
+                    OR pg_catalog.lower(COALESCE(manufacturer.legal_name,'')) LIKE :prefix
+                    OR (:tsquery<>'' AND pg_catalog.to_tsvector(
+                         'simple'::pg_catalog.regconfig,
+                         COALESCE(product.sku,'')||' '||COALESCE(product.name,'')||' '||
+                         COALESCE(product.generic_name,'')||' '||COALESCE(product.gtin,'')
+                       ) @@ pg_catalog.to_tsquery('simple'::pg_catalog.regconfig,:tsquery))
+                    OR (:tsquery<>'' AND COALESCE(
+                         composition.search_document,''::pg_catalog.tsvector
+                       ) @@ pg_catalog.to_tsquery('simple'::pg_catalog.regconfig,:tsquery)))
+             ORDER BY CASE WHEN pg_catalog.lower(product.sku)=:search THEN 0
+                           WHEN product.gtin=:search THEN 1
+                           WHEN pg_catalog.lower(product.name)=:search THEN 2
+                           WHEN pg_catalog.lower(product.name) LIKE :prefix THEN 3 ELSE 4 END,
+                      product.name, product.id
              LIMIT :limit OFFSET :offset
             """
         ),
         {
             "org_id": context.organization_id,
             "search": search,
-            "pattern": f"%{search}%",
+            "prefix": f"{search}%",
+            "tsquery": _search_tsquery(search),
             "limit": limit,
             "offset": offset,
         },
@@ -445,7 +486,7 @@ def canonical_supplier_search(
     db: Session = Depends(get_db),
 ):
     _require_operation(context, "master.suppliers.search")
-    search = (search_term or "").strip()
+    search = " ".join((search_term or "").casefold().split())
     rows = db.execute(
         text(
             """
@@ -476,20 +517,29 @@ def canonical_supplier_search(
               ) AS contact ON true
              WHERE supplier.org_id=:org_id AND supplier.status IN ('active','on_hold')
                AND party.status IN ('active','blocked')
-               AND (:search='' OR party.legal_name ILIKE :pattern
-                    OR COALESCE(party.trade_name,'') ILIKE :pattern
-                    OR supplier.supplier_code ILIKE :pattern
-                    OR COALESCE(registration.registration_number,'') ILIKE :pattern
-                    OR COALESCE(contact.phone,'') ILIKE :pattern
-                    OR COALESCE(contact.email,'') ILIKE :pattern)
-             ORDER BY party.legal_name, supplier.id
+               AND (:search='' OR pg_catalog.lower(party.legal_name) LIKE :prefix
+                    OR pg_catalog.lower(COALESCE(party.trade_name,'')) LIKE :prefix
+                    OR pg_catalog.lower(supplier.supplier_code) LIKE :prefix
+                    OR pg_catalog.lower(COALESCE(registration.registration_number,'')) LIKE :prefix
+                    OR COALESCE(contact.phone,'') LIKE :prefix
+                    OR pg_catalog.lower(COALESCE(contact.email,'')) LIKE :prefix
+                    OR (:tsquery<>'' AND pg_catalog.to_tsvector(
+                         'simple'::pg_catalog.regconfig,
+                         COALESCE(party.legal_name,'')||' '||COALESCE(party.trade_name,'')
+                       ) @@ pg_catalog.to_tsquery('simple'::pg_catalog.regconfig,:tsquery)))
+             ORDER BY CASE WHEN pg_catalog.lower(supplier.supplier_code)=:search THEN 0
+                           WHEN COALESCE(contact.phone,'')=:search THEN 1
+                           WHEN pg_catalog.lower(COALESCE(registration.registration_number,''))=:search THEN 2
+                           WHEN pg_catalog.lower(party.legal_name)=:search THEN 3 ELSE 4 END,
+                      party.legal_name, supplier.id
              LIMIT :limit OFFSET :offset
             """
         ),
         {
             "org_id": context.organization_id,
             "search": search,
-            "pattern": f"%{search}%",
+            "prefix": f"{search}%",
+            "tsquery": _search_tsquery(search),
             "limit": limit,
             "offset": offset,
         },
