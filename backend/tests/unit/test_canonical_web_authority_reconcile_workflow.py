@@ -72,6 +72,17 @@ def test_web_authority_reconcile_keeps_secrets_out_of_command_arguments() -> Non
     assert "::add-mask::" not in source
 
 
+def test_auth_identity_is_attested_before_restricted_owner_role() -> None:
+    source = WORKFLOW.read_text(encoding="utf-8")
+
+    auth_query = '"SELECT count(*) FROM auth.users WHERE id=%s"'
+    assert source.index(auth_query) < source.index(
+        "supports_membership_options = _enter_migration_owner(cursor)"
+    )
+    assert "except BaseException:" in source
+    assert "else:\n                      _leave_migration_owner" in source
+
+
 def test_embedded_remote_reconciler_is_valid_python() -> None:
     source = WORKFLOW.read_text(encoding="utf-8")
     remote = source.split("print(r'''", 1)[1].split("''')", 1)[0]
