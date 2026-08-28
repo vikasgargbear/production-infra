@@ -62,6 +62,9 @@ def test_destruction_fact_resolution_binds_one_exact_run_authority() -> None:
         "itc_reversal_attachment_id",
     ):
         assert f"destruction_authority.{authority_field}" in source
+    assert "period.period_kind='monthly'" in source
+    assert "period.period_start=date_trunc(" in source
+    assert "period.period_end=(date_trunc(" in source
     assert "filing.revision=1" in source
 
 
