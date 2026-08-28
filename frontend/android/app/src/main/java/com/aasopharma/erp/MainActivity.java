@@ -39,15 +39,32 @@ public class MainActivity extends BridgeActivity {
             @Override
             public void handleOnBackPressed() {
                 WebView webView = bridge.getWebView();
+                if (isRootAppDestination(webView.getUrl())) {
+                    finish();
+                    return;
+                }
                 if (webView.canGoBack()) {
                     webView.goBack();
                     return;
                 }
 
-                setEnabled(false);
-                getOnBackPressedDispatcher().onBackPressed();
+                finish();
             }
         });
+    }
+
+    static boolean isRootAppDestination(String rawUrl) {
+        if (rawUrl == null || rawUrl.isBlank()) {
+            return false;
+        }
+
+        Uri uri = Uri.parse(rawUrl);
+        String path = uri.getPath();
+        String fragment = uri.getFragment();
+        boolean rootPath = path == null || path.isEmpty() || "/".equals(path);
+        boolean rootFragment =
+            fragment == null || fragment.isEmpty() || "/home".equals(fragment);
+        return isTrustedAppLink(uri) && rootPath && rootFragment;
     }
 
     private void configureDownloads() {
