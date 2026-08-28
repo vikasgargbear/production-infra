@@ -12,7 +12,7 @@ from decimal import Decimal
 from typing import Any
 
 from app.api.shared.calculations import calculate_line_item
-from app.core.money import decimal_value, money, rupees
+from app.core.money import decimal_value, money
 
 
 def _gst_components(
@@ -227,7 +227,12 @@ def calculate_sales_totals(
         + insurance_value
         + other_value
     )
-    final_amount = rupees(amount_before_round)
+    # Canonical sales documents currently publish ``rounding_policy=none``
+    # from the organization business context.  The non-persistent browser
+    # preview must therefore preserve paise exactly instead of independently
+    # rounding to a whole rupee.  The posting calculator owns any future
+    # reviewed rounding policy; this preview must never invent one.
+    final_amount = money(amount_before_round)
     return {
         "subtotal_amount": money(gross_subtotal),
         "discount_amount": money(item_discount),
