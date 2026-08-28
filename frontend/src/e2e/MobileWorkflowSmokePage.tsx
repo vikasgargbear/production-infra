@@ -69,15 +69,20 @@ const OnboardingFixture: React.FC = () => (
 
 const MobileWorkflowSmokePage: React.FC = () => {
   const flow = new URLSearchParams(window.location.search).get('flow') || 'product';
+  const [closed, setClosed] = useState(false);
+  if (closed) {
+    return <main className="flex min-h-[100dvh] items-center justify-center bg-gray-50 p-4"><h1 className="text-xl font-semibold">Workflow closed</h1></main>;
+  }
+  const close = () => setClosed(true);
   const content = (() => {
     switch (flow) {
       case 'onboarding': return <OnboardingFixture />;
-      case 'customer': return <CustomerFlow open onClose={() => undefined} />;
-      case 'supplier': return <SupplierFlow open onClose={() => undefined} />;
+      case 'customer': return <CustomerFlow open onClose={close} />;
+      case 'supplier': return <SupplierFlow open onClose={close} />;
       case 'returns': return <ReturnFixture />;
       case 'footer': return <main className="flex min-h-[100dvh] flex-col bg-gray-50"><div className="flex-1 p-4"><h1 className="text-xl font-semibold">Invoice review</h1></div><ProceedToReviewComponent canProceed totalItems={3} totalAmount="680.50" proceedText="Review invoice" onProceed={() => undefined} onReset={() => undefined} /></main>;
       case 'product':
-      default: return <ProductFlow open onClose={() => undefined} />;
+      default: return <ProductFlow open onClose={close} />;
     }
   })();
 

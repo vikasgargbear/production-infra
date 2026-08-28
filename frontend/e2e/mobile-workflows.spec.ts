@@ -67,9 +67,9 @@ for (const viewport of viewports) {
     });
 
     for (const fixture of [
-      { flow: 'product', title: 'New product draft', submit: 'Save product draft', input: /Product name/, close: 'Close product form', finalControl: 'select' },
-      { flow: 'customer', title: 'New Customer', submit: 'Save Customer', input: /Customer Name/, close: 'Close customer form', finalControl: 'input[type="number"][max="365"]' },
-      { flow: 'supplier', title: 'Add New Supplier', submit: 'Save Supplier', input: /Supplier Name/, close: 'Close supplier form', finalControl: 'input[placeholder="Enter 0–180"]' },
+      { flow: 'product', title: 'New product draft', submit: 'Save product draft', input: /Product name/, close: 'Close product form', secondary: null, finalControl: 'select' },
+      { flow: 'customer', title: 'New Customer', submit: 'Save Customer', input: /Customer Name/, close: 'Close customer form', secondary: 'Cancel', finalControl: 'input[type="number"][max="365"]' },
+      { flow: 'supplier', title: 'Add New Supplier', submit: 'Save Supplier', input: /Supplier Name/, close: 'Close supplier form', secondary: 'Cancel', finalControl: 'input[placeholder="Enter 0–180"]' },
     ]) {
       test(`${fixture.flow} form keeps one primary CTA through scroll, focus, and validation`, async ({ page }) => {
         await openFlow(page, fixture.flow, viewport);
@@ -79,7 +79,19 @@ for (const viewport of viewports) {
         await expect(primary).toHaveCount(1);
         await expectTapTarget(primary);
         await expectWithinViewport(primary, viewport.height);
-        await expectTapTarget(page.getByRole('button', { name: fixture.close }));
+        const close = page.getByRole('button', { name: fixture.close });
+        await expectTapTarget(close);
+        const secondary = fixture.secondary
+          ? page.locator('button:visible').filter({ hasText: fixture.secondary })
+          : close;
+        await expectTapTarget(secondary);
+        if (fixture.secondary) await expect(secondary).toHaveCount(1);
+
+        const actions = page.getByTestId('master-form-actions');
+        await expect(actions).toBeVisible();
+        const actionsBox = await actions.boundingBox();
+        expect(actionsBox).not.toBeNull();
+        expect(Math.abs(actionsBox!.y + actionsBox!.height - viewport.height)).toBeLessThanOrEqual(1);
 
         const scrollRegion = page.getByTestId('master-form-scroll');
         const start = await scrollRegion.evaluate(element => ({
@@ -112,6 +124,8 @@ for (const viewport of viewports) {
         await expectWithinViewport(alert, viewport.height);
         await expectWithinViewport(primary, viewport.height);
         await expectNoHorizontalOverflow(page, `${fixture.flow} after validation`);
+        await secondary.click();
+        await expect(page.getByRole('heading', { name: 'Workflow closed' })).toBeVisible();
       });
     }
 
@@ -138,9 +152,19 @@ for (const viewport of viewports) {
       await expectTapTarget(reset);
       await expectWithinViewport(primary, viewport.height);
       expect(await page.locator('button:visible').filter({ hasText: 'Review return' }).count()).toBe(1);
+      const actions = page.getByTestId('erp-action-footer');
+      const actionsBox = await actions.boundingBox();
+      expect(actionsBox).not.toBeNull();
+      expect(actionsBox!.y + actionsBox!.height).toBeLessThanOrEqual(viewport.height);
       await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
       await expectWithinViewport(primary, viewport.height);
       await expectNoHorizontalOverflow(page, 'returns after full scroll');
+      await remove.click();
+      await expect(returnSelection).toBeHidden();
+      await expect(primary).toBeDisabled();
+      await reset.click();
+      await expect(page.getByRole('checkbox', { name: 'Mobile return Paracetamol 500 mg' })).toBeVisible();
+      await expect(primary).toBeEnabled();
     });
 
     test('shared review footer preserves a single dominant full-width action', async ({ page }) => {
@@ -154,6 +178,10 @@ for (const viewport of viewports) {
       expect(primaryBox!.width).toBeGreaterThan(resetBox!.width);
       await expectWithinViewport(primary, viewport.height);
       expect(await page.locator('button:visible').filter({ hasText: 'Review invoice' }).count()).toBe(1);
+      const actions = page.getByTestId('erp-action-footer');
+      const actionsBox = await actions.boundingBox();
+      expect(actionsBox).not.toBeNull();
+      expect(Math.abs(actionsBox!.y + actionsBox!.height - viewport.height)).toBeLessThanOrEqual(1);
       await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
       await expectWithinViewport(primary, viewport.height);
       await expectNoHorizontalOverflow(page, 'shared footer after full scroll');

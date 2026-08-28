@@ -49,7 +49,7 @@ const ProceedToReviewComponent: React.FC<ProceedToReviewComponentProps> = ({
         : totalAmount.toFixed(2);
 
     return (
-        <div className={`erp-action-footer ${className}`}>
+        <div data-testid="erp-action-footer" className={`erp-action-footer ${className}`}>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 {/* Left side - Totals or back button */}
                 <div className="min-w-0 text-sm text-gray-600">
