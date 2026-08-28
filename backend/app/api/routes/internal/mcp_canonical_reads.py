@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Optional
+from datetime import date
+from typing import Any, Literal, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
@@ -18,6 +19,11 @@ from ....core.auth.session_authority import require_canonical_session_authority
 from ....core.database import get_db
 from .mcp_agent_grants import _internal_auth, bearer
 from .mcp_contract import CanonicalReadPolicy, policy_for
+from .. import (
+    canonical_party_aging_reads,
+    canonical_party_ledger_reads,
+    canonical_reporting_reads,
+)
 
 
 router = APIRouter(
@@ -259,6 +265,104 @@ def _require_operation(context: CanonicalDelegation, operation_key: str) -> None
 
 def _row_dicts(rows) -> list[dict[str, Any]]:
     return [dict(row._mapping) for row in rows]
+
+
+def _delegated_scope(context: CanonicalDelegation) -> tuple[bool, list[UUID]]:
+    return context.branch_id is None, (
+        [] if context.branch_id is None else [context.branch_id]
+    )
+
+
+def _delegated_user(context: CanonicalDelegation) -> dict[str, Any]:
+    return {
+        "org_id": str(context.organization_id),
+        "auth_user_id": str(context.auth_user_id),
+        "branch_ids": [] if context.branch_id is None else [str(context.branch_id)],
+        "is_admin": False,
+        "data_access_level": (
+            "organization" if context.branch_id is None else "branch"
+        ),
+        "branch_scope": (
+            "organization" if context.branch_id is None else "assigned"
+        ),
+    }
+
+
+@router.get("/party-aging")
+def canonical_party_aging(
+    party_type: Literal["customer", "supplier"] = Query(...),
+    context: CanonicalDelegation = Depends(get_canonical_delegation),
+    db: Session = Depends(get_db),
+):
+    _require_operation(context, "finance.party_aging.get")
+    organization_scope, branch_ids = _delegated_scope(context)
+    return canonical_party_aging_reads.query_party_aging(
+        db, org_id=context.organization_id, party_type=party_type,
+        organization_scope=organization_scope, branch_ids=branch_ids,
+    )
+
+
+@router.get("/party-statement")
+def canonical_party_statement(
+    party_account_id: UUID,
+    party_type: Literal["customer", "supplier"],
+    date_from: date,
+    date_to: date,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(100, ge=1, le=200),
+    context: CanonicalDelegation = Depends(get_canonical_delegation),
+    db: Session = Depends(get_db),
+):
+    _require_operation(context, "finance.party_statement.get")
+    return canonical_party_ledger_reads.get_party_statement(
+        party_account_id, party_type, date_from, date_to, page, page_size,
+        _delegated_user(context), db,
+    )
+
+
+@router.get("/trial-balance")
+def canonical_trial_balance(
+    date_from: date, date_to: date,
+    context: CanonicalDelegation = Depends(get_canonical_delegation),
+    db: Session = Depends(get_db),
+):
+    _require_operation(context, "finance.trial_balance.get")
+    canonical_reporting_reads._period(date_from, date_to)
+    organization_scope, branch_ids = _delegated_scope(context)
+    return canonical_reporting_reads.query_trial_balance(
+        db, org_id=context.organization_id, date_from=date_from, date_to=date_to,
+        organization_scope=organization_scope, branch_ids=branch_ids,
+    )
+
+
+@router.get("/profit-loss")
+def canonical_profit_loss(
+    date_from: date, date_to: date,
+    context: CanonicalDelegation = Depends(get_canonical_delegation),
+    db: Session = Depends(get_db),
+):
+    _require_operation(context, "finance.profit_loss.get")
+    canonical_reporting_reads._period(date_from, date_to)
+    organization_scope, branch_ids = _delegated_scope(context)
+    return canonical_reporting_reads.query_profit_loss(
+        db, org_id=context.organization_id, date_from=date_from, date_to=date_to,
+        organization_scope=organization_scope, branch_ids=branch_ids,
+    )
+
+
+@router.get("/customer-activity")
+def canonical_customer_activity(
+    date_from: date, date_to: date,
+    context: CanonicalDelegation = Depends(get_canonical_delegation),
+    db: Session = Depends(get_db),
+):
+    _require_operation(context, "finance.customer_activity.get")
+    canonical_reporting_reads._period(date_from, date_to)
+    organization_scope, branch_ids = _delegated_scope(context)
+    return canonical_reporting_reads.query_customer_activity(
+        db, org_id=context.organization_id, date_from=date_from, date_to=date_to,
+        organization_scope=organization_scope, branch_ids=branch_ids,
+    )
 
 
 @router.get("/products")

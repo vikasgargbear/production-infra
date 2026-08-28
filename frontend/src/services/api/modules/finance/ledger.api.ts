@@ -50,11 +50,8 @@ export interface CanonicalPartyLedgerWire {
     total: number;
 }
 
-export interface AgingParams {
-    party_type?: 'customer' | 'supplier';
-    as_of_date?: string;
-    date_from?: string;
-    date_to?: string;
+export interface CanonicalPartyAgingParams {
+    party_type: 'customer' | 'supplier';
 }
 
 // ============================================
@@ -62,7 +59,7 @@ export interface AgingParams {
 // ============================================
 
 const ENDPOINTS = {
-    AGING: '/ledger/aging',
+    PARTY_AGING: '/canonical/party-aging',
 } as const;
 
 // ============================================
@@ -75,10 +72,15 @@ export const ledgerApi = {
         params: CanonicalPartyLedgerParams,
     ): Promise<AxiosResponse<CanonicalPartyLedgerWire>> => apiHelpers.get(
         `/canonical/party-ledger/${partyAccountId}`,
-        { params },
+        { params, preserveExactDecimals: true },
     ),
-    getAging: (params: AgingParams = {}): Promise<AxiosResponse> => {
-        return apiHelpers.get(ENDPOINTS.AGING, { params });
+    getCanonicalPartyAging: (
+        params: CanonicalPartyAgingParams,
+    ): Promise<AxiosResponse> => {
+        return apiHelpers.get(ENDPOINTS.PARTY_AGING, {
+            params,
+            preserveExactDecimals: true,
+        });
     },
 
 };

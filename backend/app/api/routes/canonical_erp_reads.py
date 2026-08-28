@@ -950,7 +950,15 @@ def customers(limit: int = Query(100, ge=1, le=1000), skip: int = Query(0, ge=0)
         "search": search.strip(),
         "pattern": f"%{search.strip()}%",
     }).scalar_one()
-    return {"customers": rows, "total": total, "skip": skip, "limit": limit}
+    return {
+        "customers": [
+            _money_fields(row, ("credit_limit", "current_outstanding"))
+            for row in rows
+        ],
+        "total": total,
+        "skip": skip,
+        "limit": limit,
+    }
 
 
 @router.get("/customers/all-with-addresses")
@@ -1142,7 +1150,7 @@ def update_customer_address(
 def suppliers(limit: int = Query(100, ge=1, le=1000), skip: int = Query(0, ge=0),
               search: str = "", user: dict = MASTER_USER, db: Session = Depends(get_db)):
     org_id = _activate(db, user)
-    return _rows(db, f"""
+    rows = _rows(db, f"""
         SELECT account.id AS supplier_id, account.supplier_code,
                party.legal_name AS supplier_name, party.trade_name,
                contact.phone AS primary_phone, contact.email AS primary_email,
@@ -1187,6 +1195,7 @@ def suppliers(limit: int = Query(100, ge=1, le=1000), skip: int = Query(0, ge=0)
          ORDER BY party.legal_name, account.id LIMIT :limit OFFSET :skip
     """, {"org_id": org_id, "search": search.strip(), "pattern": f"%{search.strip()}%",
             "limit": limit, "skip": skip})
+    return [_money_fields(row, ("current_outstanding",)) for row in rows]
 
 
 @router.get("/employees")

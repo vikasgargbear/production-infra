@@ -48,7 +48,7 @@ const Outstanding: React.FC<OutstandingProps> = ({
     queryKey: ['canonical-outstanding-aging', partyType],
     queryFn: async () => {
       try {
-        const response = await ledgerApi.getAging({ party_type: partyType });
+        const response = await ledgerApi.getCanonicalPartyAging({ party_type: partyType });
         return projectCanonicalLedger(response.data);
       } catch (err) {
         console.error('Outstanding API error:', err);
@@ -56,7 +56,6 @@ const Outstanding: React.FC<OutstandingProps> = ({
       }
     },
     placeholderData: (previousData) => previousData,
-    enabled: partyType === 'customer',
     retry: 1
   });
 
@@ -119,9 +118,9 @@ const Outstanding: React.FC<OutstandingProps> = ({
         'Phone': party.party_phone,
         'Total Outstanding': party.total_outstanding,
         'Overdue Amount': party.total_overdue,
-        'Invoice Count': party.invoice_count,
-        'Overdue Count': party.overdue_count,
-        'Oldest Days': party.oldest_invoice_days
+        'Document Count': party.invoice_count,
+        'Overdue Documents': party.overdue_count,
+        'Oldest Overdue Days': party.oldest_invoice_days
       }));
 
       if (csvData.length === 0) {
@@ -149,40 +148,17 @@ const Outstanding: React.FC<OutstandingProps> = ({
     }
   };
 
-  // Show message for suppliers
-  if (partyType === 'supplier') {
-    return (
-      <div className={embedded ? 'p-6' : 'h-full bg-blue-50'}>
-        {!embedded && (
-          <div className="h-full flex flex-col">
-            <ModuleHeader
-              title="Outstanding"
-              documentNumber=""
-              status=""
-              icon={IndianRupee}
-              iconColor="text-amber-600"
-              onClose={onClose}
-              onSaveDraft={() => { }}
-              additionalActions={[]}
-            />
-            <div className="flex-1 flex items-center justify-center">
-              <div className="text-center">
-                <AlertCircle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-600">Supplier outstanding is not available yet</p>
-                <p className="text-sm text-gray-500 mt-2">This feature will be available soon</p>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  }
-
   // If showing customer details, render that view
   if (ui.showDetailsView && selectedParty) {
     return (
       <div className="h-full bg-gray-100">
         <div className="h-full flex flex-col">
+          {embedded && (
+            <button type="button" onClick={() => dispatch({ type: 'SET_DETAILS_VIEW', show: false })} className="m-4 min-h-11 self-start rounded-lg border border-gray-300 bg-white px-4 text-sm font-semibold text-gray-700">
+              ← Back to outstanding
+            </button>
+          )}
+          {!embedded && (
           <ModuleHeader
             title={`${selectedParty.party_name} - Outstanding`}
             documentNumber=""
@@ -199,6 +175,7 @@ const Outstanding: React.FC<OutstandingProps> = ({
               }
             ] as any}
           />
+          )}
 
           <div className="flex-1 overflow-y-auto">
             <PartyDetailsView
@@ -213,9 +190,9 @@ const Outstanding: React.FC<OutstandingProps> = ({
   }
 
   return (
-    <div className={embedded ? 'p-6' : 'h-full bg-gray-100'}>
-      {!embedded && (
-        <div className="h-full flex flex-col">
+    <div className={embedded ? 'p-4 sm:p-6' : 'h-full bg-gray-100'}>
+      <div className="h-full flex flex-col">
+        {!embedded && (
           <ModuleHeader
             title="Outstanding & Aging"
             documentNumber=""
@@ -232,9 +209,10 @@ const Outstanding: React.FC<OutstandingProps> = ({
               }
             ] as any}
           />
+        )}
 
           <div className="flex-1 overflow-y-auto">
-            <div className="max-w-7xl mx-auto px-6 py-6">
+            <div className={`mx-auto max-w-7xl py-4 sm:py-6 ${embedded ? '' : 'px-4 sm:px-6'}`}>
               {isLoading ? (
                 <div className="rounded-lg border border-gray-200 bg-white p-8 text-center">
                   <Loader2 className="mx-auto mb-4 h-8 w-8 animate-spin text-blue-600" />
@@ -260,6 +238,7 @@ const Outstanding: React.FC<OutstandingProps> = ({
                   />
 
                   <OutstandingFilters
+                    partyType={partyType}
                     status={filters.status}
                     searchQuery={filters.searchQuery}
                     viewMode={ui.viewMode}
@@ -311,7 +290,7 @@ const Outstanding: React.FC<OutstandingProps> = ({
                         <div key={key} className="rounded-lg border border-gray-200 p-4">
                           <div className="text-sm font-medium text-gray-600">{label}</div>
                           <div className="mt-2 text-xl font-semibold text-gray-900">{formatExactCurrency(bucket.amount, `${label} outstanding`)}</div>
-                          <div className="mt-1 text-xs text-gray-500">{bucket.count} {bucket.count === 1 ? 'party' : 'parties'}</div>
+                          <div className="mt-1 text-xs text-gray-500">{bucket.count} {bucket.count === 1 ? 'document' : 'documents'}</div>
                           <div className={`mt-3 h-1.5 rounded-full ${color}`} aria-hidden="true" />
                         </div>
                       );
@@ -323,8 +302,7 @@ const Outstanding: React.FC<OutstandingProps> = ({
               )}
             </div>
           </div>
-        </div>
-      )}
+      </div>
     </div>
   );
 };

@@ -31,6 +31,7 @@ import { usePermissions } from './hooks/usePermissions';
 import { useHashRouter } from './hooks/useHashRouter';
 
 const MobileNavigationSmokePage = lazy(() => import('./e2e/MobileNavigationSmokePage'));
+const CanonicalReadSurfacesSmokePage = lazy(() => import('./e2e/CanonicalReadSurfacesSmokePage'));
 
 // ---------------------------------------------------------------------------
 // Tab / module definitions
@@ -121,12 +122,6 @@ const AppContent = (): JSX.Element => {
     return () => window.removeEventListener('navigate', handleNavigate as EventListener);
   }, [navigate]);
 
-  if (
-    process.env.REACT_APP_ENABLE_E2E_HARNESS === 'true'
-    && window.location.pathname === '/e2e/mobile-navigation'
-  ) {
-    return <Suspense fallback={<LoadingSpinner />}><MobileNavigationSmokePage /></Suspense>;
-  }
   if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-50">
@@ -258,6 +253,16 @@ const AppContent = (): JSX.Element => {
   );
 };
 
-const App = (): JSX.Element => <AuthProvider><AppContent /></AuthProvider>;
+const App = (): JSX.Element => {
+  if (process.env.REACT_APP_ENABLE_E2E_HARNESS === 'true') {
+    if (window.location.pathname === '/e2e/mobile-navigation') {
+      return <Suspense fallback={<LoadingSpinner />}><MobileNavigationSmokePage /></Suspense>;
+    }
+    if (window.location.pathname === '/e2e/canonical-reads') {
+      return <Suspense fallback={<LoadingSpinner />}><CanonicalReadSurfacesSmokePage /></Suspense>;
+    }
+  }
+  return <AuthProvider><AppContent /></AuthProvider>;
+};
 
 export default App;

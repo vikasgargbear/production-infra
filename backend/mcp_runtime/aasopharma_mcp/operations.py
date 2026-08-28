@@ -36,16 +36,42 @@ class Operation:
     permission: str
     max_records: int
     branch_parameter: str | None = None
+    records_field: str | None = None
 
 
 OPERATIONS = {
+    "erp_party_aging_get": Operation(
+        "finance.party_aging.get", "erp_party_aging_get",
+        "/api/internal/mcp/reads/party-aging", "finance.payment.manage", 500,
+        records_field="parties",
+    ),
+    "erp_party_statement_get": Operation(
+        "finance.party_statement.get", "erp_party_statement_get",
+        "/api/internal/mcp/reads/party-statement", "finance.account.manage", 200,
+        records_field="items",
+    ),
+    "erp_trial_balance_get": Operation(
+        "finance.trial_balance.get", "erp_trial_balance_get",
+        "/api/internal/mcp/reads/trial-balance", "finance.account.manage", 1000,
+        records_field="rows",
+    ),
+    "erp_profit_loss_get": Operation(
+        "finance.profit_loss.get", "erp_profit_loss_get",
+        "/api/internal/mcp/reads/profit-loss", "finance.account.manage", 1000,
+        records_field="rows",
+    ),
+    "erp_customer_activity_get": Operation(
+        "finance.customer_activity.get", "erp_customer_activity_get",
+        "/api/internal/mcp/reads/customer-activity", "finance.account.manage", 1000,
+        records_field="customers",
+    ),
     "erp_product_search": Operation(
         "master.products.search", "erp_product_search", "/api/internal/mcp/reads/products",
         "catalog.product.manage", 100,
     ),
     "erp_supplier_search": Operation(
         "master.suppliers.search", "erp_supplier_search", "/api/internal/mcp/reads/suppliers",
-        "parties.supplier.manage", 200,
+        "parties.supplier.manage", 200, records_field="suppliers",
     ),
     "erp_gst_settings_get": Operation(
         "gst.settings.get", "erp_gst_settings_get", "/api/internal/mcp/reads/gst-settings",
@@ -405,7 +431,16 @@ class OperationGateway:
         if len(response.content) > 1_048_576:
             raise UpstreamContractError("ERP read exceeded the one-megabyte MCP limit")
         payload = response.json()
-        records = payload if isinstance(payload, list) else payload.get("results", [])
+        if operation.records_field is not None:
+            if not isinstance(payload, dict):
+                raise UpstreamContractError("ERP read response must be an object")
+            records = payload.get(operation.records_field)
+            if not isinstance(records, list):
+                raise UpstreamContractError(
+                    f"ERP read response lacks {operation.records_field} records"
+                )
+        else:
+            records = payload if isinstance(payload, list) else payload.get("results", [])
         if isinstance(records, list) and len(records) > operation.max_records:
             raise UpstreamContractError("ERP read exceeded its reviewed record limit")
         return payload

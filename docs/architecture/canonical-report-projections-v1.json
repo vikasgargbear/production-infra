@@ -1,0 +1,48 @@
+{
+  "contract_version": "1.0.0",
+  "definition_version": "canonical-factual-v1",
+  "status": "reviewable",
+  "source_authorities": {
+    "trial_balance": [
+      "finance.accounts",
+      "finance.journal_entries",
+      "finance.journal_lines"
+    ],
+    "profit_loss": [
+      "finance.accounts.account_type",
+      "finance.journal_entries",
+      "finance.journal_lines"
+    ],
+    "customer_activity": [
+      "parties.customer_accounts",
+      "parties.parties",
+      "sales.invoices"
+    ],
+    "party_aging": [
+      "finance.open_items",
+      "finance.allocations",
+      "finance.accounting_events",
+      "sales.invoices",
+      "procurement.supplier_invoices"
+    ]
+  },
+  "definitions": {
+    "effective_journal": "A posted journal that is not itself a reversal and has no posted reversal journal.",
+    "report_currency": "INR for the current India pilot. Trial balance and profit and loss use functional ledger amounts; party aging and customer activity admit only canonical INR source documents.",
+    "trial_balance_opening": "Functional debit minus functional credit before date_from.",
+    "trial_balance_period": "Functional debit and functional credit from date_from through date_to inclusive.",
+    "trial_balance_closing": "Opening signed balance plus period debit minus period credit.",
+    "profit_loss_income": "For accounts canonically classified income, period transaction credit minus transaction debit.",
+    "profit_loss_expense": "For accounts canonically classified expense, period transaction debit minus transaction credit.",
+    "profit_loss_result": "Income minus expense for the exact inclusive period.",
+    "customer_billed_activity": "Count and grand total of posted sales invoices in the exact inclusive invoice-date period and authorized branch scope. It is not cash collection, lifetime value, retention, or net revenue.",
+    "party_aging": "Positive unsettled principal of posted receivable or payable open items as of the organization's current business date, after effective posted allocations, grouped into fixed due-date buckets. Account lifecycle status does not erase debt."
+  },
+  "explicitly_unavailable": [
+    "cash-flow classification without an effective-dated canonical mapping",
+    "customer churn or lifecycle classification without reviewed policy",
+    "customer segmentation without reviewed policy",
+    "collection efficiency without a reviewed denominator and target definition",
+    "profitability by product without reviewed cost-allocation policy"
+  ]
+}

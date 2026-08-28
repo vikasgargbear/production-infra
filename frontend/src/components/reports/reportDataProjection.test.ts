@@ -39,12 +39,7 @@ test.each([
 
 test('unpublished report surfaces contain no browser business policy', () => {
   const retired = [
-    'CustomerAnalytics.tsx',
     'ProductAnalytics.tsx',
-    'ProfitLossStatement.tsx',
-    'FinancialReport.tsx',
-    'LedgerAnalytics.tsx',
-    '../payment/reports/FinancialReports.tsx',
   ];
   for (const file of retired) {
     const source = read(file);
@@ -53,12 +48,23 @@ test('unpublished report surfaces contain no browser business policy', () => {
     expect(source).not.toMatch(/\|\|\s*0|\|\|\s*1|\?\?\s*0/);
   }
 
-  expect(read('CustomerAnalytics.tsx')).not.toMatch(/Date\.now|>\s*60|>\s*180|customer_type\s*===/);
   expect(read('ProductAnalytics.tsx')).not.toMatch(/margin\s*[><]=?\s*25|turnover\s*>\s*10|stock\s*<=\s*0/);
-  expect(read('ProfitLossStatement.tsx')).not.toMatch(/grossMargin|ebitdaMargin|previousAmount\s*\|\|\s*0/);
-  expect(read('FinancialReport.tsx')).not.toMatch(/new Date|apiClient|\.get\(/);
-  expect(read('LedgerAnalytics.tsx')).not.toMatch(/new Date|reports\/|\.get\(|toFixed\(2\)/);
-  expect(read('../payment/reports/FinancialReports.tsx')).not.toMatch(/reportsApi|generatedAt|new Date|trialBalance|profitLoss|balanceSheet/);
+
+  const customer = read('CustomerAnalytics.tsx');
+  const financial = read('FinancialReport.tsx');
+  const projection = read('utils/canonicalReportingProjection.ts');
+  expect(customer).toContain('projectCustomerActivity');
+  expect(customer).toContain('useCanonicalBusinessDate');
+  expect(customer).not.toMatch(/Date\.now|>\s*60|>\s*180|customer_type\s*===/);
+  expect(financial).toContain('projectTrialBalance');
+  expect(financial).toContain('projectProfitLoss');
+  expect(financial).toContain('useCanonicalBusinessDate');
+  expect(financial).not.toMatch(/new Date|apiClient|toFixed\(2\)|grossMargin|ebitdaMargin/);
+  expect(projection).toContain('normalizeAuthoritativeDecimal');
+  expect(projection).toContain('does not reconcile');
+  expect(read('LedgerAnalytics.tsx')).toContain('showProfitLoss={false}');
+  expect(read('ProfitLossStatement.tsx')).toContain('showTrialBalance={false}');
+  expect(read('../payment/reports/FinancialReports.tsx')).toContain('<FinancialReport');
 
   const sales = read('SalesReport.tsx');
   expect(sales).not.toMatch(/item\.(period|order_count|orders|revenue|invoice_date|total_amount|unique_customers)/);

@@ -94,7 +94,7 @@ const GlobalLayout: React.FC<GlobalLayoutProps> = ({
             container: 'h-full bg-gray-50',
             inner: 'h-full flex flex-col',
             content: 'flex-1 overflow-y-auto bg-gray-50',
-            contentInner: 'max-w-6xl mx-auto px-6 py-6',
+            contentInner: 'max-w-6xl mx-auto px-4 py-4 sm:px-6 sm:py-6',
             spacing: 'space-y-6'
         },
         compact: {
@@ -122,21 +122,21 @@ const GlobalLayout: React.FC<GlobalLayoutProps> = ({
                 {/* Header Section - Simple like ModuleHeader/Sales */}
                 {(title || Icon || headerActions) && (
                     <div className="bg-white border-b border-gray-200">
-                        <div className="flex items-center justify-between px-6 py-3">
+                        <div className="flex items-center justify-between gap-3 px-4 py-3 sm:px-6">
                             {/* Left side - Title and info */}
-                            <div className="flex items-center gap-4">
+                            <div className="flex min-w-0 items-center gap-3 sm:gap-4">
                                 {Icon && <Icon className="w-5 h-5 text-blue-600" />}
-                                <div>
+                                <div className="min-w-0">
                                     <h1 className="text-lg font-semibold text-gray-900">{title}</h1>
                                     {subtitle && (
-                                        <p className="text-sm text-gray-500 mt-1">{subtitle}</p>
+                                        <p className="mt-1 text-sm text-gray-500">{subtitle}</p>
                                     )}
                                 </div>
                             </div>
 
                             {/* Right side - Actions */}
                             {headerActions && (
-                                <div className="flex items-center gap-2">
+                                <div className="flex shrink-0 items-center gap-2">
                                     {headerActions}
                                 </div>
                             )}

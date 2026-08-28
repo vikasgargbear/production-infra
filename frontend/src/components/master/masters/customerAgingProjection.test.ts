@@ -7,11 +7,17 @@ const customers = [
 
 test('uses only explicit authoritative customer aging facts', () => {
   expect(mergeCustomersWithCanonicalAging(customers, [
-    { customer_id: 'customer-a', total_outstanding: 1563.99 },
+    { party_account_id: 'customer-a', total_outstanding: '9007199254740993.01' },
   ])).toEqual([
-    expect.objectContaining({ customer_id: 'customer-a', current_outstanding: 1563.99, outstanding_available: true }),
+    expect.objectContaining({ customer_id: 'customer-a', current_outstanding: '9007199254740993.01', outstanding_available: true }),
     expect.objectContaining({ customer_id: 'customer-b', current_outstanding: null, outstanding_available: false }),
   ]);
+});
+
+test('rejects numeric money before it can lose precision', () => {
+  expect(() => mergeCustomersWithCanonicalAging(customers, [
+    { party_account_id: 'customer-a', total_outstanding: 1563.99 },
+  ])).toThrow('exact decimal string');
 });
 
 test('marks balances unavailable when canonical aging cannot be read', () => {

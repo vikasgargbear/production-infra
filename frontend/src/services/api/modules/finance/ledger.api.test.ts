@@ -15,16 +15,16 @@ describe('canonical ledger reads', () => {
 
     it('requests authoritative aging without synthesizing dashboard facts', async () => {
         const get = apiHelpers.get as jest.Mock;
-        const response = { data: { aging_data: [], summary: { total: '0.00' } } };
+        const response = { data: { parties: [], summary: { total_outstanding: '0.00' } } };
         get.mockResolvedValueOnce(response);
 
-        await expect(ledgerApi.getAging({
+        await expect(ledgerApi.getCanonicalPartyAging({
             party_type: 'customer',
-            as_of_date: '2026-08-25',
         })).resolves.toBe(response);
 
-        expect(get).toHaveBeenCalledWith('/ledger/aging', {
-            params: { party_type: 'customer', as_of_date: '2026-08-25' },
+        expect(get).toHaveBeenCalledWith('/canonical/party-aging', {
+            params: { party_type: 'customer' },
+            preserveExactDecimals: true,
         });
     });
 });

@@ -89,6 +89,7 @@ out/
 */out/
 # Test coverage and results
 test-results/
+playwright-report/
 # Logs and temporary files
 *.log.*
 */.cache/

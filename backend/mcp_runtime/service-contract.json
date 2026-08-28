@@ -40,6 +40,7 @@
     "erp_adjustment_note_reversal_readback",
     "erp_bank_reconciliation_get",
     "erp_bank_reconciliation_prepare",
+    "erp_customer_activity_get",
     "erp_customer_cheque_bounce_prepare",
     "erp_customer_cheque_bounce_readback",
     "erp_customer_cheque_clearance_prepare",
@@ -65,8 +66,11 @@
     "erp_operation_execute",
     "erp_operation_review_get",
     "erp_operation_status_get",
+    "erp_party_aging_get",
+    "erp_party_statement_get",
     "erp_product_create",
     "erp_product_search",
+    "erp_profit_loss_get",
     "erp_purchase_order_get",
     "erp_purchase_order_prepare",
     "erp_purchase_return_prepare",
@@ -92,7 +96,8 @@
     "erp_supplier_invoice_prepare",
     "erp_supplier_payment_prepare",
     "erp_supplier_payment_readback",
-    "erp_supplier_search"
+    "erp_supplier_search",
+    "erp_trial_balance_get"
   ],
   "writes_exported": true,
   "operator_actions": {

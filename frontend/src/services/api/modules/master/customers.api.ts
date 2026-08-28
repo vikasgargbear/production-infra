@@ -105,7 +105,10 @@ export const toCanonicalCustomerCreate = (input: Record<string, any>): Canonical
 // ============================================================================
 
 export const customersApi = {
-  getAll: (params: CustomerParams = {}) => apiHelpers.get('/customers', { params })
+  getAll: (params: CustomerParams = {}) => apiHelpers.get('/customers', {
+    params,
+    preserveExactDecimals: true,
+  })
     .then(response => ({ ...response, data: decodeCanonicalCustomerList(response.data) })),
 
   create: (data: Record<string, any>, idempotencyKey: string) => {
@@ -151,7 +154,8 @@ export const customersApi = {
   // Search customers
   search: (query: string, params: CustomerParams = {}) => {
     return apiHelpers.get('/customers', {
-      params: { search: query, ...params }
+      params: { search: query, ...params },
+      preserveExactDecimals: true,
     }).then(response => ({ ...response, data: decodeCanonicalCustomerList(response.data) }));
   },
 };

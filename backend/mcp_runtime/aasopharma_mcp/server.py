@@ -68,6 +68,59 @@ def create_app(
     )
 
     @server.tool()
+    async def erp_party_aging_get(
+        party_type: Annotated[Literal["customer", "supplier"], Field(description="Customer receivables or supplier payables.")],
+    ) -> Any:
+        """Return exact current branch-authorized party and document aging."""
+        return await operation_gateway.execute(
+            OPERATIONS["erp_party_aging_get"], _access_token(), locals(),
+        )
+
+    @server.tool()
+    async def erp_party_statement_get(
+        party_account_id: Annotated[str, Field(description="Canonical customer or supplier account UUID.")],
+        party_type: Annotated[Literal["customer", "supplier"], Field(description="Canonical party-account side.")],
+        date_from: Annotated[str, Field(description="Inclusive ISO statement start date.")],
+        date_to: Annotated[str, Field(description="Inclusive ISO statement end date.")],
+        page: Annotated[int, Field(ge=1, description="One-based result page.")] = 1,
+        page_size: Annotated[int, Field(ge=1, le=200, description="Maximum journal lines per page.")] = 100,
+    ) -> Any:
+        """Return one exact posted and reversal-safe canonical party statement."""
+        return await operation_gateway.execute(
+            OPERATIONS["erp_party_statement_get"], _access_token(), locals(),
+        )
+
+    @server.tool()
+    async def erp_trial_balance_get(
+        date_from: Annotated[str, Field(description="Inclusive ISO report start date.")],
+        date_to: Annotated[str, Field(description="Inclusive ISO report end date.")],
+    ) -> Any:
+        """Return the canonical factual trial balance for an exact period."""
+        return await operation_gateway.execute(
+            OPERATIONS["erp_trial_balance_get"], _access_token(), locals(),
+        )
+
+    @server.tool()
+    async def erp_profit_loss_get(
+        date_from: Annotated[str, Field(description="Inclusive ISO report start date.")],
+        date_to: Annotated[str, Field(description="Inclusive ISO report end date.")],
+    ) -> Any:
+        """Return income, expense, and result from canonical account classifications."""
+        return await operation_gateway.execute(
+            OPERATIONS["erp_profit_loss_get"], _access_token(), locals(),
+        )
+
+    @server.tool()
+    async def erp_customer_activity_get(
+        date_from: Annotated[str, Field(description="Inclusive invoice-date start.")],
+        date_to: Annotated[str, Field(description="Inclusive invoice-date end.")],
+    ) -> Any:
+        """Return factual posted customer invoice activity without lifecycle inference."""
+        return await operation_gateway.execute(
+            OPERATIONS["erp_customer_activity_get"], _access_token(), locals(),
+        )
+
+    @server.tool()
     async def erp_product_search(
         q: Annotated[str, Field(max_length=128, description="Optional product name, generic name, SKU, or HSN fragment.")] = "",
         limit: Annotated[int, Field(ge=1, le=100, description="Maximum matching products to return.")] = 20,

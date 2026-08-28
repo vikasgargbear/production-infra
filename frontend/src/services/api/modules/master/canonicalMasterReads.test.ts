@@ -32,6 +32,9 @@ test('customer decoder preserves explicit zero and rejects a missing amount', ()
   expect(() => decodeCanonicalCustomerList({
     customers: [{ ...row, current_outstanding: undefined }], total: 1, skip: 0, limit: 20,
   })).toThrow('outstanding');
+  expect(() => decodeCanonicalCustomerList({
+    customers: [{ ...row, credit_limit: 0 }], total: 1, skip: 0, limit: 20,
+  })).toThrow('exact two-decimal string');
 });
 
 test('product decoder accepts UUIDv7 and keeps missing GST distinct from zero', () => {

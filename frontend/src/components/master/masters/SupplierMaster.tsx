@@ -8,7 +8,7 @@ import React from 'react';
 import {
   Truck, Search, Plus, AlertCircle
 } from 'lucide-react';
-import { suppliersApi } from '../../../services/api';
+import { ledgerApi, suppliersApi } from '../../../services/api';
 import { DataTable, Column } from '../../global/ui/display/DataTable';
 import { GlobalLayout, ContentCard } from '../../global';
 import Button from '../../global/ui/Button';
@@ -16,6 +16,8 @@ import SupplierFlow from '../suppliers/SupplierFlow';
 import { useEntityMaster } from '../hooks';
 import ContactActions from './ContactActions';
 import CanonicalWriteNotice from '../../global/ui/CanonicalWriteNotice';
+import { addExactDecimals, compareExactDecimals, formatExactCurrency } from '../../../utils/exactDecimal';
+import { mergeSuppliersWithCanonicalAging } from './supplierAgingProjection';
 
 // ============================================================================
 // Types
@@ -47,15 +49,21 @@ interface Supplier {
   bank_name?: string;
   account_number?: string;
   ifsc_code?: string;
-  current_outstanding?: number | string | null;
-  outstanding?: number | string | null;
+  current_outstanding?: string | null;
   outstanding_available?: boolean;
 }
 
 export const loadCanonicalSuppliers = async () => {
   const response = await suppliersApi.getAll();
-  const rows = response.data;
-  return { ...response, data: rows as Supplier[] };
+  const rows = response.data as Supplier[];
+  let agingRows: Record<string, unknown>[] | null = null;
+  try {
+    const agingResponse = await ledgerApi.getCanonicalPartyAging({ party_type: 'supplier' });
+    agingRows = Array.isArray(agingResponse.data?.parties) ? agingResponse.data.parties : [];
+  } catch {
+    agingRows = null;
+  }
+  return { ...response, data: mergeSuppliersWithCanonicalAging(rows, agingRows) };
 };
 
 // ============================================================================
@@ -153,12 +161,15 @@ const getColumns = (): Column<Supplier>[] => [
       header: 'Payable',
       align: 'right' as const,
       render: (_, supplier) => {
-        const rawAmount = supplier?.current_outstanding ?? supplier?.outstanding;
+        const rawAmount = supplier?.current_outstanding;
         if (supplier?.outstanding_available !== true || rawAmount == null) {
           return <span className="text-gray-500">Unavailable</span>;
         }
-        const amount = parseFloat(String(rawAmount));
-        return <span className={`font-medium ${amount > 0 ? 'text-red-600' : 'text-green-600'}`}>{'\u20B9'}{amount.toLocaleString()}</span>;
+        const isPositive = compareExactDecimals(
+          rawAmount, '0.00', 'Supplier payable',
+          { scale: 2, maximumWholeDigits: 20, allowNegative: false },
+        ) > 0;
+        return <span className={`font-medium ${isPositive ? 'text-red-600' : 'text-green-600'}`}>{formatExactCurrency(rawAmount, 'Supplier payable')}</span>;
       }
     },
     {
@@ -192,7 +203,7 @@ const getColumns = (): Column<Supplier>[] => [
         return (
           <div>
             {getPaymentTermsBadge(supplier)}
-            <div className="mt-1 text-sm text-gray-500">Payable balance unavailable</div>
+            <div className="mt-1 text-sm text-gray-500">Canonical payment terms</div>
           </div>
         );
       }
@@ -259,6 +270,17 @@ const SupplierMaster: React.FC = () => {
   const total = suppliers.length;
   const active = suppliers.filter(s => s.is_active !== false).length;
   const inactive = total - active;
+  const payableAvailable = !isLoading && !error
+    && suppliers.every(supplier => supplier.outstanding_available !== false);
+  const totalPayable = payableAvailable
+    ? addExactDecimals(
+      suppliers
+        .map(supplier => supplier.current_outstanding)
+        .filter((value): value is string => typeof value === 'string'),
+      'Supplier payable total',
+      { scale: 2, maximumWholeDigits: 20, allowNegative: false },
+    )
+    : null;
 
   const headerActions = (
     <Button variant="primary" onClick={() => setShowAddModal(true)}>
@@ -274,15 +296,15 @@ const SupplierMaster: React.FC = () => {
       headerActions={headerActions}
     >
       {/* Summary Stats Bar with Search & Filter */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-5 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-5 text-sm">
+      <div className="rounded-xl border border-gray-200 bg-white px-4 py-4 shadow-sm sm:px-5">
+        <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
           <span className="text-gray-600">Total: <strong className="text-gray-900">{total}</strong></span>
           <span className="text-green-600">Active: <strong>{active}</strong></span>
           <span className="text-red-600">Inactive: <strong>{inactive}</strong></span>
-          <span className="text-gray-600">Payable: <strong className="text-gray-900">Unavailable</strong></span>
+          <span className="text-gray-600">Payable: <strong className="text-gray-900">{totalPayable == null ? 'Unavailable' : formatExactCurrency(totalPayable, 'Supplier payable total')}</strong></span>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="relative">
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+          <div className="relative min-w-0">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
             <input
               ref={searchInputRef}
@@ -291,14 +313,14 @@ const SupplierMaster: React.FC = () => {
               placeholder="Search suppliers... ( / )"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="min-h-11 pl-9 pr-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-56"
+              className="min-h-11 w-full rounded-lg border border-gray-300 py-1.5 pl-9 pr-3 text-base focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
           <select
             aria-label="Filter suppliers by type"
             value={filterValue}
             onChange={(e) => setFilterValue(e.target.value)}
-            className="min-h-11 px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="min-h-11 w-full rounded-lg border border-gray-300 px-3 py-1.5 text-base focus:outline-none focus:ring-2 focus:ring-blue-500 sm:w-auto"
           >
             {SUPPLIER_TYPES.map(type => (
               <option key={type.value} value={type.value}>{type.label}</option>
@@ -332,6 +354,23 @@ const SupplierMaster: React.FC = () => {
             </Button>
           </div>
         ) : (
+          <>
+          <div className="space-y-3 p-4 md:hidden">
+            {filteredEntities.map(supplier => (
+              <article key={String(supplier.supplier_id)} className="rounded-xl border border-gray-200 bg-white p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0"><h4 className="truncate font-semibold text-gray-950">{supplier.supplier_name}</h4><p className="mt-1 text-xs text-gray-500">{supplier.supplier_code}</p></div>
+                  <span className={`rounded-full px-2 py-1 text-xs font-semibold ${supplier.is_active !== false ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{supplier.is_active !== false ? 'Active' : 'Inactive'}</span>
+                </div>
+                <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                  <div><dt className="text-gray-500">Payable</dt><dd className="mt-1 font-semibold text-red-700">{supplier.outstanding_available !== true || supplier.current_outstanding == null ? 'Unavailable' : formatExactCurrency(supplier.current_outstanding, 'Supplier payable')}</dd></div>
+                  <div><dt className="text-gray-500">Payment terms</dt><dd className="mt-1 font-medium">{supplier.payment_days == null ? 'Unavailable' : supplier.payment_days === 0 ? 'COD' : `${supplier.payment_days} days`}</dd></div>
+                </dl>
+                <div className="mt-4 border-t border-gray-100 pt-3"><p className="mb-2 text-xs text-gray-500">{supplier.primary_phone || supplier.primary_email || 'No contact details'}</p><ContactActions name={supplier.supplier_name || 'supplier'} phone={supplier.primary_phone} email={supplier.primary_email} whatsapp={supplier.whatsapp_number} /></div>
+              </article>
+            ))}
+          </div>
+          <div className="hidden md:block">
           <DataTable
             data={filteredEntities}
             columns={columns}
@@ -346,6 +385,8 @@ const SupplierMaster: React.FC = () => {
             pageSize={20}
             searchable={false}
           />
+          </div>
+          </>
         )}
       </ContentCard>
 

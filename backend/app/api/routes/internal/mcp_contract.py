@@ -19,6 +19,46 @@ class CanonicalReadPolicy:
 
 
 CANONICAL_READ_POLICIES = {
+    "finance.party_aging.get": CanonicalReadPolicy(
+        "finance.party_aging.get",
+        "finance.party_aging.get",
+        "finance.payment.manage",
+        "/internal/mcp/reads/party-aging",
+        500,
+        sensitive_read=True,
+    ),
+    "finance.party_statement.get": CanonicalReadPolicy(
+        "finance.party_statement.get",
+        "finance.party_statement.get",
+        "finance.account.manage",
+        "/internal/mcp/reads/party-statement",
+        200,
+        sensitive_read=True,
+    ),
+    "finance.trial_balance.get": CanonicalReadPolicy(
+        "finance.trial_balance.get",
+        "finance.trial_balance.get",
+        "finance.account.manage",
+        "/internal/mcp/reads/trial-balance",
+        1000,
+        sensitive_read=True,
+    ),
+    "finance.profit_loss.get": CanonicalReadPolicy(
+        "finance.profit_loss.get",
+        "finance.profit_loss.get",
+        "finance.account.manage",
+        "/internal/mcp/reads/profit-loss",
+        1000,
+        sensitive_read=True,
+    ),
+    "finance.customer_activity.get": CanonicalReadPolicy(
+        "finance.customer_activity.get",
+        "finance.customer_activity.get",
+        "finance.account.manage",
+        "/internal/mcp/reads/customer-activity",
+        1000,
+        sensitive_read=True,
+    ),
     "master.products.search": CanonicalReadPolicy(
         "master.products.search",
         "master.products.search",

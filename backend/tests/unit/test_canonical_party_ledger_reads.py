@@ -64,8 +64,13 @@ def test_sql_is_org_branch_account_and_reversal_scoped_with_deterministic_order(
     assert "journal.status='posted'" in sql
     assert "reversal.reversal_of_journal_entry_id=journal.id" in sql
     assert "journal.reversal_of_journal_entry_id IS NULL" in sql
+    assert "line.functional_debit AS debit" in sql
+    assert "line.functional_credit AS credit" in sql
+    assert "line.transaction_debit AS debit" not in sql
     assert "ORDER BY posting_date, journal_entry_id, line_number, journal_line_id" in sql
     assert "HAVING COUNT(*)=1" in sql
+    assert "account.status='active'" not in sql
+    assert "party.status='active'" not in sql
 
 
 class _Rows:

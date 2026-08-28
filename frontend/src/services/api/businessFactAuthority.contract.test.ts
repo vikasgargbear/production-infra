@@ -38,8 +38,11 @@ test('live reports and documents never present invented business facts', () => {
   expect(canonicalReads).toContain('invoice.seller_address_snapshot AS seller_address');
   expect(orderReview).not.toMatch(/Interest\s*@\s*18%/);
 
-  expect(financialReport).toContain('canonical API does not publish');
-  expect(customerAnalytics).toContain('canonical API does not publish');
+  expect(financialReport).toContain('projectProfitLoss');
+  expect(financialReport).toContain('projectTrialBalance');
+  expect(financialReport).toContain('canonical-factual-v1');
+  expect(customerAnalytics).toContain('projectCustomerActivity');
+  expect(customerAnalytics).toContain('no churn, retention, LTV, or segment inference');
 });
 
 test('retired browser spreadsheet parsers cannot invent product master facts', () => {
@@ -97,13 +100,16 @@ test('core command inputs never invent zero, aliases, or browser-local evidence 
   expect(stockAdjustment).not.toContain('selectedProduct.product_code || selectedProduct.code');
 });
 
-test('financial reports fail closed without reviewed projections; sales uses exact facts', () => {
+test('financial reports use only reviewed factual projections; sales uses exact facts', () => {
   const financialReport = read('frontend/src/components/reports/FinancialReport.tsx');
   const salesReport = read('frontend/src/components/reports/SalesReport.tsx');
   const taxAnalytics = read('frontend/src/components/reports/TaxAnalytics.tsx');
   const canonicalReads = read('backend/app/api/routes/canonical_erp_reads.py');
+  const canonicalReports = read('backend/app/api/routes/canonical_reporting_reads.py');
 
-  expect(financialReport).toContain('CanonicalReportUnavailable');
+  expect(financialReport).toContain('reportingApi.getTrialBalance');
+  expect(financialReport).toContain('reportingApi.getProfitLoss');
+  expect(financialReport).toContain('useCanonicalBusinessDate');
   expect(financialReport).not.toContain('apiClient');
   expect(financialReport).not.toContain('summaryData.revenue_change_percent || 0');
   expect(financialReport).not.toContain("transaction_category || 'General'");
@@ -111,6 +117,11 @@ test('financial reports fail closed without reviewed projections; sales uses exa
   expect(canonicalReads).not.toContain('@router.get("/financial/cash-flow")');
   expect(canonicalReads).not.toContain('@router.get("/financial/transactions")');
   expect(canonicalReads).not.toContain('@router.get("/financial/expense-breakdown")');
+  expect(canonicalReports).toContain('@router.get("/trial-balance"');
+  expect(canonicalReports).toContain('@router.get("/profit-loss"');
+  expect(canonicalReports).not.toContain('cash_flow');
+  expect(canonicalReports).not.toContain('gross_margin');
+  expect(canonicalReports).not.toContain('ebitda');
   expect(canonicalReads).not.toContain('"revenue_change_percent": 0');
   expect(canonicalReads).not.toContain('"receivable_change_percent": 0');
   expect(canonicalReads).not.toContain('0::numeric AS sales_growth');

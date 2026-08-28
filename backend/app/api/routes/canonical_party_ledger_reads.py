@@ -131,16 +131,16 @@ WITH selected_party AS (
            account.default_receivable_account_id AS account_id,
            party.legal_name AS party_name, 'customer'::text AS party_type
       FROM parties.customer_accounts account
-      JOIN parties.parties party ON party.org_id=account.org_id AND party.id=account.party_id
+     JOIN parties.parties party ON party.org_id=account.org_id AND party.id=account.party_id
      WHERE account.org_id=:org_id AND account.id=:party_account_id
-       AND :party_type='customer' AND account.status='active' AND party.status='active'
+       AND :party_type='customer'
     UNION ALL
     SELECT account.org_id, account.id, account.party_id,
            account.default_payable_account_id, party.legal_name, 'supplier'::text
       FROM parties.supplier_accounts account
-      JOIN parties.parties party ON party.org_id=account.org_id AND party.id=account.party_id
+     JOIN parties.parties party ON party.org_id=account.org_id AND party.id=account.party_id
      WHERE account.org_id=:org_id AND account.id=:party_account_id
-       AND :party_type='supplier' AND account.status='active' AND party.status='active'
+       AND :party_type='supplier'
 ), unique_events AS (
     SELECT event.org_id, event.journal_entry_id,
            (ARRAY_AGG(event.id ORDER BY event.id))[1] AS accounting_event_id,
@@ -164,10 +164,10 @@ WITH selected_party AS (
            event.accounting_event_id, event.source_document_id, event.source_type,
            journal.journal_number, journal.posting_date, line.line_number,
            COALESCE(line.description, journal.description) AS description,
-           line.transaction_debit AS debit, line.transaction_credit AS credit,
+           line.functional_debit AS debit, line.functional_credit AS credit,
            CASE WHEN selected.party_type='customer'
-                THEN line.transaction_debit-line.transaction_credit
-                ELSE line.transaction_credit-line.transaction_debit END AS signed_delta
+                THEN line.functional_debit-line.functional_credit
+                ELSE line.functional_credit-line.functional_debit END AS signed_delta
       FROM selected_party selected
       JOIN finance.journal_lines line
         ON line.org_id=selected.org_id AND line.party_id=selected.party_id
@@ -255,7 +255,7 @@ def get_party_statement(
         "offset": (page - 1) * page_size,
     }).fetchall()]
     if not rows:
-        raise HTTPException(status_code=404, detail="Canonical active party account not found")
+        raise HTTPException(status_code=404, detail="Canonical party account not found")
     header = rows[0]
     items = []
     for row in rows:

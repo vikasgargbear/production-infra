@@ -16,6 +16,7 @@ import { gstApi } from './modules/compliance/gst.api';
 import { ledgerApi } from './modules/finance/ledger.api';
 import { paymentsApi } from './modules/finance/payments.api';
 import { paymentAllocationApi } from './modules/finance/paymentAllocation.api';
+import { reportingApi } from './modules/finance/reporting.api';
 
 // =========================================================================
 // INVENTORY
@@ -77,6 +78,7 @@ export {
   ledgerApi,
   paymentsApi,
   paymentAllocationApi,
+  reportingApi,
 
   // Inventory
   batchesApi,

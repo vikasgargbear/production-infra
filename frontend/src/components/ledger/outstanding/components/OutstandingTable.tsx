@@ -23,8 +23,20 @@ export const OutstandingTable = React.memo<OutstandingTableProps>(({
     }
 
     return (
-        <div className="bg-white rounded-lg shadow-sm">
-            <table className="w-full">
+        <>
+        <div className="space-y-3 md:hidden">
+            {parties.map(party => (
+                <article key={party.party_account_id} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+                    <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0"><h3 className="truncate font-semibold text-gray-950">{party.party_name}</h3><p className="mt-0.5 text-xs text-gray-500">{party.party_code}</p></div>
+                        <span className={`shrink-0 rounded-full px-2 py-1 text-xs font-medium ${hasPositiveMoney(party.total_overdue, 'Party overdue') ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>{hasPositiveMoney(party.total_overdue, 'Party overdue') ? 'Overdue' : 'Current'}</span>
+                    </div>
+                    <div className="mt-4 flex items-end justify-between gap-3"><div><p className="text-xs text-gray-500">Outstanding</p><p className="mt-1 text-lg font-semibold text-red-700">{formatExactCurrency(party.total_outstanding, 'Party outstanding')}</p></div><button type="button" onClick={() => onPartyClick(party)} className="min-h-11 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white">View details</button></div>
+                </article>
+            ))}
+        </div>
+        <div className="hidden overflow-x-auto bg-white rounded-lg shadow-sm md:block">
+            <table className="min-w-[720px] w-full">
                 <thead className="bg-gray-50 border-b">
                     <tr>
                         <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -45,12 +57,13 @@ export const OutstandingTable = React.memo<OutstandingTableProps>(({
                     {parties.map((party) => {
                         return (
                             <tr
-                                key={party.party_id}
+                                key={party.party_account_id}
                                 className="hover:bg-gray-50 cursor-pointer"
                                 onClick={() => onPartyClick(party)}
                             >
                                 <td className="px-6 py-3">
                                     <div className="font-medium">{party.party_name}</div>
+                                    <div className="mt-0.5 text-xs text-gray-500">{party.party_code}</div>
                                 </td>
                                 <td className="px-6 py-3 text-right">
                                     <div className="font-semibold text-red-600">
@@ -74,11 +87,10 @@ export const OutstandingTable = React.memo<OutstandingTableProps>(({
                                 <td className="px-6 py-3 text-center">
                                     <button
                                         type="button"
-                                        disabled
-                                        title="Payment allocation requires the canonical customer-receipt command"
-                                        className="cursor-not-allowed rounded border border-gray-200 bg-gray-100 px-3 py-2 text-xs text-gray-500"
+                                        onClick={(event) => { event.stopPropagation(); onPartyClick(party); }}
+                                        className="min-h-11 rounded-lg border border-blue-200 bg-blue-50 px-3 text-xs font-semibold text-blue-700 hover:bg-blue-100"
                                     >
-                                        Allocation unavailable
+                                        View details
                                     </button>
                                 </td>
                             </tr>
@@ -87,6 +99,7 @@ export const OutstandingTable = React.memo<OutstandingTableProps>(({
                 </tbody>
             </table>
         </div>
+        </>
     );
 });
 
