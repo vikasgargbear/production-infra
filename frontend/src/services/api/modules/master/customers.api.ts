@@ -46,6 +46,34 @@ export interface CanonicalCustomerCreateInput {
   credit_days: number;
 }
 
+export interface CanonicalCustomerUpdateInput {
+  account_row_version: number;
+  party_row_version: number;
+  customer_name?: string;
+  customer_type?: 'individual' | 'organization';
+  primary_phone?: string;
+  primary_email?: string | null;
+  contact_person_name?: string | null;
+  pan_number?: string | null;
+  credit_limit?: string;
+  credit_days?: number;
+}
+
+export const toCanonicalCustomerUpdate = (
+  input: CanonicalCustomerUpdateInput,
+): CanonicalCustomerUpdateInput => {
+  const payload = { ...input };
+  if (payload.primary_phone !== undefined) payload.primary_phone = canonicalPhone(payload.primary_phone);
+  if (payload.pan_number) payload.pan_number = payload.pan_number.trim().toUpperCase();
+  if (payload.credit_limit !== undefined) {
+    payload.credit_limit = normalizeExactDecimal(
+      payload.credit_limit, 'Customer credit limit',
+      { scale: 2, maximumWholeDigits: 18 },
+    );
+  }
+  return payload;
+};
+
 const optionalText = (value: unknown): string | undefined => (
   typeof value === 'string' && value.trim() ? value.trim() : undefined
 );
@@ -122,10 +150,9 @@ export const customersApi = {
     }));
   },
 
-  // Customer-account edits and lifecycle changes do not yet have a reviewed
-  // canonical command. Keep every caller away from the retired CRUD routes.
-  update: (_id: number | string, _data: Record<string, any>) =>
-    rejectCanonicalWrite('Editing a customer'),
+  update: (id: string, data: CanonicalCustomerUpdateInput, idempotencyKey: string) =>
+    apiHelpers.patch(`/customers/${id}`, toCanonicalCustomerUpdate(data),
+      masterCreateRequestConfig(idempotencyKey)),
   delete: (_id: number | string) => rejectCanonicalWrite('Deleting a customer'),
 
   // Create a customer address through the live API

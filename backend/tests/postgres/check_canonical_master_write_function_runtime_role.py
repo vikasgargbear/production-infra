@@ -1,4 +1,4 @@
-"""Prove product and address writes use named functions as erp_runtime."""
+"""Prove canonical master writes use named functions as erp_runtime."""
 
 from __future__ import annotations
 
@@ -26,6 +26,16 @@ PARTY_B = UUID("ed000000-0000-7000-8000-000000000014")
 PRODUCT_A = UUID("ed000000-0000-7000-8000-000000000015")
 PRODUCT_DELETE = UUID("ed000000-0000-7000-8000-000000000016")
 PRODUCT_B = UUID("ed000000-0000-7000-8000-000000000017")
+CUSTOMER_A = UUID("ed000000-0000-7000-8000-000000000018")
+CUSTOMER_B = UUID("ed000000-0000-7000-8000-000000000019")
+SUPPLIER_PARTY_A = UUID("ed000000-0000-7000-8000-000000000020")
+SUPPLIER_PARTY_B = UUID("ed000000-0000-7000-8000-000000000021")
+SUPPLIER_A = UUID("ed000000-0000-7000-8000-000000000022")
+SUPPLIER_B = UUID("ed000000-0000-7000-8000-000000000023")
+RECEIVABLE_A = UUID("ed000000-0000-7000-8000-000000000024")
+RECEIVABLE_B = UUID("ed000000-0000-7000-8000-000000000025")
+PAYABLE_A = UUID("ed000000-0000-7000-8000-000000000026")
+PAYABLE_B = UUID("ed000000-0000-7000-8000-000000000027")
 
 
 def _expect_denied(connection, statement: str, parameters: dict) -> None:
@@ -53,7 +63,11 @@ def _seed(connection) -> None:
         "core.roles",
         "core.role_permissions",
         "core.access_grants",
+        "finance.accounts",
         "parties.parties",
+        "parties.contacts",
+        "parties.customer_accounts",
+        "parties.supplier_accounts",
         "catalog.products",
     )
     for table_name in tables:
@@ -89,8 +103,12 @@ def _seed(connection) -> None:
               org_id,role_id,permission_code,created_by_membership_id)
             VALUES (:org_a,:role_a,'catalog.product.manage',:member_a),
                    (:org_a,:role_a,'parties.party.manage',:member_a),
+                   (:org_a,:role_a,'parties.customer.manage',:member_a),
+                   (:org_a,:role_a,'parties.supplier.manage',:member_a),
                    (:org_b,:role_b,'catalog.product.manage',:member_b),
-                   (:org_b,:role_b,'parties.party.manage',:member_b);
+                   (:org_b,:role_b,'parties.party.manage',:member_b),
+                   (:org_b,:role_b,'parties.customer.manage',:member_b),
+                   (:org_b,:role_b,'parties.supplier.manage',:member_b);
             INSERT INTO core.access_grants(
               org_id,id,membership_id,role_id,scope_kind,valid_from_at,status,
               created_by_membership_id)
@@ -99,10 +117,36 @@ def _seed(connection) -> None:
                    (:org_b,:grant_b,:member_b,:role_b,'organization',
                     transaction_timestamp(),'active',:member_b);
             INSERT INTO parties.parties(
-              org_id,id,party_kind,legal_name,status,
+              org_id,id,party_kind,legal_name,pan,status,
               created_by_membership_id,updated_by_membership_id)
-            VALUES (:org_a,:party_a,'organization','Party A','active',:member_a,:member_a),
-                   (:org_b,:party_b,'organization','Party B','active',:member_b,:member_b);
+            VALUES (:org_a,:party_a,'organization','Party A',NULL,'active',:member_a,:member_a),
+                   (:org_b,:party_b,'organization','Party B',NULL,'active',:member_b,:member_b),
+                   (:org_a,:supplier_party_a,'organization','Supplier Party A',NULL,'active',:member_a,:member_a),
+                   (:org_b,:supplier_party_b,'organization','Supplier Party B',NULL,'active',:member_b,:member_b);
+            INSERT INTO finance.accounts(
+              org_id,id,code,name,account_type,allows_party_posting,status,
+              created_by_membership_id,updated_by_membership_id)
+            VALUES (:org_a,:receivable_a,'AR-A','Receivable A','asset',true,'active',:member_a,:member_a),
+                   (:org_b,:receivable_b,'AR-B','Receivable B','asset',true,'active',:member_b,:member_b),
+                   (:org_a,:payable_a,'AP-A','Payable A','liability',true,'active',:member_a,:member_a),
+                   (:org_b,:payable_b,'AP-B','Payable B','liability',true,'active',:member_b,:member_b);
+            INSERT INTO parties.contacts(
+              org_id,party_id,contact_kind,name,email,phone,is_primary,status,
+              created_by_membership_id,updated_by_membership_id)
+            VALUES (:org_a,:party_a,'business','Customer A','customer-a@example.test','9876543210',true,'active',:member_a,:member_a),
+                   (:org_b,:party_b,'business','Customer B','customer-b@example.test','9876543211',true,'active',:member_b,:member_b),
+                   (:org_a,:supplier_party_a,'business','Supplier A','supplier-a@example.test','9876543212',true,'active',:member_a,:member_a),
+                   (:org_b,:supplier_party_b,'business','Supplier B','supplier-b@example.test','9876543213',true,'active',:member_b,:member_b);
+            INSERT INTO parties.customer_accounts(
+              org_id,id,party_id,customer_code,credit_limit,credit_days,
+              default_receivable_account_id,status,created_by_membership_id,updated_by_membership_id)
+            VALUES (:org_a,:customer_a,:party_a,'TEST-CUST-A',100,7,:receivable_a,'active',:member_a,:member_a),
+                   (:org_b,:customer_b,:party_b,'TEST-CUST-B',100,7,:receivable_b,'active',:member_b,:member_b);
+            INSERT INTO parties.supplier_accounts(
+              org_id,id,party_id,supplier_code,payment_days,default_payable_account_id,
+              status,created_by_membership_id,updated_by_membership_id)
+            VALUES (:org_a,:supplier_a,:supplier_party_a,'TEST-SUP-A',30,:payable_a,'active',:member_a,:member_a),
+                   (:org_b,:supplier_b,:supplier_party_b,'TEST-SUP-B',30,:payable_b,'active',:member_b,:member_b);
             INSERT INTO catalog.products(
               org_id,id,sku,product_kind,name,base_uom_code,hsn_code,status,
               created_by_membership_id,updated_by_membership_id)
@@ -132,6 +176,16 @@ def _seed(connection) -> None:
             "product_a": PRODUCT_A,
             "product_delete": PRODUCT_DELETE,
             "product_b": PRODUCT_B,
+            "customer_a": CUSTOMER_A,
+            "customer_b": CUSTOMER_B,
+            "supplier_party_a": SUPPLIER_PARTY_A,
+            "supplier_party_b": SUPPLIER_PARTY_B,
+            "supplier_a": SUPPLIER_A,
+            "supplier_b": SUPPLIER_B,
+            "receivable_a": RECEIVABLE_A,
+            "receivable_b": RECEIVABLE_B,
+            "payable_a": PAYABLE_A,
+            "payable_b": PAYABLE_B,
         },
     )
     for table_name in tables:
@@ -168,6 +222,114 @@ def main() -> None:
                 connection,
                 "UPDATE catalog.products SET name='Direct' WHERE id=:id",
                 {"id": PRODUCT_A},
+            )
+            _expect_denied(
+                connection,
+                "UPDATE parties.customer_accounts SET credit_days=99 WHERE id=:id",
+                {"id": CUSTOMER_A},
+            )
+            customer_update_sql = """
+                SELECT customer_account_id,updated_customer_name,updated_primary_email,
+                       updated_pan,updated_credit_limit,updated_credit_days,
+                       account_row_version,party_row_version,idempotency_replayed
+                  FROM erp_master_commands.update_customer_account(
+                    :org,:customer,:account_version,:party_version,
+                    true,'Customer A Revised',false,NULL,false,NULL,
+                    true,'customer-a-revised@example.test',false,NULL,
+                    true,'ABCDE1234F',true,250.00,true,14,
+                    pg_catalog.decode(:key,'hex'),transaction_timestamp()+interval '1 hour'
+                  )
+            """
+            customer_parameters = {
+                "org": ORG_A, "customer": CUSTOMER_A,
+                "account_version": 1, "party_version": 1, "key": "11" * 32,
+            }
+            customer_updated = connection.execute(
+                text(customer_update_sql), customer_parameters,
+            ).one()
+            assert customer_updated == (
+                CUSTOMER_A, "Customer A Revised", "customer-a-revised@example.test",
+                "ABCDE1234F", 250, 14, 2, 2, False,
+            )
+            customer_replay = connection.execute(
+                text(customer_update_sql), customer_parameters,
+            ).one()
+            assert customer_replay[:-1] == customer_updated[:-1]
+            assert customer_replay[-1] is True
+            _expect_denied(
+                connection,
+                customer_update_sql,
+                {**customer_parameters, "key": "12" * 32},
+            )
+            _expect_denied(
+                connection,
+                customer_update_sql,
+                {
+                    **customer_parameters, "customer": CUSTOMER_B,
+                    "key": "13" * 32,
+                },
+            )
+            _expect_denied(
+                connection,
+                "UPDATE parties.contacts SET email='direct@example.test' WHERE party_id=:party",
+                {"party": PARTY_A},
+            )
+
+            _expect_denied(
+                connection,
+                "UPDATE parties.supplier_accounts SET payment_days=99 WHERE id=:id",
+                {"id": SUPPLIER_A},
+            )
+            supplier_update_sql = """
+                SELECT supplier_account_id,updated_supplier_name,updated_primary_phone,
+                       updated_pan,updated_payment_days,account_row_version,
+                       party_row_version,idempotency_replayed
+                  FROM erp_master_commands.update_supplier_account(
+                    :org,:supplier,:account_version,:party_version,
+                    true,'Supplier A Revised',true,'9876543299',false,NULL,
+                    false,NULL,true,'FGHIJ5678K',true,45,
+                    pg_catalog.decode(:key,'hex'),transaction_timestamp()+interval '1 hour'
+                  )
+            """
+            supplier_parameters = {
+                "org": ORG_A, "supplier": SUPPLIER_A,
+                "account_version": 1, "party_version": 1, "key": "21" * 32,
+            }
+            supplier_updated = connection.execute(
+                text(supplier_update_sql), supplier_parameters,
+            ).one()
+            assert supplier_updated == (
+                SUPPLIER_A, "Supplier A Revised", "9876543299",
+                "FGHIJ5678K", 45, 2, 2, False,
+            )
+            supplier_replay = connection.execute(
+                text(supplier_update_sql), supplier_parameters,
+            ).one()
+            assert supplier_replay[:-1] == supplier_updated[:-1]
+            assert supplier_replay[-1] is True
+            _expect_denied(
+                connection,
+                """
+                SELECT * FROM erp_master_commands.update_supplier_account(
+                  :org,:supplier,2,2,false,NULL,true,NULL,true,NULL,
+                  false,NULL,false,NULL,false,NULL,
+                  pg_catalog.decode(:key,'hex'),transaction_timestamp()+interval '1 hour'
+                )
+                """,
+                {"org": ORG_A, "supplier": SUPPLIER_A, "key": "24" * 32},
+            )
+            _expect_denied(
+                connection,
+                supplier_update_sql,
+                {**supplier_parameters, "key": "22" * 32},
+            )
+            _expect_denied(
+                connection,
+                supplier_update_sql,
+                {
+                    **supplier_parameters, "supplier": SUPPLIER_B,
+                    "key": "23" * 32,
+                },
             )
             updated = connection.execute(
                 text(

@@ -28,7 +28,7 @@ from pydantic import (
     model_validator,
 )
 from sqlalchemy import text
-from sqlalchemy.exc import DBAPIError, IntegrityError
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
 from ...core.database import get_db
@@ -36,8 +36,8 @@ from ...core.money import money_json
 from ...core.security.permissions import PermissionChecker
 from ...infrastructure import canonical_write_commands
 from ..schemas.money import MoneyJSON
-from ..schemas.master.customer import CanonicalCustomerCreate
-from ..schemas.master.supplier import CanonicalSupplierCreate
+from ..schemas.master.customer import CanonicalCustomerCreate, CanonicalCustomerUpdate
+from ..schemas.master.supplier import CanonicalSupplierCreate, CanonicalSupplierUpdate
 
 router = APIRouter(dependencies=[Security(HTTPBearer(auto_error=False))])
 logger = logging.getLogger(__name__)
@@ -1326,9 +1326,145 @@ def create_supplier(
     }
 
 
+@router.patch(
+    "/customers/{customer_id:uuid}",
+    operation_id="update_canonical_customer",
+)
+def update_customer(
+    customer_id: UUID,
+    update: CanonicalCustomerUpdate,
+    response: Response,
+    idempotency_key: str = Header(
+        ...,
+        alias="X-Idempotency-Key",
+        min_length=8,
+        max_length=128,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+    ),
+    user: dict = Depends(PermissionChecker("master", "edit")),
+    db: Session = Depends(get_db),
+):
+    org_id = _activate(db, user)
+    fields = update.model_fields_set - {"account_row_version", "party_row_version"}
+    try:
+        changed = canonical_write_commands.update_customer_account(
+            db,
+            org_id=org_id,
+            customer_id=customer_id,
+            expected_account_row_version=update.account_row_version,
+            expected_party_row_version=update.party_row_version,
+            set_customer_name="customer_name" in fields,
+            customer_name=update.customer_name,
+            set_customer_type="customer_type" in fields,
+            customer_type=update.customer_type,
+            set_primary_phone="primary_phone" in fields,
+            primary_phone=update.primary_phone,
+            set_primary_email="primary_email" in fields,
+            primary_email=str(update.primary_email) if update.primary_email else None,
+            set_contact_person_name="contact_person_name" in fields,
+            contact_person_name=update.contact_person_name,
+            set_pan="pan_number" in fields,
+            pan=update.pan_number,
+            set_credit_limit="credit_limit" in fields,
+            credit_limit=update.credit_limit,
+            set_credit_days="credit_days" in fields,
+            credit_days=update.credit_days,
+            idempotency_key_hash=hashlib.sha256(idempotency_key.encode("utf-8")).digest(),
+        )
+        db.commit()
+    except DBAPIError as exc:
+        db.rollback()
+        _raise_master_create_database_error(exc)
+    _set_master_idempotency_headers(
+        response, idempotency_key, changed["idempotency_replayed"]
+    )
+    return {
+        "customer_id": changed["customer_account_id"],
+        "party_id": changed["party_id"],
+        "customer_code": changed["customer_code"],
+        "customer_name": changed["updated_customer_name"],
+        "customer_type": changed["updated_customer_type"],
+        "primary_phone": changed["updated_primary_phone"],
+        "primary_email": changed["updated_primary_email"],
+        "contact_person_name": changed["updated_contact_person_name"],
+        "pan_number": changed["updated_pan"],
+        "credit_limit": money_json(changed["updated_credit_limit"]),
+        "credit_days": changed["updated_credit_days"],
+        "account_row_version": changed["account_row_version"],
+        "party_row_version": changed["party_row_version"],
+        "idempotency_replayed": changed["idempotency_replayed"],
+        "message": "Customer updated",
+    }
+
+
+@router.patch(
+    "/suppliers/{supplier_id:uuid}",
+    operation_id="update_canonical_supplier",
+)
+def update_supplier(
+    supplier_id: UUID,
+    update: CanonicalSupplierUpdate,
+    response: Response,
+    idempotency_key: str = Header(
+        ...,
+        alias="X-Idempotency-Key",
+        min_length=8,
+        max_length=128,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+    ),
+    user: dict = Depends(PermissionChecker("master", "edit")),
+    db: Session = Depends(get_db),
+):
+    org_id = _activate(db, user)
+    fields = update.model_fields_set - {"account_row_version", "party_row_version"}
+    try:
+        changed = canonical_write_commands.update_supplier_account(
+            db,
+            org_id=org_id,
+            supplier_id=supplier_id,
+            expected_account_row_version=update.account_row_version,
+            expected_party_row_version=update.party_row_version,
+            set_supplier_name="supplier_name" in fields,
+            supplier_name=update.supplier_name,
+            set_primary_phone="primary_phone" in fields,
+            primary_phone=update.primary_phone,
+            set_primary_email="primary_email" in fields,
+            primary_email=str(update.primary_email) if update.primary_email else None,
+            set_contact_person_name="contact_person" in fields,
+            contact_person_name=update.contact_person,
+            set_pan="pan_number" in fields,
+            pan=update.pan_number,
+            set_payment_days="payment_days" in fields,
+            payment_days=update.payment_days,
+            idempotency_key_hash=hashlib.sha256(idempotency_key.encode("utf-8")).digest(),
+        )
+        db.commit()
+    except DBAPIError as exc:
+        db.rollback()
+        _raise_master_create_database_error(exc)
+    _set_master_idempotency_headers(
+        response, idempotency_key, changed["idempotency_replayed"]
+    )
+    return {
+        "supplier_id": changed["supplier_account_id"],
+        "party_id": changed["party_id"],
+        "supplier_code": changed["supplier_code"],
+        "supplier_name": changed["updated_supplier_name"],
+        "primary_phone": changed["updated_primary_phone"],
+        "primary_email": changed["updated_primary_email"],
+        "contact_person": changed["updated_contact_person_name"],
+        "pan_number": changed["updated_pan"],
+        "payment_days": changed["updated_payment_days"],
+        "account_row_version": changed["account_row_version"],
+        "party_row_version": changed["party_row_version"],
+        "idempotency_replayed": changed["idempotency_replayed"],
+        "message": "Supplier updated",
+    }
+
+
 _PARTY_CONTACTS = """
     LEFT JOIN LATERAL (
-        SELECT phone, email FROM parties.contacts c
+        SELECT name,phone,email FROM parties.contacts c
          WHERE c.org_id=account.org_id AND c.party_id=account.party_id AND c.status='active'
          ORDER BY c.is_primary DESC, c.id LIMIT 1
     ) contact ON true
@@ -1352,9 +1488,11 @@ def customers(limit: int = Query(100, ge=1, le=1000), skip: int = Query(0, ge=0)
     normalized_search = " ".join((search if isinstance(search, str) else "").casefold().split())
     search_tsquery = _product_search_tsquery(normalized_search)
     rows = _rows(db, f"""
-        SELECT account.id AS customer_id, account.customer_code,
+        SELECT account.id AS customer_id,account.party_id,account.customer_code,
                party.legal_name AS customer_name, party.trade_name,
+               contact.name AS contact_person_name,
                contact.phone AS primary_phone, contact.email AS primary_email,
+               party.pan AS pan_number,
                registration.registration_number AS gst_number,
                registration.registration_status AS gst_verification_status,
                COALESCE(substring(registration.registration_number from 1 for 2),
@@ -1362,7 +1500,9 @@ def customers(limit: int = Query(100, ge=1, le=1000), skip: int = Query(0, ge=0)
                account.credit_limit, account.credit_days,
                COALESCE(outstanding.current_outstanding,0) AS current_outstanding,
                party.party_kind AS customer_type, account.status='active' AS is_active,
-               account.status, account.created_at, account.updated_at
+               account.status,account.row_version AS account_row_version,
+               party.row_version AS party_row_version,
+               account.created_at,account.updated_at
           FROM parties.customer_accounts account
           JOIN parties.parties party ON party.org_id=account.org_id AND party.id=account.party_id
           {_PARTY_CONTACTS}
@@ -1458,7 +1598,9 @@ def customers_with_addresses(
     rows = _rows(db, f"""
         SELECT account.id AS customer_id, account.customer_code,
                party.legal_name AS customer_name, party.trade_name,
+               contact.name AS contact_person,
                contact.phone AS primary_phone, contact.email AS primary_email,
+               party.pan AS pan_number,
                registration.registration_number AS gst_number,
                registration.registration_status AS gst_verification_status,
                COALESCE(substring(registration.registration_number from 1 for 2),
@@ -1649,7 +1791,9 @@ def suppliers(limit: int = Query(100, ge=1, le=1000), skip: int = Query(0, ge=0)
                account.payment_days,
                COALESCE(outstanding.current_outstanding,0) AS current_outstanding,
                party.party_kind AS supplier_type, account.status='active' AS is_active,
-               account.status, account.created_at, account.updated_at
+               account.status,account.row_version AS account_row_version,
+               party.row_version AS party_row_version,
+               account.created_at,account.updated_at
           FROM parties.supplier_accounts account
           JOIN parties.parties party ON party.org_id=account.org_id AND party.id=account.party_id
           {_PARTY_CONTACTS}

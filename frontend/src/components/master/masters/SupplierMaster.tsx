@@ -18,6 +18,7 @@ import ContactActions from './ContactActions';
 import CanonicalWriteNotice from '../../global/ui/CanonicalWriteNotice';
 import { addExactDecimals, compareExactDecimals, formatExactCurrency } from '../../../utils/exactDecimal';
 import { mergeSuppliersWithCanonicalAging } from './supplierAgingProjection';
+import PartyAccountEditDialog from './PartyAccountEditDialog';
 
 // ============================================================================
 // Types
@@ -25,6 +26,10 @@ import { mergeSuppliersWithCanonicalAging } from './supplierAgingProjection';
 
 interface Supplier {
   supplier_id: number | string;
+  party_id: string;
+  account_row_version: number;
+  party_row_version: number;
+  contact_person?: string | null;
   supplier_code?: string;
   supplier_name: string;
   supplier_type?: string;
@@ -121,7 +126,7 @@ const getLicenseStatus = (expiryDate?: string) => {
 // Column Definitions
 // ============================================================================
 
-const getColumns = (): Column<Supplier>[] => [
+const getColumns = (onEdit: (supplier: Supplier) => void): Column<Supplier>[] => [
     {
       key: 'supplier_name',
       header: 'Supplier',
@@ -224,11 +229,9 @@ const getColumns = (): Column<Supplier>[] => [
       header: 'Actions',
       align: 'center' as const,
       sortable: false,
-      render: () => (
-        <span className="text-sm text-gray-500" title="A canonical supplier edit command is not available">
-          Read only
-        </span>
-      ),
+      render: (_, supplier) => supplier ? (
+        <Button size="sm" variant="outline" onClick={() => onEdit(supplier)}>Edit</Button>
+      ) : null,
     }
   ];
 
@@ -249,7 +252,11 @@ const SupplierMaster: React.FC = () => {
     setFilterValue,
     showAddModal,
     setShowAddModal,
+    editingEntity,
+    setEditingEntity,
+    handleEdit,
     handleSaved,
+    loadEntities,
     searchInputRef
   } = useEntityMaster<Supplier>({
     entityName: 'supplier',
@@ -257,7 +264,6 @@ const SupplierMaster: React.FC = () => {
     nameField: 'supplier_name',
     api: {
       getAll: loadCanonicalSuppliers,
-      update: suppliersApi.update
     },
     searchFields: ['supplier_name', 'supplier_code', 'primary_phone', 'gst_number'],
     filterField: 'supplier_type',
@@ -265,7 +271,7 @@ const SupplierMaster: React.FC = () => {
     softDelete: true
   });
 
-  const columns = getColumns();
+  const columns = getColumns(handleEdit);
 
   // Summary stats
   const total = suppliers.length;
@@ -339,8 +345,8 @@ const SupplierMaster: React.FC = () => {
       )}
 
       <CanonicalWriteNotice
-        action="Editing suppliers or changing supplier status"
-        description="New supplier accounts use the canonical API. Existing supplier edits and status changes remain unavailable until their reviewed cloud commands exist."
+        action="Changing supplier status, GST registrations, or addresses"
+        description="Core supplier-account edits are canonical. Lifecycle, GST, and address changes remain separate reviewed commands."
       />
 
       {/* Supplier List */}
@@ -368,6 +374,7 @@ const SupplierMaster: React.FC = () => {
                   <div><dt className="text-gray-500">Payment terms</dt><dd className="mt-1 font-medium">{supplier.payment_days == null ? 'Unavailable' : supplier.payment_days === 0 ? 'COD' : `${supplier.payment_days} days`}</dd></div>
                 </dl>
                 <div className="mt-4 border-t border-gray-100 pt-3"><p className="mb-2 text-xs text-gray-500">{supplier.primary_phone || supplier.primary_email || 'No contact details'}</p><ContactActions name={supplier.supplier_name || 'supplier'} phone={supplier.primary_phone} email={supplier.primary_email} whatsapp={supplier.whatsapp_number} /></div>
+                <Button className="mt-3" size="sm" variant="outline" onClick={() => handleEdit(supplier)}>Edit account</Button>
               </article>
             ))}
           </div>
@@ -397,6 +404,14 @@ const SupplierMaster: React.FC = () => {
           open={true}
           onSupplierCreated={handleSaved}
           onClose={() => setShowAddModal(false)}
+        />
+      )}
+      {editingEntity && (
+        <PartyAccountEditDialog
+          kind="supplier"
+          account={{ ...editingEntity, supplier_id: String(editingEntity.supplier_id) }}
+          onClose={() => setEditingEntity(null)}
+          onSaved={loadEntities}
         />
       )}
     </GlobalLayout>

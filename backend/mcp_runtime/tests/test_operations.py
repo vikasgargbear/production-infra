@@ -184,6 +184,53 @@ async def test_master_create_uses_scoped_write_grant_and_canonical_backend_route
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
+    ("tool_name", "operation_key", "path", "identity_field"),
+    (
+        (
+            "erp_customer_update", "parties.customer.update",
+            "/api/internal/mcp/master/customers/update", "customer_id",
+        ),
+        (
+            "erp_supplier_update", "parties.supplier.update",
+            "/api/internal/mcp/master/suppliers/update", "supplier_id",
+        ),
+    ),
+)
+async def test_master_update_routes_versions_and_patch_through_scoped_grant(
+    tool_name: str, operation_key: str, path: str, identity_field: str,
+) -> None:
+    access = _access()
+    calls: list[tuple] = []
+    operation = OPERATOR_OPERATIONS[tool_name]
+    grant = _operator_grant(access, tool_name)
+    grant["permission_code"] = f"parties.{tool_name.split('_')[1]}.manage"
+    arguments = {
+        identity_field: str(uuid4()),
+        "account_row_version": 3,
+        "party_row_version": 4,
+        f"{tool_name.split('_')[1]}_name": "Canonical Updated Name",
+        "idempotency_key": f"mcp-{tool_name}-0001",
+    }
+    responses = [Response(200, grant), Response(200, arguments)]
+    gateway = OperationGateway(settings(), lambda: Client(responses, calls))
+
+    assert await gateway.execute_operator(operation, access, arguments) == arguments
+    grant_call, command_call = calls
+    assert grant_call[2]["json"]["operation_key"] == operation_key
+    assert command_call[0] == "POST"
+    assert command_call[1].endswith(path)
+    assert command_call[2]["json"] == arguments
+
+
+@pytest.mark.parametrize("tool_name", ("erp_customer_update", "erp_supplier_update"))
+def test_master_update_schema_requires_versions_and_a_mutable_field(tool_name: str) -> None:
+    schema = OPERATOR_OPERATIONS[tool_name].input_schema
+    assert {"account_row_version", "party_row_version", "idempotency_key"} <= set(schema["required"])
+    assert schema["anyOf"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
     "lookup",
     [
         {

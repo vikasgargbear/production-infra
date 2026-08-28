@@ -43,6 +43,12 @@ const integer = (value: unknown, label: string): number => {
   return Number(value);
 };
 
+const positiveInteger = (value: unknown, label: string): number => {
+  const parsed = integer(value, label);
+  if (parsed < 1) throw new Error(`${label} must be a positive integer`);
+  return parsed;
+};
+
 const decimal = (value: unknown, label: string): ExactDecimal => {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   if (typeof value === 'string' && /^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/.test(value)) return value;
@@ -62,11 +68,14 @@ const nullableDecimal = (value: unknown, label: string): ExactDecimal | null => 
 
 export interface CanonicalCustomerRead {
   customer_id: string;
+  party_id: string;
   customer_code: string;
   customer_name: string;
   trade_name: string | null;
   primary_phone: string | null;
   primary_email: string | null;
+  contact_person_name: string | null;
+  pan_number: string | null;
   gst_number: string | null;
   gst_verification_status: string | null;
   place_of_supply_state_code: string | null;
@@ -76,6 +85,8 @@ export interface CanonicalCustomerRead {
   customer_type: string;
   is_active: boolean;
   status: string;
+  account_row_version: number;
+  party_row_version: number;
   created_at: string;
   updated_at: string;
 }
@@ -85,11 +96,14 @@ export const decodeCanonicalCustomer = (value: unknown, index = 0): CanonicalCus
   const label = `Customer row ${index + 1}`;
   return {
     customer_id: uuid(row.customer_id, `${label} identity`),
+    party_id: uuid(row.party_id, `${label} party identity`),
     customer_code: text(row.customer_code, `${label} code`),
     customer_name: text(row.customer_name, `${label} name`),
     trade_name: nullableText(row.trade_name, `${label} trade name`),
     primary_phone: nullableText(row.primary_phone, `${label} phone`),
     primary_email: nullableText(row.primary_email, `${label} email`),
+    contact_person_name: nullableText(row.contact_person_name, `${label} contact person`),
+    pan_number: nullableText(row.pan_number, `${label} PAN`),
     gst_number: nullableText(row.gst_number, `${label} GSTIN`),
     gst_verification_status: nullableText(row.gst_verification_status, `${label} GST status`),
     place_of_supply_state_code: nullableText(row.place_of_supply_state_code, `${label} place of supply`),
@@ -99,6 +113,8 @@ export const decodeCanonicalCustomer = (value: unknown, index = 0): CanonicalCus
     customer_type: text(row.customer_type, `${label} type`),
     is_active: boolean(row.is_active, `${label} active state`),
     status: text(row.status, `${label} status`),
+    account_row_version: positiveInteger(row.account_row_version, `${label} account row version`),
+    party_row_version: positiveInteger(row.party_row_version, `${label} party row version`),
     created_at: text(row.created_at, `${label} created timestamp`),
     updated_at: text(row.updated_at, `${label} updated timestamp`),
   };
@@ -123,11 +139,14 @@ export const decodeCanonicalCustomerList = (value: unknown): CanonicalCustomerLi
 
 export interface CanonicalSupplierRead {
   supplier_id: string;
+  party_id: string;
   supplier_code: string;
   supplier_name: string;
   trade_name: string | null;
   primary_phone: string | null;
   primary_email: string | null;
+  contact_person: string | null;
+  pan_number: string | null;
   gst_number: string | null;
   gst_verification_status: string | null;
   payment_days: number;
@@ -135,6 +154,8 @@ export interface CanonicalSupplierRead {
   supplier_type: string;
   is_active: boolean;
   status: string;
+  account_row_version: number;
+  party_row_version: number;
   created_at: string;
   updated_at: string;
 }
@@ -145,11 +166,14 @@ export const decodeCanonicalSupplierList = (value: unknown): CanonicalSupplierRe
     const label = `Supplier row ${index + 1}`;
     return {
       supplier_id: uuid(row.supplier_id, `${label} identity`),
+      party_id: uuid(row.party_id, `${label} party identity`),
       supplier_code: text(row.supplier_code, `${label} code`),
       supplier_name: text(row.supplier_name, `${label} name`),
       trade_name: nullableText(row.trade_name, `${label} trade name`),
       primary_phone: nullableText(row.primary_phone, `${label} phone`),
       primary_email: nullableText(row.primary_email, `${label} email`),
+      contact_person: nullableText(row.contact_person, `${label} contact person`),
+      pan_number: nullableText(row.pan_number, `${label} PAN`),
       gst_number: nullableText(row.gst_number, `${label} GSTIN`),
       gst_verification_status: nullableText(row.gst_verification_status, `${label} GST status`),
       payment_days: integer(row.payment_days, `${label} payment days`),
@@ -157,6 +181,8 @@ export const decodeCanonicalSupplierList = (value: unknown): CanonicalSupplierRe
       supplier_type: text(row.supplier_type, `${label} type`),
       is_active: boolean(row.is_active, `${label} active state`),
       status: text(row.status, `${label} status`),
+      account_row_version: positiveInteger(row.account_row_version, `${label} account row version`),
+      party_row_version: positiveInteger(row.party_row_version, `${label} party row version`),
       created_at: text(row.created_at, `${label} created timestamp`),
       updated_at: text(row.updated_at, `${label} updated timestamp`),
     };

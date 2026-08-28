@@ -49,6 +49,7 @@
     "erp_customer_receipt_prepare",
     "erp_customer_receipt_readback",
     "erp_customer_search",
+    "erp_customer_update",
     "erp_expense_claim_prepare",
     "erp_expense_claim_readback",
     "erp_goods_receipt_get",
@@ -97,6 +98,7 @@
     "erp_supplier_payment_prepare",
     "erp_supplier_payment_readback",
     "erp_supplier_search",
+    "erp_supplier_update",
     "erp_trial_balance_get"
   ],
   "writes_exported": true,
@@ -106,8 +108,10 @@
     "exported": true,
     "direct_master_writes": [
       "erp_customer_create",
+      "erp_customer_update",
       "erp_product_create",
-      "erp_supplier_create"
+      "erp_supplier_create",
+      "erp_supplier_update"
     ],
     "published_tools": [
       "erp_adjustment_note_prepare",

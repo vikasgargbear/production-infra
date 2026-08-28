@@ -42,6 +42,33 @@ export interface CanonicalSupplierCreateInput {
   payment_days: number;
 }
 
+export interface CanonicalSupplierUpdateInput {
+  account_row_version: number;
+  party_row_version: number;
+  supplier_name?: string;
+  primary_phone?: string | null;
+  primary_email?: string | null;
+  contact_person?: string | null;
+  pan_number?: string | null;
+  payment_days?: number;
+}
+
+export const toCanonicalSupplierUpdate = (
+  input: CanonicalSupplierUpdateInput,
+): CanonicalSupplierUpdateInput => {
+  const payload = { ...input };
+  if (payload.primary_phone !== undefined && payload.primary_phone !== null) {
+    payload.primary_phone = canonicalPhone(payload.primary_phone) || null;
+  }
+  if (payload.pan_number) payload.pan_number = payload.pan_number.trim().toUpperCase();
+  if (payload.payment_days !== undefined
+      && (!Number.isInteger(payload.payment_days)
+        || payload.payment_days < 0 || payload.payment_days > 180)) {
+    throw new Error('Supplier payment days must be an integer from 0 to 180.');
+  }
+  return payload;
+};
+
 const optionalText = (value: unknown): string | undefined => (
   typeof value === 'string' && value.trim() ? value.trim() : undefined
 );
@@ -110,7 +137,9 @@ export const suppliersApi = {
     }));
   },
 
-  update: (_id: number | string, _data: any) => rejectCanonicalWrite('Editing a supplier'),
+  update: (id: string, data: CanonicalSupplierUpdateInput, idempotencyKey: string) =>
+    apiHelpers.patch(`/suppliers/${id}`, toCanonicalSupplierUpdate(data),
+      masterCreateRequestConfig(idempotencyKey)),
   delete: (_id: number | string) => rejectCanonicalWrite('Deleting a supplier'),
 
   // Search suppliers
