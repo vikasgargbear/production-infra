@@ -1,0 +1,128 @@
+name: Canonical persistent pilot web authority
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Open or close the bounded persistent-pilot purchase authority
+        required: true
+        default: open
+        type: choice
+        options:
+          - open
+          - close
+      reviewed_sha:
+        description: Exact deployed application SHA to bind to an opening receipt
+        required: true
+        type: string
+      organization_id:
+        description: Immutable canonical staging organization UUID
+        required: true
+        type: string
+      canonical_user_id:
+        description: Immutable canonical user UUID for the reviewed Auth identity
+        required: true
+        type: string
+      confirmation:
+        description: OPEN_PERSISTENT_PILOT_WEB_AUTHORITY or CLOSE_PERSISTENT_PILOT_WEB_AUTHORITY
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: canonical-persistent-pilot-web-authority
+  cancel-in-progress: false
+
+jobs:
+  authority:
+    runs-on: ubuntu-latest
+    environment: canonical-staging
+    timeout-minutes: 15
+    env:
+      CANONICAL_STAGING_PROJECT_REF: ${{ vars.CANONICAL_STAGING_PROJECT_REF }}
+      CANONICAL_PRODUCTION_PROJECT_REFS: ${{ vars.CANONICAL_PRODUCTION_PROJECT_REFS }}
+      PERSISTENT_PILOT_AUTH_USER_ID: ${{ vars.CANONICAL_STAGING_WEB_TEST_AUTH_USER_ID }}
+      PERSISTENT_PILOT_ORGANIZATION_ID: ${{ inputs.organization_id }}
+      PERSISTENT_PILOT_CANONICAL_USER_ID: ${{ inputs.canonical_user_id }}
+      PERSISTENT_PILOT_AUTHORITY_NONCE: ${{ github.run_id }}:${{ github.run_attempt }}:${{ inputs.action }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      REVIEWED_SHA: ${{ inputs.reviewed_sha }}
+      AUTHORITY_ACTION: ${{ inputs.action }}
+      AUTHORITY_CONFIRMATION: ${{ inputs.confirmation }}
+      RAILWAY_API_URL: ${{ vars.RAILWAY_API_URL }}
+      RAILWAY_MCP_URL: ${{ vars.RAILWAY_MCP_URL }}
+      RAILWAY_FRONTEND_URL: ${{ vars.RAILWAY_FRONTEND_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.reviewed_sha }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install the reviewed database toolchain
+        run: pip install -r backend/requirements.txt
+
+      - name: Verify immutable staging target and explicit confirmation
+        run: |
+          set -euo pipefail
+          [[ "$REVIEWED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$PERSISTENT_PILOT_ORGANIZATION_ID" =~ ^[0-9a-f-]{36}$ ]]
+          [[ "$PERSISTENT_PILOT_CANONICAL_USER_ID" =~ ^[0-9a-f-]{36}$ ]]
+          [[ "$PERSISTENT_PILOT_AUTH_USER_ID" =~ ^[0-9a-f-]{36}$ ]]
+          test "$(git rev-parse HEAD)" = "$REVIEWED_SHA"
+          git fetch origin main
+          git merge-base --is-ancestor "$REVIEWED_SHA" origin/main
+          expected="$(printf '%s' "$AUTHORITY_ACTION" | tr '[:lower:]' '[:upper:]')_PERSISTENT_PILOT_WEB_AUTHORITY"
+          test "$AUTHORITY_CONFIRMATION" = "$expected"
+          test "$CANONICAL_STAGING_PROJECT_REF" = rgihahbmkrmhitjdjvev
+          case ",$CANONICAL_PRODUCTION_PROJECT_REFS," in
+            *",$CANONICAL_STAGING_PROJECT_REF,"*)
+              echo 'Refusing persistent pilot authority against production' >&2
+              exit 2
+              ;;
+          esac
+          test -n "$RAILWAY_API_URL"
+          test -n "$RAILWAY_MCP_URL"
+          test -n "$RAILWAY_FRONTEND_URL"
+
+      - name: Require one exact deployed SHA before opening writes
+        if: inputs.action == 'open'
+        run: |
+          set -euo pipefail
+          api_payload=$(curl --fail --silent --show-error --max-time 30 "$RAILWAY_API_URL/health")
+          mcp_payload=$(curl --fail --silent --show-error --max-time 30 "$RAILWAY_MCP_URL/health")
+          frontend_payload=$(curl --fail --silent --show-error --max-time 30 "$RAILWAY_FRONTEND_URL/build-metadata.json")
+          jq -e --arg sha "$REVIEWED_SHA" '.status == "healthy" and .git_commit == $sha' <<<"$api_payload" >/dev/null
+          jq -e --arg sha "$REVIEWED_SHA" '.status == "ok" and .git_commit == $sha' <<<"$mcp_payload" >/dev/null
+          jq -e --arg sha "$REVIEWED_SHA" '.service == "aasopharma-erp" and .git_commit == $sha' <<<"$frontend_payload" >/dev/null
+
+      - name: Reconcile the bounded authority without resetting ERP data
+        run: |
+          set -euo pipefail
+          umask 077
+          receipt="$RUNNER_TEMP/persistent-pilot-web-authority.json"
+          python3 backend/scripts/manage_persistent_pilot_web_authority.py "$AUTHORITY_ACTION" > "$receipt"
+          jq -e --arg action "$AUTHORITY_ACTION" \
+            --arg organization_id "$PERSISTENT_PILOT_ORGANIZATION_ID" \
+            --arg canonical_user_id "$PERSISTENT_PILOT_CANONICAL_USER_ID" '
+              .action == $action and
+              .organization_id == $organization_id and
+              .canonical_user_id == $canonical_user_id and
+              (.state == "open" or .state == "already_open" or
+               .state == "closed" or .state == "already_closed")
+            ' "$receipt" >/dev/null
+          cp "$receipt" persistent-pilot-web-authority.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: persistent-pilot-web-authority-${{ github.run_id }}-${{ github.run_attempt }}
+          path: persistent-pilot-web-authority.json
+          if-no-files-found: error
+          retention-days: 7
