@@ -125,6 +125,62 @@ def test_admin_request_rejects_query_in_path_before_network(monkeypatch) -> None
         auth_admin.auth_admin_request(authority, "GET", "users?page=1")
 
 
+def test_admin_read_retries_only_bounded_transient_failures(monkeypatch) -> None:
+    authority = auth_admin.SupabaseAuthAdminAuthority(PROJECT_REF, SECRET)
+    responses: list[object] = [
+        requests.ConnectionError("first transport failure"),
+        _Response(503, {"message": "temporary"}),
+        _Response(200, {"users": []}),
+    ]
+    sleeps: list[int] = []
+
+    def fake_request(*_args: object, **_kwargs: object) -> _Response:
+        result = responses.pop(0)
+        if isinstance(result, Exception):
+            raise result
+        assert isinstance(result, _Response)
+        return result
+
+    monkeypatch.setattr(auth_admin.requests, "request", fake_request)
+    monkeypatch.setattr(auth_admin.time, "sleep", sleeps.append)
+
+    assert auth_admin.auth_admin_request(authority, "GET", "users") == {
+        "users": []
+    }
+    assert sleeps == [1, 2]
+    assert responses == []
+
+
+def test_admin_mutation_does_not_retry_an_ambiguous_transport_failure(
+    monkeypatch,
+) -> None:
+    authority = auth_admin.SupabaseAuthAdminAuthority(PROJECT_REF, SECRET)
+    calls = 0
+
+    def fake_request(*_args: object, **_kwargs: object) -> _Response:
+        nonlocal calls
+        calls += 1
+        raise requests.ConnectionError("ambiguous create result")
+
+    monkeypatch.setattr(auth_admin.requests, "request", fake_request)
+    monkeypatch.setattr(
+        auth_admin.time,
+        "sleep",
+        lambda _seconds: pytest.fail("mutation transport failure was retried"),
+    )
+
+    with pytest.raises(auth_admin.SupabaseAuthAdminError) as caught:
+        auth_admin.auth_admin_request(
+            authority,
+            "POST",
+            "users",
+            payload={"email": "disposable@example.invalid"},
+        )
+
+    assert caught.value.code == "AUTH_ADMIN_UNREACHABLE"
+    assert calls == 1
+
+
 def test_read_only_preflight_lists_then_reads_one_user(monkeypatch, capsys) -> None:
     authority = auth_admin.SupabaseAuthAdminAuthority(PROJECT_REF, SECRET)
     user_id = str(UUID("d4000000-0000-7000-8000-000000000001"))

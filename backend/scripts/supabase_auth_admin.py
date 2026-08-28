@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import os
 import re
+import time
 from typing import Any, Mapping
 
 import requests
@@ -18,6 +19,11 @@ import requests
 MANAGEMENT_API = "https://api.supabase.com/v1"
 PROJECT_REF_RE = re.compile(r"[a-z0-9]{20}")
 SECRET_KEY_RE = re.compile(r"sb_secret_[A-Za-z0-9._-]{20,}")
+AUTH_ADMIN_READ_ATTEMPTS = 3
+AUTH_ADMIN_RETRYABLE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+AUTH_ADMIN_RETRYABLE_STATUS_CODES = frozenset(
+    {408, 425, 429, 500, 502, 503, 504}
+)
 
 
 class SupabaseAuthAdminError(RuntimeError):
@@ -143,28 +149,45 @@ def auth_admin_request(
         raise SupabaseAuthAdminError(
             "AUTH_ADMIN_PATH_INVALID", "Supabase Auth Admin path is malformed"
         )
-    try:
-        response = requests.request(
-            method,
-            f"{authority.auth_admin_url}/{normalized_path}",
-            headers=authority.headers,
-            json=payload,
-            params=params,
-            timeout=timeout_seconds,
-        )
-    except requests.RequestException as error:
-        raise SupabaseAuthAdminError(
-            "AUTH_ADMIN_UNREACHABLE",
-            "Supabase Auth Admin request did not complete",
-        ) from error
-    if allow_missing and response.status_code == 404:
-        return None
-    if not response.ok:
+    normalized_method = method.upper()
+    attempts = (
+        AUTH_ADMIN_READ_ATTEMPTS
+        if normalized_method in AUTH_ADMIN_RETRYABLE_METHODS
+        else 1
+    )
+    for attempt in range(1, attempts + 1):
+        try:
+            response = requests.request(
+                normalized_method,
+                f"{authority.auth_admin_url}/{normalized_path}",
+                headers=authority.headers,
+                json=payload,
+                params=params,
+                timeout=timeout_seconds,
+            )
+        except requests.RequestException as error:
+            if attempt < attempts:
+                time.sleep(2 ** (attempt - 1))
+                continue
+            raise SupabaseAuthAdminError(
+                "AUTH_ADMIN_UNREACHABLE",
+                "Supabase Auth Admin request did not complete",
+            ) from error
+        if allow_missing and response.status_code == 404:
+            return None
+        if response.ok:
+            return _json_response(response, "AUTH_ADMIN_RESPONSE_INVALID")
+        if (
+            attempt < attempts
+            and response.status_code in AUTH_ADMIN_RETRYABLE_STATUS_CODES
+        ):
+            time.sleep(2 ** (attempt - 1))
+            continue
         raise SupabaseAuthAdminError(
             "AUTH_ADMIN_REJECTED",
-            f"Supabase Auth Admin {method.upper()} failed with HTTP {response.status_code}",
+            f"Supabase Auth Admin {normalized_method} failed with HTTP {response.status_code}",
         )
-    return _json_response(response, "AUTH_ADMIN_RESPONSE_INVALID")
+    raise AssertionError("unreachable Auth Admin retry state")
 
 
 def mask_auth_admin_secret(authority: SupabaseAuthAdminAuthority) -> None:
