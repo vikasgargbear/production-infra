@@ -70,12 +70,12 @@ const OrganizationOnboarding: React.FC = () => {
 
     return (
         <section aria-labelledby="organization-onboarding-heading" className="space-y-5">
-            <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
-                <h2 id="organization-onboarding-heading" className="font-semibold">
-                    Choose how to continue
+            <div>
+                <h2 id="organization-onboarding-heading" className="text-lg font-semibold text-gray-950">
+                    Set up your workspace
                 </h2>
-                <p className="mt-1">
-                    Your Google account is connected. Create a new organization or join one using an invitation.
+                <p className="mt-1 text-sm text-gray-600">
+                    Your Google account is connected. Start a new organization or use an invitation from your administrator.
                 </p>
             </div>
 
@@ -86,15 +86,15 @@ const OrganizationOnboarding: React.FC = () => {
                 </div>
             )}
 
-            <div className="grid gap-3 sm:grid-cols-2" aria-label="Organization setup options">
+            <div className="grid gap-2 sm:grid-cols-2" aria-label="Organization setup options">
                 <button
                     type="button"
                     aria-pressed={mode === 'create'}
                     onClick={() => { setMode('create'); setError(''); }}
                     disabled={loading}
-                    className={`min-h-20 rounded-lg border p-3 text-left focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${mode === 'create' ? 'border-blue-600 bg-blue-50 text-blue-950' : 'border-gray-300 bg-white text-gray-800'}`}
+                    className={`flex min-h-14 items-center gap-3 rounded-lg border px-4 py-3 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${mode === 'create' ? 'border-blue-600 bg-blue-50 text-blue-950' : 'border-gray-300 bg-white text-gray-800 hover:bg-gray-50'}`}
                 >
-                    <Building2 aria-hidden="true" className="mb-1 h-5 w-5" />
+                    <Building2 aria-hidden="true" className="h-5 w-5 shrink-0" />
                     <span className="block font-semibold">Create new organization</span>
                 </button>
                 <button
@@ -102,110 +102,122 @@ const OrganizationOnboarding: React.FC = () => {
                     aria-pressed={mode === 'join'}
                     onClick={() => { setMode('join'); setError(''); }}
                     disabled={loading}
-                    className={`min-h-20 rounded-lg border p-3 text-left focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${mode === 'join' ? 'border-blue-600 bg-blue-50 text-blue-950' : 'border-gray-300 bg-white text-gray-800'}`}
+                    className={`flex min-h-14 items-center gap-3 rounded-lg border px-4 py-3 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${mode === 'join' ? 'border-blue-600 bg-blue-50 text-blue-950' : 'border-gray-300 bg-white text-gray-800 hover:bg-gray-50'}`}
                 >
-                    <MailCheck aria-hidden="true" className="mb-1 h-5 w-5" />
+                    <MailCheck aria-hidden="true" className="h-5 w-5 shrink-0" />
                     <span className="block font-semibold">Join with invitation</span>
                 </button>
             </div>
 
             {mode === 'create' ? (
-                <form onSubmit={handleCreate} className="space-y-4" aria-label="Create organization">
-                    <div>
-                        <label htmlFor="organization-legal-name" className="mb-1 block text-sm font-medium text-gray-800">
-                            Legal name
-                        </label>
-                        <input
-                            id="organization-legal-name"
-                            value={organization.legal_name}
-                            onChange={(event) => updateOrganization('legal_name', event.target.value)}
-                            autoComplete="organization"
-                            maxLength={200}
-                            required
-                            disabled={loading}
-                            className="w-full rounded-md border border-gray-300 px-3 py-2.5 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
+                <form onSubmit={handleCreate} className="rounded-xl border border-gray-200 bg-gray-50/60 p-4 sm:p-5" aria-label="Create organization">
+                    <div className="mb-5">
+                        <h3 className="font-semibold text-gray-950">Organization details</h3>
+                        <p className="mt-1 text-sm text-gray-600">Use the registered business identity and primary address for this workspace.</p>
                     </div>
-                    <div>
-                        <label htmlFor="organization-trade-name" className="mb-1 block text-sm font-medium text-gray-800">
-                            Trade name <span className="font-normal text-gray-500">(optional)</span>
-                        </label>
-                        <input
-                            id="organization-trade-name"
-                            value={organization.trade_name}
-                            onChange={(event) => updateOrganization('trade_name', event.target.value)}
-                            maxLength={200}
-                            disabled={loading}
-                            className="w-full rounded-md border border-gray-300 px-3 py-2.5 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                    </div>
-                    <div>
-                        <label htmlFor="organization-address-line1" className="mb-1 block text-sm font-medium text-gray-800">
-                            Address line 1
-                        </label>
-                        <input
-                            id="organization-address-line1"
-                            value={organization.address_line1}
-                            onChange={(event) => updateOrganization('address_line1', event.target.value)}
-                            autoComplete="address-line1"
-                            maxLength={250}
-                            required
-                            disabled={loading}
-                            className="w-full rounded-md border border-gray-300 px-3 py-2.5 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                    </div>
-                    <div>
-                        <label htmlFor="organization-city" className="mb-1 block text-sm font-medium text-gray-800">
-                            City
-                        </label>
-                        <input
-                            id="organization-city"
-                            value={organization.city}
-                            onChange={(event) => updateOrganization('city', event.target.value)}
-                            autoComplete="address-level2"
-                            maxLength={120}
-                            required
-                            disabled={loading}
-                            className="w-full rounded-md border border-gray-300 px-3 py-2.5 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                    </div>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                        <div>
+                    <div className="grid gap-4 md:grid-cols-6">
+                        <div className="md:col-span-3">
+                            <label htmlFor="organization-legal-name" className="mb-1 block text-sm font-medium text-gray-800">
+                                Legal name
+                            </label>
+                            <input
+                                id="organization-legal-name"
+                                name="organization-legal-name"
+                                value={organization.legal_name}
+                                onChange={(event) => updateOrganization('legal_name', event.target.value)}
+                                autoComplete="organization"
+                                maxLength={200}
+                                required
+                                disabled={loading}
+                                className="min-h-11 w-full rounded-md border border-gray-300 bg-white px-3 py-2.5 text-base focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                        </div>
+                        <div className="md:col-span-3">
+                            <label htmlFor="organization-trade-name" className="mb-1 block text-sm font-medium text-gray-800">
+                                Trade name <span className="font-normal text-gray-500">(optional)</span>
+                            </label>
+                            <input
+                                id="organization-trade-name"
+                                name="organization-trade-name"
+                                value={organization.trade_name}
+                                onChange={(event) => updateOrganization('trade_name', event.target.value)}
+                                maxLength={200}
+                                disabled={loading}
+                                className="min-h-11 w-full rounded-md border border-gray-300 bg-white px-3 py-2.5 text-base focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                        </div>
+                        <div className="md:col-span-6">
+                            <label htmlFor="organization-address-line1" className="mb-1 block text-sm font-medium text-gray-800">
+                                Address line 1
+                            </label>
+                            <input
+                                id="organization-address-line1"
+                                name="organization-address-line1"
+                                value={organization.address_line1}
+                                onChange={(event) => updateOrganization('address_line1', event.target.value)}
+                                autoComplete="address-line1"
+                                maxLength={250}
+                                required
+                                disabled={loading}
+                                className="min-h-11 w-full rounded-md border border-gray-300 bg-white px-3 py-2.5 text-base focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                        </div>
+                        <div className="md:col-span-2">
+                            <label htmlFor="organization-city" className="mb-1 block text-sm font-medium text-gray-800">
+                                City
+                            </label>
+                            <input
+                                id="organization-city"
+                                name="organization-city"
+                                value={organization.city}
+                                onChange={(event) => updateOrganization('city', event.target.value)}
+                                autoComplete="address-level2"
+                                maxLength={120}
+                                required
+                                disabled={loading}
+                                className="min-h-11 w-full rounded-md border border-gray-300 bg-white px-3 py-2.5 text-base focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                        </div>
+                        <div className="md:col-span-2">
                             <label htmlFor="organization-state-code" className="mb-1 block text-sm font-medium text-gray-800">
                                 GST state code
                             </label>
                             <input
                                 id="organization-state-code"
+                                name="organization-state-code"
                                 value={organization.state_code}
                                 onChange={(event) => updateOrganization('state_code', event.target.value)}
                                 inputMode="numeric"
                                 pattern="[0-9]{2}"
                                 maxLength={2}
+                                placeholder="e.g. 27"
                                 title="Enter the 2-digit Indian GST state code"
                                 aria-describedby="organization-state-code-help"
                                 required
                                 disabled={loading}
-                                className="w-full rounded-md border border-gray-300 px-3 py-2.5 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                className="min-h-11 w-full rounded-md border border-gray-300 bg-white px-3 py-2.5 text-base focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
                             <p id="organization-state-code-help" className="mt-1 text-xs text-gray-500">2 digits, for example 27</p>
                         </div>
-                        <div>
+                        <div className="md:col-span-2">
                             <label htmlFor="organization-postal-code" className="mb-1 block text-sm font-medium text-gray-800">
                                 Postal code
                             </label>
                             <input
                                 id="organization-postal-code"
+                                name="organization-postal-code"
                                 value={organization.postal_code}
                                 onChange={(event) => updateOrganization('postal_code', event.target.value)}
                                 autoComplete="postal-code"
                                 inputMode="numeric"
                                 pattern="[0-9]{6}"
                                 maxLength={6}
+                                placeholder="e.g. 400001"
                                 title="Enter a 6-digit Indian postal code"
                                 aria-describedby="organization-postal-code-help"
                                 required
                                 disabled={loading}
-                                className="w-full rounded-md border border-gray-300 px-3 py-2.5 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                className="min-h-11 w-full rounded-md border border-gray-300 bg-white px-3 py-2.5 text-base focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
                             <p id="organization-postal-code-help" className="mt-1 text-xs text-gray-500">6-digit PIN code</p>
                         </div>
@@ -213,14 +225,14 @@ const OrganizationOnboarding: React.FC = () => {
                     <button
                         type="submit"
                         disabled={loading || !isOnline}
-                        className="flex min-h-11 w-full items-center justify-center rounded-md bg-blue-600 px-4 py-3 font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="mt-5 flex min-h-11 w-full items-center justify-center rounded-md bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 sm:ml-auto sm:w-auto sm:min-w-56"
                     >
                         {loading && <Loader2 aria-hidden="true" className="mr-2 h-5 w-5 animate-spin" />}
                         {loading ? 'Creating organization...' : 'Create organization'}
                     </button>
                 </form>
             ) : (
-                <form onSubmit={handleAcceptInvitation} className="space-y-4" aria-label="Join with invitation">
+                <form onSubmit={handleAcceptInvitation} className="space-y-4 rounded-xl border border-gray-200 bg-gray-50/60 p-4 sm:p-5" aria-label="Join with invitation">
                     {initialInvitationToken ? (
                         <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-950">
                             <p className="font-semibold">Organization invitation detected</p>
@@ -233,6 +245,7 @@ const OrganizationOnboarding: React.FC = () => {
                             </label>
                             <input
                                 id="organization-invitation-token"
+                                name="organization-invitation-token"
                                 value={invitationToken}
                                 onChange={(event) => setInvitationToken(event.target.value)}
                                 autoComplete="off"
@@ -241,7 +254,7 @@ const OrganizationOnboarding: React.FC = () => {
                                 required
                                 disabled={loading}
                                 aria-describedby="organization-invitation-help"
-                                className="min-h-11 w-full rounded-md border border-gray-300 px-3 py-2.5 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                className="min-h-11 w-full rounded-md border border-gray-300 bg-white px-3 py-2.5 text-base focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
                             <p id="organization-invitation-help" className="mt-1 text-xs text-gray-500">
                                 Ask your administrator for the invitation link. Opening it fills this securely.
@@ -251,7 +264,7 @@ const OrganizationOnboarding: React.FC = () => {
                     <button
                         type="submit"
                         disabled={loading || !isOnline || !invitationToken.trim()}
-                        className="flex min-h-11 w-full items-center justify-center rounded-md bg-blue-600 px-4 py-3 font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="flex min-h-11 w-full items-center justify-center rounded-md bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 sm:ml-auto sm:w-auto sm:min-w-64"
                     >
                         {loading && <Loader2 aria-hidden="true" className="mr-2 h-5 w-5 animate-spin" />}
                         {loading ? 'Joining organization...' : 'Accept invitation and join'}
@@ -263,7 +276,7 @@ const OrganizationOnboarding: React.FC = () => {
                 type="button"
                 onClick={logout}
                 disabled={loading}
-                className="min-h-11 w-full rounded-md border border-gray-300 bg-white px-4 py-3 font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
+                className="mx-auto flex min-h-11 items-center justify-center rounded-md px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
             >
                 Sign out and use another Google account
             </button>

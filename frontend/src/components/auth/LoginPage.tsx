@@ -24,6 +24,7 @@ const LoginPage: React.FC = () => {
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const invitationToken = invitationTokenFromLocation(window.location);
+    const showingOrganizationOnboarding = hasCloudSession && onboardingRequired;
 
     const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
         e.preventDefault();
@@ -72,20 +73,25 @@ const LoginPage: React.FC = () => {
 
     return (
         <div className="flex min-h-screen items-start justify-center overflow-y-auto bg-gray-50 px-4 py-6 sm:items-center">
-            <div className="w-full max-w-md rounded-lg border border-gray-200 bg-white p-5 sm:p-8">
+            <div
+                data-testid="login-panel"
+                className={`w-full rounded-xl border border-gray-200 bg-white p-5 shadow-sm sm:p-8 ${showingOrganizationOnboarding ? 'max-w-4xl lg:p-10' : 'max-w-md'}`}
+            >
                 {/* Header */}
-                <div className="text-center mb-8">
-                    <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-lg border border-blue-200 bg-blue-50">
+                <div className={`mb-7 text-center ${showingOrganizationOnboarding ? 'sm:flex sm:items-center sm:text-left' : ''}`}>
+                    <div className={`mx-auto mb-4 flex h-14 w-14 shrink-0 items-center justify-center rounded-lg border border-blue-200 bg-blue-50 ${showingOrganizationOnboarding ? 'sm:mx-0 sm:mb-0 sm:mr-4' : ''}`}>
                         <svg className="h-8 w-8 text-blue-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                         </svg>
                     </div>
-                    <h1 className="text-3xl font-bold text-gray-900 mb-2">Pharma ERP</h1>
-                    <p className="text-gray-600">
-                        {onboardingRequired
-                            ? 'Create or join your organization'
-                            : 'Continue with Google to create or join an organization'}
-                    </p>
+                    <div>
+                        <h1 className="mb-1 text-2xl font-bold text-gray-900 sm:text-3xl">Pharma ERP</h1>
+                        <p className="text-gray-600">
+                            {showingOrganizationOnboarding
+                                ? 'Create or join your organization'
+                                : 'Continue with Google to create or join an organization'}
+                        </p>
+                    </div>
                 </div>
 
                 {!isOnline && (

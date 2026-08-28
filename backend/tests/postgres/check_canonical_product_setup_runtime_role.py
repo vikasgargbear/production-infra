@@ -65,9 +65,10 @@ def _seed_tax_release(connection, fixture, effective_on: date) -> str:
     release_effective_from = min(effective_on, session_date)
     existing = connection.scalar(text("""
         SELECT tax_version.code
-          FROM tax.tax_code_versions tax_version
+         FROM tax.tax_code_versions tax_version
           JOIN core.reference_data_releases release ON release.id=tax_version.release_id
          WHERE tax_version.status='active' AND tax_version.code_kind='hsn'
+           AND release.dataset_kind='hsn_sac_tax'
            AND tax_version.default_supply_type='goods' AND release.status='active'
            AND :effective_on BETWEEN tax_version.effective_from AND COALESCE(tax_version.effective_to,'infinity'::date)
            AND :effective_on BETWEEN release.effective_from AND COALESCE(release.effective_to,'infinity'::date)
@@ -171,16 +172,14 @@ def main() -> None:
                 },
             ).one()
             assert configured == (fixture.PRODUCT_DELETE, "TEST-A-2", "Delete A", 2)
-            assert connection.scalar(
+            missing_fields = connection.scalar(
                 text(
-                    "SELECT erp_master_commands.product_setup_missing_fields(:org,:product,:effective_on)"
+                    "SELECT erp_master_commands.product_setup_missing_fields("
+                    ":org,:product,erp_core_commands.current_organization_business_date())"
                 ),
-                {
-                    "org": fixture.ORG_A,
-                    "product": fixture.PRODUCT_DELETE,
-                    "effective_on": effective_on,
-                },
-            ) == []
+                {"org": fixture.ORG_A, "product": fixture.PRODUCT_DELETE},
+            )
+            assert missing_fields == [], missing_fields
             assert connection.scalar(
                 text(
                     "SELECT count(*) FROM catalog.uom_conversions WHERE org_id=:org AND product_id=:product AND from_uom_code='EA' AND to_uom_code='EA' AND multiplier=1"
@@ -264,12 +263,9 @@ def main() -> None:
 
             _expect_denied(
                 connection,
-                "SELECT * FROM erp_master_commands.product_setup_missing_fields(:org,:product,:effective_on)",
-                {
-                    "org": fixture.ORG_A,
-                    "product": fixture.PRODUCT_B,
-                    "effective_on": effective_on,
-                },
+                "SELECT * FROM erp_master_commands.product_setup_missing_fields("
+                ":org,:product,erp_core_commands.current_organization_business_date())",
+                {"org": fixture.ORG_A, "product": fixture.PRODUCT_B},
             )
             print("canonical product setup runtime-role checks passed")
         finally:
