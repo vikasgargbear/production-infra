@@ -16,6 +16,8 @@ def test_manual_acceptance_reuses_data_and_binds_exact_authority() -> None:
     assert "_set_session_authority_state" in source
     assert "refusing manual authority against production" in source
     assert "runtime_inherits_session_authority" in source
+    assert "${{ runner.temp }}" not in source
+    assert 'SSH_PRIVATE_KEY=$RUNNER_TEMP/canonical-manual-' in source
 
     # Opening or closing the ACL boundary must never become a data lifecycle
     # operation. Test data persists until a separate, explicitly reviewed reset.
