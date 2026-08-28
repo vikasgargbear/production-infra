@@ -5,7 +5,7 @@
  * Uses ModuleHub for layout but wraps components to inject extra props.
  */
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   ShoppingBag, FileText, Package, ShoppingCart, List
 } from 'lucide-react';
@@ -46,6 +46,14 @@ const PurchaseHub: React.FC<PurchaseHubProps> = ({ open = true, onClose, initial
   const [receiptContext, setReceiptContext] = useState<CanonicalReceiptContext | null>(null);
   const [receiptReadbackId, setReceiptReadbackId] = useState<string | null>(null);
   const [forceModule, setForceModule] = useState<string | null>(null);
+
+  // Hash navigation is authoritative. Clear an internal transition once the
+  // parent publishes any subpage, including a later browser/back deep-link.
+  // Without this, a completed History -> GRN transition pins the hub to GRN
+  // even after the URL returns to purchase-history.
+  useEffect(() => {
+    setForceModule(null);
+  }, [initialSubpage]);
 
   // Handle "Record Receipt" from a canonical UUID PO. Legacy integer PO
   // identities are rejected by the request adapter before any HTTP call.

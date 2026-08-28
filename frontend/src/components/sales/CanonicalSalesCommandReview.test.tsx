@@ -64,4 +64,18 @@ describe('CanonicalSalesCommandReview', () => {
     document.removeEventListener('keydown', outerEscape);
     trigger.remove();
   });
+
+  it('shows a selected label only when its canonical product ID is in the server preview', () => {
+    const productId = '20000000-0000-4000-8000-000000000001';
+    render(<CanonicalSalesCommandReview title="Review exact sales order" preview={{
+      ...preview,
+      resolved_references: [{ resource_type: 'product_uom_tax', product_id: productId }],
+    }} open posting={false} onBack={jest.fn()} onPost={jest.fn()} selectedProducts={[
+      { id: productId, code: 'PROD-000001', name: 'Canonical Carton' },
+      { id: '20000000-0000-4000-8000-000000000099', code: 'OTHER', name: 'Other' },
+    ]} />);
+
+    expect(screen.getByText('Canonical Carton (PROD-000001)')).toBeTruthy();
+    expect(screen.queryByText('Other (OTHER)')).toBeNull();
+  });
 });

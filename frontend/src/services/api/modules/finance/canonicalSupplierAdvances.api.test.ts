@@ -67,6 +67,10 @@ it('rejects immutable preview drift before any approval', async () => {
     }],
   } });
   await expect(prepareSupplierAdvance(payload)).rejects.toThrow(/withholding differs/i);
+  expect(prepareCanonicalAction).toHaveBeenCalledWith(
+    'finance.supplier_advance.prepare',
+    expect.not.objectContaining({ settlement_account_id: expect.anything() }),
+  );
   expect(executeApprovedCanonicalAction).not.toHaveBeenCalled();
 });
 

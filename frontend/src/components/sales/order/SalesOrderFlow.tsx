@@ -354,6 +354,11 @@ const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose })
             <CanonicalSalesCommandReview
                 title="Review exact sales order"
                 preview={preparedPreview}
+                selectedProducts={order.items.map(item => ({
+                    id: String(item.product_id),
+                    code: item.product_code || String(item.product_id),
+                    name: item.product_name,
+                }))}
                 open={reviewOpen}
                 posting={saving}
                 onBack={closeOrderReview}
