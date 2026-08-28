@@ -20,6 +20,11 @@ MASTER_WRITE_POLICIES = {
             "actor_confirmation", (),
         ),
         ActionPolicy(
+            "catalog.product_draft.configure", "catalog.product.manage",
+            "reversible_write", "canonical_product_setup_v1",
+            "actor_confirmation", (),
+        ),
+        ActionPolicy(
             "parties.customer.create", "parties.customer.manage",
             "reversible_write", "canonical_customer_create_v1",
             "actor_confirmation", (),

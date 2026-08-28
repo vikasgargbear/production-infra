@@ -873,30 +873,8 @@ def configure_product_setup(
 ):
     org_id = _activate(db, user)
     try:
-        configured = canonical_write_commands.configure_product_draft(
-            db,
-            org_id=org_id,
-            product_id=product_id,
-            expected_row_version=setup.row_version,
-            category_id=setup.category_id,
-            manufacturer_party_id=setup.manufacturer_party_id,
-            base_uom_code=setup.base_uom_code,
-            dosage_form=setup.dosage_form,
-            strength_display=setup.strength_display,
-            hsn_code=setup.hsn_code,
-            cold_chain_required=setup.cold_chain_required,
-            minimum_storage_celsius=setup.minimum_storage_celsius,
-            maximum_storage_celsius=setup.maximum_storage_celsius,
-            shelf_life_days=setup.shelf_life_days,
-            gtin=setup.gtin,
-            pack_conversions=json.dumps(
-                [item.model_dump(mode="json") for item in setup.pack_conversions],
-                separators=(",", ":"),sort_keys=True,
-            ),
-            ingredients=json.dumps(
-                [item.model_dump(mode="json") for item in setup.ingredients],
-                separators=(",", ":"),sort_keys=True,
-            ),
+        configured = _execute_canonical_product_setup(
+            db, org_id=org_id, product_id=product_id, setup=setup
         )
         db.commit()
     except DBAPIError as exc:
@@ -910,6 +888,42 @@ def configure_product_setup(
         "lifecycle_status": "draft",
         "message": "Product setup saved and checked",
     }
+
+
+def _execute_canonical_product_setup(
+    db: Session,
+    *,
+    org_id: UUID,
+    product_id: UUID,
+    setup: CanonicalProductSetupWrite,
+):
+    """One setup command shared by browser and delegated MCP adapters."""
+
+    return canonical_write_commands.configure_product_draft(
+        db,
+        org_id=org_id,
+        product_id=product_id,
+        expected_row_version=setup.row_version,
+        category_id=setup.category_id,
+        manufacturer_party_id=setup.manufacturer_party_id,
+        base_uom_code=setup.base_uom_code,
+        dosage_form=setup.dosage_form,
+        strength_display=setup.strength_display,
+        hsn_code=setup.hsn_code,
+        cold_chain_required=setup.cold_chain_required,
+        minimum_storage_celsius=setup.minimum_storage_celsius,
+        maximum_storage_celsius=setup.maximum_storage_celsius,
+        shelf_life_days=setup.shelf_life_days,
+        gtin=setup.gtin,
+        pack_conversions=json.dumps(
+            [item.model_dump(mode="json") for item in setup.pack_conversions],
+            separators=(",", ":"), sort_keys=True,
+        ),
+        ingredients=json.dumps(
+            [item.model_dump(mode="json") for item in setup.ingredients],
+            separators=(",", ":"), sort_keys=True,
+        ),
+    )
 
 
 @router.post("/products/{product_id}/activate")

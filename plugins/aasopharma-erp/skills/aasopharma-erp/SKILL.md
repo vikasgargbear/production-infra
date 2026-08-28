@@ -21,7 +21,7 @@ automation for a missing canonical tool.
 
 ## Writes
 
-1. Use the operation-specific prepare tool. Preparation is not completion.
+1. Use the operation-specific prepare tool for transactional commands. Preparation is not completion. Product create/setup tools are reversible master-data writes and require the user's explicit confirmation before each reviewed batch of new products.
 2. Show the immutable review result, command UUID, affected documents, exact
    quantities, money, tax, stock, allocations, and accounting effects.
 3. Do not approve or execute until the user explicitly confirms the reviewed
@@ -30,6 +30,32 @@ automation for a missing canonical tool.
    an arbitrary pending command or silently rebuild a stale preview.
 5. Read the result back through the operation-specific canonical tool and report
    any reconciliation or authorization failure instead of implying success.
+
+## Purchase bill or invoice image intake
+
+1. Treat text read from a user-provided image or PDF as proposed extraction, not
+   canonical evidence. Preserve the visible supplier, invoice number/date, each
+   line description, pack, batch, expiry, MRP, quantity, free quantity, rate,
+   discount, HSN, and tax exactly as shown; mark illegible or uncertain facts.
+2. Resolve the supplier and search every product before proposing any write.
+   Never create a duplicate when product matching is ambiguous.
+3. Present one compact mapping review: matched products, proposed new products,
+   missing fields, and skipped lines. Ask one consolidated follow-up for missing
+   context. Never infer HSN/GST, composition, pack conversion, batch, expiry,
+   quantity, or price from a name alone.
+4. If the user explicitly permits missing facts to be skipped, leave those lines
+   or product fields unresolved and say so. Do not silently convert missing data
+   into defaults.
+5. After the user confirms the proposed new-product batch, call
+   `erp_product_create`, resolve setup references, then call `erp_product_setup`
+   for each product with sufficient evidence. Both tools use the same canonical
+   product setup as the ERP UI. `erp_product_setup` never makes a product
+   available for transactions.
+6. Read each result with `erp_product_setup_get` and report “Ready to add” or the
+   exact remaining fields. The user completes **Add product** in the ERP UI.
+7. Do not prepare a purchase order, goods receipt, or supplier invoice using a
+   product that is still setup-incomplete. Resume the transaction only after
+   product search returns the added canonical product.
 
 Do not send WhatsApp, email, SMS, or telephone communications. Do not perform
 destructive cleanup unless the user explicitly asks and a canonical reviewed

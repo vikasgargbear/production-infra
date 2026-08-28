@@ -149,6 +149,44 @@ def create_app(
         )
 
     @server.tool()
+    async def erp_product_setup_options_get(
+        manufacturer_search: Annotated[str, Field(max_length=100, description="Optional manufacturer or supplier name/code prefix.")] = "",
+    ) -> Any:
+        """Return canonical units, categories, manufacturers, and reference readiness for product setup."""
+        return await operation_gateway.execute(
+            OPERATIONS["erp_product_setup_options_get"], _access_token(), locals(),
+        )
+
+    @server.tool()
+    async def erp_product_ingredient_search(
+        search: Annotated[str, Field(min_length=1, max_length=100, description="Reviewed salt or ingredient name prefix.")],
+        limit: Annotated[int, Field(ge=1, le=50, description="Maximum reviewed ingredients to return.")] = 20,
+    ) -> Any:
+        """Search the effective reviewed ingredient classification used by product setup."""
+        return await operation_gateway.execute(
+            OPERATIONS["erp_product_ingredient_search"], _access_token(), locals(),
+        )
+
+    @server.tool()
+    async def erp_product_hsn_search(
+        search: Annotated[str, Field(min_length=1, max_length=100, description="HSN digits or official goods-description terms.")],
+        limit: Annotated[int, Field(ge=1, le=50, description="Maximum effective reviewed HSN records to return.")] = 20,
+    ) -> Any:
+        """Search effective reviewed HSN and GST references; never infer tax from a product name."""
+        return await operation_gateway.execute(
+            OPERATIONS["erp_product_hsn_search"], _access_token(), locals(),
+        )
+
+    @server.tool()
+    async def erp_product_setup_get(
+        product_id: Annotated[str, Field(description="Canonical product UUID returned by product creation.")],
+    ) -> Any:
+        """Read one product's exact setup, missing fields, row version, packing, and composition."""
+        return await operation_gateway.execute(
+            OPERATIONS["erp_product_setup_get"], _access_token(), locals(),
+        )
+
+    @server.tool()
     async def erp_supplier_search(
         search_term: Annotated[str | None, Field(max_length=128, description="Optional supplier name, code, GSTIN, or phone fragment.")] = None,
         limit: Annotated[int, Field(ge=1, le=200, description="Maximum matching suppliers to return.")] = 50,

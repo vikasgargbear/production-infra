@@ -75,6 +75,10 @@ EXPECTED_BASE_READ_TOOLS = {
     "erp_party_statement_get",
     "erp_product_master_search",
     "erp_product_search",
+    "erp_product_setup_options_get",
+    "erp_product_ingredient_search",
+    "erp_product_hsn_search",
+    "erp_product_setup_get",
     "erp_profit_loss_get",
     "erp_supplier_search",
     "erp_gst_settings_get",
@@ -82,6 +86,7 @@ EXPECTED_BASE_READ_TOOLS = {
 }
 EXPECTED_MASTER_WRITE_TOOLS = {
     "erp_product_create",
+    "erp_product_setup",
     "erp_customer_create",
     "erp_customer_update",
     "erp_supplier_create",
@@ -986,7 +991,7 @@ def validate(
             or app_operation.get("approval") != "actor_confirmation"
             or app_operation.get("idempotency") != "required"
         ):
-            issues.append(f"{tool}: canonical master create metadata drifted")
+            issues.append(f"{tool}: canonical master write metadata drifted")
 
     execute_operation = app_by_tool.get("erp_operation_execute", {})
     if execute_operation.get("approval") != "command_policy":

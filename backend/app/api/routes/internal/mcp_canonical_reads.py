@@ -21,6 +21,7 @@ from ....core.database import get_db
 from .mcp_agent_grants import _internal_auth, bearer
 from .mcp_contract import CanonicalReadPolicy, policy_for
 from .. import (
+    canonical_erp_reads,
     canonical_party_aging_reads,
     canonical_party_ledger_reads,
     canonical_reporting_reads,
@@ -510,6 +511,60 @@ def canonical_product_master_search(
     _require_operation(context, "master.product_catalog.search")
     return _canonical_product_rows(
         q, limit, offset, context, db, include_drafts=True
+    )
+
+
+@router.get("/product-setup-options")
+def canonical_product_setup_options(
+    manufacturer_search: str = Query("", max_length=100),
+    context: CanonicalDelegation = Depends(get_canonical_delegation),
+    db: Session = Depends(get_db),
+):
+    _require_operation(context, "master.product_setup_options.get")
+    return canonical_erp_reads.product_setup_options(
+        manufacturer_search, _delegated_user(context), db
+    )
+
+
+@router.get("/product-ingredients")
+def canonical_product_ingredient_search(
+    search: str = Query("", max_length=100),
+    limit: int = Query(20, ge=1, le=50),
+    context: CanonicalDelegation = Depends(get_canonical_delegation),
+    db: Session = Depends(get_db),
+):
+    _require_operation(context, "master.product_ingredients.search")
+    return {
+        "ingredients": canonical_erp_reads.product_setup_ingredients(
+            search, limit, _delegated_user(context), db
+        )
+    }
+
+
+@router.get("/product-hsn")
+def canonical_product_hsn_search(
+    search: str = Query("", max_length=100),
+    limit: int = Query(20, ge=1, le=50),
+    context: CanonicalDelegation = Depends(get_canonical_delegation),
+    db: Session = Depends(get_db),
+):
+    _require_operation(context, "master.product_hsn.search")
+    return {
+        "hsn_codes": canonical_erp_reads.product_setup_hsn_codes(
+            search, limit, _delegated_user(context), db
+        )
+    }
+
+
+@router.get("/product-setup")
+def canonical_product_setup_get(
+    product_id: UUID,
+    context: CanonicalDelegation = Depends(get_canonical_delegation),
+    db: Session = Depends(get_db),
+):
+    _require_operation(context, "master.product_setup.get")
+    return canonical_erp_reads.product_setup(
+        product_id, _delegated_user(context), db
     )
 
 

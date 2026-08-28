@@ -42,7 +42,7 @@ MARG's proprietary medicine catalogue must not be copied or scraped. A productio
 
 | Flow | Current canonical coverage | Operator comparison | Decision |
 |---|---|---|---|
-| Product master | Reviewed manufacturer, HSN, UOM conversion, ingredient classification and activation | The former one-page form was faster; the five-screen wizard exposed internal concepts and `Pack (pk)` could be misread as the smallest medicine unit | Implement one-pass setup, `1*10`/`10*10`, early salt search, friendly errors and a two-step setup/review path |
+| Product master | Reviewed manufacturer, HSN, UOM conversion, ingredient classification and an internal release gate | The former one-page form was faster; the five-screen wizard exposed internal concepts and `Pack (pk)` could be misread as the smallest medicine unit | Implement one-pass setup, `1*10`/`10*10`, early salt search, friendly errors and a two-step setup/review path |
 | Customer/supplier master | Canonical legal party identities, addresses and role-bound creation | Stronger authority than legacy ERPs, but wholesalers also expect fast code/name/GSTIN search and bulk onboarding | Keep authority; next add reviewed CSV import and area/route fields only when collection workflows consume them |
 | Sales | Separate invoice, challan, sales order and history; canonical preview/post/readback | Familiar capabilities, but four entry points make a routine wholesale bill feel like a process choice | Keep documents separate in storage; next add one “Sales bill” workspace with optional order/challan linkage and keyboard product/batch search |
 | Purchase | Guided receipt-then-invoice, PO, GRN, supplier invoice and combined history | Correct three-way control, but MARG users often begin from the supplier bill and expect invoice import | Keep PO/GRN/invoice authority; connect the existing safe invoice parser to a non-posting mapping preview, then require normal GRN/invoice review |
@@ -58,14 +58,17 @@ MARG's proprietary medicine catalogue must not be copied or scraped. A productio
 
 The product path now preserves the faster earlier interaction without its unsafe defaults:
 
-1. All routine product fields are on one entry page; the second page is review/activation.
+1. All routine product fields are on one entry page; the second page is a final review with an “Add product” action.
 2. `1*10`, `1x10`, `1×10`, `10*10` and `1*100 ml` are parsed into exact canonical UOM conversions.
 3. `10*10` with Strip produces `1 Strip = 10 Each` and `1 Box = 100 Each`.
 4. Salt search appears in the same setup page. A single unambiguous strength such as `500 mg` or `250 mg/5 ml` fills the first selected salt row, but remains editable. Combination strengths are not guessed.
 5. The raw `Invalid uuid / Invalid` validation leak is replaced with field names such as `Manufacturer is required` and `HSN code is required`.
-6. “Draft until activated” is replaced by “Setup incomplete”; activation remains mandatory before purchase/sale.
+6. Internal draft/activation terminology is hidden from operators: incomplete records say “Setup incomplete”, and the final action says “Add product”. The backend release gate remains mandatory before purchase/sale.
 7. Storage and shelf-life fields are collapsed as optional. Batch number, manufacture/expiry, MRP, purchase cost, free quantity and opening stock remain owned by Goods receipt.
 8. Client validation runs before draft creation, so an obviously incomplete new form does not create an orphan draft.
+9. MCP product setup reuses the browser's `CanonicalProductSetupWrite` model and `_execute_canonical_product_setup` command helper; it does not maintain a parallel AI-only product shape.
+10. ChatGPT can resolve setup options, reviewed HSN and ingredients, create an unused product, fill supported setup facts, and read back exact missing fields. It cannot perform the final **Add product** release action.
+11. Purchase-bill image guidance requires an extraction/mapping review and one consolidated missing-context question. With explicit permission, unresolved facts are skipped and remain visible rather than being guessed.
 
 ## Prioritized backlog
 
@@ -98,4 +101,4 @@ The product path now preserves the faster earlier interaction without its unsafe
 - Hundreds of configuration toggles or report variants copied from mature legacy installations.
 - Manual schedule, prescription, GST or NDPS flags when reviewed classification can derive them.
 - Silent product, batch, price, expiry, stock or margin defaults.
-- Play Store work, MCP work or unrelated deployment changes in this UI patch.
+- Play Store work or unrelated deployment changes in this product-flow patch.

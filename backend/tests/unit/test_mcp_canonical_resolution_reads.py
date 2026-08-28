@@ -93,6 +93,10 @@ def test_resolution_policies_match_operator_contract_and_are_published():
         "gst.settings.get",
         "master.product_catalog.search",
         "master.products.search",
+        "master.product_setup_options.get",
+        "master.product_ingredients.search",
+        "master.product_hsn.search",
+        "master.product_setup.get",
         "master.suppliers.search",
     }
     service = json.loads(
