@@ -206,7 +206,10 @@ export const canonicalDocumentHistoryApi = {
         : {}),
       ...(!exactSearchId && normalizedSearch ? { search: normalizedSearch } : {}),
     };
-    const response = await apiHelpers.get('/canonical/document-history', { params: requestParams });
+    const response = await apiHelpers.get('/canonical/document-history', {
+      params: requestParams,
+      preserveExactDecimals: true,
+    });
     return normalizeCanonicalDocumentHistory(response.data);
   },
 };
