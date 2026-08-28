@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import os
+from datetime import date
 from pathlib import Path
 from uuid import UUID
 
@@ -50,18 +51,30 @@ def _expect_denied(
         raise AssertionError("restricted product setup operation unexpectedly succeeded")
 
 
-def _seed_tax_release(connection, fixture) -> str:
+def _organization_business_date(connection, fixture) -> date:
+    return connection.scalar(text("""
+        SELECT (transaction_timestamp() AT TIME ZONE timezone)::date
+          FROM core.organizations
+         WHERE id=:org
+    """), {"org": fixture.ORG_A})
+
+
+def _seed_tax_release(connection, fixture, effective_on: date) -> str:
     connection.exec_driver_sql('SET LOCAL ROLE "erp_migration_owner"')
+    session_date = connection.scalar(text("SELECT CURRENT_DATE"))
+    release_effective_from = min(effective_on, session_date)
     existing = connection.scalar(text("""
         SELECT tax_version.code
           FROM tax.tax_code_versions tax_version
           JOIN core.reference_data_releases release ON release.id=tax_version.release_id
          WHERE tax_version.status='active' AND tax_version.code_kind='hsn'
            AND tax_version.default_supply_type='goods' AND release.status='active'
+           AND :effective_on BETWEEN tax_version.effective_from AND COALESCE(tax_version.effective_to,'infinity'::date)
+           AND :effective_on BETWEEN release.effective_from AND COALESCE(release.effective_to,'infinity'::date)
            AND CURRENT_DATE BETWEEN tax_version.effective_from AND COALESCE(tax_version.effective_to,'infinity'::date)
            AND CURRENT_DATE BETWEEN release.effective_from AND COALESCE(release.effective_to,'infinity'::date)
          ORDER BY tax_version.code LIMIT 1
-    """))
+    """), {"effective_on": effective_on})
     if existing:
         connection.exec_driver_sql("RESET ROLE")
         return str(existing)
@@ -80,7 +93,7 @@ def _seed_tax_release(connection, fixture) -> str:
               :release,'hsn_sac_tax','pg15-product-setup-v1','gstn',
               'https://example.invalid/pg15-product-setup','fixture','product-setup/source',
               'text/plain',:source_hash,'fixture','product-setup/dataset','application/json',
-              :dataset_hash,1,CURRENT_DATE,CURRENT_DATE,:reviewer,
+              :dataset_hash,1,:release_effective_from,:release_effective_from,:reviewer,
               transaction_timestamp(),'active'
             );
             INSERT INTO tax.tax_code_versions(
@@ -89,7 +102,7 @@ def _seed_tax_release(connection, fixture) -> str:
               ruleset_version,status)
             VALUES (
               :tax_version,:release,'4819','hsn',1,'Disposable product setup cartons',
-              CURRENT_DATE,'taxable','goods',6,6,12,0,'pg15-product-setup-v1','active'
+              :release_effective_from,'taxable','goods',6,6,12,0,'pg15-product-setup-v1','active'
             )
             """
         ),
@@ -99,6 +112,7 @@ def _seed_tax_release(connection, fixture) -> str:
             "reviewer": fixture.USER_A,
             "source_hash": hashlib.sha256(b"product setup source").digest(),
             "dataset_hash": hashlib.sha256(b"product setup dataset").digest(),
+            "release_effective_from": release_effective_from,
         },
     )
     connection.exec_driver_sql("ALTER TABLE tax.tax_code_versions ENABLE TRIGGER USER")
@@ -114,7 +128,8 @@ def main() -> None:
         transaction = connection.begin()
         try:
             fixture._seed(connection)
-            hsn_code = _seed_tax_release(connection, fixture)
+            effective_on = _organization_business_date(connection, fixture)
+            hsn_code = _seed_tax_release(connection, fixture, effective_on)
             connection.exec_driver_sql('SET SESSION AUTHORIZATION "erp_runtime"')
             connection.execute(
                 text("SELECT pg_catalog.set_config('app.request_id',:request_id,true)"),
@@ -158,9 +173,13 @@ def main() -> None:
             assert configured == (fixture.PRODUCT_DELETE, "TEST-A-2", "Delete A", 2)
             assert connection.scalar(
                 text(
-                    "SELECT erp_master_commands.product_setup_missing_fields(:org,:product,CURRENT_DATE)"
+                    "SELECT erp_master_commands.product_setup_missing_fields(:org,:product,:effective_on)"
                 ),
-                {"org": fixture.ORG_A, "product": fixture.PRODUCT_DELETE},
+                {
+                    "org": fixture.ORG_A,
+                    "product": fixture.PRODUCT_DELETE,
+                    "effective_on": effective_on,
+                },
             ) == []
             assert connection.scalar(
                 text(
@@ -245,8 +264,12 @@ def main() -> None:
 
             _expect_denied(
                 connection,
-                "SELECT * FROM erp_master_commands.product_setup_missing_fields(:org,:product,CURRENT_DATE)",
-                {"org": fixture.ORG_A, "product": fixture.PRODUCT_B},
+                "SELECT * FROM erp_master_commands.product_setup_missing_fields(:org,:product,:effective_on)",
+                {
+                    "org": fixture.ORG_A,
+                    "product": fixture.PRODUCT_B,
+                    "effective_on": effective_on,
+                },
             )
             print("canonical product setup runtime-role checks passed")
         finally:
