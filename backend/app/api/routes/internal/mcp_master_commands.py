@@ -26,7 +26,11 @@ from ..canonical_erp_reads import (
     _raise_master_create_database_error,
 )
 from .mcp_actions import get_action_context
-from .mcp_master_contract import master_write_policy_for
+from .mcp_master_contract import (
+    CUSTOMER_UPDATE_OPERATION,
+    SUPPLIER_UPDATE_OPERATION,
+    master_write_policy_for,
+)
 
 
 router = APIRouter(
@@ -231,7 +235,7 @@ def update_customer(
         }
 
     return _run_master_write(
-        db, context, "parties.customer.update", execute
+        db, context, CUSTOMER_UPDATE_OPERATION, execute
     )
 
 
@@ -285,5 +289,5 @@ def update_supplier(
         }
 
     return _run_master_write(
-        db, context, "parties.supplier.update", execute
+        db, context, SUPPLIER_UPDATE_OPERATION, execute
     )

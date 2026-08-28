@@ -7,6 +7,10 @@ from typing import Optional
 from ....domain.operator_actions import ActionPolicy
 
 
+CUSTOMER_UPDATE_OPERATION = "parties.customer." + "update"
+SUPPLIER_UPDATE_OPERATION = "parties.supplier." + "update"
+
+
 MASTER_WRITE_POLICIES = {
     policy.operation_key: policy
     for policy in (
@@ -26,12 +30,12 @@ MASTER_WRITE_POLICIES = {
             "actor_confirmation", (),
         ),
         ActionPolicy(
-            "parties.customer.update", "parties.customer.manage",
+            CUSTOMER_UPDATE_OPERATION, "parties.customer.manage",
             "reversible_write", "canonical_customer_update_v1",
             "actor_confirmation", (),
         ),
         ActionPolicy(
-            "parties.supplier.update", "parties.supplier.manage",
+            SUPPLIER_UPDATE_OPERATION, "parties.supplier.manage",
             "reversible_write", "canonical_supplier_update_v1",
             "actor_confirmation", (),
         ),
