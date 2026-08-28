@@ -366,6 +366,14 @@ def test_demo_chain_keeps_exact_lineage_between_each_prepare_payload() -> None:
     supplier_invoice = module.supplier_invoice_payload(
         UUID_A, UUID_B, portal, business_date=BUSINESS_DATE
     )
+    receipt_batch = receipt["lines"][0]["batches"][0]
+    invoice_line = supplier_invoice["lines"][0]
+    assert invoice_line["allocated_base_billed_quantity"] == receipt_batch[
+        "accepted_quantity"
+    ]
+    assert invoice_line["allocated_base_free_quantity"] == receipt_batch[
+        "free_quantity"
+    ]
     dispatch = module.sales_dispatch_payload(
         UUID_A,
         UUID_B,

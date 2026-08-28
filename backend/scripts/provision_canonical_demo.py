@@ -3582,10 +3582,10 @@ def goods_receipt_payload(
                         "expires_on": "2028-09-01",
                         "mrp": "150.00",
                         "mrp_uom_conversion_id": IDS["uom_conversion"],
-                        "received_quantity": "100",
-                        "accepted_quantity": "100",
+                        "received_quantity": "50",
+                        "accepted_quantity": "50",
                         "rejected_quantity": "0",
-                        "free_quantity": "5",
+                        "free_quantity": "2.5",
                         "qc_status": "accepted",
                         "to_location_id": IDS["saleable_location"],
                     }

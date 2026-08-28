@@ -831,7 +831,8 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     receipt_payload = provisioner.split("def goods_receipt_payload", 1)[1].split(
         "\ndef seed_supplier_invoice_portal_evidence", 1
     )[0]
-    assert '"free_quantity": "5"' in receipt_payload
+    assert '"accepted_quantity": "50"' in receipt_payload
+    assert '"free_quantity": "2.5"' in receipt_payload
     supplier_invoice_payload = provisioner.split("def supplier_invoice_payload", 1)[1].split(
         "\ndef supplier_payment_payload", 1
     )[0]
