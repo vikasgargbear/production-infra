@@ -62,14 +62,25 @@ export type InventoryReadParams = {
 };
 
 export const canonicalInventoryReadsApi = {
-  context: () => apiHelpers.get('/canonical/inventory/context'),
+  context: () => apiHelpers.get('/canonical/inventory/context', {
+    preserveExactDecimals: true,
+  }),
   currentStock: (params: InventoryReadParams) => (
-    apiHelpers.get('/canonical/inventory/current-stock', { params })
+    apiHelpers.get('/canonical/inventory/current-stock', {
+      params,
+      preserveExactDecimals: true,
+    })
   ),
   batches: (params: InventoryReadParams) => (
-    apiHelpers.get('/canonical/inventory/batches', { params })
+    apiHelpers.get('/canonical/inventory/batches', {
+      params,
+      preserveExactDecimals: true,
+    })
   ),
   movements: (params: InventoryReadParams) => (
-    apiHelpers.get('/canonical/inventory/movements', { params })
+    apiHelpers.get('/canonical/inventory/movements', {
+      params,
+      preserveExactDecimals: true,
+    })
   ),
 };
