@@ -171,6 +171,10 @@ BASE_UOM_QUANTITY_FIELDS = {
 # These names are intentionally polymorphic only in the listed, fully qualified
 # contexts. Every other repeated name must retain one recursive JSON shape.
 EXPLICIT_CONTEXT_QUALIFIED_REUSE = {
+    "fulfillment_source": {
+        "erp_sales_invoice_prepare.lines[].fulfillment_source",
+        "erp_sales_return_prepare.lines[].fulfillment_source",
+    },
     "allocations": {
         "erp_customer_receipt_prepare.allocations",
         "erp_supplier_payment_prepare.allocations",

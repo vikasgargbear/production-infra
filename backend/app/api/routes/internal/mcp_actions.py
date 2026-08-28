@@ -571,6 +571,8 @@ def prepare_action(
     validated_payload = payload.model_dump(mode="python", exclude_none=True)
     try:
         validate_prepare_payload_semantics(operation_key, payload)
+    except OperatorActionError as exc:
+        _raise_action_error(exc)
     except ValueError as exc:
         raise HTTPException(
             status_code=422,

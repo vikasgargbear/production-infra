@@ -262,6 +262,7 @@ def _sales_return_payload(*, treatment: str = "statutory"):
         "gst_tax_treatment": treatment,
         "lines": [{
             "original_invoice_line_id": str(uuid4()),
+            "fulfillment_source": "dispatch_allocated",
             "invoice_dispatch_allocation_id": str(uuid4()),
             "billed_quantity": "2.000000",
             "free_quantity": "1.000000",
@@ -1103,6 +1104,53 @@ def test_purchase_return_accepts_only_exact_invoiced_pilot_paths(
     assert business_payload["return_source_kind"] == "invoiced"
     assert business_payload["gst_tax_treatment"] == treatment
     assert business_payload["lines"][0]["supplier_invoice_receipt_allocation_id"]
+
+
+def test_return_source_capability_failures_are_structured_and_never_reach_service(
+    enabled_boundary,
+):
+    fake = FakeOperatorActionService()
+    sales_policy = ACTION_POLICIES["sales.return.prepare"]
+    holder = {"value": _context(sales_policy.operation_key, sales_policy.permission)}
+    client = TestClient(_app(fake, holder))
+    direct = _sales_return_payload(treatment="commercial_only")
+    direct["lines"][0]["fulfillment_source"] = "direct_issue"
+    direct["lines"][0].pop("invoice_dispatch_allocation_id")
+
+    response = client.post(
+        "/api/internal/mcp/actions/sales.return.prepare/prepare",
+        json=direct,
+    )
+
+    assert response.status_code == 409
+    detail = response.json()["detail"]
+    assert detail["code"] == "POLICY_BLOCKED"
+    assert detail["retryable"] is False
+    assert detail["metadata"]["reason"] == "RETURN_SOURCE_AUTHORITY_UNAVAILABLE"
+    assert detail["metadata"]["source_kind"] == "direct_issue"
+    assert detail["metadata"]["line_index"] == 0
+    assert detail["metadata"]["supported_source_kinds"] == ["dispatch_allocated"]
+
+    purchase_policy = ACTION_POLICIES["procurement.purchase_return.prepare"]
+    holder["value"] = _context(purchase_policy.operation_key, purchase_policy.permission)
+    uninvoiced = _purchase_return_payload(treatment="commercial_only")
+    uninvoiced["return_source_kind"] = "uninvoiced"
+    uninvoiced.pop("original_supplier_invoice_id")
+    uninvoiced["lines"][0].pop("supplier_invoice_receipt_allocation_id")
+
+    response = client.post(
+        "/api/internal/mcp/actions/procurement.purchase_return.prepare/prepare",
+        json=uninvoiced,
+    )
+
+    assert response.status_code == 409
+    detail = response.json()["detail"]
+    assert detail["code"] == "POLICY_BLOCKED"
+    assert detail["retryable"] is False
+    assert detail["metadata"]["reason"] == "RETURN_SOURCE_AUTHORITY_UNAVAILABLE"
+    assert detail["metadata"]["source_kind"] == "uninvoiced"
+    assert detail["metadata"]["supported_source_kinds"] == ["invoiced"]
+    assert fake.calls == []
 
 
 def test_purchase_return_rejects_portal_mismatch_and_batch_quantity_drift(

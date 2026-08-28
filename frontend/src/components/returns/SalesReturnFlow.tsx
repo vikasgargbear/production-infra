@@ -192,6 +192,11 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
       if (requestSequence !== invoiceContextRequestSequence.current) return;
       const context = response.data;
       const items = context.lines || [];
+      if (context.blocked_source_line_count > 0) {
+        toast.warning(
+          `${context.blocked_source_line_count} direct-issued invoice line(s) are excluded because canonical return authority for that source is not yet available.`,
+        );
+      }
 
       if (items.length > 0) {
         const mappedItems = items.map((item: any, index: number) => {

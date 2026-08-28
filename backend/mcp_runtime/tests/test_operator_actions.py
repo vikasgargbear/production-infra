@@ -233,6 +233,42 @@ def test_every_physical_movement_requires_explicit_batch_facts() -> None:
         ), tool
 
 
+def test_return_source_capabilities_are_explicit_without_becoming_executable() -> None:
+    sales = PREPARE_ACTIONS["erp_sales_return_prepare"].input_schema
+    sales_line = sales["properties"]["lines"]["items"]
+    assert set(sales_line["properties"]["fulfillment_source"]["enum"]) == {
+        "dispatch_allocated",
+        "direct_issue",
+    }
+    assert "fulfillment_source" in sales_line["required"]
+    assert "invoice_dispatch_allocation_id" not in sales_line["required"]
+    assert sales["x-aasopharma-source-capabilities"] == {
+        "supported": ["dispatch_allocated"],
+        "blocked": {
+            "direct_issue": {
+                "code": "RETURN_SOURCE_AUTHORITY_UNAVAILABLE",
+                "retryable": False,
+                "required_authority": [
+                    "direct_invoice_issue_lineage_lock",
+                    "direct_issue_cumulative_return_ceiling",
+                    "direct_issue_return_cost_reversal",
+                    "postgres_runtime_acceptance",
+                ],
+            }
+        },
+    }
+
+    purchase = PREPARE_ACTIONS["erp_purchase_return_prepare"].input_schema
+    assert set(purchase["properties"]["return_source_kind"]["enum"]) == {
+        "invoiced",
+        "uninvoiced",
+    }
+    assert purchase["x-aasopharma-source-capabilities"]["supported"] == ["invoiced"]
+    assert purchase["x-aasopharma-source-capabilities"]["blocked"]["uninvoiced"][
+        "code"
+    ] == "RETURN_SOURCE_AUTHORITY_UNAVAILABLE"
+
+
 def test_inventory_adjustment_is_a_hidden_typed_cycle_count_gain() -> None:
     schema = PREPARE_ACTIONS["erp_inventory_adjustment_prepare"].input_schema
     properties = schema["properties"]

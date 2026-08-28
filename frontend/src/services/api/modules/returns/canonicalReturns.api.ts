@@ -56,6 +56,7 @@ export interface CanonicalReturnReasonChoice {
 }
 
 export interface CanonicalSalesReturnLine {
+  fulfillment_source: 'dispatch_allocated';
   original_invoice_line_id: string;
   invoice_dispatch_allocation_id: string;
   dispatch_id: string;
@@ -93,7 +94,9 @@ export interface CanonicalSalesReturnContext {
   customer_name: string;
   customer_registered: boolean;
   return_date: string;
+  blocked_source_line_count: number;
   lines: CanonicalSalesReturnLine[];
+  source_capabilities: CanonicalReturnSourceCapability[];
   quarantine_locations: CanonicalReturnLocation[];
   statutory_itc_reversal_evidence: Array<{
     id: string;
@@ -178,6 +181,7 @@ export interface CanonicalPurchaseReturnContext {
   supplier_name: string;
   return_date: string;
   lines: CanonicalPurchaseReturnLine[];
+  source_capabilities: CanonicalReturnSourceCapability[];
   supplier_destinations: Array<{
     id: string;
     address_kind: 'registered' | 'shipping' | 'warehouse';
@@ -203,6 +207,14 @@ export interface CanonicalPurchaseReturnContext {
   }>;
   return_reason_choices: CanonicalReturnReasonChoice[];
   approval_policy: 'separate_approver';
+}
+
+export interface CanonicalReturnSourceCapability {
+  source_kind: 'dispatch_allocated' | 'direct_issue' | 'invoiced' | 'uninvoiced';
+  status: 'supported' | 'blocked';
+  code?: 'RETURN_SOURCE_AUTHORITY_UNAVAILABLE';
+  retryable: boolean;
+  required_authority: string[];
 }
 
 export const canonicalReturnsApi = {

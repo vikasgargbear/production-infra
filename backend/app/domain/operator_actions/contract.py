@@ -21,6 +21,7 @@ from mcp_runtime.aasopharma_mcp.operator_actions import (
     PREPARE_ACTIONS,
     PUBLISHED_PREPARE_TOOL_NAMES,
 )
+from .models import ActionErrorCode, OperatorActionError
 
 
 # UUID/date values arrive as JSON strings and must be parsed. Decimal-bearing
@@ -153,6 +154,11 @@ _SHARED_POLICIES = (
     ),
 )
 ACTION_POLICIES.update((policy.operation_key, policy) for policy in _SHARED_POLICIES)
+RETURN_SOURCE_CAPABILITIES: dict[str, Mapping[str, Any]] = {
+    action.operation_key: action.input_schema["x-aasopharma-source-capabilities"]
+    for action in PREPARE_ACTIONS.values()
+    if "x-aasopharma-source-capabilities" in action.input_schema
+}
 PUBLISHED_OPERATOR_OPERATION_KEYS = frozenset(
     PREPARE_ACTIONS[tool_name].operation_key
     for tool_name in PUBLISHED_PREPARE_TOOL_NAMES
@@ -170,12 +176,74 @@ def policy_for(operation_key: str) -> Optional[ActionPolicy]:
     return ACTION_POLICIES.get(operation_key)
 
 
+def validate_prepare_payload_capabilities(
+    operation_key: str, values: Mapping[str, Any]
+) -> None:
+    """Reject represented-but-unavailable source modes with stable machine detail."""
+
+    source_kinds: list[tuple[str, Optional[int]]] = []
+    if operation_key == "sales.return.prepare":
+        source_kinds = [
+            (str(line.get("fulfillment_source")), index)
+            for index, line in enumerate(values.get("lines", ()))
+        ]
+    elif operation_key == "procurement.purchase_return.prepare":
+        source_kinds = [(str(values.get("return_source_kind")), None)]
+    capabilities = RETURN_SOURCE_CAPABILITIES.get(operation_key, {})
+    blocked = capabilities.get("blocked", {})
+    for source_kind, line_index in source_kinds:
+        failure = blocked.get(source_kind)
+        if failure is None:
+            continue
+        metadata = {
+            "reason": failure["code"],
+            "operation_key": operation_key,
+            "source_kind": source_kind,
+            "supported_source_kinds": list(capabilities.get("supported", ())),
+            "required_authority": list(failure["required_authority"]),
+        }
+        if line_index is not None:
+            metadata["line_index"] = line_index
+        label = (
+            "Direct-issued sales returns"
+            if source_kind == "direct_issue"
+            else "Uninvoiced purchase returns"
+        )
+        raise OperatorActionError(
+            ActionErrorCode.POLICY_BLOCKED,
+            f"{label} are not yet executable",
+            metadata=metadata,
+        )
+
+
+def return_source_failure_detail(
+    operation_key: str, source_kind: str, message: str
+) -> dict[str, Any]:
+    """Build the stable HTTP failure document from the MCP-owned declaration."""
+
+    contract = RETURN_SOURCE_CAPABILITIES[operation_key]
+    failure = contract["blocked"][source_kind]
+    return {
+        "code": ActionErrorCode.POLICY_BLOCKED.value,
+        "message": message,
+        "retryable": failure["retryable"],
+        "metadata": {
+            "reason": failure["code"],
+            "operation_key": operation_key,
+            "source_kind": source_kind,
+            "supported_source_kinds": list(contract["supported"]),
+            "required_authority": list(failure["required_authority"]),
+        },
+    }
+
+
 def validate_prepare_payload_semantics(
     operation_key: str, payload: BaseModel
 ) -> None:
     """Enforce conditional action rules that JSON Schema field shapes cannot express."""
 
     values = payload.model_dump(mode="python")
+    validate_prepare_payload_capabilities(operation_key, values)
     if operation_key == "sales.order.prepare":
         if values["requested_delivery_date"] < values["order_date"]:
             raise ValueError(
@@ -436,6 +504,12 @@ def validate_prepare_payload_semantics(
             )
         seen_invoice_lines = set()
         for index, line in enumerate(values["lines"]):
+            source_kind = line["fulfillment_source"]
+            allocation_id = line.get("invoice_dispatch_allocation_id")
+            if source_kind == "dispatch_allocated" and allocation_id is None:
+                raise ValueError(
+                    f"lines[{index}] dispatch_allocated requires invoice_dispatch_allocation_id"
+                )
             invoice_line_id = line["original_invoice_line_id"]
             if invoice_line_id in seen_invoice_lines:
                 raise ValueError(
@@ -479,8 +553,8 @@ def validate_prepare_payload_semantics(
                     "commercial_only purchase return must not include supplier credit-note portal evidence"
                 )
         else:
-            raise ValueError(
-                "uninvoiced purchase return is unavailable until invoice-allocation concurrency is guarded"
+            raise AssertionError(
+                "return-source capability validation must reject uninvoiced before semantic validation"
             )
         seen_receipt_lines = set()
         for index, line in enumerate(values["lines"]):
