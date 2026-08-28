@@ -83,10 +83,13 @@ it('sends all server-side filters and returns the strict response', async () => 
     document_kind: 'sales_invoice', search: 'Exact', status: 'posted',
     date_from: '2026-08-01', date_to: '2026-08-31', page: 2, page_size: 1,
   });
-  expect(get).toHaveBeenCalledWith('/canonical/document-history', { params: {
-    document_kind: 'sales_invoice', search: 'Exact', status: 'posted',
-    date_from: '2026-08-01', date_to: '2026-08-31', page: 2, page_size: 1,
-  } });
+  expect(get).toHaveBeenCalledWith('/canonical/document-history', {
+    params: {
+      document_kind: 'sales_invoice', search: 'Exact', status: 'posted',
+      date_from: '2026-08-01', date_to: '2026-08-31', page: 2, page_size: 1,
+    },
+    preserveExactDecimals: true,
+  });
 });
 
 it('routes a canonical UUID search through the typed document identity filter', async () => {
@@ -96,11 +99,14 @@ it('routes a canonical UUID search through the typed document identity filter', 
     search: row.document_id,
     page: 1,
   });
-  expect(get).toHaveBeenCalledWith('/canonical/document-history', { params: {
-    document_kind: 'purchase_order',
-    document_id: row.document_id,
-    page: 1,
-  } });
+  expect(get).toHaveBeenCalledWith('/canonical/document-history', {
+    params: {
+      document_kind: 'purchase_order',
+      document_id: row.document_id,
+      page: 1,
+    },
+    preserveExactDecimals: true,
+  });
 });
 
 it('rejects malformed or conflicting explicit document identities before transport', async () => {
