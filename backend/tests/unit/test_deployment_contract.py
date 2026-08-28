@@ -1449,6 +1449,7 @@ def test_live18_is_opt_in_exact_sha_external_fixture_and_always_cleaned():
         "- name: Compile browser fixture from canonical facts and reviewed choices", 1
     )[1].split("\n      - name:", 1)[0]
     assert 'fact_source=(--resolve-from-database)' in compile_step
+    assert "PYTHONPATH=backend python3 backend/scripts/compile_live18_browser_fixture.py" in compile_step
     assert 'if test "$LIVE18_PROVIDER" = railway' in compile_step
     assert 'fact_source=(--authoritative-facts "$LIVE18_AUTHORITATIVE_FACTS_PATH")' in compile_step
     assert '"${fact_source[@]}"' in compile_step

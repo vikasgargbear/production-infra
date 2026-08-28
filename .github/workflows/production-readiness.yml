@@ -1851,7 +1851,7 @@ jobs:
             test -s "$LIVE18_AUTHORITATIVE_FACTS_PATH"
             fact_source=(--authoritative-facts "$LIVE18_AUTHORITATIVE_FACTS_PATH")
           fi
-          python3 backend/scripts/compile_live18_browser_fixture.py \
+          PYTHONPATH=backend python3 backend/scripts/compile_live18_browser_fixture.py \
             --identity-evidence "$PHARMA_CANONICAL_LIVE_FIXTURE_IDENTITY_EVIDENCE_PATH" \
             --reviewed-scalars "$LIVE18_REVIEWED_SCALARS_PATH" \
             --matrix backend/tests/live_acceptance/operation_matrix.json \
