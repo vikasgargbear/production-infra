@@ -279,7 +279,7 @@ for (const viewport of [{ width: 360, height: 800 }, { width: 412, height: 915 }
       }
     });
     await page.goto('/e2e/canonical-reads?surface=products');
-    await page.getByRole('button', { name: 'New draft' }).click();
+    await page.getByRole('button', { name: 'Create product' }).click();
     await expect(page.getByRole('button', { name: 'Review setup' })).toBeVisible();
     await page.getByLabel(/Product name/).fill('Browser Carton');
     await page.getByLabel(/Product kind/).selectOption('consumable');
