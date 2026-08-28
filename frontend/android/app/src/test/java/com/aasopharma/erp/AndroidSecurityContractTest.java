@@ -71,6 +71,20 @@ public class AndroidSecurityContractTest {
         );
     }
 
+    @Test
+    public void validatesNativeGoogleConfigurationAndHashedNonce() {
+        assertTrue(NativeGoogleAuthPlugin.isConfiguredClientId(
+            "323677199056-example.apps.googleusercontent.com"
+        ));
+        assertFalse(NativeGoogleAuthPlugin.isConfiguredClientId("not-a-client-id"));
+
+        assertTrue(NativeGoogleAuthPlugin.isValidNonce(
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        ));
+        assertFalse(NativeGoogleAuthPlugin.isValidNonce("raw-nonce"));
+        assertFalse(NativeGoogleAuthPlugin.isValidNonce(null));
+    }
+
     private static Uri oauthUri(String provider, String redirectTo) {
         return new Uri.Builder()
             .scheme("https")
