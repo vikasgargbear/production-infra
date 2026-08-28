@@ -28,22 +28,12 @@ BEGIN
       AND procedure.proname IN ('import_ingredient_release','import_tax_release','import_withholding_release')
       AND pg_catalog.has_function_privilege('erp_regulatory_importer',procedure.oid,'EXECUTE')
   )<>3 THEN RAISE EXCEPTION 'isolated importer command surface is incomplete'; END IF;
-  IF EXISTS (
-    SELECT 1 FROM pg_catalog.pg_proc AS procedure
-    JOIN pg_catalog.pg_namespace AS namespace ON namespace.oid=procedure.pronamespace
-    WHERE namespace.nspname='erp_regulatory_commands' AND procedure.proname='activate_product'
-      AND (
-        pg_catalog.has_function_privilege('erp_app',procedure.oid,'EXECUTE')
-        OR pg_catalog.has_function_privilege('erp_runtime',procedure.oid,'EXECUTE')
-      )
-  ) THEN RAISE EXCEPTION 'lower-level product activation grant is exposed'; END IF;
   IF NOT EXISTS (
     SELECT 1 FROM pg_catalog.pg_proc AS procedure
     JOIN pg_catalog.pg_namespace AS namespace ON namespace.oid=procedure.pronamespace
-    WHERE namespace.nspname='erp_master_commands'
-      AND procedure.proname='activate_configured_product'
-      AND pg_catalog.has_function_privilege('erp_runtime',procedure.oid,'EXECUTE')
-  ) THEN RAISE EXCEPTION 'canonical product activation grant is missing'; END IF;
+    WHERE namespace.nspname='erp_regulatory_commands' AND procedure.proname='activate_product'
+      AND pg_catalog.has_function_privilege('erp_app',procedure.oid,'EXECUTE')
+  ) THEN RAISE EXCEPTION 'typed product activation grant is missing'; END IF;
   SELECT pg_catalog.pg_get_functiondef(procedure.oid) INTO definition
     FROM pg_catalog.pg_proc AS procedure
     JOIN pg_catalog.pg_namespace AS namespace ON namespace.oid=procedure.pronamespace
