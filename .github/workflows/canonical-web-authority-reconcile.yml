@@ -27,6 +27,10 @@ on:
         description: Exact deployed Railway MCP SHA (required for MCP only)
         required: false
         type: string
+      mcp_tool_inventory_sha256:
+        description: Reviewed SHA-256 of the sorted deployed MCP tool inventory (required for MCP only)
+        required: false
+        type: string
       consent_receipt_id:
         description: Stable explicit-consent receipt identifier (required for MCP only)
         required: false
@@ -62,6 +66,7 @@ jobs:
       MCP_CLIENT_ID: ${{ inputs.mcp_client_id }}
       SUBJECT_USER_ID: ${{ inputs.subject_user_id }}
       MCP_REVIEWED_SHA: ${{ inputs.mcp_reviewed_sha }}
+      MCP_TOOL_INVENTORY_SHA256: ${{ inputs.mcp_tool_inventory_sha256 }}
       CONSENT_RECEIPT_ID: ${{ inputs.consent_receipt_id }}
       AUTHORITY_CONFIRMATION: ${{ inputs.confirmation }}
     steps:
@@ -91,6 +96,7 @@ jobs:
               test -z "$MCP_CLIENT_ID"
               test -z "$SUBJECT_USER_ID"
               test -z "$MCP_REVIEWED_SHA"
+              test -z "$MCP_TOOL_INVENTORY_SHA256"
               test -z "$CONSENT_RECEIPT_ID"
               ;;
             mcp)
@@ -98,7 +104,9 @@ jobs:
               [[ "$MCP_CLIENT_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]]
               [[ "$SUBJECT_USER_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]]
               [[ "$MCP_REVIEWED_SHA" =~ ^[0-9a-f]{40}$ ]]
+              [[ "$MCP_TOOL_INVENTORY_SHA256" =~ ^[0-9a-f]{64}$ ]]
               [[ "$CONSENT_RECEIPT_ID" =~ ^[A-Za-z0-9._:-]{16,200}$ ]]
+              git merge-base --is-ancestor "$MCP_REVIEWED_SHA" origin/main
               ;;
             *) exit 2 ;;
           esac
@@ -172,9 +180,14 @@ jobs:
             "$RAILWAY_MCP_ORIGIN/health" \
             | jq --exit-status --arg sha "$MCP_REVIEWED_SHA" \
               '.status == "ok" and .git_commit == $sha' >/dev/null
+          mcp_ready="$RUNNER_TEMP/canonical-mcp-ready.json"
           curl --fail --silent --show-error --max-time 30 \
-            "$RAILWAY_MCP_ORIGIN/ready" \
-            | jq --exit-status '.status == "ready" and (.tools | length) > 0' >/dev/null
+            "$RAILWAY_MCP_ORIGIN/ready" > "$mcp_ready"
+          jq --exit-status '.status == "ready" and (.tools | length) == 64' \
+            "$mcp_ready" >/dev/null
+          observed_inventory_sha256=$(jq -cS '.tools | sort' "$mcp_ready" | sha256sum \
+            | awk '{print $1}')
+          test "$observed_inventory_sha256" = "$MCP_TOOL_INVENTORY_SHA256"
 
       - name: Resolve and attest the exact active API instance
         env:
@@ -241,12 +254,14 @@ jobs:
             --arg mcp_client_id "$MCP_CLIENT_ID" \
             --arg subject_user_id "$SUBJECT_USER_ID" \
             --arg mcp_reviewed_sha "$MCP_REVIEWED_SHA" \
+            --arg mcp_tool_inventory_sha256 "$MCP_TOOL_INVENTORY_SHA256" \
             --arg consent_receipt_id "$CONSENT_RECEIPT_ID" \
             '{expected_sha:$expected_sha,project_ref:$project_ref,
               production_project_refs:$production_refs,password:$password,
               auth_user_id:$auth_user_id,authority_scope:$authority_scope,
               mcp_client_id:$mcp_client_id,subject_user_id:$subject_user_id,
               mcp_reviewed_sha:$mcp_reviewed_sha,
+              mcp_tool_inventory_sha256:$mcp_tool_inventory_sha256,
               consent_receipt_id:$consent_receipt_id}' > "$request"
           remote_code=$(python3 - <<'PY'
           print(r'''
@@ -408,35 +423,12 @@ jobs:
           capability_codes = tuple(row[0] for row in capability_rows)
           if len(capability_codes) != len(set(capability_codes)):
               raise SystemExit("user authority capability envelope is ambiguous")
-          if authority_scope == "mcp":
-              consent_text = json.dumps(
-                  {
-                      "capabilities": capability_rows,
-                      "client_id": target_client_id,
-                      "contract": consent_version,
-                      "consent_receipt_id": consent_receipt_id,
-                      "lifetime_days": 30,
-                      "subject_user_id": subject_user_id,
-                  },
-                  separators=(",", ":"),
-                  sort_keys=True,
-              )
-          consent_text_sha256 = hashlib.sha256(consent_text.encode("utf-8")).hexdigest()
-
           database_url = (
               "postgresql://postgres:" + quote(value["password"], safe="")
               + "@db." + value["project_ref"]
               + ".supabase.co:5432/postgres?sslmode=require&gssencmode=disable"
               + "&connect_timeout=15&application_name=canonical_user_authority_reconcile"
           )
-          grant_namespace = (
-              f"canonical-staging-reviewed-web-agent:{DEMO_ORG_ID}:{auth_user_id}"
-              if authority_scope == "web"
-              else f"canonical-staging-reviewed-mcp-agent:"
-              f"{DEMO_ORG_ID}:{target_subject_key}:{target_client_id}:"
-              f"{consent_text_sha256}"
-          )
-          grant_id = str(uuid5(NAMESPACE_URL, grant_namespace))
           with psycopg2.connect(database_url) as connection:
               with connection.cursor() as cursor:
                   _attest_reviewed_database(cursor)
@@ -452,33 +444,39 @@ jobs:
                           cursor.execute("SELECT set_config(%s,%s,true)", (name, setting))
                       cursor.execute(
                           """
-                          SELECT user_row.id::text,membership.id::text
+                          SELECT organization.id::text,user_row.id::text,
+                                 user_row.auth_user_id::text,membership.id::text
                             FROM core.users AS user_row
                             JOIN core.memberships AS membership
                               ON membership.user_id=user_row.id
-                             AND membership.org_id=%s
                             JOIN core.organizations AS organization
                               ON organization.id=membership.org_id
-                           WHERE ((%s='web' AND user_row.auth_user_id=%s)
+                           WHERE ((%s='web' AND membership.org_id=%s
+                                                AND user_row.auth_user_id=%s)
                                   OR (%s='mcp' AND user_row.id=%s))
                              AND user_row.status='active'
+                             AND user_row.auth_user_id IS NOT NULL
                              AND membership.status='active'
+                             AND membership.joined_at IS NOT NULL
+                             AND membership.revoked_at IS NULL
                              AND organization.status='active'
                              AND EXISTS (
                                  SELECT 1 FROM core.access_grants AS access_grant
                                   WHERE access_grant.org_id=membership.org_id
                                     AND access_grant.membership_id=membership.id
+                                    AND access_grant.scope_kind='organization'
+                                    AND access_grant.branch_id IS NULL
                                     AND access_grant.status='active'
                                     AND access_grant.valid_from_at<=transaction_timestamp()
                                     AND (access_grant.expires_at IS NULL
                                          OR access_grant.expires_at>transaction_timestamp())
                              )
-                           ORDER BY user_row.id,membership.id
+                           ORDER BY organization.id,user_row.id,membership.id
                            LIMIT 2
                           """,
                           (
-                              DEMO_ORG_ID,
                               authority_scope,
+                              DEMO_ORG_ID,
                               auth_user_id,
                               authority_scope,
                               subject_user_id,
@@ -489,7 +487,53 @@ jobs:
                           raise SystemExit(
                               "reviewed user identity lacks one active canonical membership authority"
                           )
-                      resolved_user_id, membership_id = bindings[0]
+                      (
+                          target_org_id,
+                          resolved_user_id,
+                          resolved_auth_user_id,
+                          membership_id,
+                      ) = bindings[0]
+                      if authority_scope == "mcp" and resolved_user_id != subject_user_id:
+                          raise SystemExit("reviewed canonical user identity changed")
+                      audit_membership_id = (
+                          REVIEWER_MEMBERSHIP_ID
+                          if authority_scope == "web"
+                          else membership_id
+                      )
+                      for name, setting in (
+                          ("app.org_id", target_org_id),
+                          ("app.auth_user_id", resolved_auth_user_id),
+                          ("app.membership_id", audit_membership_id),
+                      ):
+                          cursor.execute("SELECT set_config(%s,%s,true)", (name, setting))
+                      if authority_scope == "mcp":
+                          consent_text = json.dumps(
+                              {
+                                  "capabilities": capability_rows,
+                                  "canonical_user_id": resolved_user_id,
+                                  "client_id": target_client_id,
+                                  "contract": consent_version,
+                                  "consent_receipt_id": consent_receipt_id,
+                                  "lifetime_days": 30,
+                                  "organization_id": target_org_id,
+                                  "subject_auth_user_id": resolved_auth_user_id,
+                              },
+                              separators=(",", ":"),
+                              sort_keys=True,
+                          )
+                      consent_text_sha256 = hashlib.sha256(
+                          consent_text.encode("utf-8")
+                      ).hexdigest()
+                      grant_namespace = (
+                          f"canonical-staging-reviewed-web-agent:"
+                          f"{target_org_id}:{resolved_auth_user_id}"
+                          if authority_scope == "web"
+                          else f"canonical-staging-reviewed-mcp-agent:"
+                          f"{target_org_id}:{resolved_auth_user_id}:"
+                          f"{resolved_user_id}:{target_client_id}:"
+                          f"{consent_text_sha256}"
+                      )
+                      grant_id = str(uuid5(NAMESPACE_URL, grant_namespace))
                       cursor.execute(
                           """
                           SELECT subject_membership_id::text,client_id,
@@ -497,11 +541,16 @@ jobs:
                                  authorization_mode,consent_version,
                                  encode(consent_text_hash,'hex'),
                                  consented_by_membership_id::text,status,
-                                 expires_at>transaction_timestamp()
+                                 expires_at>transaction_timestamp(),
+                                 granted_by_membership_id::text,
+                                 consented_at=granted_at,
+                                 expires_at=consented_at+interval '30 days',
+                                 created_by_membership_id::text,
+                                 updated_by_membership_id::text
                             FROM automation.agent_grants
                            WHERE org_id=%s AND id=%s
                           """,
-                          (DEMO_ORG_ID, grant_id),
+                          (target_org_id, grant_id),
                       )
                       existing_grant = cursor.fetchone()
                       expected_grant = (
@@ -515,8 +564,15 @@ jobs:
                           membership_id,
                           "active",
                           True,
+                          audit_membership_id,
+                          True,
+                          True,
+                          audit_membership_id,
+                          audit_membership_id,
                       )
-                      expected_capabilities = sorted(capability_rows)
+                      expected_capabilities = sorted(
+                          (*row, audit_membership_id) for row in capability_rows
+                      )
                       if existing_grant is not None:
                           if existing_grant != expected_grant:
                               raise SystemExit(
@@ -526,12 +582,13 @@ jobs:
                               """
                               SELECT capability_code,operation_mode,risk_class,
                                      approval_policy,maximum_amount::text,currency_code,
-                                     allow_sensitive_read
+                                     allow_sensitive_read,
+                                     created_by_membership_id::text
                                 FROM automation.agent_grant_capabilities
                                WHERE org_id=%s AND agent_grant_id=%s AND status='active'
                                ORDER BY capability_code
                               """,
-                              (DEMO_ORG_ID, grant_id),
+                              (target_org_id, grant_id),
                           )
                           if cursor.fetchall() != expected_capabilities:
                               raise SystemExit(
@@ -549,8 +606,8 @@ jobs:
                                  AND client_id=%s AND status='active'
                               """,
                               (
-                                  REVIEWER_MEMBERSHIP_ID,
-                                  DEMO_ORG_ID,
+                                  audit_membership_id,
+                                  target_org_id,
                                   membership_id,
                                   target_client_id,
                               ),
@@ -571,10 +628,10 @@ jobs:
                               ) ON CONFLICT (org_id,id) DO NOTHING
                               """,
                               (
-                                  DEMO_ORG_ID,grant_id,membership_id,target_client_id,
+                                  target_org_id,grant_id,membership_id,target_client_id,
                                   target_client_name,consent_version,consent_text,
-                                  membership_id,REVIEWER_MEMBERSHIP_ID,
-                                  REVIEWER_MEMBERSHIP_ID,REVIEWER_MEMBERSHIP_ID,
+                                  membership_id,audit_membership_id,
+                                  audit_membership_id,audit_membership_id,
                               ),
                           )
                           cursor.executemany(
@@ -588,9 +645,9 @@ jobs:
                               """,
                               [
                                   (
-                                      DEMO_ORG_ID,grant_id,capability,mode,risk,approval,
+                                      target_org_id,grant_id,capability,mode,risk,approval,
                                       maximum_amount,currency,allow_sensitive,
-                                      REVIEWER_MEMBERSHIP_ID,
+                                      audit_membership_id,
                                   )
                                   for capability,mode,risk,approval,maximum_amount,currency,
                                       allow_sensitive
@@ -603,7 +660,8 @@ jobs:
                                  capability.operation_mode,capability.risk_class,
                                  capability.approval_policy,
                                  capability.maximum_amount::text,capability.currency_code,
-                                 capability.allow_sensitive_read
+                                 capability.allow_sensitive_read,
+                                 capability.created_by_membership_id::text
                             FROM automation.agent_grants AS grant_row
                             JOIN automation.agent_grant_capabilities AS capability
                               ON capability.org_id=grant_row.org_id
@@ -617,13 +675,13 @@ jobs:
                              AND capability.status='active'
                            ORDER BY capability.capability_code
                           """,
-                          (DEMO_ORG_ID, membership_id, target_client_id, membership_id),
+                          (target_org_id, membership_id, target_client_id, membership_id),
                       )
                       readback = cursor.fetchall()
                       expected = sorted(
                           (
                               grant_id,capability,mode,risk,approval,
-                              maximum_amount,currency,allow_sensitive,
+                              maximum_amount,currency,allow_sensitive,audit_membership_id,
                           )
                           for capability,mode,risk,approval,maximum_amount,currency,
                               allow_sensitive
@@ -638,7 +696,7 @@ jobs:
                             FROM automation.agent_grants
                            WHERE org_id=%s AND id=%s
                           """,
-                          (DEMO_ORG_ID, grant_id),
+                          (target_org_id, grant_id),
                       )
                       grant_receipt = cursor.fetchone()
                       if grant_receipt is None or grant_receipt[3] != "active":
@@ -657,7 +715,12 @@ jobs:
               "authority_scope": authority_scope,
               "client_id": target_client_id,
               "subject_user_id": resolved_user_id,
+              "subject_auth_user_id": resolved_auth_user_id,
+              "organization_id": target_org_id,
               "mcp_commit_sha": value["mcp_reviewed_sha"] or None,
+              "mcp_tool_inventory_sha256": (
+                  value["mcp_tool_inventory_sha256"] or None
+              ),
               "grant_id": grant_id,
               "reconciliation_outcome": reconciliation_outcome,
               "capability_count": len(capability_rows),
@@ -683,12 +746,15 @@ jobs:
             test "$(jq -r .client_id "$response")" = "$MCP_CLIENT_ID"
             test "$(jq -r .subject_user_id "$response")" = "$SUBJECT_USER_ID"
             test "$(jq -r .mcp_commit_sha "$response")" = "$MCP_REVIEWED_SHA"
+            test "$(jq -r .mcp_tool_inventory_sha256 "$response")" = \
+              "$MCP_TOOL_INVENTORY_SHA256"
             test "$(jq -r .capability_count "$response")" = 28
           else
             test "$(jq -r .client_id "$response")" = aasopharma-erp-web
             test "$(jq -r .capability_count "$response")" = 11
           fi
-          jq '{status,commit_sha,mcp_commit_sha,authority_scope,client_id,subject_user_id,
+          jq '{status,commit_sha,mcp_commit_sha,mcp_tool_inventory_sha256,
+               authority_scope,client_id,subject_user_id,subject_auth_user_id,organization_id,
                grant_id,reconciliation_outcome,capability_count,consent_version,
                consent_text_sha256,expires_at}' "$response" > "$AUTHORITY_RECEIPT_PATH"
           test "$(wc -c < "$AUTHORITY_RECEIPT_PATH")" -le 4096
