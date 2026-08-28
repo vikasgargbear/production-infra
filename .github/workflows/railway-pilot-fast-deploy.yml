@@ -1,0 +1,183 @@
+name: Railway pilot fast deploy
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: railway-pilot-fast-deploy-main
+  cancel-in-progress: true
+
+jobs:
+  change-plan:
+    runs-on: ubuntu-latest
+    outputs:
+      deploy_api: ${{ steps.plan.outputs.deploy_api }}
+      deploy_mcp: ${{ steps.plan.outputs.deploy_mcp }}
+      deploy_frontend: ${{ steps.plan.outputs.deploy_frontend }}
+      deploy_any: ${{ steps.plan.outputs.deploy_any }}
+      release_required: ${{ steps.plan.outputs.release_required }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Select services changed by this main update
+        id: plan
+        env:
+          BASE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          if [[ "$BASE_SHA" =~ ^0+$ ]]; then
+            BASE_SHA=$(git rev-parse HEAD^)
+          fi
+          git diff --name-only -z "$BASE_SHA" "$GITHUB_SHA" \
+            | python backend/scripts/ci_change_plan.py \
+                --github-output "$GITHUB_OUTPUT"
+
+  deploy:
+    if: needs.change-plan.outputs.deploy_any == 'true'
+    needs: [change-plan]
+    runs-on: ubuntu-latest
+    environment: canonical-staging
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - component: api
+            selected: ${{ needs.change-plan.outputs.deploy_api }}
+          - component: mcp
+            selected: ${{ needs.change-plan.outputs.deploy_mcp }}
+          - component: frontend
+            selected: ${{ needs.change-plan.outputs.deploy_frontend }}
+    env:
+      RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+      RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
+      RAILWAY_ENVIRONMENT_ID: ${{ vars.RAILWAY_ENVIRONMENT_ID }}
+      RAILWAY_API_SERVICE: ${{ vars.RAILWAY_API_SERVICE }}
+      RAILWAY_MCP_SERVICE: ${{ vars.RAILWAY_MCP_SERVICE }}
+      RAILWAY_FRONTEND_SERVICE: ${{ vars.RAILWAY_FRONTEND_SERVICE }}
+      RAILWAY_API_URL: ${{ vars.RAILWAY_API_URL }}
+      RAILWAY_MCP_URL: ${{ vars.RAILWAY_MCP_URL }}
+      RAILWAY_FRONTEND_URL: ${{ vars.RAILWAY_FRONTEND_URL }}
+    steps:
+      - name: Skip unchanged service
+        if: matrix.selected != 'true'
+        run: echo "${{ matrix.component }} is unchanged"
+
+      - uses: actions/checkout@v4
+        if: matrix.selected == 'true'
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        if: matrix.selected == 'true'
+        with:
+          node-version: "22"
+
+      - name: Install the pinned Railway CLI
+        if: matrix.selected == 'true'
+        run: npm install --global @railway/cli@5.43.4
+
+      - name: Upload only the changed service
+        if: matrix.selected == 'true'
+        env:
+          COMPONENT: ${{ matrix.component }}
+          DEPLOYMENT_NONCE: ${{ github.run_id }}:${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          case "$COMPONENT" in
+            api) service=$RAILWAY_API_SERVICE ;;
+            mcp) service=$RAILWAY_MCP_SERVICE ;;
+            frontend) service=$RAILWAY_FRONTEND_SERVICE ;;
+            *) exit 2 ;;
+          esac
+          test -n "$service"
+          railway link \
+            --project "$RAILWAY_PROJECT_ID" \
+            --environment "$RAILWAY_ENVIRONMENT_ID"
+          printf '%s' "$GITHUB_SHA" | railway variable set \
+            --service "$service" \
+            --environment "$RAILWAY_ENVIRONMENT_ID" \
+            --skip-deploys --stdin RAILWAY_GIT_COMMIT_SHA >/dev/null
+          printf '%s\n' "$GITHUB_SHA:$DEPLOYMENT_NONCE" \
+            > "deploy/railway/$COMPONENT.force-deploy"
+          railway up --detach --json \
+            --service "$service" \
+            --environment "$RAILWAY_ENVIRONMENT_ID" \
+            --project "$RAILWAY_PROJECT_ID" \
+            --message "pilot fast deploy $GITHUB_SHA $COMPONENT" \
+            > deployment.json
+          deployment_id=$(jq -er '.deploymentId' deployment.json)
+          echo "DEPLOYMENT_ID=$deployment_id" >> "$GITHUB_ENV"
+          echo "SERVICE=$service" >> "$GITHUB_ENV"
+
+      - name: Wait for the selected deployment and verify public identity
+        if: matrix.selected == 'true'
+        env:
+          COMPONENT: ${{ matrix.component }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 180); do
+            railway deployment list \
+              --service "$SERVICE" \
+              --environment "$RAILWAY_ENVIRONMENT_ID" \
+              --limit 100 --json > deployments.json
+            status=$(jq -er --arg id "$DEPLOYMENT_ID" \
+              '[.[] | select(.id == $id) | .status] | if length == 1 then .[0] else "NOT_FOUND" end' \
+              deployments.json)
+            case "$status" in
+              SUCCESS|SLEEPING) break ;;
+              FAILED|CRASHED|SKIPPED|REMOVED|REMOVING|CANCELLED) exit 1 ;;
+            esac
+            test "$attempt" -lt 180
+            sleep 5
+          done
+          for attempt in $(seq 1 60); do
+            case "$COMPONENT" in
+              api)
+                payload=$(curl --fail --silent --show-error --max-time 15 \
+                  "$RAILWAY_API_URL/health" || true)
+                jq -e --arg sha "$GITHUB_SHA" \
+                  '.status == "healthy" and .git_commit == $sha' \
+                  <<<"$payload" >/dev/null 2>&1 && exit 0
+                ;;
+              mcp)
+                payload=$(curl --fail --silent --show-error --max-time 15 \
+                  "$RAILWAY_MCP_URL/health" || true)
+                jq -e --arg sha "$GITHUB_SHA" \
+                  '.status == "ok" and .git_commit == $sha' \
+                  <<<"$payload" >/dev/null 2>&1 && exit 0
+                ;;
+              frontend)
+                payload=$(curl --fail --silent --show-error --max-time 15 \
+                  "$RAILWAY_FRONTEND_URL/build-metadata.json" || true)
+                jq -e --arg sha "$GITHUB_SHA" \
+                  '.service == "aasopharma-erp" and .git_commit == $sha' \
+                  <<<"$payload" >/dev/null 2>&1 && exit 0
+                ;;
+            esac
+            sleep 5
+          done
+          echo "$COMPONENT did not publish $GITHUB_SHA" >&2
+          exit 1
+
+  no-fast-deploy:
+    if: >-
+      always() && needs.change-plan.result == 'success' &&
+      needs.change-plan.outputs.deploy_any != 'true'
+    needs: [change-plan]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report an intentionally unchanged pilot
+        env:
+          RELEASE_REQUIRED: ${{ needs.change-plan.outputs.release_required }}
+        run: |
+          if test "$RELEASE_REQUIRED" = true; then
+            echo "Database/control-plane change: use release certification; pilot was not partially deployed."
+          else
+            echo "No deployable service content changed."
+          fi

@@ -12,6 +12,11 @@ on:
         required: false
         default: false
         type: boolean
+      github_environment:
+        description: Isolated GitHub environment containing certification-only Railway and Supabase authority
+        required: false
+        default: canonical-certification
+        type: string
   workflow_call:
     inputs:
       reviewed_sha:
@@ -23,6 +28,11 @@ on:
         required: false
         default: false
         type: boolean
+      github_environment:
+        description: Isolated GitHub environment containing certification-only Railway and Supabase authority
+        required: false
+        default: canonical-certification
+        type: string
     outputs:
       api_deployment_id:
         description: Exact Railway API deployment created for the reviewed SHA
@@ -33,6 +43,9 @@ on:
       frontend_deployment_id:
         description: Exact Railway frontend deployment created for the reviewed SHA
         value: ${{ jobs.deploy.outputs.frontend_deployment_id }}
+      reused_exact_sha:
+        description: Whether all three already-active exact-SHA deployments were reused
+        value: ${{ jobs.deploy.outputs.reused_exact_sha }}
     secrets:
       RAILWAY_API_TOKEN:
         required: true
@@ -61,7 +74,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: railway-canonical-staging-pilot
+  group: railway-canonical-certification
   cancel-in-progress: false
 
 jobs:
@@ -70,8 +83,9 @@ jobs:
       api_deployment_id: ${{ steps.exact_upload.outputs.api_deployment_id }}
       mcp_deployment_id: ${{ steps.exact_upload.outputs.mcp_deployment_id }}
       frontend_deployment_id: ${{ steps.exact_upload.outputs.frontend_deployment_id }}
+      reused_exact_sha: ${{ steps.exact_upload.outputs.reused_exact_sha }}
     runs-on: ubuntu-latest
-    environment: canonical-staging
+    environment: ${{ inputs.github_environment }}
     timeout-minutes: 45
     env:
       RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
@@ -802,6 +816,58 @@ jobs:
         run: |
           set -euo pipefail
 
+          fetch() {
+            curl --fail --silent --show-error --max-time 15 \
+              "$1" > "$2" 2>/dev/null || :
+          }
+          fetch "$RAILWAY_API_URL/health" reuse-api-health.json &
+          fetch "$RAILWAY_MCP_URL/health" reuse-mcp-health.json &
+          fetch "$RAILWAY_FRONTEND_URL/build-metadata.json" reuse-frontend.json &
+          wait
+          if jq -e --arg sha "$REVIEWED_SHA" \
+               '.status == "healthy" and .git_commit == $sha' \
+               reuse-api-health.json >/dev/null 2>&1 && \
+             jq -e --arg sha "$REVIEWED_SHA" \
+               '.status == "ok" and .git_commit == $sha' \
+               reuse-mcp-health.json >/dev/null 2>&1 && \
+             jq -e --arg sha "$REVIEWED_SHA" \
+               '.service == "aasopharma-erp" and .git_commit == $sha' \
+               reuse-frontend.json >/dev/null 2>&1; then
+            railway status \
+              --project "$RAILWAY_PROJECT_ID" \
+              --environment "$RAILWAY_ENVIRONMENT_ID" \
+              --json > reuse-status.json
+            active_deployment_id() {
+              local service=$1
+              jq -er \
+                --arg environment "$RAILWAY_ENVIRONMENT_ID" \
+                --arg service "$service" '
+                  [.environments.edges[].node
+                   | select(.id == $environment)
+                   | .serviceInstances.edges[].node
+                   | select(.serviceName == $service)
+                   | .activeDeployments[]
+                   | select(.status == "SUCCESS" and .deploymentStopped == false)
+                   | .id]
+                  | if length == 1 then .[0]
+                    else error("expected one active exact-SHA deployment") end
+                ' reuse-status.json
+            }
+            active_deployment_id "$RAILWAY_API_SERVICE" > api-deployment-id
+            active_deployment_id "$RAILWAY_MCP_SERVICE" > mcp-deployment-id
+            active_deployment_id "$RAILWAY_FRONTEND_SERVICE" > frontend-deployment-id
+            touch reused-exact-sha
+            {
+              echo "api_deployment_id=$(<api-deployment-id)"
+              echo "mcp_deployment_id=$(<mcp-deployment-id)"
+              echo "frontend_deployment_id=$(<frontend-deployment-id)"
+              echo "reused_exact_sha=true"
+            } >> "$GITHUB_OUTPUT"
+            echo "Reusing the three already-active deployments for $REVIEWED_SHA"
+            exit 0
+          fi
+          echo "reused_exact_sha=false" >> "$GITHUB_OUTPUT"
+
           # Railway watch paths compare changed archive paths. These provenance-only
           # markers make an unchanged reviewed commit uploadable without modifying
           # product code or falling back to an older Railway deployment.
@@ -1010,6 +1076,10 @@ jobs:
       - name: Require each exact upload to become the active deployment
         run: |
           set -euo pipefail
+          if test -f reused-exact-sha; then
+            echo "Exact-SHA services were already active; source upload polling is unnecessary."
+            exit 0
+          fi
           # Railway may finish building an image before regional compute assigns
           # an instance. Keep this bound above the longest observed healthy
           # Singapore activation (about 19 minutes), while remaining below the

@@ -31,13 +31,13 @@ def test_live_promotion_is_exact_sha_canonical_and_disposable_org_bound():
     assert "pytest -q backend/tests/live_canonical" in live_job
     assert "backend/tests/live_erp" not in live_job
     assert "PHARMA_CANONICAL_LIVE_TARGET_KIND: disposable_test" in live_job
-    assert "PHARMA_CANONICAL_LIVE_PROJECT_REF: rgihahbmkrmhitjdjvev" in live_job
+    assert "PHARMA_CANONICAL_LIVE_PROJECT_REF: ${{ vars.CANONICAL_STAGING_PROJECT_REF }}" in live_job
     assert "provision_ephemeral_canonical_live.py provision" in live_job
     assert '--fixture-run-token "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"' in live_job
     assert "PHARMA_CANONICAL_MCP_REVIEWER_ACCESS_TOKEN" in live_job
     assert "PHARMA_CANONICAL_LIVE_DELEGATED_TOKENS_JSON" not in live_job
     assert "PHARMA_CANONICAL_LIVE_FIXTURE_INPUT_JSON" in live_job
-    assert "environment: canonical-staging" in live_job
+    assert "environment: canonical-certification" in live_job
     assert "needs: [canonical-free-staging, railway-canonical-staging]" in live_job
     assert "needs.canonical-free-staging.result == 'success'" in live_job
     assert "inputs.provision_canonical_demo" in live_job
@@ -52,12 +52,12 @@ def test_live_promotion_is_exact_sha_canonical_and_disposable_org_bound():
     assert "inputs.live18_provider == 'railway' && vars.RAILWAY_FRONTEND_URL" in browser_job
     assert "PLAYWRIGHT_LIVE_EXPECTED_ORG_ID" in browser_job
     assert "PLAYWRIGHT_SALES_CHAIN_FIXTURE" in browser_job
-    assert "environment: canonical-staging" in browser_job
+    assert "environment: canonical-certification" in browser_job
     assert "needs: [canonical-free-staging, railway-canonical-staging]" in browser_job
     assert "needs.canonical-free-staging.result == 'success'" in browser_job
     assert "inputs.provision_canonical_demo" in browser_job
     assert "environment: live-erp-test" not in browser_job
-    assert "canonical-staging-live-browser-identities" in browser_job
+    assert "canonical-certification-live-browser-identities" in browser_job
     assert "provision --profile core-operator" in browser_job
     assert "Always restore the Render identity and remove disposable Auth user" in browser_job
     assert "Always restore the Railway identity over direct IPv6" in browser_job
@@ -84,9 +84,9 @@ def test_live_promotion_is_exact_sha_canonical_and_disposable_org_bound():
     assert "needs.canonical-free-staging.result == 'success'" in two_user_job
     assert "inputs.provision_canonical_demo" in two_user_job
     assert 'PLAYWRIGHT_LIVE_EXPECTED_ORG_ID: "d3000000-0000-7000-8000-000000000001"' in two_user_job
-    assert browser_job.count("group: canonical-staging-live-browser-identities") == 1
-    assert live_job.count("group: canonical-staging-live-browser-identities") == 1
-    assert two_user_job.count("group: canonical-staging-live-browser-identities") == 1
+    assert browser_job.count("group: canonical-certification-live-browser-identities") == 1
+    assert live_job.count("group: canonical-certification-live-browser-identities") == 1
+    assert two_user_job.count("group: canonical-certification-live-browser-identities") == 1
 
 
 def test_live_api_mcp_authority_is_ephemeral_and_command_bound():
@@ -143,7 +143,7 @@ def test_live_browser_two_user_approval_harness_is_explicit_and_ui_driven():
     two_user_job = workflow.split("live-browser-erp-two-user-approvals:", 1)[1].split(
         "\n  live18-acceptance:", 1
     )[0]
-    assert "environment: canonical-staging" in two_user_job
+    assert "environment: canonical-certification" in two_user_job
     assert "inputs.live18_provider == 'railway' && vars.RAILWAY_FRONTEND_URL" in two_user_job
     assert "environment: live-erp-test" not in two_user_job
     for long_lived_secret in (
@@ -159,7 +159,7 @@ def test_live_browser_two_user_approval_harness_is_explicit_and_ui_driven():
         assert reference not in job_environment
         assert two_user_job.count(reference) == 2
     assert "SUPABASE_SERVICE_ROLE_KEY" not in two_user_job
-    assert "canonical-staging-live-browser-identities" in two_user_job
+    assert "canonical-certification-live-browser-identities" in two_user_job
     assert "provision_ephemeral_browser_identities.py" in two_user_job
     assert "provision --profile two-user-approvals" in two_user_job
     assert "Refuse missing or identical maker/checker browser identities" in two_user_job
@@ -1314,8 +1314,8 @@ def test_live18_is_opt_in_exact_sha_external_fixture_and_always_cleaned():
     assert "- railway" in workflow
     live18 = workflow.split("\n  live18-acceptance:", 1)[1]
 
-    assert "github.event_name == 'workflow_dispatch' && inputs.run_live18" in live18
-    assert "needs: [canonical-free-staging, railway-canonical-staging]" in live18
+    assert "inputs.release_certification && inputs.run_live18" in live18
+    assert "needs: [dispatch-contract, canonical-free-staging, railway-canonical-staging]" in live18
     assert "needs.canonical-free-staging.result == 'success'" in live18
     assert "needs.railway-canonical-staging.result" in live18
     assert "inputs.provision_canonical_demo }}' != true" in live18

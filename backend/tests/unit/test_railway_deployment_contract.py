@@ -347,8 +347,10 @@ def test_workflow_uploads_fresh_source_and_polls_exact_deployment_ids() -> None:
     assert 'python3 "$GITHUB_WORKSPACE/backend/scripts/railway_upload_diagnostic.py"' in workflow
     assert 'python "$GITHUB_WORKSPACE/backend/scripts/railway_upload_diagnostic.py"' not in workflow
 
-    assert "group: railway-canonical-staging-pilot" in workflow
+    assert "group: railway-canonical-certification" in workflow
     assert "cancel-in-progress: false" in workflow
+    assert "Reusing the three already-active deployments" in workflow
+    assert 'echo "reused_exact_sha=true"' in workflow
     assert "timeout-minutes: 45" in workflow
     up_commands = re.findall(r"^\s+if railway up .+$", workflow, flags=re.MULTILINE)
     assert len(up_commands) == 1
