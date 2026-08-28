@@ -3,6 +3,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 WORKFLOW = ROOT / ".github/workflows/chatgpt-mcp-oauth-client.yml"
+AUTH_ADMIN = ROOT / "backend/scripts/supabase_auth_admin.py"
+PROVISIONER = ROOT / "backend/scripts/provision_staging_mcp_oauth.py"
 
 
 def _workflow() -> str:
@@ -96,3 +98,18 @@ def test_chatgpt_oauth_workflow_installs_only_pinned_script_dependencies() -> No
     assert "requests==2.34.2" in workflow
     assert "backend/requirements.txt" not in workflow
     assert "npm " not in workflow
+
+
+def test_chatgpt_oauth_workflow_uses_current_supabase_admin_contract() -> None:
+    workflow = _workflow()
+    auth_admin = AUTH_ADMIN.read_text(encoding="utf-8")
+    provisioner = PROVISIONER.read_text(encoding="utf-8")
+
+    assert "python3 backend/scripts/provision_staging_mcp_oauth.py" in workflow
+    assert 'return {"apikey": self.secret_key}' in auth_admin
+    assert '"Authorization": f"Bearer {self.secret_key}"' not in auth_admin
+    assert '"client_name": CLIENT_NAME' in provisioner
+    assert '"PUT",\n                f"{endpoint}/{client[\'client_id\']}"' in provisioner
+    assert '"PATCH",\n                f"{endpoint}/{client[\'client_id\']}"' not in provisioner
+    assert "AUTH_ADMIN_REJECTED (HTTP" not in provisioner
+    assert 'f" (HTTP {error.status_code})"' in provisioner

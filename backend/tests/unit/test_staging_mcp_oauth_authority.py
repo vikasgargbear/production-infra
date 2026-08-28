@@ -176,7 +176,7 @@ def test_chatgpt_authority_reconciles_exact_predefined_public_client_only(
     }
 
 
-def test_chatgpt_callback_is_patched_onto_the_reviewed_public_client(
+def test_chatgpt_callback_is_put_onto_the_reviewed_public_client(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     callback_uri = provision.REVIEWED_CHATGPT_CALLBACK
@@ -206,10 +206,10 @@ def test_chatgpt_callback_is_patched_onto_the_reviewed_public_client(
     assert calls == [
         ("GET", "oauth/clients", None, {"per_page": 100}),
         (
-            "PATCH",
+            "PUT",
             "oauth/clients/reviewed-public-client",
             {
-                "name": provision.CLIENT_NAME,
+                "client_name": provision.CLIENT_NAME,
                 "redirect_uris": list(redirect_uris),
                 "client_type": "public",
                 "token_endpoint_auth_method": "none",
@@ -217,6 +217,95 @@ def test_chatgpt_callback_is_patched_onto_the_reviewed_public_client(
             None,
         ),
     ]
+
+
+def test_chatgpt_client_create_uses_official_public_client_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    redirect_uris = (
+        *provision.REDIRECT_URIS,
+        provision.REVIEWED_CHATGPT_CALLBACK,
+    )
+    calls: list[tuple[str, str, dict | None, dict | None]] = []
+
+    def request(_authority, method, path, *, payload=None, params=None):
+        calls.append((method, path, payload, params))
+        if method == "GET":
+            return {"clients": []}
+        return {"client_id": "new-public-client", **payload}
+
+    monkeypatch.setattr(provision, "_auth_admin_json", request)
+
+    client = provision._reconcile_client(
+        _auth_admin(),
+        redirect_uris=redirect_uris,
+    )
+
+    assert client["client_id"] == "new-public-client"
+    assert calls == [
+        ("GET", "oauth/clients", None, {"per_page": 100}),
+        (
+            "POST",
+            "oauth/clients",
+            {
+                "client_name": provision.CLIENT_NAME,
+                "redirect_uris": list(redirect_uris),
+                "client_type": "public",
+                "token_endpoint_auth_method": "none",
+            },
+            None,
+        ),
+    ]
+
+
+def test_auth_admin_error_exposes_only_status_not_secret_or_response_body(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    secret = "sb_secret_" + "z" * 32
+    provider_body = f"provider failure containing {secret}"
+
+    def rejected(*_args, **_kwargs):
+        raise provision.SupabaseAuthAdminError(
+            "AUTH_ADMIN_REJECTED",
+            provider_body,
+            status_code=401,
+        )
+
+    monkeypatch.setattr(provision, "auth_admin_request", rejected)
+
+    with pytest.raises(provision.ProvisioningError) as caught:
+        provision._auth_admin_json(_auth_admin(), "GET", "oauth/clients")
+
+    assert str(caught.value) == (
+        "Supabase Auth Admin request blocked: AUTH_ADMIN_REJECTED (HTTP 401)"
+    )
+    assert secret not in str(caught.value)
+    assert "provider failure" not in str(caught.value)
+
+
+def test_management_error_exposes_only_status_not_secret_or_response_body(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    secret = "sb_secret_" + "z" * 32
+    provider_body = f"provider failure containing {secret}"
+
+    def rejected(*_args, **_kwargs):
+        raise provision.SupabaseAuthAdminError(
+            "MANAGEMENT_API_REJECTED",
+            provider_body,
+            status_code=403,
+        )
+
+    monkeypatch.setattr(provision, "resolve_auth_admin_authority", rejected)
+
+    with pytest.raises(provision.ProvisioningError) as caught:
+        provision._auth_admin_authority("management-token")
+
+    assert str(caught.value) == (
+        "Supabase Auth Admin authority blocked: MANAGEMENT_API_REJECTED (HTTP 403)"
+    )
+    assert secret not in str(caught.value)
+    assert "provider failure" not in str(caught.value)
 
 
 def test_client_authority_only_does_not_create_identity_or_bind_database(
