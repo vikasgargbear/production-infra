@@ -40,5 +40,6 @@ describe('StockTransfer governed location contract', () => {
   it('publishes the exact canonical batch identity for deterministic browser selection', () => {
     expect(source).toContain('data-testid={`transfer-fefo-batch-');
     expect(source).toContain('batch.batch_id');
+    expect(source).toContain("batch.is_default ? 'transfer-fefo-default-batch'");
   });
 });

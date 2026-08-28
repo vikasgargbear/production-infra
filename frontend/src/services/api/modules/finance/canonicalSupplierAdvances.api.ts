@@ -82,7 +82,11 @@ export const canonicalSupplierAdvancesApi = {
 };
 
 export async function prepareSupplierAdvance(payload: SupplierAdvancePreparePayload) {
-  const response = await prepareCanonicalAction('finance.supplier_advance.prepare', payload);
+  // The bank account is command input; its settlement ledger is authoritative
+  // read context used for preview/readback verification. Never send that
+  // derived ledger back through the strict canonical command schema.
+  const { settlement_account_id: _expectedSettlementAccountId, ...request } = payload;
+  const response = await prepareCanonicalAction('finance.supplier_advance.prepare', request);
   validateSupplierAdvancePreview(response.data, payload);
   return response;
 }

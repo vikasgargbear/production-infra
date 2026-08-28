@@ -67,6 +67,29 @@ describe('PurchaseHub canonical receipt navigation', () => {
     jest.clearAllMocks();
   });
 
+  it('follows a later authoritative deep-link after an internal receipt transition', async () => {
+    const onSubpageChange = jest.fn();
+    (canonicalGoodsReceiptsApi.getPurchaseOrderContext as jest.Mock).mockResolvedValue({
+      data: receiptContext,
+    });
+    const { rerender } = render(
+      <PurchaseHub initialSubpage="purchase-history" onSubpageChange={onSubpageChange} />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Start receipt' }));
+    await waitFor(() => expect(onSubpageChange).toHaveBeenCalledWith('grn'));
+    expect(screen.getByLabelText('Purchase default module').textContent).toBe('grn');
+
+    rerender(
+      <PurchaseHub initialSubpage="grn" onSubpageChange={onSubpageChange} />,
+    );
+    rerender(
+      <PurchaseHub initialSubpage="purchase-history" onSubpageChange={onSubpageChange} />,
+    );
+    await waitFor(() => expect(
+      screen.getByLabelText('Purchase default module').textContent,
+    ).toBe('purchase-history'));
+  });
+
   it('keeps the Receipts module selected after loading canonical PO context', async () => {
     jest.useFakeTimers();
     const onSubpageChange = jest.fn();
