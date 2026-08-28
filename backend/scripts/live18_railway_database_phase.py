@@ -55,7 +55,9 @@ from live18_evidence_contract import MANDATORY_LINEAGE_PATHS  # noqa: E402
 from manage_canonical_write_fence import apply_fence  # noqa: E402
 from provision_ephemeral_browser_identities import (  # noqa: E402
     EXPECTED_PROJECT_REF,
+    PROFILE_CORE_OPERATOR,
     PROFILE_LIVE18,
+    PROFILE_TWO_USER,
     cleanup as cleanup_browser_identities,
     provision as provision_browser_identities,
     recover_lost_live18_state,
@@ -118,6 +120,22 @@ IDENTITY_ENVIRONMENT_KEYS = {
     "PHARMA_CANONICAL_LIVE_TEST_BRANCH_ID",
     "PHARMA_CANONICAL_LIVE_DENIAL_ORG_ID",
     "MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS",
+}
+CORE_OPERATOR_ENVIRONMENT_KEYS = {
+    "PLAYWRIGHT_LIVE_EMAIL",
+    "PLAYWRIGHT_LIVE_PASSWORD",
+    "PLAYWRIGHT_SALES_CHAIN_FIXTURE",
+}
+TWO_USER_ENVIRONMENT_KEYS = {
+    "PLAYWRIGHT_LIVE_REQUESTER_EMAIL",
+    "PLAYWRIGHT_LIVE_REQUESTER_PASSWORD",
+    "PLAYWRIGHT_LIVE_REVIEWER_EMAIL",
+    "PLAYWRIGHT_LIVE_REVIEWER_PASSWORD",
+}
+IDENTITY_ENVIRONMENT_KEYS_BY_PROFILE = {
+    PROFILE_CORE_OPERATOR: CORE_OPERATOR_ENVIRONMENT_KEYS,
+    PROFILE_LIVE18: IDENTITY_ENVIRONMENT_KEYS,
+    PROFILE_TWO_USER: TWO_USER_ENVIRONMENT_KEYS,
 }
 
 
@@ -955,7 +973,12 @@ def _decrypt_environment(
 
 def _identity_provision(request: dict[str, Any]) -> dict[str, Any]:
     expected_sha, project_ref = _validated_boundary(request)
-    deployed_client_id = _deployed_oauth_client_id()
+    profile = str(request.get("identity_profile", PROFILE_LIVE18))
+    if profile not in IDENTITY_ENVIRONMENT_KEYS_BY_PROFILE:
+        raise RailwayDatabasePhaseError("Unsupported Railway identity profile")
+    deployed_client_id = (
+        _deployed_oauth_client_id() if profile == PROFILE_LIVE18 else ""
+    )
     environment = _secret_environment(request)
     environment.update(
         {
@@ -990,18 +1013,34 @@ def _identity_provision(request: dict[str, Any]) -> dict[str, Any]:
         mcp_provisioned = False
         try:
             with _temporary_environment(environment), contextlib.redirect_stdout(sys.stderr):
-                provision_browser_identities(browser_state, PROFILE_LIVE18)
+                provision_browser_identities(browser_state, profile)
                 browser_provisioned = True
                 browser_environment = _parse_environment_file(github_environment)
-                with _temporary_environment(browser_environment):
-                    provision_mcp_identities(
-                        mcp_state,
-                        browser_state,
-                        f"{request['run_id']}-{request['run_attempt']}",
-                    )
-                mcp_provisioned = True
-                generated = _parse_environment_file(github_environment)
+                if profile == PROFILE_LIVE18:
+                    with _temporary_environment(browser_environment):
+                        provision_mcp_identities(
+                            mcp_state,
+                            browser_state,
+                            f"{request['run_id']}-{request['run_attempt']}",
+                        )
+                    mcp_provisioned = True
+                    generated = _parse_environment_file(github_environment)
+                else:
+                    generated = browser_environment
             browser_payload = json.loads(browser_state.read_text(encoding="utf-8"))
+            encrypted_environment = _encrypt_environment(request, generated)
+            github_environment.unlink()
+            if profile != PROFILE_LIVE18:
+                response = {
+                    "schema": RESPONSE_SCHEMA,
+                    "action": "provision-identities",
+                    "identity_profile": profile,
+                    **_response_boundary(request),
+                    "encrypted_environment": encrypted_environment,
+                    "browser_state": browser_payload,
+                }
+                response["content_sha256"] = _content_hash(response)
+                return response
             mcp_payload = json.loads(mcp_state.read_text(encoding="utf-8"))
             fixture_payload = json.loads(fixture_evidence.read_text(encoding="utf-8"))
             observed_client_ids = {
@@ -1033,12 +1072,11 @@ def _identity_provision(request: dict[str, Any]) -> dict[str, Any]:
                 {str(key): str(value) for key, value in fixture_identities.items()},
                 run_token,
             )
-            encrypted_environment = _encrypt_environment(request, generated)
-            github_environment.unlink()
             fixture_evidence.unlink()
             response = {
                 "schema": RESPONSE_SCHEMA,
                 "action": "provision-identities",
+                "identity_profile": profile,
                 **_response_boundary(request),
                 "encrypted_environment": encrypted_environment,
                 "browser_state": browser_payload,
@@ -1075,21 +1113,22 @@ def _identity_provision(request: dict[str, Any]) -> dict[str, Any]:
                                 exc, sensitive_values=tuple(environment.values())
                             )
                         )
-                try:
-                    mcp_reconciliation = recover_lost_live18_mcp_state(
-                        environment["SUPABASE_ACCESS_TOKEN"],
-                        deployed_client_id,
-                        f"{request['run_id']}-{request['run_attempt']}",
-                    )
-                    if mcp_reconciliation.get("remaining_active_mcp_grant_count") == 0:
-                        mcp_cleanup_errors.clear()
-                except BaseException as exc:
-                    mcp_cleanup_errors.append(
-                        "MCP orphan reconciliation failed: "
-                        + _safe_error_detail(
-                            exc, sensitive_values=tuple(environment.values())
+                if profile == PROFILE_LIVE18:
+                    try:
+                        mcp_reconciliation = recover_lost_live18_mcp_state(
+                            environment["SUPABASE_ACCESS_TOKEN"],
+                            deployed_client_id,
+                            f"{request['run_id']}-{request['run_attempt']}",
                         )
-                    )
+                        if mcp_reconciliation.get("remaining_active_mcp_grant_count") == 0:
+                            mcp_cleanup_errors.clear()
+                    except BaseException as exc:
+                        mcp_cleanup_errors.append(
+                            "MCP orphan reconciliation failed: "
+                            + _safe_error_detail(
+                                exc, sensitive_values=tuple(environment.values())
+                            )
+                        )
                 if browser_provisioned or browser_state.exists():
                     try:
                         cleanup_browser_identities(browser_state)
@@ -1100,7 +1139,7 @@ def _identity_provision(request: dict[str, Any]) -> dict[str, Any]:
                                 exc, sensitive_values=tuple(environment.values())
                             )
                         )
-                if browser_cleanup_errors:
+                if browser_cleanup_errors and profile == PROFILE_LIVE18:
                     try:
                         reconciliation = recover_lost_live18_state()
                         if mcp_reconciliation is not None:
@@ -1149,6 +1188,13 @@ def _identity_cleanup(
     request: dict[str, Any], *, before_demo: bool = False
 ) -> dict[str, Any]:
     expected_sha, project_ref = _validated_boundary(request)
+    profile = str(request.get("identity_profile", PROFILE_LIVE18))
+    if profile not in IDENTITY_ENVIRONMENT_KEYS_BY_PROFILE:
+        raise RailwayDatabasePhaseError("Unsupported Railway identity profile")
+    if before_demo and profile != PROFILE_LIVE18:
+        raise RailwayDatabasePhaseError(
+            "Pre-demo recovery requires the live18 identity profile"
+        )
     environment = _secret_environment(request)
     environment["CANONICAL_STAGING_PROJECT_REF"] = project_ref
     environment["SUPABASE_URL"] = _required_text(request, "supabase_url")
@@ -1182,7 +1228,7 @@ def _identity_cleanup(
                     mcp_cleanup_errors.append(
                         f"MCP cleanup failed: {_safe_error_detail(exc)}"
                     )
-            if not before_demo:
+            if not before_demo and profile == PROFILE_LIVE18:
                 try:
                     mcp_reconciliation = recover_lost_live18_mcp_state(
                         environment["SUPABASE_ACCESS_TOKEN"],
@@ -1200,18 +1246,27 @@ def _identity_cleanup(
                     browser_cleanup_errors.append(
                         f"browser cleanup failed: {_safe_error_detail(exc)}"
                     )
-            try:
-                orphan_reconciliation = (
-                    recover_lost_live18_state_before_demo()
-                    if before_demo
-                    else recover_lost_live18_state()
-                )
-                orphan_reconciliation.update(mcp_reconciliation)
-            except BaseException as exc:
-                reconciliation_errors.append(
-                    f"orphan reconciliation failed: {_safe_error_detail(exc)}"
-                )
-        if _orphan_reconciliation_is_clean(orphan_reconciliation):
+            if profile == PROFILE_LIVE18:
+                try:
+                    orphan_reconciliation = (
+                        recover_lost_live18_state_before_demo()
+                        if before_demo
+                        else recover_lost_live18_state()
+                    )
+                    orphan_reconciliation.update(mcp_reconciliation)
+                except BaseException as exc:
+                    reconciliation_errors.append(
+                        f"orphan reconciliation failed: {_safe_error_detail(exc)}"
+                    )
+            else:
+                orphan_reconciliation = {
+                    "identity_profile": profile,
+                    "browser_state_cleaned": not browser_cleanup_errors,
+                }
+        if (
+            profile == PROFILE_LIVE18
+            and _orphan_reconciliation_is_clean(orphan_reconciliation)
+        ):
             cleanup_warnings = [*mcp_cleanup_errors, *browser_cleanup_errors]
             mcp_cleanup_errors = []
             browser_cleanup_errors = []
@@ -1234,6 +1289,7 @@ def _identity_cleanup(
             if before_demo
             else "cleanup-identities"
         ),
+        "identity_profile": profile,
         **_response_boundary(request),
         "cleaned": True,
         "orphan_reconciliation": orphan_reconciliation,
@@ -1490,18 +1546,29 @@ def _apply_identity_response(request: dict[str, Any], output_directory: Path) ->
     response = _verify_response(request)
     if response.get("action") != "provision-identities":
         raise RailwayDatabasePhaseError("Expected an identity-provision response")
+    profile = str(request.get("identity_profile", PROFILE_LIVE18))
+    expected_keys = IDENTITY_ENVIRONMENT_KEYS_BY_PROFILE.get(profile)
+    if expected_keys is None or response.get("identity_profile", PROFILE_LIVE18) != profile:
+        raise RailwayDatabasePhaseError("Railway identity profile differs")
     environment = _decrypt_environment(request, response.get("encrypted_environment"))
-    if set(environment) != IDENTITY_ENVIRONMENT_KEYS:
+    if set(environment) != expected_keys:
         raise RailwayDatabasePhaseError(
             "Identity response contains an unexpected environment contract"
         )
     output_directory.mkdir(parents=True, exist_ok=True)
-    for name, key in (
-        ("live18-browser-identities.json", "browser_state"),
-        ("live18-mcp-identities.json", "mcp_state"),
-        ("live18-fixture-identities.json", "fixture_evidence"),
-        ("live18-authoritative-facts.json", "authoritative_facts"),
-    ):
+    browser_state_name = (
+        "live18-browser-identities.json"
+        if profile == PROFILE_LIVE18
+        else "railway-browser-identities.json"
+    )
+    state_outputs = [(browser_state_name, "browser_state")]
+    if profile == PROFILE_LIVE18:
+        state_outputs.extend((
+            ("live18-mcp-identities.json", "mcp_state"),
+            ("live18-fixture-identities.json", "fixture_evidence"),
+            ("live18-authoritative-facts.json", "authoritative_facts"),
+        ))
+    for name, key in state_outputs:
         target = output_directory / name
         target.write_text(
             json.dumps(response[key], indent=2, sort_keys=True) + "\n",

@@ -557,6 +557,81 @@ def test_identity_response_applies_only_the_exact_reviewed_environment(tmp_path)
         phase._apply_identity_response(request, tmp_path)
 
 
+def test_core_browser_identity_response_applies_only_core_credentials(tmp_path):
+    request = {
+        **_boundary_request(),
+        "identity_profile": phase.PROFILE_CORE_OPERATOR,
+        "transport_key_base64": base64.b64encode(os.urandom(32)).decode("ascii"),
+    }
+    environment = {
+        key: f"core-{index}"
+        for index, key in enumerate(sorted(phase.CORE_OPERATOR_ENVIRONMENT_KEYS))
+    }
+    response = {
+        "schema": phase.RESPONSE_SCHEMA,
+        "action": "provision-identities",
+        "identity_profile": phase.PROFILE_CORE_OPERATOR,
+        **_boundary_request(),
+        "encrypted_environment": phase._encrypt_environment(request, environment),
+        "browser_state": {"version": 1, "purpose": "core"},
+    }
+    response["content_sha256"] = phase._content_hash(response)
+    request["response"] = response
+
+    assert phase._apply_identity_response(request, tmp_path) == environment
+    assert json.loads(
+        (tmp_path / "railway-browser-identities.json").read_text()
+    ) == {"version": 1, "purpose": "core"}
+    assert not (tmp_path / "live18-mcp-identities.json").exists()
+
+    response["identity_profile"] = phase.PROFILE_TWO_USER
+    response["content_sha256"] = phase._content_hash(response)
+    with pytest.raises(phase.RailwayDatabasePhaseError, match="profile differs"):
+        phase._apply_identity_response(request, tmp_path)
+
+
+def test_remote_core_browser_identity_uses_encrypted_profile_contract(
+    monkeypatch, tmp_path
+):
+    request = {
+        **_boundary_request(),
+        "identity_profile": phase.PROFILE_CORE_OPERATOR,
+        "transport_key_base64": base64.b64encode(os.urandom(32)).decode("ascii"),
+        "supabase_url": f"https://{phase.EXPECTED_PROJECT_REF}.supabase.co",
+        "mcp_url": "https://mcp.example.test/mcp",
+        "secrets": {key: f"secret-{key}" for key in phase.SECRET_KEYS},
+    }
+    generated = {
+        key: f"generated-{index}"
+        for index, key in enumerate(sorted(phase.CORE_OPERATOR_ENVIRONMENT_KEYS))
+    }
+    observed_profiles = []
+
+    def provision_browser(state_path, profile):
+        observed_profiles.append(profile)
+        state_path.write_text('{"version":1,"purpose":"core"}\n', encoding="utf-8")
+        with phase.Path(os.environ["GITHUB_ENV"]).open("a", encoding="utf-8") as handle:
+            for key, value in generated.items():
+                handle.write(f"{key}={value}\n")
+
+    monkeypatch.setattr(phase, "REMOTE_STATE_ROOT", tmp_path)
+    monkeypatch.setattr(
+        phase,
+        "_validated_boundary",
+        lambda _request: ("a" * 40, phase.EXPECTED_PROJECT_REF),
+    )
+    monkeypatch.setattr(phase, "provision_browser_identities", provision_browser)
+
+    response = phase._identity_provision(request)
+
+    assert observed_profiles == [phase.PROFILE_CORE_OPERATOR]
+    assert response["identity_profile"] == phase.PROFILE_CORE_OPERATOR
+    assert "mcp_state" not in response
+    assert phase._decrypt_environment(
+        request, response["encrypted_environment"]
+    ) == generated
+
+
 def test_remote_identity_success_retains_only_nonsecret_cleanup_state(
     monkeypatch, tmp_path
 ):
