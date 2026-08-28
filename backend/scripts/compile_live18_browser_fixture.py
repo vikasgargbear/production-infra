@@ -769,9 +769,14 @@ def resolve_authoritative_facts(
         JOIN core.organizations organization ON organization.id=balance.org_id
           AND organization.status='active'
         JOIN tax.return_periods period ON period.org_id=registration.org_id
-          AND period.registration_id=registration.id AND period.status='open'
-          AND (transaction_timestamp() AT TIME ZONE organization.timezone)::date
-              BETWEEN period.period_start AND period.period_end
+          AND period.registration_id=registration.id
+          AND period.period_kind='monthly' AND period.status='open'
+          AND period.period_start=date_trunc(
+                'month',transaction_timestamp() AT TIME ZONE organization.timezone
+              )::date
+          AND period.period_end=(date_trunc(
+                'month',transaction_timestamp() AT TIME ZONE organization.timezone
+              )+interval '1 month - 1 day')::date
         JOIN tax.returns filing ON filing.org_id=period.org_id
           AND filing.return_period_id=period.id AND filing.return_type='gstr3b'
           AND filing.revision=1 AND filing.status='draft'
