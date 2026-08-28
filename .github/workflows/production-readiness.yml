@@ -11,6 +11,11 @@ on:
         required: true
         default: false
         type: boolean
+      run_live_browser_erp:
+        description: Run the non-resetting core browser suite against the selected provider
+        required: true
+        default: false
+        type: boolean
       run_live_erp_two_user_approvals:
         description: Run destructive disposable-org maker/checker browser approval tests
         required: true
@@ -872,7 +877,8 @@ jobs:
   live-browser-erp:
     needs: [canonical-free-staging, railway-canonical-staging]
     if: >-
-      always() && github.event_name == 'workflow_dispatch' && inputs.run_live_erp &&
+      always() && github.event_name == 'workflow_dispatch' &&
+      (inputs.run_live_erp || inputs.run_live_browser_erp) &&
       (!(inputs.deploy_canonical_staging || inputs.provision_canonical_demo) ||
        (inputs.live18_provider == 'render' &&
         needs.canonical-free-staging.result == 'success') ||
@@ -897,6 +903,10 @@ jobs:
       SUPABASE_URL: ${{ vars.SUPABASE_URL }}
       PLAYWRIGHT_LIVE_WRITES: "true"
       PLAYWRIGHT_USE_SYSTEM_CHROME: "true"
+      RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
+      RAILWAY_ENVIRONMENT_ID: ${{ vars.RAILWAY_ENVIRONMENT_ID }}
+      RAILWAY_API_SERVICE: ${{ vars.RAILWAY_API_SERVICE }}
+      RAILWAY_IDENTITY_PROFILE: core-operator
     steps:
       - uses: actions/checkout@v4
         with:
@@ -938,13 +948,151 @@ jobs:
             https://*) ;;
             *) echo "Live browser target must use HTTPS" >&2; exit 2 ;;
           esac
-      - name: Install pinned ephemeral identity reconciler dependencies
+      - name: Install the pinned backend identity boundary
         working-directory: ${{ github.workspace }}
-        run: python3 -m pip install psycopg2-binary==2.9.9 requests==2.34.2
+        run: python3 -m pip install -r backend/requirements.txt
       - run: npm ci
       - name: Install Playwright video support
         run: npx playwright install ffmpeg
+      - name: Install the pinned Railway CLI for IPv6 identity authority
+        if: inputs.live18_provider == 'railway'
+        run: npm install --global @railway/cli@5.43.4
+      - name: Register one run-scoped Railway SSH key
+        if: inputs.live18_provider == 'railway'
+        working-directory: ${{ github.workspace }}
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          echo "RAILWAY_BROWSER_SSH_PRIVATE_KEY=$RUNNER_TEMP/railway-browser-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_ENV"
+          echo "RAILWAY_BROWSER_SSH_FINGERPRINT_PATH=$RUNNER_TEMP/railway-browser-ssh-fingerprint" >> "$GITHUB_ENV"
+          echo "RAILWAY_BROWSER_REQUEST_NONCE=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "RAILWAY_BROWSER_IDENTITY_RESPONSE=$RUNNER_TEMP/railway-browser-identity-response.json" >> "$GITHUB_ENV"
+          test -n "$RAILWAY_API_TOKEN"
+          umask 077
+          mkdir -p "$HOME/.ssh" "$HOME/.railway"
+          chmod 700 "$HOME/.ssh" "$HOME/.railway"
+          printf '%s\n' \
+            'Host ssh.railway.com' \
+            "    UserKnownHostsFile $HOME/.railway/known_hosts_relay" \
+            '    StrictHostKeyChecking accept-new' \
+            '    BatchMode yes' \
+            '    IdentitiesOnly yes' \
+            '    ConnectTimeout 10' \
+            > "$HOME/.ssh/config"
+          chmod 600 "$HOME/.ssh/config"
+          key_path="$RUNNER_TEMP/railway-browser-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          ssh-keygen -q -t ed25519 -N '' -C "railway-browser-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" -f "$key_path"
+          fingerprint=$(ssh-keygen -E sha256 -lf "$key_path.pub" | awk '{print $2}')
+          case "$fingerprint" in SHA256:*) ;; *) exit 2 ;; esac
+          printf '%s\n' "$fingerprint" > "$RUNNER_TEMP/railway-browser-ssh-fingerprint"
+          railway ssh keys add --key "$fingerprint" --name "railway-browser-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >/dev/null
+      - name: Resolve the exact active Railway API instance
+        if: inputs.live18_provider == 'railway'
+        working-directory: ${{ github.workspace }}
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          status_path="$RUNNER_TEMP/railway-browser-status.json"
+          for attempt in $(seq 1 12); do
+            railway status --project "$RAILWAY_PROJECT_ID" --environment "$RAILWAY_ENVIRONMENT_ID" --json > "$status_path"
+            mapfile -t candidates < <(jq -r \
+              --arg environment "$RAILWAY_ENVIRONMENT_ID" \
+              --arg service "$RAILWAY_API_SERVICE" '
+                .environments.edges[].node
+                | select(.id == $environment)
+                | .serviceInstances.edges[].node
+                | select(.serviceName == $service)
+                | .activeDeployments[]
+                | .id as $deployment
+                | .instances[]
+                | select(.status == "RUNNING")
+                | [$deployment,.id] | @tsv
+              ' "$status_path")
+            matches=()
+            for candidate in "${candidates[@]}"; do
+              deployment_id=${candidate%%$'\t'*}
+              instance_id=${candidate#*$'\t'}
+              observed_sha=$(timeout --signal=TERM 20s railway ssh \
+                --project "$RAILWAY_PROJECT_ID" \
+                --environment "$RAILWAY_ENVIRONMENT_ID" \
+                --service "$RAILWAY_API_SERVICE" \
+                --deployment-instance "$instance_id" \
+                --identity-file "$RAILWAY_BROWSER_SSH_PRIVATE_KEY" \
+                -- printenv RAILWAY_GIT_COMMIT_SHA 2>/dev/null || true)
+              if test "$observed_sha" = "$REVIEWED_DEPLOY_SHA"; then
+                matches+=("$deployment_id"$'\t'"$instance_id")
+              fi
+            done
+            test "${#matches[@]}" -ne 1 || break
+            sleep 5
+          done
+          test "${#matches[@]}" -eq 1
+          echo "RAILWAY_API_DEPLOYMENT_ID=${matches[0]%%$'\t'*}" >> "$GITHUB_ENV"
+          echo "RAILWAY_API_DEPLOYMENT_INSTANCE_ID=${matches[0]#*$'\t'}" >> "$GITHUB_ENV"
+      - name: Provision one masked disposable core operator over Railway IPv6
+        if: inputs.live18_provider == 'railway'
+        working-directory: ${{ github.workspace }}
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          LIVE_API_ORIGIN: ${{ vars.RAILWAY_API_URL }}
+          LIVE_MCP_ORIGIN: ${{ vars.RAILWAY_MCP_URL }}
+        run: |
+          set -euo pipefail
+          request="$RUNNER_TEMP/railway-browser-identity-request.json"
+          umask 077
+          python3 - "$request" <<'PY'
+          import base64, json, os, sys
+          from pathlib import Path
+          value = {
+              "schema": "aasopharma.live18.railway-database-phase.v1",
+              "expected_sha": os.environ["REVIEWED_DEPLOY_SHA"],
+              "project_ref": os.environ["CANONICAL_STAGING_PROJECT_REF"],
+              "run_id": os.environ["GITHUB_RUN_ID"],
+              "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+              "request_nonce": os.environ["RAILWAY_BROWSER_REQUEST_NONCE"],
+              "deployment_id": os.environ["RAILWAY_API_DEPLOYMENT_ID"],
+              "deployment_instance_id": os.environ["RAILWAY_API_DEPLOYMENT_INSTANCE_ID"],
+              "identity_profile": os.environ["RAILWAY_IDENTITY_PROFILE"],
+              "transport_key_base64": base64.b64encode(os.urandom(32)).decode("ascii"),
+              "supabase_url": os.environ["SUPABASE_URL"],
+              "api_origin": os.environ["LIVE_API_ORIGIN"],
+              "mcp_url": os.environ["LIVE_MCP_ORIGIN"].rstrip("/") + "/mcp",
+              "secrets": {name: os.environ[name] for name in (
+                  "SUPABASE_ACCESS_TOKEN", "SUPABASE_DB_PASSWORD", "SUPABASE_ANON_KEY")},
+          }
+          Path(sys.argv[1]).write_text(json.dumps(value), encoding="utf-8")
+          PY
+          touch "$RUNNER_TEMP/railway-browser-identity-attempted"
+          railway ssh \
+            --project "$RAILWAY_PROJECT_ID" \
+            --environment "$RAILWAY_ENVIRONMENT_ID" \
+            --service "$RAILWAY_API_SERVICE" \
+            --deployment-instance "$RAILWAY_API_DEPLOYMENT_INSTANCE_ID" \
+            --identity-file "$RAILWAY_BROWSER_SSH_PRIVATE_KEY" \
+            -- python scripts/live18_railway_database_phase.py provision-identities --input - --output - \
+            < "$request" > "$RAILWAY_BROWSER_IDENTITY_RESPONSE"
+          PYTHONPATH=backend python3 - "$RAILWAY_BROWSER_IDENTITY_RESPONSE" "$request" <<'PY'
+          import json, os, sys
+          from pathlib import Path
+          from scripts.live18_railway_database_phase import _apply_identity_response
+          response = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          request = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+          request["response"] = response
+          values = _apply_identity_response(request, Path(os.environ["RUNNER_TEMP"]))
+          with Path(os.environ["GITHUB_ENV"]).open("a", encoding="utf-8") as handle:
+              for key, value in sorted(values.items()):
+                  if "\n" in value or "\r" in value:
+                      raise SystemExit("Refusing multiline identity value")
+                  print(f"::add-mask::{value}")
+                  handle.write(f"{key}={value}\n")
+          PY
       - name: Provision one masked disposable core operator and live fixture
+        if: inputs.live18_provider == 'render'
         working-directory: ${{ github.workspace }}
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
@@ -960,8 +1108,8 @@ jobs:
           test -n "$PLAYWRIGHT_LIVE_PASSWORD"
           test -n "$PLAYWRIGHT_SALES_CHAIN_FIXTURE"
       - run: npm run test:e2e:live:writes
-      - name: Always restore seeded identity and remove disposable Auth user
-        if: always()
+      - name: Always restore the Render identity and remove disposable Auth user
+        if: always() && inputs.live18_provider == 'render'
         working-directory: ${{ github.workspace }}
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
@@ -969,6 +1117,81 @@ jobs:
         run: |
           python3 backend/scripts/provision_ephemeral_browser_identities.py \
             cleanup --state "$RUNNER_TEMP/canonical-browser-identities.json"
+      - name: Always restore the Railway identity over direct IPv6
+        if: always() && inputs.live18_provider == 'railway'
+        working-directory: ${{ github.workspace }}
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          set -euo pipefail
+          if ! test -f "$RUNNER_TEMP/railway-browser-identity-attempted"; then
+            exit 0
+          fi
+          request="$RUNNER_TEMP/railway-browser-cleanup-request.json"
+          response="$RUNNER_TEMP/railway-browser-cleanup-response.json"
+          umask 077
+          python3 - "$request" <<'PY'
+          import json, os, sys
+          from pathlib import Path
+          state_path = Path(os.environ["RUNNER_TEMP"]) / "railway-browser-identities.json"
+          value = {
+              "schema": "aasopharma.live18.railway-database-phase.v1",
+              "expected_sha": os.environ["REVIEWED_DEPLOY_SHA"],
+              "project_ref": os.environ["CANONICAL_STAGING_PROJECT_REF"],
+              "run_id": os.environ["GITHUB_RUN_ID"],
+              "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+              "request_nonce": os.environ["RAILWAY_BROWSER_REQUEST_NONCE"],
+              "deployment_id": os.environ["RAILWAY_API_DEPLOYMENT_ID"],
+              "deployment_instance_id": os.environ["RAILWAY_API_DEPLOYMENT_INSTANCE_ID"],
+              "identity_profile": os.environ["RAILWAY_IDENTITY_PROFILE"],
+              "supabase_url": os.environ["SUPABASE_URL"],
+              "browser_state": json.loads(state_path.read_text(encoding="utf-8")) if state_path.is_file() else None,
+              "secrets": {name: os.environ[name] for name in (
+                  "SUPABASE_ACCESS_TOKEN", "SUPABASE_DB_PASSWORD", "SUPABASE_ANON_KEY")},
+          }
+          Path(sys.argv[1]).write_text(json.dumps(value), encoding="utf-8")
+          PY
+          railway ssh \
+            --project "$RAILWAY_PROJECT_ID" \
+            --environment "$RAILWAY_ENVIRONMENT_ID" \
+            --service "$RAILWAY_API_SERVICE" \
+            --deployment-instance "$RAILWAY_API_DEPLOYMENT_INSTANCE_ID" \
+            --identity-file "$RAILWAY_BROWSER_SSH_PRIVATE_KEY" \
+            -- python scripts/live18_railway_database_phase.py cleanup-identities --input - --output - \
+            < "$request" > "$response"
+          PYTHONPATH=backend python3 - "$response" "$request" <<'PY'
+          import json, sys
+          from pathlib import Path
+          from scripts.live18_railway_database_phase import _verify_response
+          response = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          request = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+          request["response"] = response
+          _verify_response(request)
+          if response.get("action") != "cleanup-identities" or response.get("cleaned") is not True:
+              raise SystemExit("Railway browser identity cleanup was not attested")
+          if response.get("identity_profile") != request["identity_profile"]:
+              raise SystemExit("Railway browser identity cleanup profile differs")
+          reconciliation = response.get("orphan_reconciliation")
+          if not isinstance(reconciliation, dict) or reconciliation.get("browser_state_cleaned") is not True:
+              raise SystemExit("Railway browser identity cleanup did not restore its state")
+          PY
+      - name: Always remove the run-scoped Railway SSH key
+        if: always() && inputs.live18_provider == 'railway'
+        working-directory: ${{ github.workspace }}
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          if test -s "${RAILWAY_BROWSER_SSH_FINGERPRINT_PATH:-}"; then
+            fingerprint=$(<"$RAILWAY_BROWSER_SSH_FINGERPRINT_PATH")
+            railway ssh keys remove "$fingerprint" >/dev/null 2>&1 || true
+          fi
+          if test -n "${RAILWAY_BROWSER_SSH_PRIVATE_KEY:-}"; then
+            rm -f "$RAILWAY_BROWSER_SSH_PRIVATE_KEY" "$RAILWAY_BROWSER_SSH_PRIVATE_KEY.pub"
+          fi
       - name: Upload live browser traces, screenshots, videos, and reports
         if: always()
         uses: actions/upload-artifact@v4

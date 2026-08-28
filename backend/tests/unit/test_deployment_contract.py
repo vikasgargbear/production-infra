@@ -59,7 +59,11 @@ def test_live_promotion_is_exact_sha_canonical_and_disposable_org_bound():
     assert "environment: live-erp-test" not in browser_job
     assert "canonical-staging-live-browser-identities" in browser_job
     assert "provision --profile core-operator" in browser_job
-    assert "Always restore seeded identity and remove disposable Auth user" in browser_job
+    assert "Always restore the Render identity and remove disposable Auth user" in browser_job
+    assert "Always restore the Railway identity over direct IPv6" in browser_job
+    assert "live18_railway_database_phase.py provision-identities" in browser_job
+    assert "live18_railway_database_phase.py cleanup-identities" in browser_job
+    assert "identity_profile" in browser_job
     for removed_secret in (
         "PLAYWRIGHT_LIVE_EMAIL",
         "PLAYWRIGHT_LIVE_PASSWORD",
@@ -70,7 +74,7 @@ def test_live_promotion_is_exact_sha_canonical_and_disposable_org_bound():
     for admin_secret in ("SUPABASE_ACCESS_TOKEN", "SUPABASE_DB_PASSWORD"):
         reference = f"{admin_secret}: ${{{{ secrets.{admin_secret} }}}}"
         assert reference not in browser_environment
-        assert browser_job.count(reference) == 2
+        assert browser_job.count(reference) == 4
 
     two_user_job = production.split("\n  live-browser-erp-two-user-approvals:", 1)[1].split(
         "\n  live18-acceptance:", 1
