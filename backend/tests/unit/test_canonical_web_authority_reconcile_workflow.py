@@ -16,6 +16,7 @@ def test_web_authority_reconcile_is_exact_sha_and_staging_only() -> None:
     source = WORKFLOW.read_text(encoding="utf-8")
 
     assert "RECONCILE_CANONICAL_STAGING_WEB_AUTHORITY" in source
+    assert "RECONCILE_CANONICAL_STAGING_MCP_AUTHORITY" in source
     assert "group: canonical-staging-live-browser-identities" in source
     assert 'test "$(git rev-parse HEAD)" = "$REVIEWED_SHA"' in source
     assert 'os.environ.get("RAILWAY_GIT_COMMIT_SHA") != value["expected_sha"]' in source
@@ -26,7 +27,7 @@ def test_web_authority_reconcile_is_exact_sha_and_staging_only() -> None:
     assert "Waiting for the exact API instance and SSH key" in source
 
 
-def test_web_authority_reconcile_is_bounded_to_the_requested_sales_lifecycle() -> None:
+def test_user_authority_reconcile_keeps_the_bounded_web_envelope() -> None:
     source = WORKFLOW.read_text(encoding="utf-8")
 
     for operation in (
@@ -40,14 +41,31 @@ def test_web_authority_reconcile_is_bounded_to_the_requested_sales_lifecycle() -
         "finance.adjustment_note.prepare",
         "automation.command.approve",
         "automation.command.execute",
-        "automation.command.status.get",
     ):
         assert operation in source
+    assert "STATUS_CAPABILITY" in source
     assert 'test "$(jq -r .capability_count "$response")" = 11' in source
-    assert "allow_sensitive_read=false" in source
+    assert "allow_sensitive_read=excluded.allow_sensitive_read" in source
     assert "transaction_timestamp()+interval '30 days'" in source
     assert "capability_code<>ALL(%s::varchar[])" in source
-    assert "reviewed web authority did not reconcile exactly" in source
+    assert "reviewed user authority did not reconcile exactly" in source
+
+
+def test_user_authority_reconcile_uses_the_canonical_mcp_envelope() -> None:
+    source = WORKFLOW.read_text(encoding="utf-8")
+
+    for contract in (
+        "READ_CAPABILITIES",
+        "WRITE_CAPABILITIES",
+        "STATUS_CAPABILITY",
+        'configured_clients != {target_client_id}',
+        'os.environ.get(\n                      "MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS", ""',
+        'test "$(jq -r .client_id "$response")" = "$MCP_CLIENT_ID"',
+        'test "$(jq -r .capability_count "$response")" = 28',
+    ):
+        assert contract in source
+    assert "staging-chatgpt-mcp-manual-v1" in source
+    assert "canonical staging bounded ChatGPT MCP command consent" in source
 
 
 def test_web_authority_reconcile_does_not_reset_deploy_or_write_business_data() -> None:
@@ -77,12 +95,12 @@ def test_web_authority_reconcile_keeps_secrets_out_of_command_arguments() -> Non
     assert "::add-mask::" not in source
 
 
-def test_web_authority_reconcile_uses_canonical_identity_binding_only() -> None:
+def test_user_authority_reconcile_uses_canonical_identity_binding_only() -> None:
     source = WORKFLOW.read_text(encoding="utf-8")
 
     assert "FROM auth.users" not in source
     assert "user_row.auth_user_id=%s" in source
-    assert "reviewed web identity lacks one active canonical membership authority" in source
+    assert "reviewed user identity lacks one active canonical membership authority" in source
 
 
 def test_web_authority_reconcile_rolls_back_before_role_cleanup_on_failure() -> None:
