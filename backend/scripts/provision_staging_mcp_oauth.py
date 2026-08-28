@@ -160,8 +160,13 @@ def _auth_admin_authority(management_token: str) -> SupabaseAuthAdminAuthority:
     try:
         return resolve_auth_admin_authority(management_token, PROJECT_REF)
     except SupabaseAuthAdminError as error:
+        status = (
+            f" (HTTP {error.status_code})"
+            if error.status_code is not None
+            else ""
+        )
         raise ProvisioningError(
-            f"Supabase Auth Admin authority blocked: {error.code}"
+            f"Supabase Auth Admin authority blocked: {error.code}{status}"
         ) from error
 
 
@@ -182,8 +187,13 @@ def _auth_admin_json(
             params=params,
         )
     except SupabaseAuthAdminError as error:
+        status = (
+            f" (HTTP {error.status_code})"
+            if error.status_code is not None
+            else ""
+        )
         raise ProvisioningError(
-            f"Supabase Auth Admin request blocked: {error.code}"
+            f"Supabase Auth Admin request blocked: {error.code}{status}"
         ) from error
 
 
@@ -218,7 +228,7 @@ def _reconcile_client(
             f"Duplicate OAuth clients registered for staging callback {TEST_CALLBACK!r}"
         )
     payload = {
-        "name": CLIENT_NAME,
+        "client_name": CLIENT_NAME,
         "redirect_uris": list(redirect_uris),
         "client_type": "public",
         "token_endpoint_auth_method": "none",
@@ -228,7 +238,7 @@ def _reconcile_client(
         if _client_shape(client) != _client_shape(payload):
             client = _auth_admin_json(
                 authority,
-                "PATCH",
+                "PUT",
                 f"{endpoint}/{client['client_id']}",
                 payload=payload,
             )
