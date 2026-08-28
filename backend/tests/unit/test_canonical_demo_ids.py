@@ -43,14 +43,10 @@ def test_cycle_count_and_destruction_authorities_remain_attempt_scoped() -> None
     for authority_id in (
         destruction.certificate_attachment_id,
         destruction.itc_reversal_attachment_id,
-        destruction.return_period_id,
-        destruction.gstr3b_return_id,
         destruction.itc_reversal_rule_id,
     ):
         UUID(authority_id)
     assert destruction.certificate_attachment_id != retry.certificate_attachment_id
-    assert destruction.return_period_id != retry.return_period_id
-    assert destruction.gstr3b_return_id != retry.gstr3b_return_id
     assert destruction.itc_reversal_rule_id == retry.itc_reversal_rule_id
 
 

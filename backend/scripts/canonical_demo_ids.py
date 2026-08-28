@@ -30,8 +30,6 @@ class CanonicalLive18DestructionAuthority:
     certificate_storage_object_path: str
     itc_reversal_attachment_id: str
     itc_reversal_storage_object_path: str
-    return_period_id: str
-    gstr3b_return_id: str
     gst_registration_id: str
     itc_reversal_rule_id: str
 
@@ -130,8 +128,6 @@ def canonical_live18_destruction_authority(
         itc_reversal_storage_object_path=(
             f"demo/{run_token}/section-17-5-h-working-{run_token}.json"
         ),
-        return_period_id=fixture_id("destruction_return_period"),
-        gstr3b_return_id=fixture_id("destruction_gstr3b_return"),
         gst_registration_id=gst_registration_id,
         itc_reversal_rule_id=str(
             uuid5(
