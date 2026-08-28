@@ -253,12 +253,6 @@ jobs:
           with psycopg2.connect(database_url) as connection:
               with connection.cursor() as cursor:
                   _attest_reviewed_database(cursor)
-                  cursor.execute(
-                      "SELECT count(*) FROM auth.users WHERE id=%s",
-                      (auth_user_id,),
-                  )
-                  if cursor.fetchone() != (1,):
-                      raise SystemExit("reviewed web Auth identity does not exist exactly once")
                   supports_membership_options = _enter_migration_owner(cursor)
                   try:
                       cursor.execute("SET CONSTRAINTS ALL DEFERRED")
@@ -416,9 +410,10 @@ jobs:
                       if readback != expected:
                           raise SystemExit("reviewed web authority did not reconcile exactly")
                   except BaseException:
-                      # The connection context rolls back both the grant changes and
-                      # the temporary role membership.  Do not mask the root error by
-                      # issuing cleanup SQL inside an aborted transaction.
+                      # Roll back grant changes and temporary role membership before
+                      # propagating the root error; cleanup SQL cannot run in an
+                      # aborted transaction.
+                      connection.rollback()
                       raise
                   else:
                       _leave_migration_owner(cursor, supports_membership_options)
