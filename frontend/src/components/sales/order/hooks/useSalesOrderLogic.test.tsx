@@ -88,6 +88,7 @@ describe('useSalesOrderLogic canonical import calculation', () => {
         } as any));
 
         await waitFor(() => expect(mockedPreview).toHaveBeenCalledTimes(1));
+        await waitFor(() => expect(result.current.order.gst_type).toBe('CGST/SGST'));
         expect(mockedPreview.mock.calls[0][0].items[0]).toEqual(expect.objectContaining({
             quantity: '1.000000',
             free_quantity: '0.000000',
@@ -122,6 +123,7 @@ describe('useSalesOrderLogic canonical import calculation', () => {
         act(() => result.current.updateItem(0, 'quantity', 0));
 
         await waitFor(() => expect(result.current.order.total_amount).toBe(0));
+        expect(result.current.order.gst_type).toBe('');
         expect(mockedPreview).not.toHaveBeenCalled();
         expect(result.current.order.items[0]).toEqual(expect.objectContaining({
             quantity: 0,

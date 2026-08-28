@@ -231,6 +231,7 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
                 cgst_amount: 0,
                 sgst_amount: 0,
                 igst_amount: 0,
+                gst_type: '',
                 calculatedLineItems: [],
             }));
             return;
@@ -277,6 +278,7 @@ export const useSalesOrderLogic = (): UseSalesOrderLogicReturn => {
                     cgst_amount: formattedTotals.cgst_amount,
                     sgst_amount: formattedTotals.sgst_amount,
                     igst_amount: formattedTotals.igst_amount,
+                    gst_type: result.gst_type,
                     calculatedLineItems: result.items
                 }));
             }
