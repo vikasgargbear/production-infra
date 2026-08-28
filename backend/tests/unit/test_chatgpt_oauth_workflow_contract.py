@@ -77,7 +77,11 @@ def test_chatgpt_oauth_workflow_pins_callback_sha_secret_and_evidence() -> None:
     assert ".token_endpoint_auth_method == \"none\"" in workflow
     assert ".pkce_code_challenge_method == \"S256\"" in workflow
     assert ".resource_parameter_required == true" in workflow
-    assert "${{ runner.temp }}/chatgpt-mcp-oauth-evidence" in workflow
+    assert 'evidence_dir="$RUNNER_TEMP/chatgpt-mcp-oauth-evidence"' in workflow
+    assert (
+        'echo "CANONICAL_DEMO_EVIDENCE_DIR=$evidence_dir" >> "$GITHUB_ENV"'
+        in workflow
+    )
     assert workflow.count('case "$GITHUB_ENV" in') == 2
     assert "uses: actions/upload-artifact@v4" in workflow
     assert "retention-days: 7" in workflow
