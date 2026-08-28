@@ -3,6 +3,7 @@ import {
     calculateSalesOrderPreview,
     isSalesOrderPreviewReady,
 } from '../../../../services/calculations/salesOrderCalculationService';
+import { apiClient } from '../../../../services/api';
 import { useSalesOrderLogic } from './useSalesOrderLogic';
 
 jest.mock('react-toastify', () => ({
@@ -22,6 +23,9 @@ jest.mock('../../../../hooks/useNetworkStatus', () => ({
 jest.mock('../../../../hooks/useCanonicalBusinessDate', () => ({
     useCanonicalBusinessDate: () => ({ businessDate: '2026-08-25', organizationTimezone: 'Asia/Kolkata', loading: false, error: '' }),
 }));
+jest.mock('../../../../services/api', () => ({
+    apiClient: { get: jest.fn() },
+}));
 jest.mock('./useSalesOrderSave', () => ({
     useSalesOrderSave: () => ({
         saving: false,
@@ -40,10 +44,12 @@ const mockedPreview = calculateSalesOrderPreview as jest.MockedFunction<
 const mockedPreviewReady = isSalesOrderPreviewReady as jest.MockedFunction<
     typeof isSalesOrderPreviewReady
 >;
+const mockedApiGet = apiClient.get as jest.MockedFunction<typeof apiClient.get>;
 
 describe('useSalesOrderLogic canonical import calculation', () => {
     beforeEach(() => {
         jest.clearAllMocks();
+        mockedApiGet.mockReset();
         mockedPreviewReady.mockImplementation(candidate => (
             Number(candidate.items[0]?.quantity ?? 0) > 0
         ));
@@ -97,6 +103,53 @@ describe('useSalesOrderLogic canonical import calculation', () => {
         expect(result.current.order.items[0]).toEqual(expect.objectContaining({
             free_quantity: '0.000000',
             free_supply_tax_treatment: 'excluded_from_taxable_value',
+        }));
+    });
+
+    it('replaces raw address network errors and clears them after a successful retry', async () => {
+        const { result } = renderHook(() => useSalesOrderLogic());
+        const customer = {
+            customer_id: '10000000-0000-7000-8000-000000000001',
+            customer_name: 'Canonical Customer',
+        } as any;
+
+        mockedApiGet.mockRejectedValueOnce(new Error('Network Error'));
+        await act(async () => {
+            await result.current.handleCustomerSelect(customer);
+        });
+
+        expect(result.current.message).toBe(
+            'Could not load this customer’s saved addresses. Check your connection and select the customer again.',
+        );
+        expect(result.current.message).not.toContain('Network Error');
+        expect(result.current.order.shipping_address_data).toBeNull();
+
+        mockedApiGet.mockResolvedValueOnce({
+            data: {
+                success: true,
+                data: [{
+                    address_id: '10000000-0000-7000-8000-000000000002',
+                    row_version: '1',
+                    address_type: 'billing',
+                    is_default: true,
+                    address_line1: '1 Canonical Road',
+                    address_line2: '',
+                    city: 'Mumbai',
+                    state_code: '27',
+                    pincode: '400001',
+                    country_code: 'IN',
+                }],
+            },
+        } as any);
+        await act(async () => {
+            await result.current.handleCustomerSelect(customer);
+        });
+
+        expect(result.current.message).toBe('');
+        expect(result.current.order.shipping_address_data).toEqual(expect.objectContaining({
+            address_id: '10000000-0000-7000-8000-000000000002',
+            row_version: '1',
+            state_code: '27',
         }));
     });
 

@@ -23,7 +23,7 @@ test('mobile item card exposes every editable value without horizontal scrolling
   );
 
   expect(screen.getByText('Line total ₹168.00')).toBeTruthy();
-  expect(screen.getByRole('button', { name: 'Remove Synthetic Carton' })).toBeTruthy();
+  expect(screen.getAllByRole('button', { name: 'Remove Synthetic Carton' })).toHaveLength(2);
 
   fireEvent.change(screen.getByLabelText('Quantity'), { target: { value: '2' } });
   expect(onUpdateItem).toHaveBeenCalledWith(0, 'quantity', 2);
@@ -221,12 +221,7 @@ test('requires an explicit free-supply treatment only when free quantity is posi
     />,
   );
 
-  const zeroTreatment = screen.getAllByLabelText(
-    'Reviewed Carton free supply tax treatment',
-  ) as HTMLSelectElement[];
-  expect(zeroTreatment).toHaveLength(2);
-  expect(zeroTreatment.every(select => select.disabled)).toBe(true);
-  expect(zeroTreatment[0].value).toBe('excluded_from_taxable_value');
+  expect(screen.queryByLabelText('Reviewed Carton free units value')).toBeNull();
 
   rerender(
     <ItemsTable
@@ -242,10 +237,16 @@ test('requires an explicit free-supply treatment only when free quantity is posi
     />,
   );
   const positiveTreatment = screen.getAllByLabelText(
-    'Reviewed Carton free supply tax treatment',
+    'Reviewed Carton free units value',
   ) as HTMLSelectElement[];
   expect(positiveTreatment.every(select => !select.disabled)).toBe(true);
   expect(positiveTreatment[0].value).toBe('');
+  expect(screen.getByText('Product / batch')).toBeTruthy();
+  expect(screen.getByText('Free qty / value')).toBeTruthy();
+  expect(screen.queryByText('Free tax treatment')).toBeNull();
+  expect(screen.getAllByText('Choose how free units are valued')).toHaveLength(2);
+  expect(screen.getAllByText('₹0 — exclude free units')).toHaveLength(2);
+  expect(screen.getAllByText('Item rate — include free units')).toHaveLength(2);
   fireEvent.change(positiveTreatment[0], {
     target: { value: 'included_at_unit_rate' },
   });

@@ -29,6 +29,11 @@ _ADDRESS_UUID = "d3000000-0000-7000-8000-000000000020"
 _USER = {"org_id": _ORG_UUID, "auth_user_id": _AUTH_UUID}
 
 
+def test_database_backed_calculation_routes_run_in_fastapi_worker_pool():
+    assert not inspect.iscoroutinefunction(preview_invoice_totals)
+    assert not inspect.iscoroutinefunction(preview_sales_order_totals)
+
+
 class _Mappings:
     def __init__(self, rows):
         self.rows = rows
@@ -197,7 +202,7 @@ async def test_invoice_preview_activates_actor_before_forced_rls_tax_reads():
         "discount_amount": "0.00",
     })
 
-    response = await preview_invoice_totals(invoice, _USER, session)
+    response = preview_invoice_totals(invoice, _USER, session)
     body = _json_body(response)
 
     activation_sql, activation_params = session.calls[0]
@@ -231,7 +236,7 @@ async def test_invoice_and_sales_order_wire_preserve_exact_decimal_inputs(monkey
         "items": lines,
     })
     invoice_db = _ActivationSession()
-    invoice_response = await preview_invoice_totals(invoice, _USER, invoice_db)
+    invoice_response = preview_invoice_totals(invoice, _USER, invoice_db)
     invoice_body = _json_body(invoice_response)
 
     assert invoice_body["line_items"][0]["quantity"] == "1.000001"
@@ -249,7 +254,7 @@ async def test_invoice_and_sales_order_wire_preserve_exact_decimal_inputs(monkey
         "items": lines,
     })
     order_db = _ActivationSession()
-    order_response = await preview_sales_order_totals(order, _USER, order_db)
+    order_response = preview_sales_order_totals(order, _USER, order_db)
     order_body = _json_body(order_response)
     assert order_body["line_items"][2]["quantity"] == "9007199254740993.000001"
     assert order_body["totals"]["subtotal_amount"] == "9007199254740993.30"
