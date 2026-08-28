@@ -1,0 +1,122 @@
+apply plugin: 'com.android.application'
+
+def aasopharmaServerUrl = System.getenv('CAPACITOR_SERVER_URL') ?:
+    'https://aasopharma-erp-pilot-production-eb9b.up.railway.app'
+def aasopharmaServerUri = new URI(aasopharmaServerUrl)
+if (aasopharmaServerUri.scheme != 'https' || !aasopharmaServerUri.host ||
+    aasopharmaServerUri.userInfo ||
+    (aasopharmaServerUri.port != -1 && aasopharmaServerUri.port != 443) ||
+    (aasopharmaServerUri.path && aasopharmaServerUri.path != '/') ||
+    aasopharmaServerUri.query || aasopharmaServerUri.fragment) {
+    throw new GradleException('CAPACITOR_SERVER_URL must be an HTTPS origin on port 443')
+}
+def aasopharmaAppHost = aasopharmaServerUri.host
+def aasopharmaSupabaseHost = System.getenv('AASOPHARMA_SUPABASE_HOST') ?:
+    'rgihahbmkrmhitjdjvev.supabase.co'
+if (!(aasopharmaSupabaseHost ==~ /(?i)^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/)) {
+    throw new GradleException('AASOPHARMA_SUPABASE_HOST must be a hostname without a scheme or path')
+}
+
+def aasopharmaVersionCodeText = System.getenv('AASOPHARMA_ANDROID_VERSION_CODE') ?: '1'
+if (!(aasopharmaVersionCodeText ==~ /^[1-9][0-9]*$/)) {
+    throw new GradleException('AASOPHARMA_ANDROID_VERSION_CODE must be a positive integer')
+}
+def aasopharmaVersionName = System.getenv('AASOPHARMA_ANDROID_VERSION_NAME') ?: '1.0.0'
+if (!(aasopharmaVersionName ==~ /^[0-9]+(?:\.[0-9]+){1,3}(?:[-+][0-9A-Za-z.-]+)?$/)) {
+    throw new GradleException('AASOPHARMA_ANDROID_VERSION_NAME must be a semantic version')
+}
+
+def releaseSigning = [
+    keystore: System.getenv('AASOPHARMA_ANDROID_KEYSTORE'),
+    storePassword: System.getenv('AASOPHARMA_ANDROID_KEYSTORE_PASSWORD'),
+    keyAlias: System.getenv('AASOPHARMA_ANDROID_KEY_ALIAS'),
+    keyPassword: System.getenv('AASOPHARMA_ANDROID_KEY_PASSWORD'),
+]
+def releaseRequested = gradle.startParameter.taskNames.any {
+    it.toLowerCase(java.util.Locale.ROOT).contains('release')
+}
+def missingReleaseSigning = releaseSigning.findAll { !it.value }.keySet()
+if (releaseRequested && !missingReleaseSigning.isEmpty()) {
+    throw new GradleException(
+        "Release signing is incomplete. Missing AASOPHARMA_ANDROID_* values for: ${missingReleaseSigning.join(', ')}"
+    )
+}
+if (releaseRequested && !file(releaseSigning.keystore).isFile()) {
+    throw new GradleException('AASOPHARMA_ANDROID_KEYSTORE does not point to a readable file')
+}
+
+android {
+    namespace = "com.aasopharma.erp"
+    compileSdk = rootProject.ext.compileSdkVersion
+    buildFeatures {
+        buildConfig = true
+    }
+    defaultConfig {
+        applicationId "com.aasopharma.erp"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode aasopharmaVersionCodeText.toInteger()
+        versionName aasopharmaVersionName
+        buildConfigField "String", "APP_HOST", "\"${aasopharmaAppHost}\""
+        buildConfigField "String", "SUPABASE_HOST", "\"${aasopharmaSupabaseHost}\""
+        manifestPlaceholders = [aasopharmaAppHost: aasopharmaAppHost]
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    signingConfigs {
+        if (missingReleaseSigning.isEmpty()) {
+            release {
+                storeFile file(releaseSigning.keystore)
+                storePassword releaseSigning.storePassword
+                keyAlias releaseSigning.keyAlias
+                keyPassword releaseSigning.keyPassword
+                enableV1Signing false
+                enableV2Signing true
+                enableV3Signing true
+                enableV4Signing true
+            }
+        }
+    }
+    buildTypes {
+        release {
+            debuggable false
+            signingConfig signingConfigs.findByName('release')
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    testImplementation "org.robolectric:robolectric:4.16.1"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}

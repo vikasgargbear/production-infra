@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.aasopharma.erp",
+      "sha256_cert_fingerprints": [
+        "E5:FF:2C:15:10:68:FD:DB:D1:29:E7:95:C8:CE:EB:00:ED:F9:32:89:A5:89:2D:2F:CC:0C:2F:60:F8:71:46:D9"
+      ]
+    }
+  }
+]
