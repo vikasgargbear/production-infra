@@ -172,6 +172,7 @@ jobs:
               auth_user_id:$auth_user_id}' > "$request"
           remote_code=$(python3 - <<'PY'
           print(r'''
+          import hashlib
           import json
           import os
           import re
@@ -296,52 +297,92 @@ jobs:
                               "reviewed web identity lacks one active canonical membership authority"
                           )
                       _, membership_id = bindings[0]
+                      consent_text = b"canonical staging bounded manual web command consent"
+                      expected_consent_hash = hashlib.sha256(consent_text).hexdigest()
                       cursor.execute(
                           """
-                          UPDATE automation.agent_grants
-                             SET status='suspended',row_version=row_version+1,
-                                 updated_by_membership_id=%s
+                          SELECT id::text
+                            FROM automation.agent_grants
                            WHERE org_id=%s AND subject_membership_id=%s
-                             AND client_id=%s AND status='active'
+                             AND client_id=%s AND id<>%s
+                             AND status='active'
+                             AND expires_at>transaction_timestamp()
+                           FOR UPDATE
                           """,
-                          (REVIEWER_MEMBERSHIP_ID, DEMO_ORG_ID, membership_id, WEB_CLIENT_ID),
+                          (DEMO_ORG_ID, membership_id, WEB_CLIENT_ID, grant_id),
                       )
+                      if cursor.fetchone() is not None:
+                          raise SystemExit(
+                              "another active reviewed web grant conflicts with the deterministic grant"
+                          )
                       cursor.execute(
                           """
-                          INSERT INTO automation.agent_grants (
-                              org_id,id,subject_membership_id,client_id,client_display_name,
-                              branch_id,authorization_mode,consent_version,consent_text_hash,
-                              consented_by_membership_id,consented_at,granted_by_membership_id,
-                              granted_at,expires_at,status,created_by_membership_id,
-                              updated_by_membership_id
-                          ) VALUES (
-                              %s,%s,%s,%s,%s,NULL,'self_consent','staging-web-manual-v1',
-                              extensions.digest('canonical staging bounded manual web command consent','sha256'),
-                              %s,transaction_timestamp(),%s,transaction_timestamp(),
-                              transaction_timestamp()+interval '30 days','active',%s,%s
-                          ) ON CONFLICT (org_id,id) DO UPDATE SET
-                              subject_membership_id=excluded.subject_membership_id,
-                              client_id=excluded.client_id,
-                              client_display_name=excluded.client_display_name,
-                              branch_id=NULL,
-                              authorization_mode=excluded.authorization_mode,
-                              consent_version=excluded.consent_version,
-                              consent_text_hash=excluded.consent_text_hash,
-                              consented_by_membership_id=excluded.consented_by_membership_id,
-                              consented_at=excluded.consented_at,
-                              granted_by_membership_id=excluded.granted_by_membership_id,
-                              granted_at=excluded.granted_at,
-                              expires_at=excluded.expires_at,
-                              status='active',
-                              updated_by_membership_id=excluded.updated_by_membership_id,
-                              row_version=agent_grants.row_version+1
+                          SELECT subject_membership_id::text,client_id,branch_id::text,
+                                 authorization_mode,consent_version,
+                                 encode(consent_text_hash,'hex'),
+                                 consented_by_membership_id::text,consented_at IS NOT NULL,
+                                 granted_by_membership_id::text,granted_at IS NOT NULL,
+                                 expires_at,status,expires_at>transaction_timestamp()
+                            FROM automation.agent_grants
+                           WHERE org_id=%s AND id=%s
+                           FOR UPDATE
                           """,
-                          (
-                              DEMO_ORG_ID,grant_id,membership_id,WEB_CLIENT_ID,WEB_CLIENT_NAME,
-                              membership_id,REVIEWER_MEMBERSHIP_ID,
-                              REVIEWER_MEMBERSHIP_ID,REVIEWER_MEMBERSHIP_ID,
-                          ),
+                          (DEMO_ORG_ID, grant_id),
                       )
+                      existing_grant = cursor.fetchone()
+                      if existing_grant is None:
+                          cursor.execute(
+                              """
+                              INSERT INTO automation.agent_grants (
+                                  org_id,id,subject_membership_id,client_id,client_display_name,
+                                  branch_id,authorization_mode,consent_version,consent_text_hash,
+                                  consented_by_membership_id,consented_at,granted_by_membership_id,
+                                  granted_at,expires_at,status,created_by_membership_id,
+                                  updated_by_membership_id
+                              ) VALUES (
+                                  %s,%s,%s,%s,%s,NULL,'self_consent','staging-web-manual-v1',
+                                  extensions.digest(
+                                      'canonical staging bounded manual web command consent','sha256'
+                                  ),
+                                  %s,transaction_timestamp(),%s,transaction_timestamp(),
+                                  transaction_timestamp()+interval '30 days','active',%s,%s
+                              )
+                              """,
+                              (
+                                  DEMO_ORG_ID,grant_id,membership_id,WEB_CLIENT_ID,WEB_CLIENT_NAME,
+                                  membership_id,REVIEWER_MEMBERSHIP_ID,
+                                  REVIEWER_MEMBERSHIP_ID,REVIEWER_MEMBERSHIP_ID,
+                              ),
+                          )
+                      else:
+                          observed_scope = existing_grant[:10]
+                          expected_scope = (
+                              membership_id,WEB_CLIENT_ID,None,'self_consent',
+                              'staging-web-manual-v1',expected_consent_hash,
+                              membership_id,True,REVIEWER_MEMBERSHIP_ID,True,
+                          )
+                          if observed_scope != expected_scope:
+                              raise SystemExit(
+                                  "existing reviewed web grant immutable scope differs"
+                              )
+                          if existing_grant[11] != 'active' or not existing_grant[12]:
+                              raise SystemExit(
+                                  "existing reviewed web grant is not active and unexpired"
+                              )
+                          cursor.execute(
+                              """
+                              UPDATE automation.agent_grants
+                                 SET client_display_name=%s,
+                                     updated_by_membership_id=%s,
+                                     row_version=row_version+1
+                               WHERE org_id=%s AND id=%s
+                                 AND client_display_name IS DISTINCT FROM %s
+                              """,
+                              (
+                                  WEB_CLIENT_NAME,REVIEWER_MEMBERSHIP_ID,
+                                  DEMO_ORG_ID,grant_id,WEB_CLIENT_NAME,
+                              ),
+                          )
                       cursor.execute(
                           """
                           UPDATE automation.agent_grant_capabilities
@@ -352,31 +393,48 @@ jobs:
                           """,
                           (REVIEWER_MEMBERSHIP_ID, DEMO_ORG_ID, grant_id, list(capability_codes)),
                       )
-                      cursor.executemany(
+                      cursor.execute(
                           """
-                          INSERT INTO automation.agent_grant_capabilities (
-                              org_id,agent_grant_id,capability_code,operation_mode,
-                              risk_class,approval_policy,maximum_amount,currency_code,
-                              allow_sensitive_read,status,created_by_membership_id
-                          ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,false,'active',%s)
-                          ON CONFLICT (org_id,agent_grant_id,capability_code) DO UPDATE SET
-                              operation_mode=excluded.operation_mode,
-                              risk_class=excluded.risk_class,
-                              approval_policy=excluded.approval_policy,
-                              maximum_amount=excluded.maximum_amount,
-                              currency_code=excluded.currency_code,
-                              allow_sensitive_read=false,
-                              status='active',revoked_at=NULL,revoked_by_membership_id=NULL
+                          SELECT capability_code,operation_mode,risk_class,approval_policy,
+                                 maximum_amount::text,currency_code,allow_sensitive_read,status
+                            FROM automation.agent_grant_capabilities
+                           WHERE org_id=%s AND agent_grant_id=%s
+                             AND capability_code=ANY(%s::varchar[])
+                           FOR UPDATE
                           """,
-                          [
-                              (
-                                  DEMO_ORG_ID,grant_id,capability,mode,risk,approval,
-                                  maximum_amount,currency,REVIEWER_MEMBERSHIP_ID,
-                              )
-                              for capability,mode,risk,approval,maximum_amount,currency
-                              in capability_rows
-                          ],
+                          (DEMO_ORG_ID, grant_id, list(capability_codes)),
                       )
+                      existing_capabilities = {
+                          row[0]: row[1:] for row in cursor.fetchall()
+                      }
+                      missing_capabilities = []
+                      for capability,mode,risk,approval,maximum_amount,currency in capability_rows:
+                          expected_capability = (
+                              mode,risk,approval,maximum_amount,currency,False,'active',
+                          )
+                          existing_capability = existing_capabilities.get(capability)
+                          if existing_capability is None:
+                              missing_capabilities.append(
+                                  (
+                                      DEMO_ORG_ID,grant_id,capability,mode,risk,approval,
+                                      maximum_amount,currency,REVIEWER_MEMBERSHIP_ID,
+                                  )
+                              )
+                          elif existing_capability != expected_capability:
+                              raise SystemExit(
+                                  f"existing capability immutable scope differs: {capability}"
+                              )
+                      if missing_capabilities:
+                          cursor.executemany(
+                              """
+                              INSERT INTO automation.agent_grant_capabilities (
+                                  org_id,agent_grant_id,capability_code,operation_mode,
+                                  risk_class,approval_policy,maximum_amount,currency_code,
+                                  allow_sensitive_read,status,created_by_membership_id
+                              ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,false,'active',%s)
+                              """,
+                              missing_capabilities,
+                          )
                       cursor.execute(
                           """
                           SELECT grant_row.id::text,capability.capability_code,
@@ -394,6 +452,7 @@ jobs:
                              AND grant_row.expires_at>transaction_timestamp()
                              AND grant_row.consented_by_membership_id=%s
                              AND capability.status='active'
+                             AND capability.allow_sensitive_read=false
                            ORDER BY capability.capability_code
                           """,
                           (DEMO_ORG_ID, membership_id, WEB_CLIENT_ID, membership_id),
@@ -409,6 +468,15 @@ jobs:
                       )
                       if readback != expected:
                           raise SystemExit("reviewed web authority did not reconcile exactly")
+                      cursor.execute(
+                          """
+                          SELECT expires_at
+                            FROM automation.agent_grants
+                           WHERE org_id=%s AND id=%s
+                          """,
+                          (DEMO_ORG_ID, grant_id),
+                      )
+                      grant_expires_at = cursor.fetchone()[0].isoformat()
                   except BaseException:
                       # Roll back grant changes and temporary role membership before
                       # propagating the root error; cleanup SQL cannot run in an
@@ -423,7 +491,7 @@ jobs:
               "client_id": WEB_CLIENT_ID,
               "grant_id": grant_id,
               "capability_count": len(capability_rows),
-              "expires_in_days": 30,
+              "grant_expires_at": grant_expires_at,
           }, sort_keys=True))
           ''')
           PY

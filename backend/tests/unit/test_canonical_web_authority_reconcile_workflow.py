@@ -7,6 +7,11 @@ ROOT = Path(__file__).resolve().parents[3]
 WORKFLOW = ROOT / ".github/workflows/canonical-web-authority-reconcile.yml"
 
 
+def _embedded_remote_source() -> str:
+    source = WORKFLOW.read_text(encoding="utf-8")
+    return textwrap.dedent(source.split("print(r'''", 1)[1].split("''')", 1)[0])
+
+
 def test_web_authority_reconcile_is_exact_sha_and_staging_only() -> None:
     source = WORKFLOW.read_text(encoding="utf-8")
 
@@ -90,7 +95,58 @@ def test_web_authority_reconcile_rolls_back_before_role_cleanup_on_failure() -> 
 
 
 def test_embedded_remote_reconciler_is_valid_python() -> None:
-    source = WORKFLOW.read_text(encoding="utf-8")
-    remote = source.split("print(r'''", 1)[1].split("''')", 1)[0]
+    ast.parse(_embedded_remote_source())
 
-    ast.parse(textwrap.dedent(remote))
+
+def test_web_authority_rerun_preserves_immutable_grant_scope() -> None:
+    remote = _embedded_remote_source()
+    tree = ast.parse(remote)
+    sql_literals = [
+        node.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Constant) and isinstance(node.value, str)
+    ]
+    grant_updates = [
+        sql for sql in sql_literals if "UPDATE automation.agent_grants" in sql
+    ]
+
+    assert len(grant_updates) == 1
+    metadata_update = grant_updates[0]
+    assert "client_display_name=%s" in metadata_update
+    assert "updated_by_membership_id=%s" in metadata_update
+    for immutable_assignment in (
+        "subject_membership_id=",
+        "client_id=",
+        "branch_id=",
+        "authorization_mode=",
+        "consent_version=",
+        "consent_text_hash=",
+        "consented_by_membership_id=",
+        "consented_at=",
+        "granted_by_membership_id=",
+        "granted_at=",
+        "expires_at=",
+    ):
+        assert immutable_assignment not in metadata_update
+    assert "ON CONFLICT (org_id,id) DO UPDATE" not in remote
+    assert "existing reviewed web grant immutable scope differs" in remote
+    assert "existing reviewed web grant is not active and unexpired" in remote
+
+
+def test_web_authority_capability_reconciliation_never_rewrites_consent_bounds() -> None:
+    remote = _embedded_remote_source()
+
+    assert "existing capability immutable scope differs" in remote
+    assert "missing_capabilities" in remote
+    assert "ON CONFLICT (org_id,agent_grant_id,capability_code) DO UPDATE" not in remote
+    assert "SET status='revoked',revoked_at=transaction_timestamp()" in remote
+    assert "status='active',revoked_at=NULL" not in remote
+
+
+def test_web_authority_readback_reports_the_preserved_expiry() -> None:
+    remote = _embedded_remote_source()
+
+    assert "SELECT expires_at" in remote
+    assert "grant_expires_at = cursor.fetchone()[0].isoformat()" in remote
+    assert '"grant_expires_at": grant_expires_at' in remote
+    assert '"expires_in_days": 30' not in remote
