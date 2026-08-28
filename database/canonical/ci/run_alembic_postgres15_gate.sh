@@ -131,6 +131,8 @@ PYTHONPATH=backend \
 PYTHONPATH=backend \
   python backend/tests/postgres/check_canonical_sales_address_evidence_runtime_role.py
 PYTHONPATH=backend \
+  python backend/tests/postgres/check_sales_invoice_archival_snapshots.py
+PYTHONPATH=backend \
   python backend/tests/postgres/check_canonical_purchase_order_detail_runtime_role.py
 PYTHONPATH=backend \
   python backend/tests/postgres/check_canonical_purchase_order_runtime_role.py

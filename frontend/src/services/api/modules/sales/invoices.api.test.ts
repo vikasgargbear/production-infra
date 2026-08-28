@@ -62,6 +62,10 @@ describe('canonical invoice web transport', () => {
             '/canonical/sales-orders/order-uuid/import-detail',
             '/canonical/challans/challan-uuid/import-detail',
         ]);
-        expect(get.mock.calls[1][1]).toEqual({ params: { dispatch_date: '2026-08-26' } });
+        expect(get.mock.calls[1][1]).toEqual({
+            params: { dispatch_date: '2026-08-26' },
+            preserveExactDecimals: true,
+        });
+        expect(get.mock.calls[2][1]).toEqual({ preserveExactDecimals: true });
     });
 });

@@ -1,0 +1,7 @@
+{
+  "format_version": 1,
+  "revision": "20260829_0051",
+  "source_sql_sha256": "bc71aa24817d513196e71c2f5010e8ae9edb410af5cd6c3ef4299fde7bf2592a",
+  "authority_change": "canonical_dispatch_invoice_lineage_v1",
+  "target_regprocedure": "erp_automation_reads.sales_dispatch_post_provenance(uuid,uuid)"
+}

@@ -52,7 +52,10 @@ export const ordersApi = {
   ...crud,
   getById: (id: OrderId, dispatchDate: string) => apiHelpers.get<CanonicalSalesOrderImportDetail>(
     `/canonical/sales-orders/${id}/import-detail`,
-    { params: { dispatch_date: dispatchDate } },
+    {
+      params: { dispatch_date: dispatchDate },
+      preserveExactDecimals: true,
+    },
   ),
   create: (_data: any) => rejectCanonicalWrite('Legacy sales-order creation'),
   update: (_id: OrderId, _data: any) => rejectCanonicalWrite('Legacy sales-order editing'),

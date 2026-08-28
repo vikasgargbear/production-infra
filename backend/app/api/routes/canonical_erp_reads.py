@@ -2804,6 +2804,7 @@ class CanonicalInvoiceDetailItem(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: UUID
+    source_document_kind: Literal["sales_order"]
     product_id: UUID
     product_name: str
     product_code: str
@@ -3222,6 +3223,7 @@ class CanonicalInvoiceDetailResponse(BaseModel):
     invoice_number: str
     invoice_date: date
     status: str
+    archival_snapshot_state: Literal["unavailable", "captured"]
     seller_legal_name: str
     seller_gstin: str
     seller_address: str
@@ -3234,6 +3236,10 @@ class CanonicalInvoiceDetailResponse(BaseModel):
     customer_drug_license_numbers: list[str]
     billing_address: str
     shipping_address: str
+    seller_gst_evidence: dict[str, Any]
+    customer_gst_evidence: dict[str, Any]
+    seller_drug_licence_evidence: dict[str, Any]
+    customer_drug_licence_evidence: dict[str, Any]
     due_date: Optional[date]
     currency_code: str
     tax_charge_mechanism: Literal["normal", "reverse_charge"]
@@ -3267,19 +3273,42 @@ def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> di
     rows = _rows(db, """
         SELECT invoice.id AS invoice_id, invoice.invoice_number,
                invoice.invoice_date, invoice.status,
+               invoice.archival_snapshot_state,
                invoice.seller_legal_name_snapshot AS seller_legal_name,
                invoice.seller_gstin_snapshot AS seller_gstin,
                invoice.seller_address_snapshot AS seller_address,
-               COALESCE(seller_license.license_numbers, ARRAY[]::text[])
-                   AS seller_drug_license_numbers,
+               ARRAY(
+                 SELECT licence->>'license_number'
+                   FROM jsonb_array_elements(COALESCE(
+                     invoice.seller_drug_licence_evidence_snapshot->'licences',
+                     '[]'::jsonb
+                   )) licence
+                  WHERE NULLIF(btrim(licence->>'license_number'), '') IS NOT NULL
+                  ORDER BY licence->>'license_type_code', licence->>'license_number',
+                           licence->>'id'
+               ) AS seller_drug_license_numbers,
                invoice.customer_account_id AS customer_id,
-               party.legal_name AS customer_name,
-               contact.phone AS customer_phone, contact.email AS customer_email,
+               invoice.buyer_legal_name_snapshot AS customer_name,
+               NULL::text AS customer_phone, NULL::text AS customer_email,
                invoice.buyer_gstin_snapshot AS customer_gst_number,
-               COALESCE(customer_license.license_numbers, ARRAY[]::text[])
-                   AS customer_drug_license_numbers,
-               invoice.buyer_address_snapshot AS billing_address,
-               invoice.buyer_address_snapshot AS shipping_address,
+               ARRAY(
+                 SELECT licence->>'license_number'
+                   FROM jsonb_array_elements(COALESCE(
+                     invoice.buyer_drug_licence_evidence_snapshot->'licences',
+                     '[]'::jsonb
+                   )) licence
+                  WHERE NULLIF(btrim(licence->>'license_number'), '') IS NOT NULL
+                  ORDER BY licence->>'license_type_code', licence->>'license_number',
+                           licence->>'id'
+               ) AS customer_drug_license_numbers,
+               invoice.billing_address_snapshot AS billing_address,
+               invoice.shipping_address_snapshot AS shipping_address,
+               invoice.seller_gst_evidence_snapshot AS seller_gst_evidence,
+               invoice.buyer_gst_evidence_snapshot AS customer_gst_evidence,
+               invoice.seller_drug_licence_evidence_snapshot
+                 AS seller_drug_licence_evidence,
+               invoice.buyer_drug_licence_evidence_snapshot
+                 AS customer_drug_licence_evidence,
                invoice.due_date, invoice.currency_code,
                invoice.tax_charge_mechanism,
                to_char(invoice.subtotal, 'FM999999999999999990.00') AS subtotal_amount,
@@ -3297,42 +3326,6 @@ def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> di
                COALESCE(lines.items, '[]'::jsonb) AS items,
                invoice.created_at, invoice.updated_at
           FROM sales.invoices invoice
-          JOIN parties.customer_accounts account
-            ON account.org_id=invoice.org_id
-           AND account.id=invoice.customer_account_id
-          JOIN parties.parties party
-            ON party.org_id=account.org_id AND party.id=account.party_id
-          LEFT JOIN LATERAL (
-              SELECT phone, email
-                FROM parties.contacts
-               WHERE org_id=party.org_id AND party_id=party.id AND status='active'
-               ORDER BY is_primary DESC, id LIMIT 1
-          ) contact ON true
-          LEFT JOIN LATERAL (
-              SELECT array_agg(license_number ORDER BY license_type_code, id)
-                         AS license_numbers
-                FROM compliance.licenses
-               WHERE org_id=invoice.org_id
-                 AND organization_subject_id=invoice.org_id
-                 AND license_type_code IN (
-                     'drug_wholesale_form_20b', 'drug_wholesale_form_21b',
-                     'drug_schedule_x_wholesale_form_20g'
-                 )
-                 AND status='active' AND valid_from<=invoice.invoice_date
-                 AND (valid_until IS NULL OR valid_until>=invoice.invoice_date)
-          ) seller_license ON true
-          LEFT JOIN LATERAL (
-              SELECT array_agg(license_number ORDER BY license_type_code, id)
-                         AS license_numbers
-                FROM compliance.licenses
-               WHERE org_id=invoice.org_id AND party_id=party.id
-                 AND license_type_code IN (
-                     'drug_wholesale_form_20b', 'drug_wholesale_form_21b',
-                     'drug_schedule_x_wholesale_form_20g'
-                 )
-                 AND status='active' AND valid_from<=invoice.invoice_date
-                 AND (valid_until IS NULL OR valid_until>=invoice.invoice_date)
-          ) customer_license ON true
           LEFT JOIN LATERAL (
               SELECT jsonb_agg(jsonb_build_object(
                          'id', line.id, 'source_document_kind', 'sales_order',
@@ -4133,7 +4126,9 @@ def canonical_challan_compatibility_detail(
           ) contact ON true
           LEFT JOIN LATERAL (
               SELECT jsonb_agg(jsonb_build_object(
-                         'id', line.id, 'product_id', line.product_id,
+                         'id', line.id,
+                         'source_document_kind', 'delivery_challan',
+                         'product_id', line.product_id,
                          'product_name', product.name, 'product_code', product.sku,
                          'hsn_code', product.hsn_code, 'branch_id', dispatch.branch_id,
                          'uom_conversion_id', conversion.id, 'uom_code', line.uom_code,

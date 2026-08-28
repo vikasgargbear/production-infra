@@ -10,11 +10,15 @@ from typing import Any
 from urllib.parse import quote
 from uuid import UUID, uuid4
 
+from fastapi import HTTPException
 import psycopg2
 from psycopg2.extensions import AsIs, register_adapter
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
+from app.api.routes.canonical_erp_reads import (
+    canonical_challan_compatibility_detail,
+)
 from app.api.routes.canonical_sales_chain_reads import (
     _sales_dispatch_valuation_acceptance_readback,
 )
@@ -465,6 +469,72 @@ def main() -> None:
         assert UUID(str(executed.resource_id)) == dispatch_id
         assert replayed.idempotency_replayed is True
         assert replayed.resource_id == executed.resource_id
+
+        with psycopg2.connect(runtime_dsn) as connection:
+            dispatch_reconciliation = fixture.reconcile_sales_dispatch(
+                connection,
+                str(dispatch_id),
+                expected_billed_quantity="12",
+                expected_free_quantity="2",
+            )
+
+        runtime_engine = create_engine(runtime_url)
+        try:
+            with Session(runtime_engine) as session:
+                import_detail = canonical_challan_compatibility_detail(
+                    challan_id=dispatch_id,
+                    user={
+                        "org_id": fixture.IDS["org"],
+                        "auth_user_id": fixture.IDS["operator_auth_user"],
+                    },
+                    db=session,
+                )
+            assert import_detail["status"] == "posted"
+            assert len(import_detail["items"]) == 1
+            assert UUID(
+                str(import_detail["items"][0]["batch_allocations"][0][
+                    "command_request_id"
+                ])
+            ) == dispatch.command_request_id
+        finally:
+            runtime_engine.dispose()
+
+        invoice_payload = fixture.sales_invoice_payload(
+            dispatch_reconciliation["dispatch_lines"],
+            address_version,
+            business_date=business_date,
+        )
+        invoice = _prepare(
+            service,
+            "sales.invoice.prepare",
+            invoice_payload,
+            f"pg15-dispatch-invoice-{uuid4()}",
+        )
+        assert _approve(service, invoice).status == "approved"
+        invoice_execution = _execute(service, invoice)
+        assert invoice_execution.status == "succeeded"
+
+        runtime_engine = create_engine(runtime_url)
+        try:
+            with Session(runtime_engine) as session:
+                try:
+                    canonical_challan_compatibility_detail(
+                        challan_id=dispatch_id,
+                        user={
+                            "org_id": fixture.IDS["org"],
+                            "auth_user_id": fixture.IDS["operator_auth_user"],
+                        },
+                        db=session,
+                    )
+                except HTTPException as consumed:
+                    assert consumed.status_code == 409
+                    assert "already invoiced" in consumed.detail
+                else:
+                    raise AssertionError(
+                        "fully invoiced dispatch remained importable"
+                    )
+        finally:
+            runtime_engine.dispose()
 
     _reconcile(runtime_dsn, dispatch_id, batch_id, lot_id)
     runtime_engine = create_engine(runtime_url)

@@ -375,6 +375,114 @@ def test_order_and_challan_import_details_include_canonical_batch_allocations(mo
     assert challan_params == {"org_id": org_id, "challan_id": challan_id}
 
 
+def test_challan_import_route_projects_its_required_source_kind(monkeypatch) -> None:
+    org_id = uuid4()
+    challan_id = uuid4()
+    dispatch_line_id = uuid4()
+    command_id = uuid4()
+    inventory_document_id = uuid4()
+    inventory_line_id = uuid4()
+    product_id = uuid4()
+    batch_id = uuid4()
+    branch_id = uuid4()
+    conversion_id = uuid4()
+    customer_id = uuid4()
+    location_id = uuid4()
+    now = datetime(2026, 8, 29, 0, 0, 0)
+
+    monkeypatch.setattr(canonical_erp_reads, "_activate", lambda *_args: org_id)
+
+    def fake_rows(_db, sql, params):
+        assert params == {"org_id": org_id, "challan_id": challan_id}
+        item = {
+            "id": dispatch_line_id,
+            "product_id": product_id,
+            "product_name": "Canonical Product",
+            "product_code": "PROD-1",
+            "hsn_code": "30049099",
+            "branch_id": branch_id,
+            "uom_conversion_id": conversion_id,
+            "uom_code": "EA",
+            "unit": "EA",
+            "quantity": "2.000000",
+            "dispatched_quantity": "2.000000",
+            "free_quantity": "0.000000",
+            "free_supply_tax_treatment": "excluded_from_taxable_value",
+            "unit_price": "100.0000",
+            "discount_percent": "5.000000",
+            "tax_rate": "12.000000",
+            "gst_percent": "12.000000",
+            "taxable_amount": "190.00",
+            "cgst_amount": "11.40",
+            "sgst_amount": "11.40",
+            "igst_amount": "0.00",
+            "line_total": "212.80",
+            "batch_id": batch_id,
+            "batch_number": "BATCH-1",
+            "expiry_date": date(2028, 9, 1),
+            "mrp": "150.0000",
+            "batch_allocations": [{
+                "source_kind": "dispatch_allocation",
+                "allocation_id": dispatch_line_id,
+                "source_line_id": dispatch_line_id,
+                "command_request_id": command_id,
+                "inventory_document_id": inventory_document_id,
+                "inventory_document_line_id": inventory_line_id,
+                "invoice_dispatch_allocation_id": None,
+                "dispatch_id": challan_id,
+                "dispatch_line_id": dispatch_line_id,
+                "batch_id": batch_id,
+                "batch_number": "BATCH-1",
+                "expiry_date": date(2028, 9, 1),
+                "from_location_id": location_id,
+                "base_quantity": "2.000000",
+                "base_billed_quantity": "2.000000",
+                "base_free_quantity": "0.000000",
+                "billed_quantity": "2.000000",
+                "free_quantity": "0.000000",
+            }],
+        }
+        if "'source_document_kind', 'delivery_challan'" in sql:
+            item["source_document_kind"] = "delivery_challan"
+        return [{
+            "challan_id": challan_id,
+            "id": challan_id,
+            "challan_number": "DC-1",
+            "challan_date": date(2026, 8, 29),
+            "status": "posted",
+            "customer_id": customer_id,
+            "customer_name": "Customer",
+            "customer_phone": None,
+            "customer_email": None,
+            "delivery_address": "Address",
+            "delivery_city": "Jaipur",
+            "delivery_state": "08",
+            "delivery_pincode": "302001",
+            "transport_company": None,
+            "vehicle_number": None,
+            "lr_number": None,
+            "items": [item],
+            "source_item_count": 1,
+            "importable_item_count": 1,
+            "total_amount": "212.80",
+            "created_at": now,
+            "updated_at": now,
+        }]
+
+    monkeypatch.setattr(canonical_erp_reads, "_rows", fake_rows)
+    result = canonical_erp_reads.canonical_challan_compatibility_detail(
+        challan_id=challan_id, user={}, db=object(),
+    )
+    route = next(
+        route for route in canonical_erp_reads.router.routes
+        if isinstance(route, APIRoute)
+        and route.path == "/canonical/challans/{challan_id}/import-detail"
+    )
+    response = route.response_model.model_validate(result)
+
+    assert response.items[0].source_document_kind == "delivery_challan"
+
+
 def test_order_and_challan_import_routes_publish_strict_authoritative_contracts() -> None:
     routes = {
         route.path: route for route in canonical_erp_reads.router.routes
@@ -1293,7 +1401,10 @@ def test_sales_invoice_reads_project_authoritative_gst_header_totals() -> None:
         assert f"invoice.{field}" in detail_source
     assert "AS seller_drug_license_numbers" in detail_source
     assert "AS customer_drug_license_numbers" in detail_source
-    assert "valid_from<=invoice.invoice_date" in detail_source
+    assert "seller_drug_licence_evidence_snapshot->'licences'" in detail_source
+    assert "buyer_drug_licence_evidence_snapshot->'licences'" in detail_source
+    assert "FROM compliance.licenses" not in detail_source
+    assert "FROM parties.contacts" not in detail_source
 
 
 def test_sales_invoice_detail_projects_executed_batch_allocations() -> None:
@@ -1343,6 +1454,8 @@ def test_sales_invoice_detail_projects_executed_batch_allocations() -> None:
         for route in detail_routes
     )
     item_schema = canonical_erp_reads.CanonicalInvoiceDetailItem.model_json_schema()
+    assert item_schema["properties"]["source_document_kind"]["const"] == "sales_order"
+    assert "source_document_kind" in item_schema["required"]
     assert "batch_allocations" in item_schema["properties"]
     assert "batch_allocations" in item_schema["required"]
     allocation_schema = (
@@ -1421,7 +1534,8 @@ def test_sales_invoice_detail_response_validates_zero_one_and_many_allocations()
                 value["evidenced_allocation_count"] = len(allocations)
         singular = allocations[0] if len(allocations) == 1 else None
         return {
-            "id": line_id, "product_id": uuid4(), "product_name": "Product",
+            "id": line_id, "source_document_kind": "sales_order",
+            "product_id": uuid4(), "product_name": "Product",
             "product_code": "SKU", "hsn_code": "481910", "uom_code": "EA",
             "unit": "EA", "quantity": len(allocations) or 1,
             "free_quantity": 0, "base_billed_quantity": len(allocations) or 1,
@@ -1444,6 +1558,7 @@ def test_sales_invoice_detail_response_validates_zero_one_and_many_allocations()
     payload = {
         "invoice_id": uuid4(), "invoice_number": "INV-1",
         "invoice_date": date(2026, 8, 24), "status": "draft",
+        "archival_snapshot_state": "captured",
         "seller_legal_name": "Canonical Seller Private Limited",
         "seller_gstin": "27ABCDE1234F1Z5", "seller_address": "Seller Address",
         "seller_drug_license_numbers": ["MH-MZ6-20B"],
@@ -1451,7 +1566,12 @@ def test_sales_invoice_detail_response_validates_zero_one_and_many_allocations()
         "customer_phone": None, "customer_email": None,
         "customer_gst_number": None, "customer_drug_license_numbers": [],
         "billing_address": "Address",
-        "shipping_address": "Address", "due_date": None, "currency_code": "INR",
+        "shipping_address": "Address",
+        "seller_gst_evidence": {"availability": "available"},
+        "customer_gst_evidence": {"availability": "not_registered"},
+        "seller_drug_licence_evidence": {"availability": "none_effective"},
+        "customer_drug_licence_evidence": {"availability": "none_effective"},
+        "due_date": None, "currency_code": "INR",
         "tax_charge_mechanism": "normal", "subtotal_amount": 300,
         "discount_amount": 0, "charges_amount": 0, "net_value_amount": 300,
         "taxable_amount": 300, "cgst_amount": 18, "sgst_amount": 18,
@@ -1463,6 +1583,7 @@ def test_sales_invoice_detail_response_validates_zero_one_and_many_allocations()
     }
 
     response = canonical_erp_reads.CanonicalInvoiceDetailResponse.model_validate(payload)
+    assert response.items[0].source_document_kind == "sales_order"
     assert response.items[0].batch_allocations == []
     assert response.items[1].batch_allocations[0].expiry_date is None
     assert response.items[1].batch_id == direct["batch_id"]
@@ -1556,6 +1677,10 @@ def test_sales_invoice_detail_response_validates_zero_one_and_many_allocations()
     ][0]["invoice_line_id"]
     with pytest.raises(ValidationError, match="invoice line identity"):
         canonical_erp_reads.CanonicalInvoiceDetailItem.model_validate(identity_mismatch)
+    with pytest.raises(ValidationError, match="sales_order"):
+        canonical_erp_reads.CanonicalInvoiceDetailItem.model_validate({
+            **item([direct]), "source_document_kind": "delivery_challan",
+        })
 
 
 def test_supplier_invoice_reads_project_tax_totals_and_filter_invoice_dates() -> None:
