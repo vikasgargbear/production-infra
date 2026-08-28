@@ -93,7 +93,10 @@ export const toCanonicalSupplierCreate = (input: Record<string, any>): Canonical
 // ============================================================================
 
 export const suppliersApi = {
-  getAll: (params: SupplierParams = {}) => apiHelpers.get('/suppliers', { params })
+  getAll: (params: SupplierParams = {}) => apiHelpers.get('/suppliers', {
+    params,
+    preserveExactDecimals: true,
+  })
     .then(response => ({ ...response, data: decodeCanonicalSupplierList(response.data) })),
 
   create: (data: Record<string, any>, idempotencyKey: string) => {
@@ -113,7 +116,8 @@ export const suppliersApi = {
   // Search suppliers
   search: (query: string, params: SupplierParams = {}) => {
     return apiHelpers.get('/suppliers', {
-      params: { search: query, ...params }
+      params: { search: query, ...params },
+      preserveExactDecimals: true,
     }).then(response => ({ ...response, data: decodeCanonicalSupplierList(response.data) }));
   },
 };

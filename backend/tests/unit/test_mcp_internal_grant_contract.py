@@ -149,6 +149,11 @@ def test_internal_authority_is_canonical_and_never_uses_service_role():
 
 def test_exact_canonical_read_allowlist_has_no_write_or_generic_route():
     assert set(CANONICAL_READ_POLICIES) == {
+        "finance.party_aging.get",
+        "finance.party_statement.get",
+        "finance.trial_balance.get",
+        "finance.profit_loss.get",
+        "finance.customer_activity.get",
         "master.products.search",
         "master.suppliers.search",
         "gst.settings.get",
@@ -159,6 +164,11 @@ def test_exact_canonical_read_allowlist_has_no_write_or_generic_route():
     assert CANONICAL_READ_POLICIES["master.suppliers.search"].sensitive_read is True
     route_paths = {route.path for route in mcp_canonical_reads.router.routes}
     assert route_paths == {
+        "/internal/mcp/reads/party-aging",
+        "/internal/mcp/reads/party-statement",
+        "/internal/mcp/reads/trial-balance",
+        "/internal/mcp/reads/profit-loss",
+        "/internal/mcp/reads/customer-activity",
         "/internal/mcp/reads/products",
         "/internal/mcp/reads/suppliers",
         "/internal/mcp/reads/gst-settings",
@@ -206,7 +216,7 @@ def test_isolated_gateway_registry_matches_canonical_backend_contract():
         assert isinstance(tool_node, ast.Constant) and isinstance(operation_node, ast.Call)
         gateway[tool_node.value] = tuple(ast.literal_eval(argument) for argument in operation_node.args)
 
-    assert len(gateway) == 15
+    assert len(gateway) == 20
     assert {values[0] for values in gateway.values()} == set(
         ALL_CANONICAL_READ_POLICIES
     )

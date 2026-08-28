@@ -5,7 +5,7 @@
  */
 
 import React, { useMemo } from 'react';
-import { CreditCard, Clock } from 'lucide-react';
+import { Clock } from 'lucide-react';
 import { DataTable } from '../../../global';
 import { formatExactCurrency } from '../../../../utils/exactDecimal';
 import { format, parseISO } from 'date-fns';
@@ -17,7 +17,7 @@ export const PartyDetailsView = React.memo<PartyDetailsViewProps>(({
     const invoiceColumns = useMemo(() => [
         {
             key: 'invoice_number',
-            header: 'Invoice #',
+            header: 'Document #',
             render: (_: any, invoice: InvoiceDetail) => invoice.invoice_number,
             width: '120px'
         },
@@ -114,13 +114,14 @@ export const PartyDetailsView = React.memo<PartyDetailsViewProps>(({
     ], []);
 
     return (
-        <div className="max-w-7xl mx-auto px-6 py-6">
-            {/* Customer Contact Info */}
-            <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+        <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 sm:py-6">
+            {/* Party contact and canonical account identity */}
+            <div className="mb-4 rounded-lg bg-white p-4 shadow-sm sm:mb-6 sm:p-6">
                 <div className="flex items-center justify-between">
                     <div>
-                        <h2 className="text-2xl font-bold text-gray-900">{party.party_name}</h2>
-                        <div className="flex items-center gap-6 mt-2 text-gray-600">
+                        <h2 className="text-xl font-bold text-gray-900 sm:text-2xl">{party.party_name}</h2>
+                        <p className="mt-1 text-sm text-gray-500">{party.party_code} · {party.account_status.replace('_', ' ')}</p>
+                        <div className="mt-2 flex flex-col gap-2 text-sm text-gray-600 sm:flex-row sm:items-center sm:gap-6">
                             {party.party_phone && (
                                 <div className="flex items-center gap-2">
                                     <span>📱</span>
@@ -139,18 +140,18 @@ export const PartyDetailsView = React.memo<PartyDetailsViewProps>(({
             </div>
 
             {/* Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                <div className="bg-white rounded-lg shadow-sm p-6">
+            <div className="mb-4 grid grid-cols-1 gap-3 sm:mb-6 md:grid-cols-2 md:gap-6">
+                <div className="rounded-lg bg-white p-4 shadow-sm sm:p-6">
                     <div className="text-sm text-gray-600 mb-2">Total Outstanding</div>
                     <div className="text-2xl font-bold text-gray-900">
                         {formatExactCurrency(party.total_outstanding, 'Customer outstanding')}
                     </div>
                     <div className="text-sm text-gray-500 mt-1">
-                        {party.invoice_count} invoices
+                        {party.invoice_count} documents
                     </div>
                 </div>
 
-                <div className="bg-white rounded-lg shadow-sm p-6">
+                <div className="rounded-lg bg-white p-4 shadow-sm sm:p-6">
                     <div className="text-sm text-gray-600 mb-2">Overdue Amount</div>
                     <div className="text-2xl font-bold text-red-600">
                         {formatExactCurrency(party.total_overdue, 'Customer overdue')}
@@ -162,34 +163,38 @@ export const PartyDetailsView = React.memo<PartyDetailsViewProps>(({
 
             </div>
 
-            {/* Outstanding Invoices Table */}
+            {/* Outstanding documents table */}
             <div className="bg-white rounded-lg shadow-sm">
-                <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-                    <h3 className="text-lg font-semibold">Outstanding Invoices</h3>
-                    <button
-                        type="button"
-                        disabled
-                        title="Payment allocation requires the canonical customer-receipt command"
-                        className="flex cursor-not-allowed items-center rounded-md border border-gray-200 bg-gray-100 px-4 py-2 text-gray-500"
-                    >
-                        <CreditCard className="w-4 h-4 mr-2" />
-                        Allocation unavailable
-                    </button>
+                <div className="border-b border-gray-200 px-4 py-4 sm:px-6">
+                    <h3 className="text-lg font-semibold">Outstanding documents</h3>
+                    <p className="mt-1 text-sm text-gray-500">Record receipts or supplier payments from the Payments module.</p>
                 </div>
-                <div className="p-6">
+                <div className="p-4 sm:p-6">
                     {party.invoices && party.invoices.length > 0 ? (
+                        <>
+                        <div className="space-y-3 md:hidden">
+                            {party.invoices.map(document => (
+                                <article key={document.open_item_id} className="rounded-xl border border-gray-200 p-4">
+                                    <div className="flex items-start justify-between gap-3"><div><h4 className="font-semibold text-gray-950">{document.invoice_number}</h4><p className="mt-1 text-xs text-gray-500">Due {document.due_date}</p></div><span className={`rounded-full px-2 py-1 text-xs font-medium ${document.status === 'overdue' ? 'bg-red-100 text-red-700' : document.status === 'partial' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}>{document.status}</span></div>
+                                    <dl className="mt-4 grid grid-cols-2 gap-3 text-sm"><div><dt className="text-gray-500">Original</dt><dd className="mt-1 font-medium">{formatExactCurrency(document.original_amount, 'Document original amount')}</dd></div><div><dt className="text-gray-500">Outstanding</dt><dd className="mt-1 font-semibold text-red-700">{formatExactCurrency(document.current_outstanding, 'Document outstanding')}</dd></div></dl>
+                                </article>
+                            ))}
+                        </div>
+                        <div className="hidden md:block">
                         <DataTable
                             columns={invoiceColumns}
                             data={party.invoices}
                             keyField="invoice_id"
                             loading={false}
-                            emptyMessage="No invoices found"
+                            emptyMessage="No documents found"
                         />
+                        </div>
+                        </>
                     ) : (
                         <div className="text-center py-12 text-gray-500">
                             <Clock className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                            <p className="text-lg">No outstanding invoices</p>
-                            <p className="text-sm">This customer has no pending payments</p>
+                            <p className="text-lg">No outstanding documents</p>
+                            <p className="text-sm">This party has no pending balance</p>
                         </div>
                     )}
                 </div>

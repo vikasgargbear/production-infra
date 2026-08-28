@@ -49,6 +49,13 @@ const decimal = (value: unknown, label: string): ExactDecimal => {
   throw new Error(`${label} must be an explicit decimal`);
 };
 
+const money = (value: unknown, label: string): string => {
+  if (typeof value !== 'string' || !/^-?(?:0|[1-9][0-9]*)\.[0-9]{2}$/.test(value)) {
+    throw new Error(`${label} must be an exact two-decimal string`);
+  }
+  return value;
+};
+
 const nullableDecimal = (value: unknown, label: string): ExactDecimal | null => (
   value === null ? null : decimal(value, label)
 );
@@ -86,9 +93,9 @@ export const decodeCanonicalCustomer = (value: unknown, index = 0): CanonicalCus
     gst_number: nullableText(row.gst_number, `${label} GSTIN`),
     gst_verification_status: nullableText(row.gst_verification_status, `${label} GST status`),
     place_of_supply_state_code: nullableText(row.place_of_supply_state_code, `${label} place of supply`),
-    credit_limit: decimal(row.credit_limit, `${label} credit limit`),
+    credit_limit: money(row.credit_limit, `${label} credit limit`),
     credit_days: integer(row.credit_days, `${label} credit days`),
-    current_outstanding: decimal(row.current_outstanding, `${label} outstanding`),
+    current_outstanding: money(row.current_outstanding, `${label} outstanding`),
     customer_type: text(row.customer_type, `${label} type`),
     is_active: boolean(row.is_active, `${label} active state`),
     status: text(row.status, `${label} status`),
@@ -146,7 +153,7 @@ export const decodeCanonicalSupplierList = (value: unknown): CanonicalSupplierRe
       gst_number: nullableText(row.gst_number, `${label} GSTIN`),
       gst_verification_status: nullableText(row.gst_verification_status, `${label} GST status`),
       payment_days: integer(row.payment_days, `${label} payment days`),
-      current_outstanding: decimal(row.current_outstanding, `${label} outstanding`),
+      current_outstanding: money(row.current_outstanding, `${label} outstanding`),
       supplier_type: text(row.supplier_type, `${label} type`),
       is_active: boolean(row.is_active, `${label} active state`),
       status: text(row.status, `${label} status`),

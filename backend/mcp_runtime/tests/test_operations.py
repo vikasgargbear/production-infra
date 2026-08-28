@@ -268,6 +268,75 @@ async def test_read_gateway_omits_only_none_optional_parameters() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("tool_name", "params", "records_field"),
+    (
+        ("erp_party_aging_get", {"party_type": "supplier"}, "parties"),
+        (
+            "erp_party_statement_get",
+            {
+                "party_account_id": str(uuid4()), "party_type": "customer",
+                "date_from": "2026-08-01", "date_to": "2026-08-31",
+                "page": 1, "page_size": 100,
+            },
+            "items",
+        ),
+        (
+            "erp_trial_balance_get",
+            {"date_from": "2026-08-01", "date_to": "2026-08-31"},
+            "rows",
+        ),
+        (
+            "erp_profit_loss_get",
+            {"date_from": "2026-08-01", "date_to": "2026-08-31"},
+            "rows",
+        ),
+        (
+            "erp_customer_activity_get",
+            {"date_from": "2026-08-01", "date_to": "2026-08-31"},
+            "customers",
+        ),
+    ),
+)
+async def test_canonical_finance_reads_preserve_exact_query_and_bound_records(
+    tool_name: str, params: dict, records_field: str,
+) -> None:
+    access = _access()
+    calls: list[tuple] = []
+    operation = OPERATIONS[tool_name]
+    responses = [
+        Response(200, _grant(access, tool_name)),
+        Response(200, {records_field: []}),
+    ]
+    gateway = OperationGateway(
+        settings(),
+        lambda: Client(responses, calls),
+    )
+
+    assert await gateway.execute(operation, access, params) == {records_field: []}
+    assert calls[1][2]["params"] == params
+
+    oversized = {records_field: [{}] * (operation.max_records + 1)}
+    responses = [
+        Response(200, _grant(access, tool_name)), Response(200, oversized)
+    ]
+    gateway = OperationGateway(
+        settings(),
+        lambda: Client(responses, []),
+    )
+    with pytest.raises(UpstreamContractError, match="record limit"):
+        await gateway.execute(operation, access, params)
+
+    responses = [Response(200, _grant(access, tool_name)), Response(200, {})]
+    gateway = OperationGateway(
+        settings(),
+        lambda: Client(responses, []),
+    )
+    with pytest.raises(UpstreamContractError, match=records_field):
+        await gateway.execute(operation, access, params)
+
+
+@pytest.mark.asyncio
 async def test_grant_response_echo_and_record_limits_fail_closed() -> None:
     access = _access()
     bad_grant = _grant(access, "erp_product_search")

@@ -1,11 +1,13 @@
+import { normalizeAuthoritativeDecimal } from '../../../utils/exactDecimal';
+
 export type CustomerWithAging<T extends object = Record<string, unknown>> = T & {
-  current_outstanding: number | null;
+  current_outstanding: string | null;
   outstanding_available: boolean;
 };
 
 const customerKey = (row: object): string => {
   const record = row as Record<string, unknown>;
-  return String(record.customer_id ?? record.id ?? '');
+  return String(record.customer_id ?? record.party_account_id ?? record.id ?? '');
 };
 
 /** Merge the authoritative receivable projection into customer master rows. */
@@ -24,7 +26,12 @@ export const mergeCustomersWithCanonicalAging = <T extends object>(
   const outstandingByCustomer = new Map(
     agingRows
       .filter(row => row.total_outstanding !== undefined && row.total_outstanding !== null)
-      .map(row => [customerKey(row), Number(row.total_outstanding)]),
+      .map(row => [
+        customerKey(row),
+        normalizeAuthoritativeDecimal(row.total_outstanding, 'Customer outstanding', {
+          scale: 2, maximumWholeDigits: 20, allowNegative: false,
+        }),
+      ]),
   );
   return customers.map(customer => {
     const key = customerKey(customer);

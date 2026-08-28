@@ -70,9 +70,14 @@ EXPECTED_SHARED_TOOLS = {
     "erp_adjustment_note_reversal_readback",
 }
 EXPECTED_BASE_READ_TOOLS = {
+    "erp_customer_activity_get",
+    "erp_party_aging_get",
+    "erp_party_statement_get",
     "erp_product_search",
+    "erp_profit_loss_get",
     "erp_supplier_search",
     "erp_gst_settings_get",
+    "erp_trial_balance_get",
 }
 EXPECTED_MASTER_CREATE_TOOLS = {
     "erp_product_create",

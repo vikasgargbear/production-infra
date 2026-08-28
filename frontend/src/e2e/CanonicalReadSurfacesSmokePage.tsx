@@ -1,0 +1,74 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import React from 'react';
+
+import Outstanding from '../components/ledger/Outstanding';
+import CustomerMaster from '../components/master/masters/CustomerMaster';
+import SupplierMaster from '../components/master/masters/SupplierMaster';
+import CustomerAnalytics from '../components/reports/CustomerAnalytics';
+import FinancialReport from '../components/reports/FinancialReport';
+import { ToastProvider } from '../components/global';
+
+type Surface = 'customer-aging' | 'supplier-aging' | 'customers' | 'suppliers' | 'financial' | 'customer-activity';
+
+const surfaceFromLocation = (): Surface => {
+  const requested = new URLSearchParams(window.location.search).get('surface');
+  return requested === 'supplier-aging'
+    || requested === 'customers'
+    || requested === 'suppliers'
+    || requested === 'financial'
+    || requested === 'customer-activity'
+    ? requested
+    : 'customer-aging';
+};
+
+const CanonicalReadSurfacesSmokePage: React.FC = () => {
+  const [surface, setSurface] = React.useState<Surface>(surfaceFromLocation);
+  const queryClient = React.useMemo(() => new QueryClient({
+    defaultOptions: { queries: { retry: false, staleTime: 0 } },
+  }), []);
+
+  const selectSurface = (next: Surface) => {
+    const url = new URL(window.location.href);
+    url.searchParams.set('surface', next);
+    window.history.replaceState(null, '', url);
+    queryClient.clear();
+    setSurface(next);
+  };
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <ToastProvider>
+      <div className="min-h-screen bg-gray-50" data-testid="canonical-read-surfaces-harness">
+        <nav aria-label="Canonical read surfaces" className="sticky top-0 z-50 flex gap-2 overflow-x-auto border-b border-gray-200 bg-white p-3">
+          {([
+            ['customer-aging', 'Customer aging'],
+            ['supplier-aging', 'Supplier aging'],
+            ['customers', 'Customers'],
+            ['suppliers', 'Suppliers'],
+            ['financial', 'Financial'],
+            ['customer-activity', 'Customer activity'],
+          ] as const).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              aria-current={surface === id ? 'page' : undefined}
+              onClick={() => selectSurface(id)}
+              className={`min-h-11 shrink-0 rounded-lg px-4 text-sm font-semibold ${surface === id ? 'bg-blue-600 text-white' : 'border border-gray-300 bg-white text-gray-700'}`}
+            >
+              {label}
+            </button>
+          ))}
+        </nav>
+        {surface === 'customer-aging' && <Outstanding embedded partyType="customer" />}
+        {surface === 'supplier-aging' && <Outstanding embedded partyType="supplier" />}
+        {surface === 'customers' && <CustomerMaster />}
+        {surface === 'suppliers' && <SupplierMaster />}
+        {surface === 'financial' && <FinancialReport />}
+        {surface === 'customer-activity' && <CustomerAnalytics />}
+      </div>
+      </ToastProvider>
+    </QueryClientProvider>
+  );
+};
+
+export default CanonicalReadSurfacesSmokePage;

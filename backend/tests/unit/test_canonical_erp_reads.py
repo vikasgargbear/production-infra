@@ -131,6 +131,43 @@ def test_business_context_fails_closed_without_one_active_organization(monkeypat
     assert exc.value.status_code == 503
 
 
+def test_party_master_reads_transport_money_as_exact_strings(monkeypatch) -> None:
+    org_id = uuid4()
+    customer_id = uuid4()
+    supplier_id = uuid4()
+    monkeypatch.setattr(canonical_erp_reads, "_activate", lambda _db, _user: org_id)
+
+    class _CountResult:
+        def scalar_one(self):
+            return 1
+
+    class _Database:
+        def execute(self, _statement, _params=None):
+            return _CountResult()
+
+    def fake_rows(_db, sql, _params):
+        if "FROM parties.customer_accounts account" in sql:
+            return [{
+                "customer_id": customer_id,
+                "credit_limit": Decimal("9007199254740993.01"),
+                "current_outstanding": Decimal("0.01"),
+            }]
+        if "FROM parties.supplier_accounts account" in sql:
+            return [{
+                "supplier_id": supplier_id,
+                "current_outstanding": Decimal("9007199254740993.01"),
+            }]
+        raise AssertionError("unexpected party-master query")
+
+    monkeypatch.setattr(canonical_erp_reads, "_rows", fake_rows)
+    customers = canonical_erp_reads.customers(user={}, db=_Database())
+    suppliers = canonical_erp_reads.suppliers(user={}, db=_Database())
+
+    assert customers["customers"][0]["credit_limit"] == "9007199254740993.01"
+    assert customers["customers"][0]["current_outstanding"] == "0.01"
+    assert suppliers[0]["current_outstanding"] == "9007199254740993.01"
+
+
 def test_canonical_router_covers_reads_and_bounded_master_writes() -> None:
     routes = [route for route in canonical_erp_reads.router.routes if isinstance(route, APIRoute)]
     assert {route.path for route in routes} >= {path.removeprefix("/api") for path in CRITICAL_UI_READS}

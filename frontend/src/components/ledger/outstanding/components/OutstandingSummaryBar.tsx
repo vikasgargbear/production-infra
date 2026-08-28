@@ -36,7 +36,7 @@ export const OutstandingSummaryBar = React.memo<OutstandingSummaryCardsProps>(({
                     {formatExactCurrency(summary.aging_summary.current.amount, 'Current outstanding')}
                 </span>
                 <span className="text-xs text-gray-500 block mt-1">
-                    {summary.aging_summary.current.count} Invoices
+                    {summary.aging_summary.current.count} Documents
                 </span>
             </div>
             <div className="bg-slate-800 rounded-lg px-4 py-3">
@@ -45,7 +45,7 @@ export const OutstandingSummaryBar = React.memo<OutstandingSummaryCardsProps>(({
                     {formatExactCurrency(summary.aging_summary['1-30'].amount, '1-30 day outstanding')}
                 </span>
                 <span className="text-xs text-gray-500 block mt-1">
-                    {summary.aging_summary['1-30'].count} Invoices
+                    {summary.aging_summary['1-30'].count} Documents
                 </span>
             </div>
             <div className="bg-slate-800 rounded-lg px-4 py-3">
@@ -54,7 +54,7 @@ export const OutstandingSummaryBar = React.memo<OutstandingSummaryCardsProps>(({
                     {formatExactCurrency(summary.aging_summary.over_90.amount, '90+ day outstanding')}
                 </span>
                 <span className="text-xs text-gray-500 block mt-1">
-                    {summary.aging_summary.over_90.count} Invoices
+                    {summary.aging_summary.over_90.count} Documents
                 </span>
             </div>
         </div>

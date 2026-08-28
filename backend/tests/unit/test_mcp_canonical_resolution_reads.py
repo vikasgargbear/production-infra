@@ -78,7 +78,14 @@ def test_resolution_policies_match_operator_contract_and_are_published():
         assert policy_for(operation_key) is policy
 
     assert set(CANONICAL_READ_POLICIES) == {
-        "master.products.search", "master.suppliers.search", "gst.settings.get"
+        "finance.customer_activity.get",
+        "finance.party_aging.get",
+        "finance.party_statement.get",
+        "finance.profit_loss.get",
+        "finance.trial_balance.get",
+        "gst.settings.get",
+        "master.products.search",
+        "master.suppliers.search",
     }
     service = json.loads(
         (ROOT / "backend/mcp_runtime/service-contract.json").read_text(encoding="utf-8")

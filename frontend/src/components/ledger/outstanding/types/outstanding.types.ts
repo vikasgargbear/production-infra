@@ -8,8 +8,12 @@
 // ============================================================================
 
 export interface PartyOutstanding {
+    party_account_id: string;
     party_id: string;
+    party_type: 'customer' | 'supplier';
+    party_code: string;
     party_name: string;
+    account_status: 'active' | 'on_hold' | 'closed';
     party_phone: string;
     party_email: string;
     total_outstanding: string;
@@ -22,6 +26,9 @@ export interface PartyOutstanding {
 }
 
 export interface InvoiceDetail {
+    open_item_id: string;
+    branch_id: string;
+    document_kind: 'sales_invoice' | 'supplier_invoice';
     invoice_id: string;
     invoice_number: string;
     invoice_date: string;
@@ -35,6 +42,8 @@ export interface InvoiceDetail {
 }
 
 export interface OutstandingSummary {
+    as_of_date: string;
+    document_count: number;
     total_receivable: string;
     total_overdue: string;
     party_count: number;
@@ -65,6 +74,7 @@ export interface OutstandingSummaryCardsProps {
 }
 
 export interface OutstandingFiltersProps {
+    partyType: 'customer' | 'supplier';
     status: string;
     searchQuery: string;
     viewMode: 'summary' | 'aging';

@@ -62,6 +62,8 @@ from .api.routes import (
     canonical_payment_history_reads,
     canonical_customer_receipt_reads,
     canonical_party_ledger_reads,
+    canonical_party_aging_reads,
+    canonical_reporting_reads,
     canonical_document_history_reads,
     canonical_inventory_reads,
     canonical_adjustment_note_reads,
@@ -353,6 +355,8 @@ api.include_router(canonical_adjustment_note_reads.router)
 api.include_router(canonical_controlled_operation_reads.router)
 api.include_router(canonical_inventory_transfers.router, tags=["Canonical Inventory Transfers"])
 api.include_router(canonical_party_ledger_reads.router)
+api.include_router(canonical_party_aging_reads.router)
+api.include_router(canonical_reporting_reads.router)
 api.include_router(canonical_document_history_reads.router)
 api.include_router(canonical_reference_reads.router, tags=["Canonical Reference Reads"])
 api.include_router(canonical_evidence_uploads.router)

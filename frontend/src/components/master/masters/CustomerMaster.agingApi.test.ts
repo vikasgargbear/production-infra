@@ -9,7 +9,7 @@ jest.mock('../../../services/api', () => ({
     update: jest.fn(),
   },
   ledgerApi: {
-    getAging: jest.fn(),
+    getCanonicalPartyAging: jest.fn(),
   },
 }));
 
@@ -22,15 +22,15 @@ test('joins customer rows to the canonical customer aging endpoint', async () =>
   mockedCustomersApi.getAll.mockResolvedValue({
     data: [{ customer_id: 'customer-a', customer_name: 'A' }],
   } as any);
-  mockedLedgerApi.getAging.mockResolvedValue({
-    data: { aging_data: [{ customer_id: 'customer-a', total_outstanding: 1563.99 }] },
+  mockedLedgerApi.getCanonicalPartyAging.mockResolvedValue({
+    data: { parties: [{ party_account_id: 'customer-a', total_outstanding: '9007199254740993.01' }] },
   } as any);
 
   const response = await loadCustomersWithCanonicalAging();
 
-  expect(mockedLedgerApi.getAging).toHaveBeenCalledWith({ party_type: 'customer' });
+  expect(mockedLedgerApi.getCanonicalPartyAging).toHaveBeenCalledWith({ party_type: 'customer' });
   expect(response.data).toEqual([
-    expect.objectContaining({ customer_id: 'customer-a', current_outstanding: 1563.99 }),
+    expect.objectContaining({ customer_id: 'customer-a', current_outstanding: '9007199254740993.01' }),
   ]);
 });
 
@@ -38,7 +38,7 @@ test('does not turn an aging API failure into a zero balance', async () => {
   mockedCustomersApi.getAll.mockResolvedValue({
     data: [{ customer_id: 'customer-a', customer_name: 'A' }],
   } as any);
-  mockedLedgerApi.getAging.mockRejectedValue(new Error('unavailable'));
+  mockedLedgerApi.getCanonicalPartyAging.mockRejectedValue(new Error('unavailable'));
 
   const response = await loadCustomersWithCanonicalAging();
 
