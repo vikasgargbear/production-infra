@@ -32,6 +32,7 @@ class CanonicalLive18DestructionAuthority:
     itc_reversal_storage_object_path: str
     gst_registration_id: str
     itc_reversal_rule_id: str
+    sales_return_id: str
 
 
 def _validated_scope(
@@ -90,14 +91,16 @@ def canonical_live18_destruction_authority(
     run_id: str,
     run_attempt: str,
     *,
+    requester_membership_id: str,
     gst_registration_id: str,
     itc_reversal_rule_version: str,
 ) -> CanonicalLive18DestructionAuthority:
     """Return the exact destruction evidence and GST authority for one run."""
 
-    _, run_id, run_attempt = _validated_scope(
+    organization_id, run_id, run_attempt = _validated_scope(
         organization_id, run_id, run_attempt
     )
+    requester_membership_id = str(UUID(requester_membership_id))
     gst_registration_id = str(UUID(gst_registration_id))
     if (
         not isinstance(itc_reversal_rule_version, str)
@@ -136,6 +139,16 @@ def canonical_live18_destruction_authority(
                     "aasopharma-regulatory-rule:"
                     "CGST_SECTION_17_5_H_GOODS_DESTROYED:"
                     f"{itc_reversal_rule_version}"
+                ),
+            )
+        ),
+        sales_return_id=str(
+            uuid5(
+                NAMESPACE_URL,
+                (
+                    f"aasopharma:{organization_id}:{requester_membership_id}:"
+                    "sales.return.prepare:"
+                    f"demo-sales-return-{run_id}:sales_return_id"
                 ),
             )
         ),
