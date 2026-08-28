@@ -1651,8 +1651,9 @@ def test_canonical_receivables_bind_signed_branch_visibility(monkeypatch) -> Non
     assert captured["params"]["branch_ids"] == [branch_id]
 
 
-def test_customer_and_sales_order_gstin_reads_require_active_registration() -> None:
-    assert "r.registration_type='GSTIN' AND r.status='active'" in canonical_erp_reads._PARTY_CONTACTS
+def test_master_reads_include_created_gstin_while_sales_orders_require_active_registration() -> None:
+    assert "r.status IN ('active','pending_verification')" in canonical_erp_reads._PARTY_CONTACTS
+    assert "CASE WHEN r.status='active' THEN 0 ELSE 1 END" in canonical_erp_reads._PARTY_CONTACTS
     detail_source = inspect.getsource(
         canonical_erp_reads.canonical_sales_order_compatibility_detail
     )

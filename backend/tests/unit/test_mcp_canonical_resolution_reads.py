@@ -61,6 +61,13 @@ def _context(operation_key, branch=True, sensitive=False):
     )
 
 
+def test_customer_search_includes_new_pending_gstin_with_active_precedence() -> None:
+    source = inspect.getsource(reads.canonical_customer_search)
+
+    assert "status IN ('active','pending_verification')" in source
+    assert "CASE WHEN status='active' THEN 0 ELSE 1 END" in source
+
+
 def test_resolution_policies_match_operator_contract_and_are_published():
     contract = json.loads(
         (ROOT / "docs/architecture/mcp-operator-actions.json").read_text(encoding="utf-8")
