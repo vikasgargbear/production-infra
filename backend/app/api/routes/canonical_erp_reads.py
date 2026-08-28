@@ -3245,6 +3245,7 @@ class CanonicalInvoiceDetailResponse(BaseModel):
     tax_charge_mechanism: Literal["normal", "reverse_charge"]
     subtotal_amount: ExactMoney
     discount_amount: ExactMoney
+    pre_tax_discount_amount: ExactMoney
     charges_amount: ExactMoney
     net_value_amount: ExactMoney
     taxable_amount: ExactMoney
@@ -3260,6 +3261,16 @@ class CanonicalInvoiceDetailResponse(BaseModel):
 
     @model_validator(mode="after")
     def validate_posted_product_allocations(self):
+        if (
+            self.subtotal_amount
+            - self.pre_tax_discount_amount
+            + self.charges_amount
+            != self.net_value_amount
+        ):
+            raise ValueError(
+                "invoice subtotal, pre-tax discount, charges, and net value "
+                "do not reconcile"
+            )
         if self.status == "posted" and any(
             not item.batch_allocations for item in self.items
         ):
@@ -3313,6 +3324,15 @@ def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> di
                invoice.tax_charge_mechanism,
                to_char(invoice.subtotal, 'FM999999999999999990.00') AS subtotal_amount,
                to_char(invoice.discount_total, 'FM999999999999999990.00') AS discount_amount,
+               to_char(COALESCE((
+                   SELECT sum(
+                       discount_line.line_taxable_discount_amount
+                       + discount_line.document_taxable_discount_amount
+                   )
+                     FROM sales.invoice_lines discount_line
+                    WHERE discount_line.org_id=invoice.org_id
+                      AND discount_line.invoice_id=invoice.id
+               ), 0), 'FM999999999999999990.00') AS pre_tax_discount_amount,
                to_char(invoice.charges_total, 'FM999999999999999990.00') AS charges_amount,
                to_char(invoice.net_value_total, 'FM999999999999999990.00') AS net_value_amount,
                to_char(invoice.gst_taxable_total, 'FM999999999999999990.00') AS taxable_amount,

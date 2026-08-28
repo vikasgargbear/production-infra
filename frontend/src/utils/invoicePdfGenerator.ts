@@ -176,7 +176,7 @@ export const printableCanonicalInvoice = (detail: CanonicalInvoiceDetail): Invoi
             line_total: item.line_total,
         })),
         subtotal_amount: detail.subtotal_amount,
-        discount_amount: detail.discount_amount,
+        discount_amount: detail.pre_tax_discount_amount,
         charges_amount: detail.charges_amount,
         net_value_amount: detail.net_value_amount,
         taxable_amount: detail.taxable_amount,
