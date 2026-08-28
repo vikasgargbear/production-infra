@@ -1205,6 +1205,11 @@ def test_live18_profile_derives_every_prepare_permission_from_generated_contract
     }
     capabilities = {
         capability: approval
+        for capability, _, _, approval in identities.LIVE18_BASE_REQUESTER_CAPABILITIES
+        if capability.endswith(".prepare")
+    }
+    certification_capabilities = {
+        capability: approval
         for capability, _, _, approval in identities.LIVE18_REQUESTER_CAPABILITIES
         if capability.endswith(".prepare")
     }
@@ -1228,6 +1233,14 @@ def test_live18_profile_derives_every_prepare_permission_from_generated_contract
     assert len(operations) == 16
     assert set(published_capabilities) == published_operations
     assert set(capabilities) == operations
+    supported_business = json.loads(
+        identities.SUPPORTED_BUSINESS_READINESS_PATH.read_text(encoding="utf-8")
+    )
+    supported_commands = {
+        row["command_operation"] for row in supported_business["variants"]
+    }
+    assert set(certification_capabilities) == operations | supported_commands
+    assert len(certification_capabilities) == 21
     assert baseline_capabilities == {
         operation: action["approval_policy"]
         for operation, action in actions.items()
@@ -1240,7 +1253,10 @@ def test_live18_profile_derives_every_prepare_permission_from_generated_contract
         operation: actions[operation]["approval_policy"] for operation in operations
     }
     assert set(identities.LIVE18_REQUESTER_PERMISSIONS) == {
-        *(actions[operation]["permission"] for operation in operations),
+        *(
+            actions[operation]["permission"]
+            for operation in operations | supported_commands
+        ),
         "automation.command.approve",
         "automation.command.execute",
         "automation.command.view",

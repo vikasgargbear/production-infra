@@ -80,6 +80,10 @@ OPERATOR_CONTRACT_PATH = (
     else REPOSITORY_ROOT / "docs/architecture/mcp-operator-actions.json"
 )
 LIVE18_MATRIX_PATH = BACKEND_ROOT / "tests/live_acceptance/operation_matrix.json"
+SUPPORTED_BUSINESS_READINESS_PATH = (
+    BACKEND_ROOT
+    / "tests/live_acceptance/live23_supported_business_readiness.json"
+)
 
 REQUESTER_CAPABILITIES = (
     ("sales.return.prepare", "write", "consequential_write", "separate_approver"),
@@ -230,11 +234,15 @@ def _live18_authority() -> tuple[
     tuple[tuple[str, str, str, str], ...],
     tuple[tuple[str, str, str, str], ...],
     tuple[tuple[str, str, str, str], ...],
+    tuple[tuple[str, str, str, str], ...],
     tuple[str, ...],
 ]:
     """Derive the durable demo and bounded temporary MCP authorities."""
     contract = json.loads(OPERATOR_CONTRACT_PATH.read_text(encoding="utf-8"))
     matrix = json.loads(LIVE18_MATRIX_PATH.read_text(encoding="utf-8"))
+    supported_business = json.loads(
+        SUPPORTED_BUSINESS_READINESS_PATH.read_text(encoding="utf-8")
+    )
     operations = matrix.get("operations", [])
     deferred_rows = matrix.get("deferred_operations", [])
     deferred = {
@@ -277,6 +285,26 @@ def _live18_authority() -> tuple[
         raise EphemeralIdentityError(
             "Generated operator contract must expose all 16 release-ready prepare commands"
         )
+    supported_variants = supported_business.get("variants", [])
+    supported_variant_commands = {
+        row.get("command_operation")
+        for row in supported_variants
+        if isinstance(row, dict) and row.get("status") == "ready"
+    }
+    certification_ready = ready | supported_variant_commands
+    if (
+        supported_business.get("required_variant_count") != 7
+        or supported_business.get("ready_count") != 7
+        or len(supported_variants) != 7
+        or len(supported_variant_commands) != 6
+        or None in supported_variant_commands
+        or len(supported_variant_commands - ready) != 5
+        or len(certification_ready) != 21
+        or not certification_ready.issubset(by_operation)
+    ):
+        raise EphemeralIdentityError(
+            "Supported-business registry must add exactly five ready prepare commands"
+        )
     def capabilities(
         operations: set[object],
     ) -> tuple[tuple[str, str, str, str], ...]:
@@ -305,7 +333,7 @@ def _live18_authority() -> tuple[
         )
     permissions = tuple(sorted({
         str(by_operation[str(operation)]["permission"])
-        for operation in ready
+        for operation in certification_ready
     } | {
         "automation.command.approve",
         "automation.command.execute",
@@ -315,6 +343,7 @@ def _live18_authority() -> tuple[
         capabilities(set(by_operation)),
         capabilities(published),
         capabilities(ready),
+        capabilities(certification_ready),
         permissions,
     )
 
@@ -322,6 +351,7 @@ def _live18_authority() -> tuple[
 (
     DEMO_BASELINE_REQUESTER_CAPABILITIES,
     LIVE18_PUBLISHED_REQUESTER_CAPABILITIES,
+    LIVE18_BASE_REQUESTER_CAPABILITIES,
     LIVE18_REQUESTER_CAPABILITIES,
     LIVE18_REQUESTER_PERMISSIONS,
 ) = _live18_authority()
