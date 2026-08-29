@@ -67,6 +67,9 @@ from provision_staging_mcp_oauth import (  # noqa: E402
     _auth_admin_authority,
     _reconcile_client,
 )
+from app.api.routes.internal.mcp_master_contract import (  # noqa: E402
+    master_write_policy_for,
+)
 from canonical_demo_ids import (  # noqa: E402
     canonical_demo_authority_ids,
     canonical_live18_cycle_count_authority,
@@ -136,12 +139,17 @@ REQUESTER_CAPABILITIES = (
 )
 LIVE18_MCP_REQUESTER_CAPABILITIES = (
     *LIVE18_PREPARE_CAPABILITIES,
-    ("catalog.product_draft.create", "none"),
-    ("catalog.product_draft.configure", "none"),
-    ("catalog.product.activate", "none"),
+    ("catalog.product_draft.create", "actor_confirmation"),
+    ("catalog.product_draft.configure", "actor_confirmation"),
+    ("catalog.product.activate", "actor_confirmation"),
     ("automation.command.approve", "actor_confirmation"),
     ("automation.command.execute", "actor_confirmation"),
     ("automation.command.status.get", "none"),
+)
+LIVE18_DIRECT_MASTER_CAPABILITIES = (
+    "catalog.product_draft.create",
+    "catalog.product_draft.configure",
+    "catalog.product.activate",
 )
 REVIEWER_CAPABILITIES = (
     ("automation.command.approve", "actor_confirmation"),
@@ -303,6 +311,38 @@ def _capabilities(role: str, *, live18: bool = False):
     if role != "requester":
         return REVIEWER_CAPABILITIES
     return LIVE18_MCP_REQUESTER_CAPABILITIES if live18 else REQUESTER_CAPABILITIES
+
+
+def _capability_bounds(role: str, *, live18: bool = False):
+    """Return the exact persisted capability contract for a temporary grant."""
+
+    if live18 and role == "requester":
+        master_bounds = []
+        for operation_key in LIVE18_DIRECT_MASTER_CAPABILITIES:
+            policy = master_write_policy_for(operation_key)
+            if policy is None:
+                raise CanonicalLiveIdentityError(
+                    f"Missing canonical master-write policy for {operation_key}"
+                )
+            master_bounds.append(
+                (
+                    operation_key,
+                    "write",
+                    policy.risk_class,
+                    policy.approval_policy,
+                )
+            )
+        return (*LIVE18_REQUESTER_CAPABILITIES, *master_bounds)
+
+    return tuple(
+        (
+            capability,
+            "read" if capability.endswith(".get") else "write",
+            "read_only" if capability.endswith(".get") else "consequential_write",
+            approval,
+        )
+        for capability, approval in _capabilities(role, live18=live18)
+    )
 
 
 def _resolve_fixture_identities(cursor, run_token: str) -> dict[str, str]:
@@ -1005,14 +1045,15 @@ def _provision_database(
                             DEMO_ORG_ID,
                             grant_id,
                             capability,
-                            "read" if capability.endswith(".get") else "write",
-                            "read_only" if capability.endswith(".get") else "consequential_write",
+                            operation_mode,
+                            risk_class,
                             approval,
-                            "read" if capability.endswith(".get") else "write",
-                            "read" if capability.endswith(".get") else "write",
+                            operation_mode,
+                            operation_mode,
                             DEMO_REVIEWER_MEMBERSHIP_ID,
                         )
-                        for capability, approval in _capabilities(role, live18=live18)
+                        for capability, operation_mode, risk_class, approval
+                        in _capability_bounds(role, live18=live18)
                     ],
                 )
             cursor.execute(
@@ -1041,7 +1082,9 @@ def _provision_database(
                 membership_by_role[role]: (
                     state["temporary_grants"][role],
                     tuple(sorted(
-                        capability for capability, _ in _capabilities(role, live18=live18)
+                        capability
+                        for capability, _, _, _
+                        in _capability_bounds(role, live18=live18)
                     )),
                 )
                 for role in ("requester", "reviewer")

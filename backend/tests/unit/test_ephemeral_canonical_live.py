@@ -68,6 +68,12 @@ def test_live18_capabilities_extend_only_the_live18_profile_from_generated_autho
     assert "inventory.destruction.prepare" not in ordinary
     assert "finance.expense_claim.prepare" not in live18
     assert live18["inventory.destruction.prepare"] == "separate_approver"
+    for capability in (
+        "catalog.product_draft.create",
+        "catalog.product_draft.configure",
+        "catalog.product.activate",
+    ):
+        assert live18[capability] == "actor_confirmation"
     assert len(MODULE.LIVE18_PREPARE_CAPABILITIES) == 21
     assert {
         "finance.adjustment_note.reversal.prepare",
@@ -76,6 +82,42 @@ def test_live18_capabilities_extend_only_the_live18_profile_from_generated_autho
         "procurement.purchase_return.reversal.prepare",
         "sales.return.reversal.prepare",
     }.issubset(dict(MODULE.LIVE18_PREPARE_CAPABILITIES))
+
+
+def test_live18_master_capability_bounds_match_shared_policy_and_database_checks():
+    bounds = {
+        capability: (operation_mode, risk_class, approval_policy)
+        for capability, operation_mode, risk_class, approval_policy
+        in MODULE._capability_bounds("requester", live18=True)
+    }
+
+    for operation_key in MODULE.LIVE18_DIRECT_MASTER_CAPABILITIES:
+        policy = MODULE.master_write_policy_for(operation_key)
+        assert policy is not None
+        operation_mode, risk_class, approval_policy = bounds[operation_key]
+        assert operation_mode == "write"
+        assert risk_class == policy.risk_class
+        assert approval_policy == policy.approval_policy
+        assert not (
+            risk_class in {"consequential_write", "regulated_external"}
+            and approval_policy == "none"
+        )
+
+    assert bounds["catalog.product_draft.create"] == (
+        "write",
+        "reversible_write",
+        "actor_confirmation",
+    )
+    assert bounds["catalog.product_draft.configure"] == (
+        "write",
+        "reversible_write",
+        "actor_confirmation",
+    )
+    assert bounds["catalog.product.activate"] == (
+        "write",
+        "consequential_write",
+        "actor_confirmation",
+    )
 
 
 def test_live23_fixture_resolution_requires_a_bounded_run_token_and_lineage() -> None:
