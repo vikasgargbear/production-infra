@@ -38,6 +38,9 @@ if str(SCRIPT_DIRECTORY) not in sys.path:
 from cleanup_staging_evidence_storage import (  # noqa: E402
     close_writer_authority,
 )
+from app.infrastructure.evidence_storage import (  # noqa: E402
+    configured_evidence_storage,
+)
 from railway_canonical_reset import (  # noqa: E402
     CONTROL_TRANSPORT_RAILWAY_IPV6,
     RailwayCanonicalResetError,
@@ -249,6 +252,10 @@ def _plan_organization(request: Mapping[str, Any]) -> dict[str, Any]:
         "catalog_fingerprint_sha256": plan["catalog_fingerprint_sha256"],
         "alembic_head": plan["alembic_head"],
         "organization_row_count": plan["organization_row_count"],
+        "evidence_attachment_count": plan["evidence_attachment_count"],
+        "evidence_attachment_manifest_sha256": plan[
+            "evidence_attachment_manifest_sha256"
+        ],
         "issued_at": issued_at,
         "not_before": issued_at + PURGE_PLAN_MINIMUM_DELAY_SECONDS,
         "expires_at": issued_at + PURGE_PLAN_TTL_SECONDS,
@@ -295,8 +302,41 @@ def _purge_organization(request: Mapping[str, Any]) -> dict[str, Any]:
             raise RailwayResetControlError(
                 f"organization purge plan differs from execution request: {key}"
             )
+    current = plan_staging_organization_purge(
+        **arguments,
+        password=secrets["SUPABASE_DB_PASSWORD"],
+        organization_id=organization_id,
+        control_transport=CONTROL_TRANSPORT_RAILWAY_IPV6,
+    )["plan"]
+    for key in (
+        "evidence_attachment_count",
+        "evidence_attachment_manifest_sha256",
+    ):
+        if current.get(key) != signed_plan.get(key):
+            raise RailwayResetControlError(
+                f"organization purge plan differs from current evidence: {key}"
+            )
+    object_paths = current.get("evidence_object_paths")
+    if (
+        not isinstance(object_paths, list)
+        or len(object_paths) != current["evidence_attachment_count"]
+        or any(not isinstance(path, str) or not path for path in object_paths)
+    ):
+        raise RailwayResetControlError(
+            "organization purge evidence object manifest is invalid"
+        )
+    storage = configured_evidence_storage() if object_paths else None
+    deleted_objects = 0
+    absent_objects = 0
+    for object_path in object_paths:
+        if storage is None:
+            raise AssertionError("unreachable evidence cleanup state")
+        if storage.delete(object_path):
+            deleted_objects += 1
+        else:
+            absent_objects += 1
     plan_sha256 = hashlib.sha256(plan_token.encode("ascii")).hexdigest()
-    return purge_staging_organization(
+    result = purge_staging_organization(
         **arguments,
         password=secrets["SUPABASE_DB_PASSWORD"],
         organization_id=organization_id,
@@ -305,6 +345,13 @@ def _purge_organization(request: Mapping[str, Any]) -> dict[str, Any]:
         authorized_plan_sha256=plan_sha256,
         control_transport=CONTROL_TRANSPORT_RAILWAY_IPV6,
     )
+    return {
+        **result,
+        "evidence_storage_cleanup_run": bool(object_paths),
+        "evidence_storage_object_count": len(object_paths),
+        "evidence_storage_deleted_object_count": deleted_objects,
+        "evidence_storage_absent_object_count": absent_objects,
+    }
 
 
 def _fence(request: Mapping[str, Any], *, action: str) -> dict[str, Any]:

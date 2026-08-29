@@ -657,7 +657,14 @@ jobs:
                   and result["organization_id"] == reset_request["organization_id"]
                   and result["global_write_fence_changed"] is False
                   and result["other_sessions_terminated"] is False
-                  and result["evidence_storage_cleanup_run"] is False
+                  and result["evidence_storage_cleanup_run"]
+                      is (purge["evidence_attachment_count_before_purge"] > 0)
+                  and result["evidence_storage_object_count"]
+                      == purge["evidence_attachment_count_before_purge"]
+                  and (
+                      result["evidence_storage_deleted_object_count"]
+                      + result["evidence_storage_absent_object_count"]
+                  ) == result["evidence_storage_object_count"]
                   and purge["alembic_head"] == expected_head
                   and purge["organization_row_count_after_purge"] == 0
                   and purge["organization_boundary_deleted"] is True

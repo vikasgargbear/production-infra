@@ -356,6 +356,48 @@ class _ForeignKeyCursor:
         return self.rows
 
 
+def test_attachment_snapshot_is_exactly_tenant_scoped_and_rejects_holds() -> None:
+    organization_id = "10000000-0000-4000-8000-000000000010"
+    object_path = f"{organization_id}/branch/receipt/{'a' * 64}.pdf"
+    cursor = _ForeignKeyCursor(
+        [
+            (
+                "attachment-id",
+                reset_authority.EVIDENCE_STORAGE_BUCKET,
+                object_path,
+                "a" * 64,
+                False,
+            )
+        ]
+    )
+
+    snapshot = reset_authority._organization_attachment_snapshot(
+        cursor, organization_id
+    )
+
+    assert snapshot == (
+        (
+            "attachment-id",
+            reset_authority.EVIDENCE_STORAGE_BUCKET,
+            object_path,
+            "a" * 64,
+        ),
+    )
+    held = _ForeignKeyCursor(
+        [
+            (
+                "attachment-id",
+                reset_authority.EVIDENCE_STORAGE_BUCKET,
+                object_path,
+                "a" * 64,
+                True,
+            )
+        ]
+    )
+    with pytest.raises(ResetAuthorityError, match="legal holds"):
+        reset_authority._organization_attachment_snapshot(held, organization_id)
+
+
 def test_organization_delete_order_places_children_before_parents() -> None:
     cursor = _ForeignKeyCursor(
         [
