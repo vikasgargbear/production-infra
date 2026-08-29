@@ -59,6 +59,9 @@ LOGIN_ROLES = frozenset(
     }
 )
 EVIDENCE_STORAGE_BUCKET = "canonical-evidence-private-v1"
+DEMO_EVIDENCE_METADATA_BUCKET = "canonical-demo-evidence"
+DEMO_ORGANIZATION_ID = "d3000000-0000-7000-8000-000000000001"
+DEMO_EVIDENCE_PATH_PREFIXES = ("demo/", "live18/")
 
 CANONICAL_SCHEMAS = (
     "automation",
@@ -846,15 +849,23 @@ def _organization_attachment_snapshot(
                 "organization purge is forbidden while attachment legal holds exist"
             )
         path = str(object_path)
+        bucket_name = str(bucket)
+        canonical_object = (
+            bucket_name == EVIDENCE_STORAGE_BUCKET and path.startswith(prefix)
+        )
+        synthetic_demo_metadata = (
+            organization_id == DEMO_ORGANIZATION_ID
+            and bucket_name == DEMO_EVIDENCE_METADATA_BUCKET
+            and path.startswith(DEMO_EVIDENCE_PATH_PREFIXES)
+        )
         if (
-            str(bucket) != EVIDENCE_STORAGE_BUCKET
-            or not path.startswith(prefix)
+            not (canonical_object or synthetic_demo_metadata)
             or path.endswith("/")
             or "/../" in f"/{path}/"
         ):
             raise ResetAuthorityError("organization evidence storage scope drifted")
         snapshot.append(
-            (str(attachment_id), str(bucket), path, str(sha256_hex))
+            (str(attachment_id), bucket_name, path, str(sha256_hex))
         )
     return tuple(snapshot)
 
@@ -863,6 +874,16 @@ def _attachment_manifest_sha256(
     snapshot: Sequence[tuple[str, str, str, str]],
 ) -> str:
     return hashlib.sha256(_canonical_json(list(snapshot))).hexdigest()
+
+
+def _evidence_storage_object_paths(
+    snapshot: Sequence[tuple[str, str, str, str]],
+) -> tuple[str, ...]:
+    """Return only real private-bucket objects, never synthetic demo metadata."""
+
+    return tuple(
+        path for _, bucket, path, _ in snapshot if bucket == EVIDENCE_STORAGE_BUCKET
+    )
 
 
 def _require_purge_executor(
@@ -1205,6 +1226,7 @@ def plan_organization_purge(
             target_counts = _organization_row_counts(
                 cursor, organization_relations, normalized_id, target=True
             )
+    evidence_object_paths = _evidence_storage_object_paths(attachments)
     return {
         "contract_version": CONTRACT_VERSION,
         "project_ref": project_ref,
@@ -1219,7 +1241,8 @@ def plan_organization_purge(
         "evidence_attachment_manifest_sha256": _attachment_manifest_sha256(
             attachments
         ),
-        "evidence_object_paths": [row[2] for row in attachments],
+        "evidence_storage_object_count": len(evidence_object_paths),
+        "evidence_object_paths": list(evidence_object_paths),
         "confirmation_required": organization_confirmation(normalized_id),
         "global_reset_available": False,
         "truncate_used": False,
@@ -1449,6 +1472,9 @@ def execute_organization_purge(
         "evidence_attachment_count_before_purge": len(before_attachments),
         "evidence_attachment_manifest_sha256": _attachment_manifest_sha256(
             before_attachments
+        ),
+        "evidence_storage_object_count_before_purge": len(
+            _evidence_storage_object_paths(before_attachments)
         ),
         "organization_row_count_after_purge": 0,
         "other_organization_row_count_preserved": sum(

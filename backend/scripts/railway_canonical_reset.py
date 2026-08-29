@@ -717,6 +717,7 @@ def purge_staging_organization(
             "organization_row_count",
             "evidence_attachment_count",
             "evidence_attachment_manifest_sha256",
+            "evidence_storage_object_count",
         )
         if any(
             authorized_plan.get(field) != current_plan.get(field)
