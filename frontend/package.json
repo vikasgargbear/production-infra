@@ -70,9 +70,12 @@
     "mobile:build:release": "npm run mobile:sync && cd android && ./gradlew assembleRelease",
     "mobile:test:android": "cd android && ./gradlew testDebugUnitTest",
     "mobile:app-links": "node scripts/write-android-assetlinks.mjs",
-    "mobile:check": "node scripts/check-android-wrapper.mjs"
+    "mobile:check": "node scripts/check-android-wrapper.mjs",
+    "desktop:check": "node scripts/check-windows-wrapper.mjs",
+    "desktop:build:windows": "npm run desktop:check && tauri build --bundles nsis"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "2.11.4",
     "@capacitor/cli": "8.5.0",
     "@craco/craco": "^7.1.0",
     "@playwright/test": "^1.40.1",

@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Return to AASOPharma ERP</title>
+    <style>
+      body { margin: 0; font-family: system-ui, sans-serif; background: #f8fafc; color: #172033; }
+      main { box-sizing: border-box; max-width: 34rem; margin: 12vh auto; padding: 2rem; background: white; border: 1px solid #dce3ec; border-radius: 0.75rem; }
+      h1 { margin-top: 0; font-size: 1.35rem; }
+      p { line-height: 1.5; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Returning to AASOPharma ERP</h1>
+      <p id="status">The desktop app should reopen automatically. You can close this browser tab afterwards.</p>
+    </main>
+    <script>
+      (() => {
+        const status = document.getElementById('status');
+        const source = new URL(window.location.href);
+        const returnToText = source.searchParams.get('return_to');
+        let returnTo;
+        try {
+          returnTo = new URL(returnToText || '');
+        } catch {
+          status.textContent = 'This desktop sign-in return link is invalid.';
+          return;
+        }
+        const allowedOrigin = 'https://aasopharma-erp-pilot-production-eb9b.up.railway.app';
+        const allowedRoot = returnTo.pathname === '/' && (
+          !returnTo.search || (
+            returnTo.searchParams.size === 1 &&
+            returnTo.searchParams.has('invitation_token')
+          )
+        );
+        const allowedConsent = returnTo.pathname === '/oauth/consent' &&
+          returnTo.searchParams.size === 1 &&
+          returnTo.searchParams.has('authorization_id');
+        if (returnTo.origin !== allowedOrigin || returnTo.hash || (!allowedRoot && !allowedConsent)) {
+          status.textContent = 'This desktop sign-in destination is not allowed.';
+          return;
+        }
+
+        const deepLink = new URL('aasopharma://oauth/callback');
+        deepLink.searchParams.set('return_to', returnTo.href);
+        for (const name of ['code', 'error', 'error_code', 'error_description']) {
+          const values = source.searchParams.getAll(name);
+          if (values.length === 1 && values[0]) deepLink.searchParams.set(name, values[0]);
+        }
+        const hasCode = deepLink.searchParams.has('code');
+        const hasError = deepLink.searchParams.has('error');
+        if (hasCode === hasError) {
+          status.textContent = 'Google did not return a usable sign-in result.';
+          return;
+        }
+        window.location.replace(deepLink.href);
+      })();
+    </script>
+  </body>
+</html>

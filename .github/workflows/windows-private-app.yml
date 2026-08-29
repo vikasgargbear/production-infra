@@ -1,0 +1,52 @@
+name: Windows private app
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/windows-private-app.yml'
+      - 'frontend/package.json'
+      - 'frontend/package-lock.json'
+      - 'frontend/public/desktop-oauth-callback.html'
+      - 'frontend/scripts/check-windows-wrapper.mjs'
+      - 'frontend/src-tauri/**'
+  pull_request:
+    paths:
+      - '.github/workflows/windows-private-app.yml'
+      - 'frontend/package.json'
+      - 'frontend/package-lock.json'
+      - 'frontend/public/desktop-oauth-callback.html'
+      - 'frontend/scripts/check-windows-wrapper.mjs'
+      - 'frontend/src-tauri/**'
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows-setup:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: frontend/src-tauri
+      - run: npm ci
+      - run: npm run desktop:check
+      - run: cargo test --manifest-path src-tauri/Cargo.toml
+      - run: npm run desktop:build:windows
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AASOPharma-ERP-Windows-Setup
+          path: frontend/src-tauri/target/release/bundle/nsis/*-setup.exe
+          if-no-files-found: error
+          retention-days: 7
