@@ -1,11 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Calendar } from 'lucide-react';
+import { Calendar, Loader2, Upload } from 'lucide-react';
 import { usePayment } from '../../../contexts/PaymentContext';
 import { Card } from '../../global';
 import { CustomerSearch } from '../../global';
 import { moneyToCents } from '../entry/customerReceiptCommand';
 import {
   getCustomerReceiptContext,
+  uploadCustomerReceiptEvidence,
   type CustomerReceiptContext,
 } from '../../../services/api/modules/finance/customerReceipts.api';
 import { usePermissions } from '../../../hooks/usePermissions';
@@ -22,6 +23,7 @@ const PaymentFlowOptimized: React.FC = () => {
     setCustomer,
     setPaymentField,
     errors,
+    outstandingInvoices,
     clearError,
     setError
   } = usePayment();
@@ -29,6 +31,9 @@ const PaymentFlowOptimized: React.FC = () => {
   const [bankAccounts, setBankAccounts] = useState<CanonicalBankAccount[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<CustomerReceiptContext['payment_methods']>([]);
   const [bankAccountsError, setBankAccountsError] = useState('');
+  const [receiptContext, setReceiptContext] = useState<CustomerReceiptContext | null>(null);
+  const [sourcesError, setSourcesError] = useState('');
+  const [uploadingEvidence, setUploadingEvidence] = useState(false);
 
   const amountRef = useRef<HTMLInputElement>(null);
   const customerSearchRef = useRef<any>(null);
@@ -58,6 +63,7 @@ const PaymentFlowOptimized: React.FC = () => {
         const accounts = response.data.settlement_accounts;
         setBankAccounts(accounts);
         setPaymentMethods(response.data.payment_methods);
+        setReceiptContext(response.data);
         setPaymentField('payment_date', response.data.business_date);
         setPaymentField('business_date', response.data.business_date);
         setBankAccountsError(accounts.length ? '' : 'No canonical bank settlement account is available.');
@@ -66,6 +72,7 @@ const PaymentFlowOptimized: React.FC = () => {
         if (!active) return;
         setBankAccounts([]);
         setPaymentMethods([]);
+        setReceiptContext(null);
         setPaymentField('payment_date', '');
         setPaymentField('business_date', '');
         setBankAccountsError('Unable to load the canonical receipt context. Receipt posting is unavailable.');
@@ -75,6 +82,26 @@ const PaymentFlowOptimized: React.FC = () => {
     // function identity would refetch after every field update.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!selectedCustomer?.customer_id) return;
+    let active = true;
+    setSourcesError('');
+    getCustomerReceiptContext(selectedCustomer.customer_id)
+      .then(response => {
+        if (!active) return;
+        setReceiptContext(response.data);
+      })
+      .catch(() => {
+        if (!active) return;
+        setReceiptContext(current => current ? {
+          ...current,
+          approved_goods_orders: [],
+        } : null);
+        setSourcesError('Unable to load verified receipt evidence or approved goods orders.');
+      });
+    return () => { active = false; };
+  }, [selectedCustomer?.customer_id]);
 
   const handleFieldChange = (field: string, value: string): void => {
     setPaymentField(field, value);
@@ -95,6 +122,42 @@ const PaymentFlowOptimized: React.FC = () => {
     setCustomer(customer);
     // Trigger the parent's handleCustomerSelect to fetch invoices
     window.dispatchEvent(new CustomEvent('customerSelected', { detail: customer }));
+  };
+
+  const settlementBranches = new Set(
+    payment.allocations.map(allocation => (
+      outstandingInvoices.find(invoice => invoice.invoice_id === allocation.invoice_id)?.branch_id
+    )).filter(Boolean),
+  );
+  const derivedBranchId = payment.receipt_purpose === 'customer_advance'
+    ? payment.branch_id
+    : settlementBranches.size === 1 ? [...settlementBranches][0] : '';
+  const evidenceChoices = (receiptContext?.evidence ?? []).filter(
+    evidence => !derivedBranchId || evidence.branch_id === derivedBranchId,
+  );
+
+  const refreshSources = async (): Promise<void> => {
+    if (!selectedCustomer?.customer_id) return;
+    const response = await getCustomerReceiptContext(selectedCustomer.customer_id);
+    setReceiptContext(response.data);
+  };
+
+  const handleEvidenceUpload = async (file: File | undefined): Promise<void> => {
+    if (!file) return;
+    try {
+      setUploadingEvidence(true);
+      setSourcesError('');
+      const uploaded = await uploadCustomerReceiptEvidence(
+        derivedBranchId, payment.payment_date, file,
+      );
+      await refreshSources();
+      setPaymentField('evidence_attachment_id', uploaded.data.attachment_id);
+      setPaymentField('evidence_label', uploaded.data.original_filename);
+    } catch (error) {
+      setSourcesError(error instanceof Error ? error.message : 'Receipt evidence upload failed.');
+    } finally {
+      setUploadingEvidence(false);
+    }
   };
 
   const needsReference = Boolean(payment.payment_mode);
@@ -208,27 +271,77 @@ const PaymentFlowOptimized: React.FC = () => {
               <select value={payment.receipt_purpose} onChange={(event) => {
                 handleFieldChange('receipt_purpose', event.target.value);
                 setPaymentField('allocation_method', event.target.value === 'customer_advance' ? 'advance' : 'manual');
+                setPaymentField('branch_id', '');
+                setPaymentField('sales_order_id', '');
+                setPaymentField('sales_order_label', '');
+                setPaymentField('evidence_attachment_id', '');
+                setPaymentField('evidence_label', '');
+                setPaymentField('allocations', []);
               }} className="mt-1 min-h-11 w-full rounded-lg border border-gray-300 bg-white px-3">
                 <option value="invoice_settlement">Invoice settlement</option>
                 <option value="customer_advance">Goods-order customer advance</option>
               </select>
             </label>
-            <label className="text-sm font-medium text-gray-700">Verified evidence ID
-              <input value={payment.evidence_attachment_id} onChange={(event) => handleFieldChange('evidence_attachment_id', event.target.value)}
-                className="mt-1 min-h-11 w-full rounded-lg border border-gray-300 px-3" placeholder="Canonical attachment UUID" />
-            </label>
           </div>
 
-          {payment.receipt_purpose === 'customer_advance' && <div className="grid gap-3 sm:grid-cols-2">
-            <label className="text-sm font-medium text-gray-700">Approved goods order ID
-              <input value={payment.sales_order_id} onChange={(event) => handleFieldChange('sales_order_id', event.target.value)}
-                className="mt-1 min-h-11 w-full rounded-lg border border-gray-300 px-3" placeholder="Canonical sales-order UUID" />
-            </label>
-            <label className="text-sm font-medium text-gray-700">Order branch ID
-              <input value={payment.branch_id} onChange={(event) => handleFieldChange('branch_id', event.target.value)}
-                className="mt-1 min-h-11 w-full rounded-lg border border-gray-300 px-3" placeholder="Canonical branch UUID" />
-            </label>
+          {payment.receipt_purpose === 'customer_advance' && <div className="space-y-2">
+            <label htmlFor="customer-advance-order" className="text-sm font-medium text-gray-700">Approved goods order</label>
+            <select id="customer-advance-order" value={payment.sales_order_id} onChange={(event) => {
+              const order = receiptContext?.approved_goods_orders.find(candidate => candidate.sales_order_id === event.target.value);
+              setPaymentField('sales_order_id', order?.sales_order_id || '');
+              setPaymentField('sales_order_label', order ? `${order.order_number} · ${order.branch_name}` : '');
+              setPaymentField('branch_id', order?.branch_id || '');
+              setPaymentField('evidence_attachment_id', '');
+              setPaymentField('evidence_label', '');
+            }} className="min-h-11 w-full rounded-lg border border-gray-300 bg-white px-3">
+              <option value="">Select approved order for this customer</option>
+              {(receiptContext?.approved_goods_orders ?? []).map(order => (
+                <option key={order.sales_order_id} value={order.sales_order_id}>
+                  {order.order_number} · {order.order_date} · {order.branch_name} · ₹{order.remaining_advance_amount} available
+                </option>
+              ))}
+            </select>
+            {receiptContext && receiptContext.approved_goods_orders.length === 0 && (
+              <p className="text-sm text-amber-700">No approved goods order with an available advance balance was found for this customer.</p>
+            )}
           </div>}
+
+          <div className="space-y-3 rounded-lg border border-gray-200 bg-white p-4">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900">Verified receipt evidence</h3>
+              <p className="mt-1 text-sm text-gray-600">
+                {derivedBranchId
+                  ? 'Choose existing verified evidence or upload one PDF for the selected branch.'
+                  : payment.receipt_purpose === 'customer_advance'
+                    ? 'Select an approved goods order first.'
+                    : 'Allocate the receipt to an outstanding invoice first; its branch is used automatically.'}
+              </p>
+            </div>
+            <select aria-label="Verified receipt evidence" disabled={!derivedBranchId}
+              value={payment.evidence_attachment_id} onChange={(event) => {
+                const evidence = evidenceChoices.find(candidate => candidate.attachment_id === event.target.value);
+                setPaymentField('evidence_attachment_id', evidence?.attachment_id || '');
+                setPaymentField('evidence_label', evidence ? `${evidence.original_filename} · ${evidence.document_date}` : '');
+              }} className="min-h-11 w-full rounded-lg border border-gray-300 bg-white px-3 disabled:bg-gray-100">
+              <option value="">Select verified receipt evidence</option>
+              {evidenceChoices.map(evidence => (
+                <option key={evidence.attachment_id} value={evidence.attachment_id}>
+                  {evidence.original_filename} · {evidence.document_date} · {evidence.branch_name}
+                </option>
+              ))}
+            </select>
+            <label className={`flex min-h-11 items-center justify-center gap-2 rounded-lg border border-dashed px-4 text-sm font-medium ${derivedBranchId ? 'cursor-pointer border-blue-300 text-blue-700 hover:bg-blue-50' : 'cursor-not-allowed border-gray-200 text-gray-400'}`}>
+              {uploadingEvidence ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+              {uploadingEvidence ? 'Verifying PDF…' : 'Upload receipt PDF'}
+              <input type="file" accept="application/pdf,.pdf" className="sr-only"
+                disabled={!derivedBranchId || uploadingEvidence}
+                onChange={(event) => {
+                  void handleEvidenceUpload(event.target.files?.[0]);
+                  event.currentTarget.value = '';
+                }} />
+            </label>
+            {sourcesError && <p role="alert" className="text-sm text-red-700">{sourcesError}</p>}
+          </div>
 
           {/* Canonical settlement identity */}
           {!['cash', 'cheque'].includes(payment.payment_mode) && <div className="space-y-2">

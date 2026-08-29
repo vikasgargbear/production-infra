@@ -26,6 +26,7 @@ GRANT_A = UUID("ec000000-0000-7000-8000-000000000014")
 GRANT_B = UUID("ec000000-0000-7000-8000-000000000015")
 PENDING = UUID("ec000000-0000-7000-8000-000000000016")
 REJECTED = UUID("ec000000-0000-7000-8000-000000000017")
+CUSTOMER_RECEIPT = UUID("ec000000-0000-7000-8000-000000000018")
 
 
 def _expect_denied(connection, statement: str, parameters: dict) -> None:
@@ -84,8 +85,10 @@ def _seed(connection) -> None:
               org_id,role_id,permission_code,created_by_membership_id)
             VALUES (:org_a,:role_a,'core.attachment.manage',:member_a),
                    (:org_a,:role_a,'finance.expense.manage',:member_a),
+                   (:org_a,:role_a,'finance.payment.manage',:member_a),
                    (:org_b,:role_b,'core.attachment.manage',:member_b),
-                   (:org_b,:role_b,'finance.expense.manage',:member_b);
+                   (:org_b,:role_b,'finance.expense.manage',:member_b),
+                   (:org_b,:role_b,'finance.payment.manage',:member_b);
             INSERT INTO core.access_grants(
               org_id,id,membership_id,role_id,scope_kind,branch_id,
               valid_from_at,status,created_by_membership_id)
@@ -272,6 +275,56 @@ def main() -> None:
             assert connection.scalar(
                 text("SELECT status FROM core.attachments WHERE id=:id"), {"id": REJECTED}
             ) == "rejected"
+
+            customer_digest = "c" * 64
+            customer_parameters = {
+                "org_id": ORG_A, "branch_id": BRANCH_A,
+                "attachment_id": CUSTOMER_RECEIPT, "digest": customer_digest,
+                "object_path": (
+                    f"{ORG_A}/{BRANCH_A}/customer_receipt_evidence/"
+                    f"{customer_digest}.pdf"
+                ),
+            }
+            assert connection.execute(text("""
+                SELECT attachment_id,attachment_status,idempotency_replayed
+                  FROM erp_core_commands.initiate_customer_receipt_attachment(
+                    :org_id,:branch_id,:attachment_id,'canonical-evidence-private-v1',
+                    :object_path,'customer-receipt.pdf',38,decode(:digest,'hex'),
+                    current_date,current_date+365
+                  )
+            """), customer_parameters).one() == (
+                CUSTOMER_RECEIPT, "pending_upload", False,
+            )
+            assert connection.execute(text("""
+                SELECT attachment_id,attachment_status,idempotency_replayed
+                  FROM erp_core_commands.transition_customer_receipt_attachment(
+                    :org_id,:branch_id,:attachment_id,'verified'
+                  )
+            """), customer_parameters).one() == (
+                CUSTOMER_RECEIPT, "verified", False,
+            )
+            assert connection.execute(text("""
+                SELECT evidence_kind,status,verified_at IS NOT NULL
+                  FROM core.attachments WHERE id=:attachment_id
+            """), customer_parameters).one() == (
+                "customer_receipt_evidence", "verified", True,
+            )
+            hidden_customer = dict(customer_parameters)
+            hidden_customer.update({
+                "branch_id": BRANCH_A_HIDDEN,
+                "attachment_id": UUID("ec000000-0000-7000-8000-000000000019"),
+                "object_path": (
+                    f"{ORG_A}/{BRANCH_A_HIDDEN}/customer_receipt_evidence/"
+                    f"{customer_digest}.pdf"
+                ),
+            })
+            _expect_denied(connection, """
+                SELECT * FROM erp_core_commands.initiate_customer_receipt_attachment(
+                  :org_id,:branch_id,:attachment_id,'canonical-evidence-private-v1',
+                  :object_path,'customer-receipt.pdf',38,decode(:digest,'hex'),
+                  current_date,current_date+365
+                )
+            """, hidden_customer)
 
             _expect_denied(
                 connection,

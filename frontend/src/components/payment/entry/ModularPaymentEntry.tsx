@@ -858,6 +858,8 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
           payload={receiptConfirmation.payload}
           allocations={receiptConfirmation.allocations}
           customerName={selectedCustomer.customer_name}
+          evidenceLabel={payment.evidence_label}
+          salesOrderLabel={payment.sales_order_label}
           busy={saving}
           onCancel={() => {
             setReceiptConfirmation(null);

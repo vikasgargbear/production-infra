@@ -375,6 +375,7 @@ test.describe('live canonical desktop UI journeys', () => {
     await page.getByPlaceholder(/Enter bank, UPI, or gateway reference/i).fill(`${PREFIX}-UI-RCPT-${Date.now()}`);
     await page.getByRole('button', { name: 'Auto FIFO' }).click();
     await expect(page.getByText(/FIFO Applied/)).toBeVisible();
+    await page.getByLabel('Verified receipt evidence').selectOption({ index: 1 });
     await page.getByRole('button', { name: 'Continue', exact: true }).click();
     await expect(page.getByText('PAYMENT SUMMARY')).toBeVisible();
     const preparePromise = canonicalResponse(page, 'POST', /\/api\/web\/actions\/finance\.customer_receipt\.prepare\/prepare$/);
@@ -447,6 +448,7 @@ test.describe('live canonical desktop UI journeys', () => {
     const manualRow = page.getByRole('row').filter({ hasText: manualSource.invoice_number });
     await manualRow.getByRole('checkbox').check();
     await expect(manualRow).toContainText('₹0.50');
+    await page.getByLabel('Verified receipt evidence').selectOption({ index: 1 });
     await page.getByRole('button', { name: 'Continue', exact: true }).click();
     await expect(page.getByText('PAYMENT SUMMARY')).toBeVisible();
     const manualPrepareRequestPromise = page.waitForRequest(request => request.method() === 'POST'

@@ -1261,10 +1261,16 @@ def test_customer_receipt_template_targets_prior_certified_invoice() -> None:
     )
     _validate_compiled_steps("customer_receipt", operation, "actor_confirmation")
     assert used == set(scalars)
-    assert operation["prepare_steps"][9]["locator"]["name"] == (
+    assert operation["prepare_steps"][8]["locator"]["name"] == (
         "Select canonical invoice {{resource_sales_invoice}}"
     )
-    assert operation["prepare_steps"][7]["value"] == "LIVE18-RCPT-{{run_token}}"
+    assert operation["prepare_steps"][9]["locator"]["name"] == (
+        "Verified receipt evidence"
+    )
+    assert operation["prepare_steps"][9]["value"] == (
+        "d3000000-0000-7000-8000-000000000042"
+    )
+    assert operation["prepare_steps"][6]["value"] == "LIVE18-RCPT-{{run_token}}"
 
 
 def test_supplier_payment_template_targets_prior_certified_supplier_invoice() -> None:

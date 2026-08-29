@@ -23,6 +23,13 @@ def test_upload_is_authenticated_multipart_and_readback_is_get_only():
     schema = media["multipart/form-data"]["schema"]
     assert "$ref" in schema
 
+    customer_upload = contract["paths"]["/api/web/evidence/customer-receipts"]
+    assert set(customer_upload) == {"post"}
+    assert customer_upload["post"]["security"]
+    assert set(customer_upload["post"]["requestBody"]["content"]) == {
+        "multipart/form-data"
+    }
+
     readback = contract["paths"]["/api/web/evidence/{attachment_id}"]
     assert set(readback) == {"get"}
     assert readback["get"]["security"]
@@ -122,6 +129,8 @@ def test_integrity_readback_requires_exact_canonical_branch_permissions():
 
     assert "'core.attachment.manage',attachment.branch_id" in route
     assert "'finance.expense.manage',attachment.branch_id" in route
+    assert "'finance.payment.manage',attachment.branch_id" in route
+    assert 'CUSTOMER_RECEIPT_KIND = "customer_receipt_evidence"' in route
 
 
 def test_expense_context_only_lists_receipts_from_the_selected_branch():

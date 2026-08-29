@@ -22,10 +22,77 @@ export interface CustomerReceiptContext {
     account_holder_name: string;
     currency_code: 'INR';
   }>;
+  evidence: Array<{
+    attachment_id: string;
+    branch_id: string;
+    branch_code: string;
+    branch_name: string;
+    original_filename: string;
+    document_date: string;
+    retention_until: string;
+    status: 'verified' | 'retained';
+    verified_at: string;
+    sha256: string;
+  }>;
+  approved_goods_orders: Array<{
+    sales_order_id: string;
+    order_number: string;
+    order_date: string;
+    branch_id: string;
+    branch_code: string;
+    branch_name: string;
+    grand_total: string;
+    prior_active_advance: string;
+    remaining_advance_amount: string;
+  }>;
 }
 
-export async function getCustomerReceiptContext() {
-  return apiHelpers.get<CustomerReceiptContext>('/canonical/customer-receipts/context');
+export interface VerifiedCustomerReceiptEvidence {
+  organization_id: string;
+  branch_id: string;
+  attachment_id: string;
+  evidence_kind: 'customer_receipt_evidence';
+  original_filename: string;
+  media_type: 'application/pdf';
+  byte_size: number;
+  sha256: string;
+  document_date: string;
+  retention_until: string;
+  legal_hold: boolean;
+  status: 'verified' | 'retained';
+  verified_at: string;
+  idempotency_replayed: boolean;
+}
+
+export async function getCustomerReceiptContext(customerAccountId?: string) {
+  const query = customerAccountId
+    ? `?customer_account_id=${encodeURIComponent(customerAccountId)}`
+    : '';
+  return apiHelpers.get<CustomerReceiptContext>(
+    `/canonical/customer-receipts/context${query}`,
+    { preserveExactDecimals: true },
+  );
+}
+
+export async function uploadCustomerReceiptEvidence(
+  branchId: string,
+  documentDate: string,
+  file: File,
+) {
+  if (!isCanonicalUuid(branchId)) throw new Error('Select an invoice or approved goods order before uploading evidence.');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(documentDate)) throw new Error('Select a canonical receipt date.');
+  if (!(file instanceof File) || file.type !== 'application/pdf'
+      || !file.name.toLowerCase().endsWith('.pdf') || file.size <= 0
+      || file.size > 10 * 1024 * 1024) {
+    throw new Error('Select one non-empty PDF receipt no larger than 10 MiB.');
+  }
+  const form = new FormData();
+  form.append('branch_id', branchId);
+  form.append('document_date', documentDate);
+  form.append('file', file, file.name);
+  return apiHelpers.post<VerifiedCustomerReceiptEvidence>(
+    '/web/evidence/customer-receipts', form,
+  );
 }
 
 export async function prepareCustomerReceipt(payload: CanonicalCustomerReceiptPreparePayload) {

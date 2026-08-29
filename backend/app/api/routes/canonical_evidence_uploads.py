@@ -35,6 +35,7 @@ router = APIRouter(
     dependencies=[Security(HTTPBearer(auto_error=False))],
 )
 EXPENSE_RECEIPT_KIND = "expense_receipt"
+CUSTOMER_RECEIPT_KIND = "customer_receipt_evidence"
 _EVIDENCE_SQLSTATE_RESPONSES = {
     "22023": (422, "Expense receipt metadata is invalid"),
     "23505": (409, "Evidence identity conflicts with existing metadata"),
@@ -67,7 +68,7 @@ class EvidenceAttachmentResponse(BaseModel):
     organization_id: UUID
     branch_id: UUID
     attachment_id: UUID
-    evidence_kind: Literal["expense_receipt"]
+    evidence_kind: Literal["expense_receipt", "customer_receipt_evidence"]
     original_filename: str
     media_type: Literal["application/pdf"]
     byte_size: int
@@ -107,7 +108,8 @@ def _activate(db: Session, user: dict) -> tuple[UUID, UUID]:
 
 
 def _upload_context(
-    db: Session, user: dict, branch_id: UUID, document_date: date
+    db: Session, user: dict, branch_id: UUID, document_date: date,
+    *, domain_permission: str, evidence_label: str,
 ) -> dict:
     org_id, _ = _activate(db, user)
     rows = db.execute(
@@ -140,20 +142,21 @@ def _upload_context(
                AND branch.status='active'
                AND erp_security.can_access_branch(branch.id)
                AND erp_security.has_permission('core.attachment.manage',branch.id)
-               AND erp_security.has_permission('finance.expense.manage',branch.id)
+               AND erp_security.has_permission(:domain_permission,branch.id)
             """
         ),
         {
             "org_id": org_id,
             "branch_id": branch_id,
             "document_date": document_date,
+            "domain_permission": domain_permission,
         },
     ).mappings().all()
     if len(rows) != 1:
         raise HTTPException(
             status_code=409,
             detail=(
-                "A single active branch authority and reviewed expense-receipt "
+                f"A single active branch authority and reviewed {evidence_label} "
                 "retention policy are required before upload"
             ),
         )
@@ -161,13 +164,14 @@ def _upload_context(
     if document_date > context["business_date"]:
         raise HTTPException(
             status_code=422,
-            detail="Expense receipt date cannot be after the canonical business date",
+            detail=f"{evidence_label.capitalize()} date cannot be after the canonical business date",
         )
     return context
 
 
 def _attachment_row(
-    db: Session, org_id: UUID, branch_id: UUID, attachment_id: UUID
+    db: Session, org_id: UUID, branch_id: UUID, attachment_id: UUID,
+    *, domain_permission: str,
 ) -> dict | None:
     row = db.execute(
         text(
@@ -193,15 +197,25 @@ def _attachment_row(
                AND erp_security.has_permission(
                      'core.attachment.manage',attachment.branch_id
                    )
-               AND erp_security.has_permission(
-                     'finance.expense.manage',attachment.branch_id
-                   )
+               AND (
+                 (:domain_permission='auto' AND (
+                   (attachment.evidence_kind='expense_receipt' AND
+                    erp_security.has_permission('finance.expense.manage',attachment.branch_id))
+                   OR
+                   (attachment.evidence_kind='customer_receipt_evidence' AND
+                    erp_security.has_permission('finance.payment.manage',attachment.branch_id))
+                 ))
+                 OR (:domain_permission<>'auto' AND erp_security.has_permission(
+                       :domain_permission,attachment.branch_id
+                     ))
+               )
             """
         ),
         {
             "org_id": org_id,
             "branch_id": branch_id,
             "attachment_id": attachment_id,
+            "domain_permission": domain_permission,
         },
     ).mappings().one_or_none()
     return dict(row) if row else None
@@ -220,17 +234,30 @@ def _transition(
     branch_id: UUID,
     attachment_id: UUID,
     status: Literal["verified", "rejected"],
+    kind: Literal["expense_receipt", "customer_receipt_evidence"],
 ) -> dict:
     _activate(db, user)
     try:
-        canonical_write_commands.transition_expense_receipt_attachment(
+        transition = (
+            canonical_write_commands.transition_expense_receipt_attachment
+            if kind == EXPENSE_RECEIPT_KIND
+            else canonical_write_commands.transition_customer_receipt_attachment
+        )
+        transition(
             db,
             org_id=org_id,
             branch_id=branch_id,
             attachment_id=attachment_id,
             target_status=status,
         )
-        value = _attachment_row(db, org_id, branch_id, attachment_id)
+        value = _attachment_row(
+            db, org_id, branch_id, attachment_id,
+            domain_permission=(
+                "finance.expense.manage"
+                if kind == EXPENSE_RECEIPT_KIND
+                else "finance.payment.manage"
+            ),
+        )
         if value is None:
             db.rollback()
             raise HTTPException(
@@ -273,7 +300,11 @@ def upload_expense_receipt(
     except EvidenceIntegrityError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    context = _upload_context(db, user, branch_id, document_date)
+    context = _upload_context(
+        db, user, branch_id, document_date,
+        domain_permission="finance.expense.manage",
+        evidence_label="expense receipt",
+    )
     org_id = context["organization_id"]
     digest = hashlib.sha256(pdf.content).hexdigest()
     object_key = evidence_object_key(
@@ -301,7 +332,10 @@ def upload_expense_receipt(
         _raise_evidence_database_error(exc)
 
     _activate(db, user)
-    current = _attachment_row(db, org_id, branch_id, attachment_id)
+    current = _attachment_row(
+        db, org_id, branch_id, attachment_id,
+        domain_permission="finance.expense.manage",
+    )
     db.rollback()
     if current is None:
         raise HTTPException(
@@ -331,6 +365,7 @@ def upload_expense_receipt(
             branch_id=branch_id,
             attachment_id=attachment_id,
             status="rejected",
+            kind=EXPENSE_RECEIPT_KIND,
         )
         try:
             storage.delete(object_key)
@@ -347,6 +382,97 @@ def upload_expense_receipt(
         branch_id=branch_id,
         attachment_id=attachment_id,
         status="verified",
+        kind=EXPENSE_RECEIPT_KIND,
+    )
+    return _response(verified, replayed=initiated["idempotency_replayed"])
+
+
+@router.post("/customer-receipts", response_model=EvidenceAttachmentResponse)
+def upload_customer_receipt(
+    branch_id: UUID = Form(...),
+    document_date: date = Form(...),
+    file: UploadFile = File(...),
+    user: dict = Depends(PermissionChecker("payment", "create")),
+    db: Session = Depends(get_db),
+    storage: SupabaseEvidenceStorage = Depends(evidence_storage_dependency),
+) -> EvidenceAttachmentResponse:
+    """Store and verify immutable PDF evidence for one customer receipt."""
+
+    content = file.file.read(MAX_EVIDENCE_BYTES + 1)
+    try:
+        pdf = validate_pdf(file.filename, file.content_type, content)
+    except EvidenceIntegrityError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    context = _upload_context(
+        db, user, branch_id, document_date,
+        domain_permission="finance.payment.manage",
+        evidence_label="customer receipt",
+    )
+    org_id = context["organization_id"]
+    digest = hashlib.sha256(pdf.content).hexdigest()
+    object_key = evidence_object_key(
+        str(org_id), str(branch_id), CUSTOMER_RECEIPT_KIND, digest
+    )
+    attachment_id = uuid4()
+    try:
+        initiated = canonical_write_commands.initiate_customer_receipt_attachment(
+            db,
+            org_id=org_id,
+            branch_id=branch_id,
+            attachment_id=attachment_id,
+            storage_bucket=EVIDENCE_BUCKET,
+            storage_object_path=object_key,
+            original_filename=pdf.filename,
+            byte_size=len(pdf.content),
+            sha256=bytes.fromhex(digest),
+            document_date=document_date,
+            retention_until=context["retention_until"],
+        )
+        attachment_id = initiated["attachment_id"]
+        db.commit()
+    except DBAPIError as exc:
+        db.rollback()
+        _raise_evidence_database_error(exc)
+
+    _activate(db, user)
+    current = _attachment_row(
+        db, org_id, branch_id, attachment_id,
+        domain_permission="finance.payment.manage",
+    )
+    db.rollback()
+    if current is None:
+        raise HTTPException(status_code=409, detail="Canonical evidence metadata disappeared")
+    if current["status"] in ("verified", "retained"):
+        try:
+            _verify_stored_bytes(storage, current)
+        except (EvidenceStorageUnavailable, EvidenceIntegrityError) as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        return _response(current, replayed=True)
+    if current["status"] == "rejected":
+        raise HTTPException(
+            status_code=409,
+            detail="This content identity was rejected and cannot be presented as verified",
+        )
+    try:
+        storage.create(object_key, pdf.content)
+        _verify_stored_bytes(storage, current)
+    except EvidenceIntegrityError as exc:
+        _transition(
+            db, user, org_id=org_id, branch_id=branch_id,
+            attachment_id=attachment_id, status="rejected", kind=CUSTOMER_RECEIPT_KIND,
+        )
+        try:
+            storage.delete(object_key)
+        except EvidenceStorageUnavailable:
+            pass
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except EvidenceStorageUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    verified = _transition(
+        db, user, org_id=org_id, branch_id=branch_id,
+        attachment_id=attachment_id, status="verified", kind=CUSTOMER_RECEIPT_KIND,
     )
     return _response(verified, replayed=initiated["idempotency_replayed"])
 
@@ -361,7 +487,10 @@ def evidence_integrity_readback(
     """Return branch-scoped canonical metadata without exposing object bytes or URLs."""
 
     org_id, _ = _activate(db, user)
-    row = _attachment_row(db, org_id, branch_id, attachment_id)
+    row = _attachment_row(
+        db, org_id, branch_id, attachment_id,
+        domain_permission="auto",
+    )
     if row is None:
         raise HTTPException(status_code=404, detail="Evidence attachment not found")
     return _response(row, replayed=False)
