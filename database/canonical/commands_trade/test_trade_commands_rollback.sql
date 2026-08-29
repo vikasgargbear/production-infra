@@ -25,6 +25,14 @@ BEGIN
         RAISE EXCEPTION 'runtime can execute % private trade helpers',private_runtime_execute;
     END IF;
 
+    IF pg_catalog.has_table_privilege('erp_app','erp_trade_commands.command_scopes','SELECT')
+       OR pg_catalog.has_table_privilege('erp_app','erp_trade_commands.command_scopes','INSERT')
+       OR pg_catalog.has_table_privilege('erp_runtime','erp_trade_commands.command_scopes','SELECT')
+       OR pg_catalog.has_table_privilege('erp_runtime','erp_trade_commands.command_scopes','INSERT')
+       OR pg_catalog.has_table_privilege('public','erp_trade_commands.command_scopes','SELECT') THEN
+        RAISE EXCEPTION 'trade batch-release scopes are externally forgeable';
+    END IF;
+
     IF (SELECT count(*) FROM pg_catalog.pg_trigger
          WHERE tgname IN ('stock_ledger_command_owner_guard','stock_balances_projector_owner_guard')
            AND NOT tgisinternal)<>2 THEN
@@ -32,6 +40,22 @@ BEGIN
     END IF;
 END
 $trade_command_contract$;
+
+DO $batch_release_provenance$
+DECLARE guard_definition text;
+BEGIN
+    SELECT pg_catalog.pg_get_functiondef(
+        'erp_trade_invariants.guard_batch()'::pg_catalog.regprocedure
+    ) INTO guard_definition;
+    IF pg_catalog.strpos(guard_definition, 'goods_receipt_batch_release')=0
+       OR pg_catalog.strpos(
+         guard_definition,
+         'batch release requires exact posted goods-receipt command provenance'
+       )=0 THEN
+        RAISE EXCEPTION 'batch release does not require exact posted-GRN provenance';
+    END IF;
+END
+$batch_release_provenance$;
 
 SET CONSTRAINTS ALL DEFERRED;
 

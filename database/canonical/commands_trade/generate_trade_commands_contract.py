@@ -93,6 +93,16 @@ def _definitions() -> dict[str, list[str]]:
     ] = [
         f'CREATE SCHEMA "{SCHEMA}" AUTHORIZATION "erp_migration_owner"',
         f'REVOKE ALL ON SCHEMA "{SCHEMA}" FROM PUBLIC, "erp_app", "erp_runtime"',
+        f'''CREATE TABLE "{SCHEMA}"."command_scopes" (
+    backend_pid integer NOT NULL,
+    transaction_id bigint NOT NULL,
+    scope text NOT NULL,
+    org_id uuid NOT NULL,
+    entity_id uuid NOT NULL,
+    PRIMARY KEY (backend_pid, transaction_id, scope, org_id, entity_id)
+)''',
+        f'ALTER TABLE "{SCHEMA}"."command_scopes" OWNER TO "erp_migration_owner"',
+        f'REVOKE ALL ON TABLE "{SCHEMA}"."command_scopes" FROM PUBLIC, "erp_app", "erp_runtime"',
         *_function(
             "assert_context(p_org_id uuid, p_actor_id uuid)",
             "void",
@@ -854,6 +864,40 @@ BEGIN
           AND doc.goods_receipt_id=p_goods_receipt_id AND doc.document_type='purchase_receipt' AND doc.status='approved'
     ) THEN RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='goods receipt requires one approved typed inventory receipt'; END IF;
     PERFORM erp_trade_commands.post_locked_document(p_org_id,p_inventory_document_id,p_actor_id);
+    INSERT INTO erp_trade_commands.command_scopes(
+      backend_pid,transaction_id,scope,org_id,entity_id
+    )
+    SELECT pg_catalog.pg_backend_pid(),pg_catalog.txid_current(),'goods_receipt_batch_release',
+           receipt_line.org_id,receipt_line.batch_id
+      FROM procurement.goods_receipt_lines receipt_line
+      JOIN inventory.locations location
+        ON location.org_id=receipt_line.org_id AND location.id=receipt_line.location_id
+      JOIN inventory.batches batch
+        ON batch.org_id=receipt_line.org_id AND batch.id=receipt_line.batch_id
+     WHERE receipt_line.org_id=p_org_id
+       AND receipt_line.goods_receipt_id=p_goods_receipt_id
+       AND receipt_line.qc_status IN ('accepted','partial')
+       AND receipt_line.base_accepted_quantity+receipt_line.base_free_quantity>0
+       AND location.status='active'
+       AND location.location_type IN ('saleable','cold_storage')
+       AND batch.status='quarantined'
+    ON CONFLICT DO NOTHING;
+    UPDATE inventory.batches batch
+       SET status='released',released_at=pg_catalog.transaction_timestamp(),
+           released_by_membership_id=p_actor_id,
+           updated_at=pg_catalog.transaction_timestamp(),updated_by_membership_id=p_actor_id,
+           row_version=batch.row_version+1
+      FROM erp_trade_commands.command_scopes scope
+     WHERE scope.backend_pid=pg_catalog.pg_backend_pid()
+       AND scope.transaction_id=pg_catalog.txid_current()
+       AND scope.scope='goods_receipt_batch_release'
+       AND scope.org_id=p_org_id
+       AND batch.org_id=scope.org_id AND batch.id=scope.entity_id
+       AND batch.status='quarantined';
+    DELETE FROM erp_trade_commands.command_scopes
+     WHERE backend_pid=pg_catalog.pg_backend_pid()
+       AND transaction_id=pg_catalog.txid_current()
+       AND scope='goods_receipt_batch_release' AND org_id=p_org_id;
     UPDATE procurement.goods_receipts SET status='posted',posted_at=pg_catalog.transaction_timestamp(),posted_by_membership_id=p_actor_id,
       updated_at=pg_catalog.transaction_timestamp(),updated_by_membership_id=p_actor_id,row_version=row_version+1
       WHERE org_id=p_org_id AND id=p_goods_receipt_id AND status='approved';

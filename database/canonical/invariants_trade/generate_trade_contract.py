@@ -125,6 +125,16 @@ BEGIN
            ) THEN
           RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='released batch blocking requires exact cold-chain command provenance';
         END IF;
+        IF OLD.status='quarantined' AND NEW.status='released'
+           AND NOT EXISTS (
+             SELECT 1 FROM erp_trade_commands.command_scopes scope
+              WHERE scope.backend_pid=pg_catalog.pg_backend_pid()
+                AND scope.transaction_id=pg_catalog.txid_current()
+                AND scope.scope='goods_receipt_batch_release'
+                AND scope.org_id=NEW.org_id AND scope.entity_id=NEW.id
+           ) THEN
+          RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='batch release requires exact posted goods-receipt command provenance';
+        END IF;
         IF ROW(
             NEW.product_id, NEW.batch_number, NEW.lot_kind,
             NEW.manufactured_on, NEW.expires_on, NEW.mrp, NEW.mrp_uom_conversion_id

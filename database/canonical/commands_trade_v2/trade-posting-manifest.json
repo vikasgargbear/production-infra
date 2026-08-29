@@ -47,7 +47,7 @@
     ]
   },
   "postgresql": "15+",
-  "prior_manifest_sha256": "d1179565bdf18ea12852607b6c9a19767767f7ee2e79d936a34339a025a45f3a",
+  "prior_manifest_sha256": "eb114aae4c19b2a6e079edf6cfd1659c5ce0f43f5996423c3bb3086ea5fbab1c",
   "resolved_count": 9,
   "resolved_invariants": [
     "inventory.inventory_document_lines:inventory_inventory_document_lines_landed_cost_allocation",

@@ -4274,28 +4274,11 @@ def release_received_batch(connection, goods_receipt_id: str, batch_id: str) -> 
         row = cursor.fetchone()
         if row is None:
             raise RuntimeError("demo batch lacks posted QC-accepted receipt evidence")
-        if row[1] == "quarantined":
-            cursor.execute(
-                """
-                UPDATE inventory.batches
-                   SET status='released',released_at=transaction_timestamp(),
-                       released_by_membership_id=%s,updated_at=transaction_timestamp(),
-                       updated_by_membership_id=%s,row_version=row_version+1
-                 WHERE org_id=%s AND id=%s AND status='quarantined' AND row_version=%s
-                RETURNING id,status,row_version,released_at,released_by_membership_id
-                """,
-                (
-                    IDS["reviewer_membership"], IDS["reviewer_membership"],
-                    IDS["org"], batch_id, row[2],
-                ),
+        if row[1] != "released" or row[3] is None or row[4] is None:
+            raise RuntimeError(
+                "posted QC-accepted goods receipt did not atomically release its batch"
             )
-            released = cursor.fetchone()
-            if released is None:
-                raise RuntimeError("demo batch release lost its locked lifecycle version")
-        elif row[1] == "released" and row[3] is not None and row[4] is not None:
-            released = row[:5]
-        else:
-            raise RuntimeError("demo batch is not in a releasable lifecycle state")
+        released = row[:5]
         return {
             "id": str(released[0]),
             "status": released[1],

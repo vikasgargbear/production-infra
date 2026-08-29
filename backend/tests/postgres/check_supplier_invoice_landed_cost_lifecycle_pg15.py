@@ -367,36 +367,25 @@ def _set_balance_version(admin_dsn: str, batch_id: UUID, delta: int) -> None:
         assert cursor.rowcount == 1
 
 
-def _release_disposable_receipt_batch(admin_dsn: str, batch_id: UUID) -> None:
-    """Satisfy the transfer command's reviewed released-batch prerequisite."""
+def _assert_receipt_released_batch(admin_dsn: str, batch_id: UUID) -> None:
+    """A posted GRN must release its accepted saleable batch atomically."""
 
     with psycopg2.connect(admin_dsn) as connection, connection.cursor() as cursor:
-        cursor.execute('SET LOCAL ROLE "erp_migration_owner"')
         cursor.execute(
             """
-            SELECT set_config('app.org_id',%s,true),
-                   set_config('app.membership_id',%s,true),
-                   set_config('app.request_id',%s,true)
+            SELECT status,released_at,released_by_membership_id,
+                   updated_by_membership_id
+              FROM inventory.batches
+             WHERE org_id=%s AND id=%s
             """,
-            (
-                fixture.IDS["org"], fixture.IDS["operator_membership"], str(uuid4()),
-            ),
+            (fixture.IDS["org"], batch_id),
         )
-        cursor.execute(
-            """
-            UPDATE inventory.batches
-               SET status='released',released_at=transaction_timestamp(),
-                   released_by_membership_id=%s,updated_at=transaction_timestamp(),
-                   updated_by_membership_id=%s,row_version=row_version+1
-             WHERE org_id=%s AND id=%s AND status='quarantined'
-            """,
-            (
-                fixture.IDS["operator_membership"],
-                fixture.IDS["operator_membership"],
-                fixture.IDS["org"], batch_id,
-            ),
-        )
-        assert cursor.rowcount == 1
+        row = cursor.fetchone()
+        assert row is not None
+        assert row[0] == "released"
+        assert row[1] is not None
+        assert row[2] is not None
+        assert UUID(str(row[2])) == UUID(str(row[3]))
 
 
 def _assert_upstream_has_no_payable_or_tax(runtime_dsn: str) -> None:
@@ -646,7 +635,7 @@ def _run_transferred_stock_lifecycle(
         goods_receipt_line_id, batch_id, _, _ = _source_rows(
             admin_dsn, receipt.resource_id
         )
-        _release_disposable_receipt_batch(admin_dsn, batch_id)
+        _assert_receipt_released_batch(admin_dsn, batch_id)
 
         transfer = _approve_and_execute(service, _prepare(
             service, "inventory.transfer.prepare",
