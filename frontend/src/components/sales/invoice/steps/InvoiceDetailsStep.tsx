@@ -46,6 +46,7 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
     const canonicalSchemeDiscount = invoice.totals?.scheme_discount;
     // State for controlling AddressForm add mode externally
     const [addAddressMode, setAddAddressMode] = useState(false);
+    const [discountInputError, setDiscountInputError] = useState<string | null>(null);
 
     return (
         <div className="h-full bg-gray-50">
@@ -270,12 +271,19 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                                     type="number"
                                                     min="0"
                                                     max={invoice.discount_type === 'percentage' || !invoice.discount_type ? 100 : undefined}
-                                                    step={invoice.discount_type === 'percentage' || !invoice.discount_type ? 0.5 : 1}
+                                                    step="0.01"
                                                     value={invoice.discount_type === 'fixed'
                                                         ? (invoice.discount_amount || '')
                                                         : (invoice.discount_percent || '')}
                                                     onChange={(e) => {
-                                                        const value = e.target.value === '' ? 0 : parseFloat(e.target.value) || 0;
+                                                        const rawValue = e.target.value;
+                                                        const significantFraction = (rawValue.split('.')[1] || '').replace(/0+$/, '');
+                                                        if (significantFraction.length > 2) {
+                                                            setDiscountInputError('Invoice discount supports up to 2 decimal places.');
+                                                            return;
+                                                        }
+                                                        setDiscountInputError(null);
+                                                        const value = rawValue === '' ? 0 : parseFloat(rawValue) || 0;
                                                         if (invoice.discount_type === 'fixed') {
                                                             setInvoice(prev => ({ ...prev, discount_amount: value }));
                                                         } else {
@@ -283,11 +291,18 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                                         }
                                                     }}
                                                     onFocus={(e) => e.target.select()}
+                                                    aria-invalid={discountInputError ? true : undefined}
+                                                    aria-describedby={discountInputError ? 'invoice-discount-precision-error' : undefined}
                                                     className={`min-h-11 w-full ${invoice.discount_type === 'fixed' ? 'pl-8' : 'pl-4'} rounded-lg border border-gray-300 py-2.5 pr-8 text-right focus:border-transparent focus:ring-2 focus:ring-blue-500`}
                                                     placeholder="Enter value"
                                                 />
                                                 {(invoice.discount_type === 'percentage' || !invoice.discount_type) && (
                                                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500">%</span>
+                                                )}
+                                                {discountInputError && (
+                                                    <span id="invoice-discount-precision-error" role="alert" className="mt-1 block text-xs text-red-700">
+                                                        {discountInputError}
+                                                    </span>
                                                 )}
                                             </div>
                                         </div>
