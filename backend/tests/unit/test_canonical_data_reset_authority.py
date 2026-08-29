@@ -543,6 +543,14 @@ def test_role_posture_and_password_presence_use_the_correct_catalogs() -> None:
     assert "rolpassword IS NOT NULL" in credential_source
 
 
+def test_organization_purge_does_not_require_privileged_password_catalog() -> None:
+    purge_source = inspect.getsource(reset_authority.execute_organization_purge)
+
+    assert "_role_snapshot" in purge_source
+    assert "_role_password_presence" not in purge_source
+    assert "pg_authid" not in purge_source
+
+
 def test_post_cleanup_role_receipt_requires_revoked_delegation(monkeypatch) -> None:
     connection = _FakeConnection()
     connection.cursor_instance.fetchone_result = (False, False, False, False, True)

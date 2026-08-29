@@ -1349,7 +1349,6 @@ def execute_organization_purge(
                 cursor, (*organization_relations, "core.organizations")
             )
             before_roles = _role_snapshot(cursor)
-            before_role_passwords = _role_password_presence(cursor)
             before_seed_digest = _seed_digest(
                 cursor, authority.preserved_seed_relations
             )
@@ -1401,7 +1400,6 @@ def execute_organization_purge(
                 ephemeral_scope_relations=after_catalog.ephemeral_scope_relations,
             )
             after_roles = _role_snapshot(cursor)
-            after_role_passwords = _role_password_presence(cursor)
             after_seed_digest = _seed_digest(cursor, authority.preserved_seed_relations)
             after_target_counts = _organization_row_counts(
                 cursor, organization_relations, normalized_id, target=True
@@ -1426,10 +1424,6 @@ def execute_organization_purge(
             if before_roles != after_roles:
                 raise ResetAuthorityError(
                     "canonical role catalog changed during purge"
-                )
-            if before_role_passwords != after_role_passwords:
-                raise ResetAuthorityError(
-                    "canonical role credential posture changed during purge"
                 )
             if before_seed_digest != after_seed_digest:
                 raise ResetAuthorityError("deterministic seed rows changed during purge")

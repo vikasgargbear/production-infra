@@ -601,12 +601,23 @@ jobs:
           touch "$RAILWAY_RESET_FENCE_CLOSED"
 
           if test -n '${{ inputs.purge_organization_id }}'; then
+          # workflow_dispatch inputs are not secrets. Read the signed token from
+          # the event payload so its value is never interpolated into the shell
+          # source that GitHub prints before execution, then mask it before use.
+          purge_plan_token=$(jq -r '
+            .inputs.purge_organization_plan_token
+            // .inputs.purge_canonical_staging_plan_token
+            // ""
+          ' "$GITHUB_EVENT_PATH")
+          if test -n "$purge_plan_token"; then
+            echo "::add-mask::$purge_plan_token"
+          fi
           reset_request="$RUNNER_TEMP/railway-reset-request.json"
           jq \
             --arg password "$SUPABASE_DB_PASSWORD" \
             --arg organization_id '${{ inputs.purge_organization_id }}' \
             --arg confirmation '${{ inputs.purge_organization_confirmation }}' \
-            --arg plan_token '${{ inputs.purge_organization_plan_token }}' \
+            --arg plan_token "$purge_plan_token" \
             '.organization_id=$organization_id
              | .organization_confirmation=$confirmation
              | .purge_plan_token=$plan_token
@@ -620,7 +631,7 @@ jobs:
           reset_request_sha256=$(sha256sum "$reset_request" | cut -d' ' -f1)
           [[ "$reset_request_sha256" =~ ^[0-9a-f]{64}$ ]]
           purge_action=plan-organization-purge
-          if test -n '${{ inputs.purge_organization_plan_token }}'; then
+          if test -n "$purge_plan_token"; then
             purge_action=purge-organization
           fi
 
