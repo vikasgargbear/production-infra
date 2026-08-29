@@ -8,8 +8,10 @@ permissions:
   contents: read
 
 concurrency:
-  group: railway-pilot-fast-deploy-main
-  cancel-in-progress: true
+  # Serialize every Railway pilot service mutation with exact-SHA certification.
+  # A newer main push may wait for an active certification, but cannot cancel it.
+  group: railway-pilot-service-mutation
+  cancel-in-progress: false
 
 jobs:
   change-plan:
