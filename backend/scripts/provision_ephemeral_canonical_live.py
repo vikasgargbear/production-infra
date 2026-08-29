@@ -136,6 +136,9 @@ REQUESTER_CAPABILITIES = (
 )
 LIVE18_MCP_REQUESTER_CAPABILITIES = (
     *LIVE18_PREPARE_CAPABILITIES,
+    ("catalog.product_draft.create", "none"),
+    ("catalog.product_draft.configure", "none"),
+    ("catalog.product.activate", "none"),
     ("automation.command.approve", "actor_confirmation"),
     ("automation.command.execute", "actor_confirmation"),
     ("automation.command.status.get", "none"),
