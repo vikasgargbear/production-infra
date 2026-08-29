@@ -34,6 +34,7 @@
       "/database/schema-authority.json",
       "/database/canonical/domains/_contract.json",
       "/deploy/control-plane/canonical-staging.json",
+      "/deploy/control-plane/control-plane-v1.schema.json",
       "/deploy/railway/api.*"
     ]
   },

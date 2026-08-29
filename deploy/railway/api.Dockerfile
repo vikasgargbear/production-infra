@@ -64,6 +64,7 @@ COPY docs/architecture/mcp-operator-actions.json ./docs/architecture/mcp-operato
 COPY database/schema-authority.json ./database/schema-authority.json
 COPY database/canonical/domains/_contract.json ./database/canonical/domains/_contract.json
 COPY deploy/control-plane/canonical-staging.json ./deploy/control-plane/canonical-staging.json
+COPY deploy/control-plane/control-plane-v1.schema.json ./deploy/control-plane/control-plane-v1.schema.json
 COPY --from=migration-contract /review/.canonical-migration-contract-verified /tmp/.canonical-migration-contract-verified
 COPY deploy/railway/api.force-deploy /app/.railway-deployment-provenance
 
