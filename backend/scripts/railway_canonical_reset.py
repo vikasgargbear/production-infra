@@ -715,6 +715,8 @@ def purge_staging_organization(
             "authority_manifest_sha256",
             "catalog_fingerprint_sha256",
             "organization_row_count",
+            "evidence_attachment_count",
+            "evidence_attachment_manifest_sha256",
         )
         if any(
             authorized_plan.get(field) != current_plan.get(field)

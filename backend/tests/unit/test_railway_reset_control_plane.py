@@ -214,6 +214,9 @@ def test_purge_plan_uses_the_bounded_owner_authority(monkeypatch) -> None:
                 "catalog_fingerprint_sha256": "b" * 64,
                 "alembic_head": "head",
                 "organization_row_count": 7,
+                "evidence_attachment_count": 0,
+                "evidence_attachment_manifest_sha256": "d" * 64,
+                "evidence_object_paths": [],
             },
         },
     )
@@ -250,6 +253,8 @@ def test_signed_purge_plan_requires_delay_exact_boundary_and_separate_execution(
         "catalog_fingerprint_sha256": "b" * 64,
         "alembic_head": "head",
         "organization_row_count": 7,
+        "evidence_attachment_count": 0,
+        "evidence_attachment_manifest_sha256": "d" * 64,
         "issued_at": issued_at,
         "not_before": issued_at + 60,
         "expires_at": issued_at + 1800,
@@ -272,12 +277,24 @@ def test_signed_purge_plan_requires_delay_exact_boundary_and_separate_execution(
     monkeypatch.setattr(CONTROL.time, "time", lambda: issued_at + 61)
     monkeypatch.setattr(
         CONTROL,
+        "plan_staging_organization_purge",
+        lambda **_kwargs: {
+            "plan": {
+                "evidence_attachment_count": 0,
+                "evidence_attachment_manifest_sha256": "d" * 64,
+                "evidence_object_paths": [],
+            }
+        },
+    )
+    monkeypatch.setattr(
+        CONTROL,
         "purge_staging_organization",
         lambda **kwargs: calls.append(kwargs) or {"action": "purge-organization"},
     )
     result = CONTROL._purge_organization(request)
 
     assert result["action"] == "purge-organization"
+    assert result["evidence_storage_object_count"] == 0
     assert calls[0]["organization_id"] == ORGANIZATION_ID
     assert calls[0]["authorized_plan"] == payload
     assert len(str(calls[0]["authorized_plan_sha256"])) == 64
@@ -287,6 +304,68 @@ def test_signed_purge_plan_requires_delay_exact_boundary_and_separate_execution(
     request["purge_plan_token"] = tampered
     with pytest.raises(CONTROL.RailwayResetControlError, match="signature"):
         CONTROL._purge_organization(request)
+
+
+def test_purge_deletes_only_signed_evidence_object_paths(monkeypatch) -> None:
+    issued_at = 2_000
+    object_path = f"{ORGANIZATION_ID}/branch/receipt/{'d' * 64}.pdf"
+    payload = {
+        "schema": CONTROL.PURGE_PLAN_SCHEMA,
+        "expected_sha": EXPECTED_SHA,
+        "project_ref": PROJECT_REF,
+        "organization_id": ORGANIZATION_ID,
+        "authority_manifest_sha256": "a" * 64,
+        "catalog_fingerprint_sha256": "b" * 64,
+        "alembic_head": "head",
+        "organization_row_count": 7,
+        "evidence_attachment_count": 1,
+        "evidence_attachment_manifest_sha256": "d" * 64,
+        "issued_at": issued_at,
+        "not_before": issued_at + 60,
+        "expires_at": issued_at + 1800,
+        "nonce": "c" * 64,
+    }
+    request = _request(secrets={"SUPABASE_DB_PASSWORD": DB_PASSWORD})
+    request.update(
+        {
+            "organization_id": ORGANIZATION_ID,
+            "organization_confirmation": f"DELETE-ORGANIZATION:{ORGANIZATION_ID}",
+            "purge_plan_token": CONTROL._encode_signed_purge_plan(
+                payload, DB_PASSWORD
+            ),
+        }
+    )
+    deleted: list[str] = []
+
+    class Storage:
+        def delete(self, path: str) -> bool:
+            deleted.append(path)
+            return True
+
+    monkeypatch.setattr(CONTROL.time, "time", lambda: issued_at + 61)
+    monkeypatch.setattr(
+        CONTROL,
+        "plan_staging_organization_purge",
+        lambda **_kwargs: {
+            "plan": {
+                "evidence_attachment_count": 1,
+                "evidence_attachment_manifest_sha256": "d" * 64,
+                "evidence_object_paths": [object_path],
+            }
+        },
+    )
+    monkeypatch.setattr(CONTROL, "configured_evidence_storage", lambda: Storage())
+    monkeypatch.setattr(
+        CONTROL,
+        "purge_staging_organization",
+        lambda **_kwargs: {"action": "purge-organization"},
+    )
+
+    result = CONTROL._purge_organization(request)
+
+    assert deleted == [object_path]
+    assert result["evidence_storage_cleanup_run"] is True
+    assert result["evidence_storage_deleted_object_count"] == 1
 
 
 class _EvidenceConnection:

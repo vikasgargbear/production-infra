@@ -58,6 +58,7 @@ LOGIN_ROLES = frozenset(
         "erp_tax_provider",
     }
 )
+EVIDENCE_STORAGE_BUCKET = "canonical-evidence-private-v1"
 
 CANONICAL_SCHEMAS = (
     "automation",
@@ -821,16 +822,47 @@ def _require_purge_preconditions(cursor: Any, organization_id: str) -> str:
         raise ResetAuthorityError(
             "organization purge is forbidden while retention cases exist"
         )
+    return status
+
+
+def _organization_attachment_snapshot(
+    cursor: Any, organization_id: str
+) -> tuple[tuple[str, str, str, str], ...]:
     cursor.execute(
-        "SELECT count(*) FROM core.attachments WHERE org_id=%s::uuid",
+        """
+        SELECT id::text,storage_bucket,storage_object_path,
+               pg_catalog.encode(sha256,'hex'),legal_hold
+          FROM core.attachments
+         WHERE org_id=%s::uuid
+         ORDER BY id
+        """,
         (organization_id,),
     )
-    attachments = cursor.fetchone()
-    if attachments is None or int(attachments[0]) != 0:
-        raise ResetAuthorityError(
-            "organization purge is forbidden while evidence attachments exist"
+    snapshot: list[tuple[str, str, str, str]] = []
+    prefix = f"{organization_id}/"
+    for attachment_id, bucket, object_path, sha256_hex, legal_hold in cursor.fetchall():
+        if legal_hold:
+            raise ResetAuthorityError(
+                "organization purge is forbidden while attachment legal holds exist"
+            )
+        path = str(object_path)
+        if (
+            str(bucket) != EVIDENCE_STORAGE_BUCKET
+            or not path.startswith(prefix)
+            or path.endswith("/")
+            or "/../" in f"/{path}/"
+        ):
+            raise ResetAuthorityError("organization evidence storage scope drifted")
+        snapshot.append(
+            (str(attachment_id), str(bucket), path, str(sha256_hex))
         )
-    return status
+    return tuple(snapshot)
+
+
+def _attachment_manifest_sha256(
+    snapshot: Sequence[tuple[str, str, str, str]],
+) -> str:
+    return hashlib.sha256(_canonical_json(list(snapshot))).hexdigest()
 
 
 def _require_purge_executor(
@@ -1169,6 +1201,7 @@ def plan_organization_purge(
             )
             status = _require_purge_preconditions(cursor, normalized_id)
             organization_relations = _organization_relations(cursor, authority)
+            attachments = _organization_attachment_snapshot(cursor, normalized_id)
             target_counts = _organization_row_counts(
                 cursor, organization_relations, normalized_id, target=True
             )
@@ -1182,6 +1215,11 @@ def plan_organization_purge(
         "catalog_fingerprint_sha256": before_catalog.fingerprint_sha256(),
         "organization_relation_count": len(organization_relations),
         "organization_row_count": sum(count for _, count in target_counts),
+        "evidence_attachment_count": len(attachments),
+        "evidence_attachment_manifest_sha256": _attachment_manifest_sha256(
+            attachments
+        ),
+        "evidence_object_paths": [row[2] for row in attachments],
         "confirmation_required": organization_confirmation(normalized_id),
         "global_reset_available": False,
         "truncate_used": False,
@@ -1274,6 +1312,9 @@ def execute_organization_purge(
                     "organization must be suspended before destructive execution"
                 )
             organization_relations = _organization_relations(cursor, authority)
+            before_attachments = _organization_attachment_snapshot(
+                cursor, normalized_id
+            )
             executor = _require_purge_executor(cursor, organization_relations)
             delete_plan = _organization_delete_plan(
                 cursor, (*organization_relations, "core.organizations")
@@ -1404,6 +1445,10 @@ def execute_organization_purge(
         ),
         "organization_row_count_before_purge": sum(
             count for _, count in before_target_counts
+        ),
+        "evidence_attachment_count_before_purge": len(before_attachments),
+        "evidence_attachment_manifest_sha256": _attachment_manifest_sha256(
+            before_attachments
         ),
         "organization_row_count_after_purge": 0,
         "other_organization_row_count_preserved": sum(
