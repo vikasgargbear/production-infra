@@ -26,6 +26,13 @@ export interface InvoiceItem {
     free_quantity: string;
     free_supply_tax_treatment: 'excluded_from_taxable_value' | 'included_at_unit_rate';
     unit_price: string;
+    line_discount_kind: 'none' | 'percent' | 'amount';
+    line_discount_basis: 'taxable_value' | 'price_value';
+    line_discount_value: string;
+    line_discount_amount: string;
+    line_taxable_discount_amount: string;
+    document_discount_amount: string;
+    document_taxable_discount_amount: string;
     discount_percent: string;
     gst_percent: string;
     taxable_amount: string;
@@ -50,6 +57,9 @@ export interface InvoiceData {
     customer_drug_license_numbers: string[];
     billing_address: string;
     shipping_address: string;
+    supply_type: 'intra_state' | 'inter_state' | 'export' | 'sez';
+    place_of_supply_state_code: string;
+    place_of_supply_display_name: string;
     tax_charge_mechanism: 'normal' | 'reverse_charge';
     items: InvoiceItem[];
     subtotal_amount: string;
@@ -159,6 +169,13 @@ export const printableCanonicalInvoice = (detail: CanonicalInvoiceDetail): Invoi
         ),
         billing_address: archivedText(detail.billing_address, 'Billing-address snapshot'),
         shipping_address: archivedText(detail.shipping_address, 'Shipping-address snapshot'),
+        supply_type: detail.supply_type,
+        place_of_supply_state_code: archivedText(
+            detail.place_of_supply_state_code, 'Place-of-supply state code',
+        ),
+        place_of_supply_display_name: archivedText(
+            detail.place_of_supply_display_name, 'Place-of-supply name',
+        ),
         tax_charge_mechanism: detail.tax_charge_mechanism,
         items: detail.items.map(item => ({
             product_name: item.product_name,
@@ -179,6 +196,13 @@ export const printableCanonicalInvoice = (detail: CanonicalInvoiceDetail): Invoi
                 `Invoice line ${item.product_name} free-supply tax treatment`,
             ),
             unit_price: item.unit_price,
+            line_discount_kind: item.line_discount_kind,
+            line_discount_basis: item.line_discount_basis,
+            line_discount_value: item.line_discount_value,
+            line_discount_amount: item.line_discount_amount,
+            line_taxable_discount_amount: item.line_taxable_discount_amount,
+            document_discount_amount: item.document_discount_amount,
+            document_taxable_discount_amount: item.document_taxable_discount_amount,
             discount_percent: item.discount_percent,
             gst_percent: item.gst_percent,
             taxable_amount: item.taxable_amount,
@@ -229,6 +253,63 @@ const atMostTwoDecimals = (value: unknown, label: string, sourceScale: number): 
     return formatExactDecimal(exactDecimalString(rounded, 2), label, {
         scale: 2, maximumWholeDigits: 20, allowNegative: false,
     });
+};
+
+const lineDiscountDisplay = (
+    item: InvoiceItem,
+    lineNumber: number,
+    currency: (value: unknown, label: string) => string,
+): string => {
+    const label = `Invoice line ${lineNumber} discount`;
+    const value = normalizeAuthoritativeDecimal(
+        item.line_discount_value, `${label} input`,
+        { scale: 6, maximumWholeDigits: 20, allowNegative: false },
+    );
+    const percent = normalizeAuthoritativeDecimal(
+        item.discount_percent, `${label} compatibility percent`,
+        { scale: 6, maximumWholeDigits: 20, allowNegative: false },
+    );
+    if (item.line_discount_kind === 'none' && value !== '0.000000') {
+        throw new Error(`${label} contradicts its none kind.`);
+    }
+    if (item.line_discount_kind === 'percent' && value !== percent) {
+        throw new Error(`${label} percent does not match its immutable input.`);
+    }
+    if (item.line_discount_kind !== 'percent' && percent !== '0.000000') {
+        throw new Error(`${label} cannot expose a percentage for its immutable kind.`);
+    }
+    if (item.line_discount_kind === 'amount'
+        && exactDecimalUnits(value, `${label} amount input`, {
+            scale: 6, maximumWholeDigits: 20, allowNegative: false,
+        }) % 10000n !== 0n) {
+        throw new Error(`${label} fixed amount must have two-decimal precision.`);
+    }
+    const lineAmount = currency(item.line_discount_amount, `${label} allocation`);
+    const documentAmount = currency(
+        item.document_discount_amount, `${label} invoice allocation`,
+    );
+    const hasLineAmount = compareExactDecimals(
+        item.line_discount_amount, '0.00', `${label} allocation`, moneyOptions,
+    ) !== 0;
+    const hasDocumentAmount = compareExactDecimals(
+        item.document_discount_amount, '0.00', `${label} invoice allocation`, moneyOptions,
+    ) !== 0;
+    const primary = item.line_discount_kind === 'percent'
+        ? `${atMostTwoDecimals(value, `${label} percent`, 6)}%`
+        : item.line_discount_kind === 'amount'
+            ? `Fixed ${currency(
+                exactDecimalString(
+                    exactDecimalUnits(value, `${label} amount`, {
+                        scale: 6, maximumWholeDigits: 20, allowNegative: false,
+                    }) / 10000n,
+                    2,
+                ),
+                `${label} amount`,
+            )}`
+            : 'None';
+    const allocated = hasLineAmount ? ` (${lineAmount})` : '';
+    const document = hasDocumentAmount ? ` + invoice ${documentAmount}` : '';
+    return `${primary}${allocated}${document}`;
 };
 
 const roundedRate = (value: unknown, label: string): string => {
@@ -346,9 +427,7 @@ export const generateInvoiceHTML = (invoice: InvoiceData): string => {
                 <div class="muted">${escapeHTML(freeSupplyTreatmentLabel(item, lineNumber))}</div></td>
             <td class="center">${escapeHTML(item.sale_unit, `Invoice line ${lineNumber} unit`)}</td>
             <td class="right">${rate(item.unit_price, `Invoice line ${lineNumber} rate`)}</td>
-            <td class="center">${compareExactDecimals(item.discount_percent, '0', `Invoice line ${lineNumber} discount`, { scale: 6, maximumWholeDigits: 3, allowNegative: false }) === 0
-                ? '-'
-                : `${atMostTwoDecimals(item.discount_percent, `Invoice line ${lineNumber} discount`, 6)}%`}</td>
+            <td class="center">${lineDiscountDisplay(item, lineNumber, money)}</td>
             <td class="center">${atMostTwoDecimals(item.gst_percent, `Invoice line ${lineNumber} GST rate`, 6)}%</td>
             <td class="right strong">${money(item.line_total, `Invoice line ${lineNumber} total`)}</td>
         </tr>`;
@@ -360,6 +439,8 @@ export const generateInvoiceHTML = (invoice: InvoiceData): string => {
         ? `<div><strong>GSTIN:</strong> ${escapeHTML(invoice.customer_gst_number)}</div>` : '';
     const customerPhone = invoice.customer_phone
         ? `<div><strong>Phone:</strong> ${escapeHTML(invoice.customer_phone)}</div>` : '';
+    const placeOfSupply = `${requiredText(invoice.place_of_supply_display_name, 'Place-of-supply name')} (${requiredText(invoice.place_of_supply_state_code, 'Place-of-supply state code')})`;
+    const supplyType = requiredText(invoice.supply_type, 'Supply type').replace(/_/g, ' ');
     const discountDisplay = compareExactDecimals(
         invoice.discount_amount, '0.00', 'Invoice discount', moneyOptions,
     ) > 0 ? `-${money(invoice.discount_amount, 'Invoice discount')}` : money(invoice.discount_amount, 'Invoice discount');
@@ -383,7 +464,8 @@ th:nth-child(3){width:8%}th:nth-child(4){width:9%}th:nth-child(5){width:7%}th:nt
 th:nth-child(7){width:8%}th:nth-child(8){width:8%}th:nth-child(9){width:14%}
 .center{text-align:center}.right{text-align:right}.strong{font-weight:700}.muted{color:#475569;font-size:8px;margin-top:.7mm}
 .tax-detail{color:#334155;font-size:7.5px;margin-top:1mm}.summary-wrap{display:grid;grid-template-columns:1fr 76mm;gap:6mm;margin-top:5mm;align-items:start}
-.tax-note{border:1px solid #cbd5e1;padding:3mm;border-radius:2mm}.summary{border:1px solid #64748b;border-radius:2mm;padding:2.5mm}
+.tax-note{border:1px solid #cbd5e1;padding:3mm;border-radius:2mm}
+.summary{border:1px solid #64748b;border-radius:2mm;padding:2.5mm}
 .summary h2{margin:0 0 1.5mm;font-size:10px;text-transform:uppercase}.summary-row{display:flex;justify-content:space-between;gap:4mm;padding:.7mm 0}
 .summary-row.grand{border-top:1.5px solid #111827;margin-top:1mm;padding-top:1.5mm;font-size:12px;font-weight:700}
 .signatures{display:grid;grid-template-columns:1fr 1fr;gap:20mm;margin-top:12mm}.signature{border-top:1px solid #64748b;padding-top:1mm;text-align:center}
@@ -394,8 +476,9 @@ th:nth-child(7){width:8%}th:nth-child(8){width:8%}th:nth-child(9){width:14%}
 <header class="header"><section><h1 class="seller-name">${escapeHTML(invoice.seller_legal_name)}</h1>
 <div><strong>GSTIN:</strong> ${escapeHTML(invoice.seller_gstin)}</div>${addressLines(invoice.seller_address, 'Seller address')}
 ${licenceLine(invoice.seller_drug_license_numbers, 'Seller drug licences')}</section>
-<section class="document-meta"><h2 class="invoice-title">Tax Invoice</h2><div><strong>Invoice No:</strong> ${escapeHTML(invoiceNumber)}</div>
-<div><strong>Date:</strong> ${escapeHTML(invoiceDate)}</div><div><strong>Status:</strong> ${escapeHTML(invoice.status).toUpperCase()}</div></section></header>
+<section class="document-meta"><div><strong>Original for Recipient</strong></div><h2 class="invoice-title">Tax Invoice</h2><div><strong>Invoice No:</strong> ${escapeHTML(invoiceNumber)}</div>
+<div><strong>Date:</strong> ${escapeHTML(invoiceDate)}</div><div><strong>Place of Supply:</strong> ${escapeHTML(placeOfSupply)}</div>
+<div><strong>Supply:</strong> ${escapeHTML(supplyType)}</div><div><strong>Status:</strong> ${escapeHTML(invoice.status).toUpperCase()}</div></section></header>
 <section class="party-grid"><div class="party-card"><h2>Bill To</h2><div class="party-name">${escapeHTML(invoice.customer_name)}</div>
 ${addressLines(invoice.billing_address, 'Customer billing address')}${customerGstin}${customerPhone}
 ${licenceLine(invoice.customer_drug_license_numbers, 'Customer drug licences')}</div>
@@ -410,7 +493,7 @@ ${summaryRow('Net Value', money(invoice.net_value_amount, 'Invoice net value'))}
 ${summaryRow('CGST', money(invoice.cgst_amount, 'Invoice CGST'))}${summaryRow('SGST', money(invoice.sgst_amount, 'Invoice SGST'))}
 ${summaryRow('IGST', money(invoice.igst_amount, 'Invoice IGST'))}${summaryRow('Cess', money(invoice.cess_amount, 'Invoice cess'))}
 ${summaryRow('Round Off', money(invoice.rounding_adjustment, 'Invoice rounding adjustment'))}${summaryRow('Grand Total', money(invoice.total_amount, 'Invoice grand total'), 'grand')}</div></section>
-<section class="signatures"><div class="signature">Customer Signature</div><div class="signature">For ${escapeHTML(invoice.seller_legal_name)}</div></section>
+<section class="signatures"><div class="signature">Recipient (name and signature)</div><div class="signature">Competent Person (name and signature)<br>For ${escapeHTML(invoice.seller_legal_name)}</div></section>
 <footer class="footer">Computer-generated tax invoice from the canonical posted sales record.</footer></main></body></html>`;
 };
 
@@ -453,10 +536,13 @@ export const buildInvoicePDF = (invoiceData: InvoiceData): jsPDF => {
     pdf.setFont('helvetica', 'bold'); pdf.setFontSize(14);
     pdf.text('TAX INVOICE', right, 12, { align: 'right' });
     pdf.setFontSize(7.5); pdf.setFont('helvetica', 'normal');
-    pdf.text(`Invoice No: ${invoiceData.invoice_number}`, right, 19, { align: 'right' });
-    pdf.text(`Date: ${invoiceData.invoice_date}`, right, 24, { align: 'right' });
-    pdf.text(`Status: ${invoiceData.status.toUpperCase()}`, right, 29, { align: 'right' });
-    const headerBottom = Math.max(39, sellerLicenceY + (invoiceData.seller_drug_license_numbers.length ? 5 : 1));
+    pdf.text('Original for Recipient', right, 17, { align: 'right' });
+    pdf.text(`Invoice No: ${invoiceData.invoice_number}`, right, 22, { align: 'right' });
+    pdf.text(`Date: ${invoiceData.invoice_date}`, right, 27, { align: 'right' });
+    pdf.text(`Place of Supply: ${invoiceData.place_of_supply_display_name} (${invoiceData.place_of_supply_state_code})`, right, 32, { align: 'right' });
+    pdf.text(`Supply: ${invoiceData.supply_type.replace(/_/g, ' ')}`, right, 37, { align: 'right' });
+    pdf.text(`Status: ${invoiceData.status.toUpperCase()}`, right, 42, { align: 'right' });
+    const headerBottom = Math.max(48, sellerLicenceY + (invoiceData.seller_drug_license_numbers.length ? 5 : 1));
     pdf.setDrawColor(30, 41, 59); pdf.setLineWidth(0.5); pdf.line(margin, headerBottom, right, headerBottom);
 
     const cardTop = headerBottom + 4;
@@ -502,7 +588,7 @@ export const buildInvoicePDF = (invoiceData: InvoiceData): jsPDF => {
             String(index + 1), `${item.product_name}\n${batches}\n${taxes}`, item.hsn_code,
             `${atMostTwoDecimals(item.quantity, 'PDF quantity', 6)}\nFree ${atMostTwoDecimals(item.free_quantity, 'PDF free quantity', 6)}\n${freeSupplyTreatmentLabel(item, index + 1)}`,
             item.sale_unit, pdfMoney(roundedRate(item.unit_price, 'PDF rate'), 'PDF normalized rate'),
-            `${compareExactDecimals(item.discount_percent, '0.000000', 'PDF discount', { scale: 6 }) === 0 ? '-' : `${atMostTwoDecimals(item.discount_percent, 'PDF discount', 6)}%`} / ${atMostTwoDecimals(item.gst_percent, 'PDF GST rate', 6)}%`,
+            `${lineDiscountDisplay(item, index + 1, pdfMoney)} / ${atMostTwoDecimals(item.gst_percent, 'PDF GST rate', 6)}%`,
             pdfMoney(item.line_total, 'PDF line total'),
         ];
     });
@@ -558,8 +644,9 @@ export const buildInvoicePDF = (invoiceData: InvoiceData): jsPDF => {
     const signatureY = summaryY + 62;
     pdf.setFont('helvetica', 'normal'); pdf.setFontSize(7);
     pdf.line(margin, signatureY, 78, signatureY); pdf.line(132, signatureY, right, signatureY);
-    pdf.text('Customer Signature', 43, signatureY + 4, { align: 'center' });
-    pdf.text(`For ${invoiceData.seller_legal_name}`, 167, signatureY + 4, { align: 'center', maxWidth: 70 });
+    pdf.text('Recipient (name and signature)', 43, signatureY + 4, { align: 'center' });
+    pdf.text('Competent Person (name and signature)', 167, signatureY + 4, { align: 'center' });
+    pdf.text(`For ${invoiceData.seller_legal_name}`, 167, signatureY + 8, { align: 'center', maxWidth: 70 });
 
     const pageCount = pdf.getNumberOfPages();
     for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {

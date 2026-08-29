@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Download, Eye, Mail, MessageCircle, Printer, X } from 'lucide-react';
 import { DataTable, StatusBadge } from '../../../../global';
 import { useCompany } from '../../../../../contexts/CompanyContext';
@@ -16,6 +16,8 @@ import {
 } from '../utils/salesHistoryPresentation';
 import { formatCalendarDate } from '../../../../../utils/calendarDate';
 import { invoicesApi } from '../../../../../services/api/modules/sales/invoices.api';
+import type { CanonicalInvoiceDetail } from '../../../../../services/api/modules/sales/canonicalSalesDocuments.types';
+import { CanonicalInvoiceDetailDialog } from './CanonicalInvoiceDetailDialog';
 
 export const InvoiceTable = React.memo<InvoiceTableProps>(({
     invoices,
@@ -29,7 +31,11 @@ export const InvoiceTable = React.memo<InvoiceTableProps>(({
     const { companyInfo } = useCompany();
     const companyName = companyInfo?.name?.trim() || null;
     const [viewingDocument, setViewingDocument] = useState<Invoice | null>(null);
+    const [viewingInvoiceDetail, setViewingInvoiceDetail] = useState<CanonicalInvoiceDetail | null>(null);
+    const [detailLoading, setDetailLoading] = useState(false);
+    const [detailError, setDetailError] = useState<string | null>(null);
     const [documentActionError, setDocumentActionError] = useState<string | null>(null);
+    const detailRequestSequence = useRef(0);
 
     const formatDate = (dateString: string | null) => {
         if (!dateString) return 'Not specified';
@@ -82,13 +88,43 @@ ${companyName ? `\n---\n${companyName}` : ''}`;
             + `&body=${encodeURIComponent(createDocumentMessage(document))}`;
     };
 
-    const handlePrint = async (document: Invoice) => {
+    const loadInvoiceDetail = async (document: Invoice) => {
+        const requestSequence = ++detailRequestSequence.current;
+        setDetailLoading(true);
+        setDetailError(null);
+        setViewingInvoiceDetail(null);
+        try {
+            const response = await invoicesApi.getById(document.id);
+            if (requestSequence === detailRequestSequence.current) setViewingInvoiceDetail(response.data);
+        } catch (error) {
+            if (requestSequence === detailRequestSequence.current) {
+                setDetailError(error instanceof Error ? error.message : 'Invoice detail is unavailable.');
+            }
+        } finally {
+            if (requestSequence === detailRequestSequence.current) setDetailLoading(false);
+        }
+    };
+
+    const openDocument = (document: Invoice) => {
+        setViewingDocument(document);
+        if (document.document_type === 'invoice') void loadInvoiceDetail(document);
+    };
+
+    const closeDocument = () => {
+        detailRequestSequence.current += 1;
+        setViewingDocument(null);
+        setViewingInvoiceDetail(null);
+        setDetailError(null);
+        setDetailLoading(false);
+    };
+
+    const handlePrint = async (document: Invoice, loadedDetail?: CanonicalInvoiceDetail | null) => {
         setDocumentActionError(null);
         if (document.document_type === 'invoice') {
             try {
-                const response = await invoicesApi.getById(document.id);
                 const { printableCanonicalInvoice, printInvoice } = await import('../../../../../utils/invoicePdfGenerator');
-                printInvoice(printableCanonicalInvoice(response.data));
+                const detail = loadedDetail ?? (await invoicesApi.getById(document.id)).data;
+                printInvoice(printableCanonicalInvoice(detail));
             } catch (error) {
                 setDocumentActionError(error instanceof Error ? error.message : 'Invoice print is unavailable.');
             }
@@ -105,13 +141,13 @@ ${companyName ? `\n---\n${companyName}` : ''}`;
         printWindow.print();
     };
 
-    const handleDownload = async (document: Invoice) => {
+    const handleDownload = async (document: Invoice, loadedDetail?: CanonicalInvoiceDetail | null) => {
         setDocumentActionError(null);
         if (document.document_type === 'invoice') {
             try {
-                const response = await invoicesApi.getById(document.id);
                 const { downloadInvoicePDF, printableCanonicalInvoice } = await import('../../../../../utils/invoicePdfGenerator');
-                await downloadInvoicePDF(printableCanonicalInvoice(response.data));
+                const detail = loadedDetail ?? (await invoicesApi.getById(document.id)).data;
+                await downloadInvoicePDF(printableCanonicalInvoice(detail));
             } catch (error) {
                 setDocumentActionError(error instanceof Error ? error.message : 'Invoice PDF is unavailable.');
             }
@@ -131,12 +167,13 @@ ${companyName ? `\n---\n${companyName}` : ''}`;
 
     const documentActions = (document: Invoice) => {
         const label = salesDocumentLabel(document.document_type);
-        const iconButton = 'flex min-h-11 min-w-11 items-center justify-center rounded-md transition-colors';
+        const iconButton = 'flex min-h-11 min-w-11 items-center justify-center rounded-md transition-colors md:min-h-9 md:min-w-9';
         return (
-            <div className="flex flex-wrap items-center justify-end gap-1">
-                <button type="button" onClick={() => setViewingDocument(document)}
+            <div className="flex flex-nowrap items-center justify-end gap-0.5">
+                <button type="button" onClick={() => openDocument(document)}
                     className={`${iconButton} text-gray-700 hover:bg-gray-100`}
-                    title="View summary" aria-label={`View ${label} ${document.invoice_number}`}>
+                    title={document.document_type === 'invoice' ? 'View canonical invoice' : 'View summary'}
+                    aria-label={`View ${label} ${document.invoice_number}`}>
                     <Eye className="h-4 w-4" />
                 </button>
                 <button type="button" onClick={() => handlePrint(document)}
@@ -192,7 +229,10 @@ ${companyName ? `\n---\n${companyName}` : ''}`;
         {
             key: 'invoice_number', header: salesDocumentNumberLabel(documentType), width: '150px',
             render: (_: unknown, document: Invoice) => (
-                <div className="text-sm text-gray-700">{document.invoice_number}</div>
+                <button type="button" onClick={() => openDocument(document)}
+                    className="text-left text-sm font-medium text-blue-700 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
+                    {document.invoice_number}
+                </button>
             ),
         },
         {
@@ -237,7 +277,7 @@ ${companyName ? `\n---\n${companyName}` : ''}`;
             },
         },
         {
-            key: 'actions', header: 'Actions', align: 'center' as const, width: '230px',
+            key: 'actions', header: 'Actions', align: 'center' as const, width: '190px',
             render: (_: unknown, document: Invoice) => documentActions(document),
         },
     ];
@@ -266,7 +306,10 @@ ${companyName ? `\n---\n${companyName}` : ''}`;
                                     checked={selectedIds.has(document.id)} onChange={() => onToggleSelect(document.id)}
                                     className="mt-1 h-4 w-4 shrink-0 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
                                 <div className="min-w-0 flex-1">
-                                    <p className="break-words font-medium text-gray-900">{document.invoice_number}</p>
+                                    <button type="button" onClick={() => openDocument(document)}
+                                        className="break-words text-left font-medium text-blue-700 hover:underline">
+                                        {document.invoice_number}
+                                    </button>
                                     <p className="mt-1 break-words text-sm text-gray-700">{document.customer_name}</p>
                                     <p className="mt-1 text-xs text-gray-500">{formatDate(document.invoice_date)}</p>
                                 </div>
@@ -292,12 +335,27 @@ ${companyName ? `\n---\n${companyName}` : ''}`;
             </div>
             <div className="hidden overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm md:block">
                 <DataTable columns={columns} data={invoices} keyField="id" loading={loading}
+                    compact onRowActivate={openDocument}
+                    getRowAriaLabel={(document) => `Open ${salesDocumentLabel(document.document_type)} ${document.invoice_number}`}
                     emptyMessage={`No ${salesDocumentLabel(documentType).toLowerCase()} records found`} />
             </div>
 
-            {viewingDocument && (
+            {viewingDocument?.document_type === 'invoice' && (
+                <CanonicalInvoiceDetailDialog
+                    document={viewingDocument}
+                    detail={viewingInvoiceDetail}
+                    loading={detailLoading}
+                    error={detailError}
+                    onClose={closeDocument}
+                    onRetry={() => void loadInvoiceDetail(viewingDocument)}
+                    onPrint={() => void handlePrint(viewingDocument, viewingInvoiceDetail)}
+                    onDownload={() => void handleDownload(viewingDocument, viewingInvoiceDetail)}
+                />
+            )}
+
+            {viewingDocument && viewingDocument.document_type !== 'invoice' && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-                    role="presentation" onMouseDown={() => setViewingDocument(null)}>
+                    role="presentation" onMouseDown={closeDocument}>
                     <section role="dialog" aria-modal="true" aria-labelledby="sales-document-summary-title"
                         onMouseDown={(event) => event.stopPropagation()}
                         className="w-full max-w-lg rounded-lg border border-gray-200 bg-white shadow-xl">
@@ -310,7 +368,7 @@ ${companyName ? `\n---\n${companyName}` : ''}`;
                                     {viewingDocument.invoice_number}
                                 </h2>
                             </div>
-                            <button type="button" onClick={() => setViewingDocument(null)}
+                            <button type="button" onClick={closeDocument}
                                 className="flex min-h-11 min-w-11 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100"
                                 aria-label="Close document summary"><X className="h-5 w-5" /></button>
                         </header>
@@ -331,11 +389,11 @@ ${companyName ? `\n---\n${companyName}` : ''}`;
                         <footer className="flex flex-col justify-end gap-2 border-t border-gray-200 px-5 py-4 sm:flex-row">
                             <button type="button" onClick={() => handlePrint(viewingDocument)}
                                 className="min-h-11 rounded-md border border-gray-300 px-4 text-sm font-medium text-gray-700 hover:bg-gray-50">
-                                {viewingDocument.document_type === 'invoice' ? 'Print Invoice' : 'Print Summary'}
+                                Print Summary
                             </button>
                             <button type="button" onClick={() => handleDownload(viewingDocument)}
                                 className="min-h-11 rounded-md bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-700">
-                                {viewingDocument.document_type === 'invoice' ? 'Download PDF' : 'Download CSV'}
+                                Download CSV
                             </button>
                         </footer>
                     </section>

@@ -16,6 +16,11 @@ import Input from '../forms/Input';
 import Select from '../forms/Select';
 import Checkbox from '../forms/Checkbox';
 
+const isInteractiveTarget = (target: EventTarget | null): boolean => (
+  target instanceof Element
+  && Boolean(target.closest('a,button,input,select,textarea,[role="button"],[role="link"]'))
+);
+
 export interface Column<T> {
   key: keyof T | string;
   header: React.ReactNode;
@@ -62,6 +67,10 @@ export interface DataTableProps<T = Record<string, any>> {
   onRefresh?: () => void;
   onExport?: () => void;
 
+  // Row interaction
+  onRowActivate?: (row: T) => void;
+  getRowAriaLabel?: (row: T) => string;
+
   // Loading & Empty states
   loading?: boolean;
   emptyMessage?: string;
@@ -106,6 +115,9 @@ export function DataTable<T extends Record<string, any>>({
   actions,
   onRefresh,
   onExport,
+
+  onRowActivate,
+  getRowAriaLabel,
 
   loading = false,
   emptyMessage = 'No data available',
@@ -262,13 +274,13 @@ export function DataTable<T extends Record<string, any>>({
   const thClasses = [
     'px-6 py-4 text-xs font-medium text-app-500 uppercase tracking-wider',
     'bg-app-50 border-b border-app-200',
-    compact && 'px-4 py-3',
+    compact && 'px-3 py-2',
   ].filter(Boolean).join(' ');
 
   const tdClasses = [
     'px-6 py-4 whitespace-nowrap text-sm text-app-700',
     'border-b border-app-100',
-    compact && 'px-4 py-3',
+    compact && 'px-3 py-2',
   ].filter(Boolean).join(' ');
 
   return (
@@ -373,9 +385,21 @@ export function DataTable<T extends Record<string, any>>({
               paginatedData.map((row, index) => (
                 <tr
                   key={String(row[keyField])}
+                  tabIndex={onRowActivate ? 0 : undefined}
+                  aria-label={onRowActivate ? getRowAriaLabel?.(row) : undefined}
+                  onDoubleClick={(event) => {
+                    if (!onRowActivate || isInteractiveTarget(event.target)) return;
+                    onRowActivate(row);
+                  }}
+                  onKeyDown={(event) => {
+                    if (!onRowActivate || event.key !== 'Enter' || isInteractiveTarget(event.target)) return;
+                    event.preventDefault();
+                    onRowActivate(row);
+                  }}
                   className={[
                     striped && index % 2 === 1 && 'bg-app-50',
                     hoverable && 'hover:bg-app-100',
+                    onRowActivate && 'cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500',
                     'transition-colors duration-200',
                   ].filter(Boolean).join(' ')}
                 >

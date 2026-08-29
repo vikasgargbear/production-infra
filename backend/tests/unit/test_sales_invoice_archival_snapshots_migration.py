@@ -76,6 +76,10 @@ def test_invoice_readback_uses_only_archived_display_evidence() -> None:
     assert "FROM parties.contacts" not in source
     assert "invoice.seller_drug_licence_evidence_snapshot->'licences'" in source
     assert "invoice.buyer_drug_licence_evidence_snapshot->'licences'" in source
+    assert "erp_automation_reads.sales_invoice_product_identity(" in source
+    assert "FROM automation.command_requests" not in source
+    assert "resolved_references" not in source
+    assert "FROM catalog.products" not in source
 
 
 def test_postgresql_acceptance_is_in_the_canonical_alembic_gate() -> None:

@@ -222,6 +222,14 @@ ExactPercent = Annotated[
     PlainSerializer(_percent_wire, return_type=str, when_used="json"),
     WithJsonSchema(_exact_string_schema(6, "percentage"), mode="serialization"),
 ]
+ExactDiscountValue = Annotated[
+    Decimal,
+    Field(ge=0, max_digits=20, decimal_places=6),
+    PlainSerializer(_percent_wire, return_type=str, when_used="json"),
+    WithJsonSchema(
+        _exact_string_schema(6, "line discount input"), mode="serialization"
+    ),
+]
 ExactMoney = Annotated[
     Decimal,
     Field(ge=0, max_digits=20, decimal_places=2),
@@ -3225,6 +3233,13 @@ class CanonicalInvoiceDetailItem(BaseModel):
         "excluded_from_taxable_value", "included_at_unit_rate"
     ]
     unit_price: ExactRate
+    line_discount_kind: Literal["none", "percent", "amount"]
+    line_discount_basis: Literal["taxable_value", "price_value"]
+    line_discount_value: ExactDiscountValue
+    line_discount_amount: ExactMoney
+    line_taxable_discount_amount: ExactMoney
+    document_discount_amount: ExactMoney
+    document_taxable_discount_amount: ExactMoney
     discount_percent: ExactPercent
     tax_rate: ExactPercent
     gst_percent: ExactPercent
@@ -3241,6 +3256,25 @@ class CanonicalInvoiceDetailItem(BaseModel):
 
     @model_validator(mode="after")
     def validate_allocation_set(self):
+        if self.line_discount_kind == "none":
+            if self.line_discount_value != 0:
+                raise ValueError("none line discount requires a zero input value")
+        elif self.line_discount_kind == "percent":
+            if self.line_discount_value > 100:
+                raise ValueError("percent line discount cannot exceed 100")
+        elif self.line_discount_value != self.line_discount_value.quantize(
+            Decimal("0.01")
+        ):
+            raise ValueError("amount line discount input must have two-decimal precision")
+        expected_compatibility_percent = (
+            self.line_discount_value
+            if self.line_discount_kind == "percent"
+            else Decimal("0")
+        )
+        if self.discount_percent != expected_compatibility_percent:
+            raise ValueError(
+                "compatibility discount percent does not match immutable line discount facts"
+            )
         if not self.batch_allocations:
             if self.batch_id or self.batch_number or self.expiry_date:
                 raise ValueError("scalar batch identity requires an executed allocation")
@@ -3648,6 +3682,9 @@ class CanonicalInvoiceDetailResponse(BaseModel):
     customer_drug_licence_evidence: dict[str, Any]
     due_date: Optional[date]
     currency_code: str
+    supply_type: Literal["intra_state", "inter_state", "export", "sez"]
+    place_of_supply_state_code: str = Field(pattern=r"^[0-9]{2}$")
+    place_of_supply_display_name: str
     tax_charge_mechanism: Literal["normal", "reverse_charge"]
     subtotal_amount: ExactMoney
     discount_amount: ExactMoney
@@ -3677,6 +3714,23 @@ class CanonicalInvoiceDetailResponse(BaseModel):
                 "invoice subtotal, pre-tax discount, charges, and net value "
                 "do not reconcile"
             )
+        if sum(
+            (
+                item.line_discount_amount + item.document_discount_amount
+                for item in self.items
+            ),
+            Decimal("0"),
+        ) != self.discount_amount:
+            raise ValueError("invoice line discount allocations do not reconcile")
+        if sum(
+            (
+                item.line_taxable_discount_amount
+                + item.document_taxable_discount_amount
+                for item in self.items
+            ),
+            Decimal("0"),
+        ) != self.pre_tax_discount_amount:
+            raise ValueError("invoice taxable discount allocations do not reconcile")
         if self.status == "posted" and any(
             not item.batch_allocations for item in self.items
         ):
@@ -3688,6 +3742,16 @@ class CanonicalInvoiceDetailResponse(BaseModel):
 
 def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> dict:
     rows = _rows(db, """
+        WITH product_identity AS MATERIALIZED (
+            SELECT identity.product_id, identity.product_row_version,
+                   identity.product_code, identity.product_name
+              FROM erp_automation_reads.sales_invoice_product_identity(
+                   :org_id, :invoice_id
+              ) identity
+        ),
+        product_identity_guard AS (
+            SELECT count(*) AS identity_count FROM product_identity
+        )
         SELECT invoice.id AS invoice_id, invoice.invoice_number,
                invoice.invoice_date, invoice.status,
                invoice.archival_snapshot_state,
@@ -3726,7 +3790,17 @@ def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> di
                  AS seller_drug_licence_evidence,
                invoice.buyer_drug_licence_evidence_snapshot
                  AS customer_drug_licence_evidence,
-               invoice.due_date, invoice.currency_code,
+               invoice.due_date, invoice.currency_code, invoice.supply_type,
+               invoice.place_of_supply_state_code::text AS place_of_supply_state_code,
+               (SELECT jurisdiction.display_name
+                  FROM tax.gst_jurisdiction_versions jurisdiction
+                 WHERE jurisdiction.jurisdiction_code=invoice.place_of_supply_state_code
+                   AND jurisdiction.status='active'
+                   AND jurisdiction.supports_place_of_supply
+                   AND jurisdiction.effective_from<=invoice.invoice_date
+                   AND (jurisdiction.effective_to IS NULL
+                        OR jurisdiction.effective_to>=invoice.invoice_date)
+               ) AS place_of_supply_display_name,
                invoice.tax_charge_mechanism,
                to_char(invoice.subtotal, 'FM999999999999999990.00') AS subtotal_amount,
                to_char(invoice.discount_total, 'FM999999999999999990.00') AS discount_amount,
@@ -3752,12 +3826,15 @@ def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> di
                COALESCE(lines.items, '[]'::jsonb) AS items,
                invoice.created_at, invoice.updated_at
           FROM sales.invoices invoice
+          CROSS JOIN product_identity_guard
           LEFT JOIN LATERAL (
               SELECT jsonb_agg(jsonb_build_object(
                          'id', line.id, 'source_document_kind', 'sales_order',
                          'product_id', line.product_id,
-                         'product_name', product.name, 'product_code', product.sku,
-                         'hsn_code', product.hsn_code, 'uom_code', line.uom_code,
+                         'product_name', product_identity.product_name,
+                         'product_code', product_identity.product_code,
+                         'hsn_code', line.tax_classification_code_snapshot,
+                         'uom_code', line.uom_code,
                          'unit', line.uom_code, 'quantity',
                              to_char(line.billed_quantity, 'FM999999999999999990.000000'),
                          'free_quantity',
@@ -3769,6 +3846,23 @@ def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> di
                          'free_supply_tax_treatment', line.free_supply_tax_treatment,
                          'unit_price',
                              to_char(line.quoted_unit_rate, 'FM999999999999999990.0000'),
+                         'line_discount_kind', line.line_discount_kind,
+                         'line_discount_basis', line.line_discount_basis,
+                         'line_discount_value',
+                             to_char(line.line_discount_value,
+                                     'FM999999999999999990.000000'),
+                         'line_discount_amount',
+                             to_char(line.line_discount_amount,
+                                     'FM999999999999999990.00'),
+                         'line_taxable_discount_amount',
+                             to_char(line.line_taxable_discount_amount,
+                                     'FM999999999999999990.00'),
+                         'document_discount_amount',
+                             to_char(line.document_discount_amount,
+                                     'FM999999999999999990.00'),
+                         'document_taxable_discount_amount',
+                             to_char(line.document_taxable_discount_amount,
+                                     'FM999999999999999990.00'),
                          'discount_percent', to_char(CASE
                              WHEN line.line_discount_kind='percent'
                              THEN line.line_discount_value ELSE 0 END,
@@ -3800,8 +3894,8 @@ def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> di
                          'batch_allocations', COALESCE(allocation.batch_allocations, '[]'::jsonb)
                      ) ORDER BY line.line_number) AS items
                 FROM sales.invoice_lines line
-                LEFT JOIN catalog.products product
-                  ON product.org_id=line.org_id AND product.id=line.product_id
+                JOIN product_identity
+                  ON product_identity.product_id=line.product_id
                 LEFT JOIN LATERAL (
                     SELECT count(*) AS allocation_count,
                            (array_agg(executed.batch_id ORDER BY
@@ -3973,6 +4067,15 @@ def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> di
                  AND line.product_id IS NOT NULL
           ) lines ON true
          WHERE invoice.org_id=:org_id AND invoice.id=:invoice_id
+           AND (
+               product_identity_guard.identity_count>0
+               OR NOT EXISTS (
+                   SELECT 1 FROM sales.invoice_lines identity_line
+                    WHERE identity_line.org_id=invoice.org_id
+                      AND identity_line.invoice_id=invoice.id
+                      AND identity_line.product_id IS NOT NULL
+               )
+           )
     """, {"org_id": org_id, "invoice_id": invoice_id})
     if len(rows) != 1:
         raise HTTPException(status_code=404, detail="Invoice not found")

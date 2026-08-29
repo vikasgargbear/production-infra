@@ -41,6 +41,9 @@ const invoice = (): InvoiceData => ({
   customer_drug_license_numbers: ['MH-BUYER-20B'],
   billing_address: 'Buyer Lane\nPune',
   shipping_address: 'Buyer Lane\nPune',
+  supply_type: 'intra_state',
+  place_of_supply_state_code: '27',
+  place_of_supply_display_name: 'Maharashtra',
   tax_charge_mechanism: 'normal',
   items: [{
     product_name: 'Carton',
@@ -62,6 +65,13 @@ const invoice = (): InvoiceData => ({
     free_quantity: '0.125000',
     free_supply_tax_treatment: 'excluded_from_taxable_value',
     unit_price: '150.0000',
+    line_discount_kind: 'percent',
+    line_discount_basis: 'price_value',
+    line_discount_value: '2.500000',
+    line_discount_amount: '5.00',
+    line_taxable_discount_amount: '5.00',
+    document_discount_amount: '0.00',
+    document_taxable_discount_amount: '0.00',
     discount_percent: '2.500000',
     gst_percent: '12.000000',
     taxable_amount: '150.00',
@@ -120,6 +130,13 @@ const canonicalDetail = (): CanonicalInvoiceDetail => ({
     base_billed_quantity: item.quantity,
     base_free_quantity: item.free_quantity,
     free_supply_tax_treatment: 'excluded_from_taxable_value' as const,
+    line_discount_kind: item.line_discount_kind,
+    line_discount_basis: item.line_discount_basis,
+    line_discount_value: item.line_discount_value,
+    line_discount_amount: item.line_discount_amount,
+    line_taxable_discount_amount: item.line_taxable_discount_amount,
+    document_discount_amount: item.document_discount_amount,
+    document_taxable_discount_amount: item.document_taxable_discount_amount,
   })),
   created_at: '2026-08-25T12:00:00Z',
   updated_at: '2026-08-25T12:00:00Z',
@@ -156,6 +173,7 @@ test('uses the pre-tax reduction for printable discount and preserves header dis
     total_amount: '212.80',
     items: [{
       ...canonicalDetail().items[0], taxable_amount: '190.00',
+      line_discount_amount: '11.20', line_taxable_discount_amount: '10.00',
       cgst_amount: '11.40', sgst_amount: '11.40', line_total: '212.80',
     }],
   };
@@ -208,7 +226,13 @@ test('renders only canonical seller, buyer, line, and exact money facts', () => 
   expect(html).toContain('Batch BATCH-TWO; Exp 2029-01-31; Qty 0.5; Free 0');
   expect(html).toContain('Free excluded from taxable value');
   expect(html).toContain('>1.23');
-  expect(html).toContain('>2.5%');
+  expect(html).toContain('2.5% (₹5.00)');
+  expect(html).toContain('>12%</td>');
+  expect(html).toContain('Original for Recipient');
+  expect(html).toContain('<strong>Place of Supply:</strong> Maharashtra (27)');
+  expect(html).toContain('<strong>Supply:</strong> intra state');
+  expect(html).toContain('Recipient (name and signature)');
+  expect(html).toContain('Competent Person (name and signature)');
   expect(html).toContain('₹168.00');
   expect(html).not.toContain('Your Company Name');
   expect(html).not.toContain('Customer Name');
@@ -216,19 +240,38 @@ test('renders only canonical seller, buyer, line, and exact money facts', () => 
   expect(html).not.toContain('3004');
   expect(html).not.toContain('DOC-');
   expect(html).not.toContain('1.234567');
+  expect(html).not.toContain('{{');
+  expect(html).not.toContain('[object Object]');
+  expect(html).not.toContain('canonical-factual-v1');
   expect(html).toContain('thead{display:table-header-group}');
   expect(html).toContain('tr{break-inside:avoid;page-break-inside:avoid}');
   expect(html).not.toContain('.invoice-page{page-break-inside:avoid');
 });
 
-test('does not mislabel an undisclosed non-percent line discount as zero percent', () => {
-  const html = generateInvoiceHTML({
-    ...invoice(),
-    items: [{ ...invoice().items[0], discount_percent: '0.000000' }],
-  });
+test('labels fixed line discounts and invoice allocations without inventing a percent', () => {
+  const fixed = invoice();
+  fixed.discount_amount = '7.00';
+  fixed.net_value_amount = '148.00';
+  fixed.total_amount = '166.00';
+  fixed.items[0] = {
+    ...fixed.items[0],
+    line_discount_kind: 'amount',
+    line_discount_basis: 'taxable_value',
+    line_discount_value: '5.000000',
+    line_discount_amount: '5.00',
+    line_taxable_discount_amount: '5.00',
+    document_discount_amount: '2.00',
+    document_taxable_discount_amount: '2.00',
+    discount_percent: '0.000000',
+  };
+  const html = generateInvoiceHTML(fixed);
+  expect(html).toContain('Fixed ₹5.00 (₹5.00) + invoice ₹2.00');
+  expect(html).not.toContain('>0%');
 
-  expect(html).toContain('<td class="center">-</td>');
-  expect(html).not.toContain('>0%</td>');
+  expect(() => generateInvoiceHTML({
+    ...fixed,
+    items: [{ ...fixed.items[0], discount_percent: '5.000000' }],
+  })).toThrow('cannot expose a percentage for its immutable kind');
 });
 
 test('preserves an explicit zero tax component without treating it as missing', () => {
@@ -293,7 +336,9 @@ test('keeps every invoice item column inside the A4 printable width with Amount 
   mockAutoTable.mockClear();
   await downloadInvoicePDF(invoice());
 
-  const options = mockAutoTable.mock.calls.at(-1)?.[1];
+  const options = mockAutoTable.mock.calls
+    .map((call: any[]) => call[1])
+    .find((callOptions: any) => callOptions.head[0][0] === '#');
   expect(options).toBeDefined();
   expect(options.head[0].at(-1)).toBe('Amount');
   expect(options.body[0].at(-1)).toBe('INR 168.00');
