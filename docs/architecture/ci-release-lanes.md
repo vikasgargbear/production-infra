@@ -26,11 +26,14 @@ for persistent manual test organizations and browser testing.
 
 Database changes for that persistent pilot use the separate, manually
 dispatched `railway-pilot-in-place-migration.yml` lane. It requires an exact
-reviewed SHA and typed confirmation, validates the current revision against the
-linear canonical history, captures a pre-change schema artifact, runs Alembic
-twice to prove idempotency, removes temporary migration authority, and verifies
-the exact new revision and runtime grants. It does not recreate the database,
-clear tenant records, seed organizations, or deploy services.
+reviewed SHA and typed confirmation, then delegates to the existing Railway
+direct-IPv6 deployment lane with `reset_disposable_data=false`. That reviewed
+lane closes the write fence, validates and runs Alembic twice, removes temporary
+migration authority, deploys the exact SHA to all three services, verifies their
+public identities, and returns a closed-fence receipt. The pilot wrapper then
+opens that exact deployed boundary over Railway SSH, verifies API and MCP
+readiness, and removes its run-scoped SSH key. It does not recreate the database,
+clear tenant records, or seed organizations.
 
 The frontend container performs only the production bundle build. Typecheck,
 lint, unit tests, and browser tests run against the same immutable source in PR
