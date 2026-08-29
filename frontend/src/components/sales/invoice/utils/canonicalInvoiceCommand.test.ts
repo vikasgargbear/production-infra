@@ -343,6 +343,87 @@ describe('canonical invoice command', () => {
         );
     });
 
+    it('honors an explicitly selected same-expiry batch before FEFO allocates the remainder', () => {
+        const selectedAlternative = {
+            ...invoice,
+            items: [{
+                ...invoice.items[0],
+                batch_id: ids.batch2,
+                batch_number: 'SAME-TIER-2',
+                quantity: '3.000000',
+                free_quantity: '1.000000',
+                allocation_batches: [{
+                    batch_id: ids.batch,
+                    batch_number: 'SAME-TIER-1',
+                    expiry_date: '2028-09-01',
+                    available_quantity: '5.000000',
+                    location_id: ids.location,
+                    branch_id: ids.branch,
+                    uom_conversion_id: ids.uom,
+                }, {
+                    batch_id: ids.batch2,
+                    batch_number: 'SAME-TIER-2',
+                    expiry_date: '2028-09-01',
+                    available_quantity: '2.000000',
+                    location_id: ids.location,
+                    branch_id: ids.branch,
+                    uom_conversion_id: ids.uom,
+                }],
+            }],
+        } as Invoice;
+
+        const line = (buildCanonicalInvoicePreparePayload(
+            selectedAlternative,
+            customer,
+            'erp-web-invoice:selected-same-tier-batch',
+        ).lines as any[])[0];
+        expect(line.batch_allocations).toEqual([{
+            batch_id: ids.batch2,
+            billed_quantity: '2.000000',
+            free_quantity: '0.000000',
+        }, {
+            batch_id: ids.batch,
+            billed_quantity: '1.000000',
+            free_quantity: '1.000000',
+        }]);
+        expect(invoiceBatchAllocationDisplay(selectedAlternative.items[0], 0)).toBe(
+            'SAME-TIER-2 2 · SAME-TIER-1 2',
+        );
+    });
+
+    it('refuses to prioritize a selected batch outside the earliest-expiry FEFO tier', () => {
+        const laterSelection = {
+            ...invoice,
+            items: [{
+                ...invoice.items[0],
+                batch_id: ids.batch2,
+                allocation_batches: [{
+                    batch_id: ids.batch,
+                    batch_number: 'FEFO-1',
+                    expiry_date: '2028-09-01',
+                    available_quantity: '5.000000',
+                    location_id: ids.location,
+                    branch_id: ids.branch,
+                    uom_conversion_id: ids.uom,
+                }, {
+                    batch_id: ids.batch2,
+                    batch_number: 'LATER',
+                    expiry_date: '2028-10-01',
+                    available_quantity: '5.000000',
+                    location_id: ids.location,
+                    branch_id: ids.branch,
+                    uom_conversion_id: ids.uom,
+                }],
+            }],
+        } as Invoice;
+
+        expect(() => buildCanonicalInvoicePreparePayload(
+            laterSelection,
+            customer,
+            'erp-web-invoice:later-batch',
+        )).toThrow(/outside the earliest-expiry FEFO tier/i);
+    });
+
     it('fails closed when reviewed batches cannot fulfill the total quantity', () => {
         const insufficient = {
             ...invoice,

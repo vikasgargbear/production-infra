@@ -118,8 +118,8 @@ describe('BatchSelector lifecycle and mobile presentation', () => {
             unit_price: '100.0000',
             available_quantity: '12.000000',
             allocation_batches: [
-                expect.objectContaining({ batch_number: 'EARLIEST', available_quantity: '12.000000' }),
                 expect.objectContaining({ batch_number: 'SAME-EXPIRY', available_quantity: '12.000000' }),
+                expect.objectContaining({ batch_number: 'EARLIEST', available_quantity: '12.000000' }),
                 expect.objectContaining({ batch_number: 'LATER', available_quantity: '12.000000' }),
             ],
         });
