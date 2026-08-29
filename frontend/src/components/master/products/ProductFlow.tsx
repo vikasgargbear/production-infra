@@ -216,7 +216,8 @@ const ProductFlow: React.FC<ProductFlowProps> = ({ open, show, product, onClose,
     inFlight.current = true; setSaving(true); setErrors([]);
     try {
       const response = await productsApi.activate(working.product_id, working.row_version, activationKeyRef.current, optionalText(setup.traceability_code));
-      activationKeyRef.current = newProductActivationIdempotencyKey(); toast.success('Product added.');
+      activationKeyRef.current = newProductActivationIdempotencyKey();
+      toast.success('Product added with zero stock. Next, create a purchase order and receive its first batch through Goods receipt.');
       onProductCreated?.(response.data); onClose?.();
     } catch (error: any) { setErrors(errorMessages(error, 'Product could not be added. Review the required details.')); await loadSetup(working.product_id).catch(() => undefined); }
     finally { inFlight.current = false; setSaving(false); }
@@ -312,7 +313,7 @@ const ProductFlow: React.FC<ProductFlowProps> = ({ open, show, product, onClose,
           </Section>}
         </div>}
 
-        {step === 1 && <div className="space-y-5"><Section title="Review product" help="Once added, this product is available in purchases, sales and stock."><div className="mb-4"><span className={`rounded-full px-3 py-1 text-sm font-medium ${missingFields.length === 0 ? 'bg-green-50 text-green-800' : 'bg-amber-50 text-amber-800'}`}>{missingFields.length === 0 ? 'Ready to add' : `${missingFields.length} required item${missingFields.length === 1 ? '' : 's'} missing`}</span></div><dl className="divide-y">{reviewSections.map(([label, value]) => <div key={label} className="grid gap-1 py-4 sm:grid-cols-[160px_1fr]"><dt className="text-sm font-medium text-gray-600">{label}</dt><dd className="break-words text-sm">{value}</dd></div>)}</dl>
+        {step === 1 && <div className="space-y-5"><Section title="Review product" help="Once added, this zero-stock product is available in product search and purchases. Sales become available after its first batch is received."><div className="mb-4"><span className={`rounded-full px-3 py-1 text-sm font-medium ${missingFields.length === 0 ? 'bg-green-50 text-green-800' : 'bg-amber-50 text-amber-800'}`}>{missingFields.length === 0 ? 'Ready to add' : `${missingFields.length} required item${missingFields.length === 1 ? '' : 's'} missing`}</span></div><dl className="divide-y">{reviewSections.map(([label, value]) => <div key={label} className="grid gap-1 py-4 sm:grid-cols-[160px_1fr]"><dt className="text-sm font-medium text-gray-600">{label}</dt><dd className="break-words text-sm">{value}</dd></div>)}</dl>
           {missingFields.length > 0 && <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4"><p className="font-medium">Required before adding product</p><ul className="mt-2 list-inside list-disc text-sm">{missingFields.map(field => <li key={field}>{field.replace(/_/g, ' ')}</li>)}</ul></div>}
           {recommendedFields.length > 0 && <p className="mt-4 text-sm text-gray-600">Recommended to add later: {recommendedFields.map(field => field.replace(/_/g, ' ')).join(', ')}.</p>}
           {h2Applies && <label className={`${labelClass} mt-5`}>Manufacturer H2 traceability product code <Required /><input value={setup.traceability_code} onChange={e => setSetupField('traceability_code', e.target.value)} className={fieldClass} placeholder="Barcode / QR identifier from manufacturer" /></label>}
