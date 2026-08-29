@@ -11,6 +11,7 @@ export interface ItemsTableItem {
     name?: string;
     batch_id?: number | string;
     batch_number?: string;
+    batch_display?: string;
     quantity?: number | string;
     unit_price?: number | string;
     mrp?: number;
@@ -63,6 +64,9 @@ type NavigationDirection = 'right' | 'next' | 'left' | 'down' | 'up';
 const QUANTITY_DECIMAL_PLACES = 6;
 const QUANTITY_INPUT_STEP = '0.000001';
 const QUANTITY_PRECISION_ERROR = 'Quantity supports up to 6 decimal places.';
+const COMMERCIAL_DECIMAL_PLACES = 2;
+const RATE_PRECISION_ERROR = 'Rate supports up to 2 decimal places.';
+const DISCOUNT_PRECISION_ERROR = 'Discount supports up to 2 decimal places.';
 
 const visibleQuantityDecimalPlaces = (value: number | string | undefined): number => {
     const fraction = String(value ?? 0).split('.')[1] || '';
@@ -93,6 +97,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
 
     const fieldRefs = useRef<Record<string, EditableCellRef | null>>({});
     const [mobileQuantityErrors, setMobileQuantityErrors] = useState<Record<string, string>>({});
+    const [mobileCommercialErrors, setMobileCommercialErrors] = useState<Record<string, string>>({});
     const EDITABLE_FIELDS = ['quantity', 'unit_price', 'discount_percent', 'free'];
 
     const updateMobileQuantity = (
@@ -114,6 +119,34 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
 
         if (rawValue === '') return;
         setMobileQuantityErrors(previous => {
+            if (!previous[errorKey]) return previous;
+            const next = { ...previous };
+            delete next[errorKey];
+            return next;
+        });
+        onUpdateItem?.(index, field, preserveExactDecimals ? rawValue : Number(rawValue));
+    };
+
+    const updateMobileCommercialValue = (
+        index: number,
+        field: 'unit_price' | 'discount_percent',
+        rawValue: string,
+    ): void => {
+        const errorKey = `${index}-${field}`;
+        const significantFraction = (rawValue.split('.')[1] || '').replace(/0+$/, '');
+        const upperBoundValid = field !== 'discount_percent' || Number(rawValue) <= 100;
+        const valid = /^(?:\d+|\d*\.\d*)$/.test(rawValue)
+            && significantFraction.length <= COMMERCIAL_DECIMAL_PLACES
+            && upperBoundValid;
+        if (!valid) {
+            setMobileCommercialErrors(previous => ({
+                ...previous,
+                [errorKey]: field === 'unit_price' ? RATE_PRECISION_ERROR : DISCOUNT_PRECISION_ERROR,
+            }));
+            return;
+        }
+        if (rawValue === '') return;
+        setMobileCommercialErrors(previous => {
             if (!previous[errorKey]) return previous;
             const next = { ...previous };
             delete next[errorKey];
@@ -287,7 +320,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                         <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
                                 <h4 className="break-words font-medium text-gray-900">{item.product_name || item.name}</h4>
-                                <p className="mt-1 break-all text-xs text-gray-500">Batch: {item.batch_number || 'No batch'}</p>
+                                <p className="mt-1 break-words text-xs text-gray-500">Batch: {item.batch_display || item.batch_number || 'No batch'}</p>
                             </div>
                             {!readOnly && (
                                 <button type="button" onClick={() => onRemoveItem?.(index)} className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center border border-red-200 text-red-700" aria-label={`Remove ${item.product_name || item.name || 'item'}`}>
@@ -308,10 +341,12 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                                 {mobileQuantityErrors[`${index}-quantity`] && <span id={`mobile-quantity-error-${index}`} role="alert" className="mt-1 block text-xs text-red-700">{mobileQuantityErrors[`${index}-quantity`]}</span>}
                             </label>
                             <label className="text-xs font-medium text-gray-600">Rate
-                                <input type="number" min="0" step="0.01" inputMode="decimal" value={item.unit_price || 0} onChange={(event) => onUpdateItem?.(index, 'unit_price', preserveExactDecimals ? event.target.value : Number(event.target.value))} readOnly={readOnly} className="mt-1 min-h-11 w-full border border-gray-300 px-3 text-right text-base text-gray-900" />
+                                <input type="number" min="0" step="0.01" inputMode="decimal" value={item.unit_price || 0} onChange={(event) => updateMobileCommercialValue(index, 'unit_price', event.target.value)} readOnly={readOnly} aria-invalid={mobileCommercialErrors[`${index}-unit_price`] ? true : undefined} aria-describedby={mobileCommercialErrors[`${index}-unit_price`] ? `mobile-rate-error-${index}` : undefined} className="mt-1 min-h-11 w-full border border-gray-300 px-3 text-right text-base text-gray-900" />
+                                {mobileCommercialErrors[`${index}-unit_price`] && <span id={`mobile-rate-error-${index}`} role="alert" className="mt-1 block text-xs text-red-700">{mobileCommercialErrors[`${index}-unit_price`]}</span>}
                             </label>
                             <label className="text-xs font-medium text-gray-600">Discount %
-                                <input type="number" min="0" max="100" step="0.01" inputMode="decimal" value={item.discount_percent || item.discount || 0} onChange={(event) => onUpdateItem?.(index, 'discount_percent', preserveExactDecimals ? event.target.value : Number(event.target.value))} readOnly={readOnly} className="mt-1 min-h-11 w-full border border-gray-300 px-3 text-right text-base text-gray-900" />
+                                <input type="number" min="0" max="100" step="0.01" inputMode="decimal" value={item.discount_percent || item.discount || 0} onChange={(event) => updateMobileCommercialValue(index, 'discount_percent', event.target.value)} readOnly={readOnly} aria-invalid={mobileCommercialErrors[`${index}-discount_percent`] ? true : undefined} aria-describedby={mobileCommercialErrors[`${index}-discount_percent`] ? `mobile-discount-error-${index}` : undefined} className="mt-1 min-h-11 w-full border border-gray-300 px-3 text-right text-base text-gray-900" />
+                                {mobileCommercialErrors[`${index}-discount_percent`] && <span id={`mobile-discount-error-${index}`} role="alert" className="mt-1 block text-xs text-red-700">{mobileCommercialErrors[`${index}-discount_percent`]}</span>}
                             </label>
                             <label className="text-xs font-medium text-gray-600">Free quantity
                                 <input type="number" min="0" step={QUANTITY_INPUT_STEP} inputMode="decimal" value={item.free_quantity || item.free || 0} onChange={(event) => updateMobileQuantity(index, 'free_quantity', event.target.value)} readOnly={readOnly} aria-invalid={mobileQuantityErrors[`${index}-free_quantity`] ? true : undefined} aria-describedby={mobileQuantityErrors[`${index}-free_quantity`] ? `mobile-free-quantity-error-${index}` : undefined} className="mt-1 min-h-11 w-full border border-gray-300 px-3 text-right text-base text-gray-900" />
@@ -373,7 +408,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                                 <td className="px-3 py-2 text-sm text-gray-600">{index + 1}</td>
                                 <td className="min-w-72 px-3 py-2">
                                     <div className="text-sm font-medium leading-5 text-gray-900">{item.product_name || item.name}</div>
-                                    <div className="mt-1 break-all text-xs text-gray-500">Batch: {item.batch_number || 'No batch'}</div>
+                                    <div className="mt-1 break-words text-xs text-gray-500">Batch: {item.batch_display || item.batch_number || 'No batch'}</div>
                                     <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-500">
                                         <span>Pack {item.packages_per_box || 1}×{item.units_per_pack || 1}</span>
                                         <span>Expiry {item.expiry_date ? new Date(item.expiry_date).toLocaleDateString('en-IN', { month: 'short', year: '2-digit' }) : '—'}</span>
@@ -406,6 +441,8 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                                         type="number"
                                         min={0}
                                         decimalPlaces={2}
+                                        maxDecimalPlaces={COMMERCIAL_DECIMAL_PLACES}
+                                        decimalPlacesErrorMessage={RATE_PRECISION_ERROR}
                                         prefix={currencySymbol}
                                         onSave={(val) => {
                                             onUpdateItem?.(index, 'unit_price', val);
@@ -426,6 +463,8 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                                         min={0}
                                         max={100}
                                         decimalPlaces={2}
+                                        maxDecimalPlaces={COMMERCIAL_DECIMAL_PLACES}
+                                        decimalPlacesErrorMessage={DISCOUNT_PRECISION_ERROR}
                                         suffix="%"
                                         onSave={(val) => onUpdateItem?.(index, 'discount_percent', val)}
                                         onNavigate={(dir) => handleNavigate(index, 'discount_percent', dir as NavigationDirection)}

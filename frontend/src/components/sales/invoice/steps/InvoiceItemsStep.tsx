@@ -15,10 +15,11 @@ import { challansApi } from '../../../../services/api';
 import { extractDocumentDetail } from '../../utils/documentImport';
 import {
     freeSupplyTreatmentAfterQuantityEdit,
+    invoiceBatchAllocationDisplay,
     invoiceBatchAllocationValidationError,
 } from '../utils/canonicalInvoiceCommand';
 // Shared Types
-import { Customer, Invoice, Employee } from '../types/invoiceTypes';
+import { Customer, Invoice, Employee, InvoiceItem } from '../types/invoiceTypes';
 import InvoiceItemsFooter from './InvoiceItemsFooter';
 
 interface InvoiceItemsStepProps {
@@ -54,6 +55,15 @@ interface InvoiceItemsStepProps {
     showImportModal: boolean;
     setShowImportModal: React.Dispatch<React.SetStateAction<boolean>>;
 }
+
+const reviewedBatchDisplay = (item: InvoiceItem, index: number): string | undefined => {
+    if (item.source_allocation_kind === 'dispatch_allocation') return item.batch_number;
+    try {
+        return invoiceBatchAllocationDisplay(item, index);
+    } catch {
+        return item.batch_number;
+    }
+};
 
 const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
     invoice,
@@ -276,7 +286,10 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                                 </h3>
                                 <ItemsTableKeyboard
                                     ref={itemsTableRef as any}
-                                    items={(invoice.items || []) as any}
+                                    items={(invoice.items || []).map((item, index) => ({
+                                        ...item,
+                                        batch_display: reviewedBatchDisplay(item, index),
+                                    })) as any}
                                     onUpdateItem={handleCanonicalItemUpdate}
                                     onRemoveItem={handleRemoveItem}
                                     productSearchRef={productSearchRef as any}

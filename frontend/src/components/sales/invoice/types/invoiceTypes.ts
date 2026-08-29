@@ -212,6 +212,8 @@ export interface InvoiceItem {
     // Batch info
     batch_number?: string;
     batch_id?: number | string;
+    /** Saleable same-location batches available for exact FEFO allocation. */
+    allocation_batches?: InvoiceBatchAllocationCandidate[];
     location_id?: string;
     branch_id?: string;
     uom_conversion_id?: string;
@@ -275,6 +277,16 @@ export interface InvoiceItem {
 
     // Allow index access for flexibility
     [key: string]: any;
+}
+
+export interface InvoiceBatchAllocationCandidate {
+    batch_id: string;
+    batch_number: string;
+    expiry_date: string;
+    available_quantity: ExactDecimalString;
+    location_id: string;
+    branch_id: string;
+    uom_conversion_id: string;
 }
 
 // ==================== INVOICE TOTALS ====================
@@ -521,6 +533,7 @@ export interface ProductInput {
     product_code?: string;
     batch_id?: number | string | null;
     batch_number?: string;  // Alias used by some search results
+    allocation_batches?: InvoiceBatchAllocationCandidate[];
     branch_id?: string;
     location_id?: string;
     uom_conversion_id?: string;

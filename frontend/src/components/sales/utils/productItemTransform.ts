@@ -30,6 +30,15 @@ export interface ProductInput {
     product_code?: string;
     batch_id?: number | string | null;
     batch_number?: string;
+    allocation_batches?: Array<{
+        batch_id: string;
+        batch_number: string;
+        expiry_date: string;
+        available_quantity: string;
+        location_id: string;
+        branch_id: string;
+        uom_conversion_id: string;
+    }>;
     expiry_date?: string | null;
     manufacturing_date?: string;
     sale_price_per_unit?: string;
@@ -199,6 +208,13 @@ export const prepareItemForTransaction = <T extends BaseLineItem>(
         location_id: product.location_id || bestBatch?.location_id,
         branch_id: product.branch_id || bestBatch?.branch_id,
         uom_conversion_id: product.uom_conversion_id || bestBatch?.uom_conversion_id,
+        allocation_batches: product.allocation_batches?.map((batch, index) => ({
+            ...batch,
+            available_quantity: authoritativeQuantity(
+                batch.available_quantity,
+                `Allocation batch ${index + 1} available quantity`,
+            ),
+        })),
         // Pack info - from batch or product
         units_per_pack: bestBatch?.units_per_pack ?? product.units_per_pack,
         packages_per_box: bestBatch?.packages_per_box ?? product.packages_per_box,

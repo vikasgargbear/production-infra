@@ -208,7 +208,7 @@ test('desktop numeric editors commit each blur exactly once', () => {
         product_name: 'Canonical Carton',
         batch_number: 'BATCH-EXACT',
         quantity: '1.000000',
-        unit_price: '84.1250',
+        unit_price: '84.1200',
         discount_percent: '0.000000',
       }]}
       onUpdateItem={onUpdateItem}
@@ -223,6 +223,35 @@ test('desktop numeric editors commit each blur exactly once', () => {
 
   expect(onUpdateItem).toHaveBeenCalledTimes(1);
   expect(onUpdateItem).toHaveBeenCalledWith(0, 'unit_price', '85.2500');
+});
+
+test('commercial inputs reject more than two meaningful decimal places', () => {
+  const onUpdateItem = jest.fn();
+  render(
+    <ItemsTable
+      items={[{
+        product_name: 'Reviewed Carton',
+        quantity: '1.000000',
+        unit_price: '84.12',
+        discount_percent: '1.25',
+      }]}
+      onUpdateItem={onUpdateItem}
+      preserveExactDecimals
+    />,
+  );
+
+  fireEvent.change(screen.getByLabelText('Rate'), { target: { value: '84.125' } });
+  expect(screen.getByText('Rate supports up to 2 decimal places.')).toBeTruthy();
+  expect(onUpdateItem).not.toHaveBeenCalled();
+
+  fireEvent.change(screen.getByLabelText('Discount %'), { target: { value: '1.255' } });
+  expect(screen.getByText('Discount supports up to 2 decimal places.')).toBeTruthy();
+  expect(onUpdateItem).not.toHaveBeenCalled();
+
+  const desktopRate = screen.getByLabelText('Reviewed Carton rate');
+  fireEvent.focus(desktopRate);
+  fireEvent.change(desktopRate, { target: { value: '84.125' } });
+  expect(desktopRate.getAttribute('aria-invalid')).toBe('true');
 });
 
 test('requires an explicit free-supply treatment only when free quantity is positive', () => {
