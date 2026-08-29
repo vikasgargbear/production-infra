@@ -57,6 +57,20 @@ def test_persistent_pilot_migration_is_explicit_bounded_and_non_resetting() -> N
     assert 'fixtures' not in PILOT_MIGRATION.lower()
 
 
+def test_persistent_pilot_ssh_cleanup_attests_eventual_removal() -> None:
+    cleanup = PILOT_MIGRATION.split(
+        "- name: Remove the run-scoped Railway SSH key", 1
+    )[1]
+
+    assert "cleanup_failed=0" in cleanup
+    assert "ssh-add -d \"$PILOT_SSH_PRIVATE_KEY\"" in cleanup
+    assert "for attempt in $(seq 1 30); do" in cleanup
+    assert "absent_observations=$((absent_observations + 1))" in cleanup
+    assert 'test "$absent_observations" -eq 2' in cleanup
+    assert "Run-scoped Railway pilot SSH key remained after cleanup" in cleanup
+    assert 'exit "$cleanup_failed"' in cleanup
+
+
 def test_certification_reuses_exact_sha_and_has_separate_authority() -> None:
     assert "default: canonical-certification" in RAILWAY_CERTIFICATION
     assert "environment: ${{ inputs.github_environment }}" in RAILWAY_CERTIFICATION
