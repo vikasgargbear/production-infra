@@ -1443,6 +1443,10 @@ def test_api_image_packages_every_import_time_live18_contract():
         phase.BACKEND_DIRECTORY.parent / "deploy" / "railway" / "api.Dockerfile"
     ).read_text(encoding="utf-8")
     assert "COPY backend/app ./app" in dockerfile
+    assert (
+        "COPY backend/mcp_runtime/aasopharma_mcp/operator_actions.py "
+        "./mcp_runtime/aasopharma_mcp/operator_actions.py"
+    ) in dockerfile
     assert "COPY backend/scripts/live18_railway_database_phase.py" in dockerfile
     assert "COPY backend/tests/live_acceptance ./tests/live_acceptance" in dockerfile
     assert "COPY backend/tests/live_canonical ./tests/live_canonical" in dockerfile
