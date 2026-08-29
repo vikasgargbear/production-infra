@@ -1748,14 +1748,24 @@ def test_service_and_operator_delegation_are_both_required(monkeypatch):
         "agent_grant_id": str(uuid4()),
     }
     monkeypatch.setattr(mcp_actions, "decode_jwt", lambda *_args, **_kwargs: claims)
+    live_checks = []
+    monkeypatch.setattr(
+        mcp_actions,
+        "live_operator_action_authority_is_active",
+        lambda db, **kwargs: live_checks.append((db, kwargs)) or True,
+    )
 
+    database = object()
     context = mcp_actions.get_action_context(
         "Bearer delegated-token",
         HTTPAuthorizationCredentials(scheme="Bearer", credentials="s" * 32),
-        object(),
+        database,
     )
     assert context.operation_key == "sales.order.prepare"
     assert context.branch_ids == (BRANCH_ID,)
+    assert live_checks[0][0] is database
+    assert live_checks[0][1]["context"] is context
+    assert live_checks[0][1]["policy"].operation_key == "sales.order.prepare"
 
     with pytest.raises(Exception) as error:
         mcp_actions.get_action_context(
@@ -1829,6 +1839,13 @@ def test_provisioning_operator_delegation_is_provider_and_exact_sha_bound(
         mcp_actions,
         "require_canonical_provisioning_authority",
         lambda db: provisioning_checks.append(db),
+    )
+    monkeypatch.setattr(
+        mcp_actions,
+        "live_operator_action_authority_is_active",
+        lambda *_args, **_kwargs: pytest.fail(
+            "provisioning authority must not query an ordinary agent grant"
+        ),
     )
 
     database = object()

@@ -37,7 +37,12 @@ from ....domain.operator_actions import (
     policy_for,
     validate_prepare_payload_semantics,
 )
-from .mcp_agent_grants import _internal_auth, bearer
+from .mcp_agent_grants import (
+    _internal_auth,
+    bearer,
+    live_operator_action_authority_is_active,
+)
+from .mcp_master_contract import master_write_policy_for
 from ..canonical_erp_reads import (
     CanonicalCustomerReceiptReadback,
     canonical_customer_cheque_action_readback,
@@ -323,6 +328,22 @@ def _require_provisioning_deployment_identity(claims: dict[str, Any]) -> None:
     _canonical_numeric_claim(claims, "provisioning_run_attempt")
 
 
+def _action_policy_for(operation_key: str):
+    """Resolve the one reviewed action policy shared by issuance and use."""
+
+    return policy_for(operation_key) or master_write_policy_for(operation_key)
+
+
+def _deny_inactive_action_authority() -> None:
+    raise HTTPException(
+        status_code=403,
+        detail=_error_detail(
+            ActionErrorCode.SCOPE_DENIED,
+            "Canonical operator authority is no longer active",
+        ),
+    )
+
+
 def get_action_context(
     delegated_authorization: str = Header(
         ..., alias="X-MCP-Delegated-Authorization", min_length=8, max_length=8192
@@ -330,10 +351,11 @@ def get_action_context(
     service_credentials: HTTPAuthorizationCredentials = Depends(bearer),
     db: Session = Depends(get_db),
 ) -> ActionContext:
-    """Require service authentication and a short-lived signed action grant."""
+    """Require service authentication plus live durable action authority."""
     _internal_auth(service_credentials)
     claims = _parse_action_token(delegated_authorization)
-    if claims["token_profile"] == ACTION_TOKEN_PROFILE:
+    is_normal_action = claims["token_profile"] == ACTION_TOKEN_PROFILE
+    if is_normal_action:
         require_canonical_session_authority(db)
     else:
         require_canonical_provisioning_authority(db)
@@ -376,7 +398,10 @@ def get_action_context(
             status_code=401,
             detail=_error_detail(ActionErrorCode.AUTH_REQUIRED, "Invalid canonical command delegation"),
         ) from exc
-    return ActionContext(
+    policy = _action_policy_for(operation_key)
+    if policy is None or permission != policy.permission:
+        _deny_inactive_action_authority()
+    context = ActionContext(
         auth_user_id=_uuid_claim(claims, "auth_user_id"),
         user_id=_uuid_claim(claims, "user_id"),
         organization_id=_uuid_claim(claims, "org_id"),
@@ -389,6 +414,12 @@ def get_action_context(
         organization_scope=claims.get("operator_organization_scope") is True,
         delegated_command_request_id=delegated_command_request_id,
     )
+    if is_normal_action:
+        if not live_operator_action_authority_is_active(
+            db, context=context, policy=policy
+        ):
+            _deny_inactive_action_authority()
+    return context
 
 
 def _require_release_gate(service: OperatorActionService) -> None:

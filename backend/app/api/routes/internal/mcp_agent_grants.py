@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from ....core.auth.jwt_auth import create_access_token
 from ....core.auth.session_authority import require_canonical_session_authority
 from ....core.database import get_db
-from ....domain.operator_actions import ActionPolicy
+from ....domain.operator_actions import ActionContext, ActionPolicy
 from ....domain.operator_actions import policy_for as operator_policy_for
 from .mcp_contract import policy_for
 from .mcp_master_contract import master_write_policy_for
@@ -183,6 +183,159 @@ def _operator_capability_approval_policy(policy: ActionPolicy) -> str:
         "explicit_human": "actor_confirmation",
         "command_policy": "actor_confirmation",
     }.get(policy.approval_policy, policy.approval_policy)
+
+
+def live_operator_action_authority_is_active(
+    db: Session,
+    *,
+    context: ActionContext,
+    policy: ActionPolicy,
+) -> bool:
+    """Revalidate the durable authority behind a normal action delegation.
+
+    A short-lived JWT binds the request but never snapshots authorization.
+    This query deliberately repeats every mutable fact used at issuance so a
+    revocation or policy/RBAC change takes effect on the next action request.
+    """
+
+    if (
+        context.operation_key != policy.operation_key
+        or context.permission != policy.permission
+    ):
+        return False
+
+    operation_mode = "read" if policy.risk_class == "read_only" else "write"
+    capability_approval_policy = _operator_capability_approval_policy(policy)
+
+    # The verified Auth subject and requested organization activate RLS. The
+    # signed membership identifier is matched below, never trusted to activate
+    # database context.
+    db.execute(
+        text("SELECT erp_security.activate_context(:auth_user_id, :org_id)"),
+        {
+            "auth_user_id": context.auth_user_id,
+            "org_id": context.organization_id,
+        },
+    )
+    rows = db.execute(
+        text(
+            """
+            WITH requested_scope(branch_id) AS (
+                SELECT unnest(CAST(:branch_ids AS uuid[]))
+            )
+            SELECT grant_row.branch_id AS grant_branch_id
+              FROM automation.agent_grants AS grant_row
+              JOIN automation.agent_grant_capabilities AS capability
+                ON capability.org_id=grant_row.org_id
+               AND capability.agent_grant_id=grant_row.id
+              JOIN core.memberships AS membership
+                ON membership.org_id=grant_row.org_id
+               AND membership.id=grant_row.subject_membership_id
+              JOIN core.users AS user_row ON user_row.id=membership.user_id
+              JOIN core.organizations AS organization ON organization.id=grant_row.org_id
+             WHERE grant_row.org_id=:org_id
+               AND grant_row.id=:agent_grant_id
+               AND grant_row.subject_membership_id=:membership_id
+               AND grant_row.client_id=:client_id
+               AND grant_row.status='active'
+               AND grant_row.expires_at>transaction_timestamp()
+               AND membership.user_id=:user_id
+               AND membership.status='active'
+               AND user_row.auth_user_id=:auth_user_id
+               AND user_row.status='active'
+               AND organization.status='active'
+               AND capability.capability_code=:operation_key
+               AND capability.operation_mode=:operation_mode
+               AND capability.risk_class=:risk_class
+               AND capability.approval_policy=:approval_policy
+               AND capability.status='active'
+               AND ((:organization_scope AND grant_row.branch_id IS NULL)
+                    OR (NOT :organization_scope
+                        AND grant_row.branch_id IS NOT NULL
+                        AND cardinality(CAST(:branch_ids AS uuid[]))=1
+                        AND grant_row.branch_id=ANY(CAST(:branch_ids AS uuid[]))))
+               AND EXISTS (
+                   SELECT 1
+                     FROM core.access_grants AS grant_access
+                     JOIN core.roles AS grant_role
+                       ON grant_role.org_id=grant_access.org_id
+                      AND grant_role.id=grant_access.role_id
+                     JOIN core.role_permissions AS grant_role_permission
+                       ON grant_role_permission.org_id=grant_role.org_id
+                      AND grant_role_permission.role_id=grant_role.id
+                     JOIN core.permissions AS grant_permission
+                       ON grant_permission.code=grant_role_permission.permission_code
+                    WHERE grant_access.org_id=grant_row.org_id
+                      AND grant_access.membership_id=membership.id
+                      AND grant_access.status='active'
+                      AND grant_access.valid_from_at<=transaction_timestamp()
+                      AND (grant_access.expires_at IS NULL
+                           OR grant_access.expires_at>transaction_timestamp())
+                      AND grant_role.status='active'
+                      AND grant_permission.status='active'
+                      AND grant_permission.code=:permission_code
+                      AND ((grant_row.branch_id IS NULL
+                            AND grant_access.scope_kind='organization'
+                            AND grant_access.branch_id IS NULL)
+                           OR (grant_row.branch_id IS NOT NULL
+                               AND grant_access.scope_kind='branch'
+                               AND grant_access.branch_id=grant_row.branch_id))
+               )
+               AND NOT EXISTS (
+                   SELECT 1
+                     FROM requested_scope
+                    WHERE NOT EXISTS (
+                              SELECT 1 FROM core.branches AS branch
+                               WHERE branch.org_id=grant_row.org_id
+                                 AND branch.id=requested_scope.branch_id
+                                 AND branch.status='active'
+                          )
+                       OR NOT EXISTS (
+                              SELECT 1
+                                FROM core.access_grants AS requested_access
+                                JOIN core.roles AS requested_role
+                                  ON requested_role.org_id=requested_access.org_id
+                                 AND requested_role.id=requested_access.role_id
+                                JOIN core.role_permissions AS requested_role_permission
+                                  ON requested_role_permission.org_id=requested_role.org_id
+                                 AND requested_role_permission.role_id=requested_role.id
+                                JOIN core.permissions AS requested_permission
+                                  ON requested_permission.code=requested_role_permission.permission_code
+                               WHERE requested_access.org_id=grant_row.org_id
+                                 AND requested_access.membership_id=membership.id
+                                 AND requested_access.status='active'
+                                 AND requested_access.valid_from_at<=transaction_timestamp()
+                                 AND (requested_access.expires_at IS NULL
+                                      OR requested_access.expires_at>transaction_timestamp())
+                                 AND requested_role.status='active'
+                                 AND requested_permission.status='active'
+                                 AND requested_permission.code=:permission_code
+                                 AND ((requested_access.scope_kind='organization'
+                                       AND requested_access.branch_id IS NULL)
+                                      OR (requested_access.scope_kind='branch'
+                                          AND requested_access.branch_id=requested_scope.branch_id))
+                          )
+               )
+             LIMIT 2
+            """
+        ),
+        {
+            "org_id": context.organization_id,
+            "agent_grant_id": context.agent_grant_id,
+            "membership_id": context.membership_id,
+            "client_id": context.client_id,
+            "user_id": context.user_id,
+            "auth_user_id": context.auth_user_id,
+            "operation_key": policy.operation_key,
+            "operation_mode": operation_mode,
+            "risk_class": policy.risk_class,
+            "approval_policy": capability_approval_policy,
+            "permission_code": policy.permission,
+            "organization_scope": context.organization_scope,
+            "branch_ids": list(context.branch_ids),
+        },
+    ).fetchall()
+    return len(rows) == 1
 
 
 def _validate_operator_request(
