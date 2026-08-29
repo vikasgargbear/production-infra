@@ -43,10 +43,8 @@ const PaymentFlowOptimized: React.FC = () => {
   // Auto-focus amount when customer is selected
   useEffect(() => {
     if (selectedCustomer && amountRef.current) {
-      setTimeout(() => {
-        amountRef.current?.focus();
-        amountRef.current?.select();
-      }, 100);
+      amountRef.current.focus();
+      amountRef.current.select();
     }
   }, [selectedCustomer]);
 
