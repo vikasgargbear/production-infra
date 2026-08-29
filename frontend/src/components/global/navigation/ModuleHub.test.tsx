@@ -38,6 +38,33 @@ const TestHub = ({ renderVersion }: { renderVersion: number }) => {
 };
 
 describe('ModuleHub active module stability', () => {
+  it('keeps Home at the top of every desktop sidebar before module links', () => {
+    const onClose = jest.fn();
+    render(
+      <SidebarProvider>
+        <ModuleHub
+          title="Returns"
+          modules={[
+            {
+              id: 'sales-return',
+              fullLabel: 'Sales Return',
+              icon: ShoppingCart,
+              color: 'red',
+              component: SalesReturn,
+            },
+          ]}
+          onClose={onClose}
+        />
+      </SidebarProvider>,
+    );
+
+    const home = screen.getAllByRole('button', { name: 'Back to Home' }).at(-1)!;
+    const module = screen.getAllByRole('button', { name: 'Sales Return' }).at(-1)!;
+    expect(home.compareDocumentPosition(module) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(home);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   it('does not reset to the default when a parent recreates an equivalent module array', () => {
     const { rerender } = render(
       <SidebarProvider>
