@@ -1,3 +1,4 @@
+-- Revision 20260829_0055.
 SET LOCAL ROLE erp_migration_owner;
 
 CREATE FUNCTION erp_master_commands.configure_product_draft_idempotent(

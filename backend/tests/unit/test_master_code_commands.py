@@ -62,7 +62,7 @@ def test_master_code_migration_is_hash_bound_linear_and_deployed() -> None:
         "master_code_deployment_contract",
     )
     assert onboarding_revision.revision == "20260826_0028"
-    assert deployment.EXPECTED_CANONICAL_ALEMBIC_HEAD == "20260829_0054"
+    assert deployment.EXPECTED_CANONICAL_ALEMBIC_HEAD == "20260829_0055"
 
 
 def test_generated_authority_manifest_is_exact_and_post_baseline() -> None:
@@ -253,7 +253,7 @@ def test_rest_and_mcp_share_canonical_master_command_helpers() -> None:
     assert "CanonicalProductSetupWrite" in mcp_source
     assert "configure_product_draft_idempotent" in mcp_source
     idempotent_setup_sql = (
-        ROOT / "backend/alembic/sql/20260829_0050_mcp_product_setup_idempotency.sql"
+        ROOT / "backend/alembic/sql/20260829_0055_mcp_product_setup_idempotency.sql"
     ).read_text(encoding="utf-8")
     assert "FROM erp_master_commands.configure_product_draft(" in idempotent_setup_sql
     assert "erp_core_commands.claim(" in idempotent_setup_sql

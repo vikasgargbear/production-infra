@@ -7,8 +7,8 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).parents[3]
-SQL = ROOT / "backend/alembic/sql/20260829_0050_mcp_product_setup_idempotency.sql"
-REVISION = ROOT / "backend/alembic/versions/20260829_0050_mcp_product_setup_idempotency.py"
+SQL = ROOT / "backend/alembic/sql/20260829_0055_mcp_product_setup_idempotency.sql"
+REVISION = ROOT / "backend/alembic/versions/20260829_0055_mcp_product_setup_idempotency.py"
 
 
 def _load(path: Path):
@@ -23,7 +23,8 @@ def test_migration_is_hash_bound_and_linear() -> None:
     revision = _load(REVISION)
     source = SQL.read_bytes()
 
-    assert revision.revision == "20260829_0050"
+    assert revision.revision == "20260829_0055"
+    assert revision.down_revision == "20260829_0054"
     assert revision.down_revision == "20260828_0049"
     assert revision.EXPECTED_SQL_SHA256 == hashlib.sha256(source).hexdigest()
     assert revision._reviewed_sql().encode("utf-8") == source
@@ -51,11 +52,11 @@ def test_schema_authority_and_runtime_head_include_the_wrapper() -> None:
         (ROOT / "database/schema-authority.json").read_text(encoding="utf-8")
     )
     required = set(authority["required_migration_files"])
-    assert "backend/alembic/versions/20260829_0050_mcp_product_setup_idempotency.py" in required
-    assert "backend/alembic/sql/20260829_0050_mcp_product_setup_idempotency.sql" in required
+    assert "backend/alembic/versions/20260829_0055_mcp_product_setup_idempotency.py" in required
+    assert "backend/alembic/sql/20260829_0055_mcp_product_setup_idempotency.sql" in required
 
     from app.infrastructure.operator_actions.deployment_contract import (
         EXPECTED_CANONICAL_ALEMBIC_HEAD,
     )
 
-    assert EXPECTED_CANONICAL_ALEMBIC_HEAD == "20260829_0050"
+    assert EXPECTED_CANONICAL_ALEMBIC_HEAD == "20260829_0055"

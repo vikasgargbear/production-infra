@@ -1,7 +1,7 @@
 """Add exactly replay-safe delegated product setup.
 
-Revision ID: 20260829_0050
-Revises: 20260828_0049
+Revision ID: 20260829_0055
+Revises: 20260829_0054
 """
 
 from __future__ import annotations
@@ -14,17 +14,17 @@ from alembic import context, op
 from migration_support.canonical_baseline import CanonicalBaselineError
 
 
-revision = "20260829_0050"
-down_revision = "20260828_0049"
+revision = "20260829_0055"
+down_revision = "20260829_0054"
 branch_labels = None
 depends_on = None
 
 SQL_PATH = (
     Path(__file__).resolve().parents[1]
     / "sql"
-    / "20260829_0050_mcp_product_setup_idempotency.sql"
+    / "20260829_0055_mcp_product_setup_idempotency.sql"
 )
-EXPECTED_SQL_SHA256 = "a925866f4baeeae4f70e437ce4756092c701571a83ed1c284492ee805e47939a"
+EXPECTED_SQL_SHA256 = "238dd973beba2c3ab4b2e09d196b6ed011a17b2c3f89ae60ca05d4095e6bec07"
 
 
 def _reviewed_sql() -> str:
