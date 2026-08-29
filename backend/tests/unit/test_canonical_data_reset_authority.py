@@ -383,6 +383,7 @@ def test_attachment_snapshot_is_exactly_tenant_scoped_and_rejects_holds() -> Non
             "a" * 64,
         ),
     )
+    assert reset_authority._evidence_storage_object_paths(snapshot) == (object_path,)
     held = _ForeignKeyCursor(
         [
             (
@@ -396,6 +397,52 @@ def test_attachment_snapshot_is_exactly_tenant_scoped_and_rejects_holds() -> Non
     )
     with pytest.raises(ResetAuthorityError, match="legal holds"):
         reset_authority._organization_attachment_snapshot(held, organization_id)
+
+
+def test_attachment_snapshot_allows_only_bounded_demo_metadata() -> None:
+    organization_id = reset_authority.DEMO_ORGANIZATION_ID
+    cursor = _ForeignKeyCursor(
+        [
+            (
+                "attachment-id",
+                reset_authority.DEMO_EVIDENCE_METADATA_BUCKET,
+                "demo/run/synthetic.json",
+                "a" * 64,
+                False,
+            )
+        ]
+    )
+
+    snapshot = reset_authority._organization_attachment_snapshot(
+        cursor, organization_id
+    )
+
+    assert snapshot[0][1:3] == (
+        reset_authority.DEMO_EVIDENCE_METADATA_BUCKET,
+        "demo/run/synthetic.json",
+    )
+    assert reset_authority._evidence_storage_object_paths(snapshot) == ()
+
+    for invalid_organization_id, invalid_path in (
+        ("10000000-0000-4000-8000-000000000010", "demo/run/synthetic.json"),
+        (organization_id, "other/run/synthetic.json"),
+        (organization_id, "demo/../other/synthetic.json"),
+    ):
+        invalid = _ForeignKeyCursor(
+            [
+                (
+                    "attachment-id",
+                    reset_authority.DEMO_EVIDENCE_METADATA_BUCKET,
+                    invalid_path,
+                    "a" * 64,
+                    False,
+                )
+            ]
+        )
+        with pytest.raises(ResetAuthorityError, match="scope drifted"):
+            reset_authority._organization_attachment_snapshot(
+                invalid, invalid_organization_id
+            )
 
 
 def test_organization_delete_order_places_children_before_parents() -> None:

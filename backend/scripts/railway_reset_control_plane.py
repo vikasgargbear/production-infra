@@ -269,6 +269,7 @@ def _plan_organization(request: Mapping[str, Any]) -> dict[str, Any]:
         "evidence_attachment_manifest_sha256": plan[
             "evidence_attachment_manifest_sha256"
         ],
+        "evidence_storage_object_count": plan["evidence_storage_object_count"],
         "issued_at": issued_at,
         "not_before": issued_at + PURGE_PLAN_MINIMUM_DELAY_SECONDS,
         "expires_at": issued_at + PURGE_PLAN_TTL_SECONDS,
@@ -324,6 +325,7 @@ def _purge_organization(request: Mapping[str, Any]) -> dict[str, Any]:
     for key in (
         "evidence_attachment_count",
         "evidence_attachment_manifest_sha256",
+        "evidence_storage_object_count",
     ):
         if current.get(key) != signed_plan.get(key):
             raise RailwayResetControlError(
@@ -332,7 +334,7 @@ def _purge_organization(request: Mapping[str, Any]) -> dict[str, Any]:
     object_paths = current.get("evidence_object_paths")
     if (
         not isinstance(object_paths, list)
-        or len(object_paths) != current["evidence_attachment_count"]
+        or len(object_paths) != current["evidence_storage_object_count"]
         or any(not isinstance(path, str) or not path for path in object_paths)
     ):
         raise RailwayResetControlError(

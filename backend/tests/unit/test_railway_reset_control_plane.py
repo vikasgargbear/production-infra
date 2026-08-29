@@ -217,6 +217,7 @@ def test_purge_plan_uses_the_bounded_owner_authority(monkeypatch) -> None:
                 "organization_row_count": 7,
                 "evidence_attachment_count": 0,
                 "evidence_attachment_manifest_sha256": "d" * 64,
+                "evidence_storage_object_count": 0,
                 "evidence_object_paths": [],
             },
         },
@@ -256,6 +257,7 @@ def test_signed_purge_plan_requires_delay_exact_boundary_and_separate_execution(
         "organization_row_count": 7,
         "evidence_attachment_count": 0,
         "evidence_attachment_manifest_sha256": "d" * 64,
+        "evidence_storage_object_count": 0,
         "issued_at": issued_at,
         "not_before": issued_at + 60,
         "expires_at": issued_at + 1800,
@@ -283,6 +285,7 @@ def test_signed_purge_plan_requires_delay_exact_boundary_and_separate_execution(
             "plan": {
                 "evidence_attachment_count": 0,
                 "evidence_attachment_manifest_sha256": "d" * 64,
+                "evidence_storage_object_count": 0,
                 "evidence_object_paths": [],
             }
         },
@@ -321,6 +324,7 @@ def test_purge_deletes_only_signed_evidence_object_paths(monkeypatch) -> None:
         "organization_row_count": 7,
         "evidence_attachment_count": 1,
         "evidence_attachment_manifest_sha256": "d" * 64,
+        "evidence_storage_object_count": 1,
         "issued_at": issued_at,
         "not_before": issued_at + 60,
         "expires_at": issued_at + 1800,
@@ -351,6 +355,7 @@ def test_purge_deletes_only_signed_evidence_object_paths(monkeypatch) -> None:
             "plan": {
                 "evidence_attachment_count": 1,
                 "evidence_attachment_manifest_sha256": "d" * 64,
+                "evidence_storage_object_count": 1,
                 "evidence_object_paths": [object_path],
             }
         },
