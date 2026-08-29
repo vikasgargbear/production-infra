@@ -22,11 +22,14 @@ from ...schemas.master.supplier import CanonicalSupplierCreate, CanonicalSupplie
 from ....infrastructure import canonical_write_commands
 from ..canonical_erp_reads import (
     CanonicalProductActivationWrite,
+    CanonicalProductCategoryCreate,
     CanonicalProductDraftCreate,
+    CanonicalProductManufacturerCreate,
     CanonicalProductSetupWrite,
     _execute_canonical_customer_create,
     _execute_canonical_product_activation,
     _execute_canonical_product_create,
+    _execute_product_reference_create,
     _execute_canonical_supplier_create,
     _raise_master_create_database_error,
 )
@@ -39,6 +42,8 @@ from .mcp_actions import get_action_context
 from .mcp_master_contract import (
     CUSTOMER_UPDATE_OPERATION,
     PRODUCT_ACTIVATION_OPERATION,
+    PRODUCT_CATEGORY_CREATE_OPERATION,
+    PRODUCT_MANUFACTURER_CREATE_OPERATION,
     SUPPLIER_UPDATE_OPERATION,
     DRUG_LICENSE_RECORD_OPERATION,
     master_write_policy_for,
@@ -67,6 +72,20 @@ class MCPProductSetup(CanonicalProductSetupWrite):
 
 class MCPProductActivation(CanonicalProductActivationWrite):
     product_id: UUID
+    idempotency_key: str = Field(
+        min_length=8, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$"
+    )
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+
+class MCPProductCategoryCreate(CanonicalProductCategoryCreate):
+    idempotency_key: str = Field(
+        min_length=8, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$"
+    )
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+
+class MCPProductManufacturerCreate(CanonicalProductManufacturerCreate):
     idempotency_key: str = Field(
         min_length=8, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$"
     )
@@ -239,6 +258,54 @@ def create_product_draft(
             db, context.organization_id, product, request.idempotency_key
         ),
     )
+
+
+@router.post("/product-categories")
+def create_product_category(
+    request: MCPProductCategoryCreate,
+    context: ActionContext = Depends(get_action_context),
+    db: Session = Depends(get_db),
+):
+    category = CanonicalProductCategoryCreate.model_validate(
+        request.model_dump(exclude={"idempotency_key"})
+    )
+    created = _run_master_write(
+        db, context, PRODUCT_CATEGORY_CREATE_OPERATION,
+        lambda: _execute_product_reference_create(
+            db, org_id=context.organization_id,
+            function_name="create_product_category", value=category.name,
+            idempotency_key=request.idempotency_key,
+        ),
+    )
+    return {
+        "category_id": created["category_id"], "code": created["category_code"],
+        "name": created["created_category_name"], "row_version": created["row_version"],
+        "idempotency_replayed": created["idempotency_replayed"],
+    }
+
+
+@router.post("/product-manufacturers")
+def create_product_manufacturer(
+    request: MCPProductManufacturerCreate,
+    context: ActionContext = Depends(get_action_context),
+    db: Session = Depends(get_db),
+):
+    manufacturer = CanonicalProductManufacturerCreate.model_validate(
+        request.model_dump(exclude={"idempotency_key"})
+    )
+    created = _run_master_write(
+        db, context, PRODUCT_MANUFACTURER_CREATE_OPERATION,
+        lambda: _execute_product_reference_create(
+            db, org_id=context.organization_id,
+            function_name="create_product_manufacturer", value=manufacturer.legal_name,
+            idempotency_key=request.idempotency_key,
+        ),
+    )
+    return {
+        "manufacturer_party_id": created["manufacturer_party_id"],
+        "legal_name": created["legal_name"], "row_version": created["row_version"],
+        "idempotency_replayed": created["idempotency_replayed"],
+    }
 
 
 @router.post("/products/setup")

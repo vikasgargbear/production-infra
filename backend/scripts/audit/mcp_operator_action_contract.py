@@ -92,6 +92,8 @@ EXPECTED_MASTER_WRITE_TOOLS = {
     "erp_product_activate",
     "erp_product_create",
     "erp_product_setup",
+    "erp_product_category_create",
+    "erp_product_manufacturer_create",
     "erp_customer_create",
     "erp_customer_update",
     "erp_supplier_create",

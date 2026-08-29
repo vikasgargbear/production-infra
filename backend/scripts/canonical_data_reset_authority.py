@@ -28,7 +28,7 @@ except ModuleNotFoundError:  # pragma: no cover - exercised by direct CLI execut
 
 CONTRACT_VERSION = "canonical-data-reset-v1"
 CANONICAL_STAGING_PROJECT_REF = "rgihahbmkrmhitjdjvev"
-EXPECTED_CANONICAL_RELATION_COUNT = 119
+EXPECTED_CANONICAL_RELATION_COUNT = 120
 EXPECTED_EPHEMERAL_RELATION_COUNT = 9
 EXPECTED_ALEMBIC_SCHEMA_COUNT = 30
 EVIDENCE_STORAGE_BUCKET = "canonical-evidence-private-v1"
@@ -320,9 +320,9 @@ def classify_relations(
         )
 
     reset_relations = tuple(sorted(set(canonical) - set(PRESERVED_SEED_RELATIONS)))
-    if len(reset_relations) != 114:
+    if len(reset_relations) != 115:
         raise ResetAuthorityError(
-            f"reset relation count drifted: expected=114 observed={len(reset_relations)}"
+            f"reset relation count drifted: expected=115 observed={len(reset_relations)}"
         )
     if set(reset_relations) & set(PRESERVED_SEED_RELATIONS):
         raise ResetAuthorityError("preserved seed relation entered reset scope")

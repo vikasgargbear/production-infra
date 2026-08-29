@@ -130,6 +130,8 @@ NON_PERSISTENT_POST_OWNERS = {
     },
 }
 CANONICAL_MASTER_WRITES = {
+    ("POST", "/api/products/setup-options/categories"): "create_product_category",
+    ("POST", "/api/products/setup-options/manufacturers"): "create_product_manufacturer",
     ("POST", "/api/products/"): "create_product_draft",
     ("PUT", "/api/products/{product_id}"): "update_product_draft",
     ("DELETE", "/api/products/{product_id}"): "delete_product_draft",
@@ -158,6 +160,8 @@ ALLOWED_EFFECTIVE_MUTATIONS = {
     ("POST", "/api/internal/mcp/master/products"),
     ("POST", "/api/internal/mcp/master/products/activate"),
     ("POST", "/api/internal/mcp/master/products/setup"),
+    ("POST", "/api/internal/mcp/master/product-categories"),
+    ("POST", "/api/internal/mcp/master/product-manufacturers"),
     ("POST", "/api/internal/mcp/master/customers"),
     ("POST", "/api/internal/mcp/master/customers/update"),
     ("POST", "/api/internal/mcp/master/suppliers"),

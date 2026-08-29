@@ -383,7 +383,7 @@ async def test_oauth_challenge_inventory_annotations_and_valid_sdk_session() -> 
         advertised = (await session.list_tools()).tools
 
     assert tuple(sorted(tool.name for tool in advertised)) == registered_tool_names()
-    assert len(advertised) == 77
+    assert len(advertised) == 79
     by_name = {tool.name: tool for tool in advertised}
     for name in OPERATIONS:
         annotation = by_name[name].annotations

@@ -13,6 +13,8 @@ import {
   ProductHsnOption,
   ProductIngredientOption,
   ProductMutationResponse,
+  ProductCategoryReference,
+  ProductManufacturerReference,
   ProductSetupInput,
   ProductSetupOptions,
   ProductSetupRead,
@@ -90,6 +92,18 @@ export const productsApi = {
   getSetupOptions: (manufacturerSearch = '') => apiHelpers.get<ProductSetupOptions>(
     '/products/setup-options',
     { params: { manufacturer_search: manufacturerSearch } },
+  ),
+
+  createCategory: (name: string, idempotencyKey: string) => apiHelpers.post<ProductCategoryReference>(
+    '/products/setup-options/categories',
+    { name },
+    masterCreateRequestConfig(idempotencyKey),
+  ),
+
+  createManufacturer: (legalName: string, idempotencyKey: string) => apiHelpers.post<ProductManufacturerReference>(
+    '/products/setup-options/manufacturers',
+    { legal_name: legalName },
+    masterCreateRequestConfig(idempotencyKey),
   ),
 
   searchIngredients: (search: string) => apiHelpers.get<ProductIngredientOption[]>(

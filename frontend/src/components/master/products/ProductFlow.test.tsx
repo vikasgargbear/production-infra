@@ -11,6 +11,8 @@ const mockSaveSetup = jest.fn();
 const mockActivate = jest.fn();
 const mockSearchHsnCodes = jest.fn();
 const mockSearchIngredients = jest.fn();
+const mockCreateCategory = jest.fn();
+const mockCreateManufacturer = jest.fn();
 const mockSuccess = jest.fn();
 
 jest.mock('../../../services/api', () => ({
@@ -23,6 +25,8 @@ jest.mock('../../../services/api', () => ({
     activate: (...args: unknown[]) => mockActivate(...args),
     searchHsnCodes: (...args: unknown[]) => mockSearchHsnCodes(...args),
     searchIngredients: (...args: unknown[]) => mockSearchIngredients(...args),
+    createCategory: (...args: unknown[]) => mockCreateCategory(...args),
+    createManufacturer: (...args: unknown[]) => mockCreateManufacturer(...args),
   },
 }));
 jest.mock('../../global/ui/feedback/Toast', () => ({ useToast: () => ({ success: mockSuccess }) }));
@@ -41,7 +45,7 @@ const options = {
     { code: 'STRIP', name: 'Strip', symbol: 'strip', dimension: 'count', decimal_places: 3 },
     { code: 'BX', name: 'Box', symbol: 'box', dimension: 'count', decimal_places: 3 },
   ],
-  manufacturers: [{ manufacturer_party_id: manufacturerId, legal_name: 'Micro Labs', supplier_code: 'SUP-1' }],
+  manufacturers: [{ manufacturer_party_id: manufacturerId, legal_name: 'Micro Labs' }],
 };
 const ingredient = {
   ingredient_id: ingredientId, canonical_name: 'Paracetamol', salt_or_form: null,
@@ -86,7 +90,7 @@ const fillRequiredMedicine = async () => {
   fireEvent.change(screen.getByLabelText('Product name *'), { target: { value: 'Dolo 500' } });
   fireEvent.change(screen.getByLabelText(/Generic display name/), { target: { value: 'Paracetamol' } });
   fireEvent.change(screen.getByLabelText('Product kind *'), { target: { value: 'medicine' } });
-  fireEvent.change(screen.getByLabelText(/Manufacturer/), { target: { value: manufacturerId } });
+  fireEvent.change(screen.getByLabelText(/^Legal manufacturer/), { target: { value: manufacturerId } });
   fireEvent.change(screen.getByLabelText('Dosage form *'), { target: { value: 'Tablet' } });
   fireEvent.change(screen.getByLabelText(/Strength \*/), { target: { value: '500 mg' } });
   await selectReviewedHsn();
@@ -158,4 +162,69 @@ test('keeps receipt-owned batch, price and quantity facts out of product setup',
   expect(screen.queryByLabelText(/MRP/i)).not.toBeInTheDocument();
   expect(screen.queryByLabelText(/Expiry date/i)).not.toBeInTheDocument();
   expect(screen.queryByLabelText(/Opening quantity/i)).not.toBeInTheDocument();
+});
+
+test('creates empty organization category and legal manufacturer references inline and selects them', async () => {
+  const categoryId = '77777777-7777-7777-8777-777777777777';
+  mockGetSetupOptions.mockResolvedValueOnce({ data: {
+    ...options, categories: [], manufacturers: [],
+  } });
+  mockCreateManufacturer.mockResolvedValue({ data: {
+    manufacturer_party_id: manufacturerId, legal_name: 'Exact Pharma Laboratories', row_version: 1,
+  } });
+  mockCreateCategory.mockResolvedValue({ data: {
+    category_id: categoryId, code: 'ANALGESICS', name: 'Analgesics', parent_id: null, row_version: 1,
+  } });
+  render(<ProductFlow open onClose={jest.fn()} onProductCreated={jest.fn()} />);
+
+  expect(await screen.findByText(/No manufacturer exists for this organization yet/)).toBeInTheDocument();
+  expect(screen.getByText(/No product categories yet/)).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText('New legal manufacturer name'), {
+    target: { value: 'Exact Pharma Laboratories' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Add manufacturer' }));
+  await waitFor(() => expect(mockCreateManufacturer).toHaveBeenCalledWith(
+    'Exact Pharma Laboratories', expect.stringMatching(/^erp-web-master-manufacturer-create:/),
+  ));
+  await waitFor(() => expect(screen.getByLabelText(/^Legal manufacturer/)).toHaveValue(manufacturerId));
+
+  fireEvent.change(screen.getByLabelText('New product category name'), {
+    target: { value: 'Analgesics' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Add category' }));
+  await waitFor(() => expect(mockCreateCategory).toHaveBeenCalledWith(
+    'Analgesics', expect.stringMatching(/^erp-web-master-category-create:/),
+  ));
+  await waitFor(() => expect(screen.getByLabelText(/^Category/)).toHaveValue(categoryId));
+});
+
+test('retries an uncertain manufacturer request with the same key and blocks a concurrent duplicate', async () => {
+  let releaseFirst: ((value: unknown) => void) | undefined;
+  mockGetSetupOptions.mockResolvedValueOnce({ data: { ...options, manufacturers: [] } });
+  mockCreateManufacturer.mockImplementationOnce(() => new Promise(resolve => {
+    releaseFirst = resolve;
+  }));
+  render(<ProductFlow open onClose={jest.fn()} />);
+  await screen.findByLabelText('New legal manufacturer name');
+  fireEvent.change(screen.getByLabelText('New legal manufacturer name'), {
+    target: { value: 'Exact Pharma Laboratories' },
+  });
+  const button = screen.getByRole('button', { name: 'Add manufacturer' });
+  fireEvent.click(button);
+  fireEvent.click(button);
+  expect(mockCreateManufacturer).toHaveBeenCalledTimes(1);
+  const firstKey = mockCreateManufacturer.mock.calls[0][1];
+  releaseFirst?.(Promise.reject({ response: { data: { detail: 'Retry safely' } } }));
+  expect(await screen.findByText('Retry safely')).toBeInTheDocument();
+
+  mockCreateManufacturer.mockResolvedValueOnce({ data: {
+    manufacturer_party_id: manufacturerId,
+    legal_name: 'Exact Pharma Laboratories',
+    row_version: 1,
+    idempotency_replayed: true,
+  } });
+  fireEvent.click(screen.getByRole('button', { name: 'Add manufacturer' }));
+  await waitFor(() => expect(mockCreateManufacturer).toHaveBeenCalledTimes(2));
+  expect(mockCreateManufacturer.mock.calls[1][1]).toBe(firstKey);
+  await waitFor(() => expect(screen.getByLabelText(/^Legal manufacturer/)).toHaveValue(manufacturerId));
 });

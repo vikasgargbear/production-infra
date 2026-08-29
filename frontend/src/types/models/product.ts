@@ -242,7 +242,23 @@ export interface ProductSetupOptions {
   hsn_reference_ready: boolean;
   categories: Array<{ category_id: string; code: string; name: string; parent_id: string | null }>;
   units: Array<{ code: string; name: string; symbol: string; dimension: string; decimal_places: number }>;
-  manufacturers: Array<{ manufacturer_party_id: string; legal_name: string; supplier_code: string }>;
+  manufacturers: Array<{ manufacturer_party_id: string; legal_name: string }>;
+}
+
+export interface ProductCategoryReference {
+  category_id: string;
+  code: string;
+  name: string;
+  parent_id: string | null;
+  row_version?: number;
+  idempotency_replayed?: boolean;
+}
+
+export interface ProductManufacturerReference {
+  manufacturer_party_id: string;
+  legal_name: string;
+  row_version?: number;
+  idempotency_replayed?: boolean;
 }
 
 export interface ProductIngredientOption {

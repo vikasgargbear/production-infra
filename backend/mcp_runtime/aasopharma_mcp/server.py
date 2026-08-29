@@ -182,7 +182,7 @@ def create_app(
 
     @server.tool()
     async def erp_product_setup_options_get(
-        manufacturer_search: Annotated[str, Field(max_length=100, description="Optional manufacturer or supplier name/code prefix.")] = "",
+        manufacturer_search: Annotated[str, Field(max_length=100, description="Optional legal manufacturer name prefix.")] = "",
     ) -> Any:
         """Return canonical units, categories, manufacturers, and reference readiness for product setup."""
         return await operation_gateway.execute(

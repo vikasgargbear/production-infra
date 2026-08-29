@@ -570,6 +570,109 @@ class CanonicalProductActivationWrite(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
 
+class CanonicalProductCategoryCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+
+class CanonicalProductManufacturerCreate(BaseModel):
+    legal_name: str = Field(min_length=1, max_length=255)
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+
+class CanonicalProductCategoryReadback(BaseModel):
+    category_id: UUID
+    code: str = Field(min_length=1, max_length=64)
+    name: str = Field(min_length=1, max_length=120)
+    parent_id: Optional[UUID] = None
+    row_version: int = Field(ge=1)
+    idempotency_replayed: bool
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class CanonicalProductManufacturerReadback(BaseModel):
+    manufacturer_party_id: UUID
+    legal_name: str = Field(min_length=1, max_length=255)
+    row_version: int = Field(ge=1)
+    idempotency_replayed: bool
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class CanonicalProductCategoryOption(BaseModel):
+    category_id: UUID
+    code: str = Field(min_length=1, max_length=64)
+    name: str = Field(min_length=1, max_length=120)
+    parent_id: Optional[UUID] = None
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class CanonicalProductManufacturerOption(BaseModel):
+    manufacturer_party_id: UUID
+    legal_name: str = Field(min_length=1, max_length=255)
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class CanonicalProductUnitOption(BaseModel):
+    code: str
+    name: str
+    symbol: str
+    dimension: str
+    decimal_places: int = Field(ge=0)
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class CanonicalProductSetupOptionsReadback(BaseModel):
+    business_date: date
+    categories: list[CanonicalProductCategoryOption]
+    units: list[CanonicalProductUnitOption]
+    manufacturers: list[CanonicalProductManufacturerOption]
+    ingredient_reference_ready: bool
+    hsn_reference_ready: bool
+
+    model_config = ConfigDict(extra="forbid")
+
+
+def _execute_product_reference_create(
+    db: Session,
+    *,
+    org_id: UUID,
+    function_name: Literal["create_product_category", "create_product_manufacturer"],
+    value: str,
+    idempotency_key: str,
+):
+    projections = {
+        "create_product_category": (
+            "category_id,category_code,created_category_name,row_version,"
+            "idempotency_replayed"
+        ),
+        "create_product_manufacturer": (
+            "manufacturer_party_id,legal_name,row_version,idempotency_replayed"
+        ),
+    }
+    # Function and parameter names are closed literals above; values remain
+    # bound parameters.  Both REST and MCP call this same command adapter.
+    return db.execute(text(f"""
+        SELECT {projections[function_name]}
+          FROM erp_master_commands.{function_name}(
+            :org_id,:value,:idempotency_key_hash,
+            transaction_timestamp()+interval '24 hours'
+          )
+    """), {
+        "org_id": org_id,
+        "value": value,
+        "idempotency_key_hash": hashlib.sha256(
+            idempotency_key.encode("utf-8")
+        ).digest(),
+    }).mappings().one()
+
+
 def _execute_canonical_product_activation(
     db: Session,
     *,
@@ -849,7 +952,10 @@ def products(limit: int = Query(50, ge=1, le=200), skip: int = Query(0, ge=0),
     return {"products": rows, "total": total, "offset": effective_offset, "limit": limit}
 
 
-@router.get("/products/setup-options")
+@router.get(
+    "/products/setup-options",
+    response_model=CanonicalProductSetupOptionsReadback,
+)
 def product_setup_options(
     manufacturer_search: str = Query("", max_length=100),
     user: dict = PRODUCT_USER,
@@ -875,17 +981,15 @@ def product_setup_options(
          ORDER BY CASE code WHEN 'EA' THEN 0 WHEN 'PK' THEN 1 ELSE 2 END,name,code
     """, {})
     manufacturers = _rows(db, """
-        SELECT party.id AS manufacturer_party_id,party.legal_name,
-               supplier.supplier_code
-          FROM parties.parties party
-          JOIN parties.supplier_accounts supplier
-            ON supplier.org_id=party.org_id AND supplier.party_id=party.id
-         WHERE party.org_id=:org_id AND party.status='active'
-           AND supplier.status IN ('active','on_hold')
+        SELECT party.id AS manufacturer_party_id,party.legal_name
+          FROM catalog.manufacturers manufacturer
+          JOIN parties.parties party
+            ON party.org_id=manufacturer.org_id AND party.id=manufacturer.party_id
+         WHERE manufacturer.org_id=:org_id AND manufacturer.status='active'
+           AND party.status='active'
            AND (:search='' OR pg_catalog.lower(party.legal_name) LIKE :prefix
-                OR pg_catalog.lower(supplier.supplier_code)=:search)
-         ORDER BY CASE WHEN pg_catalog.lower(supplier.supplier_code)=:search THEN 0
-                       WHEN pg_catalog.lower(party.legal_name)=:search THEN 1 ELSE 2 END,
+                OR pg_catalog.lower(party.legal_name)=:search)
+         ORDER BY CASE WHEN pg_catalog.lower(party.legal_name)=:search THEN 0 ELSE 1 END,
                   party.legal_name,party.id LIMIT 100
     """, {"org_id": org_id, "search": search, "prefix": f"{search}%"})
     reference = db.execute(text("""
@@ -910,6 +1014,80 @@ def product_setup_options(
         "units": units,
         "manufacturers": manufacturers,
         **dict(reference),
+    }
+
+
+@router.post(
+    "/products/setup-options/categories",
+    status_code=status.HTTP_201_CREATED,
+    response_model=CanonicalProductCategoryReadback,
+)
+def create_product_category(
+    request: CanonicalProductCategoryCreate,
+    response: Response,
+    idempotency_key: str = Header(
+        ..., alias="X-Idempotency-Key", min_length=8, max_length=128,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+    ),
+    user: dict = PRODUCT_USER,
+    db: Session = Depends(get_db),
+):
+    org_id = _activate(db, user)
+    try:
+        created = _execute_product_reference_create(
+            db, org_id=org_id, function_name="create_product_category",
+            value=request.name, idempotency_key=idempotency_key,
+        )
+        db.commit()
+    except DBAPIError as exc:
+        db.rollback()
+        _raise_master_create_database_error(exc)
+    _set_master_idempotency_headers(
+        response, idempotency_key, created["idempotency_replayed"]
+    )
+    return {
+        "category_id": created["category_id"],
+        "code": created["category_code"],
+        "name": created["created_category_name"],
+        "parent_id": None,
+        "row_version": created["row_version"],
+        "idempotency_replayed": created["idempotency_replayed"],
+    }
+
+
+@router.post(
+    "/products/setup-options/manufacturers",
+    status_code=status.HTTP_201_CREATED,
+    response_model=CanonicalProductManufacturerReadback,
+)
+def create_product_manufacturer(
+    request: CanonicalProductManufacturerCreate,
+    response: Response,
+    idempotency_key: str = Header(
+        ..., alias="X-Idempotency-Key", min_length=8, max_length=128,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+    ),
+    user: dict = PRODUCT_USER,
+    db: Session = Depends(get_db),
+):
+    org_id = _activate(db, user)
+    try:
+        created = _execute_product_reference_create(
+            db, org_id=org_id, function_name="create_product_manufacturer",
+            value=request.legal_name, idempotency_key=idempotency_key,
+        )
+        db.commit()
+    except DBAPIError as exc:
+        db.rollback()
+        _raise_master_create_database_error(exc)
+    _set_master_idempotency_headers(
+        response, idempotency_key, created["idempotency_replayed"]
+    )
+    return {
+        "manufacturer_party_id": created["manufacturer_party_id"],
+        "legal_name": created["legal_name"],
+        "row_version": created["row_version"],
+        "idempotency_replayed": created["idempotency_replayed"],
     }
 
 
