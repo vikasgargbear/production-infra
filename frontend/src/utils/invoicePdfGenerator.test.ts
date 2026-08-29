@@ -202,11 +202,16 @@ test('renders only canonical seller, buyer, line, and exact money facts', () => 
   expect(html).toContain('27ABCDE1234F1Z5');
   expect(html).toContain('MH-MZ6-20B / MH-MZ6-21B');
   expect(html).toContain('MH-BUYER-20B');
-  expect(html).toContain('481910');
-  expect(html).toContain('Batch BATCH-ONE; Exp 2028-09-30; Qty 0.73; Free 0.13');
-  expect(html).toContain('Batch BATCH-TWO; Exp 2029-01-31; Qty 0.5; Free 0');
+  expect(html).toContain('HSN 481910 | EA');
+  expect(html).toContain('<th>Batch</th><th>Expiry</th>');
+  expect(html).toContain('<div>BATCH-ONE</div><div>BATCH-TWO</div>');
+  expect(html).toContain('<div>2028-09-30</div><div>2029-01-31</div>');
   expect(html).toContain('>1.23');
   expect(html).toContain('>2.5%');
+  expect(html).toContain('<th>GST % / Amount</th>');
+  expect(html).toContain('<strong>12%</strong>');
+  expect(html).toContain('<div class="muted">₹18.00</div>');
+  expect(html).toContain('GST by rate and amount');
   expect(html).toContain('₹168.00');
   expect(html).not.toContain('Your Company Name');
   expect(html).not.toContain('Customer Name');
@@ -214,6 +219,9 @@ test('renders only canonical seller, buyer, line, and exact money facts', () => 
   expect(html).not.toContain('3004');
   expect(html).not.toContain('DOC-');
   expect(html).not.toContain('1.234567');
+  expect(html).not.toContain('{{');
+  expect(html).not.toContain('[object Object]');
+  expect(html).not.toContain('canonical-factual-v1');
   expect(html).toContain('thead{display:table-header-group}');
   expect(html).toContain('tr{break-inside:avoid;page-break-inside:avoid}');
   expect(html).not.toContain('.invoice-page{page-break-inside:avoid');
@@ -265,7 +273,9 @@ test('keeps every invoice item column inside the A4 printable width with Amount 
   mockAutoTable.mockClear();
   await downloadInvoicePDF(invoice());
 
-  const options = mockAutoTable.mock.calls.at(-1)?.[1];
+  const options = mockAutoTable.mock.calls
+    .map((call: any[]) => call[1])
+    .find((callOptions: any) => callOptions.head[0][0] === '#');
   expect(options).toBeDefined();
   expect(options.head[0].at(-1)).toBe('Amount');
   expect(options.body[0].at(-1)).toBe('INR 168.00');
@@ -276,9 +286,9 @@ test('keeps every invoice item column inside the A4 printable width with Amount 
 
   const columnWidths = Object.values(options.columnStyles)
     .map((style: any) => style.cellWidth as number);
-  expect(columnWidths).toEqual([7, 80, 14, 16, 11, 19, 19, 26]);
+  expect(columnWidths).toEqual([6, 43, 20, 16, 16, 19, 12, 21, 20, 19]);
   expect(columnWidths.reduce((total: number, width: number) => total + width, 0))
     .toBe(options.tableWidth);
   expect(options.margin.left + options.tableWidth + options.margin.right).toBe(210);
-  expect(options.columnStyles[1].cellWidth).toBeGreaterThan(options.columnStyles[7].cellWidth);
+  expect(options.columnStyles[1].cellWidth).toBeGreaterThan(options.columnStyles[9].cellWidth);
 });
