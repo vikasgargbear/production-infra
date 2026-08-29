@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "aasopharma-erp": {
+      "type": "http",
+      "url": "https://aasopharma-mcp-pilot-production.up.railway.app/mcp",
+      "default_tools_approval_mode": "writes",
+      "oauth": {
+        "clientId": "830faf90-83da-4221-90c8-bb533cc2ed21",
+        "callbackUrl": "http://127.0.0.1/callback/T0CM3qq1LGS-"
+      }
+    }
+  }
+}

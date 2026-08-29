@@ -2,8 +2,8 @@
 
 Use a predefined public OAuth client while Supabase dynamic client registration
 and Client ID Metadata Documents are unavailable. The client uses authorization
-code plus PKCE S256, has no client secret, and is valid only for the exact
-redirect URI copied from ChatGPT app management.
+code plus PKCE S256, has no client secret, and is valid only for the reviewed
+ChatGPT and Codex desktop redirect URIs.
 
 ## Prerequisites
 
@@ -36,6 +36,7 @@ Do not create a ChatGPT connection if any check fails.
 
    ```bash
    export CHATGPT_MCP_OAUTH_CALLBACK_URI='https://chatgpt.com/connector/oauth/_MPTGhIZ1AcM'
+   export CODEX_DESKTOP_MCP_OAUTH_CALLBACK_URI='http://127.0.0.1/callback/T0CM3qq1LGS-'
    export REVIEWED_SHA='the-exact-40-character-deployed-sha'
    export GITHUB_ENV='an-empty-temporary-output-file'
    export CANONICAL_DEMO_EVIDENCE_DIR='an-empty-evidence-directory'
@@ -46,23 +47,25 @@ Do not create a ChatGPT connection if any check fails.
    The existing required inputs are `CANONICAL_STAGING_PROJECT_REF`,
    `SUPABASE_URL`, and `SUPABASE_ACCESS_TOKEN`. The mode rejects a missing,
    placeholder, non-HTTPS, non-ChatGPT, query-bearing, or fragment-bearing
-   callback before contacting Supabase. It updates only the reviewed public
-   OAuth client; it does not create an Auth user, bind an ERP grant, access the
+   callback before contacting Supabase. It also requires the exact deterministic
+   Codex desktop loopback callback and preserves both callbacks on the reviewed
+   public client. It does not create an Auth user, bind an ERP grant, access the
    database, or generate a client secret.
 
    After this workflow has been merged to the default branch, the same bounded
-   operation is available under **Actions → Register ChatGPT MCP OAuth client
-   callback → Run workflow**. Select the exact branch/commit to provision and
+   operation is available under **Actions → Register ChatGPT and Codex MCP OAuth
+   callbacks → Run workflow**. Select the exact branch/commit to provision and
    enter `REGISTER_CHATGPT_STATIC_OAUTH_CLIENT`. The workflow uses that selected
    commit as `REVIEWED_SHA`, the existing `SUPABASE_ACCESS_TOKEN` repository
-   secret, the pinned callback above, and runner-temporary environment/evidence
+   secret, the pinned callbacks above, and runner-temporary environment/evidence
    files. It has `contents: read` permission, calls only
    `--mode chatgpt-client-authority-only`, uploads a seven-day secret-free
-   receipt, and has no database, user/grant, Railway, or deployment authority.
+   receipt containing both callbacks, and has no database, user/grant, Railway,
+   or deployment authority.
 5. Review `canonical-staging-oauth-client.json`. Copy its `client_id` into the
    ChatGPT predefined-client field, select token endpoint authentication method
    `none`, and leave the client secret empty. Confirm that the evidence contains
-   the same callback and reviewed SHA.
+   both callbacks and the reviewed SHA.
 6. Promote the returned client ID to both API and MCP
    `MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS` through the normal reviewed deployment
    workflow. Do not replace any separately reviewed client IDs in a multi-client

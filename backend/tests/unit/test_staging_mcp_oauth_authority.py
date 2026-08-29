@@ -33,6 +33,7 @@ def test_oauth_callback_derives_from_sole_active_provider() -> None:
     assert provision.PERSISTENT_REDIRECT_URIS == (
         *provision.REDIRECT_URIS,
         provision.REVIEWED_CHATGPT_CALLBACK,
+        provision.REVIEWED_CODEX_DESKTOP_CALLBACK,
     )
     assert provision._redirect_uris_for_mode("client-authority-only") == (
         provision.PERSISTENT_REDIRECT_URIS
@@ -76,6 +77,29 @@ def test_chatgpt_callback_rejects_absent_placeholder_or_non_exact_uri(
         provision._reviewed_chatgpt_callback_uri(callback_uri)
 
 
+def test_codex_desktop_callback_accepts_only_reviewed_loopback_shape() -> None:
+    callback_uri = provision.REVIEWED_CODEX_DESKTOP_CALLBACK
+    assert provision._reviewed_codex_desktop_callback_uri(callback_uri) == callback_uri
+
+
+@pytest.mark.parametrize(
+    "callback_uri",
+    [
+        "",
+        " http://127.0.0.1/callback/T0CM3qq1LGS-",
+        "https://127.0.0.1/callback/T0CM3qq1LGS-",
+        "http://localhost/callback/T0CM3qq1LGS-",
+        "http://127.0.0.1:4321/callback/T0CM3qq1LGS-",
+        "http://127.0.0.1/callback/another-id",
+        "http://127.0.0.1/callback/T0CM3qq1LGS-?next=bad",
+        "http://127.0.0.1/callback/T0CM3qq1LGS-#fragment",
+    ],
+)
+def test_codex_desktop_callback_rejects_non_exact_uri(callback_uri: str) -> None:
+    with pytest.raises(provision.ProvisioningError, match="Codex|CODEX"):
+        provision._reviewed_codex_desktop_callback_uri(callback_uri)
+
+
 def test_chatgpt_authority_requires_callback_before_auth_mutation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -110,6 +134,27 @@ def test_chatgpt_authority_rejects_another_well_formed_callback_before_auth_muta
         provision.main(["--mode", "chatgpt-client-authority-only"])
 
 
+def test_chatgpt_authority_requires_codex_desktop_callback_before_auth_mutation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        provision.CHATGPT_CALLBACK_ENV,
+        provision.REVIEWED_CHATGPT_CALLBACK,
+    )
+    monkeypatch.delenv(provision.CODEX_DESKTOP_CALLBACK_ENV, raising=False)
+    monkeypatch.setattr(
+        provision,
+        "_auth_admin_authority",
+        lambda *_args: pytest.fail("missing desktop callback reached Supabase authority"),
+    )
+
+    with pytest.raises(
+        provision.ProvisioningError,
+        match=f"{provision.CODEX_DESKTOP_CALLBACK_ENV} is required",
+    ):
+        provision.main(["--mode", "chatgpt-client-authority-only"])
+
+
 def test_chatgpt_authority_reconciles_exact_predefined_public_client_only(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -117,6 +162,10 @@ def test_chatgpt_authority_reconciles_exact_predefined_public_client_only(
     github_env = tmp_path / "github-env"
     evidence_dir = tmp_path / "evidence"
     monkeypatch.setenv(provision.CHATGPT_CALLBACK_ENV, callback_uri)
+    monkeypatch.setenv(
+        provision.CODEX_DESKTOP_CALLBACK_ENV,
+        provision.REVIEWED_CODEX_DESKTOP_CALLBACK,
+    )
     monkeypatch.setenv("CANONICAL_STAGING_PROJECT_REF", provision.PROJECT_REF)
     monkeypatch.setenv("SUPABASE_URL", provision.SUPABASE_URL)
     monkeypatch.setenv("SUPABASE_ACCESS_TOKEN", "management-token")
@@ -164,6 +213,7 @@ def test_chatgpt_authority_reconciles_exact_predefined_public_client_only(
     assert evidence == {
         "application_provider": "railway",
         "chatgpt_callback_uri": callback_uri,
+        "codex_desktop_callback_uri": provision.REVIEWED_CODEX_DESKTOP_CALLBACK,
         "client_id": "chatgpt-predefined-public-client",
         "client_name": provision.CLIENT_NAME,
         "client_registration_method": "predefined",

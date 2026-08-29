@@ -4,39 +4,51 @@ This package adds agent guidance to the existing canonical AASOPharma MCP
 service. It does not contain a second API client, database connection, legacy
 endpoint, or offline fallback.
 
-## Developer connection
+## Codex desktop installation
 
-Complete the repository's
-[ChatGPT predefined OAuth procedure](../../docs/deployment/chatgpt-mcp-oauth.md)
-before creating the connection when the authorization server has neither CIMD
-nor DCR. Never invent or commit a ChatGPT callback ID.
+The plugin packages the canonical Streamable HTTP endpoint, its public OAuth
+client, the deterministic Codex loopback callback, and the ERP safety skill. It
+contains no client secret or ERP credential. Install it from a terminal on the
+same computer that runs the Codex desktop app:
 
-1. Deploy one reviewed SHA for the API, MCP, frontend, and canonical database.
-2. Require both `/health` and `/ready` to pass on the public MCP origin.
-3. In ChatGPT on the web, enable Developer mode under **Settings → Security and
-   login**.
-4. In the ChatGPT Plugins page, register the public HTTPS MCP URL including its
-   `/mcp` path and complete OAuth with a disposable organization user.
-5. Copy the generated technical ID from the connection URL. It starts with
-   `plugin_asdk_app` (or the current `asdk_app` compatibility prefix).
-6. Add `.app.json` with that real ID and add `"apps": "./.app.json"` to
-   `.codex-plugin/plugin.json`:
+```bash
+codex plugin marketplace add vikasgargbear/production-infra --ref main
+codex plugin add aasopharma-erp@aasopharma
+codex mcp login aasopharma-erp
+```
 
-   ```json
-   {
-     "apps": {
-       "aasopharma-erp": {
-         "id": "plugin_asdk_app_generated_by_chatgpt",
-         "required": true
-       }
-     }
-   }
-   ```
+Complete sign-in in the system browser. Codex receives the authorization result
+on a temporary `127.0.0.1` listener, stores the user token in its configured
+credential store, and uses the authenticated user's ERP organization and branch
+permissions. If the browser does not open or the callback is rejected, stop;
+do not paste tokens into configuration files.
 
-Do not commit the example value or reuse another app's ID. The package remains
-skills-only and fail-closed until ChatGPT creates the connection. After wiring
-the ID, validate the package and test it in a new chat before trying the same
-account on another ChatGPT surface.
+Restart Codex after first installation. Verify the connection with:
+
+```bash
+codex mcp get aasopharma-erp --json
+codex mcp login aasopharma-erp
+```
+
+To receive a later plugin version:
+
+```bash
+codex plugin marketplace upgrade aasopharma
+codex plugin remove aasopharma-erp@aasopharma
+codex plugin add aasopharma-erp@aasopharma
+```
+
+The repository's exact OAuth authority and troubleshooting procedure is in
+[Codex desktop MCP OAuth](../../docs/deployment/codex-desktop-mcp.md).
+
+## ChatGPT availability boundary
+
+Installing this plugin configures Codex on this computer. It does not install an
+account-wide ChatGPT app and does not enable the connector on a phone. As of
+2026-08-29, OpenAI lists custom MCP for Plus, Pro, Business, and Enterprise/Edu,
+not Free or Go, and lists custom MCP apps as web-only. ChatGPT developer-mode
+setup remains a separate procedure documented in
+[ChatGPT MCP OAuth](../../docs/deployment/chatgpt-mcp-oauth.md).
 
 ## Acceptance
 

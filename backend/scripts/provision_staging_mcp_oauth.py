@@ -62,6 +62,7 @@ WEB_CLIENT_ID = "aasopharma-erp-web"
 WEB_CLIENT_NAME = "AASOPharma canonical staging web"
 WEB_TEST_AUTH_USER_ENV = "CANONICAL_STAGING_WEB_TEST_AUTH_USER_ID"
 CHATGPT_CALLBACK_ENV = "CHATGPT_MCP_OAUTH_CALLBACK_URI"
+CODEX_DESKTOP_CALLBACK_ENV = "CODEX_DESKTOP_MCP_OAUTH_CALLBACK_URI"
 UNISSUED_CLIENT_ID = "disabled-unissued-canonical-staging"
 ACTIVE_PROVIDER = active_provider_name(_DEPLOYMENT_MANIFEST)
 ACTIVE_PROVIDER_SERVICES = active_provider_services(_DEPLOYMENT_MANIFEST)
@@ -76,7 +77,14 @@ REDIRECT_URIS = (
 CHATGPT_STABLE_CALLBACK = "https://chatgpt.com/connector_platform_oauth_redirect"
 CHATGPT_CALLBACK_PATH_PREFIX = "/connector/oauth/"
 REVIEWED_CHATGPT_CALLBACK = "https://chatgpt.com/connector/oauth/_MPTGhIZ1AcM"
-PERSISTENT_REDIRECT_URIS = (*REDIRECT_URIS, REVIEWED_CHATGPT_CALLBACK)
+REVIEWED_CODEX_DESKTOP_CALLBACK = (
+    "http://127.0.0.1/callback/T0CM3qq1LGS-"
+)
+PERSISTENT_REDIRECT_URIS = (
+    *REDIRECT_URIS,
+    REVIEWED_CHATGPT_CALLBACK,
+    REVIEWED_CODEX_DESKTOP_CALLBACK,
+)
 TEST_EMAIL = "mcp-e2e@canonical-staging.aasopharma.invalid"
 TEST_USER_ID = "d3000000-0000-7000-8000-00000000002a"
 TEST_MEMBERSHIP_ID = "d3000000-0000-7000-8000-00000000002b"
@@ -956,6 +964,38 @@ def _reviewed_chatgpt_callback_uri(value: str) -> str:
     return value
 
 
+def _reviewed_codex_desktop_callback_uri(value: str) -> str:
+    """Accept only the deterministic Codex loopback callback for this MCP URL."""
+
+    if value != value.strip() or len(value) > 512 or any(
+        character.isspace() for character in value
+    ):
+        raise ProvisioningError(
+            f"{CODEX_DESKTOP_CALLBACK_ENV} must be one exact Codex loopback callback URI"
+        )
+    try:
+        parsed = urlsplit(value)
+        port = parsed.port
+    except ValueError as exc:
+        raise ProvisioningError(
+            f"{CODEX_DESKTOP_CALLBACK_ENV} must be one exact Codex loopback callback URI"
+        ) from exc
+    if (
+        parsed.scheme != "http"
+        or parsed.netloc != "127.0.0.1"
+        or port is not None
+        or parsed.path != "/callback/T0CM3qq1LGS-"
+        or parsed.query
+        or parsed.fragment
+        or parsed.username is not None
+        or parsed.password is not None
+    ):
+        raise ProvisioningError(
+            f"{CODEX_DESKTOP_CALLBACK_ENV} must be one exact Codex loopback callback URI"
+        )
+    return value
+
+
 def _redirect_uris_for_mode(mode: str) -> tuple[str, ...]:
     if mode != "chatgpt-client-authority-only":
         return PERSISTENT_REDIRECT_URIS
@@ -963,6 +1003,15 @@ def _redirect_uris_for_mode(mode: str) -> tuple[str, ...]:
     if not secrets.compare_digest(callback_uri, REVIEWED_CHATGPT_CALLBACK):
         raise ProvisioningError(
             f"{CHATGPT_CALLBACK_ENV} does not match the reviewed ChatGPT app callback"
+        )
+    desktop_callback_uri = _reviewed_codex_desktop_callback_uri(
+        _required(CODEX_DESKTOP_CALLBACK_ENV)
+    )
+    if not secrets.compare_digest(
+        desktop_callback_uri, REVIEWED_CODEX_DESKTOP_CALLBACK
+    ):
+        raise ProvisioningError(
+            f"{CODEX_DESKTOP_CALLBACK_ENV} does not match the reviewed Codex desktop callback"
         )
     return PERSISTENT_REDIRECT_URIS
 
@@ -995,7 +1044,8 @@ def _write_client_evidence(
     if mode == "chatgpt-client-authority-only":
         evidence.update(
             {
-                "chatgpt_callback_uri": redirect_uris[-1],
+                "chatgpt_callback_uri": REVIEWED_CHATGPT_CALLBACK,
+                "codex_desktop_callback_uri": REVIEWED_CODEX_DESKTOP_CALLBACK,
                 "client_registration_method": "predefined",
                 "oauth_client_secret_issued": False,
                 "pkce_code_challenge_method": "S256",
