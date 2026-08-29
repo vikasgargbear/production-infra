@@ -476,6 +476,7 @@ def test_organization_delete_plan_requires_and_tracks_deferrable_cycles() -> Non
     )
     accepted_plan = reset_authority._organization_delete_plan(accepted, relations)
     assert set(accepted_plan.relation_order) == set(relations)
+    assert accepted_plan.relation_groups == (relations,)
     assert accepted_plan.deferred_cycle_constraints == (
         (relations[0], "allocation_open_item_fk"),
         (relations[1], "open_item_allocation_fk"),
@@ -486,17 +487,21 @@ def test_organization_delete_plan_requires_and_tracks_deferrable_cycles() -> Non
          (relations[1], relations[0], "safe_fk", True)]
     )
     mixed_plan = reset_authority._organization_delete_plan(mixed, relations)
-    assert mixed_plan.relation_order == relations
+    assert set(mixed_plan.relation_order) == set(relations)
+    assert mixed_plan.relation_groups == (relations,)
     assert mixed_plan.deferred_cycle_constraints == (
         (relations[1], "safe_fk"),
     )
 
-    rejected = _ForeignKeyCursor(
+    immediate_cycle = _ForeignKeyCursor(
         [(relations[0], relations[1], "unsafe_a_fk", False),
          (relations[1], relations[0], "unsafe_b_fk", False)]
     )
-    with pytest.raises(ResetAuthorityError, match="deferrable break"):
-        reset_authority._organization_delete_plan(rejected, relations)
+    immediate_plan = reset_authority._organization_delete_plan(
+        immediate_cycle, relations
+    )
+    assert immediate_plan.relation_groups == (relations,)
+    assert immediate_plan.deferred_cycle_constraints == ()
 
 
 def test_organization_delete_plan_ignores_same_statement_self_references() -> None:
@@ -508,6 +513,7 @@ def test_organization_delete_plan_ignores_same_statement_self_references() -> No
     plan = reset_authority._organization_delete_plan(cursor, (relation,))
 
     assert plan.relation_order == (relation,)
+    assert plan.relation_groups == ((relation,),)
     assert plan.deferred_cycle_constraints == ()
 
 

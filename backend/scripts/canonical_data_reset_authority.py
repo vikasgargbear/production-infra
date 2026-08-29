@@ -124,6 +124,7 @@ class ResetAuthorityError(RuntimeError):
 @dataclass(frozen=True)
 class OrganizationDeletePlan:
     relation_order: tuple[str, ...]
+    relation_groups: tuple[tuple[str, ...], ...]
     deferred_cycle_constraints: tuple[tuple[str, str], ...]
 
 
@@ -1032,71 +1033,50 @@ def _organization_delete_plan(
         for index, component in enumerate(components)
         for relation in component
     }
-    # Within a cycle, deferrable edges can be checked at transaction end. Keep
-    # every immediate edge in the ordering graph; it is enough for at least one
-    # edge in the cycle to be deferrable. Requiring every edge to be deferrable
-    # incorrectly rejects the reviewed organizations <-> memberships cycle.
-    ordering_graph = {relation: set() for relation in relations}
     deferred_cycles: list[tuple[str, str]] = []
     for child, parents in graph.items():
         for parent in parents:
             constraints = constraints_by_edge[(child, parent)]
             if component_by_relation[child] != component_by_relation[parent]:
-                ordering_graph[child].add(parent)
                 continue
-            immediate_constraints = [
-                constraint for constraint, deferrable in constraints if not deferrable
-            ]
-            if immediate_constraints:
-                ordering_graph[child].add(parent)
             deferred_cycles.extend(
                 (child, constraint)
                 for constraint, deferrable in constraints
                 if deferrable
             )
 
-    mandatory_components = _strongly_connected_components(ordering_graph)
-    for component in mandatory_components:
-        if len(component) <= 1:
-            continue
-        component_set = set(component)
-        unsafe_child = next(
-            child for child in component
-            if ordering_graph[child] & component_set
-        )
-        unsafe_parent = sorted(ordering_graph[unsafe_child] & component_set)[0]
-        unsafe_constraint = next(
-            constraint
-            for constraint, deferrable in constraints_by_edge[
-                (unsafe_child, unsafe_parent)
-            ]
-            if not deferrable
-        )
-        raise ResetAuthorityError(
-            "cyclic organization foreign keys require a deferrable break: "
-            f"{unsafe_child}.{unsafe_constraint}"
-        )
-
-    incoming = {relation: 0 for relation in relations}
-    for parents in ordering_graph.values():
+    component_edges = {index: set() for index in range(len(components))}
+    incoming = {index: 0 for index in range(len(components))}
+    for child, parents in graph.items():
+        child_component = component_by_relation[child]
         for parent in parents:
-            incoming[parent] += 1
+            parent_component = component_by_relation[parent]
+            if child_component == parent_component:
+                continue
+            if parent_component not in component_edges[child_component]:
+                component_edges[child_component].add(parent_component)
+                incoming[parent_component] += 1
     ready = sorted(
-        relation for relation, count in incoming.items() if count == 0
+        (index for index, count in incoming.items() if count == 0),
+        key=lambda value: components[value],
     )
-    ordered: list[str] = []
+    ordered_groups: list[tuple[str, ...]] = []
     while ready:
-        relation = ready.pop(0)
-        ordered.append(relation)
-        for target in sorted(ordering_graph[relation]):
+        component_index = ready.pop(0)
+        ordered_groups.append(components[component_index])
+        for target in sorted(
+            component_edges[component_index], key=lambda value: components[value]
+        ):
             incoming[target] -= 1
             if incoming[target] == 0:
                 ready.append(target)
-                ready.sort()
+                ready.sort(key=lambda value: components[value])
+    ordered = [relation for group in ordered_groups for relation in group]
     if len(ordered) != len(relations):
         raise ResetAuthorityError("organization delete order is incomplete")
     return OrganizationDeletePlan(
         relation_order=tuple(ordered),
+        relation_groups=tuple(ordered_groups),
         deferred_cycle_constraints=tuple(sorted(deferred_cycles)),
     )
 
@@ -1353,7 +1333,6 @@ def execute_organization_purge(
             delete_plan = _organization_delete_plan(
                 cursor, (*organization_relations, "core.organizations")
             )
-            delete_order = delete_plan.relation_order
             foreign_key_relations = (*organization_relations, "core.organizations")
             before_foreign_keys = _foreign_key_snapshot(cursor, foreign_key_relations)
             delete_triggers = _delete_trigger_snapshot(
@@ -1370,23 +1349,43 @@ def execute_organization_purge(
                 cursor, organization_relations, normalized_id, target=False
             )
 
-            # Cyclic tenant FKs are schema-reviewed as DEFERRABLE. Defer them
-            # without changing the catalog, delete the exact tenant, then force
-            # all queued RI checks before restoring owner-managed DELETE guards.
-            # This remains one atomic transaction and avoids ALTER TABLE while
-            # PostgreSQL has pending trigger events.
+            # Defer reviewed constraints without changing the catalog. Each
+            # strongly connected tenant component is deleted in one PostgreSQL
+            # statement, so immediate cyclic FKs are checked only after every
+            # tenant row in that component is gone. Force queued RI checks
+            # before restoring owner-managed DELETE guards. This remains one
+            # atomic transaction and never drops or disables a foreign key.
             cursor.execute("SET CONSTRAINTS ALL DEFERRED")
             _set_delete_triggers(cursor, delete_triggers, enabled=False)
             organization_deleted = 0
-            for relation in delete_order:
-                key_column = "id" if relation == "core.organizations" else "org_id"
-                cursor.execute(
-                    f"DELETE FROM {_quote_relation(relation)} "
-                    f"WHERE {_quote_identifier(key_column)}=%s::uuid",
-                    (normalized_id,),
+            for relation_group in delete_plan.relation_groups:
+                delete_ctes: list[str] = []
+                for index, relation in enumerate(relation_group):
+                    key_column = "id" if relation == "core.organizations" else "org_id"
+                    delete_ctes.append(
+                        f"deleted_{index} AS ("
+                        f"DELETE FROM {_quote_relation(relation)} "
+                        f"WHERE {_quote_identifier(key_column)}=%s::uuid RETURNING 1)"
+                    )
+                count_projection = ",".join(
+                    f"(SELECT count(*) FROM deleted_{index})"
+                    for index in range(len(relation_group))
                 )
-                if relation == "core.organizations":
-                    organization_deleted = cursor.rowcount
+                cursor.execute(
+                    f"WITH {','.join(delete_ctes)} SELECT {count_projection}",
+                    tuple(normalized_id for _relation in relation_group),
+                )
+                deleted_counts = cursor.fetchone()
+                if not isinstance(deleted_counts, (tuple, list)) or (
+                    len(deleted_counts) != len(relation_group)
+                ):
+                    raise ResetAuthorityError(
+                        "organization purge delete readback is incomplete"
+                    )
+                if "core.organizations" in relation_group:
+                    organization_deleted = int(
+                        deleted_counts[relation_group.index("core.organizations")]
+                    )
             if organization_deleted != 1:
                 raise ResetAuthorityError(
                     "organization purge did not delete exactly one boundary row"
