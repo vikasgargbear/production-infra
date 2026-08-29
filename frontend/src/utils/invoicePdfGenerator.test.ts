@@ -48,6 +48,7 @@ const invoice = (): InvoiceData => ({
   tax_charge_mechanism: 'normal',
   items: [{
     product_name: 'Carton',
+    manufacturer_name: 'Exact Labs',
     batch_number: 'BATCH-ONE',
     expiry_date: '2028-09-30',
     batch_allocations: [
@@ -223,12 +224,16 @@ test('renders only canonical seller, buyer, line, and exact money facts', () => 
   expect(html).toContain('MH-MZ6-20B / MH-MZ6-21B');
   expect(html).toContain('MH-BUYER-20B');
   expect(html).toContain('481910');
-  expect(html).toContain('Batch BATCH-ONE; Exp 2028-09-30; Qty 0.73; Free 0.13');
-  expect(html).toContain('Batch BATCH-TWO; Exp 2029-01-31; Qty 0.5; Free 0');
+  expect(html).toContain('Mfr Exact Labs');
+  expect(html).toContain('BATCH-ONE');
+  expect(html).toContain('2028-09-30');
+  expect(html).toContain('BATCH-TWO');
+  expect(html).toContain('2029-01-31');
   expect(html).toContain('Free excluded from taxable value');
   expect(html).toContain('Paid 1.23');
   expect(html).toContain('2.5% (₹5.00)');
-  expect(html).toContain('>12%</td>');
+  expect(html).toContain('12%');
+  expect(html).toContain('<div class="muted">₹18.00</div>');
   expect(html).toContain('Original for Recipient');
   expect(html).toContain('<strong>Due Date:</strong> 2026-09-05');
   expect(html).toContain('<strong>Place of Supply:</strong> Maharashtra (27)');
@@ -352,11 +357,11 @@ test('keeps every invoice item column inside the A4 printable width with Amount 
 
   const columnWidths = Object.values(options.columnStyles)
     .map((style: any) => style.cellWidth as number);
-  expect(columnWidths).toEqual([7, 76, 14, 17, 17, 19, 18, 24]);
+  expect(columnWidths).toEqual([6, 38, 23, 16, 18, 18, 17, 20, 17, 19]);
   expect(columnWidths.reduce((total: number, width: number) => total + width, 0))
     .toBe(options.tableWidth);
   expect(options.margin.left + options.tableWidth + options.margin.right).toBe(210);
-  expect(options.columnStyles[1].cellWidth).toBeGreaterThan(options.columnStyles[7].cellWidth);
+  expect(options.columnStyles[1].cellWidth).toBeGreaterThan(options.columnStyles[9].cellWidth);
 });
 
 test('prints invoice and due dates in the PDF header without obscuring the item table', async () => {
@@ -386,10 +391,12 @@ test('renders four-digit rates, Cess, free treatment, and every batch without fo
   });
 
   const options = mockAutoTable.mock.calls.at(-1)?.[1];
-  expect(options.body[0][1]).toContain('Batch BATCH-ONE');
-  expect(options.body[0][1]).toContain('Batch BATCH-TWO');
+  expect(options.body[0][1]).toContain('Mfr Exact Labs');
   expect(options.body[0][1]).toContain('Free included at unit rate');
-  expect(options.body[0][1]).toContain('Cess INR 1.00');
-  expect(options.body[0][3]).toBe('Paid 1.23\nFree 0.13');
+  expect(options.body[0][2]).toBe('BATCH-ONE\nBATCH-TWO');
+  expect(options.body[0][3]).toBe('2028-09-30\n2029-01-31');
+  expect(options.body[0][4]).toBe('Paid 1.23\nFree 0.13');
   expect(options.body[0][5]).toBe('INR 1,234.57');
+  expect(options.body[0][7]).toBe('INR 150.00');
+  expect(options.body[0][8]).toBe('12%\nINR 18.00');
 });

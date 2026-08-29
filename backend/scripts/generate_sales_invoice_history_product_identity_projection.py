@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Package the reviewed invoice-history product identity for Alembic."""
+"""Verify the immutable initial invoice-history product-identity migration."""
 
 from __future__ import annotations
 
@@ -8,10 +8,6 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-SOURCE = (
-    ROOT
-    / "database/canonical/operations/automation/sales_invoice_product_identity.sql"
-)
 TARGET = (
     ROOT
     / "backend/alembic/sql/20260829_0056_sales_invoice_product_identity.sql"
@@ -19,8 +15,7 @@ TARGET = (
 
 
 def render() -> str:
-    source = SOURCE.read_text(encoding="utf-8").rstrip()
-    return f"SET LOCAL ROLE erp_migration_owner;\n\n{source}\n\nRESET ROLE;\n"
+    return TARGET.read_text(encoding="utf-8")
 
 
 def main() -> int:
@@ -29,8 +24,7 @@ def main() -> int:
     args = parser.parse_args()
     rendered = render()
     if args.write:
-        TARGET.write_text(rendered, encoding="utf-8")
-        return 0
+        raise SystemExit("the historical migration is immutable")
     if not TARGET.is_file() or TARGET.read_text(encoding="utf-8") != rendered:
         raise SystemExit(
             "invoice-history product-identity migration drifted; run with --write"

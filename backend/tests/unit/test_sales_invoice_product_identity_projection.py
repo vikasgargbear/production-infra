@@ -44,7 +44,7 @@ def test_projection_has_one_reviewed_source_and_hash_bound_linear_migration() ->
     assert revision.down_revision == "20260829_0055"
     assert revision.EXPECTED_SQL_SHA256 == hashlib.sha256(migration).hexdigest()
     assert SOURCE.read_text(encoding="utf-8").count(
-        "CREATE OR REPLACE FUNCTION "
+        "CREATE FUNCTION "
         "erp_automation_reads.sales_invoice_product_identity("
     ) == 1
 
@@ -88,7 +88,9 @@ def test_projection_returns_only_typed_immutable_product_identity() -> None:
     assert "product_name text" in source
     assert "reference.product_row_version >= 1" in source
     assert "FROM sales.invoice_lines AS line" in source
-    assert "FROM catalog.products" not in source
+    assert "JOIN catalog.products AS product" in source
+    assert "product.row_version = reference.product_row_version" in source
+    assert "manufacturer.legal_name AS manufacturer_name" in source
     assert "UPDATE " not in source
     assert "INSERT INTO " not in source
     assert "DELETE FROM " not in source

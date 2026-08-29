@@ -1,3 +1,5 @@
+SET LOCAL ROLE erp_migration_owner;
+
 DROP FUNCTION erp_automation_reads.sales_invoice_product_identity(uuid,uuid);
 
 CREATE FUNCTION erp_automation_reads.sales_invoice_product_identity(
@@ -158,3 +160,5 @@ REVOKE ALL ON FUNCTION erp_automation_reads.sales_invoice_product_identity(uuid,
     FROM PUBLIC,erp_app,erp_runtime;
 GRANT EXECUTE ON FUNCTION erp_automation_reads.sales_invoice_product_identity(uuid,uuid)
     TO erp_runtime;
+
+RESET ROLE;

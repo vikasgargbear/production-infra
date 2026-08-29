@@ -3495,6 +3495,7 @@ class CanonicalInvoiceDetailItem(BaseModel):
     product_id: UUID
     product_name: str
     product_code: str
+    manufacturer_name: str
     hsn_code: str
     uom_code: str
     unit: str
@@ -4017,7 +4018,8 @@ def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> di
     rows = _rows(db, """
         WITH product_identity AS MATERIALIZED (
             SELECT identity.product_id, identity.product_row_version,
-                   identity.product_code, identity.product_name
+                   identity.product_code, identity.product_name,
+                   identity.manufacturer_name
               FROM erp_automation_reads.sales_invoice_product_identity(
                    :org_id, :invoice_id
               ) identity
@@ -4106,6 +4108,7 @@ def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> di
                          'product_id', line.product_id,
                          'product_name', product_identity.product_name,
                          'product_code', product_identity.product_code,
+                         'manufacturer_name', product_identity.manufacturer_name,
                          'hsn_code', line.tax_classification_code_snapshot,
                          'uom_code', line.uom_code,
                          'unit', line.uom_code, 'quantity',

@@ -629,19 +629,21 @@ def _assert_runtime_invoice_product_identity(
         assert cursor.fetchone() == (False, True)
         cursor.execute(
             """
-            SELECT product_id,product_row_version,product_code,product_name
+            SELECT product_id,product_row_version,product_code,product_name,
+                   manufacturer_name
               FROM erp_automation_reads.sales_invoice_product_identity(%s,%s)
             """,
             (fixture.IDS["org"], invoice_id),
         )
         rows = cursor.fetchall()
         assert [
-            (UUID(str(row[0])), row[1], row[2], row[3]) for row in rows
+            (UUID(str(row[0])), row[1], row[2], row[3], row[4]) for row in rows
         ] == [(
             UUID(str(product_reference["id"])),
             int(product_reference["row_version"]),
             product_reference["product_code"],
             product_reference["product_name"],
+            "Demo Paper Products Private Limited",
         )]
         for candidate_org, candidate_invoice in (
             (fixture.IDS["denial_org"], invoice_id),
