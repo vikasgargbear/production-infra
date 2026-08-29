@@ -23,6 +23,9 @@ import {
 } from './utils/canonicalSupplierInvoiceCommand';
 import { reconcileCanonicalSupplierInvoice } from './utils/canonicalSupplierInvoiceLifecycle';
 import { requireCanonicalPostingDate } from '../../../utils/canonicalPostingDate';
+import { useEnterAsTab } from '../../../hooks/useEnterAsTab';
+
+const enterExclusions = ['textarea', 'button', 'input[type="checkbox"]', '[data-no-enter-tab]'];
 
 const errorMessage = (error: any): string => (
   error?.response?.data?.detail?.message
@@ -32,6 +35,8 @@ const errorMessage = (error: any): string => (
 );
 
 const CanonicalSupplierInvoiceFlow: React.FC<{ onClose?: () => void }> = ({ onClose }) => {
+  const entryRef = useRef<HTMLDivElement>(null);
+  useEnterAsTab({ containerRef: entryRef, excludeSelectors: enterExclusions });
   const [receipts, setReceipts] = useState<CanonicalEligibleReceipt[]>([]);
   const [selectedReceiptId, setSelectedReceiptId] = useState('');
   const [invoiceNumber, setInvoiceNumber] = useState('');
@@ -271,7 +276,7 @@ const CanonicalSupplierInvoiceFlow: React.FC<{ onClose?: () => void }> = ({ onCl
   }
 
   return (
-    <div className="h-full overflow-y-auto bg-slate-50">
+    <div ref={entryRef} className="h-full overflow-y-auto bg-slate-50">
       <ModuleHeader title="Supplier Invoice" documentNumber={invoiceNumber} status={prepared ? 'review' : 'active'} icon={FileCheck2} iconColor="text-blue-600" onClose={onClose || (() => {})} showSaveDraft={false} onSaveDraft={() => {}} additionalActions={[{ label: '', title: 'Refresh posted receipts', icon: RefreshCw, variant: 'ghost', onClick: loadReceipts, disabled: loadingReceipts } as any]} />
       <main className="mx-auto max-w-6xl space-y-4 p-6">
         {!prepared ? (

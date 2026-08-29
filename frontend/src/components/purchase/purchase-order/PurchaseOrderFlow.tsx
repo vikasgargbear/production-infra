@@ -14,17 +14,8 @@ import {
 import { usePurchaseOrderLogic } from './hooks';
 import { toast } from 'react-toastify';
 import { useCompany } from '../../../contexts/CompanyContext';
-import { exactDecimalUnits } from '../../../utils/exactDecimal';
 import { usePermissions } from '../../../hooks/usePermissions';
 import { FOUNDATION_CAPABILITIES } from '../../../config/canonicalCapabilities';
-
-const hasPositiveExactQuantity = (value: unknown, label: string): boolean => {
-  try {
-    return exactDecimalUnits(value, label, { scale: 6, maximumWholeDigits: 14 }) > 0n;
-  } catch {
-    return false;
-  }
-};
 
 /**
  * PurchaseOrderFlow - Purchase Order using the full global document system
@@ -218,27 +209,9 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
             showTotals={false}
             title=""
             preserveExactDecimals
+            quantityDecimalPlaces={2}
+            showFreeSupplyTaxTreatment
           />
-
-          {purchaseOrder.items.map((item, index) => item.free_quantity !== ''
-            && item.free_quantity !== null
-            && item.free_quantity !== undefined
-            && hasPositiveExactQuantity(item.free_quantity, `Item ${index + 1} free quantity`) && (
-            <label key={String(item.id)} className="mt-3 block border border-gray-200 bg-white p-3 text-sm">
-              <span className="mb-2 block font-medium text-gray-800">
-                Free-supply tax treatment for {item.product_name}
-              </span>
-              <select
-                value={item.free_supply_tax_treatment || ''}
-                onChange={(event) => handleUpdateItem(index, 'free_supply_tax_treatment', event.target.value)}
-                className="min-h-11 w-full border border-gray-300 bg-white px-3"
-              >
-                <option value="">Select canonical treatment</option>
-                <option value="excluded_from_taxable_value">Exclude free quantity from taxable value</option>
-                <option value="included_at_unit_rate">Include free quantity at unit rate</option>
-              </select>
-            </label>
-          ))}
 
           <div className="mt-4 grid gap-3 border border-gray-200 bg-gray-50 p-4 sm:grid-cols-3">
             <label className="text-sm font-medium text-gray-700">

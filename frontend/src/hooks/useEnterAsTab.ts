@@ -20,6 +20,7 @@ export const useEnterAsTab = ({
 
         const handleKeyDown = (e: KeyboardEvent): void => {
             if (e.key !== 'Enter') return;
+            if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
 
             const target = e.target as HTMLElement;
 
@@ -32,8 +33,6 @@ export const useEnterAsTab = ({
             });
 
             if (isExcluded) return;
-            if (e.shiftKey) return;
-
             const container = containerRef?.current || document.body;
             const focusableElements = container.querySelectorAll(
                 'input:not([disabled]):not([readonly]), ' +
@@ -42,7 +41,14 @@ export const useEnterAsTab = ({
                 '[tabindex]:not([tabindex="-1"]):not([disabled])'
             );
 
-            const focusableArray = Array.from(focusableElements) as HTMLElement[];
+            const focusableArray = (Array.from(focusableElements) as HTMLElement[])
+                .filter(element => !excludeSelectors.some(selector => {
+                    try {
+                        return element.matches(selector);
+                    } catch {
+                        return false;
+                    }
+                }));
             const currentIndex = focusableArray.indexOf(target);
 
             if (currentIndex > -1 && currentIndex < focusableArray.length - 1) {
@@ -50,7 +56,8 @@ export const useEnterAsTab = ({
                 focusableArray[currentIndex + 1].focus();
 
                 const nextElement = focusableArray[currentIndex + 1] as HTMLInputElement;
-                if (nextElement.tagName === 'INPUT' && nextElement.type === 'text') {
+                if (nextElement.tagName === 'INPUT'
+                    && !['checkbox', 'radio', 'button', 'submit'].includes(nextElement.type)) {
                     nextElement.select();
                 }
             }
