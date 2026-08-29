@@ -94,6 +94,7 @@ interface JWTPayload {
 const AuthContext = createContext<AuthContextValue | null>(null);
 const SESSION_EXCHANGE_RETRY_DELAYS_MS = [0, 1500, 3000] as const;
 const SESSION_EXCHANGE_TIMEOUT_MS = 12000;
+const MAINTENANCE_AUTO_RETRY_MS = 15000;
 const TRANSIENT_SESSION_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504]);
 
 const wait = (delayMs: number): Promise<void> => (
@@ -188,6 +189,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const [isOnline, setIsOnline] = useState(navigator.onLine);
     const [hasCloudSession, setHasCloudSession] = useState(false);
     const [sessionExchangeError, setSessionExchangeError] = useState<string | null>(null);
+    const [maintenanceRecoveryPending, setMaintenanceRecoveryPending] = useState(false);
     const pendingExchange = useRef<{
         accessToken: string;
         promise: Promise<LoginResult>;
@@ -200,6 +202,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         clearErpSessionStorage();
         setHasCloudSession(false);
         setSessionExchangeError(null);
+        setMaintenanceRecoveryPending(false);
         setState({
             user: null,
             token: null,
@@ -212,6 +215,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const preserveCloudSessionFailure = useCallback((result: LoginResult) => {
         setHasCloudSession(true);
         setSessionExchangeError(result.error || 'The ERP session could not be established.');
+        setMaintenanceRecoveryPending(result.maintenanceFailure === true);
         setState((previous) => {
             if (result.maintenanceFailure) {
                 clearErpSessionStorage();
@@ -291,6 +295,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 saveErpSession(data.access_token, user);
                 setHasCloudSession(true);
                 setSessionExchangeError(null);
+                setMaintenanceRecoveryPending(false);
                 setState({
                     user,
                     token: data.access_token,
@@ -511,6 +516,29 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             window.removeEventListener('offline', handleOffline);
         };
     }, []);
+
+    useEffect(() => {
+        if (
+            !maintenanceRecoveryPending
+            || !hasCloudSession
+            || !isOnline
+            || state.isAuthenticated
+            || state.isLoading
+        ) {
+            return undefined;
+        }
+        const retryTimer = window.setTimeout(() => {
+            void retrySessionExchange();
+        }, MAINTENANCE_AUTO_RETRY_MS);
+        return () => window.clearTimeout(retryTimer);
+    }, [
+        hasCloudSession,
+        isOnline,
+        maintenanceRecoveryPending,
+        retrySessionExchange,
+        state.isAuthenticated,
+        state.isLoading,
+    ]);
 
     const value: AuthContextValue = {
         ...state,

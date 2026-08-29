@@ -417,6 +417,50 @@ test('cold-start maintenance returns immediately and preserves the cloud session
 });
 
 
+test('cold-start maintenance reconnects automatically after authority recovers', async () => {
+    jest.useFakeTimers();
+    mockGetSession.mockResolvedValue({
+        data: { session: { access_token: 'maintenance-recovery-access' } },
+        error: null,
+    });
+    fetch
+        .mockResolvedValueOnce({
+            ok: false,
+            status: 503,
+            json: async () => ({
+                detail: {
+                    error: 'erp_maintenance',
+                    message: 'Canonical authority is temporarily unavailable.',
+                },
+            }),
+        })
+        .mockResolvedValueOnce({
+            ok: true,
+            status: 200,
+            json: async () => ({ access_token: token() }),
+        });
+
+    render(<AuthProvider><Probe /></AuthProvider>);
+    await act(async () => Promise.resolve());
+    await act(async () => Promise.resolve());
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(currentAuth.isAuthenticated).toBe(false);
+    expect(currentAuth.hasCloudSession).toBe(true);
+
+    await act(async () => {
+        jest.advanceTimersByTime(15000);
+        await Promise.resolve();
+        await Promise.resolve();
+    });
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(currentAuth.isAuthenticated).toBe(true);
+    expect(currentAuth.sessionExchangeError).toBeNull();
+    jest.useRealTimers();
+});
+
+
 test('cold-start ERP failure preserves the Supabase session and supports explicit retry', async () => {
     jest.useFakeTimers();
     mockGetSession.mockResolvedValue({
