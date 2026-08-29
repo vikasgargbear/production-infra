@@ -88,6 +88,7 @@ EXPECTED_BASE_READ_TOOLS = {
     "erp_trial_balance_get",
 }
 EXPECTED_MASTER_WRITE_TOOLS = {
+    "erp_drug_license_record",
     "erp_product_activate",
     "erp_product_create",
     "erp_product_setup",
@@ -995,7 +996,7 @@ def validate(
         app_operation = app_by_tool.get(tool, {})
         expected_risk = (
             "consequential_write"
-            if tool == "erp_product_activate"
+            if tool in {"erp_product_activate", "erp_drug_license_record"}
             else "reversible_write"
         )
         if (

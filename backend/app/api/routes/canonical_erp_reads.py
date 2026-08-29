@@ -57,6 +57,7 @@ _MASTER_CREATE_SQLSTATE_RESPONSES = {
     "23505": (status.HTTP_409_CONFLICT, "Master data already exists"),
     "23503": (status.HTTP_409_CONFLICT, "Master data is already referenced"),
     "23514": (status.HTTP_409_CONFLICT, "Master data configuration is incomplete"),
+    "23P01": (status.HTTP_409_CONFLICT, "Master data conflicts with an active record"),
     "P0002": (status.HTTP_409_CONFLICT, "Required canonical master data is missing"),
     "40001": (status.HTTP_503_SERVICE_UNAVAILABLE, "Master data changed; retry safely"),
     "42501": (status.HTTP_403_FORBIDDEN, "Master data creation is not authorized"),
@@ -3221,6 +3222,11 @@ def invoices(limit: int = Query(50, ge=1, le=500), offset: int = Query(0, ge=0),
     for row in rows:
         row.update(invoice_id=row["id"], invoice_number=row["document_number"],
                    invoice_date=row["document_date"])
+        for money_field in (
+            "taxable_amount", "cgst_amount", "sgst_amount", "igst_amount",
+            "cess_amount", "total_amount", "paid_amount", "pending_amount",
+        ):
+            row[money_field] = money_json(row.get(money_field) or 0)
     total = int(rows[0].get("filtered_total", len(rows))) if rows else 0
     for row in rows:
         row.pop("filtered_total", None)

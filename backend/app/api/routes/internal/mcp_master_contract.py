@@ -10,6 +10,7 @@ from ....domain.operator_actions import ActionPolicy
 CUSTOMER_UPDATE_OPERATION = "parties.customer." + "update"
 SUPPLIER_UPDATE_OPERATION = "parties.supplier." + "update"
 PRODUCT_ACTIVATION_OPERATION = "catalog.product.activate"
+DRUG_LICENSE_RECORD_OPERATION = "compliance.wholesale_license.record"
 
 
 MASTER_WRITE_POLICIES = {
@@ -48,6 +49,11 @@ MASTER_WRITE_POLICIES = {
         ActionPolicy(
             SUPPLIER_UPDATE_OPERATION, "parties.supplier.manage",
             "reversible_write", "canonical_supplier_update_v1",
+            "actor_confirmation", (),
+        ),
+        ActionPolicy(
+            DRUG_LICENSE_RECORD_OPERATION, "compliance.license.manage",
+            "consequential_write", "canonical_wholesale_license_record_v1",
             "actor_confirmation", (),
         ),
     )

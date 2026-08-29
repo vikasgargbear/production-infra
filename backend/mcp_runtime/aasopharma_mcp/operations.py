@@ -422,6 +422,38 @@ PRODUCT_ACTIVATION_SCHEMA: Mapping[str, Any] = {
     "required": ["product_id", "row_version", "idempotency_key"],
 }
 
+DRUG_LICENSE_RECORD_SCHEMA: Mapping[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "subject_kind": {"type": "string", "enum": ["branch", "supplier"]},
+        "subject_code": {"type": "string", "minLength": 1, "maxLength": 64},
+        "evidence_branch_code": {"type": "string", "minLength": 1, "maxLength": 64},
+        "license_type_code": {
+            "type": "string",
+            "enum": ["drug_wholesale_form_20b", "drug_wholesale_form_21b"],
+        },
+        "license_number": {"type": "string", "minLength": 1, "maxLength": 128},
+        "issuing_authority": {"type": "string", "minLength": 1, "maxLength": 500},
+        "jurisdiction_code": {"type": "string", "minLength": 1, "maxLength": 32},
+        "issued_on": {"type": "string", "format": "date"},
+        "valid_from": {"type": "string", "format": "date"},
+        "next_verification_due_on": {"type": "string", "format": "date"},
+        "evidence_filename": {"type": "string", "minLength": 1, "maxLength": 255},
+        "reviewed": {"type": "boolean", "const": True},
+        "idempotency_key": {
+            "type": "string",
+            "pattern": IDEMPOTENCY_KEY_PATTERN,
+        },
+    },
+    "required": [
+        "subject_kind", "subject_code", "evidence_branch_code", "license_type_code",
+        "license_number", "issuing_authority", "jurisdiction_code", "issued_on",
+        "valid_from", "next_verification_due_on", "evidence_filename",
+        "reviewed", "idempotency_key",
+    ],
+}
+
 OPERATOR_OPERATIONS.update(
     {
         "erp_product_create": OperatorOperation(
@@ -451,6 +483,10 @@ OPERATOR_OPERATIONS.update(
         "erp_supplier_update": OperatorOperation(
             "erp_supplier_update", "parties.supplier.update",
             MASTER_UPDATE_SCHEMAS["erp_supplier_update"], "master_write",
+        ),
+        "erp_drug_license_record": OperatorOperation(
+            "erp_drug_license_record", "compliance.wholesale_license.record",
+            DRUG_LICENSE_RECORD_SCHEMA, "master_write",
         ),
     }
 )
@@ -756,6 +792,7 @@ class OperationGateway:
                 "parties.supplier.create": "/api/internal/mcp/master/suppliers",
                 "parties.customer.update": "/api/internal/mcp/master/customers/update",
                 "parties.supplier.update": "/api/internal/mcp/master/suppliers/update",
+                "compliance.wholesale_license.record": "/api/internal/mcp/master/drug-licenses",
             }[operation.operation_key]
             payload = arguments
         elif operation.kind in {"approve", "execute"}:

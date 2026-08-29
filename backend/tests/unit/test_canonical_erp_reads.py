@@ -1338,6 +1338,12 @@ def test_invoice_history_filters_and_payment_projection_use_canonical_finance(mo
             "payment_status": "partial",
             "paid_amount": 25,
             "pending_amount": 75,
+            "taxable_amount": Decimal("89.285714"),
+            "cgst_amount": Decimal("5.357143"),
+            "sgst_amount": Decimal("5.357143"),
+            "igst_amount": 0,
+            "cess_amount": 0,
+            "total_amount": Decimal("100.000000"),
             "filtered_total": 31,
         }]
 
@@ -1355,6 +1361,10 @@ def test_invoice_history_filters_and_payment_projection_use_canonical_finance(mo
 
     assert result["total"] == 31
     assert result["invoices"][0]["payment_status"] == "partial"
+    assert result["invoices"][0]["total_amount"] == "100.00"
+    assert result["invoices"][0]["taxable_amount"] == "89.29"
+    assert result["invoices"][0]["paid_amount"] == "25.00"
+    assert result["invoices"][0]["pending_amount"] == "75.00"
     assert "filtered_total" not in result["invoices"][0]
     sql = captured["sql"]
     assert "finance.accounting_events" in sql

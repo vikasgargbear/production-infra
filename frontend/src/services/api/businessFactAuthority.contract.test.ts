@@ -32,7 +32,7 @@ test('live reports and documents never present invented business facts', () => {
   const canonicalReads = read('backend/app/api/routes/canonical_erp_reads.py');
   expect(invoiceTable).toContain('invoicesApi.getById(document.id)');
   expect(invoiceTable).toContain('downloadInvoicePDF');
-  expect(invoiceTable).toContain('Download canonical invoice PDF');
+  expect(invoiceTable).toContain('Download invoice PDF');
   expect(canonicalReads).toContain('invoice.seller_legal_name_snapshot AS seller_legal_name');
   expect(canonicalReads).toContain('invoice.seller_gstin_snapshot AS seller_gstin');
   expect(canonicalReads).toContain('invoice.seller_address_snapshot AS seller_address');
