@@ -649,6 +649,10 @@ def test_canonical_sales_detail_openapi_publishes_only_exact_decimal_strings() -
             assert "anyOf" not in properties[field]
             assert properties[field]["pattern"].endswith(rf"\.[0-9]{{{scale}}}$")
 
+    assert components["CanonicalInvoiceDetailResponse"]["properties"][
+        "rounding_adjustment"
+    ]["pattern"].startswith("^-")
+
     assert {
         "inventory_value", "average_unit_cost",
     }.isdisjoint(components["CanonicalSalesOrderEligibleBatch"]["properties"])
@@ -1649,6 +1653,16 @@ def test_sales_invoice_detail_response_validates_zero_one_and_many_allocations()
     assert response.items[2].batch_id is None
     assert response.items[2].batch_allocations[1].source_kind == "direct_issue"
     assert response.items[3].batch_allocations[0].source_kind == "dispatch_allocation"
+
+    negative_rounding = canonical_erp_reads.CanonicalInvoiceDetailResponse.model_validate(
+        {
+            **payload,
+            "rounding_adjustment": "-0.21",
+            "total_amount": "335.79",
+        }
+    )
+    assert negative_rounding.rounding_adjustment == Decimal("-0.21")
+    assert json.loads(negative_rounding.model_dump_json())["rounding_adjustment"] == "-0.21"
 
     tax_inclusive_item = item([direct])
     tax_inclusive_item.update({
