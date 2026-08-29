@@ -1,0 +1,10 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main-window",
+  "description": "No native commands are exposed to the remote ERP web origin.",
+  "windows": ["main"],
+  "remote": {
+    "urls": ["https://aasopharma-erp-pilot-production-eb9b.up.railway.app/*"]
+  },
+  "permissions": ["core:default"]
+}
