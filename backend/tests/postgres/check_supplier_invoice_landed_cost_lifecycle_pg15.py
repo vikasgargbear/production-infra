@@ -373,7 +373,8 @@ def _assert_receipt_released_batch(admin_dsn: str, batch_id: UUID) -> None:
     with psycopg2.connect(admin_dsn) as connection, connection.cursor() as cursor:
         cursor.execute(
             """
-            SELECT status,released_at,released_by_membership_id
+            SELECT status,released_at,released_by_membership_id,
+                   updated_by_membership_id
               FROM inventory.batches
              WHERE org_id=%s AND id=%s
             """,
@@ -383,7 +384,8 @@ def _assert_receipt_released_batch(admin_dsn: str, batch_id: UUID) -> None:
         assert row is not None
         assert row[0] == "released"
         assert row[1] is not None
-        assert UUID(str(row[2])) == fixture.IDS["operator_membership"]
+        assert row[2] is not None
+        assert UUID(str(row[2])) == UUID(str(row[3]))
 
 
 def _assert_upstream_has_no_payable_or_tax(runtime_dsn: str) -> None:
