@@ -1448,6 +1448,7 @@ def test_api_image_packages_every_import_time_live18_contract():
         "./mcp_runtime/aasopharma_mcp/operator_actions.py"
     ) in dockerfile
     assert "COPY backend/scripts/live18_railway_database_phase.py" in dockerfile
+    assert "COPY backend/scripts/railway_reset_control_plane.py" in dockerfile
     assert "COPY backend/tests/live_acceptance ./tests/live_acceptance" in dockerfile
     assert "COPY backend/tests/live_canonical ./tests/live_canonical" in dockerfile
     assert (
