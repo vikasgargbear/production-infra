@@ -1,4 +1,23 @@
-FROM python:3.11-slim
+FROM python:3.11-slim AS migration-contract
+
+WORKDIR /review
+
+# Validate the immutable migration package from only its reviewed inputs.  This
+# stage is deliberately separate from the runtime filesystem so tests, local
+# tools, and release-only scripts cannot leak into the API image.
+COPY backend/alembic ./backend/alembic
+COPY backend/migration_support ./backend/migration_support
+COPY backend/scripts/canonical_migration_contract.py ./backend/scripts/canonical_migration_contract.py
+COPY backend/scripts/package_canonical_baseline_migration.py ./backend/scripts/package_canonical_baseline_migration.py
+COPY database/schema-authority.json ./database/schema-authority.json
+COPY database/canonical/domains/_contract.json ./database/canonical/domains/_contract.json
+
+RUN python backend/scripts/canonical_migration_contract.py --print-head \
+    && python backend/scripts/package_canonical_baseline_migration.py --verify-package \
+    && touch /review/.canonical-migration-contract-verified
+
+
+FROM python:3.11-slim AS runtime
 
 WORKDIR /app
 
@@ -12,15 +31,36 @@ RUN apt-get update && apt-get install -y --no-install-recommends gcc \
 COPY backend/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY backend/ .
-COPY docs/architecture/mcp-operator-actions.json /app/docs/architecture/mcp-operator-actions.json
-COPY database/schema-authority.json /app/database/schema-authority.json
-COPY database/canonical/domains/_contract.json /app/database/canonical/domains/_contract.json
-COPY deploy/control-plane /app/deploy/control-plane
+# Runtime contains the API plus the narrowly enumerated Live18 database-phase
+# harness used by production-readiness through `railway ssh`.  Ordinary unit
+# tests, development tools, repository documentation, and the MCP runtime are
+# deliberately not image inputs.
+COPY backend/app ./app
+COPY backend/alembic ./alembic
+COPY backend/migration_support ./migration_support
+COPY backend/scripts/canonical_demo_ids.py ./scripts/canonical_demo_ids.py
+COPY backend/scripts/canonical_migration_contract.py ./scripts/canonical_migration_contract.py
+COPY backend/scripts/canonical_staging_database.py ./scripts/canonical_staging_database.py
+COPY backend/scripts/compile_live18_browser_fixture.py ./scripts/compile_live18_browser_fixture.py
+COPY backend/scripts/exercise_staging_mcp_oauth.py ./scripts/exercise_staging_mcp_oauth.py
+COPY backend/scripts/live18_evidence_contract.py ./scripts/live18_evidence_contract.py
+COPY backend/scripts/live18_railway_database_phase.py ./scripts/live18_railway_database_phase.py
+COPY backend/scripts/manage_canonical_write_fence.py ./scripts/manage_canonical_write_fence.py
+COPY backend/scripts/provision_ephemeral_browser_identities.py ./scripts/provision_ephemeral_browser_identities.py
+COPY backend/scripts/provision_ephemeral_canonical_live.py ./scripts/provision_ephemeral_canonical_live.py
+COPY backend/scripts/provision_staging_mcp_oauth.py ./scripts/provision_staging_mcp_oauth.py
+COPY backend/scripts/supabase_auth_admin.py ./scripts/supabase_auth_admin.py
+COPY backend/tests/live_acceptance ./tests/live_acceptance
+COPY backend/tests/live_canonical ./tests/live_canonical
+COPY docs/architecture/mcp-operator-actions.json ./docs/architecture/mcp-operator-actions.json
+COPY database/schema-authority.json ./database/schema-authority.json
+COPY database/canonical/domains/_contract.json ./database/canonical/domains/_contract.json
+COPY deploy/control-plane/canonical-staging.json ./deploy/control-plane/canonical-staging.json
+COPY --from=migration-contract /review/.canonical-migration-contract-verified /tmp/.canonical-migration-contract-verified
 COPY deploy/railway/api.force-deploy /app/.railway-deployment-provenance
 
-RUN python scripts/canonical_migration_contract.py --print-head
-RUN python scripts/package_canonical_baseline_migration.py --verify-package
+RUN test -f /tmp/.canonical-migration-contract-verified \
+    && rm /tmp/.canonical-migration-contract-verified
 
 RUN useradd --create-home --shell /usr/sbin/nologin appuser \
     && chown -R appuser:appuser /app

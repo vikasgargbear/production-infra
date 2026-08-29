@@ -1442,21 +1442,27 @@ def test_api_image_packages_every_import_time_live18_contract():
     dockerfile = (
         phase.BACKEND_DIRECTORY.parent / "deploy" / "railway" / "api.Dockerfile"
     ).read_text(encoding="utf-8")
-    assert "COPY backend/ ." in dockerfile
+    assert "COPY backend/app ./app" in dockerfile
+    assert "COPY backend/scripts/live18_railway_database_phase.py" in dockerfile
+    assert "COPY backend/tests/live_acceptance ./tests/live_acceptance" in dockerfile
+    assert "COPY backend/tests/live_canonical ./tests/live_canonical" in dockerfile
     assert (
         "COPY database/schema-authority.json "
-        "/app/database/schema-authority.json"
+        "./database/schema-authority.json"
     ) in dockerfile
     assert (
         "COPY database/canonical/domains/_contract.json "
-        "/app/database/canonical/domains/_contract.json"
+        "./database/canonical/domains/_contract.json"
     ) in dockerfile
-    assert "RUN python scripts/canonical_migration_contract.py --print-head" in dockerfile
+    assert "python backend/scripts/canonical_migration_contract.py --print-head" in dockerfile
     assert (
         "COPY docs/architecture/mcp-operator-actions.json "
-        "/app/docs/architecture/mcp-operator-actions.json"
+        "./docs/architecture/mcp-operator-actions.json"
     ) in dockerfile
-    assert "COPY deploy/control-plane /app/deploy/control-plane" in dockerfile
+    assert (
+        "COPY deploy/control-plane/canonical-staging.json "
+        "./deploy/control-plane/canonical-staging.json"
+    ) in dockerfile
     assert identities.LIVE18_MATRIX_PATH == (
         identities.BACKEND_ROOT / "tests/live_acceptance/operation_matrix.json"
     )
