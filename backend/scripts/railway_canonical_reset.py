@@ -459,10 +459,7 @@ def _delegated_migration_owner_connection(
                            current_user,
                            session_role.rolsuper,
                            session_role.rolcreaterole,
-                           session_role.rolbypassrls,
-                           pg_catalog.has_parameter_privilege(
-                             session_user,'session_replication_role','SET'
-                           )
+                           session_role.rolbypassrls
                       FROM pg_catalog.pg_roles AS session_role
                      WHERE session_role.rolname=session_user
                     """
@@ -472,7 +469,6 @@ def _delegated_migration_owner_connection(
                 "postgres",
                 "erp_migration_owner",
                 False,
-                True,
                 True,
                 True,
             ):
