@@ -44,7 +44,8 @@ describe('active canonical purchase desktop facts', () => {
     it('keeps calculation requests behind explicit canonical evidence', () => {
         const supplierInvoice = read('purchase-entry/CanonicalSupplierInvoiceFlow.tsx');
         expect(supplierInvoice).toContain('Load canonical GRN and GSTR-2B context first.');
-        expect(supplierInvoice).toContain("prepareCanonicalAction(\n        'procurement.supplier_invoice.prepare'");
+        expect(supplierInvoice).toContain('invoiceDraftsApi.prepare(saved.draft_id, saved.row_version)');
+        expect(supplierInvoice).toContain('saveDraftRevision(draftPayload()');
         expect(supplierInvoice).toContain('validateCanonicalSupplierInvoicePreview');
         expect(read('PDFVerificationFlow.tsx')).not.toMatch(/\.reduce\(|\.toFixed\(/);
         expect(read('ui/PurchaseItemEditModal.tsx')).not.toContain('calculatePurchaseItemTotal');

@@ -9,6 +9,7 @@ export { default as SearchBar } from './SearchBar';
 export { default as NotesSection } from './forms/NotesSection';
 export { default as LoadingSpinner } from './LoadingSpinner';
 export { default as CanonicalWriteNotice } from './CanonicalWriteNotice';
+export { default as InvoiceDraftPicker } from './InvoiceDraftPicker';
 
 // Enhanced Input Components
 export { default as ActionButton } from './ActionButton';

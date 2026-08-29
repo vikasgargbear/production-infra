@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import json
 from pathlib import Path
 import time
@@ -13,6 +13,7 @@ from jsonschema import Draft202012Validator, FormatChecker
 from mcp.server.auth.provider import AccessToken
 
 from .config import Settings
+from .invoice_drafts import DOCUMENT_KINDS, INVOICE_DRAFT_SCHEMAS
 from .operator_actions import (
     DECIMAL_PATTERN,
     IDEMPOTENCY_KEY_PATTERN,
@@ -176,6 +177,8 @@ class OperatorOperation:
     input_schema: Mapping[str, Any]
     kind: str
     branch_fields: tuple[str, ...] = ()
+    operation_key_by_document_kind: Mapping[str, str] | None = None
+    grant_mode: str | None = None
 
 
 OPERATOR_OPERATIONS: dict[str, OperatorOperation] = {
@@ -203,6 +206,41 @@ OPERATOR_OPERATIONS.update(
             "erp_operation_status_get", "automation.command.status.get",
             SHARED_ACTION_SCHEMAS["erp_operation_status_get"], "status",
         ),
+    }
+)
+
+INVOICE_DRAFT_KINDS = frozenset(
+    {
+        "invoice_draft_list",
+        "invoice_draft_get",
+        "invoice_draft_save",
+        "invoice_draft_update",
+        "invoice_draft_abandon",
+        "invoice_draft_prepare",
+    }
+)
+READ_ONLY_INVOICE_DRAFT_KINDS = frozenset(
+    {"invoice_draft_list", "invoice_draft_get"}
+)
+_INVOICE_DRAFT_OPERATION_KEYS: Mapping[str, str] = {
+    "sales_invoice": "sales.invoice.prepare",
+    "supplier_invoice": "procurement.supplier_invoice.prepare",
+}
+OPERATOR_OPERATIONS.update(
+    {
+        tool_name: OperatorOperation(
+            tool_name=tool_name,
+            operation_key="invoice.draft.dynamic",
+            input_schema=schema,
+            kind=tool_name.removeprefix("erp_"),
+            branch_fields=("branch_id",),
+            operation_key_by_document_kind=_INVOICE_DRAFT_OPERATION_KEYS,
+            # The existing reviewed action authority grants invoice preparation.
+            # Draft reads remain MCP read-only tools, while delegation deliberately
+            # uses that same bounded write capability instead of forwarding OAuth.
+            grant_mode="write",
+        )
+        for tool_name, schema in INVOICE_DRAFT_SCHEMAS.items()
     }
 )
 
@@ -704,10 +742,8 @@ class OperationGateway:
         command_request_id: str | None,
     ) -> str:
         claims, organization_id = _oauth_identity(access)
-        operation_mode = (
-            "read"
-            if operation.kind in READ_ONLY_OPERATOR_KINDS
-            else "write"
+        operation_mode = operation.grant_mode or (
+            "read" if operation.kind in READ_ONLY_OPERATOR_KINDS else "write"
         )
         payload = {
             "issuer": claims.get("iss"),
@@ -782,10 +818,20 @@ class OperationGateway:
             location = ".".join(str(part) for part in error.absolute_path) or "arguments"
             raise ValueError(f"{location}: {error.message}")
 
+        effective_operation = operation
+        if operation.operation_key_by_document_kind is not None:
+            document_kind = arguments.get("document_kind")
+            if document_kind not in DOCUMENT_KINDS:
+                raise ValueError("document_kind must identify a supported invoice draft")
+            effective_operation = replace(
+                operation,
+                operation_key=operation.operation_key_by_document_kind[document_kind],
+            )
+
         command_request_id = arguments.get("command_request_id")
         branch_ids = [str(arguments[field]) for field in operation.branch_fields]
         delegated = await self._operator_grant(
-            operation,
+            effective_operation,
             access,
             branch_ids=branch_ids,
             command_request_id=str(command_request_id) if command_request_id else None,
@@ -794,6 +840,7 @@ class OperationGateway:
             "Authorization": f"Bearer {self.settings.internal_service_token}",
             "X-MCP-Delegated-Authorization": f"Bearer {delegated}",
         }
+        request_params: dict[str, Any] | None = None
         if operation.kind == "prepare":
             method = "POST"
             path = f"/api/internal/mcp/actions/{operation.operation_key}/prepare"
@@ -824,6 +871,47 @@ class OperationGateway:
             method = "GET"
             path = f"/api/internal/mcp/commands/{command_request_id}/review"
             payload = None
+        elif operation.kind in INVOICE_DRAFT_KINDS:
+            action = operation.kind.removeprefix("invoice_draft_")
+            draft_id = arguments.get("draft_id")
+            base_path = "/api/internal/mcp/invoice-drafts"
+            if action == "list":
+                method = "GET"
+                path = base_path
+                request_params = {
+                    "document_kind": arguments["document_kind"],
+                    "branch_id": arguments["branch_id"],
+                    "status": arguments.get("status", "open"),
+                    "limit": arguments.get("limit", 50),
+                    "offset": arguments.get("offset", 0),
+                }
+                payload = None
+            elif action == "get":
+                method = "GET"
+                path = f"{base_path}/{draft_id}"
+                payload = None
+            elif action == "save":
+                method = "POST"
+                path = base_path
+                payload = {
+                    "document_kind": arguments["document_kind"],
+                    "branch_id": arguments["branch_id"],
+                    **({"title": arguments["title"]} if arguments.get("title") else {}),
+                    "payload": arguments["payload"],
+                    "created_via": "mcp",
+                }
+            elif action == "update":
+                method = "PATCH"
+                path = f"{base_path}/{draft_id}"
+                payload = {
+                    "expected_row_version": arguments["expected_row_version"],
+                    **({"title": arguments["title"]} if "title" in arguments else {}),
+                    **({"payload": arguments["payload"]} if "payload" in arguments else {}),
+                }
+            else:
+                method = "POST"
+                path = f"{base_path}/{draft_id}/{action}"
+                payload = {"expected_row_version": arguments["expected_row_version"]}
         elif operation.kind in OPERATOR_READBACK_SUFFIXES:
             method = "GET"
             suffix = OPERATOR_READBACK_SUFFIXES[operation.kind]
@@ -839,11 +927,17 @@ class OperationGateway:
                 response = await client.post(
                     f"{self.settings.erp_api_base_url}{path}", json=payload, headers=headers
                 )
+            elif method == "PATCH":
+                response = await client.patch(
+                    f"{self.settings.erp_api_base_url}{path}", json=payload, headers=headers
+                )
             else:
                 response = await client.get(
-                    f"{self.settings.erp_api_base_url}{path}", headers=headers
+                    f"{self.settings.erp_api_base_url}{path}",
+                    params=request_params,
+                    headers=headers,
                 )
-        if response.status_code != 200:
+        if response.status_code not in {200, 201}:
             detail = response.json() if response.content else {}
             raise UpstreamContractError(
                 f"canonical operator action failed with status {response.status_code}: {detail}"
@@ -853,7 +947,55 @@ class OperationGateway:
         body = response.json()
         if not isinstance(body, dict):
             raise UpstreamContractError("ERP action response must be an object")
+        if operation.kind == "invoice_draft_list":
+            drafts = body.get("drafts")
+            total = body.get("total")
+            if not isinstance(drafts, list) or not isinstance(total, int):
+                raise UpstreamContractError("ERP invoice-draft list response schema drift")
+            if len(drafts) > int(arguments.get("limit", 50)):
+                raise UpstreamContractError("ERP invoice-draft list exceeded its requested limit")
+            if any(
+                not isinstance(draft, dict)
+                or draft.get("document_kind") != arguments["document_kind"]
+                or draft.get("branch_id") != arguments["branch_id"]
+                for draft in drafts
+            ):
+                raise UpstreamContractError("ERP invoice-draft list escaped its requested scope")
+            for draft in drafts:
+                self._validate_relative_edit_path(draft)
+        elif operation.kind in INVOICE_DRAFT_KINDS - {"invoice_draft_prepare"}:
+            if not isinstance(body.get("draft_id"), str):
+                raise UpstreamContractError("ERP invoice-draft response lacks draft_id")
+            if arguments.get("draft_id") and body["draft_id"] != arguments["draft_id"]:
+                raise UpstreamContractError("ERP invoice-draft response changed draft_id")
+            if body.get("document_kind") != arguments["document_kind"]:
+                raise UpstreamContractError("ERP invoice-draft response changed document_kind")
+            if body.get("branch_id") != arguments["branch_id"]:
+                raise UpstreamContractError("ERP invoice-draft response changed branch_id")
+            if not isinstance(body.get("row_version"), int) or body["row_version"] < 1:
+                raise UpstreamContractError("ERP invoice-draft response lacks row_version")
+            if "payload" in arguments and body.get("payload") != arguments["payload"]:
+                raise UpstreamContractError("ERP invoice-draft response changed payload")
+            self._validate_relative_edit_path(body)
+        elif operation.kind == "invoice_draft_prepare":
+            if not all(isinstance(body.get(field), str) and body[field] for field in (
+                "command_request_id", "preview_hash", "expires_at",
+            )):
+                raise UpstreamContractError("ERP invoice-draft prepare response schema drift")
         return body
+
+    @staticmethod
+    def _validate_relative_edit_path(body: Mapping[str, Any]) -> None:
+        edit_path = body.get("edit_path")
+        if edit_path is None:
+            return
+        if (
+            not isinstance(edit_path, str)
+            or not edit_path.startswith("/")
+            or edit_path.startswith("//")
+            or "://" in edit_path
+        ):
+            raise UpstreamContractError("ERP invoice-draft edit_path must be relative")
 
     async def readiness(self) -> None:
         async with self._client_factory() as client:

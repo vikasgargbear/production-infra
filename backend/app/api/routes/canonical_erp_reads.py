@@ -3275,7 +3275,8 @@ def _sales_rows(db: Session, org_id: UUID, table_name: str, number_column: str,
                 limit: int, offset: int, date_from: Optional[str] = None,
                 date_to: Optional[str] = None, search: str = "",
                 payment_status: Optional[str] = None,
-                include_invoice_payments: bool = False) -> list[dict]:
+                include_invoice_payments: bool = False,
+                posted_only: bool = False) -> list[dict]:
     payment_status_expression = """
         CASE
           WHEN document.status IN ('cancelled','reversed') THEN 'cancelled'
@@ -3343,6 +3344,7 @@ def _sales_rows(db: Session, org_id: UUID, table_name: str, number_column: str,
            AND (CAST(:payment_status AS text) IS NULL
                 OR {payment_status_expression}=CAST(:payment_status AS text))
     """ if include_invoice_payments else ""
+    posting_filter = "AND document.status='posted'" if posted_only else ""
     params = {"org_id": org_id, "date_from": date_from, "date_to": date_to,
               "limit": limit, "offset": offset, "search": search.strip(),
               "search_pattern": f"%{search.strip()}%"}
@@ -3392,6 +3394,7 @@ def _sales_rows(db: Session, org_id: UUID, table_name: str, number_column: str,
           ) lines ON true
           {payment_join}
          WHERE document.org_id=:org_id
+           {posting_filter}
            AND (:date_from IS NULL OR document.{date_column} >= CAST(:date_from AS date))
            AND (:date_to IS NULL OR document.{date_column} <= CAST(:date_to AS date))
            {search_filter}
@@ -3412,7 +3415,8 @@ def invoices(limit: int = Query(50, ge=1, le=500), offset: int = Query(0, ge=0),
     org_id = _activate(db, user)
     rows = _sales_rows(db, org_id, "invoices", "invoice_number", "invoice_date",
                        "invoice_lines", "invoice_id", limit, offset, date_from, date_to,
-                       search, payment_status, include_invoice_payments=True)
+                       search, payment_status, include_invoice_payments=True,
+                       posted_only=True)
     for row in rows:
         row.update(invoice_id=row["id"], invoice_number=row["document_number"],
                    invoice_date=row["document_date"])
@@ -5212,6 +5216,7 @@ def supplier_invoices(limit: int = Query(100, ge=1, le=500), skip: int = Query(0
                  AND line.line_kind='product'
           ) lines ON true
          WHERE invoice.org_id=:org_id
+           AND invoice.status='posted'
            AND (:from_date IS NULL OR invoice.supplier_invoice_date >= CAST(:from_date AS date))
            AND (:to_date IS NULL OR invoice.supplier_invoice_date <= CAST(:to_date AS date))
            AND (:search IS NULL OR invoice.supplier_invoice_number ILIKE '%%' || :search || '%%'

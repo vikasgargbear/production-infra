@@ -15,6 +15,12 @@ import { parseHash, buildHash, normalizePathnameRoute } from '../hooks/useHashRo
 // ---------------------------------------------------------------------------
 
 describe('parseHash', () => {
+  it('ignores query parameters when resolving a draft deep link', () => {
+    expect(parseHash('#/purchase/supplier-invoice?draft=11111111-1111-7111-8111-111111111111')).toEqual({
+      tab: 'purchase',
+      subpage: 'supplier-invoice',
+    });
+  });
   it('returns home tab with null subpage for empty string', () => {
     expect(parseHash('')).toEqual({ tab: 'home', subpage: null });
   });

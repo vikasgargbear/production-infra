@@ -21,6 +21,9 @@ interface InvoicePreviewStepProps {
     onClose: () => void;
     onBack: (step?: number) => void;
     onSave: () => void;
+    onSaveDraft: () => void;
+    onOpenDrafts: () => void;
+    draftSaving: boolean;
     onPrint: () => void;
     onThermalPrint: () => void;
     saving: boolean;
@@ -34,6 +37,9 @@ const InvoicePreviewStep: React.FC<InvoicePreviewStepProps> = ({
     onClose,
     onBack,
     onSave,
+    onSaveDraft,
+    onOpenDrafts,
+    draftSaving,
     onPrint,
     onThermalPrint,
     saving
@@ -51,7 +57,11 @@ const InvoicePreviewStep: React.FC<InvoicePreviewStepProps> = ({
             <div className="flex h-full flex-col bg-gray-50">
                 <ModuleHeader title="Invoice Preview" documentNumber={invoice.invoice_number}
                     status="unavailable" icon={FileText} iconColor="text-amber-600" onClose={onClose}
-                    additionalActions={[{ label: '← Back to Details', onClick: () => onBack(2), variant: 'secondary' }]} />
+                    showSaveDraft onSaveDraft={onSaveDraft} saveDraftDisabled={draftSaving}
+                    additionalActions={[
+                        { label: 'Open drafts', onClick: onOpenDrafts, disabled: draftSaving, variant: 'secondary' },
+                        { label: '← Back to Details', onClick: () => onBack(2), variant: 'secondary' },
+                    ]} />
                 <div className="m-auto max-w-xl rounded-lg border border-amber-200 bg-amber-50 p-6 text-amber-900" role="alert">
                     <div className="flex items-start gap-3">
                         <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
@@ -75,7 +85,16 @@ const InvoicePreviewStep: React.FC<InvoicePreviewStepProps> = ({
                     icon={FileText}
                     iconColor="text-blue-600"
                     onClose={onClose}
+                    showSaveDraft
+                    onSaveDraft={onSaveDraft}
+                    saveDraftDisabled={draftSaving}
                     additionalActions={[
+                        {
+                            label: 'Open drafts',
+                            onClick: onOpenDrafts,
+                            disabled: draftSaving,
+                            variant: 'secondary'
+                        },
                         {
                             label: "← Back to Details",
                             onClick: () => onBack(2),

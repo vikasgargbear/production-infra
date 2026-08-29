@@ -106,7 +106,7 @@ def main() -> int:
         )
     finally:
         plan_connection.close()
-    assert plan["organization_relation_count"] == 104
+    assert plan["organization_relation_count"] == 105
     assert plan["global_reset_available"] is False
     assert plan["truncate_used"] is False
 

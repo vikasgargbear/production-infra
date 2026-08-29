@@ -19,6 +19,9 @@ interface InvoiceDetailsStepProps {
     onClose: () => void;
     onContinue: () => void;
     onBack: () => void;
+    onSaveDraft: () => void;
+    onOpenDrafts: () => void;
+    draftSaving: boolean;
     // Refs
     deliveryTypeRef: RefObject<HTMLSelectElement>;
     transportRef: RefObject<HTMLInputElement>;
@@ -34,6 +37,9 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
     onClose,
     onContinue,
     onBack,
+    onSaveDraft,
+    onOpenDrafts,
+    draftSaving,
     // Refs
     deliveryTypeRef,
     transportRef,
@@ -47,6 +53,14 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
     // State for controlling AddressForm add mode externally
     const [addAddressMode, setAddAddressMode] = useState(false);
     const [discountInputError, setDiscountInputError] = useState<string | null>(null);
+    const hasDiscount = (() => {
+        try {
+            return compareExactDecimals(invoice.discount_percent || '0', '0', 'Invoice discount percent', { scale: 6 }) > 0
+                || compareExactDecimals(invoice.discount_amount || '0', '0', 'Invoice discount amount', { scale: 4 }) > 0;
+        } catch {
+            return false;
+        }
+    })();
 
     return (
         <div className="h-full bg-gray-50">
@@ -60,7 +74,16 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                     icon={FileText}
                     iconColor="text-blue-600"
                     onClose={onClose}
+                    showSaveDraft
+                    onSaveDraft={onSaveDraft}
+                    saveDraftDisabled={draftSaving}
                     additionalActions={[
+                        {
+                            label: 'Open drafts',
+                            onClick: onOpenDrafts,
+                            disabled: draftSaving,
+                            variant: 'secondary'
+                        },
                         {
                             label: "← Back to Items",
                             onClick: onBack,
@@ -236,8 +259,8 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                                     onClick={() => setInvoice(prev => ({
                                                         ...prev,
                                                         discount_type: 'percentage',
-                                                        discount_amount: 0,
-                                                        discount_percent: prev.discount_percent || 0
+                                                        discount_amount: '0.00',
+                                                        discount_percent: prev.discount_percent || '0.00'
                                                     }))}
                                                     className={`min-h-11 min-w-0 px-2 py-2.5 text-sm font-medium transition-colors sm:px-3 ${(invoice.discount_type || 'percentage') === 'percentage'
                                                         ? 'bg-blue-600 text-white'
@@ -252,8 +275,8 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                                     onClick={() => setInvoice(prev => ({
                                                         ...prev,
                                                         discount_type: 'fixed',
-                                                        discount_percent: 0,
-                                                        discount_amount: prev.discount_amount || 0
+                                                        discount_percent: '0.00',
+                                                        discount_amount: prev.discount_amount || '0.00'
                                                     }))}
                                                     className={`min-h-11 min-w-0 px-2 py-2.5 text-sm font-medium transition-colors sm:px-3 ${invoice.discount_type === 'fixed'
                                                         ? 'bg-blue-600 text-white'
@@ -287,7 +310,7 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                                             return;
                                                         }
                                                         setDiscountInputError(null);
-                                                        const value = rawValue === '' ? 0 : parseFloat(rawValue) || 0;
+                                                        const value = rawValue === '' ? '0.00' : rawValue;
                                                         if (invoice.discount_type === 'fixed') {
                                                             setInvoice(prev => ({ ...prev, discount_amount: value }));
                                                         } else {
@@ -313,12 +336,12 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
 
                                         {/* Clear Button */}
                                         <div className="sm:col-span-3 lg:col-span-4">
-                                            {((invoice.discount_percent || 0) > 0 || (invoice.discount_amount || 0) > 0) ? (
+                                            {hasDiscount ? (
                                                 <button
                                                     onClick={() => setInvoice(prev => ({
                                                         ...prev,
-                                                        discount_percent: 0,
-                                                        discount_amount: 0
+                                                        discount_percent: '0.00',
+                                                        discount_amount: '0.00'
                                                     }))}
                                                     className="min-h-11 w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-600 transition-colors hover:bg-red-50 hover:text-red-600 sm:w-auto"
                                                 >

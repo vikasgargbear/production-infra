@@ -18,6 +18,7 @@ from .models import (
     CommandExecution,
     CommandReview,
     CommandState,
+    DraftPrepareBinding,
     OperatorActionError,
     PreparedCommand,
 )
@@ -37,6 +38,7 @@ __all__ = [
     "CommandExecution",
     "CommandReview",
     "CommandState",
+    "DraftPrepareBinding",
     "OperatorActionError",
     "OperatorActionService",
     "OperatorCommandType",

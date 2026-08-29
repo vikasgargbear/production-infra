@@ -28,6 +28,7 @@ import pytest
 from aasopharma_mcp.operations import (
     OPERATIONS,
     OPERATOR_OPERATIONS,
+    READ_ONLY_INVOICE_DRAFT_KINDS,
     READ_ONLY_OPERATOR_KINDS,
 )
 from aasopharma_mcp.server import create_app, registered_tool_names
@@ -383,7 +384,7 @@ async def test_oauth_challenge_inventory_annotations_and_valid_sdk_session() -> 
         advertised = (await session.list_tools()).tools
 
     assert tuple(sorted(tool.name for tool in advertised)) == registered_tool_names()
-    assert len(advertised) == 79
+    assert len(advertised) == 85
     by_name = {tool.name: tool for tool in advertised}
     for name in OPERATIONS:
         annotation = by_name[name].annotations
@@ -399,7 +400,9 @@ async def test_oauth_challenge_inventory_annotations_and_valid_sdk_session() -> 
     for name, operation in OPERATOR_OPERATIONS.items():
         annotation = by_name[name].annotations
         assert annotation is not None
-        expected_read_only = operation.kind in READ_ONLY_OPERATOR_KINDS | {"review"}
+        expected_read_only = operation.kind in (
+            READ_ONLY_OPERATOR_KINDS | READ_ONLY_INVOICE_DRAFT_KINDS | {"review"}
+        )
         assert annotation.read_only_hint is expected_read_only
         assert annotation.destructive_hint is (not expected_read_only)
         assert annotation.idempotent_hint is True

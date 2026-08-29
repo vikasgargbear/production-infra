@@ -39,7 +39,9 @@ BEGIN
                                  'resolve_bank_reconciliation_prepare','persist_bank_reconciliation_prepare',
                                  'execute_bank_reconciliation_command',
                                  'resolve_expense_claim_prepare','persist_expense_claim_prepare',
-                                 'approve_expense_claim_command','execute_approved_expense_claim')
+                                 'approve_expense_claim_command','execute_approved_expense_claim',
+                                 'create_invoice_draft','update_invoice_draft',
+                                 'abandon_invoice_draft')
        AND pg_catalog.has_function_privilege('erp_runtime',procedure.oid,'EXECUTE');
     expected_runtime_count:=CASE
       WHEN pg_catalog.to_regprocedure(
@@ -49,6 +51,11 @@ BEGIN
         'erp_automation_commands.execute_approved_expense_claim(uuid,uuid)'
       ) IS NULL THEN 32
       ELSE 36
+    END + CASE
+      WHEN pg_catalog.to_regprocedure(
+        'erp_automation_commands.create_invoice_draft(uuid,uuid,text,uuid,text,jsonb,text)'
+      ) IS NULL THEN 0
+      ELSE 3
     END;
     IF runtime_count<>expected_runtime_count THEN
         RAISE EXCEPTION 'expected % reviewed runtime automation commands, found %',expected_runtime_count,runtime_count;
@@ -77,7 +84,9 @@ BEGIN
                                      'resolve_bank_reconciliation_prepare','persist_bank_reconciliation_prepare',
                                      'execute_bank_reconciliation_command',
                                      'resolve_expense_claim_prepare','persist_expense_claim_prepare',
-                                     'approve_expense_claim_command','execute_approved_expense_claim')
+                                     'approve_expense_claim_command','execute_approved_expense_claim',
+                                     'create_invoice_draft','update_invoice_draft',
+                                     'abandon_invoice_draft')
        AND (pg_catalog.has_function_privilege('erp_runtime',procedure.oid,'EXECUTE')
             OR pg_catalog.has_function_privilege('erp_app',procedure.oid,'EXECUTE')
             OR pg_catalog.has_function_privilege('public',procedure.oid,'EXECUTE'));
@@ -89,15 +98,21 @@ BEGIN
       FROM pg_catalog.pg_proc procedure
       JOIN pg_catalog.pg_namespace namespace ON namespace.oid=procedure.pronamespace
      WHERE namespace.nspname='erp_automation_commands'
-      AND procedure.proname IN ('resolve_sales_order_prepare','persist_sales_order_prepare',
+      AND (procedure.proname IN ('resolve_sales_order_prepare','persist_sales_order_prepare',
                                  'resolve_sales_invoice_prepare','persist_sales_invoice_prepare',
                                  'resolve_purchase_order_prepare','persist_purchase_order_prepare',
                                  'resolve_supplier_invoice_prepare','persist_supplier_invoice_prepare',
                                  'resolve_sales_return_prepare','persist_sales_return_prepare',
                                  'resolve_purchase_return_prepare','persist_purchase_return_prepare')
+           OR procedure.oid=pg_catalog.to_regprocedure(
+             'erp_automation_commands.bind_invoice_draft_prepare(uuid,uuid,bigint,bytea,uuid,text,uuid)'
+           ))
        AND pg_catalog.has_function_privilege('erp_calculator',procedure.oid,'EXECUTE');
-    IF calculator_count<>12 THEN
-        RAISE EXCEPTION 'expected twelve reviewed calculator automation commands, found %',calculator_count;
+    IF calculator_count<>(12 + CASE
+      WHEN pg_catalog.to_regprocedure(
+        'erp_automation_commands.bind_invoice_draft_prepare(uuid,uuid,bigint,bytea,uuid,text,uuid)'
+      ) IS NULL THEN 0 ELSE 1 END) THEN
+        RAISE EXCEPTION 'reviewed calculator automation command count drifted: found %',calculator_count;
     END IF;
 
     IF pg_catalog.to_regprocedure(
@@ -142,6 +157,9 @@ BEGIN
                                      'resolve_adjustment_note_prepare','persist_adjustment_note_prepare')
        AND procedure.oid IS DISTINCT FROM pg_catalog.to_regprocedure(
          'erp_automation_commands.resolve_sales_invoice_product_identities(uuid,jsonb)'
+       )
+       AND procedure.oid IS DISTINCT FROM pg_catalog.to_regprocedure(
+         'erp_automation_commands.bind_invoice_draft_prepare(uuid,uuid,bigint,bytea,uuid,text,uuid)'
        )
        AND pg_catalog.has_function_privilege('erp_calculator',procedure.oid,'EXECUTE');
     IF bad_count<>0 THEN

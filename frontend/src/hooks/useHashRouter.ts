@@ -28,7 +28,8 @@ export interface HashRouterState {
 /** Parse #/<tab>[/<subpage>] — returns defaults if hash is empty or malformed. */
 export function parseHash(hash: string): HashRouterState {
   const stripped = hash.startsWith('#') ? hash.slice(1) : hash;
-  const [, tab, subpage] = stripped.split('/');
+  const [path] = stripped.split('?');
+  const [, tab, subpage] = path.split('/');
   return {
     tab: tab || 'home',
     subpage: subpage || null,
@@ -105,7 +106,8 @@ export function useHashRouter(
       window.history.replaceState(window.history.state, '', `/${window.location.search}${canonical}`);
       return;
     }
-    if (window.location.hash !== canonical) {
+    const currentHashPath = window.location.hash.split('?')[0];
+    if (currentHashPath !== canonical) {
       window.location.replace(canonical);
     }
     // Only run once on mount

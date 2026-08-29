@@ -1,10 +1,11 @@
 # AASOPharma MCP Runtime
 
 This isolated Python 3.11 service uses the official MCP SDK's stateless
-Streamable HTTP transport. It has no database connection. It exports 71 tools:
-14 bounded base reads, 12 resolution reads, 22 prepare actions, four reversible
-master-data writes, four shared command lifecycle tools, and 15 exact command
-readbacks through the application-owned delegated boundary.
+Streamable HTTP transport. It has no database connection. It exports 85 tools:
+27 bounded and resolution reads, 22 prepare actions, 10 reviewed master-data
+writes, six shared invoice-draft lifecycle tools, four shared command lifecycle
+tools, 15 exact command readbacks, and one stateless purchase-bill review through
+the application-owned delegated boundary.
 
 The operator action schemas live in `aasopharma_mcp/operator_actions.py`
 and are governed by `docs/architecture/mcp-operator-actions.json`. They cover
@@ -38,6 +39,13 @@ scopes. Each tool separately checks the app-owned active grant, exact capability
 operation mode, approval policy, permission, expiry, tenant, and branch scope.
 The OAuth bearer is never forwarded to ERP.
 
+Sales- and supplier-invoice drafts use the same canonical ERP draft authority as
+the first-party UI. MCP preserves the exact `invoice-draft.v1` authoring envelope;
+`editor_state` is never business authority and an incomplete draft may retain a
+null `command_payload`. Draft preparation validates the complete command payload
+server-side and returns only an immutable command preview. Approval and posting
+remain separate explicit command-lifecycle tools.
+
 ## Release State
 
 Supabase DCR is disabled. The hosted consent UI and official SDK boundary are
@@ -45,8 +53,9 @@ implemented, and the lock resolves
 `@supabase/supabase-js` to `2.112.3`; clean Node 22 CI verifies authorization
 detail loading, explicit approval, denial, scope rejection, identity binding,
 type checking, build, and browser E2E. Code-owned gates and per-capability grants
-keep every unapproved operation fail closed. Published writes always require
-prepare, human approval, and execution.
+keep every unapproved operation fail closed. Published posting actions always
+require prepare, human approval, and execution. Draft save/update/abandon
+operations create no accounting, inventory, tax, payable, or receivable posting.
 
 ChatGPT needs `offline_access` for refresh and controlled Business/Enterprise/
 Edu admin or developer-mode rollout; tool snapshots must be frozen for review.

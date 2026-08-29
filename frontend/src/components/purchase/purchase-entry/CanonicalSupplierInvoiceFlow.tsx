@@ -2,10 +2,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, CheckCircle2, FileCheck2, Loader2, RefreshCw } from 'lucide-react';
 import { toast } from 'react-toastify';
 
-import { ModuleHeader } from '../../global';
+import { InvoiceDraftPicker, ModuleHeader } from '../../global';
 import {
   approveAndExecuteCanonicalAction,
-  prepareCanonicalAction,
   type CanonicalCommandPreview,
 } from '../../../services/api/canonicalOperatorActions';
 import {
@@ -24,6 +23,18 @@ import {
 import { reconcileCanonicalSupplierInvoice } from './utils/canonicalSupplierInvoiceLifecycle';
 import { requireCanonicalPostingDate } from '../../../utils/canonicalPostingDate';
 import { useEnterAsTab } from '../../../hooks/useEnterAsTab';
+import {
+  invoiceDraftsApi,
+  invoiceDraftIdFromLocation,
+  invoiceDraftMutationError,
+  type InvoiceDraft,
+} from '../../../services/api/modules/invoiceDrafts.api';
+import {
+  buildSupplierInvoiceDraftPayload,
+  requireSupplierInvoiceDraftState,
+  type SupplierInvoiceDraftPayload,
+} from './utils/supplierInvoiceDraftState';
+import { useAuth } from '../../../contexts/AuthContext';
 
 const enterExclusions = ['textarea', 'button', 'input[type="checkbox"]', '[data-no-enter-tab]'];
 
@@ -35,6 +46,7 @@ const errorMessage = (error: any): string => (
 );
 
 const CanonicalSupplierInvoiceFlow: React.FC<{ onClose?: () => void }> = ({ onClose }) => {
+  const { user } = useAuth();
   const entryRef = useRef<HTMLDivElement>(null);
   useEnterAsTab({ containerRef: entryRef, excludeSelectors: enterExclusions });
   const [receipts, setReceipts] = useState<CanonicalEligibleReceipt[]>([]);
@@ -62,6 +74,12 @@ const CanonicalSupplierInvoiceFlow: React.FC<{ onClose?: () => void }> = ({ onCl
   const prepareId = useRef(clientUuid());
   const lifecycleId = useRef(clientUuid());
   const contextRequestSequence = useRef(0);
+  const [activeDraft, setActiveDraft] = useState<InvoiceDraft<SupplierInvoiceDraftPayload> | null>(null);
+  const [drafts, setDrafts] = useState<Array<InvoiceDraft<SupplierInvoiceDraftPayload>>>([]);
+  const [draftPickerOpen, setDraftPickerOpen] = useState(false);
+  const [draftsLoading, setDraftsLoading] = useState(false);
+  const [draftBusyId, setDraftBusyId] = useState<string | null>(null);
+  const deepLinkedDraftRef = useRef<string | null>(null);
 
   const selectedReceipt = useMemo(
     () => receipts.find((receipt) => receipt.goods_receipt_id === selectedReceiptId),
@@ -174,7 +192,7 @@ const CanonicalSupplierInvoiceFlow: React.FC<{ onClose?: () => void }> = ({ onCl
     }
   };
 
-  const draftPayload = () => {
+  const draftPayload = useCallback(() => {
     if (!context) throw new Error('Load canonical GRN and GSTR-2B context first.');
     requireCanonicalPostingDate(invoiceDate, businessDate, 'Supplier invoice date');
     requireCanonicalPostingDate(
@@ -205,17 +223,189 @@ const CanonicalSupplierInvoiceFlow: React.FC<{ onClose?: () => void }> = ({ onCl
           return [line.purchase_order_line_id, method];
         })),
     });
-  };
+  }, [
+    allocationMethods,
+    businessDate,
+    chargeAllocationMethods,
+    context,
+    invoiceDate,
+    invoiceNumber,
+    itcAttested,
+    rates,
+    receivedDate,
+  ]);
+
+  const editorState = useCallback(() => ({
+    selected_receipt_id: selectedReceiptId,
+    invoice_number: invoiceNumber,
+    invoice_date: invoiceDate,
+    received_date: receivedDate,
+    rates: Object.fromEntries(Object.entries(rates).map(([key, value]) => [key, String(value)])),
+    allocation_methods: allocationMethods,
+    charge_allocation_methods: chargeAllocationMethods,
+    itc_attested: itcAttested,
+  }), [
+    allocationMethods,
+    chargeAllocationMethods,
+    invoiceDate,
+    invoiceNumber,
+    itcAttested,
+    rates,
+    receivedDate,
+    selectedReceiptId,
+  ]);
+
+  const saveDraftRevision = useCallback(async (
+    commandPayload: Record<string, unknown> | null,
+    options: { notify?: boolean } = {},
+  ): Promise<InvoiceDraft<SupplierInvoiceDraftPayload>> => {
+    const branchId = String(selectedReceipt?.branch_id || activeDraft?.branch_id || user?.branch_id || '');
+    if (!branchId) throw new Error('Select a posted GRN or branch before saving this supplier invoice draft.');
+    const payload = buildSupplierInvoiceDraftPayload(editorState(), commandPayload);
+    try {
+      const response = activeDraft
+        ? await invoiceDraftsApi.update(activeDraft.draft_id, {
+          expected_row_version: activeDraft.row_version,
+          title: invoiceNumber.trim() || 'Supplier invoice',
+          payload,
+        })
+        : await invoiceDraftsApi.create({
+          document_kind: 'supplier_invoice',
+          branch_id: branchId,
+          title: invoiceNumber.trim() || 'Supplier invoice',
+          payload,
+          created_via: 'web',
+        });
+      const saved = response.data;
+      setActiveDraft(saved);
+      setDrafts(current => [saved, ...current.filter(item => item.draft_id !== saved.draft_id)]);
+      if (options.notify !== false) toast.success('Supplier invoice draft saved.');
+      return saved;
+    } catch (error) {
+      throw invoiceDraftMutationError(error);
+    }
+  }, [activeDraft, editorState, invoiceNumber, selectedReceipt?.branch_id, user?.branch_id]);
+
+  const saveDraft = useCallback(async () => {
+    if (draftBusyId) return;
+    setDraftBusyId(activeDraft?.draft_id || 'new');
+    try {
+      let commandPayload: Record<string, unknown> | null = null;
+      try {
+        commandPayload = draftPayload();
+      } catch {
+        // An incomplete supplier invoice remains resumable and cannot be prepared.
+      }
+      await saveDraftRevision(commandPayload);
+    } catch (error) {
+      toast.error(errorMessage(error));
+    } finally {
+      setDraftBusyId(null);
+    }
+  }, [activeDraft?.draft_id, draftBusyId, draftPayload, saveDraftRevision]);
+
+  const loadDrafts = useCallback(async () => {
+    setDraftsLoading(true);
+    try {
+      const response = await invoiceDraftsApi.list<SupplierInvoiceDraftPayload>('supplier_invoice', {
+        limit: 50,
+      });
+      setDrafts(response.data.drafts.filter(draft => draft.status === 'open' || draft.status === 'prepared'));
+    } catch (error) {
+      toast.error(errorMessage(error));
+    } finally {
+      setDraftsLoading(false);
+    }
+  }, []);
+
+  const openDraftPicker = useCallback(() => {
+    setDraftPickerOpen(true);
+    void loadDrafts();
+  }, [loadDrafts]);
+
+  const openDraft = useCallback(async (summary: InvoiceDraft) => {
+    setDraftBusyId(summary.draft_id);
+    try {
+      const response = await invoiceDraftsApi.get<SupplierInvoiceDraftPayload>(summary.draft_id);
+      if (response.data.document_kind !== 'supplier_invoice' || response.data.status === 'abandoned') {
+        throw new Error('This supplier invoice draft is no longer editable.');
+      }
+      const state = requireSupplierInvoiceDraftState(response.data.payload);
+      setSelectedReceiptId(state.selected_receipt_id);
+      setInvoiceNumber(state.invoice_number);
+      setInvoiceDate(state.invoice_date);
+      setReceivedDate(state.received_date);
+      setRates(state.rates);
+      setAllocationMethods(state.allocation_methods);
+      setChargeAllocationMethods(state.charge_allocation_methods);
+      setItcAttested(state.itc_attested);
+      setPrepared(null);
+      setPosted(null);
+      setActiveDraft(response.data);
+      if (state.selected_receipt_id && state.invoice_number && state.invoice_date) {
+        const contextResponse = await canonicalSupplierInvoicesApi.context({
+          goodsReceiptId: state.selected_receipt_id,
+          supplierInvoiceNumber: state.invoice_number,
+          invoiceDate: state.invoice_date,
+        });
+        setContext(contextResponse.data);
+      } else {
+        setContext(null);
+      }
+      setDraftPickerOpen(false);
+      toast.success(response.data.created_via === 'mcp' ? 'ChatGPT draft opened.' : 'Supplier invoice draft opened.');
+    } catch (error) {
+      toast.error(errorMessage(error));
+    } finally {
+      setDraftBusyId(null);
+    }
+  }, []);
+
+  const abandonDraft = useCallback(async (draft: InvoiceDraft) => {
+    setDraftBusyId(draft.draft_id);
+    try {
+      await invoiceDraftsApi.abandon(draft.draft_id, draft.row_version);
+      setDrafts(current => current.filter(item => item.draft_id !== draft.draft_id));
+      if (activeDraft?.draft_id === draft.draft_id) {
+        setActiveDraft(null);
+        setSelectedReceiptId('');
+        setInvoiceNumber('');
+        setContext(null);
+        setRates({});
+        setAllocationMethods({});
+        setChargeAllocationMethods({});
+        setItcAttested(false);
+        resetReview();
+      }
+      toast.success('Supplier invoice draft discarded.');
+    } catch (error) {
+      toast.error(errorMessage(error));
+    } finally {
+      setDraftBusyId(null);
+    }
+  }, [activeDraft?.draft_id]);
+
+  useEffect(() => {
+    const draftId = invoiceDraftIdFromLocation(window.location);
+    if (draftId && deepLinkedDraftRef.current !== draftId) {
+      deepLinkedDraftRef.current = draftId;
+      void openDraft({ draft_id: draftId } as InvoiceDraft);
+    }
+  }, [openDraft]);
 
   const prepareReview = async () => {
     setLoading(true);
     try {
-      const response = await prepareCanonicalAction(
-        'procurement.supplier_invoice.prepare',
-        draftPayload(),
-      );
+      const saved = await saveDraftRevision(draftPayload(), { notify: false });
+      const response = await invoiceDraftsApi.prepare(saved.draft_id, saved.row_version);
       if (!context) throw new Error('Canonical context expired before preview validation.');
       setPrepared(validateCanonicalSupplierInvoicePreview(response.data, context));
+      try {
+        const refreshed = await invoiceDraftsApi.get<SupplierInvoiceDraftPayload>(saved.draft_id);
+        setActiveDraft(refreshed.data);
+      } catch {
+        // The immutable preview remains authoritative; metadata refresh is recoverable.
+      }
       toast.success('Immutable supplier-invoice preview is ready for approval.');
     } catch (error) {
       toast.error(errorMessage(error));
@@ -243,6 +433,15 @@ const CanonicalSupplierInvoiceFlow: React.FC<{ onClose?: () => void }> = ({ onCl
         (resourceId) => { executedResourceId.current = resourceId; },
       );
       setPosted(result.detail);
+      if (activeDraft) {
+        try {
+          const refreshed = await invoiceDraftsApi.get<SupplierInvoiceDraftPayload>(activeDraft.draft_id);
+          setActiveDraft(refreshed.data);
+          setDrafts(current => current.filter(item => item.draft_id !== refreshed.data.draft_id));
+        } catch {
+          // Posting is reconciled already; the next draft refresh derives final status.
+        }
+      }
       toast.success(`Supplier invoice ${result.detail.supplier_invoice_number} posted and reconciled.`);
     } catch (error) {
       toast.error(errorMessage(error));
@@ -277,7 +476,21 @@ const CanonicalSupplierInvoiceFlow: React.FC<{ onClose?: () => void }> = ({ onCl
 
   return (
     <div ref={entryRef} className="h-full overflow-y-auto bg-slate-50">
-      <ModuleHeader title="Supplier Invoice" documentNumber={invoiceNumber} status={prepared ? 'review' : 'active'} icon={FileCheck2} iconColor="text-blue-600" onClose={onClose || (() => {})} showSaveDraft={false} onSaveDraft={() => {}} additionalActions={[{ label: '', title: 'Refresh posted receipts', icon: RefreshCw, variant: 'ghost', onClick: loadReceipts, disabled: loadingReceipts } as any]} />
+      <ModuleHeader
+        title="Supplier Invoice"
+        documentNumber={invoiceNumber}
+        status={prepared ? 'review' : 'active'}
+        icon={FileCheck2}
+        iconColor="text-blue-600"
+        onClose={onClose || (() => {})}
+        showSaveDraft={!prepared}
+        onSaveDraft={saveDraft}
+        saveDraftDisabled={Boolean(draftBusyId)}
+        additionalActions={[
+          { label: 'Open drafts', variant: 'secondary', onClick: openDraftPicker, disabled: Boolean(draftBusyId) },
+          { label: '', title: 'Refresh posted receipts', icon: RefreshCw, variant: 'ghost', onClick: loadReceipts, disabled: loadingReceipts } as any,
+        ]}
+      />
       <main className="mx-auto max-w-6xl space-y-4 p-6">
         {!prepared ? (
           <>
@@ -346,6 +559,16 @@ const CanonicalSupplierInvoiceFlow: React.FC<{ onClose?: () => void }> = ({ onCl
           </section>
         )}
       </main>
+      <InvoiceDraftPicker
+        open={draftPickerOpen}
+        title="Saved supplier invoice drafts"
+        drafts={drafts}
+        loading={draftsLoading}
+        busyDraftId={draftBusyId}
+        onClose={() => setDraftPickerOpen(false)}
+        onOpen={openDraft}
+        onAbandon={abandonDraft}
+      />
     </div>
   );
 };

@@ -58,6 +58,15 @@ class ActionContext:
 
 
 @dataclass(frozen=True)
+class DraftPrepareBinding:
+    """Exact persisted editor revision bound inside invoice prepare transaction."""
+
+    draft_id: UUID
+    expected_row_version: int
+    payload_sha256: str
+
+
+@dataclass(frozen=True)
 class PreparedCommand:
     command_request_id: UUID
     command_type: str
