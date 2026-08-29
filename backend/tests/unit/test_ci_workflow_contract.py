@@ -8,6 +8,9 @@ READINESS = (ROOT / ".github/workflows/production-readiness.yml").read_text(
 FAST_DEPLOY = (ROOT / ".github/workflows/railway-pilot-fast-deploy.yml").read_text(
     encoding="utf-8"
 )
+PILOT_MIGRATION = (
+    ROOT / ".github/workflows/railway-pilot-in-place-migration.yml"
+).read_text(encoding="utf-8")
 RAILWAY_CERTIFICATION = (
     ROOT / ".github/workflows/railway-canonical-staging.yml"
 ).read_text(encoding="utf-8")
@@ -37,6 +40,20 @@ def test_normal_main_delivery_is_service_scoped_and_non_resetting() -> None:
     assert 'matrix.component }} is unchanged' in FAST_DEPLOY
     assert "reset" not in FAST_DEPLOY.lower()
     assert "canonical-staging" in FAST_DEPLOY
+
+
+def test_persistent_pilot_migration_is_explicit_bounded_and_non_resetting() -> None:
+    assert "MIGRATE_PERSISTENT_PILOT_IN_PLACE" in PILOT_MIGRATION
+    assert "ref: ${{ inputs.reviewed_sha }}" in PILOT_MIGRATION
+    assert "cancel-in-progress: false" in PILOT_MIGRATION
+    assert "--validate-current" in PILOT_MIGRATION
+    assert "pg_dump --schema-only" in PILOT_MIGRATION
+    assert PILOT_MIGRATION.count("alembic -c alembic.ini upgrade head") == 2
+    assert "revoke_staging_postgres_set_roles.sh migration-owner" in PILOT_MIGRATION
+    assert 'data_reset:false' in PILOT_MIGRATION
+    assert 'fixtures_loaded:false' in PILOT_MIGRATION
+    assert "railway up" not in PILOT_MIGRATION
+    assert "railway redeploy" not in PILOT_MIGRATION
 
 
 def test_certification_reuses_exact_sha_and_has_separate_authority() -> None:
