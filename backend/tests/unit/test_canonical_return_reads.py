@@ -46,13 +46,13 @@ def sales_line() -> dict:
         "batch_number": "B-1",
         "expires_on": date(2027, 8, 25),
         "uom_code": "BOX",
-        "uom_conversion_factor": Decimal("10.000001"),
-        "allocated_base_billed_quantity": Decimal("21.234562123456"),
-        "allocated_base_free_quantity": Decimal("0.000010000001"),
+        "uom_conversion_factor": Decimal("10.000000"),
+        "allocated_base_billed_quantity": Decimal("21.234560"),
+        "allocated_base_free_quantity": Decimal("0.000010"),
         "returned_base_billed_quantity": Decimal("0"),
         "returned_base_free_quantity": Decimal("0"),
-        "remaining_base_billed_quantity": Decimal("21.234562123456"),
-        "remaining_base_free_quantity": Decimal("0.000010000001"),
+        "remaining_base_billed_quantity": Decimal("21.234560"),
+        "remaining_base_free_quantity": Decimal("0.000010"),
         "returnable_billed_quantity": Decimal("2.123456"),
         "returnable_free_quantity": Decimal("0.000001"),
         "quoted_unit_rate": Decimal("99.123456"),
@@ -161,6 +161,40 @@ def posted() -> dict:
 def test_exact_sales_and_purchase_remainders_reconcile():
     assert SalesReturnableAllocation.model_validate(sales_line()).returnable_billed_quantity == Decimal("2.123456")
     assert PurchaseReturnableAllocation.model_validate(purchase_line()).average_unit_cost == Decimal("80.123456")
+
+
+def test_return_context_quantities_cross_json_at_exact_canonical_scale():
+    sales_wire = SalesReturnableAllocation.model_validate(sales_line()).model_dump(
+        mode="json"
+    )
+    purchase_wire = PurchaseReturnableAllocation.model_validate(
+        purchase_line()
+    ).model_dump(mode="json")
+
+    for wire in (sales_wire, purchase_wire):
+        assert wire["uom_conversion_factor"] == "10.000000"
+        assert wire["returnable_billed_quantity"] == "2.123456"
+        assert wire["returnable_free_quantity"] == "0.000001"
+        assert wire["quoted_unit_rate"] == "99.123456"
+
+    schema = SalesReturnableAllocation.model_json_schema(mode="serialization")
+    quantity_schema = schema["properties"]["returnable_billed_quantity"]
+    assert quantity_schema["type"] == "string"
+    assert quantity_schema["pattern"] == r"^(?:0|[1-9][0-9]*)\.[0-9]{6}$"
+
+
+def test_return_context_rounds_database_division_before_decimal_contract():
+    source = inspect.getsource(canonical_return_reads)
+    assert source.count("pg_catalog.round(") >= 4
+    assert "/ line.uom_conversion_factor, 6" in source
+    assert "/ invoice_line.uom_conversion_factor, 6" in source
+
+
+def test_return_context_rejects_more_than_six_quantity_places():
+    value = sales_line()
+    value["returnable_billed_quantity"] = Decimal("2.1234567")
+    with pytest.raises(ValidationError, match="decimal places"):
+        SalesReturnableAllocation.model_validate(value)
 
 
 def test_return_source_capabilities_are_derived_from_the_mcp_owned_contract():

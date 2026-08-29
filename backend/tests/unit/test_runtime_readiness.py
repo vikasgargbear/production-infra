@@ -8,6 +8,7 @@ from app import main
 
 def test_database_readiness_probe_attests_transport_and_principal(monkeypatch):
     executed = []
+    parameters = []
     peer_checks = []
     readiness_row = {
         "principal": "erp_runtime",
@@ -18,6 +19,8 @@ def test_database_readiness_probe_attests_transport_and_principal(monkeypatch):
         "session_role_exists": True,
         "session_authority": True,
         "row_security": True,
+        "canonical_revision": main.EXPECTED_CANONICAL_ALEMBIC_HEAD,
+        "schema_current": True,
     }
 
     class Result:
@@ -35,8 +38,9 @@ def test_database_readiness_probe_attests_transport_and_principal(monkeypatch):
         def __exit__(self, *_):
             return None
 
-        def execute(self, statement):
+        def execute(self, statement, _params):
             executed.append(str(statement))
+            parameters.append(_params)
             return Result()
 
     class Engine:
@@ -73,12 +77,19 @@ def test_database_readiness_probe_attests_transport_and_principal(monkeypatch):
         "session_role_exists": True,
         "session_authority": True,
         "row_security": True,
+        "canonical_revision": main.EXPECTED_CANONICAL_ALEMBIC_HEAD,
+        "expected_canonical_revision": main.EXPECTED_CANONICAL_ALEMBIC_HEAD,
+        "schema_current": True,
         "ip_version": 6,
     }
     assert "current_user AS principal" in executed[0]
     assert "pg_has_role" in executed[0]
     assert "erp_migration_owner" in executed[0]
+    assert "erp_security.deployed_canonical_revision()" in executed[0]
     assert "inet_server_addr" not in executed[0]
+    assert parameters == [{
+        "expected_revision": main.EXPECTED_CANONICAL_ALEMBIC_HEAD,
+    }]
     assert peer_checks == [True]
 
     readiness_row["migration_owner_member"] = True
@@ -106,6 +117,8 @@ def test_database_readiness_fails_closed_on_unattested_direct_transport(monkeypa
                 "session_role_exists": True,
                 "session_authority": True,
                 "row_security": True,
+                "canonical_revision": main.EXPECTED_CANONICAL_ALEMBIC_HEAD,
+                "schema_current": True,
             }
 
     class Connection:
@@ -116,7 +129,7 @@ def test_database_readiness_fails_closed_on_unattested_direct_transport(monkeypa
             return None
 
         @staticmethod
-        def execute(_statement):
+        def execute(_statement, _params):
             return Result()
 
     class Engine:
@@ -153,6 +166,8 @@ def test_database_readiness_accepts_attested_direct_ipv4(monkeypatch):
         "session_role_exists": True,
         "session_authority": True,
         "row_security": True,
+        "canonical_revision": main.EXPECTED_CANONICAL_ALEMBIC_HEAD,
+        "schema_current": True,
     }
 
     class Result:
@@ -169,7 +184,7 @@ def test_database_readiness_accepts_attested_direct_ipv4(monkeypatch):
         def __exit__(self, *_):
             return None
 
-        def execute(self, _statement):
+        def execute(self, _statement, _params):
             return Result()
 
     class Engine:
@@ -204,6 +219,9 @@ def test_ready_returns_success_only_after_database_probe(monkeypatch):
         "session_role_exists": True,
         "session_authority": True,
         "row_security": True,
+        "canonical_revision": main.EXPECTED_CANONICAL_ALEMBIC_HEAD,
+        "expected_canonical_revision": main.EXPECTED_CANONICAL_ALEMBIC_HEAD,
+        "schema_current": True,
         "ip_version": 6,
     }
     monkeypatch.setattr(main, "_database_readiness", lambda: database)
@@ -224,6 +242,9 @@ def test_ready_reports_maintenance_until_public_session_authority_opens(monkeypa
         "session_role_exists": True,
         "session_authority": False,
         "row_security": True,
+        "canonical_revision": main.EXPECTED_CANONICAL_ALEMBIC_HEAD,
+        "expected_canonical_revision": main.EXPECTED_CANONICAL_ALEMBIC_HEAD,
+        "schema_current": True,
         "ip_version": 6,
     }
     monkeypatch.setattr(main, "_database_readiness", lambda: database)
@@ -248,6 +269,9 @@ def test_ready_fails_closed_on_partial_authority_drift(monkeypatch):
         "session_role_exists": True,
         "session_authority": True,
         "row_security": True,
+        "canonical_revision": main.EXPECTED_CANONICAL_ALEMBIC_HEAD,
+        "expected_canonical_revision": main.EXPECTED_CANONICAL_ALEMBIC_HEAD,
+        "schema_current": True,
         "ip_version": 6,
     }
 
@@ -256,6 +280,7 @@ def test_ready_fails_closed_on_partial_authority_drift(monkeypatch):
         "command_authority",
         "session_role_exists",
         "session_authority",
+        "schema_current",
     ):
         database = {**open_state, field: False}
         monkeypatch.setattr(main, "_database_readiness", lambda: database)
