@@ -45,7 +45,7 @@
         "REVOKE ALL ON SCHEMA \"tax\" FROM PUBLIC;",
         "GRANT USAGE ON SCHEMA \"tax\" TO \"erp_app\";",
         "ALTER SCHEMA \"tax\" OWNER TO \"erp_migration_owner\";",
-        "GRANT USAGE ON SCHEMA \"erp_security\" TO \"erp_app\";",
+        "GRANT USAGE ON SCHEMA \"erp_security\" TO \"erp_app\", \"erp_runtime\";",
         "REVOKE ALL ON TABLE \"automation\".\"agent_grant_capabilities\" FROM PUBLIC, \"erp_app\", \"erp_runtime\";",
         "GRANT SELECT, INSERT, UPDATE ON TABLE \"automation\".\"agent_grant_capabilities\" TO \"erp_app\";",
         "ALTER TABLE \"automation\".\"agent_grant_capabilities\" OWNER TO \"erp_migration_owner\";",
