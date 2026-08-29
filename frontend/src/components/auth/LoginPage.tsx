@@ -2,7 +2,7 @@
  * Login Page Component - TypeScript Version
  */
 
-import React, { useState, FormEvent } from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { Loader2, AlertCircle } from 'lucide-react';
 import OrganizationOnboarding from './OrganizationOnboarding';
@@ -10,7 +10,6 @@ import { invitationTokenFromLocation } from '../../services/auth/oauthConsentCli
 
 const LoginPage: React.FC = () => {
     const {
-        login,
         loginWithGoogle,
         logout,
         retrySessionExchange,
@@ -19,31 +18,10 @@ const LoginPage: React.FC = () => {
         onboardingRequired,
         isOnline,
     } = useAuth();
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const invitationToken = invitationTokenFromLocation(window.location);
     const showingOrganizationOnboarding = hasCloudSession && onboardingRequired;
-
-    const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
-        e.preventDefault();
-        setError('');
-        setLoading(true);
-
-        try {
-            const result = await login(email, password);
-
-            if (!result.success) {
-                setError(result.error || 'Login failed');
-            }
-        } catch (err) {
-            setError('An unexpected error occurred');
-            console.error('Login error:', err);
-        } finally {
-            setLoading(false);
-        }
-    };
 
     const handleGoogleLogin = async () => {
         setError('');
@@ -145,6 +123,7 @@ const LoginPage: React.FC = () => {
                     type="button"
                     onClick={handleGoogleLogin}
                     disabled={loading || !isOnline}
+                    aria-describedby="google-sign-in-guidance"
                     className="flex min-h-11 w-full items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-3 font-medium text-gray-800 transition-all hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                     <svg aria-hidden="true" className="mr-2 h-5 w-5" viewBox="0 0 24 24">
@@ -155,61 +134,9 @@ const LoginPage: React.FC = () => {
                     </svg>
                     Continue with Google
                 </button>
-
-                {/* Login Form */}
-                <details className="mt-6 rounded-lg border border-gray-200 p-4">
-                    <summary className="cursor-pointer text-sm font-medium text-gray-700">
-                        Use email and password instead
-                    </summary>
-                <form onSubmit={handleSubmit} className="mt-4 space-y-4">
-                    <div>
-                        <label htmlFor="login-email" className="block text-sm font-medium text-gray-700 mb-2">
-                            Email Address
-                        </label>
-                        <input
-                            id="login-email"
-                            type="email"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                            placeholder="name@company.com"
-                            required
-                            disabled={loading}
-                        />
-                    </div>
-
-                    <div>
-                        <label htmlFor="login-password" className="block text-sm font-medium text-gray-700 mb-2">
-                            Password
-                        </label>
-                        <input
-                            id="login-password"
-                            type="password"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                            placeholder="Enter your password"
-                            required
-                            disabled={loading}
-                        />
-                    </div>
-
-                    <button
-                        type="submit"
-                        disabled={loading || !isOnline}
-                        className="flex min-h-11 w-full items-center justify-center rounded-md bg-blue-600 px-4 py-3 font-medium text-white transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                        {loading ? (
-                            <>
-                                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                                Signing in...
-                            </>
-                        ) : (
-                            'Sign In'
-                        )}
-                    </button>
-                </form>
-                </details>
+                <p id="google-sign-in-guidance" className="mt-4 text-center text-sm leading-6 text-gray-500">
+                    Use the Google account authorized for your pharmacy organization.
+                </p>
                 </>
                 )}
 
