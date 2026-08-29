@@ -97,10 +97,14 @@ def _resolved_organization_assignment(
     auth_user_id: UUID,
     db: Session,
 ) -> Optional[UUID]:
-    """Resolve a tenant without accepting any client-controlled organization hint."""
+    """Resolve a tenant from active canonical membership.
+
+    A Supabase ``app_metadata.org_id`` is server-controlled, but it can outlive
+    an organization purge or membership revocation.  Treat it as a selector
+    only when the subject has multiple active memberships; canonical active
+    membership remains the authority for zero or one membership.
+    """
     signed_assignment = _signed_organization_assignment(identity)
-    if signed_assignment is not None:
-        return signed_assignment
 
     try:
         rows = db.execute(
@@ -136,6 +140,8 @@ def _resolved_organization_assignment(
     ):
         return UUID(str(row["org_id"]))
     if row["resolution"] == "multiple_active_memberships":
+        if signed_assignment is not None:
+            return signed_assignment
         raise HTTPException(
             status_code=409,
             detail={
@@ -203,14 +209,6 @@ def _load_verified_erp_membership(
         detached_user_data = dict(user_data)
         detached_user_data["email"] = str(identity["email"])
         return detached_user_data
-
-
-def _canonical_organization_assignment(identity: dict[str, Any]) -> UUID:
-    """Resolve the signed organization claim for OAuth consent endpoints."""
-    organization_id = _signed_organization_assignment(identity)
-    if organization_id is not None:
-        return organization_id
-    raise HTTPException(status_code=403, detail=ONBOARDING_REQUIRED_DETAIL)
 
 
 def _mcp_consent_proposal_rows(
@@ -355,9 +353,10 @@ async def get_mcp_consent_proposal(
     except (KeyError, TypeError, ValueError) as exc:
         raise HTTPException(status_code=401, detail="Invalid Supabase identity") from exc
 
-    organization_id = _canonical_organization_assignment(identity)
-
     require_canonical_session_authority(db)
+    organization_id = _resolved_organization_assignment(identity, subject, db)
+    if organization_id is None:
+        raise HTTPException(status_code=403, detail=ONBOARDING_REQUIRED_DETAIL)
 
     try:
         db.execute(
