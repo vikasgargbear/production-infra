@@ -1032,45 +1032,67 @@ def _organization_delete_plan(
         for index, component in enumerate(components)
         for relation in component
     }
+    # Within a cycle, deferrable edges can be checked at transaction end. Keep
+    # every immediate edge in the ordering graph; it is enough for at least one
+    # edge in the cycle to be deferrable. Requiring every edge to be deferrable
+    # incorrectly rejects the reviewed organizations <-> memberships cycle.
+    ordering_graph = {relation: set() for relation in relations}
     deferred_cycles: list[tuple[str, str]] = []
     for child, parents in graph.items():
         for parent in parents:
+            constraints = constraints_by_edge[(child, parent)]
             if component_by_relation[child] != component_by_relation[parent]:
+                ordering_graph[child].add(parent)
                 continue
-            for constraint, deferrable in constraints_by_edge[(child, parent)]:
-                if not deferrable:
-                    raise ResetAuthorityError(
-                        "cyclic organization foreign key must be deferrable: "
-                        f"{child}.{constraint}"
-                    )
-                deferred_cycles.append((child, constraint))
+            immediate_constraints = [
+                constraint for constraint, deferrable in constraints if not deferrable
+            ]
+            if immediate_constraints:
+                ordering_graph[child].add(parent)
+            deferred_cycles.extend(
+                (child, constraint)
+                for constraint, deferrable in constraints
+                if deferrable
+            )
 
-    component_edges = {index: set() for index in range(len(components))}
-    incoming = {index: 0 for index in range(len(components))}
-    for child, parents in graph.items():
-        child_component = component_by_relation[child]
+    mandatory_components = _strongly_connected_components(ordering_graph)
+    for component in mandatory_components:
+        if len(component) <= 1:
+            continue
+        component_set = set(component)
+        unsafe_child = next(
+            child for child in component
+            if ordering_graph[child] & component_set
+        )
+        unsafe_parent = sorted(ordering_graph[unsafe_child] & component_set)[0]
+        unsafe_constraint = next(
+            constraint
+            for constraint, deferrable in constraints_by_edge[
+                (unsafe_child, unsafe_parent)
+            ]
+            if not deferrable
+        )
+        raise ResetAuthorityError(
+            "cyclic organization foreign keys require a deferrable break: "
+            f"{unsafe_child}.{unsafe_constraint}"
+        )
+
+    incoming = {relation: 0 for relation in relations}
+    for parents in ordering_graph.values():
         for parent in parents:
-            parent_component = component_by_relation[parent]
-            if child_component == parent_component:
-                continue
-            if parent_component not in component_edges[child_component]:
-                component_edges[child_component].add(parent_component)
-                incoming[parent_component] += 1
+            incoming[parent] += 1
     ready = sorted(
-        (index for index, count in incoming.items() if count == 0),
-        key=lambda value: components[value],
+        relation for relation, count in incoming.items() if count == 0
     )
     ordered: list[str] = []
     while ready:
-        component_index = ready.pop(0)
-        ordered.extend(components[component_index])
-        for target in sorted(
-            component_edges[component_index], key=lambda value: components[value]
-        ):
+        relation = ready.pop(0)
+        ordered.append(relation)
+        for target in sorted(ordering_graph[relation]):
             incoming[target] -= 1
             if incoming[target] == 0:
                 ready.append(target)
-                ready.sort(key=lambda value: components[value])
+                ready.sort()
     if len(ordered) != len(relations):
         raise ResetAuthorityError("organization delete order is incomplete")
     return OrganizationDeletePlan(

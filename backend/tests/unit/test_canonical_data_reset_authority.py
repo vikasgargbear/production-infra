@@ -481,11 +481,21 @@ def test_organization_delete_plan_requires_and_tracks_deferrable_cycles() -> Non
         (relations[1], "open_item_allocation_fk"),
     )
 
-    rejected = _ForeignKeyCursor(
+    mixed = _ForeignKeyCursor(
         [(relations[0], relations[1], "unsafe_fk", False),
          (relations[1], relations[0], "safe_fk", True)]
     )
-    with pytest.raises(ResetAuthorityError, match="must be deferrable"):
+    mixed_plan = reset_authority._organization_delete_plan(mixed, relations)
+    assert mixed_plan.relation_order == relations
+    assert mixed_plan.deferred_cycle_constraints == (
+        (relations[1], "safe_fk"),
+    )
+
+    rejected = _ForeignKeyCursor(
+        [(relations[0], relations[1], "unsafe_a_fk", False),
+         (relations[1], relations[0], "unsafe_b_fk", False)]
+    )
+    with pytest.raises(ResetAuthorityError, match="deferrable break"):
         reset_authority._organization_delete_plan(rejected, relations)
 
 
