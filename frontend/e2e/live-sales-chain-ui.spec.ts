@@ -122,12 +122,15 @@ test.describe('live desktop sales-chain visible UI acceptance', () => {
     expect(selectedBatchId).toMatch(/^[0-9a-f-]{36}$/i);
     await explicitAlternative.first().click();
     const row = page.getByRole('row').filter({ hasText: /Synthetic Corrugated Pharmacy Packing Carton/i });
-    await row.locator('input[type="number"]').nth(0).fill('1.125000');
-    await row.locator('input[type="number"]').nth(1).fill('84.1250');
-    await row.locator('input[type="number"]').nth(3).fill('0.250000');
-    await expect(row.locator('input[type="number"]').nth(0)).toHaveValue('1.125000');
-    await expect(row.locator('input[type="number"]').nth(1)).toHaveValue('84.1250');
-    await expect(row.locator('input[type="number"]').nth(3)).toHaveValue('0.250000');
+    const billedQuantity = row.getByLabel('Synthetic Corrugated Pharmacy Packing Carton quantity', { exact: true });
+    const unitRate = row.getByLabel('Synthetic Corrugated Pharmacy Packing Carton rate', { exact: true });
+    const freeQuantity = row.getByLabel('Synthetic Corrugated Pharmacy Packing Carton free quantity', { exact: true });
+    await billedQuantity.fill('1.125000');
+    await unitRate.fill('84.13');
+    await freeQuantity.fill('0.250000');
+    await expect(billedQuantity).toHaveValue('1.125000');
+    await expect(unitRate).toHaveValue('84.13');
+    await expect(freeQuantity).toHaveValue('0.250000');
     await expect(page.getByText(/batch/i).first()).toBeVisible();
     await page.getByRole('button', { name: 'Continue', exact: true }).click();
     await page.getByRole('button', { name: /continue to preview/i }).click();
@@ -137,7 +140,7 @@ test.describe('live desktop sales-chain visible UI acceptance', () => {
     const preparedPayload = (await prepareRequest).postDataJSON();
     expect(preparedPayload.lines[0].billed_quantity).toBe('1.125000');
     expect(preparedPayload.lines[0].free_quantity).toBe('0.250000');
-    expect(preparedPayload.lines[0].quoted_unit_rate).toBe('84.1250');
+    expect(preparedPayload.lines[0].quoted_unit_rate).toBe('84.1300');
     expect(preparedPayload.lines[0].batch_allocations).toEqual([
       expect.objectContaining({ batch_id: selectedBatchId }),
     ]);
@@ -190,7 +193,7 @@ test.describe('live desktop sales-chain visible UI acceptance', () => {
       free_quantity: '0.250000',
       base_billed_quantity: '1.125000',
       base_free_quantity: '0.250000',
-      unit_price: '84.1250',
+      unit_price: '84.1300',
     }));
     expect(invoiceDetail.items[0].batch_id).toBe(selectedBatchId);
     expect(invoiceDetail.items[0].batch_allocations).toHaveLength(1);

@@ -234,6 +234,7 @@ const quantityOptions = { scale: 6, maximumWholeDigits: 14 } as const;
 
 const invoiceBatchCandidates = (item: InvoiceItem, index: number) => {
     const prefix = `Item ${index + 1}`;
+    const selectedBatchId = requiredUuid(item.batch_id, `${prefix} selected batch`);
     const source = item.allocation_batches?.length
         ? item.allocation_batches
         : [{
@@ -250,7 +251,7 @@ const invoiceBatchCandidates = (item: InvoiceItem, index: number) => {
     const uomId = requiredUuid(item.uom_conversion_id, `${prefix} UOM`);
     const seen = new Set<string>();
 
-    return source.map((candidate, candidateIndex) => {
+    const candidates = source.map((candidate, candidateIndex) => {
         const label = `${prefix} batch ${candidateIndex + 1}`;
         const batchId = requiredUuid(candidate.batch_id, label);
         if (seen.has(batchId)) throw new Error(`${prefix} contains a duplicate batch allocation.`);
@@ -270,6 +271,29 @@ const invoiceBatchCandidates = (item: InvoiceItem, index: number) => {
             available_quantity: available,
         };
     });
+    const selectedIndex = candidates.findIndex(candidate => candidate.batch_id === selectedBatchId);
+    if (selectedIndex < 0) {
+        throw new Error(`${prefix} selected batch is absent from the reviewed allocation set.`);
+    }
+    if (candidates.length > 1) {
+        const expiries = candidates.map((candidate, candidateIndex) => {
+            const expiry = String(candidate.expiry_date ?? '');
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(expiry)) {
+                throw new Error(`${prefix} batch ${candidateIndex + 1} has an invalid expiry date.`);
+            }
+            return expiry;
+        });
+        const earliestExpiry = [...expiries].sort()[0];
+        if (expiries[selectedIndex] !== earliestExpiry) {
+            throw new Error(`${prefix} selected batch is outside the earliest-expiry FEFO tier.`);
+        }
+    }
+    if (selectedIndex === 0) return candidates;
+    return [
+        candidates[selectedIndex],
+        ...candidates.slice(0, selectedIndex),
+        ...candidates.slice(selectedIndex + 1),
+    ];
 };
 
 /** Allocate one logical invoice line across reviewed same-location batches in FEFO order. */

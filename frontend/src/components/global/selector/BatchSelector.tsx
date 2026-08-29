@@ -323,7 +323,11 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
         const allocationBatches = batches
             .filter(candidate => candidate.location_id === batch.location_id)
             .filter(candidate => batchDisabledReason(candidate) === null)
-            .sort(compareBatchesByCanonicalFefo)
+            .sort((left, right) => {
+                if (left.batch_id === batch.batch_id) return -1;
+                if (right.batch_id === batch.batch_id) return 1;
+                return compareBatchesByCanonicalFefo(left, right);
+            })
             .map((candidate): BatchAllocationCandidate => ({
                 batch_id: candidate.batch_id,
                 batch_number: candidate.batch_number,
