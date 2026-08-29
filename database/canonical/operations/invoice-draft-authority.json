@@ -1,0 +1,7 @@
+{
+  "authority": "post_baseline_alembic",
+  "migration_revision": "20260829_0064",
+  "migration_sql": "backend/alembic/sql/20260829_0064_shared_invoice_drafts.sql",
+  "migration_sql_sha256": "cbaa4f614b7e3a442b0db7583ce0dfd1cc0bbee4e75fee1fdc8dcb70738fd3f2",
+  "relation": "automation.invoice_drafts"
+}

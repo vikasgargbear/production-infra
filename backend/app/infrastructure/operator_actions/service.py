@@ -25,6 +25,7 @@ from ...domain.operator_actions.models import (
     CommandExecution,
     CommandReview,
     CommandState,
+    DraftPrepareBinding,
     OperatorActionError,
     PreparedCommand,
 )
@@ -140,6 +141,16 @@ from .deployment_contract import EXPECTED_CANONICAL_ALEMBIC_HEAD
 
 _ACTIVATE_CONTEXT_SQL = text(
     "SELECT erp_security.activate_context(:auth_user_id, :org_id)"
+)
+
+_BIND_INVOICE_DRAFT_SQL = text(
+    """
+    SELECT erp_automation_commands.bind_invoice_draft_prepare(
+      :org_id,:invoice_draft_id,:invoice_draft_row_version,
+      decode(:invoice_draft_payload_sha256,'hex'),:command_request_id,
+      :invoice_draft_operation,:invoice_draft_resource_id
+    ) AS row_version
+    """
 )
 
 _DEPLOYMENT_READINESS_SQL = text(
@@ -618,6 +629,7 @@ class SqlAlchemyOperatorActionService:
         payload: Mapping[str, Any],
         idempotency_key: str,
         context: ActionContext,
+        draft_binding: DraftPrepareBinding | None = None,
     ) -> PreparedCommand:
         try:
             return self._prepare(
@@ -625,6 +637,7 @@ class SqlAlchemyOperatorActionService:
                 payload=payload,
                 idempotency_key=idempotency_key,
                 context=context,
+                draft_binding=draft_binding,
             )
         except DBAPIError as exc:
             translated = _database_action_error(exc, policy.operation_key)
@@ -639,7 +652,16 @@ class SqlAlchemyOperatorActionService:
         payload: Mapping[str, Any],
         idempotency_key: str,
         context: ActionContext,
+        draft_binding: DraftPrepareBinding | None = None,
     ) -> PreparedCommand:
+        if draft_binding is not None and policy.operation_key not in {
+            "sales.invoice.prepare",
+            "procurement.supplier_invoice.prepare",
+        }:
+            raise OperatorActionError(
+                ActionErrorCode.VALIDATION_FAILED,
+                "Invoice draft binding is valid only for invoice prepare operations",
+            )
         if policy.operation_key == "sales.dispatch.prepare":
             return self._prepare_sales_dispatch(
                 policy=policy,
@@ -653,6 +675,7 @@ class SqlAlchemyOperatorActionService:
                 payload=payload,
                 idempotency_key=idempotency_key,
                 context=context,
+                draft_binding=draft_binding,
             )
         if policy.operation_key == "sales.return.prepare":
             return self._prepare_sales_return(
@@ -681,6 +704,7 @@ class SqlAlchemyOperatorActionService:
                 payload=payload,
                 idempotency_key=idempotency_key,
                 context=context,
+                draft_binding=draft_binding,
             )
         if policy.operation_key == "procurement.purchase_return.prepare":
             return self._prepare_purchase_return(
@@ -1056,6 +1080,7 @@ class SqlAlchemyOperatorActionService:
         payload: Mapping[str, Any],
         idempotency_key: str,
         context: ActionContext,
+        draft_binding: DraftPrepareBinding | None = None,
     ) -> PreparedCommand:
         if not self.adapter_readiness()[policy.operation_key]:
             raise OperatorActionError(
@@ -1271,6 +1296,24 @@ class SqlAlchemyOperatorActionService:
                         ActionErrorCode.IDEMPOTENCY_CONFLICT,
                         "Canonical supplier-invoice idempotency replay differs",
                     )
+                if draft_binding is not None:
+                    session.execute(
+                        _BIND_INVOICE_DRAFT_SQL,
+                        {
+                            **params,
+                            "invoice_draft_id": draft_binding.draft_id,
+                            "invoice_draft_row_version": (
+                                draft_binding.expected_row_version
+                            ),
+                            "invoice_draft_payload_sha256": (
+                                draft_binding.payload_sha256
+                            ),
+                            "invoice_draft_operation": (
+                                "procurement.supplier_invoice.post"
+                            ),
+                            "invoice_draft_resource_id": supplier_invoice_id,
+                        },
+                    ).scalar_one()
                 persisted_expiry = _persisted_expiry(result["expires_at"])
                 return PreparedCommand(
                     command_request_id=command_id,
@@ -1702,6 +1745,7 @@ class SqlAlchemyOperatorActionService:
         payload: Mapping[str, Any],
         idempotency_key: str,
         context: ActionContext,
+        draft_binding: DraftPrepareBinding | None = None,
     ) -> PreparedCommand:
         if not self.adapter_readiness()[policy.operation_key]:
             raise OperatorActionError(
@@ -2079,6 +2123,22 @@ class SqlAlchemyOperatorActionService:
                         ActionErrorCode.IDEMPOTENCY_CONFLICT,
                         "Canonical sales-invoice idempotency replay differs",
                     )
+                if draft_binding is not None:
+                    session.execute(
+                        _BIND_INVOICE_DRAFT_SQL,
+                        {
+                            **params,
+                            "invoice_draft_id": draft_binding.draft_id,
+                            "invoice_draft_row_version": (
+                                draft_binding.expected_row_version
+                            ),
+                            "invoice_draft_payload_sha256": (
+                                draft_binding.payload_sha256
+                            ),
+                            "invoice_draft_operation": "sales.invoice.post",
+                            "invoice_draft_resource_id": invoice_id,
+                        },
+                    ).scalar_one()
                 persisted_expiry = _persisted_expiry(persisted_result["expires_at"])
                 return PreparedCommand(
                     command_request_id=command_id,

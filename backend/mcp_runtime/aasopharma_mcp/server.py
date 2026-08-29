@@ -17,9 +17,11 @@ from starlette.responses import JSONResponse
 
 from .auth import SupabaseTokenVerifier
 from .config import Settings
+from .invoice_drafts import INVOICE_DRAFT_TOOL_DESCRIPTIONS
 from .operations import (
     OPERATIONS,
     OPERATOR_OPERATIONS,
+    READ_ONLY_INVOICE_DRAFT_KINDS,
     READ_ONLY_OPERATOR_KINDS,
     OperationGateway,
     published_operator_action_tool_names,
@@ -428,7 +430,7 @@ def create_app(
         operation = OPERATOR_OPERATIONS[tool_name]
         annotations = (
             READ_ONLY_TOOL_ANNOTATIONS
-            if operation.kind in READ_ONLY_OPERATOR_KINDS | {"review"}
+            if operation.kind in READ_ONLY_OPERATOR_KINDS | READ_ONLY_INVOICE_DRAFT_KINDS | {"review"}
             else STATE_CHANGING_TOOL_ANNOTATIONS
         )
 
@@ -440,7 +442,10 @@ def create_app(
         server.add_tool(
             invoke,
             name=tool_name,
-            description=OPERATOR_TOOL_DESCRIPTIONS[tool_name],
+            description=(
+                INVOICE_DRAFT_TOOL_DESCRIPTIONS.get(tool_name)
+                or OPERATOR_TOOL_DESCRIPTIONS[tool_name]
+            ),
             annotations=annotations,
             structured_output=False,
         )

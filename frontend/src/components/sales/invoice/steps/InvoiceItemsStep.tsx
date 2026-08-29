@@ -40,6 +40,9 @@ interface InvoiceItemsStepProps {
     onClose: () => void;
     onReset: () => void;
     onContinue: () => void;
+    onSaveDraft: () => void;
+    onOpenDrafts: () => void;
+    draftSaving: boolean;
     // Refs
     productSearchRef: RefObject<HTMLInputElement>;
     itemsTableRef: RefObject<HTMLDivElement>;
@@ -83,6 +86,9 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
     onClose,
     onReset,
     onContinue,
+    onSaveDraft,
+    onOpenDrafts,
+    draftSaving,
     // Refs
     productSearchRef,
     itemsTableRef,
@@ -172,7 +178,16 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                     icon={FileText}
                     iconColor="text-blue-600"
                     onClose={onClose}
+                    showSaveDraft
+                    onSaveDraft={onSaveDraft}
+                    saveDraftDisabled={draftSaving}
                     additionalActions={[
+                        {
+                            label: 'Open drafts',
+                            onClick: onOpenDrafts,
+                            disabled: draftSaving,
+                            variant: 'secondary'
+                        },
                         {
                             label: 'Import posted delivery challan',
                             icon: FileInput,

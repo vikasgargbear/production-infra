@@ -99,6 +99,18 @@ EXPECTED_MASTER_WRITE_TOOLS = {
     "erp_supplier_create",
     "erp_supplier_update",
 }
+EXPECTED_INVOICE_DRAFT_TOOLS = {
+    "erp_invoice_draft_abandon",
+    "erp_invoice_draft_get",
+    "erp_invoice_draft_list",
+    "erp_invoice_draft_prepare",
+    "erp_invoice_draft_save",
+    "erp_invoice_draft_update",
+}
+EXPECTED_INVOICE_DRAFT_READ_TOOLS = {
+    "erp_invoice_draft_get",
+    "erp_invoice_draft_list",
+}
 EXPECTED_UNAVAILABLE_PREPARE_TOOLS = set()
 EXPECTED_RESOLUTION_TOOLS = {
     "erp_customer_search",
@@ -888,7 +900,9 @@ def validate(
     planned_resolution = set(resolution_names)
     live_tools = set(service.get("tools", []))
     operator_service = service.get("operator_actions", {})
-    expected_published_actions = published_prepare_tools | EXPECTED_SHARED_TOOLS
+    expected_published_actions = (
+        published_prepare_tools | EXPECTED_SHARED_TOOLS | EXPECTED_INVOICE_DRAFT_TOOLS
+    )
     expected_live_tools = (
         EXPECTED_BASE_READ_TOOLS
         | EXPECTED_MASTER_WRITE_TOOLS
@@ -949,6 +963,18 @@ def validate(
             or app_operation.get("idempotency") != "not_applicable"
         ):
             issues.append(f"{tool}: reviewed live read metadata drifted")
+    for tool in EXPECTED_INVOICE_DRAFT_TOOLS:
+        app_operation = app_by_tool.get(tool, {})
+        is_read = tool in EXPECTED_INVOICE_DRAFT_READ_TOOLS
+        if (
+            app_operation.get("mode") != ("read" if is_read else "write")
+            or app_operation.get("risk") != ("read_only" if is_read else "reversible_write")
+            or app_operation.get("approval") != ("none" if is_read else "actor_confirmation")
+            or app_operation.get("idempotency") != (
+                "not_applicable" if is_read else "required"
+            )
+        ):
+            issues.append(f"{tool}: shared invoice-draft metadata drifted")
     for tool in EXPECTED_RESOLUTION_TOOLS:
         app_operation = app_by_tool.get(tool, {})
         if (

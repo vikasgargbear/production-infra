@@ -91,6 +91,16 @@ describe('useInvoiceSave reviewed canonical lifecycle', () => {
         expect(props.setCreatedInvoiceData).not.toHaveBeenCalled();
     });
 
+    it('uses the persisted draft prepare boundary and still never posts without confirmation', async () => {
+        const props = createProps(true);
+        const prepareDraft = jest.fn().mockResolvedValue(preview);
+        const { result } = renderHook(() => useInvoiceSave({ ...props, prepareDraft }));
+        await act(async () => result.current.handleSaveInvoice());
+        expect(prepareDraft).toHaveBeenCalledTimes(1);
+        expect(invoicesApi.prepareCanonical).not.toHaveBeenCalled();
+        expect(invoicesApi.executePreparedCanonical).not.toHaveBeenCalled();
+    });
+
     it('Back closes review and reopening the unchanged draft reuses its preview and idempotency', async () => {
         const props = createProps(true);
         const { result } = renderHook(() => useInvoiceSave(props));

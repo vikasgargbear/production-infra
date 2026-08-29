@@ -340,6 +340,18 @@ describe('reload persistence', () => {
     expect(result.current.subpage).toBe('sales-history');
   });
 
+  it('preserves a hash-routed invoice draft query on mount', () => {
+    setHash('#/sales/invoice?draft=4d0dcd77-7a24-4c5e-a922-c76ca52da8d7');
+
+    const { result } = renderHook(() => useHashRouter(ALL_TABS, allowAll));
+
+    expect(result.current.tab).toBe('sales');
+    expect(result.current.subpage).toBe('invoice');
+    expect(window.location.hash).toBe(
+      '#/sales/invoice?draft=4d0dcd77-7a24-4c5e-a922-c76ca52da8d7'
+    );
+  });
+
   it('hook initialises payment sub-page from hash on mount', () => {
     setHash('#/payment/journal-entry');
 

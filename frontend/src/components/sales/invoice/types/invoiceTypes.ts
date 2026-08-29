@@ -395,7 +395,7 @@ export interface Invoice {
     totals?: InvoiceTotals;
     subtotal_amount?: number;
     gross_amount?: number;
-    discount_amount?: number;
+    discount_amount?: EditableDecimalValue;
     tax_amount?: number;
     total_tax?: number;
     total_amount?: number;
@@ -437,7 +437,7 @@ export interface Invoice {
     // Discount
     discount_type?: 'percentage' | 'fixed';
     bill_discount?: number;
-    discount_percent?: number;
+    discount_percent?: EditableDecimalValue;
 
     // Sales info
     salesperson_id?: number | null;

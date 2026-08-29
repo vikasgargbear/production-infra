@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { ArrowLeft, LucideIcon } from 'lucide-react';
+import { ArrowLeft, LucideIcon, Save } from 'lucide-react';
 
 // ==================== TYPE DEFINITIONS ====================
 
@@ -30,6 +30,7 @@ export interface ModuleHeaderProps {
     additionalActions?: ModuleHeaderAction[];
     showSaveDraft?: boolean;
     onSaveDraft?: () => void;
+    saveDraftDisabled?: boolean;
     className?: string;
 }
 
@@ -44,6 +45,9 @@ const ModuleHeader: React.FC<ModuleHeaderProps> = ({
     onClose,
     historyType: _historyType, // deprecated, no longer rendered
     additionalActions = [],
+    showSaveDraft = false,
+    onSaveDraft,
+    saveDraftDisabled = false,
     className = ""
 }) => {
     const getStatusColor = (statusValue: string | undefined): string => {
@@ -103,6 +107,19 @@ const ModuleHeader: React.FC<ModuleHeaderProps> = ({
 
                 {/* Right side - Actions */}
                 <div className="flex w-full items-center gap-2 overflow-x-auto pb-1 sm:w-auto sm:justify-end sm:pb-0">
+                    {showSaveDraft && onSaveDraft && (
+                        <button
+                            type="button"
+                            onClick={onSaveDraft}
+                            disabled={saveDraftDisabled}
+                            className="flex min-h-11 shrink-0 items-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
+                            title="Save draft"
+                            aria-label="Save draft"
+                        >
+                            <Save className="mr-1.5 h-4 w-4" />
+                            Save draft
+                        </button>
+                    )}
                     {additionalActions.map((action, index) => {
                         const ActionIcon = action?.icon;
                         const isElement = React.isValidElement(ActionIcon);

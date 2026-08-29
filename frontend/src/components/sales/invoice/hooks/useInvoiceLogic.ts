@@ -92,8 +92,8 @@ export interface Invoice {
     driver_phone: string;
     lr_number: string;
     freight_charges: string | number;
-    discount_amount: number;
-    discount_percent: number;
+    discount_amount: string | number;
+    discount_percent: string | number;
     discount_type: 'percentage' | 'fixed';
     payment_mode?: string;
     payment_status?: 'pending' | 'partial' | 'paid';
@@ -203,8 +203,8 @@ export const createInitialInvoice = (businessDate = ''): Invoice => ({
     // from an explicit neutral freight amount so the canonical calculation
     // request is complete; the operator can still change it on step two.
     freight_charges: '0.00',
-    discount_amount: 0,
-    discount_percent: 0,
+    discount_amount: '0.00',
+    discount_percent: '0.00',
     discount_type: 'percentage',
     payments: [],
     notes: '',
@@ -226,7 +226,8 @@ export const createInitialInvoice = (businessDate = ''): Invoice => ({
 
 export const useInvoiceLogic = (
     onClose?: () => void,
-    prefilledData: PrefilledData | null = null
+    prefilledData: PrefilledData | null = null,
+    prepareDraft?: (commandPayload: Record<string, unknown>) => Promise<CanonicalCommandPreview>,
 ): UseInvoiceLogicReturn => {
     // Network Status
     const { isOnline } = useNetworkStatus();
@@ -303,7 +304,8 @@ export const useInvoiceLogic = (
         setInvoice,
         setCreatedInvoiceData,
         setShowSuccessModal,
-        setError
+        setError,
+        prepareDraft,
     });
 
 

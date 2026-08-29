@@ -35,6 +35,7 @@ export interface UseInvoiceSaveProps {
     setCreatedInvoiceData: Dispatch<SetStateAction<CreatedInvoiceData | null>>;
     setShowSuccessModal: Dispatch<SetStateAction<boolean>>;
     setError: Dispatch<SetStateAction<string | null>>;
+    prepareDraft?: (commandPayload: Record<string, unknown>) => Promise<CanonicalCommandPreview>;
 }
 
 export interface UseInvoiceSaveReturn {
@@ -77,6 +78,7 @@ export function useInvoiceSave(props: UseInvoiceSaveProps): UseInvoiceSaveReturn
         setCreatedInvoiceData,
         setShowSuccessModal,
         setError,
+        prepareDraft,
     } = props;
     const [saving, setSaving] = useState(false);
     const [preparedPreview, setPreparedPreview] = useState<CanonicalCommandPreview | null>(null);
@@ -134,9 +136,11 @@ export function useInvoiceSave(props: UseInvoiceSaveProps): UseInvoiceSaveReturn
                 fingerprint = JSON.stringify(payload);
             }
             if (!preparedPreview || preparedFingerprint.current !== fingerprint) {
-                const prepared = await invoicesApi.prepareCanonical(payload);
+                const prepared = prepareDraft
+                    ? await prepareDraft(payload)
+                    : (await invoicesApi.prepareCanonical(payload)).data;
                 preparedFingerprint.current = fingerprint;
-                setPreparedPreview(prepared.data);
+                setPreparedPreview(prepared);
             }
             setReviewOpen(true);
         } catch (error) {
@@ -153,6 +157,7 @@ export function useInvoiceSave(props: UseInvoiceSaveProps): UseInvoiceSaveReturn
         invoice,
         isOnline,
         preparedPreview,
+        prepareDraft,
         saving,
         selectedCustomer,
         setError,

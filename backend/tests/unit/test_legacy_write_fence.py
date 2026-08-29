@@ -152,6 +152,16 @@ AUTHENTICATED_ONBOARDING_WRITES = {
     ("POST", "/api/auth/onboarding/invitations/accept"): "accept_invitation",
     ("POST", "/api/auth/onboarding/invitations"): "create_invitation",
 }
+CANONICAL_INVOICE_DRAFT_WRITES = {
+    ("POST", "/api/canonical/invoice-drafts"),
+    ("PATCH", "/api/canonical/invoice-drafts/{draft_id}"),
+    ("POST", "/api/canonical/invoice-drafts/{draft_id}/abandon"),
+    ("POST", "/api/canonical/invoice-drafts/{draft_id}/prepare"),
+    ("POST", "/api/internal/mcp/invoice-drafts"),
+    ("PATCH", "/api/internal/mcp/invoice-drafts/{draft_id}"),
+    ("POST", "/api/internal/mcp/invoice-drafts/{draft_id}/abandon"),
+    ("POST", "/api/internal/mcp/invoice-drafts/{draft_id}/prepare"),
+}
 ALLOWED_EFFECTIVE_MUTATIONS = {
     ("POST", "/api/auth/logout"),
     ("POST", "/api/auth/oauth/supabase/session"),
@@ -189,6 +199,7 @@ ALLOWED_EFFECTIVE_MUTATIONS = {
     ("POST", "/api/calculations/invoice"),
     ("POST", "/api/calculations/sales-order"),
     *AUTHENTICATED_ONBOARDING_WRITES,
+    *CANONICAL_INVOICE_DRAFT_WRITES,
 }
 
 

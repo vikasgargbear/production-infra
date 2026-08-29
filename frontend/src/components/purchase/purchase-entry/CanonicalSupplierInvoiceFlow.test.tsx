@@ -13,8 +13,16 @@ jest.mock('../../../services/api/modules/purchase/canonicalSupplierInvoices.api'
   },
 }));
 jest.mock('../../../services/api/canonicalOperatorActions', () => ({
-  prepareCanonicalAction: jest.fn(),
   approveAndExecuteCanonicalAction: jest.fn(),
+}));
+jest.mock('../../../contexts/AuthContext', () => ({
+  useAuth: () => ({ user: { branch_id: 'd3000000-0000-7000-8000-000000000003' } }),
+}));
+jest.mock('../../../services/api/modules/invoiceDrafts.api', () => ({
+  invoiceDraftIdFromLocation: () => null,
+  invoiceDraftsApi: {
+    list: jest.fn(), get: jest.fn(), create: jest.fn(), update: jest.fn(), prepare: jest.fn(), abandon: jest.fn(),
+  },
 }));
 jest.mock('../../../utils/clientUuid', () => ({
   clientUuid: () => 'd3000000-0000-7000-8000-000000000001',
@@ -24,6 +32,7 @@ jest.mock('react-toastify', () => ({
 }));
 jest.mock('../../global', () => ({
   ModuleHeader: ({ title }: { title: string }) => <header>{title}</header>,
+  InvoiceDraftPicker: () => null,
 }));
 
 describe('CanonicalSupplierInvoiceFlow organization dates', () => {

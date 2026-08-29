@@ -12,6 +12,7 @@ from .models import (
     CommandExecution,
     CommandReview,
     CommandState,
+    DraftPrepareBinding,
     OperatorActionError,
     PreparedCommand,
 )
@@ -29,6 +30,7 @@ class OperatorActionService(Protocol):
         payload: Mapping[str, Any],
         idempotency_key: str,
         context: ActionContext,
+        draft_binding: DraftPrepareBinding | None = None,
     ) -> PreparedCommand: ...
 
     def approve(
@@ -93,7 +95,9 @@ class UnavailableOperatorActionService:
             metadata={"operation_key": operation_key, "reason": "COMMAND_ADAPTER_UNAVAILABLE"},
         )
 
-    def prepare(self, *, policy, payload, idempotency_key, context):
+    def prepare(
+        self, *, policy, payload, idempotency_key, context, draft_binding=None
+    ):
         return self._unavailable(policy.operation_key)
 
     def approve(self, *, command_request_id, preview_hash, idempotency_key, context):
