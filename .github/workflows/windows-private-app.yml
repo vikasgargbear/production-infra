@@ -44,9 +44,18 @@ jobs:
       - run: npm run desktop:check
       - run: cargo test --manifest-path src-tauri/Cargo.toml
       - run: npm run desktop:build:windows
+      - name: Publish installer checksum
+        shell: pwsh
+        run: |
+          Get-ChildItem src-tauri/target/release/bundle/nsis/*-setup.exe |
+            Get-FileHash -Algorithm SHA256 |
+            ForEach-Object { "$($_.Hash.ToLower())  $([System.IO.Path]::GetFileName($_.Path))" } |
+            Set-Content -Encoding ascii src-tauri/target/release/bundle/nsis/SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
           name: AASOPharma-ERP-Windows-Setup
-          path: frontend/src-tauri/target/release/bundle/nsis/*-setup.exe
+          path: |
+            frontend/src-tauri/target/release/bundle/nsis/*-setup.exe
+            frontend/src-tauri/target/release/bundle/nsis/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 7

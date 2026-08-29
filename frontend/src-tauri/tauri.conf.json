@@ -21,7 +21,7 @@
     "longDescription": "Private Windows desktop application for AASOPharma wholesale operations.",
     "windows": {
       "webviewInstallMode": {
-        "type": "downloadBootstrapper"
+        "type": "offlineInstaller"
       },
       "nsis": {
         "installMode": "currentUser",

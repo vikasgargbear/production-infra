@@ -8,6 +8,12 @@ const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 const config = JSON.parse(read('src-tauri/tauri.conf.json'));
 if (config.identifier !== 'com.aasopharma.erp') throw new Error('Windows identifier drifted');
 if (!config.bundle?.targets?.includes('nsis')) throw new Error('NSIS setup target is required');
+if (config.bundle?.windows?.webviewInstallMode?.type !== 'offlineInstaller') {
+  throw new Error('Windows setup must bundle the offline WebView2 installer');
+}
+if (config.bundle?.windows?.nsis?.installMode !== 'currentUser') {
+  throw new Error('Windows setup must remain scoped to the current user');
+}
 if (config.app?.security?.csp !== null) throw new Error('Remote ERP must not inherit a misleading local CSP');
 if (!fs.existsSync(path.join(root, 'src-tauri/icons/icon.ico'))) {
   throw new Error('Windows installer icon is missing');
