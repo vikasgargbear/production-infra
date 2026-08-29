@@ -249,10 +249,11 @@ const SupplierFlow: React.FC<SupplierFlowProps> = ({
                     <div className="flex min-w-0 items-center gap-3">
                         <button
                             onClick={onClose}
-                            className="grid min-h-11 min-w-11 place-items-center rounded-lg hover:bg-gray-100"
-                            aria-label="Close supplier form"
+                            className="flex min-h-11 items-center gap-2 rounded-lg px-2 hover:bg-gray-100"
+                            aria-label="Back to suppliers"
                         >
                             <ArrowLeft className="w-5 h-5 text-gray-600" />
+                            <span className="hidden text-sm font-medium text-gray-700 sm:inline">Back</span>
                         </button>
                         <div className="min-w-0">
                             <h1 className="truncate text-lg font-semibold text-gray-950 sm:text-xl">Create supplier</h1>

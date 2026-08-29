@@ -346,11 +346,12 @@ const CustomerFlow: React.FC<CustomerFlowProps> = ({
             <div className="flex-shrink-0 border-b border-gray-200 bg-white px-3 py-3 sm:px-6 sm:py-4">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                        <button aria-label="Close customer form"
+                        <button aria-label="Back to customers"
                             onClick={onClose}
-                            className="grid min-h-11 min-w-11 place-items-center rounded-lg hover:bg-gray-100"
+                            className="flex min-h-11 items-center gap-2 rounded-lg px-2 hover:bg-gray-100"
                         >
                             <ArrowLeft className="w-5 h-5 text-gray-600" />
+                            <span className="hidden text-sm font-medium text-gray-700 sm:inline">Back</span>
                         </button>
                         <div><h1 className="text-lg font-semibold text-gray-950 sm:text-xl">Create customer</h1><p className="text-sm text-gray-500">Identity, billing address, tax registration and credit terms</p></div>
                     </div>
