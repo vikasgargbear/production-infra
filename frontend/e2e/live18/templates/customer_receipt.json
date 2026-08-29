@@ -14,11 +14,11 @@
       {"actor":"requester","action":"click","locator":{"kind":"testId","name":"entity-search-option-{{fact.identity.customer_account_id}}"}},
       {"actor":"requester","action":"fill","locator":{"kind":"placeholder","name":"0","exact":true},"value":"{{scalar.customer_receipt_amount}}"},
       {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"{{scalar.customer_receipt_payment_method_label}}","exact":true}},
-      {"actor":"requester","action":"fill","locator":{"kind":"label","name":"Verified evidence ID","exact":true},"value":"{{fact.identity.customer_receipt_evidence_attachment_id}}"},
       {"actor":"requester","action":"select","locator":{"kind":"label","name":"Settlement bank account","exact":true},"value":"{{fact.identity.bank_account_id}}"},
       {"actor":"requester","action":"fill","locator":{"kind":"placeholder","name":"Enter bank, UPI, or gateway reference","exact":true},"value":"LIVE18-RCPT-{{run_token}}"},
       {"actor":"requester","action":"select","locator":{"kind":"label","name":"Customer receipt allocation method","exact":true},"value":"manual"},
       {"actor":"requester","action":"click","locator":{"kind":"role","role":"checkbox","name":"Select canonical invoice {{resource_sales_invoice}}","exact":true}},
+      {"actor":"requester","action":"select","locator":{"kind":"label","name":"Verified receipt evidence","exact":true},"value":"{{fact.identity.customer_receipt_evidence_attachment_id}}"},
       {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Continue","exact":true}},
       {"actor":"requester","action":"click","locator":{"kind":"role","role":"button","name":"Post Receipt","exact":true}}
     ],

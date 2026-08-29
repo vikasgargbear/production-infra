@@ -27,7 +27,9 @@ export interface Payment {
     settlement_account_id: string;
     branch_id: string;
     evidence_attachment_id: string;
+    evidence_label: string;
     sales_order_id: string;
+    sales_order_label: string;
     receipt_purpose: 'invoice_settlement' | 'customer_advance';
     instrument_number: string;
     instrument_date: string;
@@ -100,7 +102,9 @@ const initialState: PaymentState = {
         settlement_account_id: '',
         branch_id: '',
         evidence_attachment_id: '',
+        evidence_label: '',
         sales_order_id: '',
+        sales_order_label: '',
         receipt_purpose: 'invoice_settlement',
         instrument_number: '',
         instrument_date: '',
@@ -150,8 +154,16 @@ const paymentReducer = (state: PaymentState, action: PaymentAction): PaymentStat
                     ...state.payment,
                     customer_id: action.customer?.customer_id || '',
                     customer_name: action.customer?.customer_name || '',
-                    customer_details: action.customer
-                }
+                    customer_details: action.customer,
+                    branch_id: '',
+                    evidence_attachment_id: '',
+                    evidence_label: '',
+                    sales_order_id: '',
+                    sales_order_label: '',
+                    allocations: [],
+                },
+                outstandingInvoices: [],
+                selectedInvoices: [],
             };
 
         case 'SET_OUTSTANDING_INVOICES':

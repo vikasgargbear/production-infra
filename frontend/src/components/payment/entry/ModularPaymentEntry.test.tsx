@@ -27,6 +27,9 @@ jest.mock('../shared/PaymentFlowOptimized', () => () => {
   const { usePayment } = require('../../../contexts/PaymentContext');
   const { setPaymentField } = usePayment();
   return <button onClick={() => {
+    globalThis.dispatchEvent(new CustomEvent('customerSelected', { detail: {
+      customer_id: '0198ea37-2b1d-7c8d-9123-123456789abc', customer_name: 'E2E Customer',
+    } }));
     setPaymentField('amount', '168.00');
     setPaymentField('payment_date', '2026-08-25');
     setPaymentField('business_date', '2026-08-25');
@@ -35,9 +38,6 @@ jest.mock('../shared/PaymentFlowOptimized', () => () => {
     setPaymentField('bank_account_id', '0198ea37-2b20-7c8d-9123-123456789abc');
     setPaymentField('settlement_account_id', '0198ea37-2b21-7c8d-9123-123456789abc');
     setPaymentField('evidence_attachment_id', '0198ea37-2b24-7c8d-9123-123456789abc');
-    globalThis.dispatchEvent(new CustomEvent('customerSelected', { detail: {
-      customer_id: '0198ea37-2b1d-7c8d-9123-123456789abc', customer_name: 'E2E Customer',
-    } }));
   }}>Select fixture customer</button>;
 });
 jest.mock('../../global', () => ({

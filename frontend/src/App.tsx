@@ -32,6 +32,7 @@ import { useHashRouter } from './hooks/useHashRouter';
 
 const MobileNavigationSmokePage = lazy(() => import('./e2e/MobileNavigationSmokePage'));
 const CanonicalReadSurfacesSmokePage = lazy(() => import('./e2e/CanonicalReadSurfacesSmokePage'));
+const CustomerReceiptOperatorSmokePage = lazy(() => import('./e2e/CustomerReceiptOperatorSmokePage'));
 
 // ---------------------------------------------------------------------------
 // Tab / module definitions
@@ -264,6 +265,13 @@ const App = (): JSX.Element => {
     }
     if (window.location.pathname === '/e2e/canonical-reads') {
       return <Suspense fallback={<LoadingSpinner />}><CanonicalReadSurfacesSmokePage /></Suspense>;
+    }
+    if (window.location.pathname === '/e2e/customer-receipt-operator') {
+      return (
+        <AuthProvider>
+          <Suspense fallback={<LoadingSpinner />}><CustomerReceiptOperatorSmokePage /></Suspense>
+        </AuthProvider>
+      );
     }
   }
   return <AuthProvider><AppContent /></AuthProvider>;

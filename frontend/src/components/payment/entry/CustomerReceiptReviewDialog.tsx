@@ -10,6 +10,8 @@ interface CustomerReceiptReviewDialogProps {
   payload: CanonicalCustomerReceiptPreparePayload;
   allocations: readonly ReceiptAllocation[];
   customerName: string;
+  evidenceLabel: string;
+  salesOrderLabel: string;
   busy: boolean;
   onCancel: () => void;
   onConfirm: () => void;
@@ -21,7 +23,8 @@ const focusableSelector = [
 ].join(',');
 
 const CustomerReceiptReviewDialog: React.FC<CustomerReceiptReviewDialogProps> = ({
-  preview, payload, allocations, customerName, busy, onCancel, onConfirm,
+  preview, payload, allocations, customerName, evidenceLabel, salesOrderLabel,
+  busy, onCancel, onConfirm,
 }) => {
   const dialogRef = React.useRef<HTMLDivElement>(null);
   const cancelButtonRef = React.useRef<HTMLButtonElement>(null);
@@ -89,9 +92,9 @@ const CustomerReceiptReviewDialog: React.FC<CustomerReceiptReviewDialogProps> = 
               ['Payment date', payload.payment_date],
               ['Method', payload.payment_method.replace('_', ' ')],
               ['Purpose', payload.receipt_purpose.replace('_', ' ')],
-              ...(payload.sales_order_id ? [['Goods order', payload.sales_order_id]] : []),
+              ...(payload.sales_order_id ? [['Goods order', salesOrderLabel || 'Approved goods order']] : []),
               ...(payload.instrument_number ? [['Cheque instrument', `${payload.instrument_number} · ${payload.instrument_date} · ${payload.drawee_bank_name}`]] : []),
-              ['Evidence', payload.evidence_attachment_id],
+              ['Evidence', evidenceLabel || 'Verified receipt PDF'],
               ['Reference', payload.external_reference],
               ['Command', preview.command_request_id],
             ].map(([term, detail]) => <React.Fragment key={term}>

@@ -1,4 +1,4 @@
-import { approveCustomerReceipt, getCustomerReceiptContext, prepareCustomerReceipt, reconcileCustomerReceipt } from './customerReceipts.api';
+import { approveCustomerReceipt, getCustomerReceiptContext, prepareCustomerReceipt, reconcileCustomerReceipt, uploadCustomerReceiptEvidence } from './customerReceipts.api';
 import { approveAndExecuteCanonicalAction, prepareCanonicalAction } from '../../canonicalOperatorActions';
 import { paymentAllocationApi } from './paymentAllocation.api';
 import { apiHelpers } from '../../apiClient';
@@ -11,7 +11,7 @@ jest.mock('../../canonicalOperatorActions', () => ({
 jest.mock('./paymentAllocation.api', () => ({ paymentAllocationApi: {
   getInvoicePayments: jest.fn(), getCustomerReceiptReadback: jest.fn(),
 } }));
-jest.mock('../../apiClient', () => ({ apiHelpers: { get: jest.fn() } }));
+jest.mock('../../apiClient', () => ({ apiHelpers: { get: jest.fn(), post: jest.fn() } }));
 
 const paymentId = '0198ea37-2b30-7c8d-9123-123456789abc';
 const openItemId = '0198ea37-2b31-7c8d-9123-123456789abc';
@@ -23,12 +23,34 @@ describe('canonical receipt execution and reconciliation', () => {
   it('loads one canonical context for business date, methods, and settlement identities', async () => {
     (apiHelpers.get as jest.Mock).mockResolvedValue({ data: {
       business_date: '2026-08-25', payment_methods: ['bank_transfer', 'card', 'upi'],
-      settlement_accounts: [],
+      settlement_accounts: [], evidence: [], approved_goods_orders: [],
     } });
     await expect(getCustomerReceiptContext()).resolves.toEqual(expect.objectContaining({
       data: expect.objectContaining({ business_date: '2026-08-25' }),
     }));
-    expect(apiHelpers.get).toHaveBeenCalledWith('/canonical/customer-receipts/context');
+    expect(apiHelpers.get).toHaveBeenCalledWith(
+      '/canonical/customer-receipts/context', { preserveExactDecimals: true },
+    );
+  });
+
+  it('loads customer-specific approved orders and uploads branch-bound PDF evidence', async () => {
+    (apiHelpers.get as jest.Mock).mockResolvedValue({ data: {
+      business_date: '2026-08-25', payment_methods: ['upi'], settlement_accounts: [],
+      evidence: [], approved_goods_orders: [],
+    } });
+    await getCustomerReceiptContext(invoiceId);
+    expect(apiHelpers.get).toHaveBeenCalledWith(
+      `/canonical/customer-receipts/context?customer_account_id=${invoiceId}`,
+      { preserveExactDecimals: true },
+    );
+    (apiHelpers.post as jest.Mock).mockResolvedValue({ data: { attachment_id: openItemId } });
+    const file = new File(['%PDF-1.7\nreceipt'], 'receipt.pdf', { type: 'application/pdf' });
+    await uploadCustomerReceiptEvidence(invoiceId, '2026-08-25', file);
+    expect((apiHelpers.post as jest.Mock).mock.calls[0][0]).toBe('/web/evidence/customer-receipts');
+    const form = (apiHelpers.post as jest.Mock).mock.calls[0][1] as FormData;
+    expect(form.get('branch_id')).toBe(invoiceId);
+    expect(form.get('document_date')).toBe('2026-08-25');
+    expect((form.get('file') as File).name).toBe('receipt.pdf');
   });
 
   const preparePayload = () => ({

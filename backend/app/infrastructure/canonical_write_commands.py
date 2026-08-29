@@ -246,3 +246,41 @@ def transition_expense_receipt_attachment(
             parameters,
         ).mappings().one()
     )
+
+
+def initiate_customer_receipt_attachment(
+    db: Session, **parameters: Any
+) -> dict[str, Any]:
+    return dict(
+        db.execute(
+            text(
+                """
+                SELECT attachment_id,attachment_status,idempotency_replayed
+                  FROM erp_core_commands.initiate_customer_receipt_attachment(
+                    :org_id,:branch_id,:attachment_id,:storage_bucket,
+                    :storage_object_path,:original_filename,:byte_size,
+                    :sha256,:document_date,:retention_until
+                  )
+                """
+            ),
+            parameters,
+        ).mappings().one()
+    )
+
+
+def transition_customer_receipt_attachment(
+    db: Session, **parameters: Any
+) -> dict[str, Any]:
+    return dict(
+        db.execute(
+            text(
+                """
+                SELECT attachment_id,attachment_status,idempotency_replayed
+                  FROM erp_core_commands.transition_customer_receipt_attachment(
+                    :org_id,:branch_id,:attachment_id,:target_status
+                  )
+                """
+            ),
+            parameters,
+        ).mappings().one()
+    )
