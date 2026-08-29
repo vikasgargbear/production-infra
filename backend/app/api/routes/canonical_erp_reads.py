@@ -213,6 +213,14 @@ def _exact_string_schema(scale: int, label: str) -> dict[str, Any]:
     }
 
 
+def _signed_string_schema(scale: int, label: str) -> dict[str, Any]:
+    return {
+        "type": "string",
+        "pattern": rf"^-?(?:0|[1-9][0-9]*)\.[0-9]{{{scale}}}$",
+        "description": f"Exact signed {label}; never a JSON number.",
+    }
+
+
 ExactQuantity = Annotated[
     Decimal,
     Field(ge=0, max_digits=20, decimal_places=6),
@@ -244,6 +252,14 @@ ExactMoney = Annotated[
     Field(ge=0, max_digits=20, decimal_places=2),
     PlainSerializer(_money_wire, return_type=str, when_used="json"),
     WithJsonSchema(_exact_string_schema(2, "money amount"), mode="serialization"),
+]
+SignedMoney = Annotated[
+    Decimal,
+    Field(max_digits=20, decimal_places=2),
+    PlainSerializer(_money_wire, return_type=str, when_used="json"),
+    WithJsonSchema(
+        _signed_string_schema(2, "money amount"), mode="serialization"
+    ),
 ]
 
 
@@ -3953,7 +3969,7 @@ class CanonicalInvoiceDetailResponse(BaseModel):
     sgst_amount: ExactMoney
     igst_amount: ExactMoney
     cess_amount: ExactMoney
-    rounding_adjustment: ExactMoney
+    rounding_adjustment: SignedMoney
     total_amount: ExactMoney
     items: list[CanonicalInvoiceDetailItem]
     created_at: datetime
