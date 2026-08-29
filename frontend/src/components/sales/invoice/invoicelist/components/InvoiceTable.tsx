@@ -172,19 +172,19 @@ ${companyName ? `\n---\n${companyName}` : ''}`;
             <div className="flex flex-nowrap items-center justify-end gap-0.5">
                 <button type="button" onClick={() => openDocument(document)}
                     className={`${iconButton} text-gray-700 hover:bg-gray-100`}
-                    title={document.document_type === 'invoice' ? 'View canonical invoice' : 'View summary'}
+                    title={document.document_type === 'invoice' ? 'View invoice' : 'View summary'}
                     aria-label={`View ${label} ${document.invoice_number}`}>
                     <Eye className="h-4 w-4" />
                 </button>
                 <button type="button" onClick={() => handlePrint(document)}
                     className={`${iconButton} text-gray-700 hover:bg-gray-100`}
-                    title={document.document_type === 'invoice' ? 'Print canonical invoice' : 'Print summary'}
+                    title={document.document_type === 'invoice' ? 'Print invoice' : 'Print summary'}
                     aria-label={`Print ${label} ${document.invoice_number}`}>
                     <Printer className="h-4 w-4" />
                 </button>
                 <button type="button" onClick={() => handleDownload(document)}
                     className={`${iconButton} text-gray-700 hover:bg-gray-100`}
-                    title={document.document_type === 'invoice' ? 'Download canonical invoice PDF' : 'Download summary CSV'}
+                    title={document.document_type === 'invoice' ? 'Download invoice PDF' : 'Download summary CSV'}
                     aria-label={`Download ${label} ${document.invoice_number}`}>
                     <Download className="h-4 w-4" />
                 </button>

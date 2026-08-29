@@ -11,6 +11,20 @@ jest.mock('../../apiClient', () => ({
 }));
 
 describe('canonical invoice web transport', () => {
+    it('preserves invoice-list money strings for exact two-decimal display', () => {
+        invoicesApi.getAll({ limit: 5 });
+        invoicesApi.search({ customer_id: 'customer-uuid', limit: 5 });
+
+        expect(apiHelpers.get).toHaveBeenNthCalledWith(1, 'invoices/', {
+            params: { limit: 5 },
+            preserveExactDecimals: true,
+        });
+        expect(apiHelpers.get).toHaveBeenNthCalledWith(2, 'invoices/', {
+            params: { customer_id: 'customer-uuid', limit: 5 },
+            preserveExactDecimals: true,
+        });
+    });
+
     it('uses prepare, approve, execute, then reads the authoritative invoice', async () => {
         const post = apiHelpers.post as jest.Mock;
         const get = apiHelpers.get as jest.Mock;

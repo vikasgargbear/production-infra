@@ -9,7 +9,12 @@ import { Trash2, Package } from 'lucide-react';
 import { EditableCell } from '../../global';
 import type { ReturnItemsTableProps } from '../types/return.types';
 import { exactDecimalUnits } from '../../../utils/exactDecimal';
-import { formatReturnMoney } from '../utils/returnDecimal';
+import {
+    formatReturnDisplayPercent,
+    formatReturnDisplayQuantity,
+    formatReturnDisplayRate,
+    formatReturnMoney,
+} from '../utils/returnDecimal';
 import { formatCalendarDate } from '../../../utils/calendarDate';
 
 const EDITABLE_FIELDS: string[] = ['return_paid_qty', 'return_free_qty'];
@@ -83,7 +88,7 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
     const displayItemTotal = (item: any): string => {
         try {
             const amount = item.total_amount ?? item.line_total;
-            if (amount === '' || amount === null || amount === undefined) return 'Pending canonical preview';
+            if (amount === '' || amount === null || amount === undefined) return 'Calculated on review';
             return formatReturnMoney(amount, `Return total for ${item.product_name || 'item'}`);
         } catch {
             return 'Invalid amount';
@@ -174,7 +179,6 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                                                         <option value="expired">Expired</option>
                                                         <option value="recalled">Recalled</option>
                                                         <option value="quality_hold">Quality hold</option>
-                                                        <option value="quality_hold">Quality hold</option>
                                                     </select>
                                                     <select
                                                         aria-label={`Quarantine location for ${row.product_name}`}
@@ -209,9 +213,13 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                                         {selectedInvoice && (
                                             <td className="px-3 py-2 text-center">
                                                 <div className="text-sm text-gray-900 font-medium">
-                                                    {originalPaidQty === '' || originalPaidQty === undefined ? 'Unavailable' : originalPaidQty}
+                                                    {originalPaidQty === '' || originalPaidQty === undefined
+                                                        ? 'Unavailable'
+                                                        : formatReturnDisplayQuantity(originalPaidQty, 'Original billed quantity')}
                                                     {originalFreeQty !== '' && originalFreeQty !== undefined && isPositiveQuantity(originalFreeQty) && (
-                                                        <span className="text-green-600 ml-1">+{originalFreeQty}</span>
+                                                        <span className="text-green-600 ml-1">
+                                                            +{formatReturnDisplayQuantity(originalFreeQty, 'Original free quantity')}
+                                                        </span>
                                                     )}
                                                 </div>
                                             </td>
@@ -225,7 +233,7 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                                                     value={row.return_paid_qty ?? ''}
                                                     ariaLabel={`Billed quantity for ${row.product_name}`}
                                                     type="number"
-                                                    maxDecimalPlaces={6}
+                                                    maxDecimalPlaces={2}
                                                     preserveDecimalString
                                                     onSave={(val: string | number) => onUpdateItem(index, 'return_paid_qty', String(val))}
                                                     onNavigate={(dir: string) => handleNavigate(index, 'return_paid_qty', dir)}
@@ -243,7 +251,7 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                                                     value={row.return_free_qty ?? ''}
                                                     ariaLabel={`Free quantity for ${row.product_name}`}
                                                     type="number"
-                                                    maxDecimalPlaces={6}
+                                                    maxDecimalPlaces={2}
                                                     preserveDecimalString
                                                     onSave={(val: string | number) => onUpdateItem(index, 'return_free_qty', String(val))}
                                                     onNavigate={(dir: string) => handleNavigate(index, 'return_free_qty', dir)}
@@ -259,7 +267,7 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                                                 <span className="text-sm text-gray-900">
                                                     {row.unit_price === '' || row.unit_price === null || row.unit_price === undefined
                                                         ? 'Unavailable'
-                                                        : `₹${row.unit_price}`}
+                                                        : formatReturnDisplayRate(row.unit_price, 'Return unit rate')}
                                                 </span>
                                             </div>
                                         </td>
@@ -271,7 +279,7 @@ export const ReturnItemsTable = React.memo<ReturnItemsTableProps>(({
                                             <span className="text-sm text-gray-900 font-medium" title="Tax from product (read-only)">
                                                 {row.tax_percent === '' || row.tax_percent === null || row.tax_percent === undefined
                                                     ? 'Unavailable'
-                                                    : `${row.tax_percent}%`}
+                                                    : formatReturnDisplayPercent(row.tax_percent, 'Return tax rate')}
                                             </span>
                                         </td>
 
