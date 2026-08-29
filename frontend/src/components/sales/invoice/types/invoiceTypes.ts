@@ -573,7 +573,6 @@ export interface CreatedInvoiceData {
     customerPhone: string;
     customerEmail: string;
     totalAmount: string;
-    items: InvoiceItem[];
     isOffline: boolean;
 }
 
