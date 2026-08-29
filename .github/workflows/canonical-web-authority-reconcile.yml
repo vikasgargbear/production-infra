@@ -181,13 +181,28 @@ jobs:
             | jq --exit-status --arg sha "$MCP_REVIEWED_SHA" \
               '.status == "ok" and .git_commit == $sha' >/dev/null
           mcp_ready="$RUNNER_TEMP/canonical-mcp-ready.json"
+          mcp_contract="$RUNNER_TEMP/canonical-mcp-service-contract.json"
+          git show \
+            "$MCP_REVIEWED_SHA:backend/mcp_runtime/service-contract.json" \
+            > "$mcp_contract"
+          jq --exit-status '
+            .tools | type == "array" and length > 0 and
+            all(.[]; type == "string" and length > 0) and
+            length == (unique | length)
+          ' "$mcp_contract" >/dev/null
+          expected_inventory_sha256=$(jq -cS '.tools | sort' "$mcp_contract" \
+            | sha256sum | awk '{print $1}')
+          test "$expected_inventory_sha256" = "$MCP_TOOL_INVENTORY_SHA256"
           curl --fail --silent --show-error --max-time 30 \
             "$RAILWAY_MCP_ORIGIN/ready" > "$mcp_ready"
-          jq --exit-status '.status == "ready" and (.tools | length) == 64' \
-            "$mcp_ready" >/dev/null
+          jq --exit-status --slurpfile contract "$mcp_contract" '
+            .status == "ready" and
+            (.tools | type == "array") and
+            ((.tools | sort) == ($contract[0].tools | sort))
+          ' "$mcp_ready" >/dev/null
           observed_inventory_sha256=$(jq -cS '.tools | sort' "$mcp_ready" | sha256sum \
             | awk '{print $1}')
-          test "$observed_inventory_sha256" = "$MCP_TOOL_INVENTORY_SHA256"
+          test "$observed_inventory_sha256" = "$expected_inventory_sha256"
 
       - name: Resolve and attest the exact active API instance
         env:

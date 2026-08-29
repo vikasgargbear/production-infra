@@ -71,9 +71,15 @@ def test_user_authority_reconcile_uses_the_canonical_mcp_envelope() -> None:
     assert '"MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS", ""' in source
     assert '.MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS == $client' in source
     assert '.status == "ok" and .git_commit == $sha' in source
-    assert '.status == "ready" and (.tools | length) == 64' in source
+    assert (
+        '"$MCP_REVIEWED_SHA:backend/mcp_runtime/service-contract.json"' in source
+    )
+    assert 'length == (unique | length)' in source
+    assert '((.tools | sort) == ($contract[0].tools | sort))' in source
+    assert 'test "$expected_inventory_sha256" = "$MCP_TOOL_INVENTORY_SHA256"' in source
     assert 'git merge-base --is-ancestor "$MCP_REVIEWED_SHA" origin/main' in source
-    assert 'test "$observed_inventory_sha256" = "$MCP_TOOL_INVENTORY_SHA256"' in source
+    assert 'test "$observed_inventory_sha256" = "$expected_inventory_sha256"' in source
+    assert '(.tools | length) == 64' not in source
     assert "deployed MCP policy differs from the reviewed envelope" in source
 
 
