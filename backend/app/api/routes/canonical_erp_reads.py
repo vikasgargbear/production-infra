@@ -33,7 +33,15 @@ from sqlalchemy.orm import Session
 
 from ...core.database import get_db
 from ...core.money import money_json
-from ...core.security.permissions import PermissionChecker
+from ...core.security.permissions import (
+    ExactAnyPermissionChecker,
+    ExactPermissionChecker,
+    FOUNDATION_CUSTOMER_LOOKUP_PERMISSIONS,
+    FOUNDATION_PRODUCT_LOOKUP_PERMISSIONS,
+    FOUNDATION_SUPPLIER_LOOKUP_PERMISSIONS,
+    PermissionChecker,
+    has_exact_permission,
+)
 from ...infrastructure import canonical_write_commands
 from ..schemas.money import MoneyJSON
 from ..schemas.master.customer import CanonicalCustomerCreate, CanonicalCustomerUpdate
@@ -287,10 +295,51 @@ _INVOICE_RANGE = """
 
 
 MASTER_USER = Depends(PermissionChecker("master", "view"))
+PRODUCT_USER = Depends(ExactPermissionChecker("catalog.product.manage"))
+CUSTOMER_USER = Depends(ExactPermissionChecker("parties.customer.manage"))
+SUPPLIER_USER = Depends(ExactPermissionChecker("parties.supplier.manage"))
+
+# Operational lookup routes are shared by the reviewed transaction flows.
+# Their centralized allowlists stay exact; master administration still requires
+# one entity-manage capability, and unrelated hr/core permissions do not gain
+# access through the old broad ``master`` navigation domain.
+PRODUCT_LOOKUP_USER = Depends(ExactAnyPermissionChecker(
+    *FOUNDATION_PRODUCT_LOOKUP_PERMISSIONS
+))
+CUSTOMER_LOOKUP_USER = Depends(ExactAnyPermissionChecker(
+    *FOUNDATION_CUSTOMER_LOOKUP_PERMISSIONS
+))
+SUPPLIER_LOOKUP_USER = Depends(ExactAnyPermissionChecker(
+    *FOUNDATION_SUPPLIER_LOOKUP_PERMISSIONS
+))
 SALES_USER = Depends(PermissionChecker("sales", "view"))
 PURCHASE_USER = Depends(PermissionChecker("purchase", "view"))
 INVENTORY_USER = Depends(PermissionChecker("inventory", "view"))
 FINANCE_USER = Depends(PermissionChecker("finance", "view"))
+
+
+def _require_operational_lookup_bound(
+    user: dict,
+    *,
+    manage_permission: str,
+    requested_limit: int,
+    operational_limit: int,
+) -> None:
+    """Keep transaction lookup access bounded without constraining managers."""
+    if not isinstance(requested_limit, int):
+        requested_limit = getattr(requested_limit, "default", requested_limit)
+    if (
+        isinstance(requested_limit, int)
+        and requested_limit > operational_limit
+        and not has_exact_permission(user, manage_permission)
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                f"{manage_permission} is required above the bounded "
+                f"lookup limit of {operational_limit}"
+            ),
+        )
 
 
 class CanonicalLogisticsModePolicy(BaseModel):
@@ -590,7 +639,13 @@ def _master_search_parameters(value: Optional[str]) -> dict[str, Any]:
 def products(limit: int = Query(50, ge=1, le=200), skip: int = Query(0, ge=0),
              offset: Optional[int] = Query(None, ge=0),
              search: str = Query("", max_length=100), include_inactive: bool = False,
-             user: dict = MASTER_USER, db: Session = Depends(get_db)):
+             user: dict = PRODUCT_LOOKUP_USER, db: Session = Depends(get_db)):
+    _require_operational_lookup_bound(
+        user,
+        manage_permission="catalog.product.manage",
+        requested_limit=limit,
+        operational_limit=100,
+    )
     org_id = _activate(db, user)
     effective_offset = offset if offset is not None else skip
     parameters = {
@@ -796,7 +851,7 @@ def products(limit: int = Query(50, ge=1, le=200), skip: int = Query(0, ge=0),
 @router.get("/products/setup-options")
 def product_setup_options(
     manufacturer_search: str = Query("", max_length=100),
-    user: dict = MASTER_USER,
+    user: dict = PRODUCT_USER,
     db: Session = Depends(get_db),
 ):
     """Return only canonical references that can be selected during setup."""
@@ -861,7 +916,7 @@ def product_setup_options(
 def product_setup_ingredients(
     search: str = Query("", max_length=100),
     limit: int = Query(20, ge=1, le=50),
-    user: dict = MASTER_USER,
+    user: dict = PRODUCT_USER,
     db: Session = Depends(get_db),
 ):
     _activate(db, user)
@@ -890,7 +945,7 @@ def product_setup_ingredients(
 def product_setup_hsn_codes(
     search: str = Query("", max_length=100),
     limit: int = Query(20, ge=1, le=50),
-    user: dict = MASTER_USER,
+    user: dict = PRODUCT_USER,
     db: Session = Depends(get_db),
 ):
     _activate(db, user)
@@ -924,7 +979,7 @@ def product_setup_hsn_codes(
 @router.get("/products/{product_id}/setup")
 def product_setup(
     product_id: UUID,
-    user: dict = MASTER_USER,
+    user: dict = PRODUCT_USER,
     db: Session = Depends(get_db),
 ):
     org_id = _activate(db, user)
@@ -992,7 +1047,7 @@ def product_setup(
 def configure_product_setup(
     product_id: UUID,
     setup: CanonicalProductSetupWrite,
-    user: dict = Depends(PermissionChecker("master", "edit")),
+    user: dict = PRODUCT_USER,
     db: Session = Depends(get_db),
 ):
     org_id = _activate(db, user)
@@ -1059,7 +1114,7 @@ def activate_product_setup(
         ...,alias="X-Idempotency-Key",min_length=8,max_length=128,
         pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
     ),
-    user: dict = Depends(PermissionChecker("master", "edit")),
+    user: dict = PRODUCT_USER,
     db: Session = Depends(get_db),
 ):
     org_id = _activate(db, user)
@@ -1096,7 +1151,7 @@ def create_product_draft(
         max_length=128,
         pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
     ),
-    user: dict = Depends(PermissionChecker("master", "create")),
+    user: dict = PRODUCT_USER,
     db: Session = Depends(get_db),
 ):
     """Create an unusable draft; regulatory activation remains a separate command.
@@ -1135,7 +1190,7 @@ def create_product_draft(
 def update_product_draft(
     product_id: UUID,
     product: CanonicalProductDraftUpdate,
-    user: dict = Depends(PermissionChecker("master", "edit")),
+    user: dict = PRODUCT_USER,
     db: Session = Depends(get_db),
 ):
     """Update only mutable identity fields while the product remains a draft."""
@@ -1170,7 +1225,7 @@ def update_product_draft(
 def delete_product_draft(
     product_id: UUID,
     row_version: int = Query(..., ge=1),
-    user: dict = Depends(PermissionChecker("master", "delete")),
+    user: dict = PRODUCT_USER,
     db: Session = Depends(get_db),
 ):
     """Delete an unused draft through its canonical database command."""
@@ -1200,8 +1255,14 @@ def delete_product_draft(
 @router.get("/products/search-with-batches")
 def products_with_batches(
     page: int = Query(1, ge=1), page_size: int = Query(100, ge=1, le=500),
-    q: str = "", user: dict = MASTER_USER, db: Session = Depends(get_db),
+    q: str = "", user: dict = PRODUCT_LOOKUP_USER, db: Session = Depends(get_db),
 ):
+    _require_operational_lookup_bound(
+        user,
+        manage_permission="catalog.product.manage",
+        requested_limit=page_size,
+        operational_limit=100,
+    )
     org_id = _activate(db, user)
     offset = (page - 1) * page_size
     rows = _rows(db, """
@@ -1381,7 +1442,7 @@ def create_customer(
         max_length=128,
         pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
     ),
-    user: dict = Depends(PermissionChecker("master", "create")),
+    user: dict = CUSTOMER_USER,
     db: Session = Depends(get_db),
 ):
     org_id = _activate(db, user)
@@ -1429,7 +1490,7 @@ def create_supplier(
         max_length=128,
         pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
     ),
-    user: dict = Depends(PermissionChecker("master", "create")),
+    user: dict = SUPPLIER_USER,
     db: Session = Depends(get_db),
 ):
     org_id = _activate(db, user)
@@ -1475,7 +1536,7 @@ def update_customer(
         max_length=128,
         pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
     ),
-    user: dict = Depends(PermissionChecker("master", "edit")),
+    user: dict = CUSTOMER_USER,
     db: Session = Depends(get_db),
 ):
     org_id = _activate(db, user)
@@ -1546,7 +1607,7 @@ def update_supplier(
         max_length=128,
         pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
     ),
-    user: dict = Depends(PermissionChecker("master", "edit")),
+    user: dict = SUPPLIER_USER,
     db: Session = Depends(get_db),
 ):
     org_id = _activate(db, user)
@@ -1617,7 +1678,13 @@ _PARTY_CONTACTS = """
 @router.get("/customers")
 @router.get("/customers/")
 def customers(limit: int = Query(100, ge=1, le=1000), skip: int = Query(0, ge=0),
-              search: str = Query("", max_length=100), user: dict = MASTER_USER, db: Session = Depends(get_db)):
+              search: str = Query("", max_length=100), user: dict = CUSTOMER_LOOKUP_USER, db: Session = Depends(get_db)):
+    _require_operational_lookup_bound(
+        user,
+        manage_permission="parties.customer.manage",
+        requested_limit=limit,
+        operational_limit=100,
+    )
     org_id = _activate(db, user)
     parameters = {
         **_master_search_parameters(search if isinstance(search, str) else ""),
@@ -1799,7 +1866,7 @@ def customers(limit: int = Query(100, ge=1, le=1000), skip: int = Query(0, ge=0)
 @router.get("/customers/all-with-addresses")
 def customers_with_addresses(
     page: int = Query(1, ge=1), page_size: int = Query(100, ge=1, le=500),
-    user: dict = MASTER_USER, db: Session = Depends(get_db),
+    user: dict = CUSTOMER_USER, db: Session = Depends(get_db),
 ):
     org_id = _activate(db, user)
     rows = _rows(db, f"""
@@ -1868,7 +1935,7 @@ def _customer_party_id(db: Session, org_id: UUID, customer_id: UUID) -> UUID:
 @router.get("/customers/{customer_id:uuid}/addresses/")
 def customer_addresses(
     customer_id: UUID,
-    user: dict = MASTER_USER,
+    user: dict = CUSTOMER_LOOKUP_USER,
     db: Session = Depends(get_db),
 ):
     org_id = _activate(db, user)
@@ -1905,7 +1972,7 @@ def customer_addresses(
 def create_customer_address(
     customer_id: UUID,
     address: CanonicalCustomerAddressWrite,
-    user: dict = Depends(PermissionChecker("master", "create")),
+    user: dict = CUSTOMER_USER,
     db: Session = Depends(get_db),
 ):
     org_id = _activate(db, user)
@@ -1947,7 +2014,7 @@ def update_customer_address(
     customer_id: UUID,
     address_id: UUID,
     address: CanonicalCustomerAddressWrite,
-    user: dict = Depends(PermissionChecker("master", "edit")),
+    user: dict = CUSTOMER_USER,
     db: Session = Depends(get_db),
 ):
     org_id = _activate(db, user)
@@ -1985,7 +2052,13 @@ def update_customer_address(
 @router.get("/suppliers")
 @router.get("/suppliers/")
 def suppliers(limit: int = Query(100, ge=1, le=1000), skip: int = Query(0, ge=0),
-              search: str = Query("", max_length=100), user: dict = MASTER_USER, db: Session = Depends(get_db)):
+              search: str = Query("", max_length=100), user: dict = SUPPLIER_LOOKUP_USER, db: Session = Depends(get_db)):
+    _require_operational_lookup_bound(
+        user,
+        manage_permission="parties.supplier.manage",
+        requested_limit=limit,
+        operational_limit=100,
+    )
     org_id = _activate(db, user)
     parameters = {
         **_master_search_parameters(search if isinstance(search, str) else ""),
