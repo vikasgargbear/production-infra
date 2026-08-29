@@ -162,7 +162,9 @@ export const challansApi = {
         return executed;
     },
     getCanonical: async (id: string) => {
-        const response = await apiHelpers.get(`/canonical/sales-dispatches/${id}/acceptance-readback`);
+        const response = await apiHelpers.get(`/canonical/sales-dispatches/${id}/acceptance-readback`, {
+            preserveExactDecimals: true,
+        });
         return { ...response, data: normalizeCanonicalSalesDispatchReadback(response.data) };
     },
 

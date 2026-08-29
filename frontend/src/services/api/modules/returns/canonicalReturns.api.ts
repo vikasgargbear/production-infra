@@ -229,12 +229,12 @@ export const canonicalReturnsApi = {
   getSalesContext: (invoiceId: string, returnDate: string) =>
     apiHelpers.get<CanonicalSalesReturnContext>(
       `/canonical/returns/sales-invoices/${invoiceId}/context`,
-      { params: { return_date: returnDate } },
+      { params: { return_date: returnDate }, preserveExactDecimals: true },
     ),
   getPurchaseContext: (invoiceId: string, returnDate: string) =>
     apiHelpers.get<CanonicalPurchaseReturnContext>(
       `/canonical/returns/supplier-invoices/${invoiceId}/context`,
-      { params: { return_date: returnDate } },
+      { params: { return_date: returnDate }, preserveExactDecimals: true },
     ),
   getSalesReadback: (returnId: string) =>
     apiHelpers.get(`/canonical/returns/sales/${returnId}`),

@@ -168,7 +168,10 @@ export function decodeTransferReadback(value: unknown): TransferReadback {
 
 export const inventoryTransfersApi = {
   eligibleBatches: (params: Record<string, string>) =>
-    apiHelpers.get<EligibleTransferBatch[]>('/canonical/inventory-transfers/eligible-batches', { params }),
+    apiHelpers.get<EligibleTransferBatch[]>('/canonical/inventory-transfers/eligible-batches', {
+      params,
+      preserveExactDecimals: true,
+    }),
   readback: async (inventoryDocumentId: string) => {
     requireUuid(inventoryDocumentId, 'Transfer');
     const response = await apiHelpers.get<TransferReadback>(

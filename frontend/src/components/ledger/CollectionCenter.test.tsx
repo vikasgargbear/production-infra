@@ -1,19 +1,19 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
 
-import apiClient from '../../services/api/apiClient';
+import { apiHelpers } from '../../services/api/apiClient';
 import CollectionCenter from './CollectionCenter';
 
 jest.mock('../global', () => ({ ModuleHeader: () => null }));
 
 jest.mock('../../services/api/apiClient', () => ({
   __esModule: true,
-  default: { get: jest.fn() },
+  apiHelpers: { get: jest.fn() },
 }));
 
 describe('Collection Center failure transparency', () => {
   it('does not render zero metrics while authoritative balances are loading', () => {
-    (apiClient.get as jest.Mock).mockReturnValue(new Promise(() => undefined));
+    (apiHelpers.get as jest.Mock).mockReturnValue(new Promise(() => undefined));
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
     render(
@@ -28,7 +28,7 @@ describe('Collection Center failure transparency', () => {
 
   it('shows an actionable error instead of fake zero balances', async () => {
     jest.spyOn(console, 'error').mockImplementation(() => undefined);
-    (apiClient.get as jest.Mock).mockRejectedValue(new Error('server failed'));
+    (apiHelpers.get as jest.Mock).mockRejectedValue(new Error('server failed'));
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
@@ -44,7 +44,7 @@ describe('Collection Center failure transparency', () => {
   });
 
   it('enables each communication CTA only when canonical contact data exists', async () => {
-    (apiClient.get as jest.Mock).mockResolvedValue({ data: {
+    (apiHelpers.get as jest.Mock).mockResolvedValue({ data: {
       summary: {
         totalOutstanding: '9007199254740993.01',
         overdueAmount: '60.00',
@@ -76,6 +76,10 @@ describe('Collection Center failure transparency', () => {
     );
 
     expect(await screen.findByText('Canonical Buyer')).toBeTruthy();
+    expect(apiHelpers.get).toHaveBeenCalledWith(
+      '/collection-center/collection/aging-data',
+      { preserveExactDecimals: true },
+    );
     expect(screen.getByRole('button', { name: 'WhatsApp Canonical Buyer' }).hasAttribute('disabled')).toBe(false);
     expect(screen.getByRole('button', { name: 'Email Canonical Buyer' }).hasAttribute('disabled')).toBe(false);
     expect(screen.getByRole('button', { name: 'Call Canonical Buyer' }).hasAttribute('disabled')).toBe(false);

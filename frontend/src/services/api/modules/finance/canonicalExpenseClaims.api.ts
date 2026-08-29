@@ -305,6 +305,7 @@ export const canonicalExpenseClaimsApi = {
     requireUuid(commandRequestId, 'Expense command');
     const response = await apiHelpers.get<PostedExpenseClaim>(
       `/web/actions/expense-claims/commands/${commandRequestId}/readback`,
+      { preserveExactDecimals: true },
     );
     decodePostedExpenseClaim(response.data);
     return response;

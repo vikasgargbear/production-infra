@@ -136,7 +136,10 @@ describe('canonical expense claim browser boundary', () => {
     expect(decodePostedExpenseClaim(readback).expense_claim_id).toBe(ids.claim);
     (apiHelpers.get as jest.Mock).mockResolvedValueOnce({ data: readback });
     await expect(canonicalExpenseClaimsApi.readback(ids.command)).resolves.toEqual({ data: readback });
-    expect(apiHelpers.get).toHaveBeenCalledWith(`/web/actions/expense-claims/commands/${ids.command}/readback`);
+    expect(apiHelpers.get).toHaveBeenCalledWith(
+      `/web/actions/expense-claims/commands/${ids.command}/readback`,
+      { preserveExactDecimals: true },
+    );
   });
 
   it('rejects inconsistent journal readback instead of reporting success', () => {
