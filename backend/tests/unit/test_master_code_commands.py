@@ -268,14 +268,23 @@ def test_rest_and_mcp_share_canonical_master_command_helpers() -> None:
     assert set(mcp_master_contract.MASTER_WRITE_POLICIES) == {
         "catalog.product_draft.create",
         "catalog.product_draft.configure",
+        "catalog.product.activate",
         "parties.customer.create",
         "parties.supplier.create",
         "parties.customer.update",
         "parties.supplier.update",
     }
     assert all(
-        policy.branch_fields == () and policy.risk_class == "reversible_write"
+        policy.branch_fields == ()
         for policy in mcp_master_contract.MASTER_WRITE_POLICIES.values()
+    )
+    assert mcp_master_contract.MASTER_WRITE_POLICIES[
+        "catalog.product.activate"
+    ].risk_class == "consequential_write"
+    assert all(
+        policy.risk_class == "reversible_write"
+        for key, policy in mcp_master_contract.MASTER_WRITE_POLICIES.items()
+        if key != "catalog.product.activate"
     )
 
 

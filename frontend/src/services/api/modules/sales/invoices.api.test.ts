@@ -70,4 +70,13 @@ describe('canonical invoice web transport', () => {
         expect(get.mock.calls[2][1]).toEqual({ preserveExactDecimals: true });
         expect(get.mock.calls[0][1]).toEqual({ preserveExactDecimals: true });
     });
+
+    it('preserves exact decimals in posted reconciliation readback', () => {
+        invoicesApi.getCanonicalPostingReadback('invoice-uuid');
+
+        expect(apiHelpers.get).toHaveBeenCalledWith(
+            '/canonical/sales-invoices/invoice-uuid/posting-readback',
+            { preserveExactDecimals: true },
+        );
+    });
 });

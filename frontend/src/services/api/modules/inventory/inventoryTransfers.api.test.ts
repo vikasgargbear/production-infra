@@ -89,4 +89,15 @@ describe('canonical inventory transfer readback', () => {
       { preserveExactDecimals: true },
     );
   });
+
+  it('preserves exact batch quantities and costs for transfer selection', () => {
+    const params = { product_id: uuid('5'), source_branch_id: uuid('2') };
+
+    inventoryTransfersApi.eligibleBatches(params);
+
+    expect(apiHelpers.get).toHaveBeenCalledWith(
+      '/canonical/inventory-transfers/eligible-batches',
+      { params, preserveExactDecimals: true },
+    );
+  });
 });

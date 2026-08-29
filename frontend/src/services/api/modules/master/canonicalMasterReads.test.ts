@@ -21,6 +21,11 @@ test('customer decoder preserves explicit zero and rejects a missing amount', ()
     gst_number: null,
     gst_verification_status: null,
     place_of_supply_state_code: null,
+    address_line1: null,
+    address_line2: null,
+    city: 'Jaipur',
+    state_code: '08',
+    pincode: null,
     credit_limit: '0.00',
     credit_days: 0,
     current_outstanding: '0.00',
@@ -33,7 +38,9 @@ test('customer decoder preserves explicit zero and rejects a missing amount', ()
     updated_at: '2026-08-25T00:00:00Z',
   };
   expect(decodeCanonicalCustomerList({ customers: [row], total: 1, skip: 0, limit: 20 }))
-    .toEqual(expect.objectContaining({ customers: [expect.objectContaining({ current_outstanding: '0.00' })] }));
+    .toEqual(expect.objectContaining({ customers: [expect.objectContaining({
+      current_outstanding: '0.00', city: 'Jaipur', state_code: '08',
+    })] }));
   expect(() => decodeCanonicalCustomerList({
     customers: [{ ...row, current_outstanding: undefined }], total: 1, skip: 0, limit: 20,
   })).toThrow('outstanding');
@@ -50,6 +57,12 @@ test('product decoder accepts UUIDv7 and keeps missing GST distinct from zero', 
     generic_name: null,
     product_type: 'medical_device',
     unit: 'EA',
+    category_name: 'Devices',
+    manufacturer_name: 'Exact Labs',
+    dosage_form: null,
+    strength_display: null,
+    packing_summary: null,
+    requires_prescription: false,
     uom_conversion_id: UUID7_B,
     taxability: null,
     gst_percent: null,

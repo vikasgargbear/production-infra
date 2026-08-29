@@ -13,6 +13,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from ....core.database import get_db
+from .. import canonical_erp_reads
 from ..canonical_adjustment_note_reads import (
     AdjustmentNoteReadback,
     load_adjustment_note_readback,
@@ -245,12 +246,34 @@ def canonical_customer_search(
     db: Session = Depends(get_db),
 ) -> CustomerSearchResponse:
     _require_operation(context, "parties.customers.search")
-    search = " ".join(_nonempty(search_term, "search_term").casefold().split())
-    rows = [
-        _mapping(row)
-        for row in db.execute(
+    parameters = {
+        **canonical_erp_reads._master_search_parameters(
+            _nonempty(search_term, "search_term")
+        ),
+        "org_id": context.organization_id,
+        "limit": limit,
+    }
+
+    def load_rows(use_fallback: bool):
+        fallback = """
+                        OR (:allow_contains AND (
+                             pg_catalog.strpos(pg_catalog.lower(party.legal_name),:search)>0
+                             OR pg_catalog.strpos(
+                                  pg_catalog.lower(COALESCE(party.trade_name,'')),:search
+                                )>0))
+                        OR (:allow_fuzzy AND pg_catalog.lower(party.legal_name)
+                             LIKE ANY(CAST(:fuzzy_patterns AS text[])))
+                        OR (:allow_phone_suffix AND pg_catalog.right(
+                             pg_catalog.regexp_replace(
+                               COALESCE(contact.phone,''),'[^0-9]','','g'
+                             ),pg_catalog.length(:phone_digits)
+                           )=:phone_digits)
+        """ if use_fallback else ""
+        return [
+            _mapping(row)
+            for row in db.execute(
             text(
-                """
+                f"""
                 SELECT customer.id AS customer_account_id, customer.party_id,
                        customer.customer_code, party.legal_name, party.trade_name,
                        registration.registration_number AS gstin, contact.phone,
@@ -312,28 +335,50 @@ def canonical_customer_search(
                  WHERE customer.org_id=:org_id
                    AND customer.status IN ('active','on_hold')
                    AND party.status IN ('active','blocked')
-                   AND (pg_catalog.lower(customer.customer_code) LIKE :prefix
-                        OR pg_catalog.lower(party.legal_name) LIKE :prefix
+                   AND (pg_catalog.lower(party.legal_name) LIKE :prefix
                         OR pg_catalog.lower(COALESCE(party.trade_name,'')) LIKE :prefix
+                        OR pg_catalog.lower(customer.customer_code) LIKE :prefix
                         OR pg_catalog.lower(COALESCE(registration.registration_number,'')) LIKE :prefix
                         OR COALESCE(contact.phone,'') LIKE :prefix
                         OR (:tsquery<>'' AND pg_catalog.to_tsvector(
                              'simple'::pg_catalog.regconfig,
                              COALESCE(party.legal_name,'')||' '||COALESCE(party.trade_name,'')
-                           ) @@ pg_catalog.to_tsquery('simple'::pg_catalog.regconfig,:tsquery)))
-                 ORDER BY _exact_match DESC, party.legal_name, customer.id
+                           ) @@ pg_catalog.to_tsquery('simple'::pg_catalog.regconfig,:tsquery))
+                        {fallback})
+                 ORDER BY CASE
+                            WHEN pg_catalog.lower(party.legal_name)=:search THEN 100
+                            WHEN pg_catalog.lower(COALESCE(party.trade_name,''))=:search THEN 98
+                            WHEN pg_catalog.lower(party.legal_name) LIKE :prefix THEN 95
+                            WHEN pg_catalog.lower(COALESCE(party.trade_name,'')) LIKE :prefix THEN 92
+                            WHEN :tsquery<>'' AND pg_catalog.to_tsvector(
+                              'simple'::pg_catalog.regconfig,
+                              COALESCE(party.legal_name,'')||' '||COALESCE(party.trade_name,'')
+                            ) @@ pg_catalog.to_tsquery(
+                              'simple'::pg_catalog.regconfig,:tsquery
+                            ) THEN 90
+                            WHEN :allow_contains AND pg_catalog.strpos(
+                              pg_catalog.lower(party.legal_name),:search
+                            )>0 THEN 85
+                            WHEN :allow_fuzzy AND pg_catalog.lower(party.legal_name)
+                              LIKE ANY(CAST(:fuzzy_patterns AS text[])) THEN 80
+                            WHEN pg_catalog.lower(customer.customer_code)=:search THEN 75
+                            WHEN pg_catalog.lower(customer.customer_code) LIKE :prefix THEN 72
+                            WHEN COALESCE(contact.phone,'')=:search THEN 70
+                            WHEN COALESCE(contact.phone,'') LIKE :prefix THEN 68
+                            WHEN pg_catalog.lower(COALESCE(registration.registration_number,''))=:search THEN 65
+                            WHEN pg_catalog.lower(COALESCE(registration.registration_number,'')) LIKE :prefix THEN 63
+                            WHEN :allow_phone_suffix THEN 55 ELSE 50 END DESC,
+                          party.legal_name, customer.id
                  LIMIT :limit
                 """
             ),
-            {
-                "org_id": context.organization_id,
-                "search": search,
-                "prefix": f"{search}%",
-                "tsquery": _search_tsquery(search),
-                "limit": limit,
-            },
+            parameters,
         ).fetchall()
-    ]
+        ]
+
+    rows = load_rows(False)
+    if not rows:
+        rows = load_rows(True)
     state, exact_count = _search_state(rows)
     return CustomerSearchResponse(
         match_state=state,

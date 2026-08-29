@@ -65,7 +65,14 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
     const response = await customersApi.search(query, { limit: 20 });
     const rows = response?.data?.customers;
     if (!Array.isArray(rows)) throw new Error('Customer search returned an invalid canonical response');
-    return rows as Customer[];
+    return rows.map((row) => ({
+      ...row,
+      primary_phone: row.primary_phone ?? '',
+      phone: row.primary_phone ?? undefined,
+      email: row.primary_email ?? undefined,
+      city: row.city ?? undefined,
+      state_code: row.state_code ?? undefined,
+    })) as unknown as Customer[];
   }, []);
 
   // Render customer result in dropdown - compact layout showing all key info
@@ -73,9 +80,11 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
     const phone = (customer as any).contact_person_phone ||
       customer.phone ||
       (customer as any).primary_phone;
-    const city = (customer as any).billing_address?.city ||
+    const city = customer.city ||
+      (customer as any).billing_address?.city ||
       customer.billing_address?.city ||
       (customer as any).city;
+    const state = customer.state_code || customer.billing_address?.state || (customer as any).state;
     const hasGst = customer.gst_number || (customer as any).gst_number;
 
     return (
@@ -104,7 +113,7 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
           )}
           {city && (
             <span className="flex items-center gap-1">
-              <MapPin className="w-3 h-3" /> {city}
+              <MapPin className="w-3 h-3" /> {city}{state ? `, ${state}` : ''}
             </span>
           )}
         </div>
@@ -175,10 +184,12 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
 
                 {/* Compact Address - City, State only */}
                 {(() => {
-                  const city = (customer as any).billing_address?.city ||
+                  const city = customer.city ||
+                    (customer as any).billing_address?.city ||
                     customer.billing_address?.city ||
                     (customer as any).city || '';
-                  const state = (customer as any).billing_address?.state ||
+                  const state = customer.state_code ||
+                    (customer as any).billing_address?.state ||
                     customer.billing_address?.state ||
                     (customer as any).state || '';
 

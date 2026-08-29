@@ -1,0 +1,124 @@
+{
+  "contract_version": "1.0.0",
+  "scope": "Foundation master-data writes required before the eighteen production-critical transaction operations. These prerequisite operations do not extend Live18 or its command lifecycle.",
+  "transaction_operation_contract": {
+    "path": "docs/architecture/core-operation-authority-matrix.json",
+    "expected_operation_count": 18,
+    "relationship": "prerequisite_master_data_only"
+  },
+  "shared_invariants": {
+    "tenant_scope": "Browser and MCP adapters activate the authenticated organization context before PostgreSQL access.",
+    "code_authority": "Customer, supplier, and product codes are allocated once by erp_master_commands and are never client supplied.",
+    "idempotency": "Every create and product activation requires an exact caller replay key. MCP product setup adds the same protection around the shared setup command.",
+    "readback": "Each write returns canonical identity and must reconcile through the declared REST and MCP projections.",
+    "activation_boundary": "Product activation is consequential, requires an actor-confirmed catalog.product.activate grant, shares the browser PostgreSQL command, and must read back active lifecycle state."
+  },
+  "operations": [
+    {
+      "id": "customer_create",
+      "operation_key": "parties.customer.create",
+      "risk": "reversible_write",
+      "frontend": ["frontend/src/components/master/customers/CustomerFlow.tsx", "customersApi.create"],
+      "rest_write": ["POST", "/api/customers/"],
+      "mcp_write": ["erp_customer_create", "POST", "/api/internal/mcp/master/customers"],
+      "postgres_functions": ["erp_master_commands.create_customer"],
+      "postgres_source": "backend/alembic/sql/20260826_0027_master_code_commands.sql",
+      "relations": ["core.idempotency_keys", "core.master_code_sequences", "parties.parties", "parties.customer_accounts", "parties.contacts", "parties.addresses", "parties.tax_registrations"],
+      "readback": {
+        "rest": ["GET", "/api/customers", "customer_code"],
+        "mcp": ["erp_customer_get", "parties.customers.get", "/api/internal/mcp/reads/customer"],
+        "projection_mapping": {
+          "account_id": ["customer_id", "customer_id", "customer_account_id", "customer_account_id"],
+          "party_id": ["party_id", "party_id", "party_id", "party_id"],
+          "code": ["customer_code", "customer_code", "customer_code", "customer_code"]
+        }
+      }
+    },
+    {
+      "id": "supplier_create",
+      "operation_key": "parties.supplier.create",
+      "risk": "reversible_write",
+      "frontend": ["frontend/src/components/master/suppliers/SupplierFlow.tsx", "suppliersApi.create"],
+      "rest_write": ["POST", "/api/suppliers/"],
+      "mcp_write": ["erp_supplier_create", "POST", "/api/internal/mcp/master/suppliers"],
+      "postgres_functions": ["erp_master_commands.create_supplier"],
+      "postgres_source": "backend/alembic/sql/20260826_0027_master_code_commands.sql",
+      "relations": ["core.idempotency_keys", "core.master_code_sequences", "parties.parties", "parties.supplier_accounts", "parties.contacts", "parties.addresses", "parties.tax_registrations"],
+      "readback": {
+        "rest": ["GET", "/api/suppliers", "supplier_code"],
+        "mcp": ["erp_supplier_get", "parties.suppliers.get", "/api/internal/mcp/reads/supplier"],
+        "projection_mapping": {
+          "account_id": ["supplier_id", "supplier_id", "supplier_account_id", "supplier_account_id"],
+          "party_id": ["party_id", "party_id", "party_id", "party_id"],
+          "code": ["supplier_code", "supplier_code", "supplier_code", "supplier_code"]
+        }
+      }
+    },
+    {
+      "id": "product_draft_create",
+      "operation_key": "catalog.product_draft.create",
+      "risk": "reversible_write",
+      "frontend": ["frontend/src/components/master/products/ProductFlow.tsx", "productsApi.create"],
+      "rest_write": ["POST", "/api/products/"],
+      "mcp_write": ["erp_product_create", "POST", "/api/internal/mcp/master/products"],
+      "postgres_functions": ["erp_master_commands.create_product_draft"],
+      "postgres_source": "backend/alembic/sql/20260826_0027_master_code_commands.sql",
+      "relations": ["core.idempotency_keys", "core.master_code_sequences", "catalog.products"],
+      "readback": {
+        "rest": ["GET", "/api/products/{product_id}/setup", "product_id"],
+        "mcp": ["erp_product_setup_get", "master.product_setup.get", "/api/internal/mcp/reads/product-setup"],
+        "projection_mapping": {
+          "product_id": ["product_id", "product_id", "product_id", "product_id"],
+          "code": ["product_code", "product_code", "product_code", "product_code"],
+          "row_version": ["row_version", "row_version", "row_version", "row_version"],
+          "lifecycle": ["lifecycle_status", "status", "status", "catalog.products.status"]
+        }
+      }
+    },
+    {
+      "id": "product_draft_configure",
+      "operation_key": "catalog.product_draft.configure",
+      "risk": "reversible_write",
+      "frontend": ["frontend/src/components/master/products/ProductFlow.tsx", "productsApi.saveSetup"],
+      "rest_write": ["PUT", "/api/products/{product_id}/setup"],
+      "mcp_write": ["erp_product_setup", "POST", "/api/internal/mcp/master/products/setup"],
+      "postgres_functions": ["erp_master_commands.configure_product_draft", "erp_master_commands.configure_product_draft_idempotent"],
+      "postgres_source": "database/canonical/operations/master/product_setup_commands.sql",
+      "supplemental_postgres_source": "backend/alembic/sql/20260829_0055_mcp_product_setup_idempotency.sql",
+      "relations": ["core.idempotency_keys", "catalog.products", "catalog.product_ingredients", "catalog.uom_conversions"],
+      "readback": {
+        "rest": ["GET", "/api/products/{product_id}/setup", "product_id"],
+        "mcp": ["erp_product_setup_get", "master.product_setup.get", "/api/internal/mcp/reads/product-setup"],
+        "projection_mapping": {
+          "product_id": ["product_id", "product_id", "product_id", "product_id"],
+          "code": ["product_code", "product_code", "product_code", "product_code"],
+          "row_version": ["row_version", "row_version", "row_version", "row_version"],
+          "lifecycle": ["lifecycle_status", "status", "status", "catalog.products.status"]
+        }
+      }
+    },
+    {
+      "id": "product_activate",
+      "operation_key": "catalog.product.activate",
+      "risk": "consequential_write",
+      "approval": "actor_confirmation",
+      "frontend": ["frontend/src/components/master/products/ProductFlow.tsx", "productsApi.activate"],
+      "rest_write": ["POST", "/api/products/{product_id}/activate"],
+      "mcp_write": ["erp_product_activate", "POST", "/api/internal/mcp/master/products/activate"],
+      "postgres_functions": ["erp_master_commands.activate_configured_product", "erp_regulatory_commands.activate_product"],
+      "postgres_source": "database/canonical/operations/master/product_setup_commands.sql",
+      "relations": ["core.idempotency_keys", "catalog.products", "catalog.product_ingredients", "catalog.uom_conversions", "core.reference_data_releases", "tax.tax_code_versions"],
+      "readback": {
+        "rest": ["GET", "/api/products/{product_id}/setup", "product_id"],
+        "mcp": ["erp_product_setup_get", "master.product_setup.get", "/api/internal/mcp/reads/product-setup"],
+        "projection_mapping": {
+          "product_id": ["product_id", "product_id", "product_id", "product_id"],
+          "code": ["product_code", "product_code", "product_code", "product_code"],
+          "row_version": ["row_version", "row_version", "row_version", "row_version"],
+          "lifecycle": ["lifecycle_status", "status", "status", "catalog.products.status"]
+        }
+      }
+    }
+  ],
+  "projection_order": ["browser_write", "rest", "mcp", "postgres"]
+}

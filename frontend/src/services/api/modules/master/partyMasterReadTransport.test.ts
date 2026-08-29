@@ -11,6 +11,7 @@ const customer = {
   primary_phone: null, primary_email: null, gst_number: null,
   contact_person_name: null, pan_number: null,
   gst_verification_status: null, place_of_supply_state_code: null,
+  address_line1: null, address_line2: null, city: null, state_code: null, pincode: null,
   credit_limit: '100.00', credit_days: 30, current_outstanding: '10.00',
   customer_type: 'organization', is_active: true, status: 'active',
   account_row_version: 1, party_row_version: 1,

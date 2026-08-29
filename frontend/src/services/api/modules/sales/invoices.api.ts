@@ -143,7 +143,9 @@ export const invoicesApi = {
 
     /** Browser-safe posted readback with invoice, tax, receivable and stock-quantity lineage. */
     getCanonicalPostingReadback: (id: string) =>
-        apiHelpers.get(`/canonical/sales-invoices/${id}/posting-readback`),
+        apiHelpers.get(`/canonical/sales-invoices/${id}/posting-readback`, {
+            preserveExactDecimals: true,
+        }),
 
     /** Update invoice (only for draft invoices) */
     update: (_id: number | string, _data: Partial<InvoiceData>) =>

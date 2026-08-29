@@ -63,6 +63,7 @@ const invoice = (): InvoiceData => ({
     sale_unit: 'EA',
     quantity: '1.234567',
     free_quantity: '0.125000',
+    free_supply_tax_treatment: 'excluded_from_taxable_value',
     unit_price: '150.0000',
     line_discount_kind: 'percent',
     line_discount_basis: 'price_value',
@@ -220,17 +221,13 @@ test('renders only canonical seller, buyer, line, and exact money facts', () => 
   expect(html).toContain('27ABCDE1234F1Z5');
   expect(html).toContain('MH-MZ6-20B / MH-MZ6-21B');
   expect(html).toContain('MH-BUYER-20B');
-  expect(html).toContain('HSN 481910 | EA');
-  expect(html).toContain('<th>Batch</th><th>Expiry</th>');
-  expect(html).toContain('<div>BATCH-ONE</div><div>BATCH-TWO</div>');
-  expect(html).toContain('<div>2028-09-30</div><div>2029-01-31</div>');
+  expect(html).toContain('481910');
+  expect(html).toContain('Batch BATCH-ONE; Exp 2028-09-30; Qty 0.73; Free 0.13');
+  expect(html).toContain('Batch BATCH-TWO; Exp 2029-01-31; Qty 0.5; Free 0');
+  expect(html).toContain('Free excluded from taxable value');
   expect(html).toContain('>1.23');
-  expect(html).toContain('>2.5%');
   expect(html).toContain('2.5% (₹5.00)');
-  expect(html).toContain('<th>GST % / Amount</th>');
-  expect(html).toContain('<strong>12%</strong>');
-  expect(html).toContain('<div class="muted">₹18.00</div>');
-  expect(html).toContain('GST by rate and amount');
+  expect(html).toContain('>12%</td>');
   expect(html).toContain('Original for Recipient');
   expect(html).toContain('<strong>Place of Supply:</strong> Maharashtra (27)');
   expect(html).toContain('<strong>Supply:</strong> intra state');
@@ -308,6 +305,22 @@ test('does not include cess in the GST total', () => {
   expect(html).toContain('<span>Cess</span><span>₹1.00</span>');
 });
 
+test('renders the reviewed included-at-rate treatment for free product quantities', () => {
+  const detail = canonicalDetail();
+  detail.items[0].free_supply_tax_treatment = 'included_at_unit_rate';
+  const printable = printableCanonicalInvoice(detail);
+
+  expect(printable.items[0].free_supply_tax_treatment).toBe('included_at_unit_rate');
+  expect(generateInvoiceHTML(printable)).toContain('Free included at unit rate');
+});
+
+test('fails closed when canonical free-supply tax treatment is absent', () => {
+  const detail = canonicalDetail();
+  (detail.items[0] as any).free_supply_tax_treatment = undefined;
+
+  expect(() => printableCanonicalInvoice(detail)).toThrow('free-supply tax treatment is unavailable');
+});
+
 test('downloads the reconciled canonical facts through the paginated A4 PDF builder', async () => {
   const before = document.body.childElementCount;
   await downloadInvoicePDF({ ...invoice(), invoice_number: 'INV/2026/1' });
@@ -336,9 +349,32 @@ test('keeps every invoice item column inside the A4 printable width with Amount 
 
   const columnWidths = Object.values(options.columnStyles)
     .map((style: any) => style.cellWidth as number);
-  expect(columnWidths).toEqual([6, 43, 20, 16, 16, 19, 12, 21, 20, 19]);
+  expect(columnWidths).toEqual([7, 80, 14, 16, 11, 19, 19, 26]);
   expect(columnWidths.reduce((total: number, width: number) => total + width, 0))
     .toBe(options.tableWidth);
   expect(options.margin.left + options.tableWidth + options.margin.right).toBe(210);
-  expect(options.columnStyles[1].cellWidth).toBeGreaterThan(options.columnStyles[9].cellWidth);
+  expect(options.columnStyles[1].cellWidth).toBeGreaterThan(options.columnStyles[7].cellWidth);
+});
+
+test('renders four-digit rates, Cess, free treatment, and every batch without formatted-value reparsing', async () => {
+  mockAutoTable.mockClear();
+  await downloadInvoicePDF({
+    ...invoice(),
+    items: [{
+      ...invoice().items[0],
+      unit_price: '1234.5678',
+      free_supply_tax_treatment: 'included_at_unit_rate',
+      cess_amount: '1.00',
+      line_total: '169.00',
+    }],
+    cess_amount: '1.00',
+    total_amount: '169.00',
+  });
+
+  const options = mockAutoTable.mock.calls.at(-1)?.[1];
+  expect(options.body[0][1]).toContain('Batch BATCH-ONE');
+  expect(options.body[0][1]).toContain('Batch BATCH-TWO');
+  expect(options.body[0][1]).toContain('Cess INR 1.00');
+  expect(options.body[0][3]).toContain('Free included at unit rate');
+  expect(options.body[0][5]).toBe('INR 1,234.57');
 });

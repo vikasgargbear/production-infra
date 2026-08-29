@@ -32,6 +32,7 @@ test('sends canonical filter schema and preserves authoritative total and >2^53 
       direction: 'made', date_from: '2026-08-01', date_to: '2026-08-25',
       search: 'Supplier', page: 2, page_size: 25,
     },
+    preserveExactDecimals: true,
   });
   expect(response.data.total).toBe(31);
   expect(response.data.items[0].amount).toBe('9007199254740993.01');
@@ -64,6 +65,7 @@ test('normalizes exact detail allocation, residual, and journal strings', async 
   const response = await paymentsApi.getCanonicalDetail(item().payment_id);
   expect(apiHelpers.get).toHaveBeenCalledWith(
     `/canonical/payment-history/${item().payment_id}`,
+    { preserveExactDecimals: true },
   );
   expect(response.data.allocations[0].residual_amount).toBe('32.00');
   expect(response.data.journal_lines[0].debit).toBe('168.00');
