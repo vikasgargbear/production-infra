@@ -1244,7 +1244,9 @@ def execute_organization_purge(
                 )
             organization_relations = _organization_relations(cursor, authority)
             executor = _require_purge_executor(cursor, organization_relations)
-            delete_plan = _organization_delete_plan(cursor, organization_relations)
+            delete_plan = _organization_delete_plan(
+                cursor, (*organization_relations, "core.organizations")
+            )
             delete_order = delete_plan.relation_order
             delete_triggers = _delete_trigger_snapshot(
                 cursor, (*organization_relations, "core.organizations")
@@ -1274,16 +1276,17 @@ def execute_organization_purge(
             )
             cursor.execute("SET CONSTRAINTS ALL DEFERRED")
             _set_delete_triggers(cursor, delete_triggers, enabled=False)
+            organization_deleted = 0
             for relation in delete_order:
+                key_column = "id" if relation == "core.organizations" else "org_id"
                 cursor.execute(
-                    f"DELETE FROM {_quote_relation(relation)} WHERE org_id=%s::uuid",
+                    f"DELETE FROM {_quote_relation(relation)} "
+                    f"WHERE {_quote_identifier(key_column)}=%s::uuid",
                     (normalized_id,),
                 )
-            cursor.execute(
-                "DELETE FROM core.organizations WHERE id=%s::uuid",
-                (normalized_id,),
-            )
-            if cursor.rowcount != 1:
+                if relation == "core.organizations":
+                    organization_deleted = cursor.rowcount
+            if organization_deleted != 1:
                 raise ResetAuthorityError(
                     "organization purge did not delete exactly one boundary row"
                 )
