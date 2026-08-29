@@ -54,6 +54,7 @@ export interface ItemsTableProps {
     className?: string;
     preserveExactDecimals?: boolean;
     showFreeSupplyTaxTreatment?: boolean;
+    quantityDecimalPlaces?: number;
 }
 
 type NavigationDirection = 'right' | 'next' | 'left' | 'down' | 'up';
@@ -62,8 +63,6 @@ type NavigationDirection = 'right' | 'next' | 'left' | 'down' | 'up';
 // editor precision aligned with that contract; quantity formatting must never
 // make a fractional value appear to be a whole unit.
 const QUANTITY_DECIMAL_PLACES = 6;
-const QUANTITY_INPUT_STEP = '0.000001';
-const QUANTITY_PRECISION_ERROR = 'Quantity supports up to 6 decimal places.';
 const COMMERCIAL_DECIMAL_PLACES = 2;
 const RATE_PRECISION_ERROR = 'Rate supports up to 2 decimal places.';
 const DISCOUNT_PRECISION_ERROR = 'Discount supports up to 2 decimal places.';
@@ -90,15 +89,22 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
     className = '',
     preserveExactDecimals = false,
     showFreeSupplyTaxTreatment = false,
+    quantityDecimalPlaces = QUANTITY_DECIMAL_PLACES,
 }, ref) => {
 
     const readOnly = readOnlyProp !== undefined ? readOnlyProp : mode === 'preview';
     const enableKeyboardNav = enableKeyboardNavProp !== undefined ? enableKeyboardNavProp : mode === 'entry';
 
     const fieldRefs = useRef<Record<string, EditableCellRef | null>>({});
+    const freeTreatmentRefs = useRef<Record<number, HTMLSelectElement | null>>({});
     const [mobileQuantityErrors, setMobileQuantityErrors] = useState<Record<string, string>>({});
     const [mobileCommercialErrors, setMobileCommercialErrors] = useState<Record<string, string>>({});
     const EDITABLE_FIELDS = ['quantity', 'unit_price', 'discount_percent', 'free'];
+
+    const quantityInputStep = quantityDecimalPlaces === 0
+        ? '1'
+        : `0.${'0'.repeat(Math.max(0, quantityDecimalPlaces - 1))}1`;
+    const quantityPrecisionError = `Quantity supports up to ${quantityDecimalPlaces} decimal places.`;
 
     const updateMobileQuantity = (
         index: number,
@@ -109,10 +115,10 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
         const isPlainNonNegativeDecimal = /^(?:\d+|\d*\.\d*)$/.test(rawValue);
         const decimalPart = rawValue.split('.')[1];
         if (!isPlainNonNegativeDecimal
-            || (decimalPart !== undefined && decimalPart.length > QUANTITY_DECIMAL_PLACES)) {
+            || (decimalPart !== undefined && decimalPart.replace(/0+$/, '').length > quantityDecimalPlaces)) {
             setMobileQuantityErrors(previous => ({
                 ...previous,
-                [errorKey]: QUANTITY_PRECISION_ERROR,
+                [errorKey]: quantityPrecisionError,
             }));
             return;
         }
@@ -189,6 +195,25 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
             case 'next':
                 if (currentFieldIndex < EDITABLE_FIELDS.length - 1) {
                     focusField(currentRow, EDITABLE_FIELDS[currentFieldIndex + 1]);
+                } else if (showFreeSupplyTaxTreatment) {
+                    const freeValue = fieldRefs.current[`${currentRow}-free`]?.getValue?.() ?? '0';
+                    try {
+                        if (exactDecimalUnits(
+                            freeValue,
+                            'Free quantity',
+                            { scale: QUANTITY_DECIMAL_PLACES, maximumWholeDigits: 14 },
+                        ) > 0n) {
+                            window.setTimeout(() => freeTreatmentRefs.current[currentRow]?.focus(), 0);
+                            break;
+                        }
+                    } catch {
+                        break;
+                    }
+                    if (currentRow < items.length - 1) {
+                        focusField(currentRow + 1, EDITABLE_FIELDS[0]);
+                    } else if (productSearchRef?.current) {
+                        window.setTimeout(() => productSearchRef.current?.focus(), 0);
+                    }
                 } else if (currentRow < items.length - 1) {
                     focusField(currentRow + 1, EDITABLE_FIELDS[0]);
                 } else {
@@ -263,11 +288,15 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
         return (
             <label className="block text-xs font-medium text-gray-600">
                 <span className={surface === 'mobile' ? 'mb-1 block' : 'sr-only'}>
-                    Free units value
+                    How should free units be billed?
                 </span>
                 <select
+                    ref={surface === 'desktop'
+                        ? element => { freeTreatmentRefs.current[index] = element; }
+                        : undefined}
+                    data-no-enter-tab
                     data-testid={`${surface}-free-supply-treatment-${item.batch_id || index}`}
-                    aria-label={`${productName} free units value`}
+                    aria-label={`${productName} free units billing`}
                     value={item.free_supply_tax_treatment || ''}
                     disabled={readOnly}
                     onChange={(event) => onUpdateItem?.(
@@ -275,15 +304,24 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                         'free_supply_tax_treatment',
                         event.target.value,
                     )}
+                    onKeyDown={surface === 'desktop' ? event => {
+                        if (event.key !== 'Enter' || !event.currentTarget.value) return;
+                        event.preventDefault();
+                        if (index < items.length - 1) {
+                            focusField(index + 1, EDITABLE_FIELDS[0]);
+                        } else {
+                            window.setTimeout(() => productSearchRef?.current?.focus(), 0);
+                        }
+                    } : undefined}
                     className="min-h-11 w-full rounded border border-gray-300 bg-white px-2 text-sm text-gray-900 disabled:bg-gray-100 disabled:text-gray-600"
                 >
-                    <option value="">Choose how free units are valued</option>
-                    <option value="excluded_from_taxable_value">₹0 — exclude free units</option>
-                    <option value="included_at_unit_rate">Item rate — include free units</option>
+                    <option value="">Choose how free units are billed</option>
+                    <option value="excluded_from_taxable_value">Free — do not charge</option>
+                    <option value="included_at_unit_rate">Charge at item rate</option>
                 </select>
                 {surface === 'mobile' && (
                     <span className="mt-1 block font-normal text-gray-500">
-                        Controls whether free quantity contributes to the line and taxable value.
+                        Choose “Free” for normal bonus units. Use “Charge” only when those units should add to the invoice value.
                     </span>
                 )}
             </label>
@@ -337,7 +375,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
 
                         <div className="mt-4 grid grid-cols-2 gap-3">
                             <label className="text-xs font-medium text-gray-600">Quantity
-                                <input type="number" min="0" step={QUANTITY_INPUT_STEP} inputMode="decimal" value={item.quantity || 0} onChange={(event) => updateMobileQuantity(index, 'quantity', event.target.value)} readOnly={readOnly} aria-invalid={mobileQuantityErrors[`${index}-quantity`] ? true : undefined} aria-describedby={mobileQuantityErrors[`${index}-quantity`] ? `mobile-quantity-error-${index}` : undefined} className="mt-1 min-h-11 w-full border border-gray-300 px-3 text-right text-base text-gray-900" />
+                                <input type="number" min="0" step={quantityInputStep} inputMode="decimal" value={item.quantity || 0} onChange={(event) => updateMobileQuantity(index, 'quantity', event.target.value)} readOnly={readOnly} aria-invalid={mobileQuantityErrors[`${index}-quantity`] ? true : undefined} aria-describedby={mobileQuantityErrors[`${index}-quantity`] ? `mobile-quantity-error-${index}` : undefined} className="mt-1 min-h-11 w-full border border-gray-300 px-3 text-right text-base text-gray-900" />
                                 {mobileQuantityErrors[`${index}-quantity`] && <span id={`mobile-quantity-error-${index}`} role="alert" className="mt-1 block text-xs text-red-700">{mobileQuantityErrors[`${index}-quantity`]}</span>}
                             </label>
                             <label className="text-xs font-medium text-gray-600">Rate
@@ -349,7 +387,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                                 {mobileCommercialErrors[`${index}-discount_percent`] && <span id={`mobile-discount-error-${index}`} role="alert" className="mt-1 block text-xs text-red-700">{mobileCommercialErrors[`${index}-discount_percent`]}</span>}
                             </label>
                             <label className="text-xs font-medium text-gray-600">Free quantity
-                                <input type="number" min="0" step={QUANTITY_INPUT_STEP} inputMode="decimal" value={item.free_quantity || item.free || 0} onChange={(event) => updateMobileQuantity(index, 'free_quantity', event.target.value)} readOnly={readOnly} aria-invalid={mobileQuantityErrors[`${index}-free_quantity`] ? true : undefined} aria-describedby={mobileQuantityErrors[`${index}-free_quantity`] ? `mobile-free-quantity-error-${index}` : undefined} className="mt-1 min-h-11 w-full border border-gray-300 px-3 text-right text-base text-gray-900" />
+                                <input type="number" min="0" step={quantityInputStep} inputMode="decimal" value={item.free_quantity || item.free || 0} onChange={(event) => updateMobileQuantity(index, 'free_quantity', event.target.value)} readOnly={readOnly} aria-invalid={mobileQuantityErrors[`${index}-free_quantity`] ? true : undefined} aria-describedby={mobileQuantityErrors[`${index}-free_quantity`] ? `mobile-free-quantity-error-${index}` : undefined} className="mt-1 min-h-11 w-full border border-gray-300 px-3 text-right text-base text-gray-900" />
                                 {mobileQuantityErrors[`${index}-free_quantity`] && <span id={`mobile-free-quantity-error-${index}`} role="alert" className="mt-1 block text-xs text-red-700">{mobileQuantityErrors[`${index}-free_quantity`]}</span>}
                             </label>
                             {showFreeSupplyTaxTreatment && (
@@ -380,7 +418,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                         <th className="px-3 py-3 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">Rate</th>
                         <th className="px-3 py-3 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">Discount %</th>
                         <th className="min-w-64 px-3 py-3 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                            {showFreeSupplyTaxTreatment ? 'Free qty / value' : 'Free qty'}
+                            {showFreeSupplyTaxTreatment ? 'Free qty / billing' : 'Free qty'}
                         </th>
                         <th className="px-3 py-3 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">GST %</th>
                         <th className="px-3 py-3 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">Line total</th>
@@ -421,10 +459,10 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                                         value={item.quantity || 0}
                                         type="number"
                                         min={0}
-                                        step={Number(QUANTITY_INPUT_STEP)}
-                                        decimalPlaces={visibleQuantityDecimalPlaces(item.quantity)}
-                                        maxDecimalPlaces={QUANTITY_DECIMAL_PLACES}
-                                        decimalPlacesErrorMessage={QUANTITY_PRECISION_ERROR}
+                                        step={Number(quantityInputStep)}
+                                        decimalPlaces={Math.min(visibleQuantityDecimalPlaces(item.quantity), quantityDecimalPlaces)}
+                                        maxDecimalPlaces={quantityDecimalPlaces}
+                                        decimalPlacesErrorMessage={quantityPrecisionError}
                                         onSave={(val) => onUpdateItem?.(index, 'quantity', val)}
                                         onNavigate={(dir) => handleNavigate(index, 'quantity', dir as NavigationDirection)}
                                         readOnly={readOnly}
@@ -481,10 +519,10 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                                         value={item.free_quantity || item.free || 0}
                                         type="number"
                                         min={0}
-                                        step={Number(QUANTITY_INPUT_STEP)}
-                                        decimalPlaces={visibleQuantityDecimalPlaces(item.free_quantity ?? item.free)}
-                                        maxDecimalPlaces={QUANTITY_DECIMAL_PLACES}
-                                        decimalPlacesErrorMessage={QUANTITY_PRECISION_ERROR}
+                                        step={Number(quantityInputStep)}
+                                        decimalPlaces={Math.min(visibleQuantityDecimalPlaces(item.free_quantity ?? item.free), quantityDecimalPlaces)}
+                                        maxDecimalPlaces={quantityDecimalPlaces}
+                                        decimalPlacesErrorMessage={quantityPrecisionError}
                                         onSave={(val) => onUpdateItem?.(index, 'free_quantity', val)}
                                         onNavigate={(dir) => handleNavigate(index, 'free', dir as NavigationDirection)}
                                         readOnly={readOnly}

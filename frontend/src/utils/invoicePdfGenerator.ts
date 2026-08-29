@@ -291,14 +291,9 @@ const lineDiscountDisplay = (
         throw new Error(`${label} fixed amount must have two-decimal precision.`);
     }
     const lineAmount = currency(item.line_discount_amount, `${label} allocation`);
-    const documentAmount = currency(
-        item.document_discount_amount, `${label} invoice allocation`,
-    );
+    currency(item.document_discount_amount, `${label} invoice allocation`);
     const hasLineAmount = compareExactDecimals(
         item.line_discount_amount, '0.00', `${label} allocation`, moneyOptions,
-    ) !== 0;
-    const hasDocumentAmount = compareExactDecimals(
-        item.document_discount_amount, '0.00', `${label} invoice allocation`, moneyOptions,
     ) !== 0;
     const primary = item.line_discount_kind === 'percent'
         ? `${atMostTwoDecimals(value, `${label} percent`, 6)}%`
@@ -312,10 +307,70 @@ const lineDiscountDisplay = (
                 ),
                 `${label} amount`,
             )}`
-            : 'None';
+            : '-';
     const allocated = hasLineAmount ? ` (${lineAmount})` : '';
-    const document = hasDocumentAmount ? ` + invoice ${documentAmount}` : '';
-    return `${primary}${allocated}${document}`;
+    return `${primary}${allocated}`;
+};
+
+const displayDate = (value: string, label: string): string => {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(requiredText(value, label));
+    if (!match) throw new Error(`${label} must use YYYY-MM-DD.`);
+    return `${match[3]}/${match[2]}/${match[1]}`;
+};
+
+const batchPresentationLines = (item: InvoiceItem, lineNumber: number): string[] => {
+    if (!Array.isArray(item.batch_allocations)) {
+        throw new Error(`Invoice line ${lineNumber} batch allocations are unavailable.`);
+    }
+    if (!item.batch_allocations.length) {
+        if (!item.batch_number) return ['Not applicable'];
+        return [
+            `${requiredText(item.batch_number, `Invoice line ${lineNumber} batch`)}${item.expiry_date
+                ? ` | Exp ${displayDate(item.expiry_date, `Invoice line ${lineNumber} expiry`)}`
+                : ''}`,
+        ];
+    }
+    return item.batch_allocations.flatMap((allocation, allocationIndex) => {
+        const allocationLabel = `Invoice line ${lineNumber} batch ${allocationIndex + 1}`;
+        const expiry = allocation.expiry_date
+            ? ` | Exp ${displayDate(allocation.expiry_date, `${allocationLabel} expiry`)}`
+            : '';
+        const billed = atMostTwoDecimals(
+            allocation.billed_quantity, `${allocationLabel} billed quantity`, 6,
+        );
+        const free = atMostTwoDecimals(
+            allocation.free_quantity, `${allocationLabel} free quantity`, 6,
+        );
+        const freeSuffix = compareExactDecimals(
+            allocation.free_quantity, '0', `${allocationLabel} free quantity`,
+            { scale: 6, maximumWholeDigits: 14, allowNegative: false },
+        ) > 0 ? ` + Free ${free}` : '';
+        return [
+            `${requiredText(allocation.batch_number, allocationLabel)}${expiry}`,
+            `Qty ${billed}${freeSuffix}`,
+        ];
+    });
+};
+
+const freeSupplyFootnote = (invoice: InvoiceData): string | null => {
+    const treatments = new Set(invoice.items
+        .map((item, index) => ({ item, lineNumber: index + 1 }))
+        .filter(({ item, lineNumber }) => compareExactDecimals(
+            item.free_quantity, '0', `Invoice line ${lineNumber} free quantity`,
+            { scale: 6, maximumWholeDigits: 14, allowNegative: false },
+        ) > 0)
+        .map(({ item, lineNumber }) => canonicalFreeSupplyTaxTreatment(
+            item.free_supply_tax_treatment,
+            `Invoice line ${lineNumber} free-supply tax treatment`,
+        )));
+    if (!treatments.size) return null;
+    if (treatments.size === 1 && treatments.has('excluded_from_taxable_value')) {
+        return 'Bonus/free units are supplied at no charge and excluded from taxable value.';
+    }
+    if (treatments.size === 1 && treatments.has('included_at_unit_rate')) {
+        return 'Free units are included at the item rate in taxable value.';
+    }
+    return 'Free-unit tax treatment varies by line and is preserved in the posted invoice record.';
 };
 
 const roundedRate = (value: unknown, label: string): string => {
@@ -329,16 +384,6 @@ const roundedRate = (value: unknown, label: string): string => {
 const rate = (value: unknown, label: string): string => formatExactCurrency(
     roundedRate(value, label), label,
 );
-
-const freeSupplyTreatmentLabel = (item: InvoiceItem, lineNumber: number): string => {
-    const treatment = canonicalFreeSupplyTaxTreatment(
-        item.free_supply_tax_treatment,
-        `Invoice line ${lineNumber} free-supply tax treatment`,
-    );
-    return treatment === 'included_at_unit_rate'
-        ? 'Free included at unit rate'
-        : 'Free excluded from taxable value';
-};
 
 const addressLines = (value: string, label: string): string => {
     const lines = requiredText(value, label).split('\n').map(line => line.trim()).filter(Boolean);
@@ -390,30 +435,20 @@ export const generateInvoiceHTML = (invoice: InvoiceData): string => {
 
     const itemRows = invoice.items.map((item, index) => {
         const lineNumber = index + 1;
-        const batches = item.batch_allocations.length
-            ? item.batch_allocations.map((allocation, allocationIndex) => `<div>${escapeHTML(
-                allocation.batch_number, `Invoice line ${lineNumber} batch ${allocationIndex + 1}`,
-            )}</div>`).join('')
-            : `<div>${item.batch_number
-                ? escapeHTML(item.batch_number, `Invoice line ${lineNumber} batch`)
-                : 'Not applicable'}</div>`;
+        const batches = batchPresentationLines(item, lineNumber)
+            .map((line, batchLineIndex) => `<div class="${batchLineIndex % 2 ? 'muted batch-qty' : 'batch-id'}">${escapeHTML(
+                line, `Invoice line ${lineNumber} batch detail ${batchLineIndex + 1}`,
+            )}</div>`).join('');
         return `<tr>
             <td class="center">${lineNumber}</td>
             <td><strong>${escapeHTML(item.product_name, `Invoice line ${lineNumber} product`)}</strong>
                 <div class="muted">Mfr ${escapeHTML(item.manufacturer_name, `Invoice line ${lineNumber} manufacturer`)}</div>
-                <div class="muted">HSN ${escapeHTML(item.hsn_code, `Invoice line ${lineNumber} HSN`)} | ${escapeHTML(item.sale_unit, `Invoice line ${lineNumber} unit`)}</div>
-                <div class="muted">${escapeHTML(freeSupplyTreatmentLabel(item, lineNumber))}</div></td>
+                <div class="muted">HSN ${escapeHTML(item.hsn_code, `Invoice line ${lineNumber} HSN`)} | ${escapeHTML(item.sale_unit, `Invoice line ${lineNumber} unit`)}</div></td>
             <td>${batches}</td>
-            <td class="center">${item.batch_allocations.length
-                ? item.batch_allocations.map((allocation, allocationIndex) => `<div>${allocation.expiry_date
-                    ? escapeHTML(allocation.expiry_date, `Invoice line ${lineNumber} expiry ${allocationIndex + 1}`)
-                    : 'Not specified'}</div>`).join('')
-                : (item.expiry_date ? escapeHTML(item.expiry_date, `Invoice line ${lineNumber} expiry`) : 'Not applicable')}</td>
             <td class="center">Paid ${atMostTwoDecimals(item.quantity, `Invoice line ${lineNumber} quantity`, 6)}
                 <div class="muted">Free ${atMostTwoDecimals(item.free_quantity, `Invoice line ${lineNumber} free quantity`, 6)}</div></td>
             <td class="right">${rate(item.unit_price, `Invoice line ${lineNumber} rate`)}</td>
             <td class="center">${lineDiscountDisplay(item, lineNumber, money)}</td>
-            <td class="right">${money(item.taxable_amount, `Invoice line ${lineNumber} taxable amount`)}</td>
             <td class="center">${atMostTwoDecimals(item.gst_percent, `Invoice line ${lineNumber} GST rate`, 6)}%
                 <div class="muted">${money(addExactDecimals(
                     [item.cgst_amount, item.sgst_amount, item.igst_amount],
@@ -431,6 +466,7 @@ export const generateInvoiceHTML = (invoice: InvoiceData): string => {
         ? `<div><strong>Phone:</strong> ${escapeHTML(invoice.customer_phone)}</div>` : '';
     const placeOfSupply = `${requiredText(invoice.place_of_supply_display_name, 'Place-of-supply name')} (${requiredText(invoice.place_of_supply_state_code, 'Place-of-supply state code')})`;
     const supplyType = requiredText(invoice.supply_type, 'Supply type').replace(/_/g, ' ');
+    const freeFootnote = freeSupplyFootnote(invoice);
     const discountDisplay = compareExactDecimals(
         invoice.discount_amount, '0.00', 'Invoice discount', moneyOptions,
     ) > 0 ? `-${money(invoice.discount_amount, 'Invoice discount')}` : money(invoice.discount_amount, 'Invoice discount');
@@ -449,10 +485,11 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:10px;line-height:1.35}
 .party-card h2{margin:0 0 1.5mm;font-size:10px;text-transform:uppercase;color:#475569}.party-name{font-size:11px;font-weight:700}
 table{width:100%;border-collapse:collapse;table-layout:fixed}thead{display:table-header-group}
 tr{break-inside:avoid;page-break-inside:avoid}th,td{border:1px solid #94a3b8;padding:1.6mm 1mm;vertical-align:top;overflow-wrap:anywhere}
-th{background:#e2e8f0;font-size:8px;text-transform:uppercase}th:nth-child(1){width:3%}th:nth-child(2){width:19%}
-th:nth-child(3){width:12%}th:nth-child(4){width:9%}th:nth-child(5){width:9%}th:nth-child(6){width:10%}
-th:nth-child(7){width:9%}th:nth-child(8){width:10%}th:nth-child(9){width:9%}th:nth-child(10){width:10%}
+th{background:#e2e8f0;font-size:8px;text-transform:uppercase}th:nth-child(1){width:3%}th:nth-child(2){width:25%}
+th:nth-child(3){width:21%}th:nth-child(4){width:9%}th:nth-child(5){width:11%}th:nth-child(6){width:10%}
+th:nth-child(7){width:9%}th:nth-child(8){width:12%}
 .center{text-align:center}.right{text-align:right}.strong{font-weight:700}.muted{color:#475569;font-size:8px;margin-top:.7mm}
+.batch-id{font-weight:700}.batch-qty{margin:0 0 1.2mm}
 .tax-detail{color:#334155;font-size:7.5px;margin-top:1mm}.summary-wrap{display:grid;grid-template-columns:1fr 76mm;gap:6mm;margin-top:5mm;align-items:start}
 .tax-note{border:1px solid #cbd5e1;padding:3mm;border-radius:2mm}
 .summary{border:1px solid #64748b;border-radius:2mm;padding:2.5mm}
@@ -467,7 +504,7 @@ th:nth-child(7){width:9%}th:nth-child(8){width:10%}th:nth-child(9){width:9%}th:n
 <div><strong>GSTIN:</strong> ${escapeHTML(invoice.seller_gstin)}</div>${addressLines(invoice.seller_address, 'Seller address')}
 ${licenceLine(invoice.seller_drug_license_numbers, 'Seller drug licences')}</section>
 <section class="document-meta"><div><strong>Original for Recipient</strong></div><h2 class="invoice-title">Tax Invoice</h2><div><strong>Invoice No:</strong> ${escapeHTML(invoiceNumber)}</div>
-<div><strong>Date:</strong> ${escapeHTML(invoiceDate)}</div><div><strong>Due Date:</strong> ${invoice.due_date ? escapeHTML(invoice.due_date, 'Invoice due date') : 'Not specified'}</div>
+<div><strong>Date:</strong> ${escapeHTML(displayDate(invoiceDate, 'Invoice date'))}</div><div><strong>Due Date:</strong> ${invoice.due_date ? escapeHTML(displayDate(invoice.due_date, 'Invoice due date')) : 'Not specified'}</div>
 <div><strong>Place of Supply:</strong> ${escapeHTML(placeOfSupply)}</div>
 <div><strong>Supply:</strong> ${escapeHTML(supplyType)}</div><div><strong>Status:</strong> ${escapeHTML(invoice.status).toUpperCase()}</div></section></header>
 <section class="party-grid"><div class="party-card"><h2>Bill To</h2><div class="party-name">${escapeHTML(invoice.customer_name)}</div>
@@ -475,9 +512,9 @@ ${addressLines(invoice.billing_address, 'Customer billing address')}${customerGs
 ${licenceLine(invoice.customer_drug_license_numbers, 'Customer drug licences')}</div>
 <div class="party-card"><h2>Ship To</h2><div class="party-name">${escapeHTML(invoice.customer_name)}</div>
 ${addressLines(invoice.shipping_address, 'Customer shipping address')}</div></section>
-<table aria-label="Invoice items"><thead><tr><th>#</th><th>Product</th><th>Batch</th><th>Expiry</th><th>Qty / Free</th><th>Rate</th><th>Disc</th><th>Taxable</th><th>GST % / Amount</th><th>Amount</th></tr></thead><tbody>${itemRows}</tbody></table>
+<table aria-label="Invoice items"><thead><tr><th>#</th><th>Product</th><th>Batch / Expiry / Split</th><th>Qty / Free</th><th>Rate</th><th>Disc</th><th>GST</th><th>Amount</th></tr></thead><tbody>${itemRows}</tbody></table>
 <section class="summary-wrap"><div class="tax-note"><strong>Tax treatment:</strong> ${invoice.tax_charge_mechanism === 'reverse_charge' ? 'Reverse charge' : 'Normal charge'}<br>
-<strong>GST total:</strong> ${money(gstTotal, 'Invoice GST total')}<br>CGST ${money(invoice.cgst_amount, 'Invoice CGST')} | SGST ${money(invoice.sgst_amount, 'Invoice SGST')} | IGST ${money(invoice.igst_amount, 'Invoice IGST')}</div>
+<strong>GST total:</strong> ${money(gstTotal, 'Invoice GST total')}<br>CGST ${money(invoice.cgst_amount, 'Invoice CGST')} | SGST ${money(invoice.sgst_amount, 'Invoice SGST')} | IGST ${money(invoice.igst_amount, 'Invoice IGST')}${freeFootnote ? `<br><br><strong>Free units:</strong> ${escapeHTML(freeFootnote)}` : ''}</div>
 <div class="summary"><h2>Invoice Summary</h2>${summaryRow('Subtotal', money(invoice.subtotal_amount, 'Invoice subtotal'))}
 ${summaryRow('Discount', discountDisplay)}${summaryRow('Charges', money(invoice.charges_amount, 'Invoice charges'))}
 ${summaryRow('Net Value', money(invoice.net_value_amount, 'Invoice net value'))}${summaryRow('Taxable Amount', money(invoice.taxable_amount, 'Invoice taxable amount'))}
@@ -500,7 +537,7 @@ type InvoicePdfDocument = jsPDF & { lastAutoTable?: { finalY: number } };
 
 const pdfMoney = (value: unknown, label: string): string => money(value, label).replace('₹', 'INR ');
 const PDF_PAGE_MARGIN_MM = 9;
-const INVOICE_TABLE_COLUMN_WIDTHS_MM = [6, 38, 23, 16, 18, 18, 17, 20, 17, 19] as const;
+const INVOICE_TABLE_COLUMN_WIDTHS_MM = [6, 49, 41, 18, 19, 19, 18, 22] as const;
 const INVOICE_TABLE_WIDTH_MM = INVOICE_TABLE_COLUMN_WIDTHS_MM.reduce((total, width) => total + width, 0);
 
 /** Build a vector A4 PDF with deterministic pagination and repeated table headers. */
@@ -529,8 +566,10 @@ export const buildInvoicePDF = (invoiceData: InvoiceData): jsPDF => {
     pdf.setFontSize(7.5); pdf.setFont('helvetica', 'normal');
     pdf.text('Original for Recipient', right, 17, { align: 'right' });
     pdf.text(`Invoice No: ${invoiceData.invoice_number}`, right, 22, { align: 'right' });
-    pdf.text(`Date: ${invoiceData.invoice_date}`, right, 27, { align: 'right' });
-    pdf.text(`Due Date: ${invoiceData.due_date || 'Not specified'}`, right, 32, { align: 'right' });
+    pdf.text(`Date: ${displayDate(invoiceData.invoice_date, 'Invoice date')}`, right, 27, { align: 'right' });
+    pdf.text(`Due Date: ${invoiceData.due_date
+        ? displayDate(invoiceData.due_date, 'Invoice due date')
+        : 'Not specified'}`, right, 32, { align: 'right' });
     pdf.text(`Place of Supply: ${invoiceData.place_of_supply_display_name} (${invoiceData.place_of_supply_state_code})`, right, 37, { align: 'right' });
     pdf.text(`Supply: ${invoiceData.supply_type.replace(/_/g, ' ')}`, right, 42, { align: 'right' });
     pdf.text(`Status: ${invoiceData.status.toUpperCase()}`, right, 47, { align: 'right' });
@@ -562,47 +601,39 @@ export const buildInvoicePDF = (invoiceData: InvoiceData): jsPDF => {
     pdf.text(shipLines, margin + cardWidth + 7, cardTop + 9);
 
     const body = invoiceData.items.map((item, index) => {
-        const batches = item.batch_allocations.length
-            ? item.batch_allocations.map(allocation => allocation.batch_number).join('\n')
-            : item.batch_number || 'Not applicable';
-        const expiries = item.batch_allocations.length
-            ? item.batch_allocations.map(allocation => allocation.expiry_date || 'Not specified').join('\n')
-            : item.expiry_date || 'Not applicable';
+        const batches = batchPresentationLines(item, index + 1).join('\n');
         const gstAmount = addExactDecimals(
             [item.cgst_amount, item.sgst_amount, item.igst_amount],
             `PDF line ${index + 1} GST amount`, moneyOptions,
         );
         return [
-            String(index + 1), `${item.product_name}\nMfr ${item.manufacturer_name}\nHSN ${item.hsn_code} | ${item.sale_unit}\n${freeSupplyTreatmentLabel(item, index + 1)}`,
-            batches, expiries,
+            String(index + 1), `${item.product_name}\nMfr ${item.manufacturer_name}\nHSN ${item.hsn_code} | ${item.sale_unit}`,
+            batches,
             `Paid ${atMostTwoDecimals(item.quantity, 'PDF quantity', 6)}\nFree ${atMostTwoDecimals(item.free_quantity, 'PDF free quantity', 6)}`,
             pdfMoney(roundedRate(item.unit_price, 'PDF rate'), 'PDF normalized rate'),
             lineDiscountDisplay(item, index + 1, pdfMoney),
-            pdfMoney(item.taxable_amount, 'PDF line taxable'),
             `${atMostTwoDecimals(item.gst_percent, 'PDF GST rate', 6)}%\n${pdfMoney(gstAmount, 'PDF line GST amount')}`,
             pdfMoney(item.line_total, 'PDF line total'),
         ];
     });
     autoTable(pdf, {
         startY: cardTop + cardHeight + 4,
-        head: [['#', 'Product', 'Batch', 'Expiry', 'Qty / Free', 'Rate', 'Disc', 'Taxable', 'GST % / Amount', 'Amount']],
+        head: [['#', 'Product', 'Batch / Expiry / Split', 'Qty / Free', 'Rate', 'Disc', 'GST', 'Amount']],
         body,
-        margin: { left: margin, right: margin, top: margin, bottom: 12 },
+        margin: { left: margin, right: margin, top: 15, bottom: 12 },
         tableWidth: INVOICE_TABLE_WIDTH_MM,
         theme: 'grid',
-        styles: { font: 'helvetica', fontSize: 6.2, cellPadding: 1.4, overflow: 'linebreak', valign: 'top' },
-        headStyles: { fillColor: [226, 232, 240], textColor: [17, 24, 39], fontStyle: 'bold', fontSize: 6 },
+        styles: { font: 'helvetica', fontSize: 7, cellPadding: 1.5, overflow: 'linebreak', valign: 'top' },
+        headStyles: { fillColor: [226, 232, 240], textColor: [17, 24, 39], fontStyle: 'bold', fontSize: 6.5 },
         columnStyles: {
             0: { cellWidth: INVOICE_TABLE_COLUMN_WIDTHS_MM[0], halign: 'center' },
             1: { cellWidth: INVOICE_TABLE_COLUMN_WIDTHS_MM[1] },
-            2: { cellWidth: INVOICE_TABLE_COLUMN_WIDTHS_MM[2], halign: 'center' },
+            2: { cellWidth: INVOICE_TABLE_COLUMN_WIDTHS_MM[2] },
             3: { cellWidth: INVOICE_TABLE_COLUMN_WIDTHS_MM[3], halign: 'center' },
-            4: { cellWidth: INVOICE_TABLE_COLUMN_WIDTHS_MM[4], halign: 'center' },
-            5: { cellWidth: INVOICE_TABLE_COLUMN_WIDTHS_MM[5], halign: 'right' },
-            6: { cellWidth: INVOICE_TABLE_COLUMN_WIDTHS_MM[6], halign: 'center' },
+            4: { cellWidth: INVOICE_TABLE_COLUMN_WIDTHS_MM[4], halign: 'right' },
+            5: { cellWidth: INVOICE_TABLE_COLUMN_WIDTHS_MM[5], halign: 'center' },
+            6: { cellWidth: INVOICE_TABLE_COLUMN_WIDTHS_MM[6], halign: 'right' },
             7: { cellWidth: INVOICE_TABLE_COLUMN_WIDTHS_MM[7], halign: 'right', fontStyle: 'bold' },
-            8: { cellWidth: INVOICE_TABLE_COLUMN_WIDTHS_MM[8], halign: 'right' },
-            9: { cellWidth: INVOICE_TABLE_COLUMN_WIDTHS_MM[9], halign: 'right', fontStyle: 'bold' },
         },
         horizontalPageBreak: false,
         rowPageBreak: 'avoid',
@@ -612,6 +643,7 @@ export const buildInvoicePDF = (invoiceData: InvoiceData): jsPDF => {
     let summaryY = (pdf.lastAutoTable?.finalY ?? 70) + 6;
     if (summaryY > 215) { pdf.addPage(); summaryY = 16; }
     const { gstTotal } = reconcileInvoiceTotals(invoiceData);
+    const freeFootnote = freeSupplyFootnote(invoiceData);
     const summaryRows = [
         ['Subtotal', invoiceData.subtotal_amount], ['Discount', invoiceData.discount_amount],
         ['Charges', invoiceData.charges_amount], ['Net Value', invoiceData.net_value_amount],
@@ -622,6 +654,10 @@ export const buildInvoicePDF = (invoiceData: InvoiceData): jsPDF => {
     pdf.setFont('helvetica', 'bold'); pdf.setFontSize(7.5);
     pdf.text(`Tax treatment: ${invoiceData.tax_charge_mechanism === 'reverse_charge' ? 'Reverse charge' : 'Normal charge'}`, margin, summaryY);
     pdf.text(`GST total: ${pdfMoney(gstTotal, 'PDF GST total')}`, margin, summaryY + 5);
+    if (freeFootnote) {
+        pdf.setFont('helvetica', 'normal'); pdf.setFontSize(6.5);
+        pdf.text(`Free units: ${freeFootnote}`, margin, summaryY + 10, { maxWidth: 104 });
+    }
     const summaryX = 126;
     pdf.text('INVOICE SUMMARY', summaryX, summaryY);
     summaryRows.forEach(([label, value], index) => {
@@ -643,7 +679,13 @@ export const buildInvoicePDF = (invoiceData: InvoiceData): jsPDF => {
 
     const pageCount = pdf.getNumberOfPages();
     for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {
-        pdf.setPage(pageNumber); pdf.setFont('helvetica', 'normal'); pdf.setFontSize(6); pdf.setTextColor(100, 116, 139);
+        pdf.setPage(pageNumber);
+        if (pageNumber > 1) {
+            pdf.setTextColor(17, 24, 39); pdf.setFont('helvetica', 'bold'); pdf.setFontSize(7);
+            pdf.text(`TAX INVOICE | ${invoiceData.invoice_number} | ${displayDate(invoiceData.invoice_date, 'Invoice date')}`, margin, 8);
+            pdf.setDrawColor(148, 163, 184); pdf.setLineWidth(0.2); pdf.line(margin, 11, right, 11);
+        }
+        pdf.setFont('helvetica', 'normal'); pdf.setFontSize(6); pdf.setTextColor(100, 116, 139);
         pdf.text(`Page ${pageNumber} of ${pageCount}`, right, 291, { align: 'right' });
     }
     return pdf;

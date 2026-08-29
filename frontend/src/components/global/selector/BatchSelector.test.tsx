@@ -125,6 +125,39 @@ describe('BatchSelector lifecycle and mobile presentation', () => {
         });
     });
 
+    it('selects the recommended saleable batch with Enter and supports arrow navigation', async () => {
+        const onBatchSelect = jest.fn();
+        (batchesApi.getByProduct as jest.Mock).mockResolvedValue({
+            data: {
+                batches: [
+                    withExpiry('released', '27', '2099-09-01', 'FIRST'),
+                    withExpiry('released', '28', '2099-09-01', 'SECOND'),
+                ],
+            },
+        });
+
+        render(
+            <BatchSelector
+                show
+                enforceFefo
+                product={{
+                    product_id: 'd3000000-0000-7000-8000-000000000015',
+                    product_name: 'Demo Product',
+                } as any}
+                onBatchSelect={onBatchSelect}
+                onClose={jest.fn()}
+            />
+        );
+
+        const dialog = await screen.findByRole('dialog');
+        await screen.findByRole('option', { name: /Select batch FIRST/i });
+        fireEvent.keyDown(dialog, { key: 'ArrowDown' });
+        fireEvent.keyDown(dialog, { key: 'Enter' });
+
+        await waitFor(() => expect(onBatchSelect).toHaveBeenCalledTimes(1));
+        expect(onBatchSelect.mock.calls[0][0]).toMatchObject({ batch_number: 'SECOND' });
+    });
+
     it('renders and returns large and fractional canonical decimals without coercion', async () => {
         const onBatchSelect = jest.fn();
         (batchesApi.getByProduct as jest.Mock).mockResolvedValue({

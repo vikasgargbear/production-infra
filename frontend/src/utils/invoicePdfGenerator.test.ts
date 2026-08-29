@@ -226,16 +226,18 @@ test('renders only canonical seller, buyer, line, and exact money facts', () => 
   expect(html).toContain('481910');
   expect(html).toContain('Mfr Exact Labs');
   expect(html).toContain('BATCH-ONE');
-  expect(html).toContain('2028-09-30');
+  expect(html).toContain('30/09/2028');
   expect(html).toContain('BATCH-TWO');
-  expect(html).toContain('2029-01-31');
-  expect(html).toContain('Free excluded from taxable value');
+  expect(html).toContain('31/01/2029');
+  expect(html).toContain('Qty 0.73 + Free 0.13');
+  expect(html).toContain('Bonus/free units are supplied at no charge and excluded from taxable value.');
   expect(html).toContain('Paid 1.23');
   expect(html).toContain('2.5% (₹5.00)');
   expect(html).toContain('12%');
   expect(html).toContain('<div class="muted">₹18.00</div>');
   expect(html).toContain('Original for Recipient');
-  expect(html).toContain('<strong>Due Date:</strong> 2026-09-05');
+  expect(html).toContain('<strong>Date:</strong> 25/08/2026');
+  expect(html).toContain('<strong>Due Date:</strong> 05/09/2026');
   expect(html).toContain('<strong>Place of Supply:</strong> Maharashtra (27)');
   expect(html).toContain('<strong>Supply:</strong> intra state');
   expect(html).toContain('Recipient (name and signature)');
@@ -273,7 +275,8 @@ test('labels fixed line discounts and invoice allocations without inventing a pe
     discount_percent: '0.000000',
   };
   const html = generateInvoiceHTML(fixed);
-  expect(html).toContain('Fixed ₹5.00 (₹5.00) + invoice ₹2.00');
+  expect(html).toContain('Fixed ₹5.00 (₹5.00)');
+  expect(html).not.toContain('+ invoice ₹2.00');
   expect(html).not.toContain('>0%');
 
   expect(() => generateInvoiceHTML({
@@ -319,7 +322,7 @@ test('renders the reviewed included-at-rate treatment for free product quantitie
   const printable = printableCanonicalInvoice(detail);
 
   expect(printable.items[0].free_supply_tax_treatment).toBe('included_at_unit_rate');
-  expect(generateInvoiceHTML(printable)).toContain('Free included at unit rate');
+  expect(generateInvoiceHTML(printable)).toContain('Free units are included at the item rate in taxable value.');
 });
 
 test('fails closed when canonical free-supply tax treatment is absent', () => {
@@ -357,11 +360,11 @@ test('keeps every invoice item column inside the A4 printable width with Amount 
 
   const columnWidths = Object.values(options.columnStyles)
     .map((style: any) => style.cellWidth as number);
-  expect(columnWidths).toEqual([6, 38, 23, 16, 18, 18, 17, 20, 17, 19]);
+  expect(columnWidths).toEqual([6, 49, 41, 18, 19, 19, 18, 22]);
   expect(columnWidths.reduce((total: number, width: number) => total + width, 0))
     .toBe(options.tableWidth);
   expect(options.margin.left + options.tableWidth + options.margin.right).toBe(210);
-  expect(options.columnStyles[1].cellWidth).toBeGreaterThan(options.columnStyles[9].cellWidth);
+  expect(options.columnStyles[1].cellWidth).toBeGreaterThan(options.columnStyles[7].cellWidth);
 });
 
 test('prints invoice and due dates in the PDF header without obscuring the item table', async () => {
@@ -370,8 +373,8 @@ test('prints invoice and due dates in the PDF header without obscuring the item 
 
   const pdf = mockAutoTable.mock.calls.at(-1)?.[0];
   expect(pdf.text).toHaveBeenCalledWith('Invoice No: INV-2026-1', 201, 22, { align: 'right' });
-  expect(pdf.text).toHaveBeenCalledWith('Date: 2026-08-25', 201, 27, { align: 'right' });
-  expect(pdf.text).toHaveBeenCalledWith('Due Date: 2026-09-05', 201, 32, { align: 'right' });
+  expect(pdf.text).toHaveBeenCalledWith('Date: 25/08/2026', 201, 27, { align: 'right' });
+  expect(pdf.text).toHaveBeenCalledWith('Due Date: 05/09/2026', 201, 32, { align: 'right' });
   expect(mockAutoTable.mock.calls.at(-1)?.[1].startY).toBeGreaterThan(53);
 });
 
@@ -392,11 +395,9 @@ test('renders four-digit rates, Cess, free treatment, and every batch without fo
 
   const options = mockAutoTable.mock.calls.at(-1)?.[1];
   expect(options.body[0][1]).toContain('Mfr Exact Labs');
-  expect(options.body[0][1]).toContain('Free included at unit rate');
-  expect(options.body[0][2]).toBe('BATCH-ONE\nBATCH-TWO');
-  expect(options.body[0][3]).toBe('2028-09-30\n2029-01-31');
-  expect(options.body[0][4]).toBe('Paid 1.23\nFree 0.13');
-  expect(options.body[0][5]).toBe('INR 1,234.57');
-  expect(options.body[0][7]).toBe('INR 150.00');
-  expect(options.body[0][8]).toBe('12%\nINR 18.00');
+  expect(options.body[0][2]).toBe('BATCH-ONE | Exp 30/09/2028\nQty 0.73 + Free 0.13\nBATCH-TWO | Exp 31/01/2029\nQty 0.5');
+  expect(options.body[0][3]).toBe('Paid 1.23\nFree 0.13');
+  expect(options.body[0][4]).toBe('INR 1,234.57');
+  expect(options.body[0][6]).toBe('12%\nINR 18.00');
+  expect(options.body[0][7]).toBe('INR 169.00');
 });
