@@ -1,7 +1,7 @@
 """Add reviewed Forms 20B/21B evidence and activation authority.
 
-Revision ID: 20260829_0060
-Revises: 20260829_0059
+Revision ID: 20260829_0061
+Revises: 20260829_0060
 """
 
 from __future__ import annotations
@@ -14,17 +14,17 @@ from alembic import context, op
 from migration_support.canonical_baseline import CanonicalBaselineError
 
 
-revision = "20260829_0060"
-down_revision = "20260829_0059"
+revision = "20260829_0061"
+down_revision = "20260829_0060"
 branch_labels = None
 depends_on = None
 
 SQL_PATH = (
     Path(__file__).resolve().parents[1]
     / "sql"
-    / "20260829_0060_canonical_drug_license_onboarding.sql"
+    / "20260829_0061_canonical_drug_license_onboarding.sql"
 )
-EXPECTED_SQL_SHA256 = "a469819b9913563c2087b909d62fc59491c351dc69fde856fe263d4d643decc8"
+EXPECTED_SQL_SHA256 = "d048dcbd0f892ffddbe9b332123bdd6fa56c08a529bac98bb8b4180aa1e77d7f"
 
 
 def _reviewed_sql() -> str:

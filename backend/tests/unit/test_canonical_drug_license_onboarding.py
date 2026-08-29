@@ -9,7 +9,7 @@ def read(path: str) -> str:
 
 
 def test_migration_keeps_wholesale_scope_and_verified_evidence_fail_closed():
-    sql = read("backend/alembic/sql/20260829_0060_canonical_drug_license_onboarding.sql")
+    sql = read("backend/alembic/sql/20260829_0061_canonical_drug_license_onboarding.sql")
     assert "'drug_wholesale_form_20b','drug_wholesale_form_21b'" in sql
     assert "drug_schedule_x_wholesale_form_20g" not in sql
     assert "evidence.status IN ('verified','retained')" in sql
@@ -26,8 +26,8 @@ def test_migration_keeps_wholesale_scope_and_verified_evidence_fail_closed():
     assert "storage.delete(object_key)" in route
     assert '"23P01"' in route
     authority = read("database/schema-authority.json")
-    assert "20260829_0060_canonical_drug_license_onboarding.py" in authority
-    assert "20260829_0060_canonical_drug_license_onboarding.sql" in authority
+    assert "20260829_0061_canonical_drug_license_onboarding.py" in authority
+    assert "20260829_0061_canonical_drug_license_onboarding.sql" in authority
 
 
 def test_rest_ui_and_mcp_share_the_same_command_owner():

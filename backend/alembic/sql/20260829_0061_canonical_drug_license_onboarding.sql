@@ -1,4 +1,4 @@
--- Reviewed Forms 20B/21B evidence and canonical license activation.
+-- Reviewed Forms 20B/21B evidence and canonical license activation (revision 0061).
 SET LOCAL ROLE erp_migration_owner;
 
 ALTER TABLE core.attachments
