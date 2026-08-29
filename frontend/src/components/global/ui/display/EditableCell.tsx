@@ -88,7 +88,8 @@ const EditableCellComponent: ForwardRefRenderFunction<EditableCellRef, EditableC
         const unsigned = normalized.replace(/^[+-]/, '');
         const decimalIndex = unsigned.indexOf('.');
         if (decimalIndex < 0) return null;
-        if (unsigned.slice(decimalIndex + 1).length <= maxDecimalPlaces) return null;
+        const significantFraction = unsigned.slice(decimalIndex + 1).replace(/0+$/, '');
+        if (significantFraction.length <= maxDecimalPlaces) return null;
         return decimalPlacesErrorMessage
             || `Enter no more than ${maxDecimalPlaces} decimal places.`;
     };
@@ -112,7 +113,13 @@ const EditableCellComponent: ForwardRefRenderFunction<EditableCellRef, EditableC
     }));
 
     const formatValue = (val: string | number): string => {
-        if (preserveDecimalString) return String(val);
+        if (preserveDecimalString) {
+            const raw = String(val);
+            if (maxDecimalPlaces === undefined || !raw.includes('.')) return raw;
+            const [whole, fraction = ''] = raw.split('.');
+            const trimmed = fraction.replace(/0+$/, '');
+            return trimmed ? `${whole}.${trimmed}` : whole;
+        }
         if (type === 'number') {
             const num = parseFloat(String(val));
             if (isNaN(num)) return '';

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, KeyboardEvent, ReactNode } from 'react';
+import React, { useState, useEffect, useRef, useCallback, KeyboardEvent, ReactNode } from 'react';
 import { X, Package, AlertCircle, CheckCircle, Box } from 'lucide-react';
 import { batchesApi } from '../../../services/api';
 import DateFormatter from '../../../services/dateFormatter';
@@ -10,6 +10,7 @@ import {
     normalizeAuthoritativeDecimal,
 } from '../../../utils/exactDecimal';
 import {
+    batchDisabledReason,
     batchSelectionDisabledReason,
     compareBatchAvailability,
     compareBatchesByCanonicalFefo,
@@ -82,6 +83,16 @@ interface Batch {
     pack_type?: string;
 }
 
+export interface BatchAllocationCandidate {
+    batch_id: string;
+    batch_number: string;
+    expiry_date: string;
+    available_quantity: string;
+    location_id: string;
+    branch_id: string;
+    uom_conversion_id: string;
+}
+
 interface ProductWithBatch extends Product {
     batch_id: number | string;
     batch_number: string;
@@ -93,6 +104,7 @@ interface ProductWithBatch extends Product {
     mrp: string;
     expiry_date: string;
     manufacturing_date: string;
+    allocation_batches: BatchAllocationCandidate[];
 }
 
 interface ExpiryInfo {
@@ -144,59 +156,7 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
     const containerRef = useRef<HTMLDivElement>(null);
     const batchRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
-    useEffect(() => {
-        if (show && product && mode === 'modal') {
-            const productId = product.product_id || product.id;
-
-            if (!hasLoadedRef.current || hasLoadedRef.current !== productId) {
-                loadBatches();
-                hasLoadedRef.current = productId || false;
-            }
-            // Auto-focus modal for keyboard navigation
-            setTimeout(() => containerRef.current?.focus(), 50);
-        } else if (!show && mode === 'modal') {
-            hasLoadedRef.current = false;
-            setSelectedBatch(null);
-            setBatches([]);
-            setError(null);
-            setFocusedIndex(-1);
-        }
-    }, [show, product?.product_id, product?.id, mode]);
-
-    useEffect(() => {
-        if (product && mode !== 'modal') {
-            loadBatches();
-        }
-    }, [product, mode]);
-
-    const loadBatches = async (): Promise<void> => {
-        if (!product) return;
-
-        const productId = product.product_id || product.id;
-        if (!isCanonicalUuid(productId)) {
-            setError('This product is missing its canonical UUID. Re-select it and try again.');
-            return;
-        }
-        setLoading(true);
-        setError(null);
-
-        try {
-            const response = await batchesApi.getByProduct(String(productId));
-            const batchesData = response.data?.batches;
-            if (!Array.isArray(batchesData)) {
-                throw new Error('Batch API returned an invalid canonical response');
-            }
-            processBatches(batchesData);
-        } catch (error) {
-            console.error('[BatchSelector] API load failed:', error);
-            setBatches([]);
-            setError(error instanceof Error ? error.message : 'Failed to load batches. Please try again.');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const processBatches = (batchesData: any[]): void => {
+    const processBatches = useCallback((batchesData: any[]): void => {
         let processedBatches: Batch[] = batchesData.map((batch, index) => {
             const row = index + 1;
             for (const [field, value] of [
@@ -293,7 +253,61 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
                 ? 'No batches available for this product (may be expired or out of stock)'
                 : null);
         }
-    };
+    }, [enforceFefo, filterExpired, minQuantity, sortBy, sortOrder]);
+
+    const loadBatches = useCallback(async (): Promise<void> => {
+        if (!product) return;
+
+        const productId = product.product_id || product.id;
+        if (!isCanonicalUuid(productId)) {
+            setError('This product is missing its canonical UUID. Re-select it and try again.');
+            return;
+        }
+        setLoading(true);
+        setError(null);
+
+        try {
+            const response = await batchesApi.getByProduct(String(productId));
+            const batchesData = response.data?.batches;
+            if (!Array.isArray(batchesData)) {
+                throw new Error('Batch API returned an invalid canonical response');
+            }
+            processBatches(batchesData);
+        } catch (error) {
+            console.error('[BatchSelector] API load failed:', error);
+            setBatches([]);
+            setError(error instanceof Error ? error.message : 'Failed to load batches. Please try again.');
+        } finally {
+            setLoading(false);
+        }
+    }, [processBatches, product]);
+
+    useEffect(() => {
+        if (show && product && mode === 'modal') {
+            const productId = product.product_id || product.id;
+
+            if (!hasLoadedRef.current || hasLoadedRef.current !== productId) {
+                void loadBatches();
+                hasLoadedRef.current = productId || false;
+            }
+            const focusTimer = window.setTimeout(() => containerRef.current?.focus(), 50);
+            return () => window.clearTimeout(focusTimer);
+        }
+        if (!show && mode === 'modal') {
+            hasLoadedRef.current = false;
+            setSelectedBatch(null);
+            setBatches([]);
+            setError(null);
+            setFocusedIndex(-1);
+        }
+        return undefined;
+    }, [loadBatches, mode, product, show]);
+
+    useEffect(() => {
+        if (product && mode !== 'modal') {
+            void loadBatches();
+        }
+    }, [loadBatches, mode, product]);
 
     const handleBatchSelect = (batch: Batch): void => {
         if (!product) return;
@@ -306,6 +320,20 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
 
         // The selected canonical batch owns stock and price.  Product-level
         // price aliases are deliberately overwritten, never used as fallback.
+        const allocationBatches = batches
+            .filter(candidate => candidate.location_id === batch.location_id)
+            .filter(candidate => batchDisabledReason(candidate) === null)
+            .sort(compareBatchesByCanonicalFefo)
+            .map((candidate): BatchAllocationCandidate => ({
+                batch_id: candidate.batch_id,
+                batch_number: candidate.batch_number,
+                expiry_date: candidate.expiry_date,
+                available_quantity: candidate.quantity_available,
+                location_id: candidate.location_id!,
+                branch_id: candidate.branch_id!,
+                uom_conversion_id: candidate.uom_conversion_id!,
+            }));
+
         const productWithBatch: ProductWithBatch = {
             ...product,
             ...batch,
@@ -317,6 +345,7 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
             sale_price: batch.sale_price_per_unit,
             mrp: batch.mrp_per_unit,
             manufacturing_date: batch.manufacturing_date,
+            allocation_batches: allocationBatches,
         };
 
         onBatchSelect(productWithBatch);

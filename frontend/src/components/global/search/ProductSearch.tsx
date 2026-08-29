@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, forwardRef, useImperativeHandle, KeyboardEvent } from 'react';
 import { Search, Package } from 'lucide-react';
 import { productsApi } from '../../../services/api';
-import BatchSelector from '../selector/BatchSelector';
+import BatchSelector, { type BatchAllocationCandidate } from '../selector/BatchSelector';
 import { debounce } from '../../../utils/debounce';
 import {
     compareExactDecimals,
@@ -37,6 +37,7 @@ interface ProductWithBatch extends ExactSearchProduct {
     quantity?: string;
     free_quantity?: string;
     unit_price?: string;
+    allocation_batches?: BatchAllocationCandidate[];
 }
 
 const quantityOptions = { scale: 6, maximumWholeDigits: 14 } as const;

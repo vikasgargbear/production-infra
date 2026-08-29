@@ -62,6 +62,61 @@ describe('prepareItemForInvoice free-supply treatment', () => {
 
         expect(item.quantity).toBe('0.100000');
         expect(item.free_quantity).toBe('0.200000');
+        expect(item.unit_price).toBe('9007199254740993.13');
+        expect(item.discount_percent).toBe('0.00');
+    });
+
+    it('rounds the reviewed direct-entry rate and discount once to the visible two-decimal policy', () => {
+        const item = prepareSelectedProductForInvoice({
+            product_id: '22222222-2222-4222-8222-222222222222',
+            product_name: 'Commercial precision item',
+            ...selectedBatch,
+            sale_price_per_unit: '84.1250',
+            unit_price: '84.1250',
+            discount_percent: '1.255000',
+            quantity: '1.000000',
+            free_quantity: '0.000000',
+        });
+
+        expect(item.unit_price).toBe('84.13');
+        expect(item.discount_percent).toBe('1.26');
+    });
+
+    it('preserves reviewed FEFO allocation candidates without numeric coercion', () => {
+        const locationId = '44444444-4444-4444-8444-444444444444';
+        const branchId = '55555555-5555-4555-8555-555555555555';
+        const uomId = '66666666-6666-4666-8666-666666666666';
+        const item = prepareSelectedProductForInvoice({
+            product_id: '22222222-2222-4222-8222-222222222222',
+            product_name: 'Multi-batch product',
+            ...selectedBatch,
+            location_id: locationId,
+            branch_id: branchId,
+            uom_conversion_id: uomId,
+            quantity: '13.000000',
+            free_quantity: '0.000000',
+            allocation_batches: [{
+                batch_id: '33333333-3333-4333-8333-333333333333',
+                batch_number: 'BATCH-1',
+                expiry_date: '2028-09-01',
+                available_quantity: '12.500000',
+                location_id: locationId,
+                branch_id: branchId,
+                uom_conversion_id: uomId,
+            }, {
+                batch_id: '77777777-7777-4777-8777-777777777777',
+                batch_number: 'BATCH-2',
+                expiry_date: '2028-10-01',
+                available_quantity: '4.250000',
+                location_id: locationId,
+                branch_id: branchId,
+                uom_conversion_id: uomId,
+            }],
+        });
+
+        expect(item.allocation_batches?.map(batch => batch.available_quantity)).toEqual([
+            '12.500000', '4.250000',
+        ]);
     });
 
     it.each([
