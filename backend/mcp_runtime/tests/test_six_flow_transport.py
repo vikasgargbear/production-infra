@@ -98,7 +98,9 @@ class ScenarioGateway:
                 "product_id": IDS["product"],
                 "product_code": "PROD-000001",
                 "row_version": self.product_row_version,
-                "lifecycle_status": "draft",
+                "lifecycle_status": (
+                    "active" if self.product_row_version >= 3 else "draft"
+                ),
                 "pack_conversions": [{"uom_code": "STRIP", "multiplier": "10"}],
             }
         if operation.tool_name == "erp_customer_get":
@@ -174,6 +176,17 @@ class ScenarioGateway:
                 "product_code": "PROD-000001",
                 "row_version": self.product_row_version,
                 "lifecycle_status": "draft",
+                "idempotency_replayed": False,
+            }
+        elif operation.tool_name == "erp_product_activate":
+            if arguments["row_version"] != self.product_row_version:
+                raise RuntimeError("stale product row_version")
+            self.product_row_version += 1
+            result = {
+                "product_id": IDS["product"],
+                "product_code": "PROD-000001",
+                "row_version": self.product_row_version,
+                "lifecycle_status": "active",
                 "idempotency_replayed": False,
             }
         elif operation.tool_name == "erp_customer_create":
@@ -370,7 +383,7 @@ async def test_oauth_challenge_inventory_annotations_and_valid_sdk_session() -> 
         advertised = (await session.list_tools()).tools
 
     assert tuple(sorted(tool.name for tool in advertised)) == registered_tool_names()
-    assert len(advertised) == 75
+    assert len(advertised) == 76
     by_name = {tool.name: tool for tool in advertised}
     for name in OPERATIONS:
         annotation = by_name[name].annotations
@@ -443,6 +456,26 @@ async def test_product_customer_and_supplier_creation_setup_readback_and_replay(
             )
         )
         assert "stale product row_version" in stale
+
+        activation = {
+            "product_id": IDS["product"],
+            "row_version": 2,
+            "manufacturer_traceability_code": "MFG-REVIEW-42",
+            "idempotency_key": "transport-product-activate-0001",
+        }
+        activated = _body(await session.call_tool("erp_product_activate", activation))
+        activation_replay = _body(
+            await session.call_tool("erp_product_activate", activation)
+        )
+        assert activated["lifecycle_status"] == "active"
+        assert activation_replay["idempotency_replayed"] is True
+        activated_readback = _body(
+            await session.call_tool(
+                "erp_product_setup_get", {"product_id": IDS["product"]}
+            )
+        )
+        assert activated_readback["lifecycle_status"] == "active"
+        assert activated_readback["row_version"] == activated["row_version"]
 
         customer = _body(
             await session.call_tool(
