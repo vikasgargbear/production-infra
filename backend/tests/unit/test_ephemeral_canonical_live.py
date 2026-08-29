@@ -120,6 +120,21 @@ def test_live18_master_capability_bounds_match_shared_policy_and_database_checks
     )
 
 
+def test_capability_reconciliation_is_exact_but_order_independent():
+    forward = MODULE._capability_identity_map(
+        [("membership", "grant", ["catalog.product.activate", "sales.order.prepare"])]
+    )
+    reversed_order = MODULE._capability_identity_map(
+        [("membership", "grant", ["sales.order.prepare", "catalog.product.activate"])]
+    )
+    missing = MODULE._capability_identity_map(
+        [("membership", "grant", ["catalog.product.activate"])]
+    )
+
+    assert forward == reversed_order
+    assert forward != missing
+
+
 def test_live23_fixture_resolution_requires_a_bounded_run_token_and_lineage() -> None:
     for invalid in ("local", "0-1", "1-0", "1" * 21 + "-1", "1-" + "1" * 11):
         with pytest.raises(MODULE.CanonicalLiveIdentityError, match="run token"):

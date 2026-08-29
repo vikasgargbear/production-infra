@@ -345,6 +345,18 @@ def _capability_bounds(role: str, *, live18: bool = False):
     )
 
 
+def _capability_identity_map(rows):
+    """Compare grant authority as an exact set, independent of DB collation."""
+
+    return {
+        str(membership_id): (
+            str(grant_id),
+            frozenset(str(capability) for capability in capabilities),
+        )
+        for membership_id, grant_id, capabilities in rows
+    }
+
+
 def _resolve_fixture_identities(cursor, run_token: str) -> dict[str, str]:
     run_token = _validated_fixture_run_token(run_token)
     run_id, run_attempt = run_token.split("-", 1)
@@ -1077,15 +1089,15 @@ def _provision_database(
                     list(state["temporary_grants"].values()),
                 ),
             )
-            actual = {row[0]: (row[1], tuple(row[2])) for row in cursor.fetchall()}
+            actual = _capability_identity_map(cursor.fetchall())
             expected = {
                 membership_by_role[role]: (
                     state["temporary_grants"][role],
-                    tuple(sorted(
+                    frozenset(
                         capability
                         for capability, _, _, _
                         in _capability_bounds(role, live18=live18)
-                    )),
+                    ),
                 )
                 for role in ("requester", "reviewer")
             }
