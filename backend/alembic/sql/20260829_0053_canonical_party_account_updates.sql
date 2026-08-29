@@ -1,4 +1,3 @@
--- Revision 20260829_0053.
 SET LOCAL ROLE erp_migration_owner;
 
 CREATE FUNCTION erp_master_commands.update_customer_account(

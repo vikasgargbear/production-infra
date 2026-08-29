@@ -1,4 +1,3 @@
--- Revision 20260829_0054.
 SET LOCAL ROLE erp_migration_owner;
 
 CREATE OR REPLACE FUNCTION erp_master_commands.activate_configured_product(

@@ -24,7 +24,7 @@ SQL_PATH = (
     / "sql"
     / "20260829_0053_canonical_party_account_updates.sql"
 )
-EXPECTED_SQL_SHA256 = "6cab655f6767cd0834e711500cc3096b49108a63ea2949c7aced4c7de7cc7e05"
+EXPECTED_SQL_SHA256 = "23002fb2a605ec421bf4dce9b1be2b644210f5d2979f9ef45bb1d61616b36adb"
 
 
 def _reviewed_sql() -> str:

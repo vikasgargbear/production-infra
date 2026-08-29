@@ -25,7 +25,6 @@ def test_migration_is_hash_bound_and_linear() -> None:
 
     assert revision.revision == "20260829_0055"
     assert revision.down_revision == "20260829_0054"
-    assert revision.down_revision == "20260828_0049"
     assert revision.EXPECTED_SQL_SHA256 == hashlib.sha256(source).hexdigest()
     assert revision._reviewed_sql().encode("utf-8") == source
 

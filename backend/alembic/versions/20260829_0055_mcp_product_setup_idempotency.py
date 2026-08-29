@@ -24,7 +24,7 @@ SQL_PATH = (
     / "sql"
     / "20260829_0055_mcp_product_setup_idempotency.sql"
 )
-EXPECTED_SQL_SHA256 = "238dd973beba2c3ab4b2e09d196b6ed011a17b2c3f89ae60ca05d4095e6bec07"
+EXPECTED_SQL_SHA256 = "a925866f4baeeae4f70e437ce4756092c701571a83ed1c284492ee805e47939a"
 
 
 def _reviewed_sql() -> str:

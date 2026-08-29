@@ -558,7 +558,11 @@ jobs:
                                  encode(consent_text_hash,'hex'),
                                  consented_by_membership_id::text,consented_at IS NOT NULL,
                                  granted_by_membership_id::text,granted_at IS NOT NULL,
-                                 expires_at,status,expires_at>transaction_timestamp()
+                                 expires_at,status,expires_at>transaction_timestamp(),
+                                 consented_at=granted_at,
+                                 expires_at=consented_at+interval '30 days',
+                                 created_by_membership_id::text,
+                                 updated_by_membership_id::text
                             FROM automation.agent_grants
                            WHERE org_id=%s AND id=%s
                            FOR UPDATE
@@ -592,19 +596,34 @@ jobs:
                           )
                       else:
                           reconciliation_outcome = "unchanged"
-                          observed_scope = existing_grant[:10]
-                          expected_scope = (
+                          observed_grant = (
+                              *existing_grant[:10],
+                              *existing_grant[11:],
+                          )
+                          expected_grant = (
                               membership_id,target_client_id,None,'self_consent',
                               consent_version,expected_consent_hash,
                               membership_id,True,audit_membership_id,True,
+                              'active',True,True,True,
+                              audit_membership_id,audit_membership_id,
                           )
-                          if observed_scope != expected_scope:
+                          if observed_grant != expected_grant:
+                              scope_error = (
+                                  "existing reviewed web grant immutable scope differs"
+                                  if authority_scope == "web"
+                                  else "existing consent receipt differs from the reviewed grant"
+                              )
                               raise SystemExit(
-                                  "existing reviewed user grant immutable scope differs"
+                                  scope_error
                               )
                           if existing_grant[11] != 'active' or not existing_grant[12]:
+                              active_error = (
+                                  "existing reviewed web grant is not active and unexpired"
+                                  if authority_scope == "web"
+                                  else "existing reviewed MCP grant is not active and unexpired"
+                              )
                               raise SystemExit(
-                                  "existing reviewed grant is not active and unexpired"
+                                  active_error
                               )
                           cursor.execute(
                               """
@@ -633,7 +652,8 @@ jobs:
                       cursor.execute(
                           """
                           SELECT capability_code,operation_mode,risk_class,approval_policy,
-                                 maximum_amount::text,currency_code,allow_sensitive_read,status
+                                 maximum_amount::text,currency_code,allow_sensitive_read,status,
+                                 created_by_membership_id::text
                             FROM automation.agent_grant_capabilities
                            WHERE org_id=%s AND agent_grant_id=%s
                              AND capability_code=ANY(%s::varchar[])
@@ -648,6 +668,7 @@ jobs:
                       for capability,mode,risk,approval,maximum_amount,currency,allow_sensitive in capability_rows:
                           expected_capability = (
                               mode,risk,approval,maximum_amount,currency,allow_sensitive,'active',
+                              audit_membership_id,
                           )
                           existing_capability = existing_capabilities.get(capability)
                           if existing_capability is None:
@@ -660,7 +681,9 @@ jobs:
                               )
                           elif existing_capability != expected_capability:
                               raise SystemExit(
-                                  f"existing capability immutable scope differs: {capability}"
+                                  "existing capability immutable scope differs; "
+                                  "existing consent receipt capability envelope differs: "
+                                  f"{capability}"
                               )
                       if missing_capabilities:
                           cursor.executemany(
@@ -698,17 +721,23 @@ jobs:
                           (target_org_id, membership_id, target_client_id, membership_id),
                       )
                       readback = cursor.fetchall()
+                      expected_capabilities = sorted(
+                          (*row, audit_membership_id) for row in capability_rows
+                      )
                       expected = sorted(
-                          (
-                              grant_id,capability,mode,risk,approval,
-                              maximum_amount,currency,allow_sensitive,audit_membership_id,
-                          )
-                          for capability,mode,risk,approval,maximum_amount,currency,
-                              allow_sensitive
-                          in capability_rows
+                          (grant_id, *row) for row in expected_capabilities
                       )
                       if readback != expected:
                           raise SystemExit("reviewed user authority did not reconcile exactly")
+                      cursor.execute(
+                          """
+                          SELECT expires_at
+                            FROM automation.agent_grants
+                           WHERE org_id=%s AND id=%s
+                          """,
+                          (target_org_id, grant_id),
+                      )
+                      grant_expires_at = cursor.fetchone()[0].isoformat()
                       cursor.execute(
                           """
                           SELECT consent_version,encode(consent_text_hash,'hex'),
@@ -744,10 +773,10 @@ jobs:
               "grant_id": grant_id,
               "reconciliation_outcome": reconciliation_outcome,
               "capability_count": len(capability_rows),
+              "grant_expires_at": grant_expires_at,
               "consent_version": grant_receipt[0],
               "consent_text_sha256": grant_receipt[1],
               "expires_at": grant_receipt[2],
-              "expires_in_days": 30,
           }, sort_keys=True))
           ''')
           PY

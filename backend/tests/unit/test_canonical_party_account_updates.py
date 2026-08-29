@@ -41,7 +41,6 @@ def test_party_account_update_migration_is_generated_hash_bound_and_linear() -> 
     assert migration == generator.render()
     assert revision.revision == "20260829_0053"
     assert revision.down_revision == "20260829_0052"
-    assert revision.down_revision == "20260828_0049"
     assert revision.EXPECTED_SQL_SHA256 == hashlib.sha256(MIGRATION.read_bytes()).hexdigest()
 
 
