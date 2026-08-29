@@ -55,7 +55,6 @@ export interface LoginResult {
 }
 
 export interface AuthContextValue extends AuthState {
-    login: (email: string, password: string) => Promise<LoginResult>;
     loginWithGoogle: () => Promise<LoginResult | void>;
     handleOAuthCallback: (accessToken: string) => Promise<LoginResult>;
     logout: () => void;
@@ -315,24 +314,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         return promise;
     }, [preserveCloudSessionFailure]);
 
-    const login = useCallback(async (email: string, password: string): Promise<LoginResult> => {
-        if (!navigator.onLine) {
-            return { success: false, error: 'An internet connection is required to sign in.' };
-        }
-        try {
-            const { data, error } = await getSupabaseClient().auth.signInWithPassword({
-                email: email.trim(),
-                password,
-            });
-            if (error) return { success: false, error: error.message };
-            if (!data.session) return { success: false, error: 'Email verification is required' };
-            setHasCloudSession(true);
-            return exchangeSupabaseSession(data.session.access_token);
-        } catch (error) {
-            return { success: false, error: error instanceof Error ? error.message : 'Login failed' };
-        }
-    }, [exchangeSupabaseSession]);
-
     const loginWithGoogle = useCallback(async (): Promise<LoginResult | void> => {
         if (!navigator.onLine) {
             return { success: false, error: 'An internet connection is required to sign in.' };
@@ -533,7 +514,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     const value: AuthContextValue = {
         ...state,
-        login,
         loginWithGoogle,
         handleOAuthCallback: exchangeSupabaseSession,
         logout,

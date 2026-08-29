@@ -107,7 +107,6 @@ const harnessAuthValue = (): AuthContextValue => {
     user, token: 'browser-harness-token', isAuthenticated: true, isLoading: false,
     onboardingRequired: false, isOnline: true, hasCloudSession: true,
     sessionExchangeError: null,
-    login: async () => ({ success: true, user }),
     loginWithGoogle: async () => ({ success: true, user }),
     handleOAuthCallback: async () => ({ success: true, user }),
     logout: () => undefined,
