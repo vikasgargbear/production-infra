@@ -976,7 +976,7 @@ def test_free_staging_reset_is_explicit_and_preserves_supabase_schemas():
     assert "revoke_staging_postgres_set_roles.sh migration-owner" in reset_step
     assert "PRESERVED_SEED_RELATIONS" in reset_authority
     assert "EXPECTED_CANONICAL_RELATION_COUNT = 119" in reset_authority
-    assert "EXPECTED_EPHEMERAL_RELATION_COUNT = 7" in reset_authority
+    assert "EXPECTED_EPHEMERAL_RELATION_COUNT = 9" in reset_authority
     assert "if re.search(r\"\\bCASCADE\\b\"" in reset_authority
     assert "before_roles != after_roles" in reset_authority
     assert "before_seed_digest != after_seed_digest" in reset_authority
