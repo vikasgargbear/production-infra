@@ -25,6 +25,13 @@ export interface InvoiceItem {
     quantity: string;
     free_quantity: string;
     unit_price: string;
+    line_discount_kind: 'none' | 'percent' | 'amount';
+    line_discount_basis: 'taxable_value' | 'price_value';
+    line_discount_value: string;
+    line_discount_amount: string;
+    line_taxable_discount_amount: string;
+    document_discount_amount: string;
+    document_taxable_discount_amount: string;
     discount_percent: string;
     gst_percent: string;
     taxable_amount: string;
@@ -176,6 +183,13 @@ export const printableCanonicalInvoice = (detail: CanonicalInvoiceDetail): Invoi
             quantity: item.quantity,
             free_quantity: item.free_quantity,
             unit_price: item.unit_price,
+            line_discount_kind: item.line_discount_kind,
+            line_discount_basis: item.line_discount_basis,
+            line_discount_value: item.line_discount_value,
+            line_discount_amount: item.line_discount_amount,
+            line_taxable_discount_amount: item.line_taxable_discount_amount,
+            document_discount_amount: item.document_discount_amount,
+            document_taxable_discount_amount: item.document_taxable_discount_amount,
             discount_percent: item.discount_percent,
             gst_percent: item.gst_percent,
             taxable_amount: item.taxable_amount,
@@ -226,6 +240,63 @@ const atMostTwoDecimals = (value: unknown, label: string, sourceScale: number): 
     return formatExactDecimal(exactDecimalString(rounded, 2), label, {
         scale: 2, maximumWholeDigits: 20, allowNegative: false,
     });
+};
+
+const lineDiscountDisplay = (
+    item: InvoiceItem,
+    lineNumber: number,
+    currency: (value: unknown, label: string) => string,
+): string => {
+    const label = `Invoice line ${lineNumber} discount`;
+    const value = normalizeAuthoritativeDecimal(
+        item.line_discount_value, `${label} input`,
+        { scale: 6, maximumWholeDigits: 20, allowNegative: false },
+    );
+    const percent = normalizeAuthoritativeDecimal(
+        item.discount_percent, `${label} compatibility percent`,
+        { scale: 6, maximumWholeDigits: 20, allowNegative: false },
+    );
+    if (item.line_discount_kind === 'none' && value !== '0.000000') {
+        throw new Error(`${label} contradicts its none kind.`);
+    }
+    if (item.line_discount_kind === 'percent' && value !== percent) {
+        throw new Error(`${label} percent does not match its immutable input.`);
+    }
+    if (item.line_discount_kind !== 'percent' && percent !== '0.000000') {
+        throw new Error(`${label} cannot expose a percentage for its immutable kind.`);
+    }
+    if (item.line_discount_kind === 'amount'
+        && exactDecimalUnits(value, `${label} amount input`, {
+            scale: 6, maximumWholeDigits: 20, allowNegative: false,
+        }) % 10000n !== 0n) {
+        throw new Error(`${label} fixed amount must have two-decimal precision.`);
+    }
+    const lineAmount = currency(item.line_discount_amount, `${label} allocation`);
+    const documentAmount = currency(
+        item.document_discount_amount, `${label} invoice allocation`,
+    );
+    const hasLineAmount = compareExactDecimals(
+        item.line_discount_amount, '0.00', `${label} allocation`, moneyOptions,
+    ) !== 0;
+    const hasDocumentAmount = compareExactDecimals(
+        item.document_discount_amount, '0.00', `${label} invoice allocation`, moneyOptions,
+    ) !== 0;
+    const primary = item.line_discount_kind === 'percent'
+        ? `${atMostTwoDecimals(value, `${label} percent`, 6)}%`
+        : item.line_discount_kind === 'amount'
+            ? `Fixed ${currency(
+                exactDecimalString(
+                    exactDecimalUnits(value, `${label} amount`, {
+                        scale: 6, maximumWholeDigits: 20, allowNegative: false,
+                    }) / 10000n,
+                    2,
+                ),
+                `${label} amount`,
+            )}`
+            : 'None';
+    const allocated = hasLineAmount ? ` (${lineAmount})` : '';
+    const document = hasDocumentAmount ? ` + invoice ${documentAmount}` : '';
+    return `${primary}${allocated}${document}`;
 };
 
 const rate = (value: unknown, label: string): string => {
@@ -356,7 +427,7 @@ export const generateInvoiceHTML = (invoice: InvoiceData): string => {
             <td class="center">${atMostTwoDecimals(item.quantity, `Invoice line ${lineNumber} quantity`, 6)}
                 <div class="muted">Free ${atMostTwoDecimals(item.free_quantity, `Invoice line ${lineNumber} free quantity`, 6)}</div></td>
             <td class="right">${rate(item.unit_price, `Invoice line ${lineNumber} rate`)}</td>
-            <td class="center">${atMostTwoDecimals(item.discount_percent, `Invoice line ${lineNumber} discount`, 6)}%</td>
+            <td class="center">${lineDiscountDisplay(item, lineNumber, money)}</td>
             <td class="right">${money(item.taxable_amount, `Invoice line ${lineNumber} taxable amount`)}</td>
             <td class="right"><strong>${atMostTwoDecimals(item.gst_percent, `Invoice line ${lineNumber} GST rate`, 6)}%</strong>
                 <div class="muted">${money(lineGst, `Invoice line ${lineNumber} GST amount`)}</div>${cess}</td>
@@ -522,7 +593,7 @@ export const buildInvoicePDF = (invoiceData: InvoiceData): jsPDF => {
             batches.join('\n'), expiries.join('\n'),
             `${atMostTwoDecimals(item.quantity, 'PDF quantity', 6)}\nFree ${atMostTwoDecimals(item.free_quantity, 'PDF free quantity', 6)}`,
             pdfMoney(rate(item.unit_price, 'PDF rate').replace('₹', ''), 'PDF normalized rate'),
-            `${atMostTwoDecimals(item.discount_percent, 'PDF discount', 6)}%`,
+            lineDiscountDisplay(item, lineNumber, pdfMoney),
             pdfMoney(item.taxable_amount, 'PDF line taxable'),
             `${atMostTwoDecimals(item.gst_percent, 'PDF GST rate', 6)}%\n${pdfMoney(gstAmount, 'PDF line GST amount')}${cess}`,
             pdfMoney(item.line_total, 'PDF line total'),

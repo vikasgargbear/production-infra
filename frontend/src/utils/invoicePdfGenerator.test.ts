@@ -64,6 +64,13 @@ const invoice = (): InvoiceData => ({
     quantity: '1.234567',
     free_quantity: '0.125000',
     unit_price: '150.0000',
+    line_discount_kind: 'percent',
+    line_discount_basis: 'price_value',
+    line_discount_value: '2.500000',
+    line_discount_amount: '5.00',
+    line_taxable_discount_amount: '5.00',
+    document_discount_amount: '0.00',
+    document_taxable_discount_amount: '0.00',
     discount_percent: '2.500000',
     gst_percent: '12.000000',
     taxable_amount: '150.00',
@@ -122,6 +129,13 @@ const canonicalDetail = (): CanonicalInvoiceDetail => ({
     base_billed_quantity: item.quantity,
     base_free_quantity: item.free_quantity,
     free_supply_tax_treatment: 'excluded_from_taxable_value' as const,
+    line_discount_kind: item.line_discount_kind,
+    line_discount_basis: item.line_discount_basis,
+    line_discount_value: item.line_discount_value,
+    line_discount_amount: item.line_discount_amount,
+    line_taxable_discount_amount: item.line_taxable_discount_amount,
+    document_discount_amount: item.document_discount_amount,
+    document_taxable_discount_amount: item.document_taxable_discount_amount,
   })),
   created_at: '2026-08-25T12:00:00Z',
   updated_at: '2026-08-25T12:00:00Z',
@@ -158,6 +172,7 @@ test('uses the pre-tax reduction for printable discount and preserves header dis
     total_amount: '212.80',
     items: [{
       ...canonicalDetail().items[0], taxable_amount: '190.00',
+      line_discount_amount: '11.20', line_taxable_discount_amount: '10.00',
       cgst_amount: '11.40', sgst_amount: '11.40', line_total: '212.80',
     }],
   };
@@ -211,6 +226,7 @@ test('renders only canonical seller, buyer, line, and exact money facts', () => 
   expect(html).toContain('<div>2028-09-30</div><div>2029-01-31</div>');
   expect(html).toContain('>1.23');
   expect(html).toContain('>2.5%');
+  expect(html).toContain('2.5% (₹5.00)');
   expect(html).toContain('<th>GST % / Amount</th>');
   expect(html).toContain('<strong>12%</strong>');
   expect(html).toContain('<div class="muted">₹18.00</div>');
@@ -233,6 +249,32 @@ test('renders only canonical seller, buyer, line, and exact money facts', () => 
   expect(html).toContain('thead{display:table-header-group}');
   expect(html).toContain('tr{break-inside:avoid;page-break-inside:avoid}');
   expect(html).not.toContain('.invoice-page{page-break-inside:avoid');
+});
+
+test('labels fixed line discounts and invoice allocations without inventing a percent', () => {
+  const fixed = invoice();
+  fixed.discount_amount = '7.00';
+  fixed.net_value_amount = '148.00';
+  fixed.total_amount = '166.00';
+  fixed.items[0] = {
+    ...fixed.items[0],
+    line_discount_kind: 'amount',
+    line_discount_basis: 'taxable_value',
+    line_discount_value: '5.000000',
+    line_discount_amount: '5.00',
+    line_taxable_discount_amount: '5.00',
+    document_discount_amount: '2.00',
+    document_taxable_discount_amount: '2.00',
+    discount_percent: '0.000000',
+  };
+  const html = generateInvoiceHTML(fixed);
+  expect(html).toContain('Fixed ₹5.00 (₹5.00) + invoice ₹2.00');
+  expect(html).not.toContain('>0%');
+
+  expect(() => generateInvoiceHTML({
+    ...fixed,
+    items: [{ ...fixed.items[0], discount_percent: '5.000000' }],
+  })).toThrow('cannot expose a percentage for its immutable kind');
 });
 
 test('preserves an explicit zero tax component without treating it as missing', () => {

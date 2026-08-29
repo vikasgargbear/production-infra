@@ -606,6 +606,52 @@ def _assert_runtime_resume_projection(
             raise AssertionError("cross-tenant command resume lookup was not denied")
 
 
+def _assert_runtime_invoice_product_identity(
+    runtime_dsn: str,
+    invoice_id: UUID,
+    product_reference: dict[str, object],
+) -> None:
+    """Prove invoice history receives only exact typed immutable labels."""
+
+    with psycopg2.connect(runtime_dsn) as connection, connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT erp_security.activate_context(%s,%s)",
+            (fixture.IDS["operator_auth_user"], fixture.IDS["org"]),
+        )
+        cursor.execute(
+            "SELECT has_table_privilege("
+            "current_user,'automation.command_requests','SELECT'),"
+            "has_function_privilege("
+            "current_user,"
+            "'erp_automation_reads.sales_invoice_product_identity(uuid,uuid)',"
+            "'EXECUTE')"
+        )
+        assert cursor.fetchone() == (False, True)
+        cursor.execute(
+            """
+            SELECT product_id,product_row_version,product_code,product_name
+              FROM erp_automation_reads.sales_invoice_product_identity(%s,%s)
+            """,
+            (fixture.IDS["org"], invoice_id),
+        )
+        assert cursor.fetchall() == [(
+            UUID(str(product_reference["id"])),
+            int(product_reference["row_version"]),
+            product_reference["product_code"],
+            product_reference["product_name"],
+        )]
+        for candidate_org, candidate_invoice in (
+            (fixture.IDS["denial_org"], invoice_id),
+            (fixture.IDS["org"], uuid4()),
+        ):
+            cursor.execute(
+                "SELECT count(*) FROM "
+                "erp_automation_reads.sales_invoice_product_identity(%s,%s)",
+                (candidate_org, candidate_invoice),
+            )
+            assert cursor.fetchone() == (0,)
+
+
 def _reconcile(runtime_dsn: str, invoice_id: UUID, batch_ids: list[UUID]) -> None:
     with psycopg2.connect(runtime_dsn) as connection, connection.cursor() as cursor:
         cursor.execute(
@@ -873,6 +919,9 @@ def main() -> None:
         assert executed.status == "succeeded"
         assert replayed.idempotency_replayed is True
         assert replayed.resource_id == executed.resource_id == invoice_id
+        _assert_runtime_invoice_product_identity(
+            runtime_dsn, invoice_id, product_references[0]
+        )
 
         with psycopg2.connect(admin_dsn) as connection, connection.cursor() as cursor:
             cursor.execute(

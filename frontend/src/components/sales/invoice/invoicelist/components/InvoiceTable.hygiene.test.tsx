@@ -56,7 +56,11 @@ const canonicalDetail = {
     updated_at: '2026-08-29T00:00:00Z', items: [{
         id: 'line-1', product_id: 'product-1', product_name: 'AASOPOD-100 Dry Syrup', product_code: 'AASOPOD-100',
         hsn_code: '30042019', uom_code: 'NOS', unit: 'NOS', quantity: '10.000000', free_quantity: '1.000000',
-        free_supply_tax_treatment: 'excluded_from_taxable_value', unit_price: '15.0000', discount_percent: '0.000000',
+        free_supply_tax_treatment: 'excluded_from_taxable_value', unit_price: '15.0000',
+        line_discount_kind: 'none', line_discount_basis: 'price_value', line_discount_value: '0.000000',
+        line_discount_amount: '0.00', line_taxable_discount_amount: '0.00',
+        document_discount_amount: '0.00', document_taxable_discount_amount: '0.00',
+        discount_percent: '0.000000',
         gst_percent: '12.000000', taxable_amount: '150.00', cgst_amount: '9.00', sgst_amount: '9.00',
         igst_amount: '0.00', line_total: '168.00', source_document_kind: 'sales_order',
         base_billed_quantity: '10.000000', base_free_quantity: '1.000000', cess_amount: '0.00',

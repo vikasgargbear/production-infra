@@ -58,6 +58,18 @@ export interface CanonicalInvoiceDetailLine extends CanonicalSalesDocumentLine {
   source_document_kind: 'sales_order';
   base_billed_quantity: ExactDecimalString;
   base_free_quantity: ExactDecimalString;
+  line_discount_kind: 'none' | 'percent' | 'amount';
+  line_discount_basis: 'taxable_value' | 'price_value';
+  /** Immutable operator-entered line discount value, never inferred from allocation totals. */
+  line_discount_value: ExactDecimalString;
+  /** Persisted customer-payable line discount allocation, including any tax effect. */
+  line_discount_amount: ExactDecimalString;
+  /** Persisted pre-tax line discount allocation used in net-value reconciliation. */
+  line_taxable_discount_amount: ExactDecimalString;
+  /** Persisted customer-payable invoice-level discount allocated to this line. */
+  document_discount_amount: ExactDecimalString;
+  /** Persisted pre-tax invoice-level discount allocated to this line. */
+  document_taxable_discount_amount: ExactDecimalString;
   cess_amount: ExactDecimalString;
   batch_allocations: CanonicalExecutedBatchAllocation[];
 }

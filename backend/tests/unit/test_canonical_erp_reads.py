@@ -575,7 +575,11 @@ def test_canonical_sales_detail_openapi_publishes_only_exact_decimal_strings() -
         "CanonicalInvoiceDetailItem": {
             "quantity": 6, "free_quantity": 6,
             "base_billed_quantity": 6, "base_free_quantity": 6,
-            "unit_price": 4, "discount_percent": 6, "tax_rate": 6,
+            "unit_price": 4, "line_discount_value": 6,
+            "line_discount_amount": 2, "line_taxable_discount_amount": 2,
+            "document_discount_amount": 2,
+            "document_taxable_discount_amount": 2,
+            "discount_percent": 6, "tax_rate": 6,
             "gst_percent": 6, "taxable_amount": 2, "cgst_amount": 2,
             "sgst_amount": 2, "igst_amount": 2, "cess_amount": 2,
             "line_total": 2,
@@ -1414,8 +1418,9 @@ def test_sales_invoice_reads_project_authoritative_gst_header_totals() -> None:
     assert "buyer_drug_licence_evidence_snapshot->'licences'" in detail_source
     assert "FROM compliance.licenses" not in detail_source
     assert "FROM parties.contacts" not in detail_source
-    assert "FROM automation.command_requests command" in detail_source
-    assert "command_snapshot.preview->'resolved_references'" in detail_source
+    assert "erp_automation_reads.sales_invoice_product_identity(" in detail_source
+    assert "FROM automation.command_requests" not in detail_source
+    assert "resolved_references" not in detail_source
     assert "line.tax_classification_code_snapshot" in detail_source
     assert "FROM catalog.products" not in detail_source
     assert "product.hsn_code" not in detail_source
@@ -1553,7 +1558,11 @@ def test_sales_invoice_detail_response_validates_zero_one_and_many_allocations()
             "product_code": "SKU", "hsn_code": "481910", "uom_code": "EA",
             "unit": "EA", "quantity": len(allocations) or 1,
             "free_quantity": 0, "base_billed_quantity": len(allocations) or 1,
-            "base_free_quantity": 0, "unit_price": 150, "discount_percent": 0,
+            "base_free_quantity": 0, "unit_price": 150,
+            "line_discount_kind": "none", "line_discount_basis": "price_value",
+            "line_discount_value": 0, "line_discount_amount": 0,
+            "line_taxable_discount_amount": 0, "document_discount_amount": 0,
+            "document_taxable_discount_amount": 0, "discount_percent": 0,
             "free_supply_tax_treatment": "excluded_from_taxable_value",
             "tax_rate": 12, "gst_percent": 12, "taxable_amount": 150,
             "cgst_amount": 9, "sgst_amount": 9, "igst_amount": 0,
@@ -1609,6 +1618,15 @@ def test_sales_invoice_detail_response_validates_zero_one_and_many_allocations()
     assert response.items[2].batch_allocations[1].source_kind == "direct_issue"
     assert response.items[3].batch_allocations[0].source_kind == "dispatch_allocation"
 
+    tax_inclusive_item = item([direct])
+    tax_inclusive_item.update({
+        "line_discount_kind": "percent",
+        "line_discount_basis": "price_value",
+        "line_discount_value": "5.000000",
+        "line_discount_amount": "11.20",
+        "line_taxable_discount_amount": "10.00",
+        "discount_percent": "5.000000",
+    })
     tax_inclusive_discount = {
         **payload,
         "subtotal_amount": "200.00",
@@ -1620,6 +1638,7 @@ def test_sales_invoice_detail_response_validates_zero_one_and_many_allocations()
         "cgst_amount": "11.40",
         "sgst_amount": "11.40",
         "total_amount": "212.80",
+        "items": [tax_inclusive_item],
     }
     discount_response = (
         canonical_erp_reads.CanonicalInvoiceDetailResponse.model_validate(
@@ -1628,10 +1647,41 @@ def test_sales_invoice_detail_response_validates_zero_one_and_many_allocations()
     )
     assert discount_response.discount_amount == Decimal("11.20")
     assert discount_response.pre_tax_discount_amount == Decimal("10.00")
+    assert discount_response.items[0].line_discount_kind == "percent"
+    assert discount_response.items[0].line_discount_amount == Decimal("11.20")
+    assert discount_response.items[0].line_taxable_discount_amount == Decimal("10.00")
     with pytest.raises(ValidationError, match="pre-tax discount"):
         canonical_erp_reads.CanonicalInvoiceDetailResponse.model_validate(
             {**tax_inclusive_discount, "pre_tax_discount_amount": "11.20"}
         )
+    fixed_amount_discount = item([direct])
+    fixed_amount_discount.update({
+        "line_discount_kind": "amount",
+        "line_discount_basis": "taxable_value",
+        "line_discount_value": "25.000000",
+        "line_discount_amount": "25.00",
+        "line_taxable_discount_amount": "25.00",
+    })
+    fixed_response = canonical_erp_reads.CanonicalInvoiceDetailItem.model_validate(
+        fixed_amount_discount
+    )
+    fixed_wire = json.loads(fixed_response.model_dump_json())
+    assert fixed_wire["line_discount_kind"] == "amount"
+    assert fixed_wire["line_discount_value"] == "25.000000"
+    assert fixed_wire["line_discount_amount"] == "25.00"
+    assert fixed_wire["discount_percent"] == "0.000000"
+    with pytest.raises(ValidationError, match="compatibility discount percent"):
+        canonical_erp_reads.CanonicalInvoiceDetailItem.model_validate({
+            **fixed_amount_discount, "discount_percent": "25.000000",
+        })
+    with pytest.raises(ValidationError, match="two-decimal precision"):
+        canonical_erp_reads.CanonicalInvoiceDetailItem.model_validate({
+            **fixed_amount_discount, "line_discount_value": "25.001000",
+        })
+    with pytest.raises(ValidationError, match="line discount allocations"):
+        canonical_erp_reads.CanonicalInvoiceDetailResponse.model_validate({
+            **tax_inclusive_discount, "discount_amount": "11.21",
+        })
 
     missing_line_identity = {**direct}
     missing_line_identity.pop("inventory_document_line_id")

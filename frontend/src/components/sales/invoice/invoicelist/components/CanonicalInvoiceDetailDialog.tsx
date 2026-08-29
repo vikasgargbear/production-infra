@@ -47,6 +47,41 @@ const displayRate = (value: unknown, label: string): string => {
     return formatExactCurrency(exactDecimalString(cents, 2), label);
 };
 
+const displayLineDiscount = (
+    line: CanonicalInvoiceDetail['items'][number], index: number,
+): React.ReactNode => {
+    const label = `Invoice line ${index + 1} discount`;
+    const lineAmount = formatExactCurrency(line.line_discount_amount, `${label} allocation`);
+    const invoiceAmount = formatExactCurrency(
+        line.document_discount_amount, `${label} invoice allocation`,
+    );
+    const hasLineAmount = compareExactDecimals(
+        line.line_discount_amount, '0.00', `${label} allocation`, moneyOptions,
+    ) !== 0;
+    const hasInvoiceAmount = compareExactDecimals(
+        line.document_discount_amount, '0.00', `${label} invoice allocation`, moneyOptions,
+    ) !== 0;
+    const input = line.line_discount_kind === 'percent'
+        ? `${displayQuantity(line.line_discount_value, `${label} percent`)}%`
+        : line.line_discount_kind === 'amount'
+            ? `Fixed ${formatExactCurrency(
+                exactDecimalString(
+                    exactDecimalUnits(line.line_discount_value, `${label} amount`, quantityOptions)
+                        / 10000n,
+                    2,
+                ),
+                `${label} fixed amount`,
+            )}`
+            : 'None';
+    return (
+        <>
+            <div>{input}</div>
+            {hasLineAmount && <div className="text-xs text-gray-500">Allocated {lineAmount}</div>}
+            {hasInvoiceAmount && <div className="text-xs text-gray-500">Invoice allocation {invoiceAmount}</div>}
+        </>
+    );
+};
+
 const lineGstAmount = (detail: CanonicalInvoiceDetail, lineIndex: number): string => {
     const line = detail.items[lineIndex];
     return addExactDecimals(
@@ -196,7 +231,7 @@ export const CanonicalInvoiceDetailDialog: React.FC<CanonicalInvoiceDetailDialog
                                                             && <div className="text-xs text-gray-500">+ {displayQuantity(line.free_quantity, `Invoice line ${index + 1} free quantity`)} free</div>}
                                                     </td>
                                                     <td className="px-3 py-2.5 text-right tabular-nums">{displayRate(line.unit_price, `Invoice line ${index + 1} rate`)}</td>
-                                                    <td className="px-3 py-2.5 text-right tabular-nums">{displayQuantity(line.discount_percent, `Invoice line ${index + 1} discount`)}%</td>
+                                                    <td className="px-3 py-2.5 text-right tabular-nums">{displayLineDiscount(line, index)}</td>
                                                     <td className="px-3 py-2.5 text-right tabular-nums">{formatExactCurrency(line.taxable_amount, `Invoice line ${index + 1} taxable`)}</td>
                                                     <td className="px-3 py-2.5 text-right tabular-nums">
                                                         <div className="font-medium">{displayQuantity(line.gst_percent, `Invoice line ${index + 1} GST rate`)}%</div>
