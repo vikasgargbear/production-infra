@@ -124,7 +124,8 @@ class ResetAuthorityError(RuntimeError):
 @dataclass(frozen=True)
 class OrganizationDeletePlan:
     relation_order: tuple[str, ...]
-    temporarily_removed_constraints: tuple[tuple[str, str, str], ...]
+    relation_groups: tuple[tuple[str, ...], ...]
+    deferred_cycle_constraints: tuple[tuple[str, str], ...]
 
 
 @dataclass(frozen=True)
@@ -989,7 +990,7 @@ def _organization_delete_plan(
         SELECT child_namespace.nspname || '.' || child.relname AS child_relation,
                parent_namespace.nspname || '.' || parent.relname AS parent_relation,
                constraint_row.conname,
-               pg_catalog.pg_get_constraintdef(constraint_row.oid,true)
+               constraint_row.condeferrable
           FROM pg_catalog.pg_constraint AS constraint_row
           JOIN pg_catalog.pg_class AS child
             ON child.oid=constraint_row.conrelid
@@ -1008,18 +1009,22 @@ def _organization_delete_plan(
     )
     relation_set = set(relations)
     graph = {relation: set() for relation in relations}
-    constraints_by_edge: dict[tuple[str, str], list[tuple[str, str]]] = {}
-    for child, parent, constraint, definition in cursor.fetchall():
+    constraints_by_edge: dict[tuple[str, str], list[tuple[str, bool]]] = {}
+    for child, parent, constraint, deferrable in cursor.fetchall():
         child_name = str(child)
         parent_name = str(parent)
         if child_name not in relation_set or parent_name not in relation_set:
             raise ResetAuthorityError("organization foreign-key scope drifted")
         if child_name == parent_name:
+            # Every row for this organization is removed from the relation in
+            # one DELETE statement. PostgreSQL checks an immediate self-FK at
+            # statement end, when neither the tenant parent nor its children
+            # remain, so this is not a cross-statement dependency cycle.
             continue
         graph[child_name].add(parent_name)
         edge = (child_name, parent_name)
         constraints_by_edge.setdefault(edge, []).append(
-            (str(constraint), str(definition))
+            (str(constraint), bool(deferrable))
         )
 
     components = _strongly_connected_components(graph)
@@ -1028,13 +1033,17 @@ def _organization_delete_plan(
         for index, component in enumerate(components)
         for relation in component
     }
-    temporarily_removed: list[tuple[str, str, str]] = []
+    deferred_cycles: list[tuple[str, str]] = []
     for child, parents in graph.items():
         for parent in parents:
+            constraints = constraints_by_edge[(child, parent)]
             if component_by_relation[child] != component_by_relation[parent]:
                 continue
-            for constraint, definition in constraints_by_edge[(child, parent)]:
-                temporarily_removed.append((child, constraint, definition))
+            deferred_cycles.extend(
+                (child, constraint)
+                for constraint, deferrable in constraints
+                if deferrable
+            )
 
     component_edges = {index: set() for index in range(len(components))}
     incoming = {index: 0 for index in range(len(components))}
@@ -1051,10 +1060,10 @@ def _organization_delete_plan(
         (index for index, count in incoming.items() if count == 0),
         key=lambda value: components[value],
     )
-    ordered: list[str] = []
+    ordered_groups: list[tuple[str, ...]] = []
     while ready:
         component_index = ready.pop(0)
-        ordered.extend(components[component_index])
+        ordered_groups.append(components[component_index])
         for target in sorted(
             component_edges[component_index], key=lambda value: components[value]
         ):
@@ -1062,11 +1071,13 @@ def _organization_delete_plan(
             if incoming[target] == 0:
                 ready.append(target)
                 ready.sort(key=lambda value: components[value])
+    ordered = [relation for group in ordered_groups for relation in group]
     if len(ordered) != len(relations):
         raise ResetAuthorityError("organization delete order is incomplete")
     return OrganizationDeletePlan(
         relation_order=tuple(ordered),
-        temporarily_removed_constraints=tuple(sorted(temporarily_removed)),
+        relation_groups=tuple(ordered_groups),
+        deferred_cycle_constraints=tuple(sorted(deferred_cycles)),
     )
 
 
@@ -1076,26 +1087,6 @@ def _organization_delete_order(
     """Compatibility projection for callers that only need relation ordering."""
 
     return _organization_delete_plan(cursor, relations).relation_order
-
-
-def _set_cycle_foreign_keys(
-    cursor: Any,
-    constraints: Sequence[tuple[str, str, str]],
-    *,
-    enabled: bool,
-) -> None:
-    ordered = constraints if enabled else tuple(reversed(constraints))
-    for relation, constraint, definition in ordered:
-        if enabled:
-            cursor.execute(
-                f"ALTER TABLE {_quote_relation(relation)} ADD CONSTRAINT "
-                f"{_quote_identifier(constraint)} {definition}"
-            )
-        else:
-            cursor.execute(
-                f"ALTER TABLE {_quote_relation(relation)} DROP CONSTRAINT "
-                f"{_quote_identifier(constraint)}"
-            )
 
 
 def _foreign_key_snapshot(
@@ -1342,7 +1333,6 @@ def execute_organization_purge(
             delete_plan = _organization_delete_plan(
                 cursor, (*organization_relations, "core.organizations")
             )
-            delete_order = delete_plan.relation_order
             foreign_key_relations = (*organization_relations, "core.organizations")
             before_foreign_keys = _foreign_key_snapshot(cursor, foreign_key_relations)
             delete_triggers = _delete_trigger_snapshot(
@@ -1359,37 +1349,49 @@ def execute_organization_purge(
                 cursor, organization_relations, normalized_id, target=False
             )
 
-            # Snapshot, remove, and recreate only FKs inside dependency cycles
-            # in this transaction. All acyclic RI constraints remain active,
-            # and the complete FK catalog is compared before commit. Owner-
-            # managed DELETE guards are likewise disabled and restored in this
-            # same transaction. Every DELETE remains exact-UUID parameterized.
-            _set_cycle_foreign_keys(
-                cursor,
-                delete_plan.temporarily_removed_constraints,
-                enabled=False,
-            )
+            # Defer reviewed constraints without changing the catalog. Each
+            # strongly connected tenant component is deleted in one PostgreSQL
+            # statement, so immediate cyclic FKs are checked only after every
+            # tenant row in that component is gone. Force queued RI checks
+            # before restoring owner-managed DELETE guards. This remains one
+            # atomic transaction and never drops or disables a foreign key.
+            cursor.execute("SET CONSTRAINTS ALL DEFERRED")
             _set_delete_triggers(cursor, delete_triggers, enabled=False)
             organization_deleted = 0
-            for relation in delete_order:
-                key_column = "id" if relation == "core.organizations" else "org_id"
-                cursor.execute(
-                    f"DELETE FROM {_quote_relation(relation)} "
-                    f"WHERE {_quote_identifier(key_column)}=%s::uuid",
-                    (normalized_id,),
+            for relation_group in delete_plan.relation_groups:
+                delete_ctes: list[str] = []
+                for index, relation in enumerate(relation_group):
+                    key_column = "id" if relation == "core.organizations" else "org_id"
+                    delete_ctes.append(
+                        f"deleted_{index} AS ("
+                        f"DELETE FROM {_quote_relation(relation)} "
+                        f"WHERE {_quote_identifier(key_column)}=%s::uuid RETURNING 1)"
+                    )
+                count_projection = ",".join(
+                    f"(SELECT count(*) FROM deleted_{index})"
+                    for index in range(len(relation_group))
                 )
-                if relation == "core.organizations":
-                    organization_deleted = cursor.rowcount
+                cursor.execute(
+                    f"WITH {','.join(delete_ctes)} SELECT {count_projection}",
+                    tuple(normalized_id for _relation in relation_group),
+                )
+                deleted_counts = cursor.fetchone()
+                if not isinstance(deleted_counts, (tuple, list)) or (
+                    len(deleted_counts) != len(relation_group)
+                ):
+                    raise ResetAuthorityError(
+                        "organization purge delete readback is incomplete"
+                    )
+                if "core.organizations" in relation_group:
+                    organization_deleted = int(
+                        deleted_counts[relation_group.index("core.organizations")]
+                    )
             if organization_deleted != 1:
                 raise ResetAuthorityError(
                     "organization purge did not delete exactly one boundary row"
                 )
+            cursor.execute("SET CONSTRAINTS ALL IMMEDIATE")
             _set_delete_triggers(cursor, delete_triggers, enabled=True)
-            _set_cycle_foreign_keys(
-                cursor,
-                delete_plan.temporarily_removed_constraints,
-                enabled=True,
-            )
             after_foreign_keys = _foreign_key_snapshot(cursor, foreign_key_relations)
 
             after_catalog = _catalog_snapshot(cursor, authority.alembic_schemas)
@@ -1453,9 +1455,10 @@ def execute_organization_purge(
         "preserved_seed_relation_count": len(authority.preserved_seed_relations),
         "preserved_seed_digest_sha256": after_seed_digest,
         "organization_relation_count": len(organization_relations),
-        "delete_order_relation_count": len(delete_order),
-        "temporarily_removed_foreign_key_count": len(
-            delete_plan.temporarily_removed_constraints
+        "delete_order_relation_count": len(delete_plan.relation_order),
+        "delete_statement_group_count": len(delete_plan.relation_groups),
+        "deferred_cycle_foreign_key_count": len(
+            delete_plan.deferred_cycle_constraints
         ),
         "temporarily_disabled_delete_trigger_count": sum(
             state != "D" for _, _, state in delete_triggers
