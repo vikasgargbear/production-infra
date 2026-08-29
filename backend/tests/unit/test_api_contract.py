@@ -168,6 +168,9 @@ def test_exported_operation_has_explicit_security_metadata(contract):
     assert operation["x-erp-data-classification"] in {"internal", "confidential"}
     assert operation["x-erp-max-records"] == contract.max_records
     assert operation["x-erp-permission"] == contract.permission
+    assert operation["x-erp-permission-any-of"] == list(
+        contract.permission_any_of or (contract.permission,)
+    )
     assert operation["x-erp-tenant-scope"] == "organization"
     assert operation["x-erp-deprecated"] is False
     assert {next(iter(item)) for item in operation["security"]} == {"HTTPBearer"}

@@ -51,6 +51,62 @@ ACTION_SUFFIXES: Dict[str, Set[str]] = {
     "approve": {"approve", "post", "file", "execute"}, "export": set(),
 }
 
+# Exact application capabilities whose operators legitimately need bounded
+# foundation lookups while preparing canonical transactions. Administration,
+# setup and mutations are intentionally not covered by these any-of policies.
+FOUNDATION_PRODUCT_LOOKUP_PERMISSIONS = (
+    "catalog.product.manage",
+    "sales.order.create",
+    "sales.order.manage",
+    "sales.invoice.create",
+    "sales.dispatch.create",
+    "sales.dispatch.post",
+    "sales.return.create",
+    "sales.return.post",
+    "procurement.order.manage",
+    "procurement.receipt.post",
+    "procurement.invoice.post",
+    "procurement.supplier_invoice.create",
+    "procurement.purchase_return.create",
+    "procurement.return.post",
+    "inventory.adjustment.create",
+    "inventory.transfer.create",
+    "inventory.destruction.create",
+    "inventory.batch.manage",
+    "inventory.reservation.manage",
+    "inventory.document.post",
+)
+FOUNDATION_CUSTOMER_LOOKUP_PERMISSIONS = (
+    "parties.customer.manage",
+    "sales.order.create",
+    "sales.order.manage",
+    "sales.invoice.create",
+    "sales.dispatch.create",
+    "sales.dispatch.post",
+    "sales.return.create",
+    "sales.return.post",
+    "finance.customer_receipt.create",
+    "finance.payment.manage",
+    "finance.account.manage",
+    "finance.adjustment_note.edit",
+    "finance.adjustment_note.manage",
+)
+FOUNDATION_SUPPLIER_LOOKUP_PERMISSIONS = (
+    "parties.supplier.manage",
+    "procurement.order.manage",
+    "procurement.receipt.post",
+    "procurement.invoice.post",
+    "procurement.supplier_invoice.create",
+    "procurement.purchase_return.create",
+    "procurement.return.post",
+    "finance.supplier_payment.create",
+    "finance.supplier_advance.create",
+    "finance.payment.manage",
+    "finance.account.manage",
+    "finance.adjustment_note.edit",
+    "finance.adjustment_note.manage",
+)
+
 
 def _active_permission_codes(raw_permissions: Any) -> Set[str]:
     """Normalize the supported signed-claim representations."""
@@ -59,6 +115,12 @@ def _active_permission_codes(raw_permissions: Any) -> Set[str]:
     if isinstance(raw_permissions, Iterable) and not isinstance(raw_permissions, (str, bytes)):
         return {str(code).lower() for code in raw_permissions}
     return set()
+
+
+def has_exact_permission(user: Mapping[str, Any], permission_code: str) -> bool:
+    """Check one signed canonical capability without an administrator bypass."""
+    raw = user.get("permissions") or user.get("role_permissions")
+    return permission_code.strip().lower() in _active_permission_codes(raw)
 
 
 def canonical_module_access(permission_codes: Set[str], module: Optional[str]) -> bool:
@@ -166,6 +228,52 @@ class PermissionChecker:
             return True
         raw = user.get("permissions") or user.get("role_permissions")
         return canonical_permission_access(_active_permission_codes(raw), module, permission)
+
+
+class ExactAnyPermissionChecker:
+    """Require one of an explicit set of canonical signed capabilities.
+
+    Foundation master routes cross several capability domains, so the legacy
+    ``master`` navigation grouping is too broad for authorization.  This
+    dependency deliberately does not grant an administrator bypass: privileged
+    sessions must carry one of the route's reviewed canonical capabilities.
+    """
+
+    def __init__(self, *permission_codes: str):
+        normalized = tuple(dict.fromkeys(
+            permission_code.strip().lower()
+            for permission_code in permission_codes
+        ))
+        if not normalized or any(
+            not permission_code or "." not in permission_code
+            for permission_code in normalized
+        ):
+            raise ValueError("At least one exact canonical permission code is required")
+        self.permission_codes = normalized
+
+    async def __call__(
+        self,
+        authorization: str = Header(None),
+        db: Session = Depends(get_db),
+    ) -> Dict[str, Any]:
+        user = await PermissionChecker()(authorization, db)
+        if is_test_mode_enabled():
+            return user
+        codes = _active_permission_codes(user["permissions"])
+        if not codes.intersection(self.permission_codes):
+            raise HTTPException(
+                status_code=403,
+                detail="Permission denied: one of " + ", ".join(self.permission_codes),
+            )
+        return user
+
+
+class ExactPermissionChecker(ExactAnyPermissionChecker):
+    """Require one exact canonical capability from the signed ERP claims."""
+
+    def __init__(self, permission_code: str):
+        super().__init__(permission_code)
+        self.permission_code = self.permission_codes[0]
 
 
 def require_permission(module: str = None, permission: str = None, require_admin: bool = False):
