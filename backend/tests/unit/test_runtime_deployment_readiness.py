@@ -84,7 +84,7 @@ class _Session:
 def test_expected_runtime_head_is_the_exact_checked_in_migration_head() -> None:
     contract = load_contract()
 
-    assert contract.head == EXPECTED_CANONICAL_ALEMBIC_HEAD == "20260829_0059"
+    assert contract.head == EXPECTED_CANONICAL_ALEMBIC_HEAD == "20260829_0060"
     assert contract.canonical_table_count == 119
 
 
@@ -162,6 +162,7 @@ def test_postgres_and_staging_gates_prove_runtime_exact_head_before_demo() -> No
     assert "check_runtime_deployment_readiness.py" in postgres_gate
     assert "has_function_privilege('erp_runtime', 'erp_security.deployed_canonical_revision()', 'EXECUTE')" in postgres_gate
     assert "has_function_privilege('erp_app', 'erp_security.deployed_canonical_revision()', 'EXECUTE')" in postgres_gate
+    assert "has_schema_privilege('erp_runtime', 'erp_security', 'USAGE')" in postgres_gate
 
     provision = workflow.split(
         "Provision and exercise the disposable demo organization", 1

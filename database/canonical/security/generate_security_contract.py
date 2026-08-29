@@ -624,7 +624,9 @@ def _runtime_grant_sql(mappings: list[dict[str, Any]], schemas: list[str]) -> li
                 f'ALTER SCHEMA {_quote(schema)} OWNER TO "erp_migration_owner";',
             ]
         )
-    statements.append('GRANT USAGE ON SCHEMA "erp_security" TO "erp_app";')
+    statements.append(
+        'GRANT USAGE ON SCHEMA "erp_security" TO "erp_app", "erp_runtime";'
+    )
     for mapping in mappings:
         table = _qualified(mapping["table"])
         statements.extend(
@@ -754,7 +756,7 @@ def generate_sql(manifest: dict[str, Any]) -> str:
         "GRANT USAGE ON SCHEMA \"extensions\" TO \"erp_migration_owner\";",
         "CREATE SCHEMA \"erp_security\" AUTHORIZATION \"erp_migration_owner\";",
         "REVOKE ALL ON SCHEMA \"erp_security\" FROM PUBLIC;",
-        "GRANT USAGE ON SCHEMA \"erp_security\" TO \"erp_app\";",
+        "GRANT USAGE ON SCHEMA \"erp_security\" TO \"erp_app\", \"erp_runtime\";",
         "",
     ]
     for schema in schemas:
