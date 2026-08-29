@@ -1,5 +1,6 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import '@testing-library/jest-dom';
 
 import PaymentMade from './PaymentMade';
 import { canonicalSupplierPaymentsApi } from '../../../services/api/modules/finance/canonicalSupplierPayments.api';
@@ -19,6 +20,8 @@ const ids = {
   settlement: 'd3000000-0000-7000-8000-000000000006',
   item: 'd3000000-0000-7000-8000-000000000007',
   invoice: 'd3000000-0000-7000-8000-000000000008',
+  item2: 'd3000000-0000-7000-8000-000000000009',
+  invoice2: 'd3000000-0000-7000-8000-000000000010',
 };
 
 beforeEach(() => {
@@ -30,6 +33,10 @@ beforeEach(() => {
       open_item_id: ids.item, supplier_invoice_id: ids.invoice, branch_id: ids.branch,
       document_number: 'INV-1', document_date: '2026-08-01', due_date: '2026-08-10',
       principal_amount: '100.01', allocated_amount: '0.00', outstanding_amount: '100.01',
+    }, {
+      open_item_id: ids.item2, supplier_invoice_id: ids.invoice2, branch_id: ids.branch,
+      document_number: 'INV-2', document_date: '2026-08-02', due_date: '2026-08-11',
+      principal_amount: '50.01', allocated_amount: '0.00', outstanding_amount: '50.01',
     }] }],
   } });
 });
@@ -56,4 +63,31 @@ test('defaults to FIFO while preserving exact manual per-invoice allocation', as
   expect((allocation as HTMLInputElement).value).toBe('100.01');
   expect(screen.getByText('Allocated ₹100.01')).not.toBeNull();
   expect((screen.getByRole('button', { name: 'Review immutable preview' }) as HTMLButtonElement).disabled).toBe(false);
+});
+
+test('moves through supplier-payment fields with Enter while keeping action controls out of the path', async () => {
+  render(<PaymentMade />);
+  const supplier = await screen.findByLabelText('Supplier');
+  const branch = screen.getByLabelText('Branch');
+
+  supplier.focus();
+  fireEvent.keyDown(supplier, { key: 'Enter' });
+
+  expect(branch).toHaveFocus();
+});
+
+test('navigates manual supplier allocations by Enter and vertical arrows', async () => {
+  render(<PaymentMade />);
+  await screen.findByLabelText('Supplier');
+  fireEvent.change(screen.getByLabelText('Supplier'), { target: { value: ids.supplier } });
+  fireEvent.change(screen.getByLabelText('Branch'), { target: { value: ids.branch } });
+  fireEvent.click(screen.getByRole('radio', { name: 'Manual per invoice' }));
+
+  const first = screen.getByLabelText(/Allocation for INV-1/);
+  const second = screen.getByLabelText(/Allocation for INV-2/);
+  first.focus();
+  fireEvent.keyDown(first, { key: 'Enter' });
+  expect(second).toHaveFocus();
+  fireEvent.keyDown(second, { key: 'ArrowUp' });
+  expect(first).toHaveFocus();
 });

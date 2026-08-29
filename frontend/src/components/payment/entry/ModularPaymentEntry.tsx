@@ -27,6 +27,7 @@ import type { CanonicalCommandPreview } from '../../../services/api/canonicalOpe
 import CustomerReceiptReviewDialog from './CustomerReceiptReviewDialog';
 import { usePermissions } from '../../../hooks/usePermissions';
 import { FOUNDATION_CAPABILITIES } from '../../../config/canonicalCapabilities';
+import { useEnterAsTab } from '../../../hooks/useEnterAsTab';
 
 
 // Import global components
@@ -47,6 +48,11 @@ const exactMoneySum = (values: readonly (string | number)[]): string => (
 
 // Inner component that uses the context
 const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) => {
+  const entryRef = React.useRef<HTMLDivElement>(null);
+  useEnterAsTab({
+    containerRef: entryRef,
+    excludeSelectors: ['textarea', 'button', 'input[type="checkbox"]', '[data-no-enter-tab]'],
+  });
   const { hasCapability } = usePermissions();
   const canManageCustomers = hasCapability(FOUNDATION_CAPABILITIES.customer);
   const {
@@ -137,11 +143,12 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
   React.useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
       // Ctrl+Enter to proceed
-      if (e.ctrlKey && e.key === 'Enter' && currentStep === 1) {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && currentStep === 1) {
+        e.preventDefault();
         goToSummary();
       }
       // Ctrl+S to save
-      if (e.ctrlKey && e.key === 's' && currentStep === 2) {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's' && currentStep === 2) {
         e.preventDefault();
         void requestPaymentReview();
       }
@@ -504,7 +511,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
   }
 
   return (
-    <div className="h-full bg-gray-50">
+    <div ref={entryRef} className="h-full bg-gray-50">
       <div className="h-full flex flex-col">
         {/* Header - Using Global ModuleHeader */}
         <ModuleHeader

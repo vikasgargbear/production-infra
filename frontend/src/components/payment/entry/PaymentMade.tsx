@@ -13,6 +13,7 @@ import {
   type SupplierPaymentPreparePayload,
 } from './supplierPaymentCommand';
 import { reconcileCanonicalSupplierPayment } from './supplierPaymentLifecycle';
+import { useEnterAsTab } from '../../../hooks/useEnterAsTab';
 
 interface PaymentMadeProps { onClose?: () => void }
 type Step = 'entry' | 'review' | 'posted';
@@ -24,6 +25,11 @@ const errorMessage = (error: any): string => {
 };
 
 const PaymentMade: React.FC<PaymentMadeProps> = ({ onClose }) => {
+  const entryRef = useRef<HTMLDivElement>(null);
+  useEnterAsTab({
+    containerRef: entryRef,
+    excludeSelectors: ['textarea', 'button', 'input[type="checkbox"]', 'input[type="radio"]', '[data-no-enter-tab]'],
+  });
   const [context, setContext] = useState<SupplierPaymentContext | null>(null);
   const [step, setStep] = useState<Step>('entry');
   const [supplierId, setSupplierId] = useState('');
@@ -46,6 +52,7 @@ const PaymentMade: React.FC<PaymentMadeProps> = ({ onClose }) => {
   const prepareAttempt = useRef(`erp-web-supplier-payment-prepare:${clientUuid()}`);
   const lifecycle = useRef(clientUuid());
   const contextRequestSequence = useRef(0);
+  const allocationInputRefs = useRef<Array<HTMLInputElement | null>>([]);
 
   const load = useCallback(async (dateValue?: string) => {
     const requestSequence = ++contextRequestSequence.current;
@@ -135,8 +142,42 @@ const PaymentMade: React.FC<PaymentMadeProps> = ({ onClose }) => {
     finally { setBusy(false); }
   };
 
+  const handleKeyboard = (event: React.KeyboardEvent<HTMLDivElement>): void => {
+    if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+      event.preventDefault();
+      if (step === 'entry') void prepare();
+      else if (step === 'review' && actorConfirmed) void postOrReconcile();
+      return;
+    }
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's' && step === 'review') {
+      event.preventDefault();
+      if (actorConfirmed) void postOrReconcile();
+      return;
+    }
+    if (event.key === 'Escape' && step === 'review' && !postedPaymentId) {
+      event.preventDefault();
+      setStep('entry');
+      setActorConfirmed(false);
+    } else if (event.key === 'Escape' && step === 'entry') {
+      onClose?.();
+    }
+  };
+
+  const handleAllocationKeyboard = (
+    event: React.KeyboardEvent<HTMLInputElement>,
+    rowIndex: number,
+  ): void => {
+    if (!['Enter', 'ArrowDown', 'ArrowUp'].includes(event.key)) return;
+    const nextIndex = event.key === 'ArrowUp' ? rowIndex - 1 : rowIndex + 1;
+    const next = allocationInputRefs.current[nextIndex];
+    if (!next) return;
+    event.preventDefault();
+    next.focus();
+    next.select();
+  };
+
   return (
-    <div className="flex h-full flex-col bg-slate-50">
+    <div ref={entryRef} onKeyDown={handleKeyboard} className="flex h-full flex-col bg-slate-50">
       <header className="flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4">
         <div><h1 className="text-xl font-semibold text-slate-900">Supplier Payment</h1><p className="text-sm text-slate-600">Posted invoice payables through reviewed canonical accounting</p></div>
         {onClose && <button type="button" onClick={onClose} aria-label="Close supplier payment" className="min-h-11 min-w-11 rounded-lg border border-slate-200 p-2"><X className="mx-auto h-5 w-5" /></button>}
@@ -168,7 +209,7 @@ const PaymentMade: React.FC<PaymentMadeProps> = ({ onClose }) => {
             </fieldset>
             {allocationMode === 'fifo' && <div className="mt-4 flex flex-wrap gap-3"><label className="min-w-64 flex-1 text-sm font-medium">Payment amount<input inputMode="decimal" value={amount} onChange={event => { invalidate(); setAmount(event.target.value); setAllocations([]); }} placeholder="0.00" className="mt-1 min-h-11 w-full rounded-lg border px-3" /></label><button type="button" onClick={applyFifo} disabled={!supplier || !branchId || !amount} className="min-h-11 self-end rounded-lg bg-blue-600 px-5 text-white disabled:bg-slate-300">Allocate FIFO</button></div>}
             {allocationMode === 'manual' && <p className="mt-4 text-sm text-slate-600">Enter the exact amount beside each invoice. Blank invoices are not included.</p>}
-            <div className="mt-4 overflow-x-auto"><table className="min-w-full text-sm"><thead><tr className="border-b text-left text-slate-600"><th className="p-3">Invoice</th><th className="p-3">Date / Due</th><th className="p-3 text-right">Outstanding</th><th className="p-3 text-right">Allocated</th></tr></thead><tbody>{visibleItems.map(item => { const row = allocations.find(value => value.open_item_id === item.open_item_id); return <tr key={item.open_item_id} className="border-b border-slate-100"><td className="p-3 font-medium">{item.document_number}</td><td className="p-3">{item.document_date}<br /><span className="text-slate-500">Due {item.due_date}</span></td><td className="p-3 text-right">₹{item.outstanding_amount}</td><td className="p-3 text-right">{allocationMode === 'manual' ? <input data-testid={`allocate-supplier-invoice-${item.supplier_invoice_id}`} aria-label={`Allocation for ${item.document_number} — canonical supplier invoice ${item.supplier_invoice_id}`} inputMode="decimal" value={row?.amount || ''} onChange={event => setManualAllocation(item.open_item_id, event.target.value)} placeholder="0.00" className="min-h-11 w-32 rounded-lg border px-3 text-right" /> : <>₹{row?.amount || '0.00'}</>}</td></tr>; })}</tbody></table></div>
+            <div className="mt-4 overflow-x-auto"><table className="min-w-full text-sm"><thead><tr className="border-b text-left text-slate-600"><th className="p-3">Invoice</th><th className="p-3">Date / Due</th><th className="p-3 text-right">Outstanding</th><th className="p-3 text-right">Allocated</th></tr></thead><tbody>{visibleItems.map((item, rowIndex) => { const row = allocations.find(value => value.open_item_id === item.open_item_id); return <tr key={item.open_item_id} className="border-b border-slate-100"><td className="p-3 font-medium">{item.document_number}</td><td className="p-3">{item.document_date}<br /><span className="text-slate-500">Due {item.due_date}</span></td><td className="p-3 text-right">₹{item.outstanding_amount}</td><td className="p-3 text-right">{allocationMode === 'manual' ? <input ref={element => { allocationInputRefs.current[rowIndex] = element; }} data-no-enter-tab data-testid={`allocate-supplier-invoice-${item.supplier_invoice_id}`} aria-label={`Allocation for ${item.document_number} — canonical supplier invoice ${item.supplier_invoice_id}`} inputMode="decimal" value={row?.amount || ''} onChange={event => setManualAllocation(item.open_item_id, event.target.value)} onFocus={event => event.currentTarget.select()} onKeyDown={event => handleAllocationKeyboard(event, rowIndex)} placeholder="0.00" className="min-h-11 w-32 rounded-lg border px-3 text-right" /> : <>₹{row?.amount || '0.00'}</>}</td></tr>; })}</tbody></table></div>
             <div className="mt-4 flex items-center justify-between border-t pt-4"><span className="font-semibold">Allocated ₹{supplierMinorToMoney(allocatedTotal)}</span><button type="button" onClick={() => void prepare()} disabled={busy || !context.ready || !supplierId || !branchId || !bankId || !method || !reference.trim() || !allocations.length} className="min-h-11 rounded-lg bg-blue-600 px-6 font-medium text-white disabled:bg-slate-300">Review immutable preview</button></div>
           </section>
         </>}

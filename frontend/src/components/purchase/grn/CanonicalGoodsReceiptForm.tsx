@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
   CheckCircle2,
@@ -27,6 +27,7 @@ import {
   canonicalSourceTimestampInputMin,
   requireCanonicalPostingTimestamp,
 } from '../../../utils/canonicalPostingDate';
+import { useEnterAsTab } from '../../../hooks/useEnterAsTab';
 
 
 interface Props {
@@ -44,12 +45,15 @@ function errorMessage(error: any): string {
 }
 
 const inputClass = 'mt-1 min-h-11 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200';
+const enterExclusions = ['textarea', 'button', 'input[type="checkbox"]', '[data-no-enter-tab]'];
 
 export const CanonicalGoodsReceiptForm: React.FC<Props> = ({
   context,
   onCancel,
   onPosted,
 }) => {
+  const entryRef = useRef<HTMLDivElement>(null);
+  useEnterAsTab({ containerRef: entryRef, excludeSelectors: enterExclusions });
   const [draft, setDraft] = useState<CanonicalReceiptDraft>(() => initialReceiptDraft(
     context,
     `erp-web-goods-receipt-prepare:${clientUuid()}`,
@@ -170,7 +174,7 @@ export const CanonicalGoodsReceiptForm: React.FC<Props> = ({
   };
 
   return (
-    <div className="h-full overflow-y-auto bg-gray-50 p-4 sm:p-6">
+    <div ref={entryRef} className="h-full overflow-y-auto bg-gray-50 p-4 sm:p-6">
       <div className="mx-auto max-w-5xl space-y-5">
         <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-gray-200 bg-white p-5">
           <div>

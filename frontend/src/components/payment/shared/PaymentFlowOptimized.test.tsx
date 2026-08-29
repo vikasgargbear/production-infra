@@ -82,4 +82,18 @@ describe('operator-completable customer receipt sources', () => {
     expect(screen.getByText(/SO-0021 · Main Branch/)).toBeInTheDocument();
     expect(screen.getAllByText(/upi-proof.pdf · 2026-08-29/).length).toBeGreaterThan(0);
   });
+
+  it('selects payment method with arrows and Enter, then advances to receipt purpose', async () => {
+    render(<PaymentProvider><PaymentFlowOptimized /></PaymentProvider>);
+    fireEvent.click(screen.getByRole('button', { name: 'Choose customer' }));
+    const cash = await screen.findByRole('radio', { name: 'Cash' });
+    const cheque = screen.getByRole('radio', { name: 'Cheque' });
+
+    cash.focus();
+    fireEvent.keyDown(cash, { key: 'ArrowRight' });
+    expect(cheque).toHaveFocus();
+    fireEvent.keyDown(cheque, { key: 'Enter' });
+    expect(cheque).toHaveAttribute('aria-checked', 'true');
+    await waitFor(() => expect(screen.getByLabelText('Receipt purpose')).toHaveFocus());
+  });
 });

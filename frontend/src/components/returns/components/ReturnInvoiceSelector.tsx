@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { FileText, ChevronRight, ChevronLeft, Loader2, RefreshCw, Package } from 'lucide-react';
 import { invoicesApi } from '../../../services/api';
 import type { ReturnInvoiceSelectorProps } from '../types/return.types';
@@ -36,6 +36,8 @@ export const ReturnInvoiceSelector = React.memo<ReturnInvoiceSelectorProps>(({
     const [error, setError] = useState<string | null>(null);
     const [page, setPage] = useState(1);
     const [totalCount, setTotalCount] = useState(0);
+    const [activeInvoiceIndex, setActiveInvoiceIndex] = useState(0);
+    const invoiceButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
     const ITEMS_PER_PAGE = 5;
 
     // Get customer ID handling multiple possible field names
@@ -61,6 +63,7 @@ export const ReturnInvoiceSelector = React.memo<ReturnInvoiceSelectorProps>(({
             const invoiceList = data?.invoices || (Array.isArray(data) ? data : []);
             setInvoices(invoiceList);
             setTotalCount(data?.total ?? invoiceList.length);
+            setActiveInvoiceIndex(0);
         } catch (err) {
             console.error('Failed to fetch invoices:', err);
             setError('Failed to load posted invoices.');
@@ -151,6 +154,26 @@ export const ReturnInvoiceSelector = React.memo<ReturnInvoiceSelectorProps>(({
         onInvoiceSelect(mappedInvoice as any);
     };
 
+    const handleInvoiceKey = (event: React.KeyboardEvent<HTMLButtonElement>, index: number): void => {
+        if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            handleInvoiceClick(invoices[index]);
+            return;
+        }
+        if (!['ArrowDown', 'ArrowRight', 'ArrowUp', 'ArrowLeft', 'Home', 'End'].includes(event.key)) return;
+        event.preventDefault();
+        const lastIndex = invoices.length - 1;
+        const nextIndex = event.key === 'Home'
+            ? 0
+            : event.key === 'End'
+                ? lastIndex
+                : event.key === 'ArrowUp' || event.key === 'ArrowLeft'
+                    ? Math.max(0, index - 1)
+                    : Math.min(lastIndex, index + 1);
+        setActiveInvoiceIndex(nextIndex);
+        invoiceButtonRefs.current[nextIndex]?.focus();
+    };
+
     return (
         <div className="mb-6">
             <div className="flex items-center justify-between mb-3">
@@ -190,12 +213,20 @@ export const ReturnInvoiceSelector = React.memo<ReturnInvoiceSelectorProps>(({
                         <>
                             {/* Invoice cards */}
                             <div className="space-y-2">
-                                {invoices.map((invoice) => (
+                                {invoices.map((invoice, invoiceIndex) => (
                                     <button
+                                        ref={(element) => {
+                                            invoiceButtonRefs.current[invoiceIndex] = element;
+                                            if (invoiceIndex === 0 && invoiceSearchRef) {
+                                                (invoiceSearchRef as React.MutableRefObject<any>).current = element;
+                                            }
+                                        }}
                                         key={invoice.id ?? invoice.invoice_id}
                                         data-testid={`select-sales-invoice-${invoice.id ?? invoice.invoice_id}`}
                                         onClick={() => handleInvoiceClick(invoice)}
-                                        className="w-full text-left p-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-all flex items-center justify-between group"
+                                        onFocus={() => setActiveInvoiceIndex(invoiceIndex)}
+                                        onKeyDown={(event) => handleInvoiceKey(event, invoiceIndex)}
+                                        className={`w-full text-left p-3 rounded-lg border hover:border-blue-300 hover:bg-blue-50 transition-all flex items-center justify-between group ${activeInvoiceIndex === invoiceIndex ? 'border-blue-400 bg-blue-50 ring-2 ring-blue-200' : 'border-gray-200'}`}
                                     >
                                         <div className="flex items-center gap-3">
                                             <div className="w-10 h-10 rounded-full bg-gray-100 group-hover:bg-blue-100 flex items-center justify-center transition-colors">

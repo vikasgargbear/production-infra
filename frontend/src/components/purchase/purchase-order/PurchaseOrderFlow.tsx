@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Package, FileText, Building2, ShieldCheck } from 'lucide-react';
 import {
   GlobalDocumentFlow,
@@ -11,20 +11,13 @@ import {
   ContentCard,
   StandardDatePicker
 } from '../../global';
+import type { ItemsTableRef } from '../../global';
 import { usePurchaseOrderLogic } from './hooks';
 import { toast } from 'react-toastify';
 import { useCompany } from '../../../contexts/CompanyContext';
-import { exactDecimalUnits } from '../../../utils/exactDecimal';
 import { usePermissions } from '../../../hooks/usePermissions';
 import { FOUNDATION_CAPABILITIES } from '../../../config/canonicalCapabilities';
-
-const hasPositiveExactQuantity = (value: unknown, label: string): boolean => {
-  try {
-    return exactDecimalUnits(value, label, { scale: 6, maximumWholeDigits: 14 }) > 0n;
-  } catch {
-    return false;
-  }
-};
+import { useEnterAsTab } from '../../../hooks/useEnterAsTab';
 
 /**
  * PurchaseOrderFlow - Purchase Order using the full global document system
@@ -42,6 +35,13 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
   const canManageSuppliers = hasCapability(FOUNDATION_CAPABILITIES.supplier);
   const canManageProducts = hasCapability(FOUNDATION_CAPABILITIES.product);
   const productSearchRef = useRef<any>(null);
+  const itemsTableRef = useRef<ItemsTableRef>(null);
+  const entryRef = useRef<HTMLDivElement>(null);
+  const pendingItemFocusRef = useRef<string | number | null>(null);
+  useEnterAsTab({
+    containerRef: entryRef,
+    excludeSelectors: ['textarea', 'button', 'input[type="checkbox"]', '[data-no-enter-tab]'],
+  });
   const { companyInfo } = useCompany();
 
   // Use the extracted hook for all state and handlers
@@ -85,6 +85,20 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
     handleSavePurchaseOrder,
     handlePrint
   } = usePurchaseOrderLogic({ prefilledData, onClose });
+
+  const handleKeyboardAddItem = (product: any): void => {
+    pendingItemFocusRef.current = product.product_id;
+    handleAddItem(product);
+  };
+
+  useEffect(() => {
+    const pendingProductId = pendingItemFocusRef.current;
+    if (pendingProductId === null) return;
+    const rowIndex = purchaseOrder.items.findIndex(item => item.product_id === pendingProductId);
+    if (rowIndex < 0) return;
+    pendingItemFocusRef.current = null;
+    itemsTableRef.current?.focusField(rowIndex, 'quantity');
+  }, [purchaseOrder.items]);
 
   // ==================== JSX RENDERING ====================
 
@@ -162,6 +176,7 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
           displayMode="compact"
           placeholder="Search supplier by name, phone, or code..."
           clearable={true}
+          nextFocusRef={productSearchRef}
         />
         {errors.supplier && (
           <p className="text-red-500 text-xs mt-1">{errors.supplier}</p>
@@ -183,7 +198,7 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
           </button>}
         </div>
         <ProductSearch
-          onAddItem={handleAddItem}
+          onAddItem={handleKeyboardAddItem}
           onCreateProduct={(searchQuery) => {
             setShowProductModal(true);
           }}
@@ -201,6 +216,7 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
             <h3 className="text-sm font-semibold text-gray-700">ORDER ITEMS</h3>
           </div>
           <ItemsTable
+            ref={itemsTableRef}
             items={purchaseOrder.items.map(item => ({
               ...item,
               unit_price: item.unit_price,
@@ -218,27 +234,10 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
             showTotals={false}
             title=""
             preserveExactDecimals
+            quantityDecimalPlaces={2}
+            showFreeSupplyTaxTreatment
+            productSearchRef={productSearchRef}
           />
-
-          {purchaseOrder.items.map((item, index) => item.free_quantity !== ''
-            && item.free_quantity !== null
-            && item.free_quantity !== undefined
-            && hasPositiveExactQuantity(item.free_quantity, `Item ${index + 1} free quantity`) && (
-            <label key={String(item.id)} className="mt-3 block border border-gray-200 bg-white p-3 text-sm">
-              <span className="mb-2 block font-medium text-gray-800">
-                Free-supply tax treatment for {item.product_name}
-              </span>
-              <select
-                value={item.free_supply_tax_treatment || ''}
-                onChange={(event) => handleUpdateItem(index, 'free_supply_tax_treatment', event.target.value)}
-                className="min-h-11 w-full border border-gray-300 bg-white px-3"
-              >
-                <option value="">Select canonical treatment</option>
-                <option value="excluded_from_taxable_value">Exclude free quantity from taxable value</option>
-                <option value="included_at_unit_rate">Include free quantity at unit rate</option>
-              </select>
-            </label>
-          ))}
 
           <div className="mt-4 grid gap-3 border border-gray-200 bg-gray-50 p-4 sm:grid-cols-3">
             <label className="text-sm font-medium text-gray-700">
@@ -370,7 +369,7 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
   );
 
   return (
-    <>
+    <div ref={entryRef}>
       <GlobalDocumentFlow
         documentType="purchase-order"
         documentData={purchaseOrder as any}
@@ -457,7 +456,7 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
           showCopy={true}
         />
       )}
-    </>
+    </div>
   );
 };
 

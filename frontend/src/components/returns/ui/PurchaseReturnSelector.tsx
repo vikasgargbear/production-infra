@@ -1,4 +1,4 @@
-import React, { useState, forwardRef } from 'react';
+import React, { useState, forwardRef, useRef } from 'react';
 import { Search, FileText, Calendar, ChevronRight, Package, Truck, AlertCircle } from 'lucide-react';
 import { formatCalendarDate } from '../../../utils/calendarDate';
 
@@ -48,6 +48,8 @@ const PurchaseReturnSelector = forwardRef<HTMLInputElement, PurchaseReturnSelect
 }, ref) => {
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | number | null>(null);
+  const [activeInvoiceIndex, setActiveInvoiceIndex] = useState(0);
+  const invoiceButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   // Filter invoices based on search
   const filteredInvoices = invoices.filter((invoice: PurchaseInvoice) => {
@@ -63,6 +65,27 @@ const PurchaseReturnSelector = forwardRef<HTMLInputElement, PurchaseReturnSelect
   const handleSelect = (invoice: PurchaseInvoice): void => {
     setSelectedInvoiceId(invoice.supplier_invoice_id ?? invoice.grn_id ?? null);
     onInvoiceSelect(invoice);
+  };
+
+  const focusInvoice = (index: number): void => {
+    if (!filteredInvoices.length) return;
+    const nextIndex = Math.max(0, Math.min(index, filteredInvoices.length - 1));
+    setActiveInvoiceIndex(nextIndex);
+    invoiceButtonRefs.current[nextIndex]?.focus();
+  };
+
+  const handleInvoiceKey = (event: React.KeyboardEvent<HTMLButtonElement>, index: number): void => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      handleSelect(filteredInvoices[index]);
+      return;
+    }
+    if (!['ArrowDown', 'ArrowRight', 'ArrowUp', 'ArrowLeft', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    if (event.key === 'Home') focusInvoice(0);
+    else if (event.key === 'End') focusInvoice(filteredInvoices.length - 1);
+    else if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') focusInvoice(index - 1);
+    else focusInvoice(index + 1);
   };
 
   const formatAmount = (value: PurchaseInvoice['total_amount']): string => {
@@ -87,6 +110,11 @@ const PurchaseReturnSelector = forwardRef<HTMLInputElement, PurchaseReturnSelect
           type="text"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
+          onKeyDown={(event) => {
+            if (event.key !== 'ArrowDown' || !filteredInvoices.length) return;
+            event.preventDefault();
+            focusInvoice(0);
+          }}
           placeholder="Search by invoice number, GRN number, or supplier name..."
           className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
         />
@@ -103,7 +131,7 @@ const PurchaseReturnSelector = forwardRef<HTMLInputElement, PurchaseReturnSelect
       {/* Invoice List */}
       {!loading && filteredInvoices.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredInvoices.map((invoice) => {
+          {filteredInvoices.map((invoice, invoiceIndex) => {
             const invoiceId = invoice.supplier_invoice_id ?? invoice.grn_id;
             const invoiceNumber = invoice.supplier_invoice_number ?? invoice.invoice_number;
             const invoiceDate = invoice.invoice_date ?? invoice.grn_date;
@@ -112,12 +140,15 @@ const PurchaseReturnSelector = forwardRef<HTMLInputElement, PurchaseReturnSelect
 
             return (
               <button
+                ref={element => { invoiceButtonRefs.current[invoiceIndex] = element; }}
                 type="button"
                 key={invoiceId}
                 onClick={() => handleSelect(invoice)}
                 data-testid={`select-supplier-invoice-${invoiceId}`}
                 aria-label={`Select supplier invoice ${invoiceNumber}`}
-                className={`border rounded-lg p-4 cursor-pointer transition-all ${selectedInvoiceId === invoiceId
+                onFocus={() => setActiveInvoiceIndex(invoiceIndex)}
+                onKeyDown={(event) => handleInvoiceKey(event, invoiceIndex)}
+                className={`border rounded-lg p-4 cursor-pointer transition-all ${selectedInvoiceId === invoiceId || activeInvoiceIndex === invoiceIndex
                   ? 'border-orange-500 bg-orange-50'
                   : 'border-gray-200 hover:border-orange-300 hover:bg-gray-50'
                   } text-left`}
