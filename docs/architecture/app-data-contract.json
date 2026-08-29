@@ -159,6 +159,7 @@
   "mcp_operations": [
     {"tool":"erp_product_create","resource":"catalog","mode":"write","risk":"reversible_write","idempotency":"required","approval":"actor_confirmation"},
     {"tool":"erp_product_setup","resource":"catalog","mode":"write","risk":"reversible_write","idempotency":"required","approval":"actor_confirmation"},
+    {"tool":"erp_product_activate","resource":"catalog","mode":"write","risk":"consequential_write","idempotency":"required","approval":"actor_confirmation"},
     {"tool":"erp_customer_create","resource":"parties","mode":"write","risk":"reversible_write","idempotency":"required","approval":"actor_confirmation"},
     {"tool":"erp_customer_update","resource":"parties","mode":"write","risk":"reversible_write","idempotency":"required","approval":"actor_confirmation"},
     {"tool":"erp_supplier_create","resource":"parties","mode":"write","risk":"reversible_write","idempotency":"required","approval":"actor_confirmation"},

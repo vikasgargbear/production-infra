@@ -252,6 +252,53 @@ async def test_product_setup_uses_scoped_write_grant_and_shared_backend_route() 
 
 
 @pytest.mark.asyncio
+async def test_product_activation_uses_consequential_scoped_grant_and_shared_backend_route() -> None:
+    access = _access()
+    calls: list[tuple] = []
+    operation = OPERATOR_OPERATIONS["erp_product_activate"]
+    grant = _operator_grant(access, "erp_product_activate")
+    grant["permission_code"] = "catalog.product.manage"
+    grant["organization_scope"] = True
+    product_id = str(uuid4())
+    responses = [
+        Response(200, grant),
+        Response(200, {
+            "product_id": product_id,
+            "product_code": "PROD-000001",
+            "row_version": 3,
+            "lifecycle_status": "active",
+            "idempotency_replayed": False,
+        }),
+    ]
+    gateway = OperationGateway(settings(), lambda: Client(responses, calls))
+    arguments = {
+        "product_id": product_id,
+        "row_version": 2,
+        "manufacturer_traceability_code": "MFG-REVIEW-42",
+        "idempotency_key": "mcp-product-activate-0001",
+    }
+
+    result = await gateway.execute_operator(operation, access, arguments)
+
+    grant_call, command_call = calls
+    assert grant_call[2]["json"] == {
+        "issuer": access.claims["iss"],
+        "subject": access.subject,
+        "client_id": access.client_id,
+        "organization_id": access.claims["organization_id"],
+        "operation_key": "catalog.product.activate",
+        "capability_code": "catalog.product.activate",
+        "operation_mode": "write",
+        "branch_ids": [],
+        "command_request_id": None,
+    }
+    assert command_call[0] == "POST"
+    assert command_call[1].endswith("/api/internal/mcp/master/products/activate")
+    assert command_call[2]["json"] == arguments
+    assert result["lifecycle_status"] == "active"
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("tool_name", "operation_key", "path", "identity_field"),
     (

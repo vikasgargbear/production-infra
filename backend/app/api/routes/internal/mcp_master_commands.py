@@ -20,9 +20,11 @@ from ...schemas.master.customer import CanonicalCustomerCreate, CanonicalCustome
 from ...schemas.master.supplier import CanonicalSupplierCreate, CanonicalSupplierUpdate
 from ....infrastructure import canonical_write_commands
 from ..canonical_erp_reads import (
+    CanonicalProductActivationWrite,
     CanonicalProductDraftCreate,
     CanonicalProductSetupWrite,
     _execute_canonical_customer_create,
+    _execute_canonical_product_activation,
     _execute_canonical_product_create,
     _execute_canonical_supplier_create,
     _raise_master_create_database_error,
@@ -30,6 +32,7 @@ from ..canonical_erp_reads import (
 from .mcp_actions import get_action_context
 from .mcp_master_contract import (
     CUSTOMER_UPDATE_OPERATION,
+    PRODUCT_ACTIVATION_OPERATION,
     SUPPLIER_UPDATE_OPERATION,
     master_write_policy_for,
 )
@@ -48,6 +51,14 @@ class MCPProductDraftCreate(CanonicalProductDraftCreate):
 
 
 class MCPProductSetup(CanonicalProductSetupWrite):
+    product_id: UUID
+    idempotency_key: str = Field(
+        min_length=8, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$"
+    )
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+
+class MCPProductActivation(CanonicalProductActivationWrite):
     product_id: UUID
     idempotency_key: str = Field(
         min_length=8, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$"
@@ -225,6 +236,38 @@ def configure_product_draft(
         "idempotency_replayed": configured["idempotency_replayed"],
         "lifecycle_status": "draft",
         "message": "Product details saved for review",
+    }
+
+
+@router.post("/products/activate")
+def activate_product(
+    request: MCPProductActivation,
+    context: ActionContext = Depends(get_action_context),
+    db: Session = Depends(get_db),
+):
+    activation = CanonicalProductActivationWrite.model_validate(
+        request.model_dump(exclude={"product_id", "idempotency_key"})
+    )
+    activated = _run_master_write(
+        db,
+        context,
+        PRODUCT_ACTIVATION_OPERATION,
+        lambda: _execute_canonical_product_activation(
+            db,
+            org_id=context.organization_id,
+            product_id=request.product_id,
+            activation=activation,
+            idempotency_key=request.idempotency_key,
+        ),
+    )
+    return {
+        "product_id": activated["product_id"],
+        "product_code": activated["product_code"],
+        "product_name": activated["product_name"],
+        "row_version": activated["new_row_version"],
+        "idempotency_replayed": activated["idempotency_replayed"],
+        "lifecycle_status": "active",
+        "message": "Product activated and ready for purchasing and sale",
     }
 
 

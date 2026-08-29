@@ -276,6 +276,22 @@ def main() -> None:
             assert replayed == (
                 fixture.PRODUCT_DELETE, "TEST-A-2", "Delete A", 3, True
             )
+            _expect_denied(
+                connection,
+                """
+                SELECT * FROM erp_master_commands.activate_configured_product(
+                  :org,:product,2,'DIFFERENT-TRACEABILITY',:key,
+                  transaction_timestamp()+interval '1 hour')
+                """,
+                {
+                    "org": fixture.ORG_A,
+                    "product": fixture.PRODUCT_DELETE,
+                    "key": hashlib.sha256(
+                        b"pg15-product-setup-activation"
+                    ).digest(),
+                },
+                expected_sqlstate="23505",
+            )
             assert connection.execute(
                 text("SELECT status,row_version FROM catalog.products WHERE org_id=:org AND id=:product"),
                 {"org": fixture.ORG_A, "product": fixture.PRODUCT_DELETE},
@@ -286,6 +302,21 @@ def main() -> None:
                 "SELECT * FROM erp_master_commands.product_setup_missing_fields("
                 ":org,:product,erp_core_commands.current_organization_business_date())",
                 {"org": fixture.ORG_A, "product": fixture.PRODUCT_B},
+            )
+            _expect_denied(
+                connection,
+                """
+                SELECT * FROM erp_master_commands.activate_configured_product(
+                  :org,:product,1,NULL,:key,
+                  transaction_timestamp()+interval '1 hour')
+                """,
+                {
+                    "org": fixture.ORG_A,
+                    "product": fixture.PRODUCT_B,
+                    "key": hashlib.sha256(
+                        b"pg15-cross-tenant-product-activation"
+                    ).digest(),
+                },
             )
             print("canonical product setup runtime-role checks passed")
         finally:

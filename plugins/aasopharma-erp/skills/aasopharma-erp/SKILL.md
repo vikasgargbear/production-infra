@@ -37,7 +37,7 @@ automation for a missing canonical tool.
 
 ## Writes
 
-1. Use the operation-specific prepare tool for transactional commands. Preparation is not completion. Product, customer, and supplier master-data writes are reversible and require the user's explicit confirmation before each reviewed batch.
+1. Use the operation-specific prepare tool for transactional commands. Preparation is not completion. Product, customer, and supplier draft/setup writes are reversible and require the user's explicit confirmation before each reviewed batch. Product activation is consequential and requires a separate explicit confirmation after exact setup readback.
 2. Show the immutable review result, command UUID, affected documents, exact
    quantities, money, tax, stock, allocations, and accounting effects.
 3. Do not approve or execute until the user explicitly confirms the reviewed
@@ -128,7 +128,11 @@ receipt, payment, return, adjustment, inventory, and accounting preparation:
    product setup as the ERP UI. `erp_product_setup` never makes a product
    available for transactions.
 7. Read each result with `erp_product_setup_get` and report “Ready to add” or the
-   exact remaining fields. The user completes **Add product** in the ERP UI.
+   exact remaining fields. If it is ready, show the reviewed identity,
+   manufacturer, HSN, unit/packing, composition, handling facts, and ask for a
+   separate explicit activation confirmation. Only after that confirmation call
+   `erp_product_activate` with the exact product ID and row version, then read it
+   back again with `erp_product_setup_get` and require `active` lifecycle state.
 8. Re-run `erp_purchase_bill_mapping_review` after supplier/product resolution.
    “Ready for canonical prepare validation” means only that mapping-level
    identity blockers are cleared; validate and satisfy the complete exact schema

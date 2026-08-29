@@ -401,6 +401,27 @@ PRODUCT_SETUP_SCHEMA: Mapping[str, Any] = {
     ],
 }
 
+PRODUCT_ACTIVATION_SCHEMA: Mapping[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "product_id": {"type": "string", "format": "uuid"},
+        "row_version": {"type": "integer", "minimum": 1},
+        "manufacturer_traceability_code": {
+            "anyOf": [
+                {"type": "string", "maxLength": 128},
+                {"type": "null"},
+            ]
+        },
+        "idempotency_key": {
+            "type": "string",
+            "pattern": IDEMPOTENCY_KEY_PATTERN,
+            "description": "Stable caller key for exact replay of this activation request.",
+        },
+    },
+    "required": ["product_id", "row_version", "idempotency_key"],
+}
+
 OPERATOR_OPERATIONS.update(
     {
         "erp_product_create": OperatorOperation(
@@ -410,6 +431,10 @@ OPERATOR_OPERATIONS.update(
         "erp_product_setup": OperatorOperation(
             "erp_product_setup", "catalog.product_draft.configure",
             PRODUCT_SETUP_SCHEMA, "master_write",
+        ),
+        "erp_product_activate": OperatorOperation(
+            "erp_product_activate", "catalog.product.activate",
+            PRODUCT_ACTIVATION_SCHEMA, "master_write",
         ),
         "erp_customer_create": OperatorOperation(
             "erp_customer_create", "parties.customer.create",
@@ -726,6 +751,7 @@ class OperationGateway:
             path = {
                 "catalog.product_draft.create": "/api/internal/mcp/master/products",
                 "catalog.product_draft.configure": "/api/internal/mcp/master/products/setup",
+                "catalog.product.activate": "/api/internal/mcp/master/products/activate",
                 "parties.customer.create": "/api/internal/mcp/master/customers",
                 "parties.supplier.create": "/api/internal/mcp/master/suppliers",
                 "parties.customer.update": "/api/internal/mcp/master/customers/update",
