@@ -406,6 +406,9 @@ def test_workflow_orders_reset_fence_and_exact_deployment() -> None:
     assert "ssh-agent -k" in workflow[remove_key:]
     assert "manage_render_pilot_lifecycle.py" not in workflow
     assert "purge_organization_plan_token:" in production
+    assert "${{ inputs.purge_organization_plan_token }}" not in workflow
+    assert 'echo "::add-mask::$purge_plan_token"' in workflow
+    assert '"$GITHUB_EVENT_PATH"' in workflow
 
     live18 = production.split("\n  live18-acceptance:", 1)[1]
     demo_step = live18.split(
