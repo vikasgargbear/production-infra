@@ -201,7 +201,6 @@ export function useInvoiceSave(props: UseInvoiceSaveProps): UseInvoiceSaveReturn
                 customerPhone: selectedCustomer!.primary_phone || '',
                 customerEmail: selectedCustomer!.primary_email || '',
                 totalAmount: authoritativeTotal,
-                items: invoice.items,
                 isOffline: false,
             });
             setShowSuccessModal(true);
@@ -231,7 +230,6 @@ export function useInvoiceSave(props: UseInvoiceSaveProps): UseInvoiceSaveReturn
             setSaving(false);
         }
     }, [
-        invoice,
         preparedPreview,
         saving,
         selectedCustomer,

@@ -206,7 +206,13 @@ describe('customer and supplier search adapters', () => {
 
     it('issues one canonical customer request for one query, including a parent rerender', async () => {
         (customersApi.search as jest.Mock).mockResolvedValue({
-            data: { customers: [{ customer_id: 'customer-1', customer_name: 'Customer One' }] },
+            data: { customers: [{
+                customer_id: 'customer-1',
+                customer_name: 'Customer One',
+                primary_phone: '9876543210',
+                city: 'Jaipur',
+                state_code: '08',
+            }] },
         });
         const onChange = jest.fn();
         const { rerender } = render(<CustomerSearch value={null} onChange={onChange} />);
@@ -219,6 +225,8 @@ describe('customer and supplier search adapters', () => {
         expect(customersApi.search).toHaveBeenCalledTimes(1);
         expect(customersApi.search).toHaveBeenCalledWith('Customer', { limit: 20 });
         expect(screen.getByText('Customer One')).toBeTruthy();
+        expect(screen.getByText('9876543210')).toBeTruthy();
+        expect(screen.getByText('Jaipur, 08')).toBeTruthy();
     });
 
     it('issues one canonical supplier request for one query, including a parent rerender', async () => {

@@ -17,6 +17,59 @@ const UUID = {
   account: 'd3000000-0000-7000-8000-000000000041',
 } as const;
 
+const productSearchRows = Array.from({ length: 12 }, (_, index) => ({
+  product_id: `d3000000-0000-7000-8000-${String(100 + index).padStart(12, '0')}`,
+  product_code: `MED-${String(index + 1).padStart(4, '0')}`,
+  product_name: index === 0 ? 'Paracetamol 500 mg Tablet' : `Paracetamol Variant ${String(index + 1).padStart(2, '0')}`,
+  generic_name: 'Paracetamol',
+  product_type: 'medicine',
+  unit: 'strip',
+  category_name: 'Analgesics',
+  manufacturer_name: index === 0 ? 'Acme Pharma' : 'Alternate Pharma',
+  dosage_form: 'Tablet',
+  strength_display: index === 0 ? '500 mg' : '650 mg',
+  packing_summary: '10 tablets / strip',
+  requires_prescription: false,
+  uom_conversion_id: null,
+  taxability: 'taxable',
+  gst_percent: '12.000000',
+  hsn_code: '30049099',
+  current_stock: String(100 - index),
+  is_active: true,
+  status: 'active',
+  row_version: 1,
+}));
+
+const customerSearchRows = Array.from({ length: 12 }, (_, index) => ({
+  customer_id: `d3000000-0000-7000-8000-${String(200 + index).padStart(12, '0')}`,
+  party_id: `d3000000-0000-7000-8000-${String(300 + index).padStart(12, '0')}`,
+  customer_code: `CUST-${String(index + 1).padStart(4, '0')}`,
+  customer_name: index === 0 ? 'Apollo Pharmacy' : `Apollo Store ${String(index + 1).padStart(2, '0')}`,
+  trade_name: null,
+  primary_phone: index === 0 ? '9876543210' : `987650${String(index).padStart(4, '0')}`,
+  primary_email: null,
+  contact_person_name: null,
+  pan_number: null,
+  gst_number: index === 0 ? '27ABCDE1234F1Z5' : null,
+  gst_verification_status: index === 0 ? 'verified' : null,
+  place_of_supply_state_code: '27',
+  address_line1: `${index + 1} Market Road`,
+  address_line2: null,
+  city: index === 0 ? 'Mumbai' : 'Pune',
+  state_code: '27',
+  pincode: index === 0 ? '400001' : '411001',
+  credit_limit: '50000.00',
+  credit_days: 30,
+  current_outstanding: '12345.67',
+  customer_type: 'organization',
+  is_active: true,
+  status: 'active',
+  account_row_version: 1,
+  party_row_version: 1,
+  created_at: '2026-08-01T00:00:00Z',
+  updated_at: '2026-08-28T00:00:00Z',
+}));
+
 const businessContext = {
   organization_id: UUID.org,
   organization_timezone: 'Asia/Kolkata',
@@ -195,26 +248,24 @@ const installRoutes = async (page: Page) => {
       pack_conversions: ((productSetup.pack_conversions as Array<Record<string, unknown>>) || [])
         .map(row => ({ ...row, uom_name: row.uom_code === 'BX' ? 'Box' : 'Each', multiplier: String(row.multiplier) })),
     };
-    else if (path === '/api/products') body = {
-      products: [], total: 0, offset: Number(url.searchParams.get('offset') || 0), limit: 50,
-    };
-    else if (path === '/api/customers') body = {
-      customers: [{
-        customer_id: UUID.customerAccount, customer_code: 'CUST-0001',
-        customer_name: 'Apollo Pharmacy', trade_name: null, primary_phone: '9876543210',
-        primary_email: 'operator@example.com', gst_number: null,
-        gst_verification_status: null, place_of_supply_state_code: '27',
-        credit_limit: '50000.00', credit_days: 30, current_outstanding: '12345.67',
-        customer_type: 'organization', is_active: true, status: 'active',
-        created_at: '2026-08-01T00:00:00Z', updated_at: '2026-08-28T00:00:00Z',
-      }], total: 1, skip: 0, limit: 100,
-    };
+    else if (path === '/api/products') {
+      const products = url.searchParams.has('search') ? productSearchRows : [];
+      body = {
+        products, total: products.length, offset: Number(url.searchParams.get('offset') || 0),
+        limit: Number(url.searchParams.get('limit') || 50),
+      };
+    }
+    else if (path === '/api/customers') {
+      const customers = url.searchParams.has('search') ? customerSearchRows : customerSearchRows.slice(0, 1);
+      body = { customers, total: customers.length, skip: 0, limit: Number(url.searchParams.get('limit') || 100) };
+    }
     else if (path === '/api/suppliers') body = [{
-      supplier_id: UUID.supplierAccount, supplier_code: 'SUP-0001',
+      supplier_id: UUID.supplierAccount, party_id: UUID.supplierParty, supplier_code: 'SUP-0001',
       supplier_name: 'Healthy Supply Co', trade_name: null, primary_phone: '9876543210',
-      primary_email: 'operator@example.com', gst_number: null,
+      primary_email: 'operator@example.com', contact_person: null, pan_number: null, gst_number: null,
       gst_verification_status: null, payment_days: 30, current_outstanding: '12345.67',
       supplier_type: 'organization', is_active: true, status: 'active',
+      account_row_version: 1, party_row_version: 1,
       created_at: '2026-08-01T00:00:00Z', updated_at: '2026-08-28T00:00:00Z',
     }];
     else return route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ detail: `Unhandled ${path}` }) });
@@ -382,3 +433,91 @@ test('mobile aging controls and CTA remain reachable and tappable', async ({ pag
   await expect(page.getByRole('button', { name: 'Back to outstanding' })).toBeVisible();
   await expect(page.getByText('Record receipts or supplier payments from the Payments module.')).toBeVisible();
 });
+
+for (const viewport of [{ width: 360, height: 800 }, { width: 412, height: 915 }]) {
+  test(`global product and customer search stays usable at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await installRoutes(page);
+    const searchResponses: Array<{ path: string; search: string | null; status: number }> = [];
+    page.on('response', response => {
+      const url = new URL(response.url());
+      if ((url.pathname === '/api/products' || url.pathname === '/api/customers') && url.searchParams.has('search')) {
+        searchResponses.push({ path: url.pathname, search: url.searchParams.get('search'), status: response.status() });
+      }
+    });
+
+    await page.goto('/e2e/canonical-reads?surface=global-search');
+    const customerInput = page.getByPlaceholder('Search customer');
+    await customerInput.fill('Apollo');
+    const customerOptions = page.getByRole('option');
+    await expect(customerOptions).toHaveCount(customerSearchRows.length);
+    const firstCustomer = customerOptions.first();
+    await expect(firstCustomer.getByText('Apollo Pharmacy', { exact: true })).toBeVisible();
+    await expect(firstCustomer.getByText('9876543210', { exact: false })).toBeVisible();
+    await expect(firstCustomer.getByText('Mumbai, 27', { exact: true })).toBeVisible();
+    expect((await firstCustomer.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+
+    const customerDropdown = page.getByRole('listbox');
+    const customerScroll = await customerDropdown.evaluate(element => ({
+      clientHeight: element.clientHeight,
+      scrollHeight: element.scrollHeight,
+      overflowY: getComputedStyle(element).overflowY,
+    }));
+    expect(customerScroll.clientHeight).toBeLessThanOrEqual(256);
+    expect(customerScroll.scrollHeight).toBeGreaterThan(customerScroll.clientHeight);
+    expect(customerScroll.overflowY).toBe('auto');
+
+    await customerInput.press('Enter');
+    await expect(page.getByTestId('selected-customer-name')).toHaveText('Selected: Apollo Pharmacy');
+
+    const productInput = page.getByPlaceholder('Search product');
+    await productInput.fill('Paracetamol');
+    const productOptions = page.getByTestId(/^product-search-option-/);
+    await expect(productOptions).toHaveCount(productSearchRows.length);
+    const firstProduct = productOptions.first();
+    const productName = firstProduct.getByText('Paracetamol 500 mg Tablet', { exact: true });
+    const manufacturer = firstProduct.getByText('Acme Pharma', { exact: true });
+    await expect(productName).toBeVisible();
+    await expect(firstProduct.getByText('Paracetamol', { exact: true })).toBeVisible();
+    await expect(manufacturer).toBeVisible();
+    await expect(firstProduct.getByText('500 mg', { exact: true })).toBeVisible();
+    await expect(firstProduct.getByText('10 tablets / strip', { exact: true })).toBeVisible();
+    await expect(firstProduct.getByText('Analgesics', { exact: true })).toBeVisible();
+    expect((await firstProduct.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+
+    const visualHierarchy = await firstProduct.evaluate(element => {
+      const name = Array.from(element.querySelectorAll('div')).find(node => node.textContent === 'Paracetamol 500 mg Tablet');
+      const metadata = Array.from(element.querySelectorAll('span')).find(node => node.textContent === 'Acme Pharma');
+      if (!name || !metadata) throw new Error('Expected product name and manufacturer metadata');
+      return {
+        nameWeight: Number(getComputedStyle(name).fontWeight),
+        nameSize: Number.parseFloat(getComputedStyle(name).fontSize),
+        metadataSize: Number.parseFloat(getComputedStyle(metadata).fontSize),
+      };
+    });
+    expect(visualHierarchy.nameWeight).toBeGreaterThanOrEqual(600);
+    expect(visualHierarchy.nameSize).toBeGreaterThan(visualHierarchy.metadataSize);
+
+    const productDropdown = firstProduct.locator('xpath=..');
+    const productScroll = await productDropdown.evaluate(element => ({
+      clientHeight: element.clientHeight,
+      scrollHeight: element.scrollHeight,
+      overflowY: getComputedStyle(element).overflowY,
+    }));
+    expect(productScroll.clientHeight).toBeLessThanOrEqual(256);
+    expect(productScroll.scrollHeight).toBeGreaterThan(productScroll.clientHeight);
+    expect(productScroll.overflowY).toBe('auto');
+    await expectNoHorizontalPageScroll(page, viewport.width);
+    await page.screenshot({
+      path: `test-results/artifacts/canonical-search/${viewport.width}x${viewport.height}-product-search.png`,
+      fullPage: false,
+    });
+
+    await productInput.press('Enter');
+    await expect(page.getByTestId('selected-product-name')).toHaveText('Selected: Paracetamol 500 mg Tablet');
+    expect(searchResponses).toEqual(expect.arrayContaining([
+      { path: '/api/customers', search: 'Apollo', status: 200 },
+      { path: '/api/products', search: 'Paracetamol', status: 200 },
+    ]));
+  });
+}

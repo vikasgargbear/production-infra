@@ -24,6 +24,7 @@ export interface InvoiceItem {
     sale_unit: string;
     quantity: string;
     free_quantity: string;
+    free_supply_tax_treatment: 'excluded_from_taxable_value' | 'included_at_unit_rate';
     unit_price: string;
     discount_percent: string;
     gst_percent: string;
@@ -126,6 +127,14 @@ const archivedCustomerGstin = (value: unknown, snapshot: unknown): string | unde
     return gstin;
 };
 
+const canonicalFreeSupplyTaxTreatment = (
+    value: unknown,
+    label: string,
+): InvoiceItem['free_supply_tax_treatment'] => {
+    if (value === 'excluded_from_taxable_value' || value === 'included_at_unit_rate') return value;
+    throw new Error(`${label} is unavailable.`);
+};
+
 export const printableCanonicalInvoice = (detail: CanonicalInvoiceDetail): InvoiceData => {
     if (detail.archival_snapshot_state !== 'captured') {
         throw new Error('Archived invoice party evidence is unavailable for this invoice.');
@@ -165,6 +174,10 @@ export const printableCanonicalInvoice = (detail: CanonicalInvoiceDetail): Invoi
             sale_unit: item.unit,
             quantity: item.quantity,
             free_quantity: item.free_quantity,
+            free_supply_tax_treatment: canonicalFreeSupplyTaxTreatment(
+                item.free_supply_tax_treatment,
+                `Invoice line ${item.product_name} free-supply tax treatment`,
+            ),
             unit_price: item.unit_price,
             discount_percent: item.discount_percent,
             gst_percent: item.gst_percent,
@@ -218,12 +231,26 @@ const atMostTwoDecimals = (value: unknown, label: string, sourceScale: number): 
     });
 };
 
-const rate = (value: unknown, label: string): string => {
+const roundedRate = (value: unknown, label: string): string => {
     const units = exactDecimalUnits(value, label, {
         scale: 4, maximumWholeDigits: 20, allowNegative: false,
     });
     const rounded = units / 100n + (units % 100n >= 50n ? 1n : 0n);
-    return formatExactCurrency(exactDecimalString(rounded, 2), label);
+    return exactDecimalString(rounded, 2);
+};
+
+const rate = (value: unknown, label: string): string => formatExactCurrency(
+    roundedRate(value, label), label,
+);
+
+const freeSupplyTreatmentLabel = (item: InvoiceItem, lineNumber: number): string => {
+    const treatment = canonicalFreeSupplyTaxTreatment(
+        item.free_supply_tax_treatment,
+        `Invoice line ${lineNumber} free-supply tax treatment`,
+    );
+    return treatment === 'included_at_unit_rate'
+        ? 'Free included at unit rate'
+        : 'Free excluded from taxable value';
 };
 
 const addressLines = (value: string, label: string): string => {
@@ -315,10 +342,13 @@ export const generateInvoiceHTML = (invoice: InvoiceData): string => {
                 <div class="tax-detail">${lineTaxes.join(' | ')}</div></td>
             <td class="center">${escapeHTML(item.hsn_code, `Invoice line ${lineNumber} HSN`)}</td>
             <td class="center">${atMostTwoDecimals(item.quantity, `Invoice line ${lineNumber} quantity`, 6)}
-                <div class="muted">Free ${atMostTwoDecimals(item.free_quantity, `Invoice line ${lineNumber} free quantity`, 6)}</div></td>
+                <div class="muted">Free ${atMostTwoDecimals(item.free_quantity, `Invoice line ${lineNumber} free quantity`, 6)}</div>
+                <div class="muted">${escapeHTML(freeSupplyTreatmentLabel(item, lineNumber))}</div></td>
             <td class="center">${escapeHTML(item.sale_unit, `Invoice line ${lineNumber} unit`)}</td>
             <td class="right">${rate(item.unit_price, `Invoice line ${lineNumber} rate`)}</td>
-            <td class="center">${atMostTwoDecimals(item.discount_percent, `Invoice line ${lineNumber} discount`, 6)}%</td>
+            <td class="center">${compareExactDecimals(item.discount_percent, '0', `Invoice line ${lineNumber} discount`, { scale: 6, maximumWholeDigits: 3, allowNegative: false }) === 0
+                ? '-'
+                : `${atMostTwoDecimals(item.discount_percent, `Invoice line ${lineNumber} discount`, 6)}%`}</td>
             <td class="center">${atMostTwoDecimals(item.gst_percent, `Invoice line ${lineNumber} GST rate`, 6)}%</td>
             <td class="right strong">${money(item.line_total, `Invoice line ${lineNumber} total`)}</td>
         </tr>`;
@@ -463,14 +493,16 @@ export const buildInvoicePDF = (invoiceData: InvoiceData): jsPDF => {
             : item.batch_number
                 ? `Batch ${item.batch_number}${item.expiry_date ? `; Exp ${item.expiry_date}` : ''}`
                 : 'Batch: Not applicable';
+        const cess = compareExactDecimals(item.cess_amount, '0.00', `PDF line ${index + 1} cess`, moneyOptions) !== 0
+            ? ` | Cess ${pdfMoney(item.cess_amount, `PDF line ${index + 1} cess`)}` : '';
         const taxes = `Taxable ${pdfMoney(item.taxable_amount, 'PDF line taxable')} | `
             + `CGST ${pdfMoney(item.cgst_amount, 'PDF line CGST')} | SGST ${pdfMoney(item.sgst_amount, 'PDF line SGST')} | `
-            + `IGST ${pdfMoney(item.igst_amount, 'PDF line IGST')}`;
+            + `IGST ${pdfMoney(item.igst_amount, 'PDF line IGST')}${cess}`;
         return [
             String(index + 1), `${item.product_name}\n${batches}\n${taxes}`, item.hsn_code,
-            `${atMostTwoDecimals(item.quantity, 'PDF quantity', 6)}\nFree ${atMostTwoDecimals(item.free_quantity, 'PDF free quantity', 6)}`,
-            item.sale_unit, pdfMoney(rate(item.unit_price, 'PDF rate').replace('₹', ''), 'PDF normalized rate'),
-            `${atMostTwoDecimals(item.discount_percent, 'PDF discount', 6)}% / ${atMostTwoDecimals(item.gst_percent, 'PDF GST rate', 6)}%`,
+            `${atMostTwoDecimals(item.quantity, 'PDF quantity', 6)}\nFree ${atMostTwoDecimals(item.free_quantity, 'PDF free quantity', 6)}\n${freeSupplyTreatmentLabel(item, index + 1)}`,
+            item.sale_unit, pdfMoney(roundedRate(item.unit_price, 'PDF rate'), 'PDF normalized rate'),
+            `${compareExactDecimals(item.discount_percent, '0.000000', 'PDF discount', { scale: 6 }) === 0 ? '-' : `${atMostTwoDecimals(item.discount_percent, 'PDF discount', 6)}%`} / ${atMostTwoDecimals(item.gst_percent, 'PDF GST rate', 6)}%`,
             pdfMoney(item.line_total, 'PDF line total'),
         ];
     });

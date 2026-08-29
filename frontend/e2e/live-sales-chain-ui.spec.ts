@@ -206,6 +206,19 @@ test.describe('live desktop sales-chain visible UI acceptance', () => {
       inventory_document_id: postingReadback.invoice_inventory_document_id,
       inventory_document_line_id: postingReadback.inventory_evidence[0].inventory_document_line_id,
     }));
+
+    await expect(page.getByText('Invoice Created!', { exact: true })).toBeVisible();
+    const canonicalOutputRead = response(
+      page,
+      'GET',
+      new RegExp(`/api/canonical/invoices/${executed.resource_id}$`),
+    );
+    const pdfDownload = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Download', exact: true }).click();
+    const canonicalOutputResponse = await canonicalOutputRead;
+    expect(canonicalOutputResponse.status()).toBe(200);
+    const downloadedPdf = await pdfDownload;
+    expect(downloadedPdf.suggestedFilename()).toBe(`${invoiceDetail.invoice_number}.pdf`);
     await page.screenshot({ path: testInfo.outputPath('direct-invoice-explicit-batch-posted.png'), fullPage: true });
     await testInfo.attach('direct-invoice-authoritative-readback.json', {
       contentType: 'application/json',

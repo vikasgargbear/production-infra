@@ -14,6 +14,13 @@ const row = (name: string) => ({
     product_code: `SKU-${name}`,
     product_name: name,
     product_type: 'medicine',
+    generic_name: 'Exact Generic',
+    manufacturer_name: 'Exact Labs',
+    category_name: 'Analgesics',
+    dosage_form: 'tablet',
+    strength_display: '500 mg',
+    packing_summary: 'BOX × 10 strip',
+    unit: 'strip',
     hsn_code: '481910',
     uom_conversion_id: 'd3000000-0000-7000-8000-000000000016',
     gst_percent: '12.000000',
@@ -41,10 +48,36 @@ describe('ProductSearch canonical request lifecycle', () => {
         expect(productsApi.search).toHaveBeenCalledTimes(1);
         expect(productsApi.search).toHaveBeenCalledWith('Exact', { limit: 20 });
         expect(await screen.findByText('Exact Product')).toBeTruthy();
+        expect(screen.getByText('Exact Generic')).toBeTruthy();
+        expect(screen.getByText('Exact Labs')).toBeTruthy();
+        expect(screen.getByText('Analgesics')).toBeTruthy();
+        expect(screen.getByText('500 mg')).toBeTruthy();
+        expect(screen.getByText('BOX × 10 strip')).toBeTruthy();
+        expect(screen.getByText('Unit: strip')).toBeTruthy();
         expect(screen.getByText('Stock: 99999999999999.123456')).toBeTruthy();
         expect(screen.getByTestId(
             'product-search-option-d3000000-0000-7000-8000-000000000015',
         )).toBeTruthy();
+    });
+
+    it('selects the canonical product fields with the keyboard', async () => {
+        const onAddItem = jest.fn();
+        (productsApi.search as jest.Mock).mockResolvedValue({ data: [row('Exact Product')] });
+        render(<ProductSearch onAddItem={onAddItem} showBatchSelection={false} />);
+
+        const input = screen.getByPlaceholderText(/Search products/i);
+        fireEvent.change(input, { target: { value: 'Exact' } });
+        await act(async () => { jest.advanceTimersByTime(100); });
+        fireEvent.keyDown(input, { key: 'Enter' });
+
+        expect(onAddItem).toHaveBeenCalledWith(expect.objectContaining({
+            product_name: 'Exact Product',
+            manufacturer: 'Exact Labs',
+            category: 'Analgesics',
+            strength: '500 mg',
+            packing_summary: 'BOX × 10 strip',
+            unit: 'strip',
+        }));
     });
 
     it('does not let an older response overwrite a newer query', async () => {

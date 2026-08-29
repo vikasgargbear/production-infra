@@ -60,6 +60,7 @@ const invoice = (): InvoiceData => ({
     sale_unit: 'EA',
     quantity: '1.234567',
     free_quantity: '0.125000',
+    free_supply_tax_treatment: 'excluded_from_taxable_value',
     unit_price: '150.0000',
     discount_percent: '2.500000',
     gst_percent: '12.000000',
@@ -205,6 +206,7 @@ test('renders only canonical seller, buyer, line, and exact money facts', () => 
   expect(html).toContain('481910');
   expect(html).toContain('Batch BATCH-ONE; Exp 2028-09-30; Qty 0.73; Free 0.13');
   expect(html).toContain('Batch BATCH-TWO; Exp 2029-01-31; Qty 0.5; Free 0');
+  expect(html).toContain('Free excluded from taxable value');
   expect(html).toContain('>1.23');
   expect(html).toContain('>2.5%');
   expect(html).toContain('₹168.00');
@@ -217,6 +219,16 @@ test('renders only canonical seller, buyer, line, and exact money facts', () => 
   expect(html).toContain('thead{display:table-header-group}');
   expect(html).toContain('tr{break-inside:avoid;page-break-inside:avoid}');
   expect(html).not.toContain('.invoice-page{page-break-inside:avoid');
+});
+
+test('does not mislabel an undisclosed non-percent line discount as zero percent', () => {
+  const html = generateInvoiceHTML({
+    ...invoice(),
+    items: [{ ...invoice().items[0], discount_percent: '0.000000' }],
+  });
+
+  expect(html).toContain('<td class="center">-</td>');
+  expect(html).not.toContain('>0%</td>');
 });
 
 test('preserves an explicit zero tax component without treating it as missing', () => {
@@ -250,6 +262,22 @@ test('does not include cess in the GST total', () => {
   expect(html).toContain('<span>Cess</span><span>₹1.00</span>');
 });
 
+test('renders the reviewed included-at-rate treatment for free product quantities', () => {
+  const detail = canonicalDetail();
+  detail.items[0].free_supply_tax_treatment = 'included_at_unit_rate';
+  const printable = printableCanonicalInvoice(detail);
+
+  expect(printable.items[0].free_supply_tax_treatment).toBe('included_at_unit_rate');
+  expect(generateInvoiceHTML(printable)).toContain('Free included at unit rate');
+});
+
+test('fails closed when canonical free-supply tax treatment is absent', () => {
+  const detail = canonicalDetail();
+  (detail.items[0] as any).free_supply_tax_treatment = undefined;
+
+  expect(() => printableCanonicalInvoice(detail)).toThrow('free-supply tax treatment is unavailable');
+});
+
 test('downloads the reconciled canonical facts through the paginated A4 PDF builder', async () => {
   const before = document.body.childElementCount;
   await downloadInvoicePDF({ ...invoice(), invoice_number: 'INV/2026/1' });
@@ -281,4 +309,27 @@ test('keeps every invoice item column inside the A4 printable width with Amount 
     .toBe(options.tableWidth);
   expect(options.margin.left + options.tableWidth + options.margin.right).toBe(210);
   expect(options.columnStyles[1].cellWidth).toBeGreaterThan(options.columnStyles[7].cellWidth);
+});
+
+test('renders four-digit rates, Cess, free treatment, and every batch without formatted-value reparsing', async () => {
+  mockAutoTable.mockClear();
+  await downloadInvoicePDF({
+    ...invoice(),
+    items: [{
+      ...invoice().items[0],
+      unit_price: '1234.5678',
+      free_supply_tax_treatment: 'included_at_unit_rate',
+      cess_amount: '1.00',
+      line_total: '169.00',
+    }],
+    cess_amount: '1.00',
+    total_amount: '169.00',
+  });
+
+  const options = mockAutoTable.mock.calls.at(-1)?.[1];
+  expect(options.body[0][1]).toContain('Batch BATCH-ONE');
+  expect(options.body[0][1]).toContain('Batch BATCH-TWO');
+  expect(options.body[0][1]).toContain('Cess INR 1.00');
+  expect(options.body[0][3]).toContain('Free included at unit rate');
+  expect(options.body[0][5]).toBe('INR 1,234.57');
 });

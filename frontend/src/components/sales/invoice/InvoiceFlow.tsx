@@ -3,18 +3,15 @@ import { toast } from 'react-toastify';
 import { useCompany } from '../../../contexts/CompanyContext';
 import useEscapeKey from '../../../hooks/useEscapeKey';
 import { useEnterAsTab } from '../../../hooks/useEnterAsTab';
-import html2pdf from 'html2pdf.js';
 import { calculateInvoicePreview } from '../../../services/calculations/invoiceCalculationService';
 import InvoiceItemsStepBase from './steps/InvoiceItemsStep';
 import InvoiceDetailsStepBase from './steps/InvoiceDetailsStep';
 import InvoicePreviewStepBase from './steps/InvoicePreviewStep';
 import {
     useInvoiceLogic,
-    CreatedInvoiceData,
     PrefilledData,
 } from './hooks/useInvoiceLogic';
 import { GenericSuccessModal } from '../../global';
-import InvoicePreview from './ui/InvoicePreviewEnterprise';
 import {
     invoiceBatchAllocationValidationError,
     invoicePreviewValidationError,
@@ -22,6 +19,10 @@ import {
 import CanonicalSalesCommandReview from '../CanonicalSalesCommandReview';
 import { formatExactCurrency } from '../../../utils/exactDecimal';
 import { applyCanonicalInvoicePreview } from './utils/invoicePreviewState';
+import {
+    downloadCanonicalInvoiceById,
+    printCanonicalInvoiceById,
+} from './utils/canonicalInvoiceOutput';
 
 // ==================== TYPE DEFINITIONS ====================
 
@@ -130,8 +131,16 @@ const InvoiceFlow: React.FC<InvoiceFlowProps> = ({ open = true, onClose, prefill
     );
 
     // Print handlers
-    const handlePrint = useCallback(() => {
+    const handleDraftPrint = useCallback(() => {
         window.print();
+    }, []);
+
+    const handleCanonicalPrint = useCallback(async (invoiceId: string | number) => {
+        try {
+            await printCanonicalInvoiceById(invoiceId);
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Canonical invoice print is unavailable.');
+        }
     }, []);
 
     const handleThermalPrint = useCallback(() => {
@@ -140,43 +149,12 @@ const InvoiceFlow: React.FC<InvoiceFlowProps> = ({ open = true, onClose, prefill
         document.dispatchEvent(printEvent);
     }, []);
 
-    const handlePDFDownload = useCallback((invoiceData: CreatedInvoiceData) => {
-        // Try to find the hidden invoice preview by ID
-        const element = document.getElementById('invoice-preview');
-        if (!element) {
-            toast.error('Unable to generate PDF - preview not found');
-            console.error('[PDF] Could not find #invoice-preview element');
-            return;
+    const handlePDFDownload = useCallback(async (invoiceId: string | number) => {
+        try {
+            await downloadCanonicalInvoiceById(invoiceId);
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Canonical invoice PDF is unavailable.');
         }
-
-        // Maximum quality settings for html2pdf
-        const options = {
-            margin: [5, 5, 5, 5] as [number, number, number, number],
-            filename: `Invoice-${invoiceData.invoiceNumber || 'draft'}.pdf`,
-            image: { type: 'jpeg' as const, quality: 1 },
-            html2canvas: {
-                scale: 3,  // Reduced scale - too high can cause blurry output
-                useCORS: true,
-                logging: false,
-                letterRendering: true,
-                windowWidth: 794,  // A4 width in pixels at 96dpi
-                dpi: 300,  // Higher DPI for print quality
-                scrollX: 0,
-                scrollY: -window.scrollY  // Capture from current scroll position
-            },
-            jsPDF: {
-                unit: 'mm',
-                format: 'a4',
-                orientation: 'portrait' as const,
-                compress: false,  // Disable compression for sharper text
-                precision: 16  // Higher precision
-            },
-            pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
-        };
-
-        // Silent PDF generation - only show errors
-        html2pdf().set(options).from(element).save()
-            .catch((err: Error) => toast.error(`PDF generation failed: ${err.message}`));
     }, []);
 
     const handleWhatsAppShare = useCallback((phone: string | undefined, customerName?: string, amount?: string) => {
@@ -355,7 +333,7 @@ ${companyInfo.name}`;
                     onClose={onClose as any}
                     onBack={handleBackFromStep3}
                     onSave={handleSaveInvoice}
-                    onPrint={handlePrint}
+                    onPrint={handleDraftPrint}
                     onThermalPrint={handleThermalPrint}
                     saving={saving}
                 />
@@ -388,7 +366,6 @@ ${companyInfo.name}`;
                     documentData={{
                         customerPhone: createdInvoiceData.customerPhone,
                         customerEmail: createdInvoiceData.customerEmail,
-                        items: createdInvoiceData.items,
                         totals: {
                             total_amount: createdInvoiceData.totalAmount
                         }
@@ -399,45 +376,19 @@ ${companyInfo.name}`;
                         email: createdInvoiceData.customerEmail
                     }}
                     companyInfo={companyInfo}
-                    onPrint={handlePrint}
+                    onPrint={() => { void handleCanonicalPrint(createdInvoiceData.invoiceId); }}
                     onThermalPrint={handleThermalPrint}
                     onWhatsApp={() => handleWhatsAppShare(
                         createdInvoiceData.customerPhone,
                         createdInvoiceData.customerName,
                         createdInvoiceData.totalAmount
                     )}
-                    onDownload={() => handlePDFDownload(createdInvoiceData)}
+                    onDownload={() => { void handlePDFDownload(createdInvoiceData.invoiceId); }}
                     showCopy={true}
                     showQuickActions={true}
                 />
             )}
 
-            {/* Off-screen Invoice Preview for PDF Generation - must be in DOM but not visible */}
-            {createdInvoiceData && showSuccessModal && (
-                <div className="absolute left-[-9999px] top-0 w-[210mm]">
-                    <InvoicePreview
-                        invoice={{
-                            ...invoice,
-                            invoice_number: createdInvoiceData.invoiceNumber,
-                            customer_name: createdInvoiceData.customerName,
-                            customer_details: {
-                                ...selectedCustomer,
-                                address: invoice.billing_address,
-                                gst_number: selectedCustomer?.gst_number,
-                                phone: createdInvoiceData.customerPhone || selectedCustomer?.phone
-                            },
-                            shipping_address: invoice.shipping_address,
-                            is_same_address: invoice.billing_address === invoice.shipping_address,
-                            items: createdInvoiceData.items,
-                            totals: invoice.totals ?? undefined
-                        } as any}
-                        companyInfo={companyInfo as any}
-                        showAddresses={true}
-                        isPrintMode={true}
-                        onInvoiceUpdate={() => { }}
-                    />
-                </div>
-            )}
         </div>
     );
 };
