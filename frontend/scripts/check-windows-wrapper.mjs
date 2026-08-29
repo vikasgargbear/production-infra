@@ -9,6 +9,9 @@ const config = JSON.parse(read('src-tauri/tauri.conf.json'));
 if (config.identifier !== 'com.aasopharma.erp') throw new Error('Windows identifier drifted');
 if (!config.bundle?.targets?.includes('nsis')) throw new Error('NSIS setup target is required');
 if (config.app?.security?.csp !== null) throw new Error('Remote ERP must not inherit a misleading local CSP');
+if (!fs.existsSync(path.join(root, 'src-tauri/icons/icon.ico'))) {
+  throw new Error('Windows installer icon is missing');
+}
 
 const rust = read('src-tauri/src/main.rs');
 for (const contract of [

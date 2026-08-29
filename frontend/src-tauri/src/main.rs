@@ -193,7 +193,7 @@ fn main() {
             let callback_window = window.clone();
             app.deep_link().on_open_url(move |event| {
                 for url in event.urls() {
-                    handle_deep_link(&callback_window, url);
+                    handle_deep_link(&callback_window, &url);
                 }
             });
             if let Some(urls) = app.deep_link().get_current()? {

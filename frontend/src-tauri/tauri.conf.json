@@ -16,7 +16,7 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
-    "icon": ["../public/favicon.ico"],
+    "icon": ["icons/icon.ico"],
     "shortDescription": "AASOPharma ERP desktop application",
     "longDescription": "Private Windows desktop application for AASOPharma wholesale operations.",
     "windows": {
