@@ -140,6 +140,59 @@ def test_session_resolves_exactly_one_active_membership_without_client_org_hint(
     assert captured["parameters"] == {"verified_auth_user_id": AUTH_USER_ID}
 
 
+def test_session_ignores_stale_signed_org_when_no_active_membership():
+    class Result:
+        @staticmethod
+        def mappings():
+            return Result()
+
+        @staticmethod
+        def all():
+            return [{"org_id": None, "resolution": "no_active_membership"}]
+
+    class Database:
+        @staticmethod
+        def execute(*_args):
+            return Result()
+
+    identity = _identity()
+    identity["app_metadata"]["org_id"] = str(ORG_ID)
+
+    assert oauth._resolved_organization_assignment(
+        identity, AUTH_USER_ID, Database()
+    ) is None
+
+
+def test_session_uses_the_only_active_membership_over_a_stale_signed_org():
+    active_org_id = UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+
+    class Result:
+        @staticmethod
+        def mappings():
+            return Result()
+
+        @staticmethod
+        def all():
+            return [
+                {
+                    "org_id": active_org_id,
+                    "resolution": "exactly_one_active_membership",
+                }
+            ]
+
+    class Database:
+        @staticmethod
+        def execute(*_args):
+            return Result()
+
+    identity = _identity()
+    identity["app_metadata"]["org_id"] = str(ORG_ID)
+
+    assert oauth._resolved_organization_assignment(
+        identity, AUTH_USER_ID, Database()
+    ) == active_org_id
+
+
 def test_session_rejects_ambiguous_memberships_without_trusting_a_header():
     class Result:
         @staticmethod

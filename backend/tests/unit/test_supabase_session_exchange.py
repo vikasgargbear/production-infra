@@ -69,11 +69,27 @@ def _membership(**overrides):
     return membership
 
 
+def _organization_resolution():
+    return SimpleNamespace(
+        mappings=lambda: SimpleNamespace(
+            all=lambda: [
+                {
+                    "org_id": UUID(ORG_ID),
+                    "resolution": "exactly_one_active_membership",
+                }
+            ]
+        )
+    )
+
+
 @pytest.fixture(autouse=True)
 def _open_canonical_session_authority(monkeypatch):
     class SessionOwner:
         def __enter__(self):
-            return object()
+            return self
+
+        def execute(self, *_args, **_kwargs):
+            return _organization_resolution()
 
         def __exit__(self, _exc_type, _exc, _traceback):
             return False
@@ -396,6 +412,9 @@ async def test_exchange_keeps_event_loop_responsive_and_closes_owned_session(
             lifecycle.append("closed")
             return False
 
+        def execute(self, *_args, **_kwargs):
+            return _organization_resolution()
+
     async def verified_identity(_token):
         return _identity()
 
@@ -457,6 +476,9 @@ async def test_concurrent_exchanges_close_every_thread_owned_session(monkeypatch
             with lifecycle_lock:
                 closed += 1
             return False
+
+        def execute(self, *_args, **_kwargs):
+            return _organization_resolution()
 
     async def verified_identity(_token):
         return _identity()
@@ -607,6 +629,22 @@ def test_consent_proposal_is_subject_and_preregistered_client_bound(monkeypatch)
 
         def execute(self, statement, params):
             self.calls.append((str(statement), params))
+            if "resolve_auth_organization" in str(statement):
+                class Resolution:
+                    @staticmethod
+                    def mappings():
+                        return Resolution()
+
+                    @staticmethod
+                    def all():
+                        return [
+                            {
+                                "org_id": UUID(ORG_ID),
+                                "resolution": "exactly_one_active_membership",
+                            }
+                        ]
+
+                return Resolution()
 
     database = Database()
     monkeypatch.setenv("MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS", "client-1,client-2")
@@ -636,12 +674,12 @@ def test_consent_proposal_is_subject_and_preregistered_client_bound(monkeypatch)
         "organization_id": UUID(ORG_ID),
         "client_id": "client-1",
     }
-    assert database.calls == [
-        (
-            "SELECT erp_security.activate_context(:auth_user_id, :org_id)",
-            {"auth_user_id": UUID(AUTH_USER_ID), "org_id": UUID(ORG_ID)},
-        )
-    ]
+    assert len(database.calls) == 2
+    assert "resolve_auth_organization" in database.calls[0][0]
+    assert database.calls[1] == (
+        "SELECT erp_security.activate_context(:auth_user_id, :org_id)",
+        {"auth_user_id": UUID(AUTH_USER_ID), "org_id": UUID(ORG_ID)},
+    )
 
 
 @pytest.mark.parametrize(
@@ -660,6 +698,20 @@ def test_consent_proposal_requires_exact_canonical_app_metadata_org_id(
 
     monkeypatch.setenv("MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS", "client-1")
     monkeypatch.setattr(oauth.supabase_auth, "get_user_from_access_token", verified_identity)
+    monkeypatch.setattr(
+        oauth,
+        "_resolved_organization_assignment",
+        lambda *_args: (
+            (_ for _ in ()).throw(
+                HTTPException(
+                    status_code=403,
+                    detail=oauth.INVALID_ASSIGNMENT_DETAIL,
+                )
+            )
+            if app_metadata.get("org_id") == "not-a-uuid"
+            else None
+        ),
+    )
     monkeypatch.setattr(
         oauth,
         "_mcp_consent_proposal_rows",
