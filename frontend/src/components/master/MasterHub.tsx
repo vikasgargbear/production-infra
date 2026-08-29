@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import {
   Building, Package, Users,
   Calculator, UserCheck, Settings,
-  Ruler, Warehouse, Truck, Shield
+  Ruler, Warehouse, Truck, Shield, ShieldCheck
 } from 'lucide-react';
 import { ModuleHub } from '../global';
 import { usePermissions } from '../../hooks/usePermissions';
@@ -13,6 +13,7 @@ import CustomerMaster from './masters/CustomerMaster';
 import SupplierMaster from './masters/SupplierMaster';
 import UserManagement from './settings/UserManagement';
 import RoleManagement from './settings/RoleManagement';
+import DrugLicenseSetup from './settings/DrugLicenseSetup';
 import TaxMaster from './masters/TaxMaster';
 import UnitMaster from './masters/UnitMaster';
 import WarehouseMaster from './masters/WarehouseMaster';
@@ -22,6 +23,7 @@ export const MASTER_SUBPAGE_IDS = [
   'customer-master',
   'supplier-master',
   'company-profile',
+  'drug-licenses',
   'tax-master',
   'unit-master',
   'warehouse-master',
@@ -75,6 +77,11 @@ const MASTER_MODULES: MasterModule[] = [
     component: CompanyProfile, group: 'Business Setup'
   },
   {
+    id: 'drug-licenses', label: 'Drug licences', fullLabel: 'Drug Licence Setup',
+    description: 'Reviewed branch & supplier Forms 20B/21B', icon: ShieldCheck, color: 'blue',
+    component: DrugLicenseSetup, group: 'Business Setup'
+  },
+  {
     id: 'tax-master', label: 'Tax & GST', fullLabel: 'Tax Master',
     description: 'GST rates & slabs', icon: Calculator, color: 'amber',
     component: TaxMaster, group: 'Business Setup'
@@ -102,7 +109,7 @@ const MASTER_MODULES: MasterModule[] = [
 ];
 
 const MasterHub: React.FC<MasterHubProps> = ({ open = true, onClose, initialSubpage, onSubpageChange }) => {
-  const { hasPermission } = usePermissions();
+  const { hasPermission, hasCapability } = usePermissions();
   const canEdit = hasPermission('master', 'edit');
   const resolvedDefault: MasterSubpage = initialSubpage
     && (MASTER_SUBPAGE_IDS as readonly string[]).includes(initialSubpage)
@@ -131,8 +138,11 @@ const MasterHub: React.FC<MasterHubProps> = ({ open = true, onClose, initialSubp
 
   // Filter out admin-only modules for non-admin users
   const visibleModules = useMemo(
-    () => canEdit ? MASTER_MODULES : MASTER_MODULES.filter(m => !ADMIN_ONLY_IDS.has(m.id)),
-    [canEdit]
+    () => MASTER_MODULES.filter(module => (
+      (canEdit || !ADMIN_ONLY_IDS.has(module.id))
+      && (module.id !== 'drug-licenses' || hasCapability('compliance.license.manage'))
+    )),
+    [canEdit, hasCapability]
   );
 
   return (

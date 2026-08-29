@@ -3,7 +3,7 @@
 BEGIN;
 
 DO $core_command_contract$
-DECLARE runtime_commands integer; onboarding_commands integer; exposed_helpers integer; guard_triggers integer;
+DECLARE runtime_commands integer; onboarding_commands integer; license_evidence_commands integer; exposed_helpers integer; guard_triggers integer;
 BEGIN
     SELECT count(*) INTO runtime_commands
       FROM pg_catalog.pg_proc AS proc
@@ -33,6 +33,19 @@ BEGIN
         RAISE EXCEPTION 'onboarding command surface is partially exposed: %',onboarding_commands;
     END IF;
 
+    SELECT count(*) INTO license_evidence_commands
+      FROM pg_catalog.pg_proc AS proc
+      JOIN pg_catalog.pg_namespace AS namespace ON namespace.oid=proc.pronamespace
+     WHERE namespace.nspname='erp_core_commands'
+       AND proc.proname IN (
+         'initiate_drug_license_attachment','transition_drug_license_attachment'
+       )
+       AND proc.prosecdef
+       AND pg_catalog.has_function_privilege('erp_app',proc.oid,'EXECUTE');
+    IF license_evidence_commands NOT IN (0,2) THEN
+        RAISE EXCEPTION 'reviewed licence-evidence command surface is incomplete: %',license_evidence_commands;
+    END IF;
+
     SELECT count(*) INTO exposed_helpers
       FROM pg_catalog.pg_proc AS proc
       JOIN pg_catalog.pg_namespace AS namespace ON namespace.oid=proc.pronamespace
@@ -40,7 +53,8 @@ BEGIN
        AND proc.proname NOT IN (
          'allocate_document_number','replace_setting','change_customer_terms','change_supplier_terms',
          'complete_retention_case','resolve_auth_organization','onboard_organization',
-         'create_organization_invitation','accept_organization_invitation'
+         'create_organization_invitation','accept_organization_invitation',
+         'initiate_drug_license_attachment','transition_drug_license_attachment'
        )
        AND pg_catalog.has_function_privilege('erp_app',proc.oid,'EXECUTE');
     IF exposed_helpers<>0 THEN

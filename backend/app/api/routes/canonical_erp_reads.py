@@ -57,6 +57,7 @@ _MASTER_CREATE_SQLSTATE_RESPONSES = {
     "23505": (status.HTTP_409_CONFLICT, "Master data already exists"),
     "23503": (status.HTTP_409_CONFLICT, "Master data is already referenced"),
     "23514": (status.HTTP_409_CONFLICT, "Master data configuration is incomplete"),
+    "23P01": (status.HTTP_409_CONFLICT, "Master data conflicts with an active record"),
     "P0002": (status.HTTP_409_CONFLICT, "Required canonical master data is missing"),
     "40001": (status.HTTP_503_SERVICE_UNAVAILABLE, "Master data changed; retry safely"),
     "42501": (status.HTTP_403_FORBIDDEN, "Master data creation is not authorized"),

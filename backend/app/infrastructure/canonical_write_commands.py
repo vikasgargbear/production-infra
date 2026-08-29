@@ -284,3 +284,60 @@ def transition_customer_receipt_attachment(
             parameters,
         ).mappings().one()
     )
+
+
+def initiate_drug_license_attachment(
+    db: Session, **parameters: Any
+) -> dict[str, Any]:
+    return dict(
+        db.execute(
+            text(
+                """
+                SELECT attachment_id,attachment_status,idempotency_replayed
+                  FROM erp_core_commands.initiate_drug_license_attachment(
+                    :org_id,:branch_id,:attachment_id,:storage_bucket,
+                    :storage_object_path,:original_filename,:byte_size,
+                    :sha256,:document_date
+                  )
+                """
+            ),
+            parameters,
+        ).mappings().one()
+    )
+
+
+def transition_drug_license_attachment(db: Session, **parameters: Any) -> None:
+    db.execute(
+        text(
+            """
+            SELECT erp_core_commands.transition_drug_license_attachment(
+              :org_id,:branch_id,:attachment_id,:target_status
+            )
+            """
+        ),
+        parameters,
+    )
+
+
+def record_effective_wholesale_license(
+    db: Session, **parameters: Any
+) -> dict[str, Any]:
+    return dict(
+        db.execute(
+            text(
+                """
+                SELECT recorded_license_id,recorded_status,recorded_row_version,
+                       idempotency_replayed
+                  FROM erp_compliance_commands.record_effective_wholesale_license(
+                    :org_id,:license_id,:actor_id,:subject_branch_id,
+                    :subject_party_id,:evidence_branch_id,:license_type_code,
+                    :license_number,:issuing_authority,:jurisdiction_code,
+                    :issued_on,:valid_from,:next_verification_due_on,
+                    :evidence_attachment_id,:idempotency_key_hash,
+                    transaction_timestamp()+interval '24 hours'
+                  )
+                """
+            ),
+            parameters,
+        ).mappings().one()
+    )
