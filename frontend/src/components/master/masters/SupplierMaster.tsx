@@ -8,7 +8,7 @@ import React from 'react';
 import {
   Truck, Search, Plus, AlertCircle
 } from 'lucide-react';
-import { ledgerApi, suppliersApi } from '../../../services/api';
+import { suppliersApi } from '../../../services/api';
 import { DataTable, Column } from '../../global/ui/display/DataTable';
 import { GlobalLayout, ContentCard } from '../../global';
 import Button from '../../global/ui/Button';
@@ -17,7 +17,6 @@ import { useEntityMaster } from '../hooks';
 import ContactActions from './ContactActions';
 import CanonicalWriteNotice from '../../global/ui/CanonicalWriteNotice';
 import { addExactDecimals, compareExactDecimals, formatExactCurrency } from '../../../utils/exactDecimal';
-import { mergeSuppliersWithCanonicalAging } from './supplierAgingProjection';
 import PartyAccountEditDialog from './PartyAccountEditDialog';
 
 // ============================================================================
@@ -58,17 +57,13 @@ interface Supplier {
   outstanding_available?: boolean;
 }
 
-export const loadCanonicalSuppliers = async (search = '') => {
-  const response = await suppliersApi.getAll({ limit: 1000, search });
+export const loadCanonicalSuppliers = async (search = '', signal?: AbortSignal) => {
+  const response = await suppliersApi.getAll({ limit: 100, search }, { signal });
   const rows = response.data as Supplier[];
-  let agingRows: Record<string, unknown>[] | null = null;
-  try {
-    const agingResponse = await ledgerApi.getCanonicalPartyAging({ party_type: 'supplier' });
-    agingRows = Array.isArray(agingResponse.data?.parties) ? agingResponse.data.parties : [];
-  } catch {
-    agingRows = null;
-  }
-  return { ...response, data: mergeSuppliersWithCanonicalAging(rows, agingRows) };
+  return {
+    ...response,
+    data: rows.map(row => ({ ...row, outstanding_available: true })),
+  };
 };
 
 // ============================================================================

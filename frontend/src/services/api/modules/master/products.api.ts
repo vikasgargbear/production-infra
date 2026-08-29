@@ -44,6 +44,10 @@ export interface ProductParams {
   include_inactive?: boolean;
 }
 
+interface MasterReadConfig {
+  signal?: AbortSignal;
+}
+
 export interface ProductSyncParams {
   page?: number;
   pageSize?: number;
@@ -56,7 +60,10 @@ export interface ProductSyncParams {
 // ============================================================================
 
 export const productsApi = {
-  getAll: (params: ProductParams = {}) => apiHelpers.get('/products', { params })
+  getAll: (params: ProductParams = {}, config: MasterReadConfig = {}) => apiHelpers.get('/products', {
+    params,
+    signal: config.signal,
+  })
     .then(response => ({ ...response, data: decodeCanonicalProductList(response.data) })),
 
   create: (
@@ -127,9 +134,10 @@ export const productsApi = {
   },
 
   // Search products
-  search: (query: string, params: ProductParams = {}) => {
+  search: (query: string, params: ProductParams = {}, config: MasterReadConfig = {}) => {
     return apiHelpers.get('/products', {
       params: { search: query, ...params },
+      signal: config.signal,
       preserveExactDecimals: true,
     }).then(response => ({ ...response, data: decodeCanonicalProductList(response.data).products }));
   },

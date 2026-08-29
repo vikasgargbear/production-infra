@@ -61,8 +61,8 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
   // Memoized search function to prevent EntitySearch debounce recreation
   // This is CRITICAL - without useCallback, the searchFn changes on every render,
   // causing the debounced performSearch in EntitySearch to reset its timeout
-  const searchCustomers = useCallback(async (query: string): Promise<Customer[]> => {
-    const response = await customersApi.search(query, { limit: 20 });
+  const searchCustomers = useCallback(async (query: string, signal: AbortSignal): Promise<Customer[]> => {
+    const response = await customersApi.search(query, { limit: 20 }, { signal });
     const rows = response?.data?.customers;
     if (!Array.isArray(rows)) throw new Error('Customer search returned an invalid canonical response');
     return rows.map((row) => ({
@@ -241,7 +241,7 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
       createButtonLabel="Create New Customer"
       searchFn={searchCustomers}
       minLength={minSearchLength}
-      debounceMs={100}
+      debounceMs={275}
       renderResult={renderCustomerResult}
       renderSelected={renderSelectedCustomer}
       getItemKey={getItemKey}

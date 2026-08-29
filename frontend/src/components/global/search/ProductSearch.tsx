@@ -80,9 +80,11 @@ const ProductSearch = forwardRef<ProductSearchRef, ProductSearchProps>(
         const dropdownRef = useRef<HTMLDivElement>(null);
         const resultRefs = useRef<(HTMLButtonElement | null)[]>([]);
         const searchRequestRef = useRef(0);
+        const searchAbortRef = useRef<AbortController | null>(null);
 
         useEffect(() => {
             if (!disabled) return;
+            searchAbortRef.current?.abort();
             searchRequestRef.current += 1;
             setSearchQuery('');
             setSearchResults([]);
@@ -110,8 +112,11 @@ const ProductSearch = forwardRef<ProductSearchRef, ProductSearchProps>(
 
                 setLoading(true);
 
+                searchAbortRef.current?.abort();
+                const controller = new AbortController();
+                searchAbortRef.current = controller;
                 try {
-                    const response = await productsApi.search(query, { limit: 20 });
+                    const response = await productsApi.search(query, { limit: 20 }, { signal: controller.signal });
                     if (requestId !== searchRequestRef.current) return;
                     const rows = response?.data;
                     if (!Array.isArray(rows)) {
@@ -161,14 +166,16 @@ const ProductSearch = forwardRef<ProductSearchRef, ProductSearchProps>(
                         setHighlightedIndex(-1);
                     }
                 } catch (error) {
+                    if (controller.signal.aborted) return;
                     if (requestId !== searchRequestRef.current) return;
                     console.error('Product search failed:', error);
                     setSearchResults([]);
                     setHighlightedIndex(-1);
                 } finally {
                     if (requestId === searchRequestRef.current) setLoading(false);
+                    if (searchAbortRef.current === controller) searchAbortRef.current = null;
                 }
-            }, 100),
+            }, 275),
             []
         );
 
@@ -179,7 +186,10 @@ const ProductSearch = forwardRef<ProductSearchRef, ProductSearchProps>(
             }
             const requestId = ++searchRequestRef.current;
             searchProducts(searchQuery, requestId);
-            return () => searchProducts.cancel();
+            return () => {
+                searchProducts.cancel();
+                searchAbortRef.current?.abort();
+            };
         }, [disabled, searchQuery, searchProducts]);
 
         // Auto-scroll to highlighted item
