@@ -1,9 +1,9 @@
 import { clientUuid } from '../../../../utils/clientUuid';
 import { isCanonicalUuid } from '../../../../utils/canonicalUuid';
 
-export type MasterEntityKind = 'customer' | 'supplier' | 'product';
+export type MasterEntityKind = 'customer' | 'supplier' | 'product' | 'category' | 'manufacturer';
 
-const IDEMPOTENCY_KEY_PATTERN = /^erp-web-master-(customer|supplier|product)-create:[0-9a-f-]{36}$/i;
+const IDEMPOTENCY_KEY_PATTERN = /^erp-web-master-(customer|supplier|product|category|manufacturer)-create:[0-9a-f-]{36}$/i;
 const UPDATE_IDEMPOTENCY_KEY_PATTERN = /^erp-web-master-(customer|supplier)-update:[0-9a-f-]{36}$/i;
 const PRODUCT_ACTIVATION_KEY_PATTERN = /^erp-web-master-product-activate:[0-9a-f-]{36}$/i;
 
@@ -16,7 +16,7 @@ export const newProductActivationIdempotencyKey = (): string => (
 );
 
 export const newMasterUpdateIdempotencyKey = (
-  kind: Exclude<MasterEntityKind, 'product'>,
+  kind: Extract<MasterEntityKind, 'customer' | 'supplier'>,
 ): string => `erp-web-master-${kind}-update:${clientUuid()}`;
 
 export const masterCreateRequestConfig = (idempotencyKey: string) => {

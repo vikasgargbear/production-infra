@@ -207,6 +207,40 @@ async def test_master_create_uses_scoped_write_grant_and_canonical_backend_route
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("tool_name", "operation_key", "path", "arguments"),
+    (
+        (
+            "erp_product_category_create", "catalog.product_category.create",
+            "/api/internal/mcp/master/product-categories",
+            {"name": "Analgesics", "idempotency_key": "mcp-category-create-0001"},
+        ),
+        (
+            "erp_product_manufacturer_create", "catalog.product_manufacturer.create",
+            "/api/internal/mcp/master/product-manufacturers",
+            {"legal_name": "Exact Pharma Laboratories", "idempotency_key": "mcp-manufacturer-create-0001"},
+        ),
+    ),
+)
+async def test_product_reference_creates_share_scoped_canonical_authority(
+    tool_name: str, operation_key: str, path: str, arguments: dict,
+) -> None:
+    access = _access()
+    calls: list[tuple] = []
+    operation = OPERATOR_OPERATIONS[tool_name]
+    grant = _operator_grant(access, tool_name)
+    grant["permission_code"] = "catalog.product.manage"
+    responses = [Response(200, grant), Response(200, {"row_version": 1})]
+    gateway = OperationGateway(settings(), lambda: Client(responses, calls))
+
+    await gateway.execute_operator(operation, access, arguments)
+
+    assert calls[0][2]["json"]["operation_key"] == operation_key
+    assert calls[1][1].endswith(path)
+    assert calls[1][2]["json"] == arguments
+
+
+@pytest.mark.asyncio
 async def test_product_setup_uses_scoped_write_grant_and_shared_backend_route() -> None:
     access = _access()
     calls: list[tuple] = []

@@ -193,6 +193,8 @@ def test_canonical_router_covers_reads_and_bounded_master_writes() -> None:
     assert {route.path for route in routes} >= {path.removeprefix("/api") for path in CRITICAL_UI_READS}
     writes = [route for route in routes if not route.methods <= {"GET", "HEAD"}]
     assert [(route.path, route.methods) for route in writes] == [
+        ("/products/setup-options/categories", {"POST"}),
+        ("/products/setup-options/manufacturers", {"POST"}),
         ("/products/{product_id}/setup", {"PUT"}),
         ("/products/{product_id}/activate", {"POST"}),
         ("/products/", {"POST"}),

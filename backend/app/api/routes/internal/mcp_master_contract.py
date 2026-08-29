@@ -11,6 +11,8 @@ CUSTOMER_UPDATE_OPERATION = "parties.customer." + "update"
 SUPPLIER_UPDATE_OPERATION = "parties.supplier." + "update"
 PRODUCT_ACTIVATION_OPERATION = "catalog.product.activate"
 DRUG_LICENSE_RECORD_OPERATION = "compliance.wholesale_license.record"
+PRODUCT_CATEGORY_CREATE_OPERATION = "catalog.product_category.create"
+PRODUCT_MANUFACTURER_CREATE_OPERATION = "catalog.product_manufacturer.create"
 
 
 MASTER_WRITE_POLICIES = {
@@ -24,6 +26,16 @@ MASTER_WRITE_POLICIES = {
         ActionPolicy(
             "catalog.product_draft.configure", "catalog.product.manage",
             "reversible_write", "canonical_product_setup_v1",
+            "actor_confirmation", (),
+        ),
+        ActionPolicy(
+            PRODUCT_CATEGORY_CREATE_OPERATION, "catalog.product.manage",
+            "reversible_write", "canonical_product_category_create_v1",
+            "actor_confirmation", (),
+        ),
+        ActionPolicy(
+            PRODUCT_MANUFACTURER_CREATE_OPERATION, "catalog.product.manage",
+            "reversible_write", "canonical_product_manufacturer_create_v1",
             "actor_confirmation", (),
         ),
         ActionPolicy(

@@ -14,7 +14,7 @@ const ids = {
 };
 
 describe('backend-generated master identity contract', () => {
-  it.each(['customer', 'supplier', 'product'] as const)(
+  it.each(['customer', 'supplier', 'product', 'category', 'manufacturer'] as const)(
     'creates a bounded %s attempt key and sends the reviewed header',
     kind => {
       const key = newMasterCreateIdempotencyKey(kind);

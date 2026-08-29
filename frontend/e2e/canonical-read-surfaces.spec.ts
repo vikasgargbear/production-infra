@@ -153,7 +153,7 @@ const reportHeader = {
   currency_code: 'INR', date_from: '2026-08-01', date_to: '2026-08-28',
 };
 
-const installRoutes = async (page: Page) => {
+const installRoutes = async (page: Page, options: { emptyProductReferences?: boolean } = {}) => {
   let productName = 'Existing Product';
   let productSetup: Record<string, unknown> = {
     category_id: null, manufacturer_party_id: null, base_uom_code: 'EA',
@@ -193,6 +193,20 @@ const installRoutes = async (page: Page) => {
       body = {
         product_id: UUID.product, product_code: 'PROD-0001', product_name: productName,
         lifecycle_status: 'draft', row_version: 1, message: 'Product draft created',
+      };
+    } else if (method === 'POST' && path === '/api/products/setup-options/manufacturers') {
+      const request = route.request().postDataJSON();
+      status = 201;
+      body = {
+        manufacturer_party_id: UUID.manufacturer, legal_name: request.legal_name,
+        row_version: 1, idempotency_replayed: false,
+      };
+    } else if (method === 'POST' && path === '/api/products/setup-options/categories') {
+      const request = route.request().postDataJSON();
+      status = 201;
+      body = {
+        category_id: UUID.category, code: 'ANALGESICS', name: request.name,
+        parent_id: null, row_version: 1, idempotency_replayed: false,
       };
     } else if (method === 'PUT' && path === `/api/products/${UUID.product}/setup`) {
       productSetup = route.request().postDataJSON();
@@ -249,12 +263,12 @@ const installRoutes = async (page: Page) => {
     };
     else if (path === '/api/products/setup-options') body = {
       business_date: '2026-08-28', ingredient_reference_ready: true, hsn_reference_ready: true,
-      categories: [{ category_id: UUID.category, code: 'GEN', name: 'General', parent_id: null }],
+      categories: options.emptyProductReferences ? [] : [{ category_id: UUID.category, code: 'GEN', name: 'General', parent_id: null }],
       units: [
         { code: 'EA', name: 'Each', symbol: 'ea', dimension: 'count', decimal_places: 3 },
         { code: 'BX', name: 'Box', symbol: 'box', dimension: 'count', decimal_places: 3 },
       ],
-      manufacturers: [{ manufacturer_party_id: UUID.manufacturer, legal_name: 'Healthy Supply Co', supplier_code: 'SUP-0001' }],
+      manufacturers: options.emptyProductReferences ? [] : [{ manufacturer_party_id: UUID.manufacturer, legal_name: 'Healthy Manufacturing Ltd' }],
     };
     else if (path === '/api/products/setup-options/hsn') body = [{
       tax_code_version_id: UUID.taxCode, hsn_code: '4819', description: 'Cartons and boxes',
@@ -356,7 +370,7 @@ for (const viewport of [{ width: 360, height: 800 }, { width: 412, height: 915 }
     await expect(page.getByRole('button', { name: 'Review setup' })).toBeVisible();
     await page.getByLabel(/Product name/).fill('Browser Carton');
     await page.getByLabel(/Product kind/).selectOption('consumable');
-    await page.getByLabel(/Manufacturer/).selectOption(UUID.manufacturer);
+    await page.getByLabel(/^Legal manufacturer/).selectOption(UUID.manufacturer);
     await page.getByLabel(/Category/).selectOption(UUID.category);
     await page.getByLabel(/HSN code/).fill('4819');
     await page.getByRole('button', { name: /4819 · 12\.000000% GST/ }).click();
@@ -385,6 +399,27 @@ for (const viewport of [{ width: 360, height: 800 }, { width: 412, height: 915 }
     await primary.click();
     await expect.poll(() => statuses.some(item => item.method === 'POST' && item.path.endsWith('/activate') && item.status === 200)).toBe(true);
     expect(statuses.some(item => item.method === 'PUT' && item.path.endsWith('/setup') && item.status === 200)).toBe(true);
+  });
+}
+
+for (const viewport of [{ width: 360, height: 800 }, { width: 412, height: 915 }, { width: 1280, height: 900 }]) {
+  test(`first product can add category and legal manufacturer at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await installRoutes(page, { emptyProductReferences: true });
+    await page.goto('/e2e/canonical-reads?surface=products');
+    await page.getByRole('button', { name: 'Create product' }).click();
+    await expect(page.getByText(/No manufacturer exists for this organization yet/)).toBeVisible();
+    await expect(page.getByText(/No product categories yet/)).toBeVisible();
+    await page.getByLabel('New legal manufacturer name').fill('Exact Pharma Laboratories');
+    await page.getByRole('button', { name: 'Add manufacturer' }).click();
+    await expect(page.getByLabel(/^Legal manufacturer/)).toHaveValue(UUID.manufacturer);
+    await page.getByLabel('New product category name').fill('Analgesics');
+    await page.getByRole('button', { name: 'Add category' }).click();
+    await expect(page.getByLabel(/^Category/)).toHaveValue(UUID.category);
+    await expectNoHorizontalPageScroll(page, viewport.width);
+    for (const action of ['Add manufacturer', 'Add category']) {
+      expect((await page.getByRole('button', { name: action }).boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    }
   });
 }
 

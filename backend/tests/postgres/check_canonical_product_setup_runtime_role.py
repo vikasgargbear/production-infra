@@ -159,6 +159,19 @@ def main() -> None:
                 text("SELECT erp_security.activate_context(:auth,:org)"),
                 {"auth": fixture.AUTH_A, "org": fixture.ORG_A},
             )
+            manufacturer = connection.scalar(
+                text("""
+                    SELECT manufacturer_party_id
+                      FROM erp_master_commands.create_product_manufacturer(
+                        :org,:name,:key,transaction_timestamp()+interval '1 hour'
+                      )
+                """),
+                {
+                    "org": fixture.ORG_A,
+                    "name": "Product Setup Manufacturer",
+                    "key": hashlib.sha256(b"product-setup-manufacturer").digest(),
+                },
+            )
 
             _expect_denied(
                 connection,
@@ -186,7 +199,7 @@ def main() -> None:
                 {
                     "org": fixture.ORG_A,
                     "product": fixture.PRODUCT_DELETE,
-                    "manufacturer": fixture.PARTY_A,
+                    "manufacturer": manufacturer,
                     "hsn_code": hsn_code,
                 },
             ).one()
@@ -216,7 +229,7 @@ def main() -> None:
                 {
                     "org": fixture.ORG_A,
                     "product": fixture.PRODUCT_DELETE,
-                    "manufacturer": fixture.PARTY_A,
+                    "manufacturer": manufacturer,
                     "hsn_code": hsn_code,
                 },
             )
@@ -230,7 +243,7 @@ def main() -> None:
                 {
                     "org": fixture.ORG_A,
                     "product": fixture.PRODUCT_DELETE,
-                    "manufacturer": fixture.PARTY_A,
+                    "manufacturer": manufacturer,
                     "hsn_code": hsn_code,
                 },
             )
