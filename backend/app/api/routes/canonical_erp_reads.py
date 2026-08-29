@@ -537,6 +537,46 @@ def _product_search_tsquery(search: str) -> str:
     return " & ".join(f"{token}:*" for token in tokens)
 
 
+def _master_search_parameters(value: Optional[str]) -> dict[str, Any]:
+    """Build the shared, bounded REST/MCP master-search contract.
+
+    Names stay the primary discovery surface.  Contains matching is enabled only
+    after three visible characters; a conservative one-character wildcard
+    fallback is enabled only for five-to-32-character ASCII names.  That catches
+    common misspellings such as ``paracetmol`` without making short queries scan
+    every master-data field or silently selecting a fuzzy match.
+    """
+
+    search = " ".join((value or "").casefold().split())
+    compact = "".join(search.split())
+    allow_contains = len(compact) >= 3
+    fuzzy_patterns: list[str] = []
+    if 5 <= len(search) <= 32 and re.fullmatch(r"[a-z0-9 ]+", search):
+        for index, character in enumerate(search):
+            if character == " ":
+                continue
+            fuzzy_patterns.extend((
+                f"{search[:index]}_{search[index + 1:]}%",  # substitution
+                f"{search[:index]}{search[index + 1:]}%",  # extra query character
+                f"{search[:index]}_{search[index:]}%",  # missing query character
+            ))
+        fuzzy_patterns = fuzzy_patterns[:32]
+    phone_digits = "".join(re.findall(r"[0-9]+", search))
+    phone_query = bool(
+        len(phone_digits) >= 4 and re.fullmatch(r"[+()0-9. -]+", search)
+    )
+    return {
+        "search": search,
+        "prefix": f"{search}%",
+        "tsquery": _product_search_tsquery(search),
+        "allow_contains": allow_contains,
+        "fuzzy_patterns": fuzzy_patterns,
+        "allow_fuzzy": bool(fuzzy_patterns),
+        "phone_digits": phone_digits,
+        "allow_phone_suffix": phone_query,
+    }
+
+
 @router.get("/products")
 @router.get("/products/")
 def products(limit: int = Query(50, ge=1, le=200), skip: int = Query(0, ge=0),
@@ -545,66 +585,140 @@ def products(limit: int = Query(50, ge=1, le=200), skip: int = Query(0, ge=0),
              user: dict = MASTER_USER, db: Session = Depends(get_db)):
     org_id = _activate(db, user)
     effective_offset = offset if offset is not None else skip
-    normalized_search = " ".join((search if isinstance(search, str) else "").casefold().split())
-    search_tsquery = _product_search_tsquery(normalized_search)
     parameters = {
+        **_master_search_parameters(search if isinstance(search, str) else ""),
         "org_id": org_id,
-        "search": normalized_search,
-        "prefix": f"{normalized_search}%",
-        "tsquery": search_tsquery,
         "include_drafts": include_inactive,
         "limit": limit,
         "skip": effective_offset,
     }
-    rows = _rows(db, """
+    fallback_product_predicate = """
+             OR (:allow_contains AND (
+                  pg_catalog.strpos(pg_catalog.lower(product.name),:search)>0
+                  OR pg_catalog.strpos(
+                       pg_catalog.lower(COALESCE(product.generic_name,'')),:search
+                     )>0))
+             OR (:allow_fuzzy AND pg_catalog.lower(product.name)
+                  LIKE ANY(CAST(:fuzzy_patterns AS text[])))
+             OR (:allow_contains AND EXISTS (
+                  SELECT 1 FROM parties.parties fallback_manufacturer
+                   WHERE fallback_manufacturer.org_id=product.org_id
+                     AND fallback_manufacturer.id=product.manufacturer_party_id
+                     AND pg_catalog.strpos(
+                           pg_catalog.lower(fallback_manufacturer.legal_name),:search
+                         )>0
+                ))
+             OR (:allow_contains AND EXISTS (
+                  SELECT 1
+                    FROM catalog.product_ingredients fallback_link
+                    JOIN catalog.ingredients fallback_ingredient
+                      ON fallback_ingredient.id=fallback_link.ingredient_id
+                   WHERE fallback_link.org_id=product.org_id
+                     AND fallback_link.product_id=product.id
+                     AND fallback_link.status='active'
+                     AND fallback_link.valid_until IS NULL
+                     AND fallback_ingredient.status='active'
+                     AND pg_catalog.strpos(
+                           fallback_ingredient.normalized_name,:search
+                         )>0
+                ))
+    """
+
+    def count_products(use_fallback: bool) -> int:
+        fallback = fallback_product_predicate if use_fallback else ""
+        return db.execute(text(f"""
+            SELECT COUNT(*) FROM catalog.products product
+             WHERE product.org_id=:org_id
+               AND (product.status IN ('active','blocked')
+                    OR (:include_drafts AND product.status='draft'))
+               AND (
+                 :search='' OR pg_catalog.lower(product.name)=:search
+                 OR pg_catalog.lower(product.name) LIKE :prefix
+                 OR pg_catalog.lower(COALESCE(product.generic_name,'')) LIKE :prefix
+                 OR pg_catalog.lower(product.sku)=:search OR product.gtin=:search
+                 OR pg_catalog.lower(product.sku) LIKE :prefix
+                 OR (:tsquery<>'' AND pg_catalog.to_tsvector(
+                   'simple'::pg_catalog.regconfig, COALESCE(product.name,'')
+                 ) @@ pg_catalog.to_tsquery('simple'::pg_catalog.regconfig,:tsquery))
+                 {fallback}
+               )
+        """), parameters).scalar_one()
+
+    total = count_products(False)
+    fallback_used = bool(parameters["search"] and total == 0)
+    if fallback_used:
+        total = count_products(True)
+    fallback = """
+               OR (:allow_contains AND (
+                    pg_catalog.strpos(pg_catalog.lower(p.name),:search)>0
+                    OR pg_catalog.strpos(
+                         pg_catalog.lower(COALESCE(p.generic_name,'')),:search
+                       )>0))
+               OR (:allow_fuzzy AND pg_catalog.lower(p.name)
+                    LIKE ANY(CAST(:fuzzy_patterns AS text[])))
+               OR (:allow_contains AND EXISTS (
+                    SELECT 1 FROM parties.parties fallback_manufacturer
+                     WHERE fallback_manufacturer.org_id=p.org_id
+                       AND fallback_manufacturer.id=p.manufacturer_party_id
+                       AND pg_catalog.strpos(
+                             pg_catalog.lower(fallback_manufacturer.legal_name),:search
+                           )>0
+                  ))
+               OR (:allow_contains AND EXISTS (
+                    SELECT 1
+                      FROM catalog.product_ingredients fallback_link
+                      JOIN catalog.ingredients fallback_ingredient
+                        ON fallback_ingredient.id=fallback_link.ingredient_id
+                     WHERE fallback_link.org_id=p.org_id
+                       AND fallback_link.product_id=p.id
+                       AND fallback_link.status='active'
+                       AND fallback_link.valid_until IS NULL
+                       AND fallback_ingredient.status='active'
+                       AND pg_catalog.strpos(
+                             fallback_ingredient.normalized_name,:search
+                           )>0
+                  ))
+    """ if fallback_used else ""
+    rows = _rows(db, f"""
         WITH ranked AS MATERIALIZED (
           SELECT p.id,
                  CASE
                    WHEN :search='' THEN 0
-                   WHEN pg_catalog.lower(p.sku)=:search THEN 100
-                   WHEN p.gtin=:search THEN 98
-                   WHEN pg_catalog.lower(p.name)=:search THEN 95
-                   WHEN pg_catalog.lower(p.name) LIKE :prefix THEN 85
-                   WHEN pg_catalog.lower(COALESCE(p.generic_name,'')) LIKE :prefix THEN 78
-                   WHEN pg_catalog.lower(COALESCE(manufacturer.legal_name,'')) LIKE :prefix THEN 72
-                   WHEN COALESCE(composition.normalized_names,'') LIKE :prefix THEN 68
+                   WHEN pg_catalog.lower(p.name)=:search THEN 100
+                   WHEN pg_catalog.lower(p.name) LIKE :prefix THEN 95
                    WHEN :tsquery<>'' AND pg_catalog.to_tsvector(
                      'simple'::pg_catalog.regconfig,
-                     COALESCE(p.sku,'')||' '||COALESCE(p.name,'')||' '||
-                     COALESCE(p.generic_name,'')||' '||COALESCE(p.gtin,'')
-                   ) @@ pg_catalog.to_tsquery('simple'::pg_catalog.regconfig,:tsquery) THEN 60
-                   WHEN COALESCE(composition.search_document,''::pg_catalog.tsvector)
-                          @@ pg_catalog.to_tsquery('simple'::pg_catalog.regconfig,:tsquery) THEN 55
+                     COALESCE(p.name,'')
+                   ) @@ pg_catalog.to_tsquery('simple'::pg_catalog.regconfig,:tsquery) THEN 90
+                   WHEN :allow_contains AND pg_catalog.strpos(
+                     pg_catalog.lower(p.name),:search
+                   )>0 THEN 85
+                   WHEN :allow_fuzzy AND pg_catalog.lower(p.name)
+                     LIKE ANY(CAST(:fuzzy_patterns AS text[])) THEN 80
+                   WHEN pg_catalog.lower(COALESCE(p.generic_name,''))=:search THEN 75
+                   WHEN pg_catalog.lower(COALESCE(p.generic_name,'')) LIKE :prefix THEN 70
+                   WHEN :allow_contains AND pg_catalog.strpos(
+                     pg_catalog.lower(COALESCE(p.generic_name,'')),:search
+                   )>0 THEN 65
+                   WHEN pg_catalog.lower(p.sku)=:search THEN 60
+                   WHEN p.gtin=:search THEN 58
+                   WHEN pg_catalog.lower(p.sku) LIKE :prefix THEN 55
                    ELSE 0
                  END AS search_rank
             FROM catalog.products p
-            LEFT JOIN parties.parties manufacturer
-              ON manufacturer.org_id=p.org_id AND manufacturer.id=p.manufacturer_party_id
-            LEFT JOIN LATERAL (
-              SELECT pg_catalog.lower(pg_catalog.string_agg(ingredient.normalized_name,' ' ORDER BY ingredient.normalized_name)) AS normalized_names,
-                     pg_catalog.to_tsvector('simple'::pg_catalog.regconfig,
-                       pg_catalog.string_agg(ingredient.canonical_name,' ' ORDER BY ingredient.canonical_name)) AS search_document
-                FROM catalog.product_ingredients link
-                JOIN catalog.ingredients ingredient ON ingredient.id=link.ingredient_id
-               WHERE link.org_id=p.org_id AND link.product_id=p.id AND link.status='active'
-                 AND link.valid_until IS NULL AND ingredient.status='active'
-            ) composition ON true
            WHERE p.org_id=:org_id
              AND (p.status IN ('active','blocked') OR (:include_drafts AND p.status='draft'))
              AND (
-               :search='' OR pg_catalog.lower(p.sku)=:search OR p.gtin=:search
-               OR pg_catalog.lower(p.name)=:search
+               :search='' OR pg_catalog.lower(p.name)=:search
                OR pg_catalog.lower(p.name) LIKE :prefix
                OR pg_catalog.lower(COALESCE(p.generic_name,'')) LIKE :prefix
-               OR pg_catalog.lower(COALESCE(manufacturer.legal_name,'')) LIKE :prefix
-               OR COALESCE(composition.normalized_names,'') LIKE :prefix
+               OR pg_catalog.lower(p.sku)=:search OR p.gtin=:search
+               OR pg_catalog.lower(p.sku) LIKE :prefix
                OR (:tsquery<>'' AND pg_catalog.to_tsvector(
                  'simple'::pg_catalog.regconfig,
-                 COALESCE(p.sku,'')||' '||COALESCE(p.name,'')||' '||
-                 COALESCE(p.generic_name,'')||' '||COALESCE(p.gtin,'')
+                 COALESCE(p.name,'')
                ) @@ pg_catalog.to_tsquery('simple'::pg_catalog.regconfig,:tsquery))
-               OR (:tsquery<>'' AND COALESCE(composition.search_document,''::pg_catalog.tsvector)
-                    @@ pg_catalog.to_tsquery('simple'::pg_catalog.regconfig,:tsquery))
+               {fallback}
              )
            ORDER BY search_rank DESC,p.name,p.id LIMIT :limit OFFSET :skip
         )
@@ -613,6 +727,7 @@ def products(limit: int = Query(50, ge=1, le=200), skip: int = Query(0, ge=0),
                p.gtin, p.category_id, category.name AS category_name,
                p.manufacturer_party_id, manufacturer.legal_name AS manufacturer_name,
                conversion.id AS uom_conversion_id,
+               packs.packing_summary,
                tax_version.taxability,
                (CASE WHEN tax_version.taxability IS NULL THEN NULL
                      WHEN tax_version.taxability='taxable' THEN tax_version.igst_rate
@@ -646,6 +761,18 @@ def products(limit: int = Query(50, ge=1, le=200), skip: int = Query(0, ge=0),
                ORDER BY valid_from DESC, id LIMIT 1
           ) conversion ON true
           LEFT JOIN LATERAL (
+              SELECT pg_catalog.string_agg(
+                       pack.from_uom_code||' × '||pack.multiplier::text||' '||
+                       pack.to_uom_code, ', ' ORDER BY pack.from_uom_code
+                     ) AS packing_summary
+                FROM catalog.uom_conversions pack
+               WHERE pack.org_id=p.org_id AND pack.product_id=p.id
+                 AND pack.from_uom_code<>pack.to_uom_code
+                 AND pack.to_uom_code=p.base_uom_code AND pack.status='active'
+                 AND pack.valid_from<=(transaction_timestamp() AT TIME ZONE organization.timezone)::date
+                 AND (pack.valid_until IS NULL OR pack.valid_until>=(transaction_timestamp() AT TIME ZONE organization.timezone)::date)
+          ) packs ON true
+          LEFT JOIN LATERAL (
               SELECT taxability, igst_rate
                 FROM tax.tax_code_versions
                WHERE code=p.hsn_code AND code_kind='hsn' AND status='active'
@@ -655,37 +782,6 @@ def products(limit: int = Query(50, ge=1, le=200), skip: int = Query(0, ge=0),
           ) tax_version ON true
          ORDER BY ranked.search_rank DESC,p.name,p.id
     """, parameters)
-    total = db.execute(text("""
-        SELECT COUNT(*) FROM catalog.products product
-        LEFT JOIN parties.parties manufacturer
-          ON manufacturer.org_id=product.org_id AND manufacturer.id=product.manufacturer_party_id
-        LEFT JOIN LATERAL (
-          SELECT pg_catalog.lower(pg_catalog.string_agg(ingredient.normalized_name,' ' ORDER BY ingredient.normalized_name)) AS normalized_names,
-                 pg_catalog.to_tsvector('simple'::pg_catalog.regconfig,
-                   pg_catalog.string_agg(ingredient.canonical_name,' ' ORDER BY ingredient.canonical_name)) AS search_document
-            FROM catalog.product_ingredients link
-            JOIN catalog.ingredients ingredient ON ingredient.id=link.ingredient_id
-           WHERE link.org_id=product.org_id AND link.product_id=product.id
-             AND link.status='active' AND link.valid_until IS NULL AND ingredient.status='active'
-        ) composition ON true
-         WHERE product.org_id=:org_id
-           AND (product.status IN ('active','blocked') OR (:include_drafts AND product.status='draft'))
-           AND (
-             :search='' OR pg_catalog.lower(product.sku)=:search OR product.gtin=:search
-             OR pg_catalog.lower(product.name)=:search
-             OR pg_catalog.lower(product.name) LIKE :prefix
-             OR pg_catalog.lower(COALESCE(product.generic_name,'')) LIKE :prefix
-             OR pg_catalog.lower(COALESCE(manufacturer.legal_name,'')) LIKE :prefix
-             OR COALESCE(composition.normalized_names,'') LIKE :prefix
-             OR (:tsquery<>'' AND pg_catalog.to_tsvector(
-               'simple'::pg_catalog.regconfig,
-               COALESCE(product.sku,'')||' '||COALESCE(product.name,'')||' '||
-               COALESCE(product.generic_name,'')||' '||COALESCE(product.gtin,'')
-             ) @@ pg_catalog.to_tsquery('simple'::pg_catalog.regconfig,:tsquery))
-             OR (:tsquery<>'' AND COALESCE(composition.search_document,''::pg_catalog.tsvector)
-                  @@ pg_catalog.to_tsquery('simple'::pg_catalog.regconfig,:tsquery))
-           )
-    """), parameters).scalar_one()
     return {"products": rows, "total": total, "offset": effective_offset, "limit": limit}
 
 
@@ -1515,32 +1611,101 @@ _PARTY_CONTACTS = """
 def customers(limit: int = Query(100, ge=1, le=1000), skip: int = Query(0, ge=0),
               search: str = Query("", max_length=100), user: dict = MASTER_USER, db: Session = Depends(get_db)):
     org_id = _activate(db, user)
-    normalized_search = " ".join((search if isinstance(search, str) else "").casefold().split())
-    search_tsquery = _product_search_tsquery(normalized_search)
-    rows = _rows(db, f"""
-        SELECT account.id AS customer_id,account.party_id,account.customer_code,
-               party.legal_name AS customer_name, party.trade_name,
-               contact.name AS contact_person_name,
-               contact.phone AS primary_phone, contact.email AS primary_email,
-               party.pan AS pan_number,
-               registration.registration_number AS gst_number,
-               registration.registration_status AS gst_verification_status,
-               COALESCE(substring(registration.registration_number from 1 for 2),
+    parameters = {
+        **_master_search_parameters(search if isinstance(search, str) else ""),
+        "org_id": org_id,
+        "limit": limit,
+        "skip": skip,
+    }
+
+    def load_rows(use_fallback: bool):
+        fallback = """
+               OR (:allow_contains AND (
+                    pg_catalog.strpos(pg_catalog.lower(party.legal_name),:search)>0
+                    OR pg_catalog.strpos(
+                         pg_catalog.lower(COALESCE(party.trade_name,'')),:search
+                       )>0))
+               OR (:allow_fuzzy AND pg_catalog.lower(party.legal_name)
+                    LIKE ANY(CAST(:fuzzy_patterns AS text[])))
+               OR (:allow_phone_suffix AND pg_catalog.right(
+                    pg_catalog.regexp_replace(COALESCE(contact.phone,''),'[^0-9]','','g'),
+                    pg_catalog.length(:phone_digits)
+                  )=:phone_digits)
+        """ if use_fallback else ""
+        return _rows(db, f"""
+        WITH ranked AS MATERIALIZED (
+          SELECT account.id AS customer_id, account.party_id, account.customer_code,
+                 party.legal_name AS customer_name, party.trade_name,
+                 contact.name AS contact_person_name,
+                 contact.phone AS primary_phone, contact.email AS primary_email,
+                 party.pan AS pan_number,
+                 registration.registration_number AS gst_number,
+                 registration.registration_status AS gst_verification_status,
+                 account.credit_limit, account.credit_days,
+                 party.party_kind AS customer_type, account.status,
+                 account.row_version AS account_row_version,
+                 party.row_version AS party_row_version,
+                 account.created_at, account.updated_at,
+                 CASE
+                   WHEN :search='' THEN 0
+                   WHEN pg_catalog.lower(party.legal_name)=:search THEN 100
+                   WHEN pg_catalog.lower(COALESCE(party.trade_name,''))=:search THEN 98
+                   WHEN pg_catalog.lower(party.legal_name) LIKE :prefix THEN 95
+                   WHEN pg_catalog.lower(COALESCE(party.trade_name,'')) LIKE :prefix THEN 92
+                   WHEN :tsquery<>'' AND pg_catalog.to_tsvector(
+                     'simple'::pg_catalog.regconfig,
+                     COALESCE(party.legal_name,'')||' '||COALESCE(party.trade_name,'')
+                   ) @@ pg_catalog.to_tsquery('simple'::pg_catalog.regconfig,:tsquery) THEN 90
+                   WHEN :allow_contains AND pg_catalog.strpos(
+                     pg_catalog.lower(party.legal_name),:search
+                   )>0 THEN 85
+                   WHEN :allow_fuzzy AND pg_catalog.lower(party.legal_name)
+                     LIKE ANY(CAST(:fuzzy_patterns AS text[])) THEN 80
+                   WHEN pg_catalog.lower(account.customer_code)=:search THEN 75
+                   WHEN pg_catalog.lower(account.customer_code) LIKE :prefix THEN 72
+                   WHEN COALESCE(contact.phone,'')=:search THEN 70
+                   WHEN COALESCE(contact.phone,'') LIKE :prefix THEN 68
+                   WHEN pg_catalog.lower(COALESCE(registration.registration_number,''))=:search THEN 65
+                   WHEN pg_catalog.lower(COALESCE(registration.registration_number,'')) LIKE :prefix THEN 63
+                   WHEN pg_catalog.lower(COALESCE(contact.email,''))=:search THEN 60
+                   WHEN pg_catalog.lower(COALESCE(contact.email,'')) LIKE :prefix THEN 58
+                   WHEN :allow_phone_suffix THEN 55
+                   ELSE 50
+                 END AS search_rank
+            FROM parties.customer_accounts account
+            JOIN parties.parties party
+              ON party.org_id=account.org_id AND party.id=account.party_id
+            {_PARTY_CONTACTS}
+           WHERE account.org_id=:org_id AND account.status IN ('active','on_hold')
+             AND (:search='' OR pg_catalog.lower(party.legal_name) LIKE :prefix
+                  OR pg_catalog.lower(COALESCE(party.trade_name,'')) LIKE :prefix
+                  OR pg_catalog.lower(account.customer_code) LIKE :prefix
+                  OR COALESCE(contact.phone,'') LIKE :prefix
+                  OR pg_catalog.lower(COALESCE(contact.email,'')) LIKE :prefix
+                  OR pg_catalog.lower(COALESCE(registration.registration_number,'')) LIKE :prefix
+                  OR (:tsquery<>'' AND pg_catalog.to_tsvector(
+                       'simple'::pg_catalog.regconfig,
+                       COALESCE(party.legal_name,'')||' '||COALESCE(party.trade_name,'')
+                     ) @@ pg_catalog.to_tsquery('simple'::pg_catalog.regconfig,:tsquery))
+                  {fallback})
+           ORDER BY search_rank DESC, party.legal_name, account.id
+           LIMIT :limit OFFSET :skip
+        )
+        SELECT ranked.*,
+               address.line1 AS address_line1, address.line2 AS address_line2,
+               address.city, address.state_code, address.postal_code AS pincode,
+               COALESCE(substring(ranked.gst_number from 1 for 2),
                         address.state_code) AS place_of_supply_state_code,
-               account.credit_limit, account.credit_days,
                COALESCE(outstanding.current_outstanding,0) AS current_outstanding,
-               party.party_kind AS customer_type, account.status='active' AS is_active,
-               account.status,account.row_version AS account_row_version,
-               party.row_version AS party_row_version,
-               account.created_at,account.updated_at
-          FROM parties.customer_accounts account
-          JOIN parties.parties party ON party.org_id=account.org_id AND party.id=account.party_id
-          {_PARTY_CONTACTS}
+               ranked.status='active' AS is_active
+          FROM ranked
           LEFT JOIN LATERAL (
-              SELECT state_code FROM parties.addresses
-               WHERE org_id=account.org_id AND party_id=account.party_id
-                 AND status='active'
-               ORDER BY is_primary DESC, id LIMIT 1
+              SELECT line1,line2,city,state_code,postal_code
+                FROM parties.addresses
+               WHERE org_id=:org_id AND party_id=ranked.party_id AND status='active'
+               ORDER BY is_primary DESC,
+                        CASE address_kind WHEN 'billing' THEN 0 WHEN 'registered' THEN 1 ELSE 2 END,
+                        id LIMIT 1
           ) address ON true
           LEFT JOIN LATERAL (
               SELECT SUM(GREATEST(item.principal_amount-COALESCE(applied.amount,0),0))
@@ -1551,7 +1716,7 @@ def customers(limit: int = Query(100, ge=1, le=1000), skip: int = Query(0, ge=0)
                  AND event.sales_invoice_id IS NOT NULL
                 JOIN sales.invoices invoice
                   ON invoice.org_id=event.org_id AND invoice.id=event.sales_invoice_id
-                 AND invoice.customer_account_id=account.id AND invoice.status='posted'
+                 AND invoice.customer_account_id=ranked.customer_id AND invoice.status='posted'
                 LEFT JOIN LATERAL (
                     SELECT SUM(allocation.amount) AS amount
                       FROM finance.allocations allocation
@@ -1565,49 +1730,53 @@ def customers(limit: int = Query(100, ge=1, le=1000), skip: int = Query(0, ge=0)
                               AND reversal.reversal_of_allocation_id=allocation.id
                        )
                 ) applied ON true
-               WHERE item.org_id=account.org_id
+               WHERE item.org_id=:org_id
                  AND item.item_side='receivable' AND item.status<>'reversed'
           ) outstanding ON true
-         WHERE account.org_id=:org_id AND account.status IN ('active','on_hold')
-           AND (:search='' OR pg_catalog.lower(party.legal_name) LIKE :prefix
-                OR pg_catalog.lower(account.customer_code) LIKE :prefix
-                OR COALESCE(contact.phone,'') LIKE :prefix
-                OR pg_catalog.lower(COALESCE(contact.email,'')) LIKE :prefix
-                OR pg_catalog.lower(COALESCE(registration.registration_number,'')) LIKE :prefix
-                OR (:tsquery<>'' AND pg_catalog.to_tsvector(
-                      'simple'::pg_catalog.regconfig,
-                      COALESCE(party.legal_name,'')||' '||COALESCE(party.trade_name,'')
-                    ) @@ pg_catalog.to_tsquery('simple'::pg_catalog.regconfig,:tsquery)))
-         ORDER BY CASE WHEN pg_catalog.lower(account.customer_code)=:search THEN 0
-                       WHEN COALESCE(contact.phone,'')=:search THEN 1
-                       WHEN pg_catalog.lower(COALESCE(registration.registration_number,''))=:search THEN 2
-                       WHEN pg_catalog.lower(party.legal_name)=:search THEN 3 ELSE 4 END,
-                  party.legal_name, account.id LIMIT :limit OFFSET :skip
-    """, {"org_id": org_id, "search": normalized_search, "prefix": f"{normalized_search}%",
-            "tsquery": search_tsquery,
-            "limit": limit, "skip": skip})
-    total = db.execute(text(f"""
-        SELECT COUNT(*)
-          FROM parties.customer_accounts account
-          JOIN parties.parties party
-            ON party.org_id=account.org_id AND party.id=account.party_id
-          {_PARTY_CONTACTS}
-         WHERE account.org_id=:org_id AND account.status IN ('active','on_hold')
-           AND (:search='' OR pg_catalog.lower(party.legal_name) LIKE :prefix
-                OR pg_catalog.lower(account.customer_code) LIKE :prefix
-                OR COALESCE(contact.phone,'') LIKE :prefix
-                OR pg_catalog.lower(COALESCE(contact.email,'')) LIKE :prefix
-                OR pg_catalog.lower(COALESCE(registration.registration_number,'')) LIKE :prefix
-                OR (:tsquery<>'' AND pg_catalog.to_tsvector(
-                      'simple'::pg_catalog.regconfig,
-                      COALESCE(party.legal_name,'')||' '||COALESCE(party.trade_name,'')
-                    ) @@ pg_catalog.to_tsquery('simple'::pg_catalog.regconfig,:tsquery)))
-    """), {
-        "org_id": org_id,
-        "search": normalized_search,
-        "prefix": f"{normalized_search}%",
-        "tsquery": search_tsquery,
-    }).scalar_one()
+         ORDER BY ranked.search_rank DESC, ranked.customer_name, ranked.customer_id
+    """, parameters)
+
+    customer_fallback = """
+                OR (:allow_contains AND (
+                     pg_catalog.strpos(pg_catalog.lower(party.legal_name),:search)>0
+                     OR pg_catalog.strpos(
+                          pg_catalog.lower(COALESCE(party.trade_name,'')),:search
+                        )>0))
+                OR (:allow_fuzzy AND pg_catalog.lower(party.legal_name)
+                     LIKE ANY(CAST(:fuzzy_patterns AS text[])))
+                OR (:allow_phone_suffix AND pg_catalog.right(
+                     pg_catalog.regexp_replace(COALESCE(contact.phone,''),'[^0-9]','','g'),
+                     pg_catalog.length(:phone_digits)
+                   )=:phone_digits)
+    """
+
+    def count_customers(use_fallback: bool) -> int:
+        fallback = customer_fallback if use_fallback else ""
+        return db.execute(text(f"""
+            SELECT COUNT(*)
+              FROM parties.customer_accounts account
+              JOIN parties.parties party
+                ON party.org_id=account.org_id AND party.id=account.party_id
+              {_PARTY_CONTACTS}
+             WHERE account.org_id=:org_id AND account.status IN ('active','on_hold')
+               AND (:search='' OR pg_catalog.lower(party.legal_name) LIKE :prefix
+                    OR pg_catalog.lower(COALESCE(party.trade_name,'')) LIKE :prefix
+                    OR pg_catalog.lower(account.customer_code) LIKE :prefix
+                    OR COALESCE(contact.phone,'') LIKE :prefix
+                    OR pg_catalog.lower(COALESCE(contact.email,'')) LIKE :prefix
+                    OR pg_catalog.lower(COALESCE(registration.registration_number,'')) LIKE :prefix
+                    OR (:tsquery<>'' AND pg_catalog.to_tsvector(
+                          'simple'::pg_catalog.regconfig,
+                          COALESCE(party.legal_name,'')||' '||COALESCE(party.trade_name,'')
+                        ) @@ pg_catalog.to_tsquery('simple'::pg_catalog.regconfig,:tsquery))
+                    {fallback})
+        """), parameters).scalar_one()
+
+    total = count_customers(False)
+    fallback_used = bool(parameters["search"] and total == 0)
+    if fallback_used:
+        total = count_customers(True)
+    rows = load_rows(fallback_used)
     return {
         "customers": [
             _money_fields(row, ("credit_limit", "current_outstanding"))
@@ -1810,23 +1979,98 @@ def update_customer_address(
 def suppliers(limit: int = Query(100, ge=1, le=1000), skip: int = Query(0, ge=0),
               search: str = Query("", max_length=100), user: dict = MASTER_USER, db: Session = Depends(get_db)):
     org_id = _activate(db, user)
-    normalized_search = " ".join((search if isinstance(search, str) else "").casefold().split())
-    search_tsquery = _product_search_tsquery(normalized_search)
-    rows = _rows(db, f"""
-        SELECT account.id AS supplier_id,account.party_id,account.supplier_code,
-               party.legal_name AS supplier_name, party.trade_name,
-               contact.phone AS primary_phone, contact.email AS primary_email,
-               registration.registration_number AS gst_number,
-               registration.registration_status AS gst_verification_status,
-               account.payment_days,
+    parameters = {
+        **_master_search_parameters(search if isinstance(search, str) else ""),
+        "org_id": org_id,
+        "limit": limit,
+        "skip": skip,
+    }
+
+    def load_rows(use_fallback: bool):
+        fallback = """
+               OR (:allow_contains AND (
+                    pg_catalog.strpos(pg_catalog.lower(party.legal_name),:search)>0
+                    OR pg_catalog.strpos(
+                         pg_catalog.lower(COALESCE(party.trade_name,'')),:search
+                       )>0))
+               OR (:allow_fuzzy AND pg_catalog.lower(party.legal_name)
+                    LIKE ANY(CAST(:fuzzy_patterns AS text[])))
+               OR (:allow_phone_suffix AND pg_catalog.right(
+                    pg_catalog.regexp_replace(COALESCE(contact.phone,''),'[^0-9]','','g'),
+                    pg_catalog.length(:phone_digits)
+                  )=:phone_digits)
+        """ if use_fallback else ""
+        return _rows(db, f"""
+        WITH ranked AS MATERIALIZED (
+          SELECT account.id AS supplier_id, account.party_id, account.supplier_code,
+                 party.legal_name AS supplier_name, party.trade_name,
+                 contact.name AS contact_person,
+                 contact.phone AS primary_phone, contact.email AS primary_email,
+                 registration.registration_number AS gst_number,
+                 registration.registration_status AS gst_verification_status,
+                 account.payment_days, party.party_kind AS supplier_type,
+                 account.status, account.row_version AS account_row_version,
+                 party.row_version AS party_row_version,
+                 account.created_at, account.updated_at,
+                 CASE
+                   WHEN :search='' THEN 0
+                   WHEN pg_catalog.lower(party.legal_name)=:search THEN 100
+                   WHEN pg_catalog.lower(COALESCE(party.trade_name,''))=:search THEN 98
+                   WHEN pg_catalog.lower(party.legal_name) LIKE :prefix THEN 95
+                   WHEN pg_catalog.lower(COALESCE(party.trade_name,'')) LIKE :prefix THEN 92
+                   WHEN :tsquery<>'' AND pg_catalog.to_tsvector(
+                     'simple'::pg_catalog.regconfig,
+                     COALESCE(party.legal_name,'')||' '||COALESCE(party.trade_name,'')
+                   ) @@ pg_catalog.to_tsquery('simple'::pg_catalog.regconfig,:tsquery) THEN 90
+                   WHEN :allow_contains AND pg_catalog.strpos(
+                     pg_catalog.lower(party.legal_name),:search
+                   )>0 THEN 85
+                   WHEN :allow_fuzzy AND pg_catalog.lower(party.legal_name)
+                     LIKE ANY(CAST(:fuzzy_patterns AS text[])) THEN 80
+                   WHEN pg_catalog.lower(account.supplier_code)=:search THEN 75
+                   WHEN pg_catalog.lower(account.supplier_code) LIKE :prefix THEN 72
+                   WHEN COALESCE(contact.phone,'')=:search THEN 70
+                   WHEN COALESCE(contact.phone,'') LIKE :prefix THEN 68
+                   WHEN pg_catalog.lower(COALESCE(registration.registration_number,''))=:search THEN 65
+                   WHEN pg_catalog.lower(COALESCE(registration.registration_number,'')) LIKE :prefix THEN 63
+                   WHEN pg_catalog.lower(COALESCE(contact.email,''))=:search THEN 60
+                   WHEN pg_catalog.lower(COALESCE(contact.email,'')) LIKE :prefix THEN 58
+                   WHEN :allow_phone_suffix THEN 55
+                   ELSE 50
+                 END AS search_rank
+            FROM parties.supplier_accounts account
+            JOIN parties.parties party
+              ON party.org_id=account.org_id AND party.id=account.party_id
+            {_PARTY_CONTACTS}
+           WHERE account.org_id=:org_id AND account.status IN ('active','on_hold')
+             AND (:search='' OR pg_catalog.lower(party.legal_name) LIKE :prefix
+                  OR pg_catalog.lower(COALESCE(party.trade_name,'')) LIKE :prefix
+                  OR pg_catalog.lower(account.supplier_code) LIKE :prefix
+                  OR COALESCE(contact.phone,'') LIKE :prefix
+                  OR pg_catalog.lower(COALESCE(contact.email,'')) LIKE :prefix
+                  OR pg_catalog.lower(COALESCE(registration.registration_number,'')) LIKE :prefix
+                  OR (:tsquery<>'' AND pg_catalog.to_tsvector(
+                       'simple'::pg_catalog.regconfig,
+                       COALESCE(party.legal_name,'')||' '||COALESCE(party.trade_name,'')
+                     ) @@ pg_catalog.to_tsquery('simple'::pg_catalog.regconfig,:tsquery))
+                  {fallback})
+           ORDER BY search_rank DESC, party.legal_name, account.id
+           LIMIT :limit OFFSET :skip
+        )
+        SELECT ranked.*,
+               address.line1 AS address_line1, address.line2 AS address_line2,
+               address.city, address.state_code, address.postal_code AS pincode,
                COALESCE(outstanding.current_outstanding,0) AS current_outstanding,
-               party.party_kind AS supplier_type, account.status='active' AS is_active,
-               account.status,account.row_version AS account_row_version,
-               party.row_version AS party_row_version,
-               account.created_at,account.updated_at
-          FROM parties.supplier_accounts account
-          JOIN parties.parties party ON party.org_id=account.org_id AND party.id=account.party_id
-          {_PARTY_CONTACTS}
+               ranked.status='active' AS is_active
+          FROM ranked
+          LEFT JOIN LATERAL (
+              SELECT line1,line2,city,state_code,postal_code
+                FROM parties.addresses
+               WHERE org_id=:org_id AND party_id=ranked.party_id AND status='active'
+               ORDER BY is_primary DESC,
+                        CASE address_kind WHEN 'billing' THEN 0 WHEN 'registered' THEN 1 ELSE 2 END,
+                        id LIMIT 1
+          ) address ON true
           LEFT JOIN LATERAL (
               SELECT SUM(GREATEST(item.principal_amount-COALESCE(applied.amount,0),0))
                          AS current_outstanding
@@ -1836,7 +2080,7 @@ def suppliers(limit: int = Query(100, ge=1, le=1000), skip: int = Query(0, ge=0)
                  AND event.supplier_invoice_id IS NOT NULL
                 JOIN procurement.supplier_invoices invoice
                   ON invoice.org_id=event.org_id AND invoice.id=event.supplier_invoice_id
-                 AND invoice.supplier_account_id=account.id AND invoice.status='posted'
+                 AND invoice.supplier_account_id=ranked.supplier_id AND invoice.status='posted'
                 LEFT JOIN LATERAL (
                     SELECT SUM(allocation.amount) AS amount
                       FROM finance.allocations allocation
@@ -1850,27 +2094,15 @@ def suppliers(limit: int = Query(100, ge=1, le=1000), skip: int = Query(0, ge=0)
                               AND reversal.reversal_of_allocation_id=allocation.id
                        )
                 ) applied ON true
-               WHERE item.org_id=account.org_id
+               WHERE item.org_id=:org_id
                  AND item.item_side='payable' AND item.status<>'reversed'
           ) outstanding ON true
-         WHERE account.org_id=:org_id AND account.status IN ('active','on_hold')
-           AND (:search='' OR pg_catalog.lower(party.legal_name) LIKE :prefix
-                OR pg_catalog.lower(account.supplier_code) LIKE :prefix
-                OR COALESCE(contact.phone,'') LIKE :prefix
-                OR pg_catalog.lower(COALESCE(contact.email,'')) LIKE :prefix
-                OR pg_catalog.lower(COALESCE(registration.registration_number,'')) LIKE :prefix
-                OR (:tsquery<>'' AND pg_catalog.to_tsvector(
-                      'simple'::pg_catalog.regconfig,
-                      COALESCE(party.legal_name,'')||' '||COALESCE(party.trade_name,'')
-                    ) @@ pg_catalog.to_tsquery('simple'::pg_catalog.regconfig,:tsquery)))
-         ORDER BY CASE WHEN pg_catalog.lower(account.supplier_code)=:search THEN 0
-                       WHEN COALESCE(contact.phone,'')=:search THEN 1
-                       WHEN pg_catalog.lower(COALESCE(registration.registration_number,''))=:search THEN 2
-                       WHEN pg_catalog.lower(party.legal_name)=:search THEN 3 ELSE 4 END,
-                  party.legal_name, account.id LIMIT :limit OFFSET :skip
-    """, {"org_id": org_id, "search": normalized_search, "prefix": f"{normalized_search}%",
-            "tsquery": search_tsquery,
-            "limit": limit, "skip": skip})
+         ORDER BY ranked.search_rank DESC, ranked.supplier_name, ranked.supplier_id
+    """, parameters)
+
+    rows = load_rows(False)
+    if parameters["search"] and skip == 0 and not rows:
+        rows = load_rows(True)
     return [_money_fields(row, ("current_outstanding",)) for row in rows]
 
 

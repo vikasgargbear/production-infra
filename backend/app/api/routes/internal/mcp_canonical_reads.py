@@ -432,18 +432,104 @@ def _canonical_product_rows(
     *,
     include_drafts: bool,
 ):
-    search = " ".join(q.casefold().split())
-    rows = db.execute(
-        text(
-            """
+    parameters = {
+        **canonical_erp_reads._master_search_parameters(q),
+        "org_id": context.organization_id,
+        "limit": limit,
+        "offset": offset,
+        "include_drafts": include_drafts,
+    }
+
+    def load_rows(use_fallback: bool):
+        fallback = """
+                    OR (:allow_contains AND (
+                         pg_catalog.strpos(pg_catalog.lower(product.name),:search)>0
+                         OR pg_catalog.strpos(
+                              pg_catalog.lower(COALESCE(product.generic_name,'')),:search
+                            )>0))
+                    OR (:allow_fuzzy AND pg_catalog.lower(product.name)
+                         LIKE ANY(CAST(:fuzzy_patterns AS text[])))
+                    OR (:allow_contains AND EXISTS (
+                         SELECT 1 FROM parties.parties fallback_manufacturer
+                          WHERE fallback_manufacturer.org_id=product.org_id
+                            AND fallback_manufacturer.id=product.manufacturer_party_id
+                            AND pg_catalog.strpos(
+                                  pg_catalog.lower(fallback_manufacturer.legal_name),:search
+                                )>0
+                       ))
+                    OR (:allow_contains AND EXISTS (
+                         SELECT 1
+                           FROM catalog.product_ingredients fallback_link
+                           JOIN catalog.ingredients fallback_ingredient
+                             ON fallback_ingredient.id=fallback_link.ingredient_id
+                          WHERE fallback_link.org_id=product.org_id
+                            AND fallback_link.product_id=product.id
+                            AND fallback_link.status='active'
+                            AND fallback_link.valid_until IS NULL
+                            AND fallback_ingredient.status='active'
+                            AND pg_catalog.strpos(
+                                  fallback_ingredient.normalized_name,
+                                  :search
+                                )>0
+                       ))
+        """ if use_fallback else ""
+        return db.execute(
+            text(
+                f"""
+            WITH ranked AS MATERIALIZED (
+              SELECT product.id,
+                     CASE
+                       WHEN :search='' THEN 0
+                       WHEN pg_catalog.lower(product.name)=:search THEN 100
+                       WHEN pg_catalog.lower(product.name) LIKE :prefix THEN 95
+                       WHEN :tsquery<>'' AND pg_catalog.to_tsvector(
+                         'simple'::pg_catalog.regconfig,COALESCE(product.name,'')
+                       ) @@ pg_catalog.to_tsquery(
+                         'simple'::pg_catalog.regconfig,:tsquery
+                       ) THEN 90
+                       WHEN :allow_contains AND pg_catalog.strpos(
+                         pg_catalog.lower(product.name),:search
+                       )>0 THEN 85
+                       WHEN :allow_fuzzy AND pg_catalog.lower(product.name)
+                         LIKE ANY(CAST(:fuzzy_patterns AS text[])) THEN 80
+                       WHEN pg_catalog.lower(COALESCE(product.generic_name,''))=:search THEN 75
+                       WHEN pg_catalog.lower(COALESCE(product.generic_name,'')) LIKE :prefix THEN 70
+                       WHEN pg_catalog.lower(product.sku)=:search THEN 60
+                       WHEN product.gtin=:search THEN 58
+                       WHEN pg_catalog.lower(product.sku) LIKE :prefix THEN 55
+                       ELSE 50
+                     END AS search_rank
+                FROM catalog.products AS product
+               WHERE product.org_id=:org_id
+                 AND (product.status IN ('active','blocked')
+                      OR (:include_drafts AND product.status='draft'))
+                 AND (:search='' OR pg_catalog.lower(product.name) LIKE :prefix
+                      OR pg_catalog.lower(COALESCE(product.generic_name,'')) LIKE :prefix
+                      OR pg_catalog.lower(product.sku)=:search
+                      OR product.gtin=:search
+                      OR pg_catalog.lower(product.sku) LIKE :prefix
+                      OR (:tsquery<>'' AND pg_catalog.to_tsvector(
+                           'simple'::pg_catalog.regconfig,COALESCE(product.name,'')
+                         ) @@ pg_catalog.to_tsquery(
+                           'simple'::pg_catalog.regconfig,:tsquery
+                         ))
+                      {fallback})
+               ORDER BY search_rank DESC,product.name,product.id
+               LIMIT :limit OFFSET :offset
+            )
             SELECT product.id AS product_id, product.sku, product.product_kind,
                    product.name, product.generic_name, product.base_uom_code,
                    dosage_form, strength_display, hsn_code, drug_schedule,
                    requires_prescription, ndps_regulated, cold_chain_required,
                    gtin, product.status, product.status AS lifecycle_status,
                    product.row_version,
+                   category.name AS category_name,
+                   manufacturer.legal_name AS manufacturer_name,
+                   packs.packing_summary,
                    conversions.uom_conversions
-              FROM catalog.products AS product
+              FROM ranked
+              JOIN catalog.products AS product
+                ON product.org_id=:org_id AND product.id=ranked.id
               CROSS JOIN LATERAL (
                   SELECT erp_core_commands.current_organization_business_date()
                            AS business_date
@@ -476,60 +562,33 @@ def _canonical_product_rows(
                        LIMIT 50
                     ) AS conversion
               ) AS conversions ON true
+              LEFT JOIN catalog.categories AS category
+                ON category.org_id=product.org_id AND category.id=product.category_id
               LEFT JOIN parties.parties AS manufacturer
                 ON manufacturer.org_id=product.org_id
                AND manufacturer.id=product.manufacturer_party_id
               LEFT JOIN LATERAL (
-                  SELECT pg_catalog.to_tsvector(
-                           'simple'::pg_catalog.regconfig,
-                           pg_catalog.string_agg(
-                             ingredient.canonical_name,' '
-                             ORDER BY ingredient.canonical_name
-                           )
-                         ) AS search_document
-                    FROM catalog.product_ingredients AS composition
-                    JOIN catalog.ingredients AS ingredient
-                      ON ingredient.id=composition.ingredient_id
-                   WHERE composition.org_id=product.org_id
-                     AND composition.product_id=product.id
-                     AND composition.status='active'
-                     AND composition.valid_until IS NULL
-                     AND ingredient.status='active'
-              ) AS composition ON true
-             WHERE product.org_id=:org_id
-               AND (product.status IN ('active','blocked')
-                    OR (:include_drafts AND product.status='draft'))
-               AND (:search='' OR pg_catalog.lower(product.name) LIKE :prefix
-                    OR pg_catalog.lower(COALESCE(product.generic_name,'')) LIKE :prefix
-                    OR pg_catalog.lower(product.sku) LIKE :prefix
-                    OR product.hsn_code LIKE :prefix OR COALESCE(product.gtin,'') LIKE :prefix
-                    OR pg_catalog.lower(COALESCE(manufacturer.legal_name,'')) LIKE :prefix
-                    OR (:tsquery<>'' AND pg_catalog.to_tsvector(
-                         'simple'::pg_catalog.regconfig,
-                         COALESCE(product.sku,'')||' '||COALESCE(product.name,'')||' '||
-                         COALESCE(product.generic_name,'')||' '||COALESCE(product.gtin,'')
-                       ) @@ pg_catalog.to_tsquery('simple'::pg_catalog.regconfig,:tsquery))
-                    OR (:tsquery<>'' AND COALESCE(
-                         composition.search_document,''::pg_catalog.tsvector
-                       ) @@ pg_catalog.to_tsquery('simple'::pg_catalog.regconfig,:tsquery)))
-             ORDER BY CASE WHEN pg_catalog.lower(product.sku)=:search THEN 0
-                           WHEN product.gtin=:search THEN 1
-                           WHEN pg_catalog.lower(product.name)=:search THEN 2
-                           WHEN pg_catalog.lower(product.name) LIKE :prefix THEN 3 ELSE 4 END,
-                      product.name, product.id
-             LIMIT :limit OFFSET :offset
-            """
-        ),
-        {
-            "org_id": context.organization_id,
-            "search": search,
-            "prefix": f"{search}%",
-            "tsquery": _search_tsquery(search),
-            "limit": limit,
-            "offset": offset,
-            "include_drafts": include_drafts,
-        },
-    ).fetchall()
+                  SELECT pg_catalog.string_agg(
+                           pack.from_uom_code||' × '||pack.multiplier::text||' '||
+                           pack.to_uom_code, ', ' ORDER BY pack.from_uom_code
+                         ) AS packing_summary
+                    FROM catalog.uom_conversions AS pack
+                   WHERE pack.org_id=product.org_id AND pack.product_id=product.id
+                     AND pack.from_uom_code<>pack.to_uom_code
+                     AND pack.to_uom_code=product.base_uom_code AND pack.status='active'
+                     AND pack.valid_from<=business_clock.business_date
+                     AND (pack.valid_until IS NULL
+                          OR pack.valid_until>=business_clock.business_date)
+              ) AS packs ON true
+             ORDER BY ranked.search_rank DESC,product.name,product.id
+                """
+            ),
+            parameters,
+        ).fetchall()
+
+    rows = load_rows(False)
+    if parameters["search"] and offset == 0 and not rows:
+        rows = load_rows(True)
     return _row_dicts(rows)
 
 
@@ -696,10 +755,30 @@ def canonical_supplier_search(
     db: Session = Depends(get_db),
 ):
     _require_operation(context, "master.suppliers.search")
-    search = " ".join((search_term or "").casefold().split())
-    rows = db.execute(
-        text(
-            """
+    parameters = {
+        **canonical_erp_reads._master_search_parameters(search_term),
+        "org_id": context.organization_id,
+        "limit": limit,
+        "offset": offset,
+    }
+
+    def load_rows(use_fallback: bool):
+        fallback = """
+                    OR (:allow_contains AND (
+                         pg_catalog.strpos(pg_catalog.lower(party.legal_name),:search)>0
+                         OR pg_catalog.strpos(
+                              pg_catalog.lower(COALESCE(party.trade_name,'')),:search
+                            )>0))
+                    OR (:allow_fuzzy AND pg_catalog.lower(party.legal_name)
+                         LIKE ANY(CAST(:fuzzy_patterns AS text[])))
+                    OR (:allow_phone_suffix AND pg_catalog.right(
+                         pg_catalog.regexp_replace(COALESCE(contact.phone,''),'[^0-9]','','g'),
+                         pg_catalog.length(:phone_digits)
+                       )=:phone_digits)
+        """ if use_fallback else ""
+        return db.execute(
+            text(
+                f"""
             SELECT supplier.id AS supplier_account_id,
                    supplier.supplier_code, supplier.party_id,
                    party.legal_name, party.trade_name, supplier.payment_days,
@@ -738,24 +817,44 @@ def canonical_supplier_search(
                     OR (:tsquery<>'' AND pg_catalog.to_tsvector(
                          'simple'::pg_catalog.regconfig,
                          COALESCE(party.legal_name,'')||' '||COALESCE(party.trade_name,'')
-                       ) @@ pg_catalog.to_tsquery('simple'::pg_catalog.regconfig,:tsquery)))
-             ORDER BY CASE WHEN pg_catalog.lower(supplier.supplier_code)=:search THEN 0
-                           WHEN COALESCE(contact.phone,'')=:search THEN 1
-                           WHEN pg_catalog.lower(COALESCE(registration.registration_number,''))=:search THEN 2
-                           WHEN pg_catalog.lower(party.legal_name)=:search THEN 3 ELSE 4 END,
+                       ) @@ pg_catalog.to_tsquery('simple'::pg_catalog.regconfig,:tsquery))
+                    {fallback})
+             ORDER BY CASE
+                           WHEN :search='' THEN 0
+                           WHEN pg_catalog.lower(party.legal_name)=:search THEN 100
+                           WHEN pg_catalog.lower(COALESCE(party.trade_name,''))=:search THEN 98
+                           WHEN pg_catalog.lower(party.legal_name) LIKE :prefix THEN 95
+                           WHEN pg_catalog.lower(COALESCE(party.trade_name,'')) LIKE :prefix THEN 92
+                           WHEN :tsquery<>'' AND pg_catalog.to_tsvector(
+                             'simple'::pg_catalog.regconfig,
+                             COALESCE(party.legal_name,'')||' '||COALESCE(party.trade_name,'')
+                           ) @@ pg_catalog.to_tsquery(
+                             'simple'::pg_catalog.regconfig,:tsquery
+                           ) THEN 90
+                           WHEN :allow_contains AND pg_catalog.strpos(
+                             pg_catalog.lower(party.legal_name),:search
+                           )>0 THEN 85
+                           WHEN :allow_fuzzy AND pg_catalog.lower(party.legal_name)
+                             LIKE ANY(CAST(:fuzzy_patterns AS text[])) THEN 80
+                           WHEN pg_catalog.lower(supplier.supplier_code)=:search THEN 75
+                           WHEN pg_catalog.lower(supplier.supplier_code) LIKE :prefix THEN 72
+                           WHEN COALESCE(contact.phone,'')=:search THEN 70
+                           WHEN COALESCE(contact.phone,'') LIKE :prefix THEN 68
+                           WHEN pg_catalog.lower(COALESCE(registration.registration_number,''))=:search THEN 65
+                           WHEN pg_catalog.lower(COALESCE(registration.registration_number,'')) LIKE :prefix THEN 63
+                           WHEN pg_catalog.lower(COALESCE(contact.email,''))=:search THEN 60
+                           WHEN pg_catalog.lower(COALESCE(contact.email,'')) LIKE :prefix THEN 58
+                           WHEN :allow_phone_suffix THEN 55 ELSE 50 END DESC,
                       party.legal_name, supplier.id
              LIMIT :limit OFFSET :offset
             """
-        ),
-        {
-            "org_id": context.organization_id,
-            "search": search,
-            "prefix": f"{search}%",
-            "tsquery": _search_tsquery(search),
-            "limit": limit,
-            "offset": offset,
-        },
-    ).fetchall()
+            ),
+            parameters,
+        ).fetchall()
+
+    rows = load_rows(False)
+    if parameters["search"] and offset == 0 and not rows:
+        rows = load_rows(True)
     suppliers = [SupplierSearchItem(**row) for row in _row_dicts(rows)]
     match_state = (
         "no_match" if not suppliers else "single_match" if len(suppliers) == 1 else "multiple_matches"
