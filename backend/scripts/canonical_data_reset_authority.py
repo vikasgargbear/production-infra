@@ -967,15 +967,19 @@ def _organization_delete_order(
         for index, component in enumerate(components)
         for relation in component
     }
+    unsafe_cycle_edges: list[str] = []
     for child, parents in graph.items():
         for parent in parents:
             if (
                 component_by_relation[child] == component_by_relation[parent]
                 and not edge_deferrable[(child, parent)]
             ):
-                raise ResetAuthorityError(
-                    "organization foreign-key cycle is not fully deferrable"
-                )
+                unsafe_cycle_edges.append(f"{child}->{parent}")
+    if unsafe_cycle_edges:
+        raise ResetAuthorityError(
+            "organization foreign-key cycle is not fully deferrable: "
+            + ", ".join(sorted(unsafe_cycle_edges))
+        )
 
     component_edges = {index: set() for index in range(len(components))}
     incoming = {index: 0 for index in range(len(components))}
