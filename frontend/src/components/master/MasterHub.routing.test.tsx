@@ -11,7 +11,7 @@ jest.mock('../global', () => ({
   ),
 }));
 jest.mock('../../hooks/usePermissions', () => ({
-  usePermissions: () => ({ hasPermission: () => true }),
+  usePermissions: () => ({ hasPermission: () => true, hasCapability: () => true }),
 }));
 jest.mock('./settings/CompanyProfile', () => () => null);
 jest.mock('./masters/ProductMaster', () => () => null);

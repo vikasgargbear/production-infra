@@ -33,6 +33,7 @@ import { useHashRouter } from './hooks/useHashRouter';
 const MobileNavigationSmokePage = lazy(() => import('./e2e/MobileNavigationSmokePage'));
 const CanonicalReadSurfacesSmokePage = lazy(() => import('./e2e/CanonicalReadSurfacesSmokePage'));
 const CustomerReceiptOperatorSmokePage = lazy(() => import('./e2e/CustomerReceiptOperatorSmokePage'));
+const DrugLicenseSetupSmokePage = lazy(() => import('./e2e/DrugLicenseSetupSmokePage'));
 
 // ---------------------------------------------------------------------------
 // Tab / module definitions
@@ -272,6 +273,9 @@ const App = (): JSX.Element => {
           <Suspense fallback={<LoadingSpinner />}><CustomerReceiptOperatorSmokePage /></Suspense>
         </AuthProvider>
       );
+    }
+    if (window.location.pathname === '/e2e/drug-license-setup') {
+      return <Suspense fallback={<LoadingSpinner />}><DrugLicenseSetupSmokePage /></Suspense>;
     }
   }
   return <AuthProvider><AppContent /></AuthProvider>;

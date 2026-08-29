@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Any
+from datetime import date
+from typing import Any, Literal
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
@@ -29,11 +30,17 @@ from ..canonical_erp_reads import (
     _execute_canonical_supplier_create,
     _raise_master_create_database_error,
 )
+from ..canonical_drug_licenses import (
+    DrugLicenseRecordRequest,
+    _license_rows,
+    execute_drug_license_record,
+)
 from .mcp_actions import get_action_context
 from .mcp_master_contract import (
     CUSTOMER_UPDATE_OPERATION,
     PRODUCT_ACTIVATION_OPERATION,
     SUPPLIER_UPDATE_OPERATION,
+    DRUG_LICENSE_RECORD_OPERATION,
     master_write_policy_for,
 )
 
@@ -90,6 +97,27 @@ class MCPCustomerUpdate(CanonicalCustomerUpdate):
 
 class MCPSupplierUpdate(CanonicalSupplierUpdate):
     supplier_id: UUID
+    idempotency_key: str = Field(
+        min_length=8, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$"
+    )
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+
+class MCPDrugLicenseRecord(BaseModel):
+    subject_kind: Literal["branch", "supplier"]
+    subject_code: str = Field(min_length=1, max_length=64)
+    evidence_branch_code: str = Field(min_length=1, max_length=64)
+    license_type_code: Literal[
+        "drug_wholesale_form_20b", "drug_wholesale_form_21b"
+    ]
+    license_number: str = Field(min_length=1, max_length=128)
+    issuing_authority: str = Field(min_length=1, max_length=500)
+    jurisdiction_code: str = Field(min_length=1, max_length=32)
+    issued_on: date
+    valid_from: date
+    next_verification_due_on: date
+    evidence_filename: str = Field(min_length=1, max_length=255)
+    reviewed: Literal[True]
     idempotency_key: str = Field(
         min_length=8, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$"
     )
@@ -420,4 +448,128 @@ def update_supplier(
 
     return _run_master_write(
         db, context, SUPPLIER_UPDATE_OPERATION, execute
+    )
+
+
+@router.post("/drug-licenses")
+def record_drug_license(
+    request: MCPDrugLicenseRecord,
+    context: ActionContext = Depends(get_action_context),
+    db: Session = Depends(get_db),
+):
+    def execute():
+        evidence_branch_id = db.execute(
+            text(
+                """SELECT branch.id FROM core.branches branch
+                     WHERE branch.org_id=:org_id AND branch.code=:branch_code
+                       AND branch.status='active'
+                       AND erp_security.can_access_branch(branch.id)"""
+            ),
+            {
+                "org_id": context.organization_id,
+                "branch_code": request.evidence_branch_code,
+            },
+        ).scalar_one_or_none()
+        if evidence_branch_id is None:
+            raise HTTPException(
+                status_code=422,
+                detail="Evidence branch code is not active or accessible",
+            )
+        if request.subject_kind == "branch":
+            subject_id = db.execute(
+                text(
+                    """SELECT branch.id FROM core.branches branch
+                         WHERE branch.org_id=:org_id AND branch.code=:subject_code
+                           AND branch.status='active'
+                           AND erp_security.can_access_branch(branch.id)"""
+                ),
+                {
+                    "org_id": context.organization_id,
+                    "subject_code": request.subject_code,
+                },
+            ).scalar_one_or_none()
+        else:
+            subject_id = db.execute(
+                text(
+                    """SELECT supplier.party_id
+                         FROM parties.supplier_accounts supplier
+                         JOIN parties.parties party
+                           ON party.org_id=supplier.org_id
+                          AND party.id=supplier.party_id
+                        WHERE supplier.org_id=:org_id
+                          AND supplier.supplier_code=:subject_code
+                          AND supplier.status='active' AND party.status='active'"""
+                ),
+                {
+                    "org_id": context.organization_id,
+                    "subject_code": request.subject_code,
+                },
+            ).scalar_one_or_none()
+        if subject_id is None:
+            raise HTTPException(
+                status_code=422,
+                detail=f"{request.subject_kind.title()} code is not active or accessible",
+            )
+        evidence_rows = db.execute(
+            text(
+                """SELECT attachment.id
+                     FROM core.attachments attachment
+                    WHERE attachment.org_id=:org_id
+                      AND attachment.branch_id=:branch_id
+                      AND attachment.evidence_kind='drug_license_evidence'
+                      AND attachment.original_filename=:filename
+                      AND attachment.document_date=:issued_on
+                      AND attachment.status IN ('verified','retained')
+                      AND attachment.verified_at IS NOT NULL
+                      AND attachment.legal_hold=true
+                    ORDER BY attachment.id"""
+            ),
+            {
+                "org_id": context.organization_id,
+                "branch_id": evidence_branch_id,
+                "filename": request.evidence_filename,
+                "issued_on": request.issued_on,
+            },
+        ).scalars().all()
+        if len(evidence_rows) != 1:
+            detail = (
+                "No matching verified licence PDF was found"
+                if not evidence_rows
+                else "More than one verified PDF has this filename and issue date"
+            )
+            raise HTTPException(status_code=422, detail=detail)
+        canonical_request = DrugLicenseRecordRequest(
+            subject_kind=request.subject_kind,
+            subject_id=subject_id,
+            evidence_branch_id=evidence_branch_id,
+            license_type_code=request.license_type_code,
+            license_number=request.license_number,
+            issuing_authority=request.issuing_authority,
+            jurisdiction_code=request.jurisdiction_code,
+            issued_on=request.issued_on,
+            valid_from=request.valid_from,
+            next_verification_due_on=request.next_verification_due_on,
+            evidence_attachment_id=evidence_rows[0],
+            reviewed=request.reviewed,
+            idempotency_key=request.idempotency_key,
+        )
+        result = execute_drug_license_record(
+            db,
+            org_id=context.organization_id,
+            actor_id=context.membership_id,
+            request=canonical_request,
+        )
+        rows = _license_rows(
+            db, context.organization_id, UUID(str(result["recorded_license_id"]))
+        )
+        if len(rows) != 1:
+            raise HTTPException(status_code=409, detail="License readback is unavailable")
+        return {
+            "license": rows[0],
+            "idempotency_replayed": result["idempotency_replayed"],
+            "controlled_drug_scope": "unsupported",
+        }
+
+    return _run_master_write(
+        db, context, DRUG_LICENSE_RECORD_OPERATION, execute
     )

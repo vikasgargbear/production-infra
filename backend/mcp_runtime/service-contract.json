@@ -51,6 +51,7 @@
     "erp_customer_receipt_readback",
     "erp_customer_search",
     "erp_customer_update",
+    "erp_drug_license_record",
     "erp_expense_claim_prepare",
     "erp_expense_claim_readback",
     "erp_goods_receipt_get",
@@ -125,6 +126,7 @@
     "status": "published_bounded",
     "exported": true,
     "direct_master_writes": [
+      "erp_drug_license_record",
       "erp_customer_create",
       "erp_customer_update",
       "erp_product_create",
