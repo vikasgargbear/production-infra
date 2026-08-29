@@ -44,6 +44,7 @@ COPY backend/migration_support ./migration_support
 COPY backend/scripts/canonical_demo_ids.py ./scripts/canonical_demo_ids.py
 COPY backend/scripts/canonical_migration_contract.py ./scripts/canonical_migration_contract.py
 COPY backend/scripts/canonical_staging_database.py ./scripts/canonical_staging_database.py
+COPY backend/scripts/cleanup_staging_evidence_storage.py ./scripts/cleanup_staging_evidence_storage.py
 COPY backend/scripts/compile_live18_browser_fixture.py ./scripts/compile_live18_browser_fixture.py
 COPY backend/scripts/exercise_staging_mcp_oauth.py ./scripts/exercise_staging_mcp_oauth.py
 COPY backend/scripts/live18_evidence_contract.py ./scripts/live18_evidence_contract.py
@@ -52,6 +53,8 @@ COPY backend/scripts/manage_canonical_write_fence.py ./scripts/manage_canonical_
 COPY backend/scripts/provision_ephemeral_browser_identities.py ./scripts/provision_ephemeral_browser_identities.py
 COPY backend/scripts/provision_ephemeral_canonical_live.py ./scripts/provision_ephemeral_canonical_live.py
 COPY backend/scripts/provision_staging_mcp_oauth.py ./scripts/provision_staging_mcp_oauth.py
+COPY backend/scripts/railway_canonical_reset.py ./scripts/railway_canonical_reset.py
+COPY backend/scripts/railway_reset_control_plane.py ./scripts/railway_reset_control_plane.py
 COPY backend/scripts/supabase_auth_admin.py ./scripts/supabase_auth_admin.py
 COPY backend/tests/live_acceptance ./tests/live_acceptance
 COPY backend/tests/live_canonical ./tests/live_canonical
@@ -64,7 +67,8 @@ COPY deploy/railway/api.force-deploy /app/.railway-deployment-provenance
 
 RUN test -f /tmp/.canonical-migration-contract-verified \
     && rm /tmp/.canonical-migration-contract-verified \
-    && python -c "from mcp_runtime.aasopharma_mcp.operator_actions import PREPARE_ACTIONS; assert PREPARE_ACTIONS"
+    && python -c "from mcp_runtime.aasopharma_mcp.operator_actions import PREPARE_ACTIONS; assert PREPARE_ACTIONS" \
+    && python scripts/railway_reset_control_plane.py --help >/dev/null
 
 RUN useradd --create-home --shell /usr/sbin/nologin appuser \
     && chown -R appuser:appuser /app
