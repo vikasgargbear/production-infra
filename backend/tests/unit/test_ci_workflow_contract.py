@@ -35,7 +35,8 @@ def test_release_certification_is_explicit_and_requires_live18() -> None:
 
 def test_normal_main_delivery_is_service_scoped_and_non_resetting() -> None:
     assert "name: Railway pilot fast deploy" in FAST_DEPLOY
-    assert "cancel-in-progress: true" in FAST_DEPLOY
+    assert "group: railway-pilot-service-mutation" in FAST_DEPLOY
+    assert "cancel-in-progress: false" in FAST_DEPLOY
     assert "strategy:\n      fail-fast: false" in FAST_DEPLOY
     assert 'matrix.component }} is unchanged' in FAST_DEPLOY
     assert "reset" not in FAST_DEPLOY.lower()
@@ -49,16 +50,17 @@ def test_persistent_pilot_migration_is_explicit_bounded_and_non_resetting() -> N
     assert "uses: ./.github/workflows/railway-canonical-staging.yml" in PILOT_MIGRATION
     assert "reset_disposable_data: false" in PILOT_MIGRATION
     assert "github_environment: canonical-staging" in PILOT_MIGRATION
+    assert "open_persistent_pilot_after_deploy: true" in PILOT_MIGRATION
     assert "secrets: inherit" in PILOT_MIGRATION
     assert "verify_staging_direct_roles.py" not in PILOT_MIGRATION
-    assert "railway_reset_control_plane.py open-fence" in PILOT_MIGRATION
+    assert "railway_reset_control_plane.py open-fence" not in PILOT_MIGRATION
     assert 'reset_disposable_data: false' in PILOT_MIGRATION
     assert 'provision-demo' not in PILOT_MIGRATION
     assert 'fixtures' not in PILOT_MIGRATION.lower()
 
 
 def test_persistent_pilot_ssh_cleanup_attests_eventual_removal() -> None:
-    cleanup = PILOT_MIGRATION.split(
+    cleanup = RAILWAY_CERTIFICATION.split(
         "- name: Remove the run-scoped Railway SSH key", 1
     )[1]
 
@@ -69,6 +71,36 @@ def test_persistent_pilot_ssh_cleanup_attests_eventual_removal() -> None:
     assert 'test "$absent_observations" -eq 2' in cleanup
     assert "Run-scoped Railway pilot SSH key remained after cleanup" in cleanup
     assert 'exit "$cleanup_failed"' in cleanup
+
+
+def test_railway_mutations_share_one_non_canceling_workflow_lock() -> None:
+    shared_lock = "group: railway-pilot-service-mutation"
+
+    assert shared_lock in FAST_DEPLOY
+    assert shared_lock in RAILWAY_CERTIFICATION
+    assert "cancel-in-progress: false" in FAST_DEPLOY
+    assert "cancel-in-progress: false" in RAILWAY_CERTIFICATION
+
+    # The wrapper must not hold the child's lock while waiting for the reusable
+    # workflow, which would deadlock the caller and callee.
+    assert shared_lock not in PILOT_MIGRATION
+    assert "group: railway-persistent-pilot-in-place-migration" in PILOT_MIGRATION
+
+
+def test_persistent_fence_open_stays_inside_the_canonical_mutation_lock() -> None:
+    assert RAILWAY_CERTIFICATION.count("open_persistent_pilot_after_deploy:") == 2
+    assert "default: false" in RAILWAY_CERTIFICATION.split(
+        "open_persistent_pilot_after_deploy:", 1
+    )[1]
+    open_job = RAILWAY_CERTIFICATION.split("\n  open-persistent-pilot:", 1)[1]
+
+    assert "if: inputs.open_persistent_pilot_after_deploy" in open_job
+    assert "needs: deploy" in open_job
+    assert "environment: ${{ inputs.github_environment }}" in open_job
+    assert "API_DEPLOYMENT_ID: ${{ needs.deploy.outputs.api_deployment_id }}" in open_job
+    assert "railway_reset_control_plane.py open-fence" in open_job
+    assert "Verify public API and MCP readiness" in open_job
+    assert "Remove the run-scoped Railway SSH key" in open_job
 
 
 def test_certification_reuses_exact_sha_and_has_separate_authority() -> None:

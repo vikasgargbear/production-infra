@@ -511,7 +511,7 @@ def test_workflow_uploads_fresh_source_and_polls_exact_deployment_ids() -> None:
     assert 'python3 "$GITHUB_WORKSPACE/backend/scripts/railway_upload_diagnostic.py"' in workflow
     assert 'python "$GITHUB_WORKSPACE/backend/scripts/railway_upload_diagnostic.py"' not in workflow
 
-    assert "group: railway-canonical-certification" in workflow
+    assert "group: railway-pilot-service-mutation" in workflow
     assert "cancel-in-progress: false" in workflow
     assert "Reusing the three already-active deployments" in workflow
     assert 'echo "reused_exact_sha=true"' in workflow
@@ -996,6 +996,7 @@ exit 45
 
 def test_workflow_requires_all_public_health_and_readiness_boundaries() -> None:
     workflow = _workflow()
+    deploy_workflow = workflow.split("\n  open-persistent-pilot:", 1)[0]
 
     for endpoint in (
         '$RAILWAY_API_URL/health',
@@ -1005,24 +1006,24 @@ def test_workflow_requires_all_public_health_and_readiness_boundaries() -> None:
         '$RAILWAY_FRONTEND_URL/health',
         '$RAILWAY_FRONTEND_URL/build-metadata.json',
     ):
-        assert endpoint in workflow
+        assert endpoint in deploy_workflow
 
     # Pre-reset wake-up and liveness probes use fail-with-body; the deliberate
     # maintenance readiness probe captures its expected HTTP 503 explicitly.
-    assert workflow.count("curl --fail-with-body") == 2
-    assert "--write-out '%{http_code}'" in workflow
-    assert 'test "$status" = 503' in workflow
-    assert '.status == "maintenance"' in workflow
-    assert "Verify exact API maintenance and database isolation before demo provisioning" in workflow
-    assert "fetch()" in workflow
-    assert workflow.count(" &\n") >= 6
-    assert '.status == "healthy" and .git_commit == $sha' in workflow
-    assert '.status == "ok" and .git_commit == $sha' in workflow
-    assert workflow.count('.status == "ready"') == 2
-    assert workflow.count('.database.transport == "supabase_direct"') == 2
-    assert workflow.count('.database.principal == "erp_runtime"') == 2
-    assert workflow.count(".database.principal_isolated == true") == 2
-    assert workflow.count(".database.migration_owner_member == false") == 2
+    assert deploy_workflow.count("curl --fail-with-body") == 2
+    assert "--write-out '%{http_code}'" in deploy_workflow
+    assert 'test "$status" = 503' in deploy_workflow
+    assert '.status == "maintenance"' in deploy_workflow
+    assert "Verify exact API maintenance and database isolation before demo provisioning" in deploy_workflow
+    assert "fetch()" in deploy_workflow
+    assert deploy_workflow.count(" &\n") >= 6
+    assert '.status == "healthy" and .git_commit == $sha' in deploy_workflow
+    assert '.status == "ok" and .git_commit == $sha' in deploy_workflow
+    assert deploy_workflow.count('.status == "ready"') == 2
+    assert deploy_workflow.count('.database.transport == "supabase_direct"') == 2
+    assert deploy_workflow.count('.database.principal == "erp_runtime"') == 2
+    assert deploy_workflow.count(".database.principal_isolated == true") == 2
+    assert deploy_workflow.count(".database.migration_owner_member == false") == 2
     assert workflow.count(".database.row_security == true") == 2
     assert workflow.count(".database.ip_version == 6") == 2
     assert '.service == "aasopharma-erp" and .git_commit == $sha' in workflow

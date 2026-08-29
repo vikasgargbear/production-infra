@@ -402,6 +402,7 @@ def test_workflow_orders_reset_fence_and_exact_deployment() -> None:
     production = (
         ROOT / ".github/workflows/production-readiness.yml"
     ).read_text(encoding="utf-8")
+    deploy_workflow = workflow.split("\n  open-persistent-pilot:", 1)[0]
 
     register_key = workflow.index("Register one run-scoped Railway reset SSH key")
     reset = workflow.index(
@@ -495,7 +496,7 @@ def test_workflow_orders_reset_fence_and_exact_deployment() -> None:
     assert reset_block.count("evidence_writer_closure") >= 1
     assert "DELETE FROM storage.objects" not in workflow
     assert "--fence closed" in workflow[prove:public_readiness]
-    assert "railway_reset_control_plane.py open-fence" not in workflow
+    assert "railway_reset_control_plane.py open-fence" not in deploy_workflow
     assert "defer_write_fence_open:" not in workflow
     assert "defer_write_fence_open:" not in production
     assert 'DEFER_WRITE_FENCE_OPEN: "true"' in workflow
