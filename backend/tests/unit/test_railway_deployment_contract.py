@@ -196,6 +196,8 @@ def test_api_runtime_image_excludes_tests_docs_and_operator_tooling() -> None:
     assert "FROM python:3.11-slim AS migration-contract" in dockerfile
     assert "FROM python:3.11-slim AS runtime" in dockerfile
     assert "COPY backend/app ./app" in dockerfile
+    assert "COPY backend/alembic.ini ./alembic.ini" in dockerfile
+    assert "test -f /app/alembic.ini" in dockerfile
     assert "COPY backend/ ." not in dockerfile
     assert "COPY backend/tests/unit" not in dockerfile
     assert "COPY backend/tests/integration" not in dockerfile

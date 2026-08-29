@@ -39,6 +39,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/app ./app
 COPY backend/mcp_runtime/aasopharma_mcp/__init__.py ./mcp_runtime/aasopharma_mcp/__init__.py
 COPY backend/mcp_runtime/aasopharma_mcp/operator_actions.py ./mcp_runtime/aasopharma_mcp/operator_actions.py
+COPY backend/alembic.ini ./alembic.ini
 COPY backend/alembic ./alembic
 COPY backend/migration_support ./migration_support
 COPY backend/scripts/canonical_data_reset_authority.py ./scripts/canonical_data_reset_authority.py
@@ -71,6 +72,7 @@ COPY deploy/railway/api.force-deploy /app/.railway-deployment-provenance
 
 RUN test -f /tmp/.canonical-migration-contract-verified \
     && rm /tmp/.canonical-migration-contract-verified \
+    && test -f /app/alembic.ini \
     && python -c "from mcp_runtime.aasopharma_mcp.operator_actions import PREPARE_ACTIONS; assert PREPARE_ACTIONS" \
     && python scripts/railway_reset_control_plane.py --help >/dev/null
 
