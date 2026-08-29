@@ -691,7 +691,10 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
             setFocusedIndex(prev => {
                 const current = saleableIndexes.indexOf(prev);
                 const next = saleableIndexes[(current + 1) % saleableIndexes.length];
-                batchRefs.current[next]?.scrollIntoView({ block: 'nearest' });
+                const nextBatch = batchRefs.current[next];
+                if (typeof nextBatch?.scrollIntoView === 'function') {
+                    nextBatch.scrollIntoView({ block: 'nearest' });
+                }
                 return next;
             });
             return;
@@ -702,7 +705,10 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
             setFocusedIndex(prev => {
                 const current = saleableIndexes.indexOf(prev);
                 const next = saleableIndexes[(current - 1 + saleableIndexes.length) % saleableIndexes.length];
-                batchRefs.current[next]?.scrollIntoView({ block: 'nearest' });
+                const nextBatch = batchRefs.current[next];
+                if (typeof nextBatch?.scrollIntoView === 'function') {
+                    nextBatch.scrollIntoView({ block: 'nearest' });
+                }
                 return next;
             });
             return;

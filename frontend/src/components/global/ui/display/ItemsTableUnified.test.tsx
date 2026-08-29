@@ -1,5 +1,6 @@
 import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import '@testing-library/jest-dom';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import ItemsTable from './ItemsTableUnified';
 
 test('mobile item card exposes every editable value without horizontal scrolling', () => {
@@ -48,6 +49,39 @@ test('groups line money in the Indian system with exactly two decimals', () => {
   ['Quantity', 'Rate', 'Discount %', 'Free quantity'].forEach(label => {
     expect(screen.getByLabelText(label).className.split(/\s+/)).toContain('text-right');
   });
+});
+
+test('Enter follows quantity, rate, discount, free quantity, then returns to product search', async () => {
+  const focusProductSearch = jest.fn();
+  render(
+    <ItemsTable
+      items={[{
+        product_name: 'Keyboard Carton',
+        quantity: '1.00',
+        unit_price: '100.00',
+        discount_percent: '0.00',
+        free_quantity: '0.00',
+      }]}
+      onUpdateItem={jest.fn()}
+      productSearchRef={{ current: { focus: focusProductSearch } } as any}
+      preserveExactDecimals
+      quantityDecimalPlaces={2}
+    />,
+  );
+
+  const quantity = screen.getByLabelText('Keyboard Carton quantity');
+  const rate = screen.getByLabelText('Keyboard Carton rate');
+  const discount = screen.getByLabelText('Keyboard Carton discount percent');
+  const free = screen.getByLabelText('Keyboard Carton free quantity');
+
+  fireEvent.keyDown(quantity, { key: 'Enter' });
+  await waitFor(() => expect(rate).toHaveFocus());
+  fireEvent.keyDown(rate, { key: 'Enter' });
+  await waitFor(() => expect(discount).toHaveFocus());
+  fireEvent.keyDown(discount, { key: 'Enter' });
+  await waitFor(() => expect(free).toHaveFocus());
+  fireEvent.keyDown(free, { key: 'Enter' });
+  await waitFor(() => expect(focusProductSearch).toHaveBeenCalledTimes(1));
 });
 
 test('fractional billed and free quantities remain visible and editable at canonical precision', () => {
@@ -254,7 +288,33 @@ test('commercial inputs reject more than two meaningful decimal places', () => {
   expect(desktopRate.getAttribute('aria-invalid')).toBe('true');
 });
 
-test('requires an explicit free-supply treatment only when free quantity is positive', () => {
+test('invoice operator mode limits billed and free entry to two decimals without changing exact storage mode', () => {
+  const onUpdateItem = jest.fn();
+  render(
+    <ItemsTable
+      items={[{
+        product_name: 'Operator Carton',
+        quantity: '1.00',
+        free_quantity: '0.00',
+        unit_price: '84.12',
+      }]}
+      onUpdateItem={onUpdateItem}
+      preserveExactDecimals
+      quantityDecimalPlaces={2}
+    />,
+  );
+
+  const mobileQuantity = screen.getByLabelText('Quantity') as HTMLInputElement;
+  expect(mobileQuantity.step).toBe('0.01');
+  fireEvent.change(mobileQuantity, { target: { value: '1.125' } });
+  expect(screen.getByText('Quantity supports up to 2 decimal places.')).toBeTruthy();
+  expect(onUpdateItem).not.toHaveBeenCalled();
+
+  fireEvent.change(mobileQuantity, { target: { value: '1.25' } });
+  expect(onUpdateItem).toHaveBeenCalledWith(0, 'quantity', '1.25');
+});
+
+test('requires an explicit free-supply treatment only when free quantity is positive', async () => {
   const onUpdateItem = jest.fn();
   const { rerender } = render(
     <ItemsTable
@@ -287,16 +347,20 @@ test('requires an explicit free-supply treatment only when free quantity is posi
     />,
   );
   const positiveTreatment = screen.getAllByLabelText(
-    'Reviewed Carton free units value',
+    'Reviewed Carton free units billing',
   ) as HTMLSelectElement[];
   expect(positiveTreatment.every(select => !select.disabled)).toBe(true);
   expect(positiveTreatment[0].value).toBe('');
   expect(screen.getByText('Product / batch')).toBeTruthy();
-  expect(screen.getByText('Free qty / value')).toBeTruthy();
+  expect(screen.getByText('Free qty / billing')).toBeTruthy();
   expect(screen.queryByText('Free tax treatment')).toBeNull();
-  expect(screen.getAllByText('Choose how free units are valued')).toHaveLength(2);
-  expect(screen.getAllByText('₹0 — exclude free units')).toHaveLength(2);
-  expect(screen.getAllByText('Item rate — include free units')).toHaveLength(2);
+  expect(screen.getAllByText('Choose how free units are billed')).toHaveLength(2);
+  expect(screen.getAllByText('Free — do not charge')).toHaveLength(2);
+  expect(screen.getAllByText('Charge at item rate')).toHaveLength(2);
+  fireEvent.keyDown(screen.getByLabelText('Reviewed Carton free quantity'), { key: 'Enter' });
+  await waitFor(() => expect(
+    screen.getByTestId('desktop-free-supply-treatment-0'),
+  ).toHaveFocus());
   fireEvent.change(positiveTreatment[0], {
     target: { value: 'included_at_unit_rate' },
   });

@@ -231,6 +231,8 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                         <div className="sm:col-span-5 lg:col-span-4">
                                             <div className="grid grid-cols-2 overflow-hidden rounded-lg border border-gray-300">
                                                 <button
+                                                    type="button"
+                                                    data-no-enter-tab
                                                     onClick={() => setInvoice(prev => ({
                                                         ...prev,
                                                         discount_type: 'percentage',
@@ -245,6 +247,8 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                                     Percentage (%)
                                                 </button>
                                                 <button
+                                                    type="button"
+                                                    data-no-enter-tab
                                                     onClick={() => setInvoice(prev => ({
                                                         ...prev,
                                                         discount_type: 'fixed',

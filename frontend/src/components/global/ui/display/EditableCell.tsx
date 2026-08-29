@@ -270,6 +270,7 @@ const EditableCellComponent: ForwardRefRenderFunction<EditableCellRef, EditableC
 
             <input
                 ref={inputRef}
+                data-no-enter-tab
                 type={type === 'number' ? 'text' : type}
                 value={displayValue}
                 onChange={handleChange}
