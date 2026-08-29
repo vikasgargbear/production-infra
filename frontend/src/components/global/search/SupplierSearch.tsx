@@ -45,6 +45,7 @@ export interface SupplierSearchProps {
     autoFocus?: boolean;
     clearable?: boolean;
     buttonLabel?: string;
+    nextFocusRef?: React.RefObject<{ focus: () => void } | HTMLElement | null>;
 }
 
 export interface SupplierSearchRef extends EntitySearchRef { }
@@ -72,7 +73,8 @@ export const SupplierSearch = forwardRef<SupplierSearchRef, SupplierSearchProps>
         className = '',
         autoFocus = false,
         clearable = true,
-        buttonLabel = 'Create Supplier'
+        buttonLabel = 'Create Supplier',
+        nextFocusRef
     },
     ref
 ) => {
@@ -218,6 +220,7 @@ export const SupplierSearch = forwardRef<SupplierSearchRef, SupplierSearchProps>
             accessDeniedMessage="Supplier search was denied. Ask an administrator for supplier management access."
             autoFocus={autoFocus}
             className={className}
+            nextFocusRef={nextFocusRef}
         />
         {!canSearchSuppliers && (
             <CapabilityDeniedNotice>

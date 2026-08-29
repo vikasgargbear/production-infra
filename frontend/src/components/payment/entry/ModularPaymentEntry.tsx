@@ -143,11 +143,12 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
   React.useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
       // Ctrl+Enter to proceed
-      if (e.ctrlKey && e.key === 'Enter' && currentStep === 1) {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && currentStep === 1) {
+        e.preventDefault();
         goToSummary();
       }
       // Ctrl+S to save
-      if (e.ctrlKey && e.key === 's' && currentStep === 2) {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's' && currentStep === 2) {
         e.preventDefault();
         void requestPaymentReview();
       }

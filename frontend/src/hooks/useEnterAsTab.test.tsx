@@ -14,8 +14,10 @@ const KeyboardForm = () => {
     <div ref={containerRef}>
       <input aria-label="First" />
       <button type="button">Auxiliary action</button>
+      <button type="button" data-enter-tab>Required choice</button>
       <input aria-label="Excluded" data-no-enter-tab />
       <input aria-label="Flag" type="checkbox" />
+      <input aria-label="Hidden amount" style={{ display: 'none' }} />
       <input aria-label="Amount" inputMode="decimal" />
       <select aria-label="Mode"><option>Cash</option></select>
     </div>
@@ -31,6 +33,9 @@ describe('useEnterAsTab', () => {
 
     first.focus();
     fireEvent.keyDown(first, { key: 'Enter' });
+    expect(screen.getByRole('button', { name: 'Required choice' })).toHaveFocus();
+
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Required choice' }), { key: 'Enter' });
     expect(amount).toHaveFocus();
 
     fireEvent.keyDown(amount, { key: 'Enter' });
@@ -44,5 +49,21 @@ describe('useEnterAsTab', () => {
     first.focus();
     fireEvent.keyDown(first, { key: 'Enter', ctrlKey: true });
     expect(first).toHaveFocus();
+  });
+
+  it('does not double-handle owned events and prevents last-field form submission', () => {
+    render(<KeyboardForm />);
+    const first = screen.getByLabelText('First');
+    const mode = screen.getByLabelText('Mode');
+
+    first.focus();
+    const ownedEvent = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+    ownedEvent.preventDefault();
+    first.dispatchEvent(ownedEvent);
+    expect(first).toHaveFocus();
+
+    mode.focus();
+    expect(fireEvent.keyDown(mode, { key: 'Enter' })).toBe(false);
+    expect(mode).toHaveFocus();
   });
 });

@@ -105,6 +105,10 @@ const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose })
     // Keyboard shortcuts
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent): void => {
+            if (e.defaultPrevented || e.repeat) return;
+            const overlayOpen = showCancelConfirm || showCustomerModal || showProductModal
+                || showImportModal || reviewOpen || showSuccessModal;
+            if (overlayOpen && e.key !== 'Escape') return;
             if (e.ctrlKey || e.metaKey) {
                 switch (e.key) {
                     case 's':
@@ -145,7 +149,7 @@ const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose })
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [canManageCustomers, currentStep, handleCancelRequest, showCancelConfirm, showCustomerModal, showProductModal, showImportModal, saveOrder, printOrder, setShowCustomerModal, setShowImportModal, setShowProductModal]);
+    }, [canManageCustomers, currentStep, handleCancelRequest, reviewOpen, showCancelConfirm, showCustomerModal, showProductModal, showImportModal, showSuccessModal, saveOrder, printOrder, setShowCustomerModal, setShowImportModal, setShowProductModal]);
 
     if (!open) return null;
 

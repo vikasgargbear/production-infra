@@ -37,6 +37,8 @@ const PaymentFlowOptimized: React.FC = () => {
 
   const amountRef = useRef<HTMLInputElement>(null);
   const customerSearchRef = useRef<any>(null);
+  const paymentMethodRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const receiptPurposeRef = useRef<HTMLSelectElement>(null);
 
   // Auto-focus amount when customer is selected
   useEffect(() => {
@@ -166,6 +168,27 @@ const PaymentFlowOptimized: React.FC = () => {
     setPaymentField('payment_mode', mode);
   };
 
+  const handlePaymentMethodKey = (
+    event: React.KeyboardEvent<HTMLButtonElement>,
+    method: string,
+    index: number,
+  ): void => {
+    if (['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp'].includes(event.key)) {
+      event.preventDefault();
+      event.stopPropagation();
+      const offset = event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 1;
+      const nextIndex = (index + offset + paymentMethods.length) % paymentMethods.length;
+      paymentMethodRefs.current[nextIndex]?.focus();
+      return;
+    }
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      event.stopPropagation();
+      handlePaymentModeSelect(method);
+      setTimeout(() => receiptPurposeRef.current?.focus(), 0);
+    }
+  };
+
   return (
     <div className="space-y-4">
       {/* Customer Selection - Standard Pattern */}
@@ -245,16 +268,21 @@ const PaymentFlowOptimized: React.FC = () => {
           {/* Payment Mode Selection */}
           <div className="space-y-2">
             <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">PAYMENT METHOD</h3>
-            <div className="grid grid-cols-3 gap-2">
-              {paymentMethods.map((method) => {
+            <div role="radiogroup" aria-label="Payment method" className="grid grid-cols-3 gap-2">
+              {paymentMethods.map((method, methodIndex) => {
                 const label = method === 'bank_transfer'
                   ? 'Bank Transfer'
                   : method.charAt(0).toUpperCase() + method.slice(1);
                 return (
                 <button
+                  ref={element => { paymentMethodRefs.current[methodIndex] = element; }}
                   key={method}
                   type="button"
+                  role="radio"
+                  aria-checked={payment.payment_mode === method}
+                  data-enter-tab
                   onClick={() => handlePaymentModeSelect(method)}
+                  onKeyDownCapture={(event) => handlePaymentMethodKey(event, method, methodIndex)}
                   className={`min-h-11 p-2.5 rounded-lg border transition-all ${payment.payment_mode === method
                     ? 'border-blue-500 bg-blue-50'
                     : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
@@ -268,7 +296,7 @@ const PaymentFlowOptimized: React.FC = () => {
 
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="text-sm font-medium text-gray-700">Receipt purpose
-              <select value={payment.receipt_purpose} onChange={(event) => {
+              <select ref={receiptPurposeRef} value={payment.receipt_purpose} onChange={(event) => {
                 handleFieldChange('receipt_purpose', event.target.value);
                 setPaymentField('allocation_method', event.target.value === 'customer_advance' ? 'advance' : 'manual');
                 setPaymentField('branch_id', '');

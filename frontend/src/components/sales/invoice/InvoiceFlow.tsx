@@ -110,7 +110,7 @@ const InvoiceFlow: React.FC<InvoiceFlowProps> = ({ open = true, onClose, prefill
     useEnterAsTab({
         containerRef: invoiceFormRef,
         enabled: true,
-        excludeSelectors: ['textarea', 'button[type="submit"]', '[data-no-enter-tab]']
+        excludeSelectors: ['textarea', 'button', 'input[type="checkbox"]', '[data-no-enter-tab]']
     });
 
     // ESC key handling for modal hierarchy

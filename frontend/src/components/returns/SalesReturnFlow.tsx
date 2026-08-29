@@ -42,6 +42,7 @@ import { addExactDecimals, compareExactDecimals, exactDecimalUnits } from '../..
 import { useCanonicalBusinessDate } from '../../hooks/useCanonicalBusinessDate';
 import { isCanonicalUuid } from '../../utils/canonicalUuid';
 import { usePermissions } from '../../hooks/usePermissions';
+import { useEnterAsTab } from '../../hooks/useEnterAsTab';
 import { FOUNDATION_CAPABILITIES } from '../../config/canonicalCapabilities';
 import {
   authoritativeReturnQuantity,
@@ -89,6 +90,11 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
   // Refs
   const customerSearchRef = useRef<any>(null);
   const invoiceSearchRef = useRef<any>(null);
+  const entryRef = useRef<HTMLDivElement>(null);
+  useEnterAsTab({
+    containerRef: entryRef,
+    excludeSelectors: ['textarea', 'button', 'input[type="checkbox"]', '[data-no-enter-tab]'],
+  });
   const returnDataRef = useRef(returnData);
   returnDataRef.current = returnData;
   const invoiceContextRequestSequence = useRef(0);
@@ -105,6 +111,11 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.defaultPrevented) return;
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        if (ui.currentStep === 1) handleProceedToReview();
+        return;
+      }
       if (e.ctrlKey || e.metaKey) {
         switch (e.key) {
           case 'r':
@@ -473,7 +484,7 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
   // Step 1: Create Return Form
   if (ui.currentStep === 1) {
     return (
-      <div className="h-full bg-blue-50">
+      <div ref={entryRef} className="h-full bg-blue-50">
         <div className="h-full flex flex-col">
           <ModuleHeader
             title="Sales Return"
@@ -780,7 +791,7 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
 
   // Step 2: Review Panel
   return (
-    <div className="h-full bg-blue-50">
+    <div ref={entryRef} className="h-full bg-blue-50">
       <div className="h-full flex flex-col">
         <ModuleHeader
           title="Sales Return"

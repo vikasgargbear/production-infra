@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Package, X, AlertCircle, CheckCircle,
   RotateCcw, FileText, Building2
@@ -6,7 +6,7 @@ import {
 import {
   SupplierSearch, ModuleHeader,
   Select, NotesSection, useToast,
-  ProceedToReviewComponent, StandardDatePicker
+  ProceedToReviewComponent, StandardDatePicker, EditableCell
 } from '../global';
 import KeyboardShortcuts, { SHORTCUT_SETS } from '../global/ui/KeyboardShortcuts';
 import { purchasesApi } from '../../services/api';
@@ -35,6 +35,7 @@ import {
   formatReturnMoney,
   hasExactReturnPreview,
 } from './utils/returnDecimal';
+import { useEnterAsTab } from '../../hooks/useEnterAsTab';
 
 const purchaseQuantityOptions = { scale: 6, maximumWholeDigits: 14 } as const;
 const purchaseRateOptions = { scale: 6, maximumWholeDigits: 14 } as const;
@@ -111,6 +112,12 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
   // Refs for keyboard navigation
   const supplierSearchRef = useRef<any>(null);
   const invoiceSearchRef = useRef<any>(null);
+  const entryRef = useRef<HTMLDivElement>(null);
+  useEnterAsTab({
+    containerRef: entryRef,
+    excludeSelectors: ['textarea', 'button', 'input[type="checkbox"]', '[data-no-enter-tab]'],
+  });
+  const quantityFieldRefs = useRef<Record<string, any>>({});
 
   // Return data state - matching sales return structure
   const [returnData, setReturnData] = useState<PurchaseReturnData>({
@@ -181,6 +188,11 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.defaultPrevented) return;
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        if (currentStep === 1) handleProceedToReview();
+        return;
+      }
       if (e.ctrlKey || e.metaKey) {
         switch (e.key) {
           case 'r':
@@ -447,6 +459,45 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
     }));
   };
 
+  const setQuantityFieldRef = (rowIndex: number, fieldName: string, element: any): void => {
+    quantityFieldRefs.current[`${rowIndex}-${fieldName}`] = element;
+  };
+
+  const focusQuantityField = useCallback((rowIndex: number, fieldName: string): void => {
+    const field = quantityFieldRefs.current[`${rowIndex}-${fieldName}`];
+    if (field?.focus) setTimeout(() => field.focus(), 0);
+  }, []);
+
+  const navigateQuantityField = useCallback((
+    rowIndex: number,
+    fieldName: 'return_paid_qty' | 'return_free_qty',
+    direction: string,
+  ): void => {
+    const fields: Array<'return_paid_qty' | 'return_free_qty'> = ['return_paid_qty', 'return_free_qty'];
+    const fieldIndex = fields.indexOf(fieldName);
+    if ((direction === 'right' || direction === 'next') && fieldIndex === 0) {
+      focusQuantityField(rowIndex, fields[1]);
+      return;
+    }
+    if ((direction === 'right' || direction === 'next') && rowIndex < returnData.items.length - 1) {
+      focusQuantityField(rowIndex + 1, fields[0]);
+      return;
+    }
+    if (direction === 'left' && fieldIndex === 1) {
+      focusQuantityField(rowIndex, fields[0]);
+      return;
+    }
+    if (direction === 'left' && rowIndex > 0) {
+      focusQuantityField(rowIndex - 1, fields[1]);
+      return;
+    }
+    if (direction === 'down' && rowIndex < returnData.items.length - 1) {
+      focusQuantityField(rowIndex + 1, fieldName);
+      return;
+    }
+    if (direction === 'up' && rowIndex > 0) focusQuantityField(rowIndex - 1, fieldName);
+  }, [focusQuantityField, returnData.items.length]);
+
   const updateTransportMode = (mode: string) => {
     const policy = returnDataRef.current.logistics_modes.find(
       candidate => candidate.transport_mode === mode,
@@ -540,7 +591,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
   // Step 1: Create Return - Sales Return Style
   if (currentStep === 1) {
     return (
-      <div className="h-full bg-gray-50">
+      <div ref={entryRef} className="h-full bg-gray-50">
         <div className="h-full flex flex-col">
           <ModuleHeader
             title="Purchase Return"
@@ -620,6 +671,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
                   </h3>
                 </div>
                 <SupplierSearch
+                  ref={supplierSearchRef}
                   value={selectedSupplier || null}
                   onChange={handleSupplierSelect}
                   displayMode="inline"
@@ -695,6 +747,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
                       onRetry={retryBusinessDate}
                     >
                       <PurchaseReturnSelector
+                        ref={invoiceSearchRef}
                         invoices={returnableInvoices}
                         onInvoiceSelect={handleInvoiceSelect}
                         loading={loading}
@@ -725,8 +778,36 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
                           <tr key={String(item.id)} className="border-b border-gray-100">
                             <td className="p-2"><input aria-label={`Return ${item.product_name}`} type="checkbox" checked={item.selected} onChange={(event) => updateReturnItem(index, 'selected', event.target.checked)} /></td>
                             <td className="p-2"><p className="font-medium">{item.product_name}</p><p className="text-xs text-gray-600">{item.batch_number}</p></td>
-                            <td className="p-2"><input aria-label={`Billed quantity for ${item.product_name}`} inputMode="decimal" value={String(item.return_paid_qty ?? '')} onChange={(event) => updateReturnItem(index, 'return_paid_qty', event.target.value)} className="min-h-11 w-28 rounded border border-gray-300 px-2" /><p className="text-xs text-gray-500">Max {item.returnable_billed_quantity}</p></td>
-                            <td className="p-2"><input aria-label={`Free quantity for ${item.product_name}`} inputMode="decimal" value={String(item.return_free_qty ?? '')} onChange={(event) => updateReturnItem(index, 'return_free_qty', event.target.value)} className="min-h-11 w-28 rounded border border-gray-300 px-2" /><p className="text-xs text-gray-500">Max {item.returnable_free_quantity}</p></td>
+                            <td className="p-2">
+                              <EditableCell
+                                ref={(element: any) => setQuantityFieldRef(index, 'return_paid_qty', element)}
+                                ariaLabel={`Billed quantity for ${item.product_name}`}
+                                type="number"
+                                value={item.return_paid_qty ?? ''}
+                                maxDecimalPlaces={2}
+                                preserveDecimalString
+                                selectOnFocus
+                                onSave={(value) => updateReturnItem(index, 'return_paid_qty', String(value))}
+                                onNavigate={(direction) => navigateQuantityField(index, 'return_paid_qty', direction)}
+                                className="w-28"
+                              />
+                              <p className="text-xs text-gray-500">Max {item.returnable_billed_quantity}</p>
+                            </td>
+                            <td className="p-2">
+                              <EditableCell
+                                ref={(element: any) => setQuantityFieldRef(index, 'return_free_qty', element)}
+                                ariaLabel={`Free quantity for ${item.product_name}`}
+                                type="number"
+                                value={item.return_free_qty ?? ''}
+                                maxDecimalPlaces={2}
+                                preserveDecimalString
+                                selectOnFocus
+                                onSave={(value) => updateReturnItem(index, 'return_free_qty', String(value))}
+                                onNavigate={(direction) => navigateQuantityField(index, 'return_free_qty', direction)}
+                                className="w-28"
+                              />
+                              <p className="text-xs text-gray-500">Max {item.returnable_free_quantity}</p>
+                            </td>
                             <td className="p-2 text-xs">{item.from_location_code} · {item.from_location_name}</td>
                           </tr>
                         ))}</tbody>
@@ -929,7 +1010,7 @@ const PurchaseReturnFlowV2 = ({ onClose }) => {
 
   // Step 2: Review and Confirm
   return (
-    <div className="h-full bg-blue-50">
+    <div ref={entryRef} className="h-full bg-blue-50">
       <div className="h-full flex flex-col">
         <ModuleHeader
           title="Review Purchase Return"

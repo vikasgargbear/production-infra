@@ -3,7 +3,7 @@
  * Step 1 of sales order flow - customer and product selection
  */
 
-import React, { useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
     CheckCircle, AlertCircle, FileInput, User, Package
 } from 'lucide-react';
@@ -19,6 +19,7 @@ import type { ProductSearchRef } from '../../../global/search/ProductSearch';
 import { resolvedSalesOrderDeliveryAddress } from '../../utils/canonicalSalesChainCommand';
 import { usePermissions } from '../../../../hooks/usePermissions';
 import { FOUNDATION_CAPABILITIES } from '../../../../config/canonicalCapabilities';
+import type { ItemsTableRef } from '../../../global';
 
 // Using canonical types from /types/models - no local duplicates
 
@@ -59,12 +60,32 @@ const OrderItemsStep: React.FC<OrderItemsStepProps> = ({
     const canManageCustomers = hasCapability(FOUNDATION_CAPABILITIES.customer);
     const canManageProducts = hasCapability(FOUNDATION_CAPABILITIES.product);
     const productSearchRef = useRef<ProductSearchRef>(null);
-    const itemsTableRef = useRef<HTMLDivElement>(null);
+    const itemsTableRef = useRef<ItemsTableRef>(null);
+    const pendingItemFocusRef = useRef<{ productId: unknown; batchId: unknown } | null>(null);
     const deliveryAddress = resolvedSalesOrderDeliveryAddress(order.shipping_address_data);
     const canRetryCustomerAddress = messageType === 'error'
         && Boolean(selectedCustomer)
         && !deliveryAddress
         && /address/i.test(message);
+
+    const handleProductSelect = (product: any): void => {
+        pendingItemFocusRef.current = {
+            productId: product.product_id,
+            batchId: product.batch_id,
+        };
+        onProductSelect(product);
+    };
+
+    useEffect(() => {
+        const pending = pendingItemFocusRef.current;
+        if (!pending) return;
+        const rowIndex = order.items.findIndex(item => (
+            item.product_id === pending.productId && item.batch_id === pending.batchId
+        ));
+        if (rowIndex < 0) return;
+        pendingItemFocusRef.current = null;
+        itemsTableRef.current?.focusField(rowIndex, 'quantity');
+    }, [order.items]);
     return (
         <div className="mx-auto max-w-[1600px] px-4 py-4 sm:px-6 sm:py-6">
             {/* Message Display */}
@@ -167,7 +188,7 @@ const OrderItemsStep: React.FC<OrderItemsStepProps> = ({
                 </div>
                 <ProductSearch
                     ref={productSearchRef}
-                    onAddItem={onProductSelect as any}
+                    onAddItem={handleProductSelect as any}
                     onCreateProduct={onCreateProduct as any}
                     enforceFefo
                     tabIndex={2}
@@ -182,7 +203,7 @@ const OrderItemsStep: React.FC<OrderItemsStepProps> = ({
                         ORDER ITEMS
                     </h3>
                     <ItemsTableKeyboard
-                        ref={itemsTableRef as any}
+                        ref={itemsTableRef}
                         items={order.items as any}
                         onUpdateItem={onUpdateItem}
                         onRemoveItem={onRemoveItem}

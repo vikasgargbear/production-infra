@@ -19,12 +19,13 @@ export const useEnterAsTab = ({
         if (!enabled) return;
 
         const handleKeyDown = (e: KeyboardEvent): void => {
-            if (e.key !== 'Enter') return;
+            if (e.key !== 'Enter' || e.defaultPrevented || e.repeat) return;
             if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
 
             const target = e.target as HTMLElement;
 
-            const isExcluded = excludeSelectors.some(selector => {
+            const isExplicitlyIncluded = target.matches('[data-enter-tab]');
+            const isExcluded = !isExplicitlyIncluded && excludeSelectors.some(selector => {
                 try {
                     return target.matches(selector);
                 } catch {
@@ -42,22 +43,31 @@ export const useEnterAsTab = ({
             );
 
             const focusableArray = (Array.from(focusableElements) as HTMLElement[])
-                .filter(element => !excludeSelectors.some(selector => {
+                .filter(element => element.matches('[data-enter-tab]') || !excludeSelectors.some(selector => {
                     try {
                         return element.matches(selector);
                     } catch {
                         return false;
                     }
-                }));
+                }))
+                .filter(element => {
+                    if (element.hidden || element.closest('[hidden], [aria-hidden="true"]')) return false;
+                    const style = window.getComputedStyle(element);
+                    return style.display !== 'none' && style.visibility !== 'hidden';
+                });
             const currentIndex = focusableArray.indexOf(target);
 
-            if (currentIndex > -1 && currentIndex < focusableArray.length - 1) {
+            if (currentIndex > -1) {
                 e.preventDefault();
+                if (currentIndex >= focusableArray.length - 1) return;
                 focusableArray[currentIndex + 1].focus();
 
                 const nextElement = focusableArray[currentIndex + 1] as HTMLInputElement;
                 if (nextElement.tagName === 'INPUT'
-                    && !['checkbox', 'radio', 'button', 'submit'].includes(nextElement.type)) {
+                    && (
+                        ['text', 'search', 'tel', 'url', 'email', 'password', 'number'].includes(nextElement.type)
+                        || ['decimal', 'numeric'].includes(nextElement.inputMode)
+                    )) {
                     nextElement.select();
                 }
             }
