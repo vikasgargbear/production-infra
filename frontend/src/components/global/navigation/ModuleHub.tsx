@@ -333,6 +333,21 @@ const ModuleHub: React.FC<ModuleHubProps> = ({
           )}
         </div>
 
+        {/* Keep the escape route with the module navigation instead of
+            hiding it below a potentially long, scrolling sidebar. */}
+        <div className={`px-1.5 pb-2 ${isExpanded ? '' : 'pt-1'}`}>
+          <button
+            type="button"
+            onClick={onClose}
+            className={`flex min-h-11 w-full items-center rounded-lg border border-blue-100 bg-blue-50 text-blue-700 transition-colors hover:bg-blue-100 ${isExpanded ? 'gap-3 px-3 py-2.5' : 'justify-center p-3'}`}
+            title={!isExpanded ? 'Back to Home' : undefined}
+            aria-label="Back to Home"
+          >
+            <Home className="h-5 w-5 shrink-0" />
+            {isExpanded && <span className="text-sm font-medium">Home</span>}
+          </button>
+        </div>
+
         {/* Module Navigation */}
         <nav aria-label={`${title} module navigation`} className={`flex-1 overflow-y-auto px-1.5 pt-2`}>
           {availableModules.map((module, index) => {
@@ -383,18 +398,6 @@ const ModuleHub: React.FC<ModuleHubProps> = ({
           })}
         </nav>
 
-        {/* Persistent way home; avoids trapping users inside a hub. */}
-        <div className={`pb-4 pt-2 ${isExpanded ? 'px-3' : 'px-1.5'}`}>
-          <button
-            onClick={onClose}
-            className={`w-full rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors flex items-center ${isExpanded ? 'px-3 py-2.5 gap-3' : 'p-3 justify-center'}`}
-            title="Back to Home"
-            aria-label="Back to Home"
-          >
-            <Home className="w-5 h-5" />
-            {isExpanded && <span className="text-sm font-medium">Home</span>}
-          </button>
-        </div>
       </div>
 
       {/* Main Content Area — scaled to 90% for compact, information-dense UI */}
