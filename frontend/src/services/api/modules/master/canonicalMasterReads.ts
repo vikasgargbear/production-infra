@@ -79,6 +79,11 @@ export interface CanonicalCustomerRead {
   gst_number: string | null;
   gst_verification_status: string | null;
   place_of_supply_state_code: string | null;
+  address_line1: string | null;
+  address_line2: string | null;
+  city: string | null;
+  state_code: string | null;
+  pincode: string | null;
   credit_limit: ExactDecimal;
   credit_days: number;
   current_outstanding: ExactDecimal;
@@ -107,6 +112,11 @@ export const decodeCanonicalCustomer = (value: unknown, index = 0): CanonicalCus
     gst_number: nullableText(row.gst_number, `${label} GSTIN`),
     gst_verification_status: nullableText(row.gst_verification_status, `${label} GST status`),
     place_of_supply_state_code: nullableText(row.place_of_supply_state_code, `${label} place of supply`),
+    address_line1: nullableText(row.address_line1, `${label} address line 1`),
+    address_line2: nullableText(row.address_line2, `${label} address line 2`),
+    city: nullableText(row.city, `${label} city`),
+    state_code: nullableText(row.state_code, `${label} state code`),
+    pincode: nullableText(row.pincode, `${label} pincode`),
     credit_limit: money(row.credit_limit, `${label} credit limit`),
     credit_days: integer(row.credit_days, `${label} credit days`),
     current_outstanding: money(row.current_outstanding, `${label} outstanding`),
@@ -196,6 +206,12 @@ export interface CanonicalProductRead {
   generic_name: string | null;
   product_type: string;
   unit: string;
+  category_name: string | null;
+  manufacturer_name: string | null;
+  dosage_form: string | null;
+  strength_display: string | null;
+  packing_summary: string | null;
+  requires_prescription: boolean;
   uom_conversion_id: string | null;
   taxability: string | null;
   gst_percent: ExactDecimal | null;
@@ -218,6 +234,12 @@ const decodeCanonicalProductRows = (value: unknown): CanonicalProductRead[] => (
       generic_name: nullableText(row.generic_name, `${label} generic name`),
       product_type: text(row.product_type, `${label} type`),
       unit: text(row.unit, `${label} unit`),
+      category_name: nullableText(row.category_name, `${label} category name`),
+      manufacturer_name: nullableText(row.manufacturer_name, `${label} manufacturer name`),
+      dosage_form: nullableText(row.dosage_form, `${label} dosage form`),
+      strength_display: nullableText(row.strength_display, `${label} strength`),
+      packing_summary: nullableText(row.packing_summary, `${label} packing summary`),
+      requires_prescription: boolean(row.requires_prescription, `${label} prescription requirement`),
       uom_conversion_id: row.uom_conversion_id === null
         ? null : uuid(row.uom_conversion_id, `${label} UOM conversion`),
       taxability: nullableText(row.taxability, `${label} taxability`),
