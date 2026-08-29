@@ -47,8 +47,10 @@ account on another ChatGPT surface.
 - Write requests use prepare → review → approve → execute and expose the command
   UUID; no direct or apparent-success write path is accepted.
 - Reversible product create/setup tools share the browser's canonical setup
-  contract, require explicit user confirmation, and never add/release a product
-  for transactions; final **Add product** remains a UI review action.
+  contract and require explicit user confirmation. Consequential product
+  activation requires a separate reviewed confirmation, calls the same
+  canonical activation command as **Add product**, and is verified through
+  exact setup readback before the product is treated as transaction-ready.
 - Customer and supplier creates are generated from the browser/API canonical
   contracts, require one reviewed confirmation, and are verified with exact
   post-create readback. Missing optional facts remain explicit and required

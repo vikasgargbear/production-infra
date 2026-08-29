@@ -88,6 +88,7 @@ EXPECTED_BASE_READ_TOOLS = {
     "erp_trial_balance_get",
 }
 EXPECTED_MASTER_WRITE_TOOLS = {
+    "erp_product_activate",
     "erp_product_create",
     "erp_product_setup",
     "erp_customer_create",
@@ -992,9 +993,14 @@ def validate(
 
     for tool in EXPECTED_MASTER_WRITE_TOOLS:
         app_operation = app_by_tool.get(tool, {})
+        expected_risk = (
+            "consequential_write"
+            if tool == "erp_product_activate"
+            else "reversible_write"
+        )
         if (
             app_operation.get("mode") != "write"
-            or app_operation.get("risk") != "reversible_write"
+            or app_operation.get("risk") != expected_risk
             or app_operation.get("approval") != "actor_confirmation"
             or app_operation.get("idempotency") != "required"
         ):

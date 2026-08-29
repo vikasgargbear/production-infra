@@ -9,6 +9,7 @@ from ....domain.operator_actions import ActionPolicy
 
 CUSTOMER_UPDATE_OPERATION = "parties.customer." + "update"
 SUPPLIER_UPDATE_OPERATION = "parties.supplier." + "update"
+PRODUCT_ACTIVATION_OPERATION = "catalog.product.activate"
 
 
 MASTER_WRITE_POLICIES = {
@@ -22,6 +23,11 @@ MASTER_WRITE_POLICIES = {
         ActionPolicy(
             "catalog.product_draft.configure", "catalog.product.manage",
             "reversible_write", "canonical_product_setup_v1",
+            "actor_confirmation", (),
+        ),
+        ActionPolicy(
+            PRODUCT_ACTIVATION_OPERATION, "catalog.product.manage",
+            "consequential_write", "canonical_product_activation_v1",
             "actor_confirmation", (),
         ),
         ActionPolicy(
