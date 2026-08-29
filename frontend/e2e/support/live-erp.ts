@@ -1,4 +1,7 @@
 import { expect, Page, Response, TestInfo } from '@playwright/test';
+import { createClient } from '@supabase/supabase-js';
+
+import { supabaseSessionStorageKey } from './live18/session';
 
 const VISIBLE_FAILURE = /failed to|permission check failed|sync error|something went wrong|unexpected error|access denied/i;
 const BENIGN_CONSOLE_ERROR = /resizeobserver loop|favicon\.ico|source map/i;
@@ -54,13 +57,45 @@ export function collectBrowserFailures(page: Page): BrowserFailureCollector {
 
 export async function loginToLiveErp(page: Page, email: string, password: string): Promise<void> {
   await page.goto('/');
-  const signIn = page.getByRole('button', { name: 'Sign In', exact: true });
-  if (await signIn.isVisible().catch(() => false)) {
-    await page.locator('input[type="email"]').fill(email);
-    await page.locator('input[type="password"]').fill(password);
-    await signIn.click();
+  const coreOperations = page.getByText('Core Operations', { exact: true });
+  if (!await coreOperations.isVisible().catch(() => false)) {
+    const supabaseOrigin = process.env.SUPABASE_URL?.trim();
+    const supabaseAnonKey = process.env.SUPABASE_ANON_KEY?.trim();
+    if (!supabaseOrigin || !supabaseAnonKey) {
+      throw new Error(
+        'Google-only UI acceptance requires SUPABASE_URL and SUPABASE_ANON_KEY '
+        + 'for disposable test-session bootstrap.',
+      );
+    }
+    const supabase = createClient(supabaseOrigin, supabaseAnonKey, {
+      auth: {
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+        persistSession: false,
+      },
+    });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error || !data.session || data.user?.email?.toLowerCase() !== email.toLowerCase()) {
+      throw new Error('Disposable Supabase browser identity bootstrap failed.');
+    }
+    await page.evaluate(({ storageKey, session }) => {
+      window.localStorage.setItem(storageKey, JSON.stringify(session));
+    }, {
+      storageKey: supabaseSessionStorageKey(supabaseOrigin),
+      session: data.session,
+    });
+    const exchange = page.waitForResponse(response => (
+      response.request().method() === 'POST'
+      && new URL(response.url()).pathname === '/api/auth/oauth/supabase/session'
+    ), { timeout: 45_000 });
+    await page.reload();
+    const exchangeResponse = await exchange;
+    expect(
+      exchangeResponse.status(),
+      'disposable Supabase session must exchange for an ERP session',
+    ).toBe(200);
   }
-  await expect(page.getByText('Core Operations')).toBeVisible({ timeout: 45_000 });
+  await expect(coreOperations).toBeVisible({ timeout: 45_000 });
 
   const expectedOrganizationId = process.env.PLAYWRIGHT_LIVE_EXPECTED_ORG_ID?.trim();
   if (expectedOrganizationId) {
@@ -84,7 +119,7 @@ export async function loginToLiveErp(page: Page, email: string, password: string
     const context = JSON.parse(result.text);
     expect(context.organization_id, 'authenticated browser session organization')
       .toBe(expectedOrganizationId);
-    await expect(page.getByText('Core Operations')).toBeVisible({ timeout: 45_000 });
+    await expect(coreOperations).toBeVisible({ timeout: 45_000 });
   }
 }
 

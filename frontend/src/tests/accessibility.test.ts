@@ -18,7 +18,6 @@ import '@testing-library/jest-dom';
 
 jest.mock('../contexts/AuthContext', () => ({
   useAuth: () => ({
-    login: jest.fn(),
     loginWithGoogle: jest.fn(),
     isOnline: true,
   }),
@@ -51,24 +50,11 @@ jest.mock('../components/global/ui/CanonicalWriteNotice', () => ({
 // ─── Login Page ──────────────────────────────────────────────────────────────
 
 describe('LoginPage accessibility', () => {
-  it('email input has an associated label', () => {
+  it('does not expose unsupported password controls', () => {
     const { default: LoginPage } = require('../components/auth/LoginPage');
     render(React.createElement(LoginPage));
-    expect(screen.getByLabelText(/email address/i)).toBeInTheDocument();
-  });
-
-  it('password input has an associated label', () => {
-    const { default: LoginPage } = require('../components/auth/LoginPage');
-    render(React.createElement(LoginPage));
-    expect(screen.getByLabelText(/password/i)).toBeInTheDocument();
-  });
-
-  it('submit button is present and has type submit', () => {
-    const { default: LoginPage } = require('../components/auth/LoginPage');
-    render(React.createElement(LoginPage));
-    // Use exact name match to distinguish from "Sign in with Google"
-    const submitBtn = screen.getByRole('button', { name: /^sign in$/i });
-    expect(submitBtn).toBeInTheDocument();
+    expect(screen.queryByLabelText(/email address/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/password/i)).not.toBeInTheDocument();
   });
 
   it('Google onboarding button is present and labelled', () => {
