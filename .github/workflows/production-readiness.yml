@@ -47,11 +47,21 @@ on:
         required: true
         default: false
         type: boolean
-      reset_canonical_staging:
-        description: Reset canonical data on the pinned disposable free-staging project
-        required: true
-        default: false
-        type: boolean
+      purge_canonical_staging_organization_id:
+        description: Exact Railway staging organization UUID to plan or purge
+        required: false
+        default: ""
+        type: string
+      purge_canonical_staging_confirmation:
+        description: Exact DELETE-ORGANIZATION colon UUID acknowledgement
+        required: false
+        default: ""
+        type: string
+      purge_canonical_staging_plan_token:
+        description: Signed token from a prior plan run; blank creates a plan only
+        required: false
+        default: ""
+        type: string
       restart_canonical_staging:
         description: Restart the pinned free-staging database before verification
         required: true
@@ -193,15 +203,14 @@ jobs:
   canonical-free-staging:
     if: >-
       github.event_name == 'workflow_dispatch' &&
-      (inputs.deploy_canonical_staging || inputs.provision_canonical_demo ||
-       inputs.reset_canonical_staging) &&
+      (inputs.deploy_canonical_staging || inputs.provision_canonical_demo) &&
       inputs.live18_provider == 'render'
     uses: ./.github/workflows/canonical-staging.yml
     with:
       confirmation: DEPLOY_FREE_CANONICAL_STAGING
       deploy_render_pilot: ${{ inputs.deploy_canonical_staging && inputs.live18_provider == 'render' }}
       provision_demo_data: ${{ inputs.provision_canonical_demo }}
-      reset_disposable_data: ${{ inputs.reset_canonical_staging }}
+      reset_disposable_data: false
       restart_staging_database: ${{ inputs.restart_canonical_staging }}
       rotate_role_passwords: ${{ inputs.rotate_canonical_staging_roles }}
       render_deploy_sha: ${{ inputs.canonical_staging_deploy_sha }}
@@ -213,13 +222,15 @@ jobs:
     if: >-
       needs.dispatch-contract.result == 'success' &&
       github.event_name == 'workflow_dispatch' &&
-      (inputs.deploy_canonical_staging || inputs.reset_canonical_staging) &&
+      (inputs.deploy_canonical_staging || inputs.purge_canonical_staging_organization_id != '') &&
       inputs.live18_provider == 'railway' &&
       vars.DEPLOY_RAILWAY_PILOT == 'true'
     uses: ./.github/workflows/railway-canonical-staging.yml
     with:
       reviewed_sha: ${{ inputs.canonical_staging_deploy_sha }}
-      reset_disposable_data: ${{ inputs.reset_canonical_staging }}
+      purge_organization_id: ${{ inputs.purge_canonical_staging_organization_id }}
+      purge_organization_confirmation: ${{ inputs.purge_canonical_staging_confirmation }}
+      purge_organization_plan_token: ${{ inputs.purge_canonical_staging_plan_token }}
       github_environment: canonical-certification
     secrets: inherit
 

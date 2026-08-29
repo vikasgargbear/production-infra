@@ -24,6 +24,7 @@ NONCE = "c" * 64
 DB_PASSWORD = "database-secret-value"
 ACCESS_TOKEN = "sb_secret_access-token-value"
 ANON_KEY = "eyJanonymous-token-value"
+ORGANIZATION_ID = "10000000-0000-4000-8000-000000000010"
 
 
 def test_fence_control_does_not_eagerly_import_reset_only_provisioning() -> None:
@@ -141,8 +142,8 @@ def test_exact_deployment_requires_sha_and_packaged_provenance(
     ("expected", "provided"),
     (
         (
-            CONTROL.RESET_SECRET_KEYS,
-            {"SUPABASE_DB_PASSWORD": DB_PASSWORD},
+            CONTROL.PURGE_SECRET_KEYS,
+            {"SUPABASE_DB_PASSWORD": DB_PASSWORD, "EXTRA": "forbidden"},
         ),
         (
             CONTROL.FENCE_SECRET_KEYS,
@@ -178,7 +179,7 @@ def test_prepare_boundary_migrates_without_resetting_business_data(
     monkeypatch.setattr(CONTROL, "prepare_reset_boundary", prepare)
     monkeypatch.setattr(
         CONTROL,
-        "reset_disposable_staging",
+        "purge_staging_organization",
         lambda **_kwargs: (_ for _ in ()).throw(
             AssertionError("migration-only preparation must not reset data")
         ),
@@ -199,60 +200,56 @@ def test_prepare_boundary_migrates_without_resetting_business_data(
     ]
 
 
-def test_reset_boundary_orders_prepare_cleanup_and_reset_over_ipv6(
+def test_signed_purge_plan_requires_delay_exact_boundary_and_separate_execution(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    calls: list[tuple[str, object]] = []
-
-    def prepare(**kwargs):
-        calls.append(("prepare", kwargs))
-        return {"action": "prepare-reset", "write_fence": {"state": "closed"}}
-
-    cleanup_receipt = {
-        "contract_version": "canonical-evidence-reset-cleanup-v2",
-        "state": "empty",
+    issued_at = 1_000
+    payload = {
+        "schema": CONTROL.PURGE_PLAN_SCHEMA,
+        "expected_sha": EXPECTED_SHA,
+        "project_ref": PROJECT_REF,
+        "organization_id": ORGANIZATION_ID,
+        "authority_manifest_sha256": "a" * 64,
+        "catalog_fingerprint_sha256": "b" * 64,
+        "alembic_head": "head",
+        "organization_row_count": 7,
+        "issued_at": issued_at,
+        "not_before": issued_at + 60,
+        "expires_at": issued_at + 1800,
+        "nonce": "c" * 64,
     }
-
-    def cleanup(request, secrets):
-        calls.append(("cleanup", (request, dict(secrets))))
-        return {
-            "transport": {"network_family": 6},
-            "identity_prepared": False,
-            "identity_receipt": None,
-            "cleanup_receipt": cleanup_receipt,
-            "cleanup_receipt_sha256": "e" * 64,
-            "cleanup_receipt_bytes": json.dumps(cleanup_receipt),
+    token = CONTROL._encode_signed_purge_plan(payload, DB_PASSWORD)
+    request = _request(secrets={"SUPABASE_DB_PASSWORD": DB_PASSWORD})
+    request.update(
+        {
+            "organization_id": ORGANIZATION_ID,
+            "organization_confirmation": f"DELETE-ORGANIZATION:{ORGANIZATION_ID}",
+            "purge_plan_token": token,
         }
+    )
+    calls: list[dict[str, object]] = []
+    monkeypatch.setattr(CONTROL.time, "time", lambda: issued_at + 30)
+    with pytest.raises(CONTROL.RailwayResetControlError, match="cooling-off"):
+        CONTROL._purge_organization(request)
 
-    def reset(**kwargs):
-        receipt_path = kwargs.pop("evidence_cleanup_receipt_path")
-        calls.append(("reset", kwargs))
-        assert json.loads(receipt_path.read_text(encoding="utf-8")) == cleanup_receipt
-        assert receipt_path.stat().st_mode & 0o777 == 0o600
-        return {"action": "reset", "post_reset_fence_state": "closed"}
+    monkeypatch.setattr(CONTROL.time, "time", lambda: issued_at + 61)
+    monkeypatch.setattr(
+        CONTROL,
+        "purge_staging_organization",
+        lambda **kwargs: calls.append(kwargs) or {"action": "purge-organization"},
+    )
+    result = CONTROL._purge_organization(request)
 
-    monkeypatch.setattr(CONTROL, "prepare_reset_boundary", prepare)
-    monkeypatch.setattr(CONTROL, "_evidence_cleanup", cleanup)
-    monkeypatch.setattr(CONTROL, "reset_disposable_staging", reset)
-    request = _request()
+    assert result["action"] == "purge-organization"
+    assert calls[0]["organization_id"] == ORGANIZATION_ID
+    assert calls[0]["authorized_plan"] == payload
+    assert len(str(calls[0]["authorized_plan_sha256"])) == 64
+    assert "SUPABASE_ACCESS_TOKEN" not in calls[0]
 
-    result = CONTROL._reset_boundary(request)
-
-    assert [name for name, _value in calls] == ["prepare", "cleanup", "reset"]
-    for name, value in (calls[0], calls[2]):
-        assert name in {"prepare", "reset"}
-        assert value == {
-            "expected_sha": EXPECTED_SHA,
-            "project_ref": PROJECT_REF,
-            "production_project_refs": PRODUCTION_REFS,
-            "password": DB_PASSWORD,
-            "control_transport": RESET.CONTROL_TRANSPORT_RAILWAY_IPV6,
-        }
-    assert "cleanup_receipt_bytes" not in result["evidence"]
-    serialized = json.dumps(result)
-    assert DB_PASSWORD not in serialized
-    assert ACCESS_TOKEN not in serialized
-    assert ANON_KEY not in serialized
+    tampered = token[:-1] + ("0" if token[-1] != "0" else "1")
+    request["purge_plan_token"] = tampered
+    with pytest.raises(CONTROL.RailwayResetControlError, match="signature"):
+        CONTROL._purge_organization(request)
 
 
 class _EvidenceConnection:
@@ -280,135 +277,6 @@ def _closed_writer() -> WriterClosure:
         remaining_preclosure_authenticator_session_count=0,
         verified_at="2026-08-27T00:00:00Z",
     )
-
-
-def test_empty_evidence_cleanup_skips_service_identity(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        CONTROL,
-        "_admin_database_url",
-        lambda **_kwargs: ("postgresql://redacted", {"network_family": 6}),
-    )
-    connections: list[_EvidenceConnection] = []
-
-    def connect(*_args, **_kwargs):
-        connection = _EvidenceConnection()
-        connections.append(connection)
-        return connection
-
-    monkeypatch.setattr(CONTROL.psycopg2, "connect", connect)
-    monkeypatch.setattr(CONTROL, "load_inventory", lambda _connection: "inventory")
-    monkeypatch.setattr(CONTROL, "validated_cleanup_keys", lambda _inventory: ())
-    monkeypatch.setattr(
-        CONTROL,
-        "provision_evidence_identity",
-        lambda _arguments: pytest.fail("empty evidence must not provision identity"),
-    )
-    cleanup_receipt = {
-        "contract_version": "canonical-evidence-reset-cleanup-v2",
-        "state": "empty",
-        "remaining_object_count": 0,
-    }
-    monkeypatch.setattr(
-        CONTROL,
-        "execute_fenced_cleanup",
-        lambda **_kwargs: cleanup_receipt,
-    )
-    monkeypatch.setattr(
-        CONTROL,
-        "write_evidence_cleanup_receipt",
-        lambda path, payload: path.write_text(json.dumps(payload), encoding="utf-8"),
-    )
-
-    result = CONTROL._evidence_cleanup(
-        _request(),
-        {
-            "SUPABASE_ACCESS_TOKEN": ACCESS_TOKEN,
-            "SUPABASE_ANON_KEY": ANON_KEY,
-            "SUPABASE_DB_PASSWORD": DB_PASSWORD,
-        },
-    )
-
-    assert result["identity_prepared"] is False
-    assert result["identity_receipt"] is None
-    assert result["cleanup_receipt"] == cleanup_receipt
-    assert DB_PASSWORD not in json.dumps(result)
-    assert len(connections) == 2
-    assert all(connection.closed for connection in connections)
-
-
-def test_nonempty_evidence_cleanup_prepares_identity_once_without_exporting_secrets(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        CONTROL,
-        "_admin_database_url",
-        lambda **_kwargs: ("postgresql://redacted", {"network_family": 6}),
-    )
-    connections: list[_EvidenceConnection] = []
-
-    def connect(*_args, **_kwargs):
-        connection = _EvidenceConnection()
-        connections.append(connection)
-        return connection
-
-    monkeypatch.setattr(CONTROL.psycopg2, "connect", connect)
-    monkeypatch.setattr(CONTROL, "load_inventory", lambda _connection: "inventory")
-    monkeypatch.setattr(
-        CONTROL, "validated_cleanup_keys", lambda _inventory: ("one-reviewed-key",)
-    )
-    provision_calls: list[list[str]] = []
-
-    def provision(arguments: list[str]) -> int:
-        provision_calls.append(arguments)
-        environment_path = Path(arguments[arguments.index("--github-env") + 1])
-        receipt_path = Path(arguments[arguments.index("--receipt") + 1])
-        environment_path.write_text(
-            "EVIDENCE_STORAGE_ENABLED=true\n"
-            "EVIDENCE_STORAGE_SERVICE_PASSWORD=ephemeral-password\n",
-            encoding="utf-8",
-        )
-        receipt_path.write_text(
-            json.dumps({"state": "prepared", "password_rotated": True}),
-            encoding="utf-8",
-        )
-        return 0
-
-    monkeypatch.setattr(CONTROL, "provision_evidence_identity", provision)
-    cleanup_receipt = {
-        "contract_version": "canonical-evidence-reset-cleanup-v2",
-        "state": "empty",
-        "remaining_object_count": 0,
-    }
-    monkeypatch.setattr(
-        CONTROL,
-        "execute_fenced_cleanup",
-        lambda **_kwargs: cleanup_receipt,
-    )
-    monkeypatch.setattr(
-        CONTROL,
-        "write_evidence_cleanup_receipt",
-        lambda path, payload: path.write_text(json.dumps(payload), encoding="utf-8"),
-    )
-
-    result = CONTROL._evidence_cleanup(
-        _request(),
-        {
-            "SUPABASE_ACCESS_TOKEN": ACCESS_TOKEN,
-            "SUPABASE_ANON_KEY": ANON_KEY,
-            "SUPABASE_DB_PASSWORD": DB_PASSWORD,
-        },
-    )
-
-    assert len(provision_calls) == 1
-    assert result["identity_prepared"] is True
-    serialized = json.dumps(result)
-    assert "ephemeral-password" not in serialized
-    assert DB_PASSWORD not in serialized
-    assert ACCESS_TOKEN not in serialized
-    assert len(connections) == 2
-    assert all(connection.closed for connection in connections)
 
 
 @pytest.mark.parametrize(
@@ -528,11 +396,11 @@ def test_response_and_error_paths_do_not_disclose_transported_secrets(
     request, digest = _archive_boundary(monkeypatch, tmp_path)
     monkeypatch.setattr(
         CONTROL,
-        "_reset_boundary",
-        lambda _request: {"prepared": True, "evidence": True, "reset": True},
+        "_purge_organization",
+        lambda _request: {"purge": True},
     )
 
-    response = CONTROL.execute(request, "reset-boundary")
+    response = CONTROL.execute(request, "purge-organization")
 
     serialized = json.dumps(response)
     assert DB_PASSWORD not in serialized
@@ -551,7 +419,7 @@ def test_response_and_error_paths_do_not_disclose_transported_secrets(
         )
 
     monkeypatch.setattr(CONTROL, "execute", fail)
-    assert CONTROL.main(["reset-boundary", "--input", str(request_path)]) == 1
+    assert CONTROL.main(["purge-organization", "--input", str(request_path)]) == 1
     captured = capsys.readouterr()
     assert captured.out == ""
     assert DB_PASSWORD not in captured.err
@@ -567,28 +435,28 @@ def test_response_verifier_recomputes_hash_and_does_not_trust_remote_boundary(
     request, _digest = _archive_boundary(monkeypatch, tmp_path)
     monkeypatch.setattr(
         CONTROL,
-        "_reset_boundary",
-        lambda _request: {"reset": {"post_reset_fence_state": "closed"}},
+        "_purge_organization",
+        lambda _request: {"purge": {"organization_boundary_deleted": True}},
     )
-    response = CONTROL.execute(request, "reset-boundary")
+    response = CONTROL.execute(request, "purge-organization")
 
     assert (
-        CONTROL.verify_response(response, request, action="reset-boundary")
+        CONTROL.verify_response(response, request, action="purge-organization")
         == response
     )
 
     tampered_boundary = {**response, "deployment_id": INSTANCE_ID}
     with pytest.raises(CONTROL.RailwayResetControlError, match="deployment_id"):
         CONTROL.verify_response(
-            tampered_boundary, request, action="reset-boundary"
+            tampered_boundary, request, action="purge-organization"
         )
 
     tampered_result = {
         **response,
-        "result": {"reset": {"post_reset_fence_state": "open"}},
+        "result": {"purge": {"organization_boundary_deleted": False}},
     }
     with pytest.raises(CONTROL.RailwayResetControlError, match="hash"):
-        CONTROL.verify_response(tampered_result, request, action="reset-boundary")
+        CONTROL.verify_response(tampered_result, request, action="purge-organization")
 
 
 class _Cursor:

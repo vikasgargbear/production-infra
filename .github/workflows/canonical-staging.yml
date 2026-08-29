@@ -136,6 +136,12 @@ jobs:
       RAILWAY_MCP_URL: ${{ vars.RAILWAY_MCP_URL }}
       RAILWAY_FRONTEND_URL: ${{ vars.RAILWAY_FRONTEND_URL }}
     steps:
+      - name: Refuse the retired whole-database reset
+        if: inputs.reset_disposable_data == true
+        run: |
+          echo "Whole-database reset is permanently disabled; use the two-run organization purge UI." >&2
+          exit 2
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0

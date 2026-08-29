@@ -953,36 +953,27 @@ def test_demo_runtime_computes_activation_hash_without_extensions_access():
     assert "postgresql://<redacted>@" not in workflow
 
 
-def test_free_staging_reset_is_explicit_and_preserves_supabase_schemas():
+def test_whole_database_reset_is_retired_and_org_purge_is_two_run_scoped():
     workflow = _read(".github/workflows/canonical-staging.yml")
     reset_authority = _read("backend/scripts/canonical_data_reset_authority.py")
     production_workflow = _read(".github/workflows/production-readiness.yml")
-    reset_step = workflow.split(
-        "Reset canonical data on the pinned disposable project", 1
-    )[1].split("Provision isolated staging login credentials", 1)[0]
-
     assert "reset_disposable_data:" in workflow
-    assert "if: inputs.reset_disposable_data == true" in workflow
+    assert "Refuse the retired whole-database reset" in workflow
+    assert "Whole-database reset is permanently disabled" in workflow
     assert "Refuse any target except the reviewed free staging project" in workflow
-    assert "Close canonical writes before the disposable data reset" in workflow
-    assert workflow.index(
-        "Apply or verify the approved canonical migration head"
-    ) < workflow.index("Reset canonical data on the pinned disposable project")
-    assert "canonical_data_reset_authority.py" in reset_step
-    assert "--execute-reset" in reset_step
-    assert "--expected-evidence-object-count 0" in reset_step
-    assert "canonical-data-reset-facts.json" in reset_step
-    assert "GRANT erp_migration_owner TO postgres WITH SET TRUE" in reset_step
-    assert "revoke_staging_postgres_set_roles.sh migration-owner" in reset_step
     assert "PRESERVED_SEED_RELATIONS" in reset_authority
     assert "EXPECTED_CANONICAL_RELATION_COUNT = 120" in reset_authority
     assert "EXPECTED_EPHEMERAL_RELATION_COUNT = 9" in reset_authority
-    assert "if re.search(r\"\\bCASCADE\\b\"" in reset_authority
+    assert "EXPECTED_ORGANIZATION_RELATION_COUNT = 104" in reset_authority
+    assert "TRUNCATE TABLE" not in reset_authority
+    assert "execute_reset" not in reset_authority
+    assert "--execute-organization-purge" not in reset_authority
+    assert "authorized_plan_sha256" in reset_authority
+    assert "WHERE org_id=%s::uuid" in reset_authority
     assert "before_roles != after_roles" in reset_authority
     assert "before_seed_digest != after_seed_digest" in reset_authority
     assert "before_catalog.relation_oids != after_catalog.relation_oids" in reset_authority
     assert "before_catalog.schema_oids != after_catalog.schema_oids" in reset_authority
-    assert "evidence_storage_object_count_after_reset" in reset_authority
     assert "DROP TABLE IF EXISTS public.alembic_version" not in workflow
     assert "DROP EXTENSION IF EXISTS btree_gist" not in workflow
     assert "DROP OWNED BY" not in workflow
@@ -990,18 +981,17 @@ def test_free_staging_reset_is_explicit_and_preserves_supabase_schemas():
     assert "ALTER ROLE %I NOLOGIN" not in workflow
     assert "DROP SCHEMA auth" not in workflow
     assert "DROP SCHEMA storage" not in workflow
-    assert "reset_canonical_staging:" in production_workflow
+    assert "purge_canonical_staging_organization_id:" in production_workflow
+    assert "purge_canonical_staging_plan_token:" in production_workflow
     assert (
         "(inputs.deploy_canonical_staging || inputs.provision_canonical_demo)"
         in production_workflow
     )
-    assert "reset_disposable_data: ${{ inputs.reset_canonical_staging }}" in production_workflow
+    assert "purge_organization_plan_token:" in production_workflow
     assert "rotate_canonical_staging_roles:" in production_workflow
     assert "rotate_role_passwords: ${{ inputs.rotate_canonical_staging_roles }}" in production_workflow
     assert "refresh_canonical_staging_pooler:" not in production_workflow
     assert "refresh_pooler_configuration:" not in workflow
-    assert "pg_catalog.pg_terminate_backend(activity.pid)" in workflow
-    assert "activity.usename IN" in workflow
     assert "restart_staging_database:" in workflow
     assert "if: inputs.restart_staging_database == true" in workflow
     assert '"https://api.supabase.com/v1/projects/$CANONICAL_STAGING_PROJECT_REF/restart"' in workflow

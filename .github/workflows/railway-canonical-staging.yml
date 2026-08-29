@@ -7,11 +7,21 @@ on:
         description: Exact reviewed application SHA to upload to all Railway pilot services
         required: true
         type: string
-      reset_disposable_data:
-        description: Close writes and reset disposable canonical staging before the exact deployment
+      purge_organization_id:
+        description: Exact staging organization UUID to purge; blank disables purge
         required: false
-        default: false
-        type: boolean
+        default: ""
+        type: string
+      purge_organization_confirmation:
+        description: Type DELETE-ORGANIZATION followed by a colon and the exact UUID
+        required: false
+        default: ""
+        type: string
+      purge_organization_plan_token:
+        description: Signed token from a prior plan run; blank creates a plan only
+        required: false
+        default: ""
+        type: string
       github_environment:
         description: Isolated GitHub environment containing certification-only Railway and Supabase authority
         required: false
@@ -33,11 +43,21 @@ on:
         description: Exact application SHA to upload to all Railway pilot services
         required: true
         type: string
-      reset_disposable_data:
-        description: Close writes and reset disposable canonical staging before the exact deployment
+      purge_organization_id:
+        description: Exact staging organization UUID to purge; blank disables purge
         required: false
-        default: false
-        type: boolean
+        default: ""
+        type: string
+      purge_organization_confirmation:
+        description: Exact DELETE-ORGANIZATION colon UUID acknowledgement
+        required: false
+        default: ""
+        type: string
+      purge_organization_plan_token:
+        description: Signed token from a prior plan run; blank creates a plan only
+        required: false
+        default: ""
+        type: string
       github_environment:
         description: Isolated GitHub environment containing certification-only Railway and Supabase authority
         required: false
@@ -580,13 +600,17 @@ jobs:
           PY
           touch "$RAILWAY_RESET_FENCE_CLOSED"
 
-          if test '${{ inputs.reset_disposable_data }}' = true; then
+          if test -n '${{ inputs.purge_organization_id }}'; then
           reset_request="$RUNNER_TEMP/railway-reset-request.json"
           jq \
-            --arg access "$SUPABASE_ACCESS_TOKEN" \
-            --arg anon "$SUPABASE_ANON_KEY" \
             --arg password "$SUPABASE_DB_PASSWORD" \
-            '.secrets={SUPABASE_ACCESS_TOKEN:$access,SUPABASE_ANON_KEY:$anon,SUPABASE_DB_PASSWORD:$password}' \
+            --arg organization_id '${{ inputs.purge_organization_id }}' \
+            --arg confirmation '${{ inputs.purge_organization_confirmation }}' \
+            --arg plan_token '${{ inputs.purge_organization_plan_token }}' \
+            '.organization_id=$organization_id
+             | .organization_confirmation=$confirmation
+             | .purge_plan_token=$plan_token
+             | .secrets={SUPABASE_DB_PASSWORD:$password}' \
             "$base_request" > "$reset_request"
           chmod 600 "$reset_request"
           # Evidence cleanup temporarily opens an independent Storage writer
@@ -595,11 +619,15 @@ jobs:
           rm -f "$RAILWAY_RESET_FENCE_CLOSED"
           reset_request_sha256=$(sha256sum "$reset_request" | cut -d' ' -f1)
           [[ "$reset_request_sha256" =~ ^[0-9a-f]{64}$ ]]
+          purge_action=plan-organization-purge
+          if test -n '${{ inputs.purge_organization_plan_token }}'; then
+            purge_action=purge-organization
+          fi
 
           verify_reset_receipt() {
             local candidate=$1
             PYTHONPATH=backend python3 - \
-              "$reset_request" "$candidate" "$expected_head" <<'PY'
+              "$reset_request" "$candidate" "$purge_action" "$expected_head" <<'PY'
           import json
           from pathlib import Path
           import sys
@@ -607,27 +635,39 @@ jobs:
 
           reset_request = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
           reset_response = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
-          verify_response(reset_response, reset_request, action="reset-boundary")
+          action = sys.argv[3]
+          verify_response(reset_response, reset_request, action=action)
           result = reset_response["result"]
-          prepared = result["prepared"]
-          evidence = result["evidence"]["cleanup_receipt"]
-          reset = result["reset"]
-          expected_head = sys.argv[3]
-          if not (
-              prepared["write_fence"]["state"] == "closed"
-              and prepared["transport"]["network_family"] == 6
-              and prepared["migration"]["alembic_head"] == expected_head
-              and evidence["state"] == "empty"
-              and evidence["remaining_object_count"] == 0
-              and evidence["evidence_writer_membership_open"] is False
-              and reset["post_reset_fence_state"] == "closed"
-              and reset["reset"]["alembic_head"] == expected_head
-              and reset["reset"]["disposable_row_count_after_reset"] == 0
-              and reset["reset"]["evidence_storage_object_count_after_reset"] == 0
-          ):
-              raise SystemExit("Railway IPv6 reset receipt is incomplete")
+          expected_head = sys.argv[4]
+          if action == "plan-organization-purge":
+              plan = result["plan"]
+              valid = (
+                  result["requires_separate_execution"] is True
+                  and result["minimum_delay_seconds"] >= 60
+                  and plan["organization_id"] == reset_request["organization_id"]
+                  and plan["alembic_head"] == expected_head
+                  and plan["global_reset_available"] is False
+                  and plan["truncate_used"] is False
+                  and bool(result["authorization_token"])
+              )
+          else:
+              purge = result["purge"]
+              valid = (
+                  result["action"] == "purge-organization"
+                  and result["organization_id"] == reset_request["organization_id"]
+                  and result["global_write_fence_changed"] is False
+                  and result["other_sessions_terminated"] is False
+                  and result["evidence_storage_cleanup_run"] is False
+                  and purge["alembic_head"] == expected_head
+                  and purge["organization_row_count_after_purge"] == 0
+                  and purge["organization_boundary_deleted"] is True
+                  and purge["global_reset_available"] is False
+                  and purge["truncate_used"] is False
+              )
+          if not valid:
+              raise SystemExit("Railway organization purge control receipt is incomplete")
           Path("railway-canonical-reset.json").write_text(
-              json.dumps(reset, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+              json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8"
           )
           PY
           }
@@ -682,10 +722,17 @@ jobs:
             reset_rc=0
             # Expansion belongs to the remote shell.
             # shellcheck disable=SC2016
-            remote_ssh /bin/sh -c \
-              'cd "$1/source"; exec python backend/scripts/railway_reset_control_plane.py reset-boundary --input - --output -' \
-              sh "$RAILWAY_RESET_REMOTE_ROOT" \
-              < "$reset_request" > "$attempt_receipt" || reset_rc=$?
+            if test "$purge_action" = plan-organization-purge; then
+              remote_ssh /bin/sh -c \
+                'cd "$1/source"; exec python backend/scripts/railway_reset_control_plane.py plan-organization-purge --input - --output -' \
+                sh "$RAILWAY_RESET_REMOTE_ROOT" \
+                < "$reset_request" > "$attempt_receipt" || reset_rc=$?
+            else
+              remote_ssh /bin/sh -c \
+                'cd "$1/source"; exec python backend/scripts/railway_reset_control_plane.py purge-organization --input - --output -' \
+                sh "$RAILWAY_RESET_REMOTE_ROOT" \
+                < "$reset_request" > "$attempt_receipt" || reset_rc=$?
+            fi
 
             if { test "$reset_rc" -eq 0 || test "$reset_rc" -eq 255; } && \
                verify_reset_receipt "$attempt_receipt" 2>/dev/null; then

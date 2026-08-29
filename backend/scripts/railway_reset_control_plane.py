@@ -12,16 +12,19 @@ copy and also verifies Railway's exact-SHA provenance.
 from __future__ import annotations
 
 import argparse
+import base64
 import contextlib
 from dataclasses import asdict
 import hashlib
+import hmac
 import json
 import os
 from pathlib import Path
 import re
+import secrets as secure_random
 import sys
-import tempfile
-from typing import Any, Iterator, Mapping
+import time
+from typing import Any, Mapping
 
 import psycopg2
 
@@ -32,17 +35,8 @@ if str(BACKEND_DIRECTORY) not in sys.path:
 if str(SCRIPT_DIRECTORY) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIRECTORY))
 
-from app.infrastructure.evidence_storage_credentials import (  # noqa: E402
-    EvidenceCredentialConfig,
-    EvidenceServiceTokenProvider,
-)
 from cleanup_staging_evidence_storage import (  # noqa: E402
-    _write_receipt as write_evidence_cleanup_receipt,
     close_writer_authority,
-    execute_fenced_cleanup,
-    load_inventory,
-    open_writer_authority,
-    validated_cleanup_keys,
 )
 from railway_canonical_reset import (  # noqa: E402
     CONTROL_TRANSPORT_RAILWAY_IPV6,
@@ -51,7 +45,11 @@ from railway_canonical_reset import (  # noqa: E402
     close_fence_after_failure,
     open_fence_after_deploy,
     prepare_reset_boundary,
-    reset_disposable_staging,
+    purge_staging_organization,
+)
+from canonical_data_reset_authority import (  # noqa: E402
+    load_reset_authority,
+    plan_organization_purge,
 )
 
 
@@ -65,28 +63,15 @@ UUID_PATTERN = re.compile(
 )
 MAX_REQUEST_BYTES = 64 * 1024
 DEPLOYED_PROVENANCE = Path("/app/.railway-deployment-provenance")
-RESET_SECRET_KEYS = {
-    "SUPABASE_ACCESS_TOKEN",
-    "SUPABASE_ANON_KEY",
-    "SUPABASE_DB_PASSWORD",
-}
+PURGE_SECRET_KEYS = {"SUPABASE_DB_PASSWORD"}
 FENCE_SECRET_KEYS = {"SUPABASE_DB_PASSWORD"}
+PURGE_PLAN_SCHEMA = "aasopharma.organization-purge-plan.v1"
+PURGE_PLAN_MINIMUM_DELAY_SECONDS = 60
+PURGE_PLAN_TTL_SECONDS = 30 * 60
 
 
 class RailwayResetControlError(RuntimeError):
     """The bounded Railway reset control request failed closed."""
-
-
-def provision_evidence_identity(arguments: list[str]) -> int:
-    """Load reset-only provisioning only for the reset action.
-
-    Fence open/close runs from the slim API image and must not depend on
-    repository-only evidence identity declarations.
-    """
-
-    from provision_canonical_evidence_storage_identity import main
-
-    return main(arguments)
 
 
 def _required_text(mapping: Mapping[str, Any], key: str) -> str:
@@ -200,20 +185,6 @@ def _secret_environment(
     return {name: _required_text(supplied, name) for name in expected_keys}
 
 
-@contextlib.contextmanager
-def _temporary_environment(values: Mapping[str, str]) -> Iterator[None]:
-    prior = {name: os.environ.get(name) for name in values}
-    try:
-        os.environ.update(values)
-        yield
-    finally:
-        for name, value in prior.items():
-            if value is None:
-                os.environ.pop(name, None)
-            else:
-                os.environ[name] = value
-
-
 def _request_arguments(request: Mapping[str, Any]) -> dict[str, str]:
     return {
         "expected_sha": _required_text(request, "expected_sha"),
@@ -224,128 +195,124 @@ def _request_arguments(request: Mapping[str, Any]) -> dict[str, str]:
     }
 
 
-def _parse_environment_file(path: Path) -> dict[str, str]:
-    values: dict[str, str] = {}
-    for line in path.read_text(encoding="utf-8").splitlines():
-        name, separator, value = line.partition("=")
-        if not separator or not name or "\n" in value or "\r" in value:
-            raise RailwayResetControlError(
-                "evidence identity environment output is malformed"
-            )
-        values[name] = value
-    return values
+def _encode_signed_purge_plan(payload: Mapping[str, Any], secret: str) -> str:
+    body = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    encoded = base64.urlsafe_b64encode(body).decode("ascii").rstrip("=")
+    signature = hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
+    return f"{encoded}.{signature}"
 
 
-def _evidence_cleanup(
-    request: Mapping[str, Any], secrets: Mapping[str, str]
-) -> dict[str, Any]:
-    project_ref = _required_text(request, "project_ref")
+def _decode_signed_purge_plan(token: str, secret: str) -> dict[str, Any]:
+    encoded, separator, supplied_signature = token.partition(".")
+    if (
+        not separator
+        or not encoded
+        or SHA256_PATTERN.fullmatch(supplied_signature) is None
+        or len(token) > 16_384
+    ):
+        raise RailwayResetControlError("organization purge plan token is malformed")
+    try:
+        body = base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4))
+        value = json.loads(body)
+    except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise RailwayResetControlError(
+            "organization purge plan token is malformed"
+        ) from error
+    expected_signature = hmac.new(
+        secret.encode("utf-8"), body, hashlib.sha256
+    ).hexdigest()
+    if not hmac.compare_digest(supplied_signature, expected_signature):
+        raise RailwayResetControlError("organization purge plan signature is invalid")
+    if not isinstance(value, dict) or value.get("schema") != PURGE_PLAN_SCHEMA:
+        raise RailwayResetControlError("organization purge plan schema is invalid")
+    return value
+
+
+def _plan_organization(request: Mapping[str, Any]) -> dict[str, Any]:
+    secrets = _secret_environment(request, PURGE_SECRET_KEYS)
+    organization_id = _required_text(request, "organization_id")
+    if UUID_PATTERN.fullmatch(organization_id) is None:
+        raise RailwayResetControlError("organization_id is not a canonical UUID")
+    arguments = _request_arguments(request)
     database_url, transport = _admin_database_url(
         password=secrets["SUPABASE_DB_PASSWORD"],
-        application_name="canonical_railway_evidence_cleanup",
+        application_name="canonical_railway_organization_purge_plan",
         control_transport=CONTROL_TRANSPORT_RAILWAY_IPV6,
         recover_stale_owner_delegation=True,
     )
-    with contextlib.closing(
-        psycopg2.connect(database_url, connect_timeout=20)
-    ) as probe_connection:
-        inventory = load_inventory(probe_connection)
-        cleanup_keys = validated_cleanup_keys(inventory)
-
-    with tempfile.TemporaryDirectory(prefix="canonical-railway-evidence-") as raw:
-        directory = Path(raw)
-        environment_file = directory / "identity.env"
-        environment_file.touch(mode=0o600)
-        identity_receipt_path = directory / "identity.json"
-        cleanup_receipt_path = directory / "cleanup.json"
-        environment = {
-            **secrets,
-            "CANONICAL_STAGING_PROJECT_REF": project_ref,
-            "SUPABASE_URL": f"https://{project_ref}.supabase.co",
-            "PSYCOPG_DATABASE_URL": database_url,
-            "GITHUB_ACTIONS": "false",
-            "GITHUB_RUN_ID": _required_text(request, "run_id"),
-            "GITHUB_RUN_ATTEMPT": _required_text(request, "run_attempt"),
-        }
-        identity_receipt: dict[str, Any] | None = None
-        if cleanup_keys:
-            with _temporary_environment(environment), contextlib.redirect_stdout(
-                sys.stderr
-            ):
-                result = provision_evidence_identity(
-                    [
-                        "--phase",
-                        "prepare",
-                        "--project-ref",
-                        project_ref,
-                        "--reviewed-sha",
-                        _required_text(request, "expected_sha"),
-                        "--github-env",
-                        str(environment_file),
-                        "--receipt",
-                        str(identity_receipt_path),
-                    ]
-                )
-            if result != 0:
-                raise RailwayResetControlError(
-                    "evidence storage identity preparation did not complete"
-                )
-            identity_receipt = json.loads(
-                identity_receipt_path.read_text(encoding="utf-8")
-            )
-            environment.update(_parse_environment_file(environment_file))
-
-        connection = psycopg2.connect(database_url, connect_timeout=20)
-        try:
-            def token_provider() -> EvidenceServiceTokenProvider:
-                config = EvidenceCredentialConfig.from_environment(
-                    base_url=f"https://{project_ref}.supabase.co",
-                    project_ref=project_ref,
-                )
-                return EvidenceServiceTokenProvider(config)
-
-            with _temporary_environment(environment):
-                cleanup_receipt = execute_fenced_cleanup(
-                    project_ref=project_ref,
-                    load_current_inventory=lambda: load_inventory(connection),
-                    open_writer=lambda: open_writer_authority(connection),
-                    close_writer=lambda: close_writer_authority(connection),
-                    token_provider_factory=token_provider,
-                )
-        finally:
-            connection.close()
-        write_evidence_cleanup_receipt(cleanup_receipt_path, cleanup_receipt)
-        receipt_bytes = cleanup_receipt_path.read_bytes()
-        return {
-            "transport": dict(transport),
-            "identity_prepared": identity_receipt is not None,
-            "identity_receipt": identity_receipt,
-            "cleanup_receipt": cleanup_receipt,
-            "cleanup_receipt_sha256": hashlib.sha256(receipt_bytes).hexdigest(),
-            "cleanup_receipt_bytes": receipt_bytes.decode("utf-8"),
-        }
-
-
-def _reset_boundary(request: Mapping[str, Any]) -> dict[str, Any]:
-    secrets = _secret_environment(request, RESET_SECRET_KEYS)
-    arguments = _request_arguments(request)
-    common = {
-        **arguments,
-        "password": secrets["SUPABASE_DB_PASSWORD"],
-        "control_transport": CONTROL_TRANSPORT_RAILWAY_IPV6,
+    with contextlib.closing(psycopg2.connect(database_url)) as connection:
+        plan = plan_organization_purge(
+            connection,
+            authority=load_reset_authority(),
+            project_ref=arguments["project_ref"],
+            organization_id=organization_id,
+        )
+    issued_at = int(time.time())
+    signed_payload = {
+        "schema": PURGE_PLAN_SCHEMA,
+        "expected_sha": arguments["expected_sha"],
+        "project_ref": arguments["project_ref"],
+        "organization_id": organization_id,
+        "authority_manifest_sha256": plan["authority_manifest_sha256"],
+        "catalog_fingerprint_sha256": plan["catalog_fingerprint_sha256"],
+        "alembic_head": plan["alembic_head"],
+        "organization_row_count": plan["organization_row_count"],
+        "issued_at": issued_at,
+        "not_before": issued_at + PURGE_PLAN_MINIMUM_DELAY_SECONDS,
+        "expires_at": issued_at + PURGE_PLAN_TTL_SECONDS,
+        "nonce": secure_random.token_hex(32),
     }
-    prepared = prepare_reset_boundary(**common)
-    evidence = _evidence_cleanup(request, secrets)
-    with tempfile.TemporaryDirectory(prefix="canonical-railway-reset-") as raw:
-        receipt_path = Path(raw) / "evidence-cleanup.json"
-        receipt_path.write_text(
-            evidence.pop("cleanup_receipt_bytes"), encoding="utf-8"
-        )
-        receipt_path.chmod(0o600)
-        reset = reset_disposable_staging(
-            **common, evidence_cleanup_receipt_path=receipt_path
-        )
-    return {"prepared": prepared, "evidence": evidence, "reset": reset}
+    token = _encode_signed_purge_plan(
+        signed_payload, secrets["SUPABASE_DB_PASSWORD"]
+    )
+    return {
+        "action": "plan-organization-purge",
+        "provider": "railway",
+        "transport": dict(transport),
+        "plan": plan,
+        "authorization_token": token,
+        "not_before": signed_payload["not_before"],
+        "expires_at": signed_payload["expires_at"],
+        "minimum_delay_seconds": PURGE_PLAN_MINIMUM_DELAY_SECONDS,
+        "requires_separate_execution": True,
+    }
+
+
+def _purge_organization(request: Mapping[str, Any]) -> dict[str, Any]:
+    secrets = _secret_environment(request, PURGE_SECRET_KEYS)
+    organization_id = _required_text(request, "organization_id")
+    confirmation = _required_text(request, "organization_confirmation")
+    if UUID_PATTERN.fullmatch(organization_id) is None:
+        raise RailwayResetControlError("organization_id is not a canonical UUID")
+    arguments = _request_arguments(request)
+    plan_token = _required_text(request, "purge_plan_token")
+    signed_plan = _decode_signed_purge_plan(
+        plan_token, secrets["SUPABASE_DB_PASSWORD"]
+    )
+    now = int(time.time())
+    if not isinstance(signed_plan.get("not_before"), int) or now < signed_plan["not_before"]:
+        raise RailwayResetControlError("organization purge cooling-off period is active")
+    if not isinstance(signed_plan.get("expires_at"), int) or now > signed_plan["expires_at"]:
+        raise RailwayResetControlError("organization purge plan has expired")
+    for key, expected in {
+        "expected_sha": arguments["expected_sha"],
+        "project_ref": arguments["project_ref"],
+        "organization_id": organization_id,
+    }.items():
+        if signed_plan.get(key) != expected:
+            raise RailwayResetControlError(
+                f"organization purge plan differs from execution request: {key}"
+            )
+    plan_sha256 = hashlib.sha256(plan_token.encode("ascii")).hexdigest()
+    return purge_staging_organization(
+        **arguments,
+        password=secrets["SUPABASE_DB_PASSWORD"],
+        organization_id=organization_id,
+        confirmation=confirmation,
+        authorized_plan=signed_plan,
+        authorized_plan_sha256=plan_sha256,
+        control_transport=CONTROL_TRANSPORT_RAILWAY_IPV6,
+    )
 
 
 def _fence(request: Mapping[str, Any], *, action: str) -> dict[str, Any]:
@@ -434,8 +401,10 @@ def execute(request: Mapping[str, Any], action: str) -> dict[str, Any]:
     boundary = _execution_boundary(request)
     if action == "prepare-boundary":
         payload = _prepare_boundary(request)
-    elif action == "reset-boundary":
-        payload = _reset_boundary(request)
+    elif action == "plan-organization-purge":
+        payload = _plan_organization(request)
+    elif action == "purge-organization":
+        payload = _purge_organization(request)
     elif action in {"open-fence", "close-fence"}:
         payload = _fence(request, action=action)
     else:  # argparse owns this branch; keep the library boundary explicit.
@@ -518,7 +487,8 @@ def main(argv: list[str] | None = None) -> int:
         "action",
         choices=(
             "prepare-boundary",
-            "reset-boundary",
+            "plan-organization-purge",
+            "purge-organization",
             "open-fence",
             "close-fence",
         ),

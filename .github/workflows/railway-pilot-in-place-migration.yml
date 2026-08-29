@@ -42,7 +42,9 @@ jobs:
     uses: ./.github/workflows/railway-canonical-staging.yml
     with:
       reviewed_sha: ${{ inputs.reviewed_sha }}
-      reset_disposable_data: false
+      purge_organization_id: ""
+      purge_organization_confirmation: ""
+      purge_organization_plan_token: ""
       github_environment: canonical-staging
       open_persistent_pilot_after_deploy: true
     secrets: inherit
