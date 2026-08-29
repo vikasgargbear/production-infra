@@ -24,7 +24,6 @@ beforeEach(() => {
         createOrganization: mockCreateOrganization,
         hasCloudSession: false,
         isOnline: true,
-        login: jest.fn(),
         loginWithGoogle: mockLoginWithGoogle,
         logout: jest.fn(),
         onboardingRequired: false,
@@ -42,6 +41,20 @@ test('presents Google as the create-or-join path before authentication', async (
     expect(screen.getByText('Continue with Google to create or join an organization')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Continue with Google' }));
     expect(mockLoginWithGoogle).toHaveBeenCalledTimes(1);
+});
+
+
+test('does not present unsupported email or password authentication', () => {
+    render(<LoginPage />);
+
+    expect(screen.queryByLabelText(/email address/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/password/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/email and password/i)).not.toBeInTheDocument();
+    expect(screen.getAllByRole('button')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Continue with Google' })).toHaveAttribute(
+        'aria-describedby',
+        'google-sign-in-guidance',
+    );
 });
 
 

@@ -6,7 +6,7 @@ Global state management using React Context API.
 
 | Context | Lines | Purpose |
 |---------|-------|---------|
-| AuthContext.js | 471 | Authentication, OAuth, offline login |
+| AuthContext.tsx | - | Google authentication and ERP session exchange |
 | CompanyContext.tsx | 227 | Company profile, org settings |
 | EscapeKeyContext.tsx | 121 | ESC key modal handling |
 | PaymentContext.tsx | 250 | Payment entry wizard state |
@@ -20,7 +20,7 @@ Global state management using React Context API.
 import { useAuth, useCompany, usePayment } from '@/contexts';
 
 // In component
-const { user, login, logout } = useAuth();
+const { user, loginWithGoogle, logout } = useAuth();
 const { companyInfo } = useCompany();
 ```
 

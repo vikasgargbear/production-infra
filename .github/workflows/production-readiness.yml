@@ -1029,6 +1029,7 @@ jobs:
       CANONICAL_STAGING_PROJECT_REF: ${{ vars.CANONICAL_STAGING_PROJECT_REF }}
       CANONICAL_EPHEMERAL_DATABASE_TRANSPORT: direct_ipv4
       SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
       PLAYWRIGHT_LIVE_WRITES: "true"
       PLAYWRIGHT_USE_SYSTEM_CHROME: "true"
       RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
@@ -1241,6 +1242,7 @@ jobs:
       - name: Refuse missing ephemeral browser credentials or fixture
         run: |
           set -euo pipefail
+          test -n "$SUPABASE_ANON_KEY"
           test -n "$PLAYWRIGHT_LIVE_EMAIL"
           test -n "$PLAYWRIGHT_LIVE_PASSWORD"
           test -n "$PLAYWRIGHT_SALES_CHAIN_FIXTURE"
@@ -1369,6 +1371,7 @@ jobs:
       CANONICAL_STAGING_PROJECT_REF: ${{ vars.CANONICAL_STAGING_PROJECT_REF }}
       CANONICAL_EPHEMERAL_DATABASE_TRANSPORT: direct_ipv4
       SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
       PLAYWRIGHT_LIVE_RETURN_CUSTOMER_QUERY: "Demo Retail Customer"
       PLAYWRIGHT_LIVE_RETURN_INVOICE_PATTERN: "DEMO-SI-"
       PLAYWRIGHT_LIVE_RETURN_SUPPLIER_QUERY: "Synthetic Packaging"
@@ -1434,6 +1437,7 @@ jobs:
       - name: Refuse missing or identical maker/checker browser identities
         run: |
           set -euo pipefail
+          test -n "$SUPABASE_ANON_KEY"
           test -n "$PLAYWRIGHT_LIVE_REQUESTER_EMAIL"
           test -n "$PLAYWRIGHT_LIVE_REQUESTER_PASSWORD"
           test -n "$PLAYWRIGHT_LIVE_REVIEWER_EMAIL"
