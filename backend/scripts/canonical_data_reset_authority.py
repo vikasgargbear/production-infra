@@ -29,7 +29,7 @@ except ModuleNotFoundError:  # pragma: no cover - exercised by direct CLI execut
 CONTRACT_VERSION = "canonical-data-reset-v1"
 CANONICAL_STAGING_PROJECT_REF = "rgihahbmkrmhitjdjvev"
 EXPECTED_CANONICAL_RELATION_COUNT = 119
-EXPECTED_EPHEMERAL_RELATION_COUNT = 7
+EXPECTED_EPHEMERAL_RELATION_COUNT = 9
 EXPECTED_ALEMBIC_SCHEMA_COUNT = 30
 EVIDENCE_STORAGE_BUCKET = "canonical-evidence-private-v1"
 RESET_LOCK_KEY = 8_260_826_2
@@ -87,6 +87,7 @@ EPHEMERAL_SCOPE_RELATIONS = (
     "erp_finance_commands.command_scopes",
     "erp_regulatory_commands.command_scopes",
     "erp_tax_provider_commands.command_scopes",
+    "erp_trade_commands.command_scopes",
 )
 
 CREATE_TABLE = re.compile(

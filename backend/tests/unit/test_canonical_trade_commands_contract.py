@@ -93,6 +93,31 @@ def test_released_batch_blocking_requires_exact_cold_chain_scope() -> None:
     assert "scope.org_id=NEW.org_id AND scope.entity_id=NEW.id" in trade_invariants
 
 
+def test_goods_receipt_atomically_releases_only_accepted_saleable_batches() -> None:
+    mapping_text = (ROOT / "baseline-trade-command-enforcements.json").read_text()
+    trade_invariants = (
+        REPO / "database/canonical/invariants_trade/baseline-trade-enforcements.json"
+    ).read_text()
+
+    assert 'CREATE TABLE \\"erp_trade_commands\\".\\"command_scopes\\"' in mapping_text
+    assert "receipt_line.qc_status IN ('accepted','partial')" in mapping_text
+    assert "receipt_line.base_accepted_quantity+receipt_line.base_free_quantity>0" in mapping_text
+    assert "location.location_type IN ('saleable','cold_storage')" in mapping_text
+    assert "batch.status='quarantined'" in mapping_text
+    assert "SET status='released',released_at=pg_catalog.transaction_timestamp()" in mapping_text
+    assert "released_by_membership_id=p_actor_id" in mapping_text
+    assert "scope='goods_receipt_batch_release'" in mapping_text
+    assert "OLD.status='quarantined' AND NEW.status='released'" in trade_invariants
+    assert "batch release requires exact posted goods-receipt command provenance" in trade_invariants
+    fixture = (ROOT / "test_trade_commands_rollback.sql").read_text()
+    assert "trade batch-release scopes are externally forgeable" in fixture
+    assert "batch release does not require exact posted-GRN provenance" in fixture
+    replay_at = mapping_text.index("IF replay_id IS NOT NULL THEN RETURN replay_id; END IF")
+    release_at = mapping_text.index("scope='goods_receipt_batch_release'", replay_at)
+    assert replay_at < release_at
+    assert "PERFORM erp_trade_commands.assert_context(p_org_id,p_actor_id)" in mapping_text
+
+
 def test_commands_claim_idempotency_and_do_not_fake_calculation_or_landed_cost() -> None:
     mapping_text = (ROOT / "baseline-trade-command-enforcements.json").read_text()
     manifest = json.loads((ROOT / "trade-commands-manifest.json").read_text())

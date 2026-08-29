@@ -244,7 +244,7 @@ const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose })
                             onProductCreated={(product) => {
                                 setShowProductModal(false);
                                 setNewProductName('');
-                                toast.info(`Product ${product.product_code} is a draft and was not added. Complete classification and activation before ordering it.`);
+                                toast.success(`Product ${product.product_code} was added with zero stock. Receive its first batch through a purchase order and Goods receipt before dispatch.`);
                             }}
                             initialProductName={newProductName}
                         />

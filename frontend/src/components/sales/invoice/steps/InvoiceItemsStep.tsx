@@ -343,7 +343,7 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                     onClose={() => setShowProductModal(false)}
                     onProductCreated={(product) => {
                         setShowProductModal(false);
-                        toast.info(`Product ${product.product_code} is a draft and was not added. Complete classification and activation before invoicing it.`);
+                        toast.success(`Product ${product.product_code} was added with zero stock. Create a purchase order and goods receipt before invoicing it.`);
                     }}
                 />
             )}

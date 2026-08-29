@@ -83,7 +83,7 @@
   "catalog_invariant_sha256": "cf74457aa0d2fbdfd5d892a9b504df8f07bb0bec0e9c538b8d7f71b6c07cf925",
   "manifest_version": "1.0.0",
   "mapping_file": "baseline-trade-enforcements.json",
-  "mapping_sha256": "5a3f68fb2a4ee70751cf9942c0c2215ec269bc2cab24fd6121ab167bc30da35c",
+  "mapping_sha256": "e5376fcea087639f1005b2bd60d9f209e8c8b3f2b1294c28b66b13bc6c1c0893",
   "mutation_ownership": {
     "inventory_ledger_writers_added": 0,
     "inventory_projector_writers_added": 0,

@@ -207,6 +207,11 @@ def test_replay_reconciliation_accepts_only_valid_forward_order_states() -> None
     assert "balance.on_hand_quantity" not in goods_receipt_reconciliation
     assert "balance.inventory_value" not in goods_receipt_reconciliation
     assert "ledger.quantity_delta AS posted_quantity_delta" in goods_receipt_reconciliation
+    batch_release = source.split(
+        "def release_received_batch", 1
+    )[1].split("\ndef seed_inventory_destruction_ui_fixture", 1)[0]
+    assert "did not atomically release its batch" in batch_release
+    assert "UPDATE inventory.batches" not in batch_release
     cross_table = source.split(
         "def reconcile_cross_table_invariants", 1
     )[1].split("\ndef main", 1)[0]
