@@ -33,6 +33,8 @@ ROLE = UUID("ac270000-0000-7000-8000-000000000006")
 ACCESS_GRANT = UUID("ac270000-0000-7000-8000-000000000007")
 RECEIVABLE_ACCOUNT = UUID("ac270000-0000-7000-8000-000000000008")
 PAYABLE_ACCOUNT = UUID("ac270000-0000-7000-8000-000000000009")
+RECEIVABLE_ROLE_SETTING = UUID("ac270000-0000-7000-8000-000000000019")
+PAYABLE_ROLE_SETTING = UUID("ac270000-0000-7000-8000-000000000020")
 OTHER_USER = UUID("ac270000-0000-7000-8000-000000000010")
 OTHER_MEMBERSHIP = UUID("ac270000-0000-7000-8000-000000000011")
 BRANCH = UUID("ac270000-0000-7000-8000-000000000012")
@@ -170,6 +172,16 @@ def _seed(admin_dsn: str) -> None:
                    true,false,'active',%s,%s),
                   (%s,%s,'2100-PG27','PG15 trade payables','liability','INR',
                    true,false,'active',%s,%s);
+
+                INSERT INTO core.settings(
+                  org_id,id,scope_kind,branch_id,namespace,key,value_type,
+                  value_text,status,created_by_membership_id,
+                  updated_by_membership_id)
+                VALUES
+                  (%s,%s,'organization',NULL,'finance.account_roles',
+                   'accounts_receivable','text',%s,'active',%s,%s),
+                  (%s,%s,'organization',NULL,'finance.account_roles',
+                   'accounts_payable','text',%s,'active',%s,%s);
                 """,
                 (
                     ORG, MEMBERSHIP, MEMBERSHIP,
@@ -192,6 +204,10 @@ def _seed(admin_dsn: str) -> None:
                     BRANCH, MEMBERSHIP,
                     ORG, RECEIVABLE_ACCOUNT, MEMBERSHIP, MEMBERSHIP,
                     ORG, PAYABLE_ACCOUNT, MEMBERSHIP, MEMBERSHIP,
+                    ORG, RECEIVABLE_ROLE_SETTING, str(RECEIVABLE_ACCOUNT),
+                    MEMBERSHIP, MEMBERSHIP,
+                    ORG, PAYABLE_ROLE_SETTING, str(PAYABLE_ACCOUNT),
+                    MEMBERSHIP, MEMBERSHIP,
                 ),
             )
         finally:
