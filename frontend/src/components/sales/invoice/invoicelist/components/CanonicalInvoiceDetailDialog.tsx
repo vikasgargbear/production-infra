@@ -221,6 +221,7 @@ export const CanonicalInvoiceDetailDialog: React.FC<CanonicalInvoiceDetailDialog
                                                 <tr key={line.id} className="align-top hover:bg-gray-50/70">
                                                     <td className="px-3 py-2.5">
                                                         <p className="font-medium text-gray-950">{line.product_name}</p>
+                                                        <p className="mt-0.5 text-xs text-gray-600">Mfr {line.manufacturer_name}</p>
                                                         <p className="mt-0.5 text-xs text-gray-500">HSN {line.hsn_code} | {line.unit}</p>
                                                     </td>
                                                     <td className="px-3 py-2.5 text-gray-800">

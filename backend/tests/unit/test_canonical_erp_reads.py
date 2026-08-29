@@ -1591,7 +1591,8 @@ def test_sales_invoice_detail_response_validates_zero_one_and_many_allocations()
         return {
             "id": line_id, "source_document_kind": "sales_order",
             "product_id": uuid4(), "product_name": "Product",
-            "product_code": "SKU", "hsn_code": "481910", "uom_code": "EA",
+            "product_code": "SKU", "manufacturer_name": "Exact Labs",
+            "hsn_code": "481910", "uom_code": "EA",
             "unit": "EA", "quantity": len(allocations) or 1,
             "free_quantity": 0, "base_billed_quantity": len(allocations) or 1,
             "base_free_quantity": 0, "unit_price": 150,
