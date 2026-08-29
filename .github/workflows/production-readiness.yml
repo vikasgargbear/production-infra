@@ -2241,6 +2241,10 @@ jobs:
           set -euo pipefail
           test "$PHARMA_CANONICAL_LIVE_TEST_BRANCH_ID" = "$LIVE18_EXPECTED_BRANCH_ID"
           test "$PHARMA_CANONICAL_LIVE_DENIAL_ORG_ID" = "$LIVE18_EXPECTED_DENIAL_ORG_ID"
+      - name: Exercise two-distinct-product invoice and return through deployed MCP
+        env:
+          PHARMA_CANONICAL_LIVE_SERVICE_TOKEN: ${{ secrets.MCP_INTERNAL_SERVICE_TOKEN }}
+        run: PYTHONPATH=backend python3 backend/scripts/exercise_live_mcp_multiproduct.py
       - name: Compile browser fixture from canonical facts and reviewed choices
         run: |
           set -euo pipefail

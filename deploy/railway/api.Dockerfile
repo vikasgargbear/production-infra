@@ -39,10 +39,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/app ./app
 COPY backend/mcp_runtime/aasopharma_mcp/__init__.py ./mcp_runtime/aasopharma_mcp/__init__.py
 COPY backend/mcp_runtime/aasopharma_mcp/operator_actions.py ./mcp_runtime/aasopharma_mcp/operator_actions.py
+COPY backend/alembic.ini ./alembic.ini
 COPY backend/alembic ./alembic
 COPY backend/migration_support ./migration_support
-COPY backend/scripts/canonical_demo_ids.py ./scripts/canonical_demo_ids.py
 COPY backend/scripts/canonical_data_reset_authority.py ./scripts/canonical_data_reset_authority.py
+COPY backend/scripts/canonical_demo_ids.py ./scripts/canonical_demo_ids.py
 COPY backend/scripts/canonical_migration_contract.py ./scripts/canonical_migration_contract.py
 COPY backend/scripts/canonical_staging_database.py ./scripts/canonical_staging_database.py
 COPY backend/scripts/cleanup_staging_evidence_storage.py ./scripts/cleanup_staging_evidence_storage.py
@@ -52,6 +53,7 @@ COPY backend/scripts/exercise_staging_mcp_oauth.py ./scripts/exercise_staging_mc
 COPY backend/scripts/live18_evidence_contract.py ./scripts/live18_evidence_contract.py
 COPY backend/scripts/live18_railway_database_phase.py ./scripts/live18_railway_database_phase.py
 COPY backend/scripts/manage_canonical_write_fence.py ./scripts/manage_canonical_write_fence.py
+COPY backend/scripts/provision_canonical_demo.py ./scripts/provision_canonical_demo.py
 COPY backend/scripts/provision_ephemeral_browser_identities.py ./scripts/provision_ephemeral_browser_identities.py
 COPY backend/scripts/provision_ephemeral_canonical_live.py ./scripts/provision_ephemeral_canonical_live.py
 COPY backend/scripts/provision_staging_mcp_oauth.py ./scripts/provision_staging_mcp_oauth.py
@@ -70,6 +72,7 @@ COPY deploy/railway/api.force-deploy /app/.railway-deployment-provenance
 
 RUN test -f /tmp/.canonical-migration-contract-verified \
     && rm /tmp/.canonical-migration-contract-verified \
+    && test -f /app/alembic.ini \
     && python -c "from mcp_runtime.aasopharma_mcp.operator_actions import PREPARE_ACTIONS; assert PREPARE_ACTIONS" \
     && python scripts/railway_reset_control_plane.py --help >/dev/null
 

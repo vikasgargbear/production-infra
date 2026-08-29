@@ -158,6 +158,7 @@ def test_api_watches_only_runtime_and_packaged_migration_inputs() -> None:
         "/backend/scripts/live18_railway_database_phase.py",
         "/backend/scripts/manage_canonical_write_fence.py",
         "/backend/scripts/package_canonical_baseline_migration.py",
+        "/backend/scripts/provision_canonical_demo.py",
         "/backend/scripts/provision_ephemeral_browser_identities.py",
         "/backend/scripts/provision_ephemeral_canonical_live.py",
         "/backend/scripts/provision_staging_mcp_oauth.py",
@@ -179,7 +180,6 @@ def test_api_watches_only_runtime_and_packaged_migration_inputs() -> None:
         "/backend/tests/unit/test_example.py",
         "/backend/requirements-dev.txt",
         "/backend/mcp_runtime/aasopharma_mcp/server.py",
-        "/backend/scripts/provision_canonical_demo.py",
         "/backend/tests/integration/test_example.py",
         "/docs/architecture/unrelated-design.md",
         "/.github/workflows/production-readiness.yml",
@@ -196,6 +196,8 @@ def test_api_runtime_image_excludes_tests_docs_and_operator_tooling() -> None:
     assert "FROM python:3.11-slim AS migration-contract" in dockerfile
     assert "FROM python:3.11-slim AS runtime" in dockerfile
     assert "COPY backend/app ./app" in dockerfile
+    assert "COPY backend/alembic.ini ./alembic.ini" in dockerfile
+    assert "test -f /app/alembic.ini" in dockerfile
     assert "COPY backend/ ." not in dockerfile
     assert "COPY backend/tests/unit" not in dockerfile
     assert "COPY backend/tests/integration" not in dockerfile
@@ -219,16 +221,20 @@ def test_api_runtime_image_excludes_tests_docs_and_operator_tooling() -> None:
     assert "COPY deploy/control-plane /app/deploy/control-plane" not in dockerfile
     assert "COPY backend/scripts/ ./scripts" not in dockerfile
     assert (
-        "COPY backend/scripts/canonical_migration_contract.py "
-        "./scripts/canonical_migration_contract.py"
-    ) in dockerfile
-    assert (
         "COPY backend/scripts/canonical_data_reset_authority.py "
         "./scripts/canonical_data_reset_authority.py"
     ) in dockerfile
     assert (
+        "COPY backend/scripts/canonical_migration_contract.py "
+        "./scripts/canonical_migration_contract.py"
+    ) in dockerfile
+    assert (
         "COPY backend/scripts/deployment_control.py "
         "./scripts/deployment_control.py"
+    ) in dockerfile
+    assert (
+        "COPY backend/scripts/provision_canonical_demo.py "
+        "./scripts/provision_canonical_demo.py"
     ) in dockerfile
     assert (
         "COPY backend/scripts/cleanup_staging_evidence_storage.py "
@@ -243,6 +249,10 @@ def test_api_runtime_image_excludes_tests_docs_and_operator_tooling() -> None:
         "./scripts/railway_reset_control_plane.py"
     ) in dockerfile
     assert "python scripts/railway_reset_control_plane.py --help" in dockerfile
+    assert (
+        "COPY deploy/control-plane/control-plane-v1.schema.json "
+        "./deploy/control-plane/control-plane-v1.schema.json"
+    ) in dockerfile
     assert (
         "COPY backend/scripts/package_canonical_baseline_migration.py "
         "./backend/scripts/package_canonical_baseline_migration.py"
@@ -1033,3 +1043,19 @@ def test_workflow_binds_frontend_origin_to_registered_railway_domain() -> None:
     assert '[.. | objects | .domain? // empty] | index($domain) != null' in workflow
     assert "SUPABASE_ACCESS_TOKEN:" in workflow
     assert "reconcile_supabase_auth_redirect.py" in workflow
+
+
+def test_live_mcp_helper_uses_pristine_recovery_until_identity_provisioning() -> None:
+    helper = (
+        ROOT / "backend/scripts/run_live_mcp_multiproduct_railway.py"
+    ).read_text(encoding="utf-8")
+
+    assert "demo_provisioned = False" in helper
+    assert "identity_attempted = False" in helper
+    assert 'identity_attempted = True\n        identity_response = remote(' in helper
+    assert (
+        '"cleanup-identities"\n                if demo_provisioned and identity_attempted\n'
+        '                else "recover-identities-before-demo"'
+    ) in helper
+    assert "live MCP exercise failed:" in helper
+    assert "; live MCP cleanup failed:" in helper
