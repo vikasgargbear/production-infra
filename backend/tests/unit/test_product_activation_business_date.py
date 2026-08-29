@@ -7,8 +7,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).parents[3]
 SOURCE = ROOT / "database/canonical/operations/master/product_setup_commands.sql"
-MIGRATION = ROOT / "backend/alembic/sql/20260829_0051_product_activation_business_date.sql"
-REVISION = ROOT / "backend/alembic/versions/20260829_0051_product_activation_business_date.py"
+MIGRATION = ROOT / "backend/alembic/sql/20260829_0054_product_activation_business_date.sql"
+REVISION = ROOT / "backend/alembic/versions/20260829_0054_product_activation_business_date.py"
 GENERATOR = ROOT / "backend/scripts/generate_product_activation_business_date_migration.py"
 
 
@@ -25,8 +25,8 @@ def test_business_date_migration_is_generated_hash_bound_and_linear() -> None:
     revision = _load(REVISION, "product_activation_business_date_revision")
 
     assert MIGRATION.read_text(encoding="utf-8") == generator.render()
-    assert revision.revision == "20260829_0051"
-    assert revision.down_revision == "20260828_0050"
+    assert revision.revision == "20260829_0054"
+    assert revision.down_revision == "20260829_0053"
     assert revision.EXPECTED_SQL_SHA256 == hashlib.sha256(MIGRATION.read_bytes()).hexdigest()
 
 

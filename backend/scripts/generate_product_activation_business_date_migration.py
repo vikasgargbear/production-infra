@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SOURCE = ROOT / "database/canonical/operations/master/product_setup_commands.sql"
 OUTPUT = (
     ROOT
-    / "backend/alembic/sql/20260829_0051_product_activation_business_date.sql"
+    / "backend/alembic/sql/20260829_0054_product_activation_business_date.sql"
 )
 
 

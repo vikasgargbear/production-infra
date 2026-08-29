@@ -62,7 +62,7 @@ def test_master_code_migration_is_hash_bound_linear_and_deployed() -> None:
         "master_code_deployment_contract",
     )
     assert onboarding_revision.revision == "20260826_0028"
-    assert deployment.EXPECTED_CANONICAL_ALEMBIC_HEAD == "20260829_0052"
+    assert deployment.EXPECTED_CANONICAL_ALEMBIC_HEAD == "20260829_0054"
 
 
 def test_generated_authority_manifest_is_exact_and_post_baseline() -> None:

@@ -14,7 +14,7 @@ SOURCE = (
 )
 OUTPUT = (
     ROOT
-    / "backend/alembic/sql/20260828_0050_canonical_party_account_updates.sql"
+    / "backend/alembic/sql/20260829_0053_canonical_party_account_updates.sql"
 )
 
 

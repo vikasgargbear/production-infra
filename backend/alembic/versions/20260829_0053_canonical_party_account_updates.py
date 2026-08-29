@@ -1,7 +1,7 @@
-"""Use the organization business date for canonical product activation.
+"""Add canonical customer and supplier account update commands.
 
-Revision ID: 20260829_0051
-Revises: 20260828_0050
+Revision ID: 20260829_0053
+Revises: 20260829_0052
 """
 
 from __future__ import annotations
@@ -14,24 +14,24 @@ from alembic import context, op
 from migration_support.canonical_baseline import CanonicalBaselineError
 
 
-revision = "20260829_0051"
-down_revision = "20260828_0050"
+revision = "20260829_0053"
+down_revision = "20260829_0052"
 branch_labels = None
 depends_on = None
 
 SQL_PATH = (
     Path(__file__).resolve().parents[1]
     / "sql"
-    / "20260829_0051_product_activation_business_date.sql"
+    / "20260829_0053_canonical_party_account_updates.sql"
 )
-EXPECTED_SQL_SHA256 = "ab3988c3f993770575df23daebdcf1f2a1486565872d149a83c8c2dc1f6e1186"
+EXPECTED_SQL_SHA256 = "6cab655f6767cd0834e711500cc3096b49108a63ea2949c7aced4c7de7cc7e05"
 
 
 def _reviewed_sql() -> str:
     sql = SQL_PATH.read_text(encoding="utf-8")
     if hashlib.sha256(sql.encode("utf-8")).hexdigest() != EXPECTED_SQL_SHA256:
         raise CanonicalBaselineError(
-            "product-activation business-date migration source hash mismatch"
+            "canonical party-account update migration source hash mismatch"
         )
     return sql
 
@@ -39,7 +39,7 @@ def _reviewed_sql() -> str:
 def upgrade() -> None:
     if context.is_offline_mode():
         raise CanonicalBaselineError(
-            "product-activation business-date migration requires an online reviewed principal"
+            "canonical party-account update migration requires an online reviewed principal"
         )
     cursor = op.get_bind().connection.cursor()
     try:
@@ -50,5 +50,5 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     raise CanonicalBaselineError(
-        "product-activation business-date downgrade is intentionally unavailable"
+        "canonical party-account update downgrade is intentionally unavailable"
     )

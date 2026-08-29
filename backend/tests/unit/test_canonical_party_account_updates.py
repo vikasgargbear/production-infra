@@ -20,8 +20,8 @@ from app.infrastructure import canonical_write_commands
 
 ROOT = Path(__file__).parents[3]
 SOURCE = ROOT / "database/canonical/operations/master/party_account_update_commands.sql"
-MIGRATION = ROOT / "backend/alembic/sql/20260828_0050_canonical_party_account_updates.sql"
-REVISION = ROOT / "backend/alembic/versions/20260828_0050_canonical_party_account_updates.py"
+MIGRATION = ROOT / "backend/alembic/sql/20260829_0053_canonical_party_account_updates.sql"
+REVISION = ROOT / "backend/alembic/versions/20260829_0053_canonical_party_account_updates.py"
 GENERATOR = ROOT / "backend/scripts/generate_canonical_party_account_update_migration.py"
 
 
@@ -39,7 +39,8 @@ def test_party_account_update_migration_is_generated_hash_bound_and_linear() -> 
     migration = MIGRATION.read_text(encoding="utf-8")
 
     assert migration == generator.render()
-    assert revision.revision == "20260828_0050"
+    assert revision.revision == "20260829_0053"
+    assert revision.down_revision == "20260829_0052"
     assert revision.down_revision == "20260828_0049"
     assert revision.EXPECTED_SQL_SHA256 == hashlib.sha256(MIGRATION.read_bytes()).hexdigest()
 
