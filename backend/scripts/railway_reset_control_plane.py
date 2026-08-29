@@ -38,9 +38,6 @@ if str(SCRIPT_DIRECTORY) not in sys.path:
 from cleanup_staging_evidence_storage import (  # noqa: E402
     close_writer_authority,
 )
-from app.infrastructure.evidence_storage import (  # noqa: E402
-    configured_evidence_storage,
-)
 from railway_canonical_reset import (  # noqa: E402
     CONTROL_TRANSPORT_RAILWAY_IPV6,
     RailwayCanonicalResetError,
@@ -72,6 +69,22 @@ PURGE_PLAN_TTL_SECONDS = 30 * 60
 
 class RailwayResetControlError(RuntimeError):
     """The bounded Railway reset control request failed closed."""
+
+
+def configured_evidence_storage():
+    """Load the application storage adapter only for an actual object purge.
+
+    Most control-plane actions, and the GitHub-side receipt verifier, run with
+    the deliberately minimal deployment dependency set.  Importing the full
+    evidence adapter eagerly also imports PDF validation dependencies that are
+    irrelevant to planning, fencing, and receipt verification.
+    """
+
+    from app.infrastructure.evidence_storage import (  # noqa: PLC0415
+        configured_evidence_storage as application_storage,
+    )
+
+    return application_storage()
 
 
 def _required_text(mapping: Mapping[str, Any], key: str) -> str:

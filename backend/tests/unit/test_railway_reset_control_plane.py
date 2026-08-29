@@ -35,6 +35,7 @@ def test_fence_control_does_not_eagerly_import_reset_only_provisioning() -> None
     }
 
     assert "provision_canonical_evidence_storage_identity" not in eager_modules
+    assert "app.infrastructure.evidence_storage" not in eager_modules
 
 
 def _request(
