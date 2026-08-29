@@ -242,6 +242,14 @@ MASTER_CREATE_SCHEMAS: Mapping[str, Mapping[str, Any]] = {
         },
         ("product_name", "product_kind"),
     ),
+    "erp_product_category_create": _master_create_schema(
+        {"name": {"type": "string", "minLength": 1, "maxLength": 120}},
+        ("name",),
+    ),
+    "erp_product_manufacturer_create": _master_create_schema(
+        {"legal_name": {"type": "string", "minLength": 1, "maxLength": 255}},
+        ("legal_name",),
+    ),
     **PARTY_CREATE_SCHEMAS,
 }
 
@@ -459,6 +467,14 @@ OPERATOR_OPERATIONS.update(
         "erp_product_create": OperatorOperation(
             "erp_product_create", "catalog.product_draft.create",
             MASTER_CREATE_SCHEMAS["erp_product_create"], "master_write",
+        ),
+        "erp_product_category_create": OperatorOperation(
+            "erp_product_category_create", "catalog.product_category.create",
+            MASTER_CREATE_SCHEMAS["erp_product_category_create"], "master_write",
+        ),
+        "erp_product_manufacturer_create": OperatorOperation(
+            "erp_product_manufacturer_create", "catalog.product_manufacturer.create",
+            MASTER_CREATE_SCHEMAS["erp_product_manufacturer_create"], "master_write",
         ),
         "erp_product_setup": OperatorOperation(
             "erp_product_setup", "catalog.product_draft.configure",
@@ -786,6 +802,8 @@ class OperationGateway:
             method = "POST"
             path = {
                 "catalog.product_draft.create": "/api/internal/mcp/master/products",
+                "catalog.product_category.create": "/api/internal/mcp/master/product-categories",
+                "catalog.product_manufacturer.create": "/api/internal/mcp/master/product-manufacturers",
                 "catalog.product_draft.configure": "/api/internal/mcp/master/products/setup",
                 "catalog.product.activate": "/api/internal/mcp/master/products/activate",
                 "parties.customer.create": "/api/internal/mcp/master/customers",

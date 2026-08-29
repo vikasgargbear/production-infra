@@ -25,6 +25,8 @@ RELEASE_GATES: Mapping[str, bool] = {
 
 OPERATOR_TOOL_DESCRIPTIONS: Mapping[str, str] = {
     "erp_product_create": "Create one canonical product draft with a server-allocated immutable product code and exact replay protection.",
+    "erp_product_category_create": "Create one organization product category through the same canonical authority used by the ERP product form; categories are optional and never inferred.",
+    "erp_product_manufacturer_create": "Create one legal product-manufacturer identity independent of supplier/vendor accounts, with exact replay protection.",
     "erp_product_setup": "Save reviewed manufacturer, HSN, units, packing, composition, and handling details on one unused product for human review; this never activates the product.",
     "erp_product_activate": "Activate one fully configured product after explicit human review, making it available for purchasing and sale with exact replay protection.",
     "erp_customer_create": "Create one canonical customer with a server-allocated immutable customer code and exact replay protection.",

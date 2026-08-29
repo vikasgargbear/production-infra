@@ -62,9 +62,14 @@ const labelClass = 'block text-sm font-medium text-gray-800';
 const ProductFlow: React.FC<ProductFlowProps> = ({ open, show, product, onClose, onProductCreated, initialProductName = '' }) => {
   const isOpen = open ?? show ?? true;
   const formRef = useRef<HTMLDivElement>(null);
+  const manufacturerNameRef = useRef<HTMLInputElement>(null);
+  const categoryNameRef = useRef<HTMLInputElement>(null);
   const createKeyRef = useRef(newMasterCreateIdempotencyKey('product'));
   const activationKeyRef = useRef(newProductActivationIdempotencyKey());
+  const manufacturerCreateKeyRef = useRef(newMasterCreateIdempotencyKey('manufacturer'));
+  const categoryCreateKeyRef = useRef(newMasterCreateIdempotencyKey('category'));
   const inFlight = useRef(false);
+  const referenceInFlight = useRef<'manufacturer' | 'category' | null>(null);
   const toast = useToast();
   const [step, setStep] = useState(0);
   const [working, setWorking] = useState<WorkingProduct>(() => initialProduct(product, initialProductName));
@@ -82,6 +87,10 @@ const ProductFlow: React.FC<ProductFlowProps> = ({ open, show, product, onClose,
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
+  const [manufacturerName, setManufacturerName] = useState('');
+  const [categoryName, setCategoryName] = useState('');
+  const [referenceSaving, setReferenceSaving] = useState<'manufacturer' | 'category' | null>(null);
+  const [referenceError, setReferenceError] = useState<{ field: 'manufacturer' | 'category'; message: string } | null>(null);
 
   useEnterAsTab({ containerRef: formRef, enabled: isOpen, excludeSelectors: ['button'] });
   useEscapeKey(useCallback(() => onClose?.(), [onClose]), isOpen, 'ProductFlow');
@@ -117,6 +126,10 @@ const ProductFlow: React.FC<ProductFlowProps> = ({ open, show, product, onClose,
     let cancelled = false;
     const next = initialProduct(product, initialProductName);
     setWorking(next); setSetup(emptySetup); setStep(0); setErrors([]); setPackNotation('');
+    setManufacturerName(''); setCategoryName(''); setReferenceError(null);
+    manufacturerCreateKeyRef.current = newMasterCreateIdempotencyKey('manufacturer');
+    categoryCreateKeyRef.current = newMasterCreateIdempotencyKey('category');
+    referenceInFlight.current = null;
     setSaleUomCode('STRIP'); setPackError(''); setLoading(true);
     Promise.all([loadOptions(), ...(next.product_id ? [loadSetup(next.product_id)] : [])])
       .catch(() => { if (!cancelled) setErrors(['Product setup references could not be loaded. Retry before entering regulated details.']); })
@@ -192,6 +205,60 @@ const ProductFlow: React.FC<ProductFlowProps> = ({ open, show, product, onClose,
     const response = await productsApi.saveSetup(productId, setupPayload(rowVersion));
     setWorking(current => ({ ...current, row_version: response.data.row_version }));
     await loadSetup(productId); return response.data;
+  };
+  const createManufacturer = async () => {
+    if (referenceInFlight.current) return;
+    const legalName = manufacturerName.trim();
+    if (!legalName) {
+      setReferenceError({ field: 'manufacturer', message: 'Enter the legal manufacturer name.' });
+      manufacturerNameRef.current?.focus(); return;
+    }
+    referenceInFlight.current = 'manufacturer';
+    setReferenceSaving('manufacturer'); setReferenceError(null);
+    try {
+      const response = await productsApi.createManufacturer(
+        legalName, manufacturerCreateKeyRef.current,
+      );
+      setOptions(current => current ? {
+        ...current,
+        manufacturers: [...current.manufacturers, response.data]
+          .sort((left, right) => left.legal_name.localeCompare(right.legal_name)),
+      } : current);
+      setSetupField('manufacturer_party_id', response.data.manufacturer_party_id);
+      setManufacturerName('');
+      manufacturerCreateKeyRef.current = newMasterCreateIdempotencyKey('manufacturer');
+      toast.success('Legal manufacturer added and selected.');
+    } catch (error: any) {
+      setReferenceError({ field: 'manufacturer', message: errorMessages(error, 'Manufacturer could not be added.')[0] });
+      manufacturerNameRef.current?.focus();
+    } finally { referenceInFlight.current = null; setReferenceSaving(null); }
+  };
+  const createCategory = async () => {
+    if (referenceInFlight.current) return;
+    const name = categoryName.trim();
+    if (!name) {
+      setReferenceError({ field: 'category', message: 'Enter a category name.' });
+      categoryNameRef.current?.focus(); return;
+    }
+    referenceInFlight.current = 'category';
+    setReferenceSaving('category'); setReferenceError(null);
+    try {
+      const response = await productsApi.createCategory(
+        name, categoryCreateKeyRef.current,
+      );
+      setOptions(current => current ? {
+        ...current,
+        categories: [...current.categories, response.data]
+          .sort((left, right) => left.name.localeCompare(right.name)),
+      } : current);
+      setSetupField('category_id', response.data.category_id);
+      setCategoryName('');
+      categoryCreateKeyRef.current = newMasterCreateIdempotencyKey('category');
+      toast.success('Product category added and selected.');
+    } catch (error: any) {
+      setReferenceError({ field: 'category', message: errorMessages(error, 'Category could not be added.')[0] });
+      categoryNameRef.current?.focus();
+    } finally { referenceInFlight.current = null; setReferenceSaving(null); }
   };
   const advance = async () => {
     if (inFlight.current) return; inFlight.current = true; setSaving(true); setErrors([]);
@@ -284,8 +351,8 @@ const ProductFlow: React.FC<ProductFlowProps> = ({ open, show, product, onClose,
         {step === 0 && <Section title="Classification and tax" help="Select reviewed references. Schedule, prescription, NDPS and H2 rules are derived from composition when the product is added.">
           {(!options?.hsn_reference_ready || (medicine && !options?.ingredient_reference_ready)) && <div className="mb-5 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">Reviewed reference data is not ready. Setup will fail closed until an operator imports it.</div>}
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-            <label className={labelClass}>Manufacturer <Required /><select value={setup.manufacturer_party_id} onChange={e => setSetupField('manufacturer_party_id', e.target.value)} className={fieldClass}><option value="">Select an active supplier/manufacturer</option>{options?.manufacturers.map(row => <option key={row.manufacturer_party_id} value={row.manufacturer_party_id}>{row.legal_name} · {row.supplier_code}</option>)}</select><Hint>Missing? Create the supplier first so invoices and batches share one legal identity.</Hint></label>
-            <label className={labelClass}>Category <Optional /><select value={setup.category_id} onChange={e => setSetupField('category_id', e.target.value)} className={fieldClass}><option value="">No category selected</option>{options?.categories.map(row => <option key={row.category_id} value={row.category_id}>{row.name}</option>)}</select></label>
+            <div><label className={labelClass}>Legal manufacturer <Required /><select value={setup.manufacturer_party_id} onChange={e => setSetupField('manufacturer_party_id', e.target.value)} className={fieldClass}><option value="">Select manufacturer</option>{options?.manufacturers.map(row => <option key={row.manufacturer_party_id} value={row.manufacturer_party_id}>{row.legal_name}</option>)}</select></label>{options?.manufacturers.length === 0 && <Empty>No manufacturer exists for this organization yet. Add the legal name printed on the product.</Empty>}<div className="mt-2 flex min-w-0 flex-col gap-2 sm:flex-row"><input ref={manufacturerNameRef} value={manufacturerName} onChange={event => setManufacturerName(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void createManufacturer(); } }} className={`${fieldClass} mt-0 min-w-0 flex-1`} aria-label="New legal manufacturer name" aria-invalid={referenceError?.field === 'manufacturer' || undefined} aria-describedby={referenceError?.field === 'manufacturer' ? 'manufacturer-create-error' : undefined} placeholder="Add legal manufacturer name" /><button type="button" onClick={() => void createManufacturer()} disabled={referenceSaving !== null} className="inline-flex min-h-12 shrink-0 items-center justify-center gap-2 rounded-lg border border-green-700 px-4 font-medium text-green-800 disabled:opacity-50">{referenceSaving === 'manufacturer' && <Loader2 className="h-4 w-4 animate-spin" />} Add manufacturer</button></div>{referenceError?.field === 'manufacturer' && <p id="manufacturer-create-error" className="mt-1 text-sm text-red-700" role="alert">{referenceError.message}</p>}<Hint>A manufacturer is product identity. It does not create or require a supplier account.</Hint></div>
+            <div><label className={labelClass}>Category <Optional /><select value={setup.category_id} onChange={e => setSetupField('category_id', e.target.value)} className={fieldClass}><option value="">No category selected</option>{options?.categories.map(row => <option key={row.category_id} value={row.category_id}>{row.name}</option>)}</select></label>{options?.categories.length === 0 && <Empty>No product categories yet. Category is optional; add one only if it helps your catalogue.</Empty>}<div className="mt-2 flex min-w-0 flex-col gap-2 sm:flex-row"><input ref={categoryNameRef} value={categoryName} onChange={event => setCategoryName(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void createCategory(); } }} className={`${fieldClass} mt-0 min-w-0 flex-1`} aria-label="New product category name" aria-invalid={referenceError?.field === 'category' || undefined} aria-describedby={referenceError?.field === 'category' ? 'category-create-error' : undefined} placeholder="Add category, e.g. Analgesics" /><button type="button" onClick={() => void createCategory()} disabled={referenceSaving !== null} className="inline-flex min-h-12 shrink-0 items-center justify-center gap-2 rounded-lg border border-green-700 px-4 font-medium text-green-800 disabled:opacity-50">{referenceSaving === 'category' && <Loader2 className="h-4 w-4 animate-spin" />} Add category</button></div>{referenceError?.field === 'category' && <p id="category-create-error" className="mt-1 text-sm text-red-700" role="alert">{referenceError.message}</p>}</div>
             <div className="relative md:col-span-2"><label className={labelClass}>HSN code <Required /><div className="relative"><Search className="pointer-events-none absolute left-3 top-4 h-4 w-4 text-gray-400" /><input value={hsnQuery || setup.hsn_code} onChange={e => { setHsnQuery(e.target.value); setSetupField('hsn_code', ''); }} className={`${fieldClass} pl-9`} placeholder="Search by HSN code or official description" /></div></label>
               {hsnOptions.length > 0 && <Picker>{hsnOptions.map(row => <button key={row.tax_code_version_id} type="button" onClick={() => { setSetup(current => ({ ...current, hsn_code: row.hsn_code, hsn_description: row.description, hsn_rate: row.igst_rate })); setHsnQuery(''); setHsnOptions([]); }} className="block min-h-12 w-full border-b px-3 py-3 text-left hover:bg-gray-50"><strong>{row.hsn_code} · {row.igst_rate}% GST</strong><span className="mt-1 block text-sm text-gray-600">{row.description}</span></button>)}</Picker>}
               {setup.hsn_code && <p className="mt-2 rounded-lg bg-green-50 px-3 py-2 text-sm text-green-900"><Check className="mr-2 inline h-4 w-4" />HSN {setup.hsn_code}{setup.hsn_rate ? ` · ${setup.hsn_rate}% GST` : ''}</p>}

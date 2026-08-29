@@ -183,6 +183,8 @@ PYTHONPATH=backend \
 PYTHONPATH=backend \
   python backend/tests/postgres/check_canonical_master_write_function_runtime_role.py
 PYTHONPATH=backend \
+  python backend/tests/postgres/check_product_reference_masters_runtime_role.py
+PYTHONPATH=backend \
   python backend/tests/postgres/check_mcp_live_action_authority_runtime_role.py
 PYTHONPATH=backend \
   python backend/tests/postgres/check_product_master_mcp_read_runtime_role.py
