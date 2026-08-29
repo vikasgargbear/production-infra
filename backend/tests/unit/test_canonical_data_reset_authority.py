@@ -371,7 +371,7 @@ def test_organization_delete_order_places_children_before_parents() -> None:
     assert order == ("sales.lines", "sales.invoices", "parties.parties")
 
 
-def test_organization_delete_order_accepts_only_deferrable_cycles() -> None:
+def test_organization_delete_plan_defers_only_nondeferrable_cycle_edges() -> None:
     relations = ("finance.allocations", "finance.open_items")
     accepted = _ForeignKeyCursor(
         [
@@ -379,9 +379,9 @@ def test_organization_delete_order_accepts_only_deferrable_cycles() -> None:
             (relations[1], relations[0], "open_item_allocation_fk", True),
         ]
     )
-    assert set(reset_authority._organization_delete_order(accepted, relations)) == set(
-        relations
-    )
+    accepted_plan = reset_authority._organization_delete_plan(accepted, relations)
+    assert set(accepted_plan.relation_order) == set(relations)
+    assert accepted_plan.temporarily_deferred_constraints == ()
 
     refused = _ForeignKeyCursor(
         [
@@ -389,8 +389,27 @@ def test_organization_delete_order_accepts_only_deferrable_cycles() -> None:
             (relations[1], relations[0], "open_item_allocation_fk", False),
         ]
     )
-    with pytest.raises(ResetAuthorityError, match="not fully deferrable"):
-        reset_authority._organization_delete_order(refused, relations)
+    refused_plan = reset_authority._organization_delete_plan(refused, relations)
+    assert set(refused_plan.relation_order) == set(relations)
+    assert refused_plan.temporarily_deferred_constraints == (
+        (relations[1], "open_item_allocation_fk"),
+    )
+
+
+def test_foreign_key_deferral_is_exact_and_restored() -> None:
+    cursor = _ForeignKeyCursor([])
+    constraints = (("finance.open_items", "open_item_accounting_event_fk"),)
+
+    reset_authority._set_foreign_key_deferral(cursor, constraints, enabled=True)
+    reset_authority._set_foreign_key_deferral(cursor, constraints, enabled=False)
+
+    statements = [statement for statement, _parameters in cursor.executed]
+    assert statements == [
+        'ALTER TABLE "finance"."open_items" ALTER CONSTRAINT '
+        '"open_item_accounting_event_fk" DEFERRABLE INITIALLY DEFERRED',
+        'ALTER TABLE "finance"."open_items" ALTER CONSTRAINT '
+        '"open_item_accounting_event_fk" NOT DEFERRABLE',
+    ]
 
 
 def test_delete_trigger_restoration_preserves_prior_modes() -> None:
