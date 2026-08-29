@@ -436,6 +436,53 @@ def _temporary_owner_delegation(
             _verify_owner_cleanup(database_url, project_ref=project_ref)
 
 
+@contextlib.contextmanager
+def _delegated_migration_owner_connection(
+    database_url: str, *, project_ref: str
+) -> Iterator[Any]:
+    """Yield one owner-scoped connection and always revoke the delegation.
+
+    Supabase's reviewed ``postgres`` administrator is deliberately not a
+    superuser and does not inherit application-table privileges. Organization
+    purge planning and execution therefore need an explicit, serialized
+    ``SET ROLE`` window instead of ambient administrator access.
+    """
+
+    with _temporary_owner_delegation(database_url, project_ref=project_ref):
+        with contextlib.closing(psycopg2.connect(database_url)) as connection:
+            connection.autocommit = True
+            with connection.cursor() as cursor:
+                cursor.execute('SET ROLE "erp_migration_owner"')
+                cursor.execute(
+                    """
+                    SELECT session_user,
+                           current_user,
+                           session_role.rolsuper,
+                           session_role.rolcreaterole,
+                           session_role.rolbypassrls,
+                           pg_catalog.has_parameter_privilege(
+                             session_user,'session_replication_role','SET'
+                           )
+                      FROM pg_catalog.pg_roles AS session_role
+                     WHERE session_role.rolname=session_user
+                    """
+                )
+                posture = cursor.fetchone()
+            if posture != (
+                "postgres",
+                "erp_migration_owner",
+                False,
+                True,
+                True,
+                True,
+            ):
+                raise RailwayCanonicalResetError(
+                    "organization purge owner delegation posture is unsafe"
+                )
+            connection.autocommit = False
+            yield connection
+
+
 def _verify_owner_cleanup(
     database_url: str, *, project_ref: str
 ) -> dict[str, object]:
@@ -598,6 +645,41 @@ def prepare_reset_boundary(
     }
 
 
+def plan_staging_organization_purge(
+    *,
+    expected_sha: str,
+    project_ref: str,
+    production_project_refs: str,
+    password: str,
+    organization_id: str,
+    control_transport: str = CONTROL_TRANSPORT_GITHUB_IPV4,
+) -> dict[str, Any]:
+    """Create a read-only plan through the bounded owner authority."""
+
+    _validate_boundary(
+        expected_sha=expected_sha,
+        project_ref=project_ref,
+        production_project_refs=production_project_refs,
+    )
+    database_url, transport = _admin_database_url(
+        password=_required(password, "Supabase database password"),
+        application_name="canonical_railway_organization_purge_plan",
+        control_transport=control_transport,
+        recover_stale_owner_delegation=True,
+    )
+    authority = load_reset_authority()
+    with _delegated_migration_owner_connection(
+        database_url, project_ref=project_ref
+    ) as connection:
+        plan = plan_organization_purge(
+            connection,
+            authority=authority,
+            project_ref=project_ref,
+            organization_id=organization_id,
+        )
+    return {"plan": plan, "transport": dict(transport)}
+
+
 def purge_staging_organization(
     *,
     expected_sha: str,
@@ -622,7 +704,9 @@ def purge_staging_organization(
         recover_stale_owner_delegation=True,
     )
     authority = load_reset_authority()
-    with contextlib.closing(psycopg2.connect(database_url)) as connection:
+    with _delegated_migration_owner_connection(
+        database_url, project_ref=project_ref
+    ) as connection:
         current_plan = plan_organization_purge(
             connection,
             authority=authority,

@@ -820,6 +820,64 @@ def _require_purge_preconditions(cursor: Any, organization_id: str) -> str:
     return status
 
 
+def _require_purge_executor(
+    cursor: Any, organization_relations: Sequence[str]
+) -> dict[str, object]:
+    """Attest either a local superuser or the exact Supabase owner delegation."""
+
+    cursor.execute(
+        """
+        SELECT session_user,
+               current_user,
+               session_role.rolsuper,
+               session_role.rolcreaterole,
+               session_role.rolbypassrls,
+               pg_catalog.has_parameter_privilege(
+                 session_user,'session_replication_role','SET'
+               )
+          FROM pg_catalog.pg_roles AS session_role
+         WHERE session_role.rolname=session_user
+        """
+    )
+    row = cursor.fetchone()
+    if not isinstance(row, tuple) or len(row) != 6:
+        raise ResetAuthorityError("organization purge executor posture is unavailable")
+    session_user, current_user, superuser, createrole, bypassrls, can_set_replica = row
+    delegated_owner = (
+        session_user == "postgres"
+        and current_user == "erp_migration_owner"
+        and superuser is False
+        and createrole is True
+        and bypassrls is True
+        and can_set_replica is True
+    )
+    if superuser is not True and not delegated_owner:
+        raise ResetAuthorityError(
+            "organization purge requires the reviewed database administrator"
+        )
+    if delegated_owner:
+        for relation in (*organization_relations, "core.organizations"):
+            cursor.execute(
+                """
+                SELECT pg_catalog.pg_get_userbyid(relation.relowner)=current_user
+                  FROM pg_catalog.pg_class AS relation
+                 WHERE relation.oid=%s::regclass
+                """,
+                (relation,),
+            )
+            if cursor.fetchone() != (True,):
+                raise ResetAuthorityError(
+                    "organization purge owner does not own every target relation"
+                )
+    return {
+        "session_user": str(session_user),
+        "current_user": str(current_user),
+        "superuser": bool(superuser),
+        "delegated_owner": delegated_owner,
+        "session_replication_role_set": bool(can_set_replica),
+    }
+
+
 def verify_reset_boundary(
     connection: Any, *, authority: ResetAuthority, project_ref: str
 ) -> dict[str, object]:
@@ -979,16 +1037,8 @@ def execute_organization_purge(
                 raise ResetAuthorityError(
                     "organization must be suspended before destructive execution"
                 )
-            cursor.execute(
-                "SELECT role.rolsuper FROM pg_catalog.pg_roles AS role "
-                "WHERE role.rolname=SESSION_USER"
-            )
-            superuser = cursor.fetchone()
-            if superuser != (True,):
-                raise ResetAuthorityError(
-                    "organization purge requires the reviewed database administrator"
-                )
             organization_relations = _organization_relations(cursor, authority)
+            executor = _require_purge_executor(cursor, organization_relations)
             before_roles = _role_snapshot(cursor)
             before_role_passwords = _role_password_presence(cursor)
             before_seed_digest = _seed_digest(
@@ -1103,6 +1153,7 @@ def execute_organization_purge(
         "relation_oids_preserved": True,
         "isolated_role_posture_preserved": True,
         "isolated_role_catalog_preserved": True,
+        "executor": executor,
         "completed_at": _utc_now(),
     }
 

@@ -44,12 +44,9 @@ from railway_canonical_reset import (  # noqa: E402
     _admin_database_url,
     close_fence_after_failure,
     open_fence_after_deploy,
+    plan_staging_organization_purge,
     prepare_reset_boundary,
     purge_staging_organization,
-)
-from canonical_data_reset_authority import (  # noqa: E402
-    load_reset_authority,
-    plan_organization_purge,
 )
 
 
@@ -234,19 +231,14 @@ def _plan_organization(request: Mapping[str, Any]) -> dict[str, Any]:
     if UUID_PATTERN.fullmatch(organization_id) is None:
         raise RailwayResetControlError("organization_id is not a canonical UUID")
     arguments = _request_arguments(request)
-    database_url, transport = _admin_database_url(
+    planned = plan_staging_organization_purge(
+        **arguments,
         password=secrets["SUPABASE_DB_PASSWORD"],
-        application_name="canonical_railway_organization_purge_plan",
+        organization_id=organization_id,
         control_transport=CONTROL_TRANSPORT_RAILWAY_IPV6,
-        recover_stale_owner_delegation=True,
     )
-    with contextlib.closing(psycopg2.connect(database_url)) as connection:
-        plan = plan_organization_purge(
-            connection,
-            authority=load_reset_authority(),
-            project_ref=arguments["project_ref"],
-            organization_id=organization_id,
-        )
+    plan = planned["plan"]
+    transport = planned["transport"]
     issued_at = int(time.time())
     signed_payload = {
         "schema": PURGE_PLAN_SCHEMA,
