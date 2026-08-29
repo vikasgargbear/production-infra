@@ -141,6 +141,8 @@ def test_api_watches_only_runtime_and_packaged_migration_inputs() -> None:
     patterns = set(_config("api")["build"]["watchPatterns"])
     assert patterns == {
         "/backend/app/**",
+        "/backend/mcp_runtime/aasopharma_mcp/__init__.py",
+        "/backend/mcp_runtime/aasopharma_mcp/operator_actions.py",
         "/backend/alembic/**",
         "/backend/migration_support/**",
         "/backend/scripts/canonical_migration_contract.py",
@@ -169,7 +171,7 @@ def test_api_watches_only_runtime_and_packaged_migration_inputs() -> None:
     for non_runtime_path in (
         "/backend/tests/unit/test_example.py",
         "/backend/requirements-dev.txt",
-        "/backend/mcp_runtime/server.py",
+        "/backend/mcp_runtime/aasopharma_mcp/server.py",
         "/backend/scripts/provision_canonical_demo.py",
         "/backend/tests/integration/test_example.py",
         "/docs/architecture/unrelated-design.md",
@@ -190,7 +192,17 @@ def test_api_runtime_image_excludes_tests_docs_and_operator_tooling() -> None:
     assert "COPY backend/ ." not in dockerfile
     assert "COPY backend/tests/unit" not in dockerfile
     assert "COPY backend/tests/integration" not in dockerfile
-    assert "COPY backend/mcp_runtime" not in dockerfile
+    assert "COPY backend/mcp_runtime ./mcp_runtime" not in dockerfile
+    assert (
+        "COPY backend/mcp_runtime/aasopharma_mcp/__init__.py "
+        "./mcp_runtime/aasopharma_mcp/__init__.py"
+    ) in dockerfile
+    assert (
+        "COPY backend/mcp_runtime/aasopharma_mcp/operator_actions.py "
+        "./mcp_runtime/aasopharma_mcp/operator_actions.py"
+    ) in dockerfile
+    assert "backend/mcp_runtime/aasopharma_mcp/server.py" not in dockerfile
+    assert "from mcp_runtime.aasopharma_mcp.operator_actions import PREPARE_ACTIONS" in dockerfile
     assert "COPY docs/architecture/mcp-operator-actions.json" in dockerfile
     assert "COPY deploy/control-plane/canonical-staging.json" in dockerfile
     assert "COPY deploy/control-plane /app/deploy/control-plane" not in dockerfile
