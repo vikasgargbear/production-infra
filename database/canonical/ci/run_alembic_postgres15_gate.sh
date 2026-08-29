@@ -64,6 +64,16 @@ test "$(psql -X -Atqc "SELECT relrowsecurity::text || '|' || relforcerowsecurity
 test "$(psql -X -Atqc "SELECT has_table_privilege('erp_runtime', 'public.alembic_version', 'SELECT')")" = "f"
 test "$(psql -X -Atqc "SELECT has_function_privilege('erp_runtime', 'erp_security.deployed_canonical_revision()', 'EXECUTE')")" = "t"
 test "$(psql -X -Atqc "SELECT has_function_privilege('erp_app', 'erp_security.deployed_canonical_revision()', 'EXECUTE')")" = "f"
+test "$(psql -X -Atqc "SELECT has_schema_privilege('erp_runtime', 'erp_security', 'USAGE')")" = "t"
+test "$(psql -X -Atqc "
+  SELECT EXISTS (
+    SELECT 1
+      FROM pg_catalog.pg_namespace AS namespace
+      CROSS JOIN LATERAL pg_catalog.aclexplode(namespace.nspacl) AS acl
+     WHERE namespace.nspname='erp_security'
+       AND acl.grantee='erp_runtime'::pg_catalog.regrole::oid
+       AND acl.privilege_type='USAGE'
+  )")" = "t"
 test "$(psql -X -Atqc "
   SELECT
     EXISTS (
