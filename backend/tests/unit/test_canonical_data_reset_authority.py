@@ -359,13 +359,12 @@ class _ForeignKeyCursor:
 def test_organization_delete_order_places_children_before_parents() -> None:
     cursor = _ForeignKeyCursor(
         [
-            ("sales.lines", "sales.invoices", "lines_invoice_fk", False, False),
+            ("sales.lines", "sales.invoices", "lines_invoice_fk", "line definition"),
             (
                 "sales.invoices",
                 "parties.parties",
                 "invoice_party_fk",
-                False,
-                False,
+                "invoice definition",
             ),
         ]
     )
@@ -377,60 +376,51 @@ def test_organization_delete_order_places_children_before_parents() -> None:
     assert order == ("sales.lines", "sales.invoices", "parties.parties")
 
 
-def test_organization_delete_plan_defers_only_nondeferrable_cycle_edges() -> None:
+def test_organization_delete_plan_removes_only_cycle_edges() -> None:
     relations = ("finance.allocations", "finance.open_items")
     accepted = _ForeignKeyCursor(
         [
-            (relations[0], relations[1], "allocation_open_item_fk", True, False),
-            (relations[1], relations[0], "open_item_allocation_fk", True, True),
+            (relations[0], relations[1], "allocation_open_item_fk", "allocation fk"),
+            (relations[1], relations[0], "open_item_allocation_fk", "open item fk"),
         ]
     )
     accepted_plan = reset_authority._organization_delete_plan(accepted, relations)
     assert set(accepted_plan.relation_order) == set(relations)
-    assert accepted_plan.temporarily_deferred_constraints == (
-        (relations[0], "allocation_open_item_fk", True, False),
-        (relations[1], "open_item_allocation_fk", True, True),
+    assert accepted_plan.temporarily_removed_constraints == (
+        (relations[0], "allocation_open_item_fk", "allocation fk"),
+        (relations[1], "open_item_allocation_fk", "open item fk"),
     )
 
-    refused = _ForeignKeyCursor(
-        [
-            (relations[0], relations[1], "allocation_open_item_fk", True, False),
-            (relations[1], relations[0], "open_item_allocation_fk", False, False),
-        ]
-    )
-    refused_plan = reset_authority._organization_delete_plan(refused, relations)
-    assert set(refused_plan.relation_order) == set(relations)
-    assert refused_plan.temporarily_deferred_constraints == (
-        (relations[0], "allocation_open_item_fk", True, False),
-        (relations[1], "open_item_allocation_fk", False, False),
-    )
-
-
-def test_foreign_key_deferral_is_exact_and_restored() -> None:
+def test_cycle_foreign_keys_are_exactly_removed_and_restored() -> None:
     cursor = _ForeignKeyCursor([])
     constraints = (
-        ("finance.open_items", "open_item_accounting_event_fk", False, False),
-        ("finance.open_items", "open_item_adjustment_note_fk", True, False),
-        ("finance.open_items", "open_item_payment_fk", True, True),
+        (
+            "finance.open_items",
+            "open_item_accounting_event_fk",
+            "FOREIGN KEY (org_id, event_id) REFERENCES finance.accounting_events(org_id, id)",
+        ),
+        (
+            "finance.adjustment_notes",
+            "adjustment_open_item_fk",
+            "FOREIGN KEY (org_id, open_item_id) REFERENCES finance.open_items(org_id, id)",
+        ),
     )
 
-    reset_authority._set_foreign_key_deferral(cursor, constraints, enabled=True)
-    reset_authority._set_foreign_key_deferral(cursor, constraints, enabled=False)
+    reset_authority._set_cycle_foreign_keys(cursor, constraints, enabled=False)
+    reset_authority._set_cycle_foreign_keys(cursor, constraints, enabled=True)
 
     statements = [statement for statement, _parameters in cursor.executed]
     assert statements == [
-        'ALTER TABLE "finance"."open_items" ALTER CONSTRAINT '
-        '"open_item_accounting_event_fk" DEFERRABLE INITIALLY DEFERRED',
-        'ALTER TABLE "finance"."open_items" ALTER CONSTRAINT '
-        '"open_item_adjustment_note_fk" DEFERRABLE INITIALLY DEFERRED',
-        'ALTER TABLE "finance"."open_items" ALTER CONSTRAINT '
-        '"open_item_payment_fk" DEFERRABLE INITIALLY DEFERRED',
-        'ALTER TABLE "finance"."open_items" ALTER CONSTRAINT '
-        '"open_item_accounting_event_fk" NOT DEFERRABLE',
-        'ALTER TABLE "finance"."open_items" ALTER CONSTRAINT '
-        '"open_item_adjustment_note_fk" DEFERRABLE INITIALLY IMMEDIATE',
-        'ALTER TABLE "finance"."open_items" ALTER CONSTRAINT '
-        '"open_item_payment_fk" DEFERRABLE INITIALLY DEFERRED',
+        'ALTER TABLE "finance"."adjustment_notes" DROP CONSTRAINT '
+        '"adjustment_open_item_fk"',
+        'ALTER TABLE "finance"."open_items" DROP CONSTRAINT '
+        '"open_item_accounting_event_fk"',
+        'ALTER TABLE "finance"."open_items" ADD CONSTRAINT '
+        '"open_item_accounting_event_fk" FOREIGN KEY (org_id, event_id) '
+        'REFERENCES finance.accounting_events(org_id, id)',
+        'ALTER TABLE "finance"."adjustment_notes" ADD CONSTRAINT '
+        '"adjustment_open_item_fk" FOREIGN KEY (org_id, open_item_id) '
+        'REFERENCES finance.open_items(org_id, id)',
     ]
 
 
