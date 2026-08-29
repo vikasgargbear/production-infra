@@ -90,6 +90,25 @@ test('shows exact client, standard scopes, ERP tenant and capabilities', async (
 });
 
 
+test('resumes an existing authorization through the returned OAuth redirect', async () => {
+    const redirectUrl = 'https://chat.example.com/callback?code=existing&state=state';
+    (getOAuthConsentApi as jest.Mock).mockReturnValue({
+        getAuthorizationDetails: jest.fn().mockResolvedValue({
+            data: { redirect_url: redirectUrl },
+            error: null,
+        }),
+        approveAuthorization,
+        denyAuthorization,
+    });
+
+    render(<OAuthConsentPage />);
+
+    await waitFor(() => expect(redirectToOAuthClient).toHaveBeenCalledWith(redirectUrl));
+    expect(loadMcpConsentProposal).not.toHaveBeenCalled();
+    expect(screen.queryByRole('heading', { name: 'Authorization unavailable' })).toBeNull();
+});
+
+
 test('requires an explicit click and revalidates the proposal before approval', async () => {
     render(<OAuthConsentPage />);
     await screen.findByRole('button', { name: 'Approve' });
