@@ -42,10 +42,12 @@ COPY backend/mcp_runtime/aasopharma_mcp/operator_actions.py ./mcp_runtime/aasoph
 COPY backend/alembic ./alembic
 COPY backend/migration_support ./migration_support
 COPY backend/scripts/canonical_demo_ids.py ./scripts/canonical_demo_ids.py
+COPY backend/scripts/canonical_data_reset_authority.py ./scripts/canonical_data_reset_authority.py
 COPY backend/scripts/canonical_migration_contract.py ./scripts/canonical_migration_contract.py
 COPY backend/scripts/canonical_staging_database.py ./scripts/canonical_staging_database.py
 COPY backend/scripts/cleanup_staging_evidence_storage.py ./scripts/cleanup_staging_evidence_storage.py
 COPY backend/scripts/compile_live18_browser_fixture.py ./scripts/compile_live18_browser_fixture.py
+COPY backend/scripts/deployment_control.py ./scripts/deployment_control.py
 COPY backend/scripts/exercise_staging_mcp_oauth.py ./scripts/exercise_staging_mcp_oauth.py
 COPY backend/scripts/live18_evidence_contract.py ./scripts/live18_evidence_contract.py
 COPY backend/scripts/live18_railway_database_phase.py ./scripts/live18_railway_database_phase.py
