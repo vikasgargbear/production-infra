@@ -634,7 +634,10 @@ def _assert_runtime_invoice_product_identity(
             """,
             (fixture.IDS["org"], invoice_id),
         )
-        assert cursor.fetchall() == [(
+        rows = cursor.fetchall()
+        assert [
+            (UUID(str(row[0])), row[1], row[2], row[3]) for row in rows
+        ] == [(
             UUID(str(product_reference["id"])),
             int(product_reference["row_version"]),
             product_reference["product_code"],
