@@ -17,6 +17,11 @@ on:
         required: false
         default: canonical-certification
         type: string
+      run_live_mcp_multiproduct:
+        description: Exercise a disposable two-product invoice and sales return through deployed MCP
+        required: false
+        default: false
+        type: boolean
   workflow_call:
     inputs:
       reviewed_sha:
@@ -33,6 +38,11 @@ on:
         required: false
         default: canonical-certification
         type: string
+      run_live_mcp_multiproduct:
+        description: Exercise a disposable two-product invoice and sales return through deployed MCP
+        required: false
+        default: false
+        type: boolean
     outputs:
       api_deployment_id:
         description: Exact Railway API deployment created for the reviewed SHA
@@ -55,7 +65,15 @@ on:
         required: true
       ERP_TAX_PROVIDER_PASSWORD:
         required: true
+      ERP_REGULATORY_IMPORTER_PASSWORD:
+        required: true
       JWT_SECRET_KEY:
+        required: true
+      LIVE18_REVIEWED_SCALARS_JSON:
+        required: true
+      CANONICAL_DEMO_EXPENSE_RECEIPT_BASE64:
+        required: true
+      CANONICAL_DEMO_EXPENSE_RECEIPT_SHA256:
         required: true
       MCP_INTERNAL_SERVICE_TOKEN:
         required: true
@@ -1356,6 +1374,59 @@ jobs:
             --frontend-origin "$RAILWAY_FRONTEND_URL" \
             --reviewed-sha "$REVIEWED_SHA" \
             > railway-supabase-auth-redirect.json
+
+      - name: Exercise a disposable two-product invoice and return through deployed MCP
+        if: inputs.run_live_mcp_multiproduct
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          ERP_REGULATORY_IMPORTER_PASSWORD: ${{ secrets.ERP_REGULATORY_IMPORTER_PASSWORD }}
+          MCP_INTERNAL_SERVICE_TOKEN: ${{ secrets.MCP_INTERNAL_SERVICE_TOKEN }}
+          LIVE18_REVIEWED_SCALARS_JSON: ${{ secrets.LIVE18_REVIEWED_SCALARS_JSON }}
+          CANONICAL_DEMO_EXPENSE_RECEIPT_BASE64: ${{ secrets.CANONICAL_DEMO_EXPENSE_RECEIPT_BASE64 }}
+          CANONICAL_DEMO_EXPENSE_RECEIPT_SHA256: ${{ secrets.CANONICAL_DEMO_EXPENSE_RECEIPT_SHA256 }}
+          LIVE_MCP_STOCK_ADJUSTMENT_LOSS_QUANTITY: "1"
+          CANONICAL_STAGING_WEB_TEST_AUTH_USER_ID: ${{ vars.CANONICAL_STAGING_WEB_TEST_AUTH_USER_ID }}
+          CANONICAL_PRODUCTION_PROJECT_REFS: ${{ vars.CANONICAL_PRODUCTION_PROJECT_REFS }}
+          RAILWAY_API_DEPLOYMENT_ID: ${{ steps.exact_upload.outputs.api_deployment_id }}
+          RAILWAY_IDENTITY_FILE: ${{ env.RAILWAY_RESET_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          python3 -m pip install -r backend/requirements.txt
+          test -n "$RAILWAY_API_DEPLOYMENT_ID"
+          railway status \
+            --project "$RAILWAY_PROJECT_ID" \
+            --environment "$RAILWAY_ENVIRONMENT_ID" \
+            --json > "$RUNNER_TEMP/live-mcp-railway-status.json"
+          RAILWAY_API_DEPLOYMENT_INSTANCE_ID=$(jq -er \
+            --arg environment "$RAILWAY_ENVIRONMENT_ID" \
+            --arg service "$RAILWAY_API_SERVICE" \
+            --arg deployment "$RAILWAY_API_DEPLOYMENT_ID" '
+              [.environments.edges[].node
+               | select(.id == $environment)
+               | .serviceInstances.edges[].node
+               | select(.serviceName == $service)
+               | .activeDeployments[]
+               | select(.id == $deployment and .deploymentStopped == false)
+               | .instances[]
+               | select(.status == "RUNNING")
+               | .id]
+              | if length == 1 then .[0]
+                else error("expected one running exact Railway API instance") end
+            ' "$RUNNER_TEMP/live-mcp-railway-status.json")
+          export RAILWAY_API_DEPLOYMENT_INSTANCE_ID
+          PYTHONPATH=backend python3 \
+            backend/scripts/run_live_mcp_multiproduct_railway.py
+
+      - name: Upload live MCP multi-product evidence
+        if: always() && inputs.run_live_mcp_multiproduct
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-mcp-multiproduct-${{ inputs.reviewed_sha }}
+          path: ${{ runner.temp }}/live-mcp-*.json
+          if-no-files-found: warn
+          retention-days: 30
 
       - uses: actions/upload-artifact@v4
         with:
