@@ -34,7 +34,7 @@ const deferred = <T,>(): Deferred<T> => {
     return { promise, resolve, reject };
 };
 
-const renderEntitySearch = (searchFn: (query: string) => Promise<SearchItem[]>) => {
+const renderEntitySearch = (searchFn: (query: string, signal: AbortSignal) => Promise<SearchItem[]>) => {
     const onChange = jest.fn();
     const onCreateNew = jest.fn();
     const view = render(
@@ -75,7 +75,7 @@ describe('EntitySearch request ownership', () => {
 
         await act(async () => { jest.advanceTimersByTime(1); });
         expect(searchFn).toHaveBeenCalledTimes(1);
-        expect(searchFn).toHaveBeenCalledWith('one');
+        expect(searchFn).toHaveBeenCalledWith('one', expect.anything());
         expect(screen.getByText('One result')).toBeTruthy();
         expect(screen.getByRole('option', { name: 'One result' })).toBeTruthy();
         expect(screen.getByTestId('entity-search-option-one')).toBeTruthy();
@@ -91,10 +91,10 @@ describe('EntitySearch request ownership', () => {
         fireEvent.change(input, { target: { value: 'older' } });
         await act(async () => { jest.advanceTimersByTime(50); });
         fireEvent.change(input, { target: { value: 'latest' } });
-        await act(async () => { jest.advanceTimersByTime(100); });
+        await act(async () => { jest.advanceTimersByTime(275); });
 
         expect(searchFn).toHaveBeenCalledTimes(1);
-        expect(searchFn).toHaveBeenCalledWith('latest');
+        expect(searchFn).toHaveBeenCalledWith('latest', expect.anything());
     });
 
     it('does not let an older success overwrite the latest results', async () => {
@@ -107,9 +107,11 @@ describe('EntitySearch request ownership', () => {
         const input = screen.getByPlaceholderText('Find entity');
 
         fireEvent.change(input, { target: { value: 'older' } });
-        await act(async () => { jest.advanceTimersByTime(100); });
+        await act(async () => { jest.advanceTimersByTime(275); });
         fireEvent.change(input, { target: { value: 'latest' } });
         await act(async () => { jest.advanceTimersByTime(100); });
+        const olderSignal = searchFn.mock.calls[0][1] as AbortSignal;
+        expect(olderSignal.aborted).toBe(true);
 
         await act(async () => { latest.resolve([{ id: 'latest', label: 'Latest result' }]); });
         expect(screen.getByText('Latest result')).toBeTruthy();
@@ -219,11 +221,13 @@ describe('customer and supplier search adapters', () => {
         fireEvent.change(screen.getByPlaceholderText(/Search customer/i), {
             target: { value: 'Customer' },
         });
-        await act(async () => { jest.advanceTimersByTime(100); });
+        await act(async () => { jest.advanceTimersByTime(275); });
         rerender(<CustomerSearch value={null} onChange={onChange} className="rerendered" />);
 
         expect(customersApi.search).toHaveBeenCalledTimes(1);
-        expect(customersApi.search).toHaveBeenCalledWith('Customer', { limit: 20 });
+        expect(customersApi.search).toHaveBeenCalledWith(
+            'Customer', { limit: 20 }, { signal: expect.anything() },
+        );
         expect(screen.getByText('Customer One')).toBeTruthy();
         expect(screen.getByText('9876543210')).toBeTruthy();
         expect(screen.getByText('Jaipur, 08')).toBeTruthy();
@@ -238,11 +242,13 @@ describe('customer and supplier search adapters', () => {
         fireEvent.change(screen.getByPlaceholderText(/Search supplier/i), {
             target: { value: 'Supplier' },
         });
-        await act(async () => { jest.advanceTimersByTime(100); });
+        await act(async () => { jest.advanceTimersByTime(275); });
         rerender(<SupplierSearch value={null} onChange={onChange} className="rerendered" />);
 
         expect(suppliersApi.search).toHaveBeenCalledTimes(1);
-        expect(suppliersApi.search).toHaveBeenCalledWith('Supplier', { limit: 20 });
+        expect(suppliersApi.search).toHaveBeenCalledWith(
+            'Supplier', { limit: 20 }, { signal: expect.anything() },
+        );
         expect(screen.getByText('Supplier One')).toBeTruthy();
     });
 });

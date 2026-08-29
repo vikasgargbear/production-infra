@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Building2, Plus, Search } from 'lucide-react';
+import { Building2, Plus } from 'lucide-react';
 import { suppliersApi } from '../../../services/api';
 import { debounce } from 'lodash';
 
@@ -13,44 +13,52 @@ const SupplierQuickSelect = ({ value, onChange }: { value?: any; onChange: (supp
   const [loading, setLoading] = useState(false);
   const [selectedSupplier, setSelectedSupplier] = useState<any | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const searchAbortRef = useRef<AbortController | null>(null);
 
   // Search suppliers
-  const searchSuppliers = React.useCallback(
-    debounce(async (term) => {
+  const searchSuppliers = React.useMemo(
+    () => debounce(async (term: string) => {
+      searchAbortRef.current?.abort();
+      const controller = new AbortController();
+      searchAbortRef.current = controller;
       if (!term) {
         // Load recent suppliers
         setLoading(true);
         try {
-          const response = await suppliersApi.search('limit=10');
+          const response = await suppliersApi.getAll({ limit: 10 }, { signal: controller.signal });
           setSuppliers(response.data || []);
         } catch (error) {
+          if (controller.signal.aborted) return;
           // Silently handle error for recent suppliers
           setSuppliers([]);
         } finally {
-          setLoading(false);
+          if (!controller.signal.aborted) setLoading(false);
         }
         return;
       }
 
       setLoading(true);
       try {
-        const response = await suppliersApi.search(
-          `search=${term}&limit=10`
-        );
+        const response = await suppliersApi.search(term, { limit: 10 }, { signal: controller.signal });
         setSuppliers(response.data || []);
       } catch (error) {
+        if (controller.signal.aborted) return;
         // Silently handle search error
         setSuppliers([]);
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
-    }, 300),
+    }, 275),
     []
   );
 
   useEffect(() => {
     searchSuppliers(searchTerm);
-  }, [searchTerm]);
+    return () => {
+      searchSuppliers.cancel();
+      searchAbortRef.current?.abort();
+    };
+  }, [searchTerm, searchSuppliers]);
 
   // Handle supplier selection
   const selectSupplier = (supplier) => {
