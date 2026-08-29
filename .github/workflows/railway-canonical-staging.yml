@@ -46,30 +46,6 @@ on:
       reused_exact_sha:
         description: Whether all three already-active exact-SHA deployments were reused
         value: ${{ jobs.deploy.outputs.reused_exact_sha }}
-    secrets:
-      RAILWAY_API_TOKEN:
-        required: true
-      ERP_RUNTIME_PASSWORD:
-        required: true
-      ERP_CALCULATOR_PASSWORD:
-        required: true
-      ERP_TAX_PROVIDER_PASSWORD:
-        required: true
-      JWT_SECRET_KEY:
-        required: true
-      MCP_INTERNAL_SERVICE_TOKEN:
-        required: true
-      SUPABASE_ANON_KEY:
-        required: true
-      SUPABASE_ACCESS_TOKEN:
-        required: true
-      SUPABASE_DB_PASSWORD:
-        required: true
-      TAX_PROVIDER_INTERNAL_SERVICE_TOKEN:
-        required: true
-      TAX_PROVIDER_INTERNAL_HMAC_SECRET:
-        required: true
-
 permissions:
   contents: read
 
