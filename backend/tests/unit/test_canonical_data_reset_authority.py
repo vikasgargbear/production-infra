@@ -479,7 +479,6 @@ def test_organization_delete_plan_requires_and_tracks_deferrable_cycles() -> Non
     assert accepted_plan.deferred_cycle_constraints == (
         (relations[0], "allocation_open_item_fk"),
         (relations[1], "open_item_allocation_fk"),
-        (relations[1], "open_item_reversal_fk"),
     )
 
     rejected = _ForeignKeyCursor(
@@ -488,6 +487,18 @@ def test_organization_delete_plan_requires_and_tracks_deferrable_cycles() -> Non
     )
     with pytest.raises(ResetAuthorityError, match="must be deferrable"):
         reset_authority._organization_delete_plan(rejected, relations)
+
+
+def test_organization_delete_plan_ignores_same_statement_self_references() -> None:
+    relation = "catalog.categories"
+    cursor = _ForeignKeyCursor(
+        [(relation, relation, "categories_parent_fk", False)]
+    )
+
+    plan = reset_authority._organization_delete_plan(cursor, (relation,))
+
+    assert plan.relation_order == (relation,)
+    assert plan.deferred_cycle_constraints == ()
 
 
 def test_organization_purge_defers_constraints_without_altering_foreign_keys() -> None:

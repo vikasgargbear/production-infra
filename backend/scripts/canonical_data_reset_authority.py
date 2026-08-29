@@ -1009,16 +1009,16 @@ def _organization_delete_plan(
     relation_set = set(relations)
     graph = {relation: set() for relation in relations}
     constraints_by_edge: dict[tuple[str, str], list[tuple[str, bool]]] = {}
-    self_constraints: list[tuple[str, str, bool]] = []
     for child, parent, constraint, deferrable in cursor.fetchall():
         child_name = str(child)
         parent_name = str(parent)
         if child_name not in relation_set or parent_name not in relation_set:
             raise ResetAuthorityError("organization foreign-key scope drifted")
         if child_name == parent_name:
-            self_constraints.append(
-                (child_name, str(constraint), bool(deferrable))
-            )
+            # Every row for this organization is removed from the relation in
+            # one DELETE statement. PostgreSQL checks an immediate self-FK at
+            # statement end, when neither the tenant parent nor its children
+            # remain, so this is not a cross-statement dependency cycle.
             continue
         graph[child_name].add(parent_name)
         edge = (child_name, parent_name)
@@ -1033,13 +1033,6 @@ def _organization_delete_plan(
         for relation in component
     }
     deferred_cycles: list[tuple[str, str]] = []
-    for relation, constraint, deferrable in self_constraints:
-        if not deferrable:
-            raise ResetAuthorityError(
-                "cyclic organization foreign key must be deferrable: "
-                f"{relation}.{constraint}"
-            )
-        deferred_cycles.append((relation, constraint))
     for child, parents in graph.items():
         for parent in parents:
             if component_by_relation[child] != component_by_relation[parent]:
