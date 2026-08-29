@@ -30,12 +30,13 @@ const { autoTable: mockAutoTable } = jest.requireMock('jspdf-autotable');
 const invoice = (): InvoiceData => ({
   invoice_number: 'INV-2026-1',
   invoice_date: '2026-08-25',
+  due_date: '2026-09-05',
   status: 'posted',
-  seller_legal_name: 'Canonical Seller Private Limited',
+  seller_legal_name: 'Aaso Pharma Private Limited',
   seller_gstin: '27ABCDE1234F1Z5',
   seller_address: 'Seller Lane\nMumbai',
   seller_drug_license_numbers: ['MH-MZ6-20B', 'MH-MZ6-21B'],
-  customer_name: 'Canonical Buyer',
+  customer_name: 'City Care Pharmacy',
   customer_phone: undefined,
   customer_gst_number: undefined,
   customer_drug_license_numbers: ['MH-BUYER-20B'],
@@ -117,7 +118,7 @@ const canonicalDetail = (): CanonicalInvoiceDetail => ({
     availability: 'available',
     licences: [{ license_number: 'ARCHIVED-BUYER-20B' }],
   },
-  due_date: null,
+  due_date: '2026-09-05',
   currency_code: 'INR',
   items: invoice().items.map((item, index) => ({
     ...item,
@@ -217,7 +218,7 @@ test('fails closed instead of falling back when archival evidence is unavailable
 
 test('renders only canonical seller, buyer, line, and exact money facts', () => {
   const html = generateInvoiceHTML(invoice());
-  expect(html).toContain('Canonical Seller Private Limited');
+  expect(html).toContain('Aaso Pharma Private Limited');
   expect(html).toContain('27ABCDE1234F1Z5');
   expect(html).toContain('MH-MZ6-20B / MH-MZ6-21B');
   expect(html).toContain('MH-BUYER-20B');
@@ -225,10 +226,11 @@ test('renders only canonical seller, buyer, line, and exact money facts', () => 
   expect(html).toContain('Batch BATCH-ONE; Exp 2028-09-30; Qty 0.73; Free 0.13');
   expect(html).toContain('Batch BATCH-TWO; Exp 2029-01-31; Qty 0.5; Free 0');
   expect(html).toContain('Free excluded from taxable value');
-  expect(html).toContain('>1.23');
+  expect(html).toContain('Paid 1.23');
   expect(html).toContain('2.5% (₹5.00)');
   expect(html).toContain('>12%</td>');
   expect(html).toContain('Original for Recipient');
+  expect(html).toContain('<strong>Due Date:</strong> 2026-09-05');
   expect(html).toContain('<strong>Place of Supply:</strong> Maharashtra (27)');
   expect(html).toContain('<strong>Supply:</strong> intra state');
   expect(html).toContain('Recipient (name and signature)');
@@ -243,6 +245,7 @@ test('renders only canonical seller, buyer, line, and exact money facts', () => 
   expect(html).not.toContain('{{');
   expect(html).not.toContain('[object Object]');
   expect(html).not.toContain('canonical-factual-v1');
+  expect(html.toLowerCase()).not.toContain('canonical');
   expect(html).toContain('thead{display:table-header-group}');
   expect(html).toContain('tr{break-inside:avoid;page-break-inside:avoid}');
   expect(html).not.toContain('.invoice-page{page-break-inside:avoid');
@@ -349,11 +352,22 @@ test('keeps every invoice item column inside the A4 printable width with Amount 
 
   const columnWidths = Object.values(options.columnStyles)
     .map((style: any) => style.cellWidth as number);
-  expect(columnWidths).toEqual([7, 80, 14, 16, 11, 19, 19, 26]);
+  expect(columnWidths).toEqual([7, 76, 14, 17, 17, 19, 18, 24]);
   expect(columnWidths.reduce((total: number, width: number) => total + width, 0))
     .toBe(options.tableWidth);
   expect(options.margin.left + options.tableWidth + options.margin.right).toBe(210);
   expect(options.columnStyles[1].cellWidth).toBeGreaterThan(options.columnStyles[7].cellWidth);
+});
+
+test('prints invoice and due dates in the PDF header without obscuring the item table', async () => {
+  mockAutoTable.mockClear();
+  await downloadInvoicePDF(invoice());
+
+  const pdf = mockAutoTable.mock.calls.at(-1)?.[0];
+  expect(pdf.text).toHaveBeenCalledWith('Invoice No: INV-2026-1', 201, 22, { align: 'right' });
+  expect(pdf.text).toHaveBeenCalledWith('Date: 2026-08-25', 201, 27, { align: 'right' });
+  expect(pdf.text).toHaveBeenCalledWith('Due Date: 2026-09-05', 201, 32, { align: 'right' });
+  expect(mockAutoTable.mock.calls.at(-1)?.[1].startY).toBeGreaterThan(53);
 });
 
 test('renders four-digit rates, Cess, free treatment, and every batch without formatted-value reparsing', async () => {
@@ -374,7 +388,8 @@ test('renders four-digit rates, Cess, free treatment, and every batch without fo
   const options = mockAutoTable.mock.calls.at(-1)?.[1];
   expect(options.body[0][1]).toContain('Batch BATCH-ONE');
   expect(options.body[0][1]).toContain('Batch BATCH-TWO');
+  expect(options.body[0][1]).toContain('Free included at unit rate');
   expect(options.body[0][1]).toContain('Cess INR 1.00');
-  expect(options.body[0][3]).toContain('Free included at unit rate');
+  expect(options.body[0][3]).toBe('Paid 1.23\nFree 0.13');
   expect(options.body[0][5]).toBe('INR 1,234.57');
 });
