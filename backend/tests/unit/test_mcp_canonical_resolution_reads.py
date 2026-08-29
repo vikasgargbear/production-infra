@@ -321,8 +321,9 @@ def test_document_number_collision_is_explicit_and_does_not_load_lines():
 
 def test_all_ten_routes_execute_bounded_canonical_queries_for_empty_results():
     calls = [
-        lambda: reads.canonical_customer_search(
-            "missing", 20, _context("parties.customers.search", branch=False, sensitive=True), _Database([])
+            lambda: reads.canonical_customer_search(
+                "missing", 20, _context("parties.customers.search", branch=False, sensitive=True),
+            _Database([], [])
         ),
         lambda: reads.canonical_location_search(
             "MISSING", 20, _context("inventory.locations.search"), _Database([])

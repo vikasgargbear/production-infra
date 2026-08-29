@@ -24,6 +24,10 @@ type ExactSearchProduct = Omit<Product,
     mrp?: string;
     sale_price?: string;
     cost_per_unit?: string;
+    unit?: string;
+    dosage_form?: string;
+    strength_display?: string;
+    packing_summary?: string;
 };
 
 interface ProductWithBatch extends ExactSearchProduct {
@@ -113,7 +117,7 @@ const ProductSearch = forwardRef<ProductSearchRef, ProductSearchProps>(
                     if (!Array.isArray(rows)) {
                         throw new Error('Product search returned an invalid canonical response');
                     }
-                    const transformedResults: ExactSearchProduct[] = rows.map((row: any, index: number) => {
+                    const transformedResults: ExactSearchProduct[] = rows.map((row, index) => {
                         if (typeof row?.product_id !== 'string' || typeof row?.product_name !== 'string') {
                             throw new Error(`Product search row ${index + 1} is missing identity`);
                         }
@@ -133,9 +137,14 @@ const ProductSearch = forwardRef<ProductSearchRef, ProductSearchProps>(
                             product_name: row.product_name,
                             product_type: typeof row.product_type === 'string' ? row.product_type : 'medicine',
                             generic_name: typeof row.generic_name === 'string' ? row.generic_name : undefined,
-                            manufacturer: typeof row.manufacturer === 'string' ? row.manufacturer : undefined,
+                            manufacturer: typeof row.manufacturer_name === 'string' ? row.manufacturer_name : undefined,
                             hsn_code: typeof row.hsn_code === 'string' ? row.hsn_code : undefined,
-                            category: typeof row.category === 'string' ? row.category : undefined,
+                            category: typeof row.category_name === 'string' ? row.category_name : undefined,
+                            unit: typeof row.unit === 'string' ? row.unit : undefined,
+                            dosage_form: typeof row.dosage_form === 'string' ? row.dosage_form : undefined,
+                            strength: typeof row.strength_display === 'string' ? row.strength_display : undefined,
+                            strength_display: typeof row.strength_display === 'string' ? row.strength_display : undefined,
+                            packing_summary: typeof row.packing_summary === 'string' ? row.packing_summary : undefined,
                             uom_conversion_id: typeof row.uom_conversion_id === 'string' ? row.uom_conversion_id : undefined,
                             gst_percent: gstPercent,
                             requires_prescription: row.requires_prescription === true,
@@ -299,15 +308,27 @@ const ProductSearch = forwardRef<ProductSearchRef, ProductSearchProps>(
                                                     : 'hover:bg-gray-50'
                                                     }`}
                                             >
-                                                <div className="flex justify-between items-center">
-                                                    <div>
-                                                        <div className="font-medium text-gray-900">{product.product_name}</div>
-                                                        <div className="text-sm text-gray-500">
-                                                            {product.generic_name && <span>{product.generic_name} | </span>}
-                                                            HSN: {product.hsn_code || 'N/A'}
+                                                <div className="flex flex-wrap justify-between items-start gap-x-4 gap-y-1">
+                                                    <div className="min-w-0 flex-1">
+                                                        <div className="font-semibold text-gray-900 break-words">{product.product_name}</div>
+                                                        {product.generic_name && (
+                                                            <div className="text-sm text-gray-600 break-words">{product.generic_name}</div>
+                                                        )}
+                                                        <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-gray-600">
+                                                            {product.manufacturer && <span>{product.manufacturer}</span>}
+                                                            {product.strength_display && <span>{product.strength_display}</span>}
+                                                            {product.packing_summary && <span>{product.packing_summary}</span>}
+                                                            {product.dosage_form && <span>{product.dosage_form}</span>}
+                                                            {product.unit && <span>Unit: {product.unit}</span>}
                                                         </div>
+                                                        {(product.category || product.hsn_code) && (
+                                                            <div className="mt-0.5 flex flex-wrap gap-x-2 text-xs text-gray-400">
+                                                                {product.category && <span>{product.category}</span>}
+                                                                {product.hsn_code && <span>HSN: {product.hsn_code}</span>}
+                                                            </div>
+                                                        )}
                                                     </div>
-                                                    <div className="text-right">
+                                                    <div className="shrink-0 text-right">
                                                         <div className={`font-medium ${compareExactDecimals(
                                                             product.total_stock ?? '0', '0', 'Product stock', quantityOptions,
                                                         ) > 0 ? 'text-green-600' : 'text-red-500'}`}>
@@ -326,13 +347,14 @@ const ProductSearch = forwardRef<ProductSearchRef, ProductSearchProps>(
                                         {onCreateProduct && searchQuery.length >= 2 && (
                                             <div className="px-4 py-3 border-t border-gray-200 bg-gray-50">
                                                 <button
+                                                    type="button"
                                                     onClick={(e) => {
                                                         e.preventDefault();
                                                         e.stopPropagation();
                                                         setShowDropdown(false);
                                                         onCreateProduct(searchQuery);
                                                     }}
-                                                    className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                                    className="w-full min-h-11 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                                                 >
                                                     + Create Product "{searchQuery}"
                                                 </button>
@@ -347,13 +369,14 @@ const ProductSearch = forwardRef<ProductSearchRef, ProductSearchProps>(
                                         </div>
                                         {onCreateProduct && (
                                             <button
+                                                type="button"
                                                 onClick={(e) => {
                                                     e.preventDefault();
                                                     e.stopPropagation();
                                                     setShowDropdown(false);
                                                     onCreateProduct(searchQuery);
                                                 }}
-                                                className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 rounded-lg transition-colors"
+                                                className="w-full min-h-11 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 rounded-lg transition-colors"
                                             >
                                                 + Create Product "{searchQuery}"
                                             </button>

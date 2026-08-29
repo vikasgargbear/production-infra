@@ -23,6 +23,11 @@ export interface Customer {
   // GST and compliance (all nullable in DB)
   gst_number?: string;
   place_of_supply_state_code?: string;
+  address_line1?: string;
+  address_line2?: string;
+  city?: string;
+  state_code?: string;
+  pincode?: string;
   pan_number?: string;
   drug_license_number?: string;
   drug_license_validity?: string | Date;
