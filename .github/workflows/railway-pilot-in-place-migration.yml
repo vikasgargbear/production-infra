@@ -8,7 +8,7 @@ on:
         required: true
         type: string
       reviewed_sha:
-        description: Exact reviewed 40-character commit to migrate to
+        description: Exact reviewed 40-character commit to migrate and deploy
         required: true
         type: string
 
@@ -20,25 +20,61 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  migrate:
+  authorize:
     runs-on: ubuntu-latest
-    environment: canonical-staging
-    timeout-minutes: 20
-    env:
-      CANONICAL_STAGING_PROJECT_REF: ${{ vars.CANONICAL_STAGING_PROJECT_REF }}
-      CANONICAL_PRODUCTION_PROJECT_REFS: ${{ vars.CANONICAL_PRODUCTION_PROJECT_REFS }}
-      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-      REVIEWED_SHA: ${{ inputs.reviewed_sha }}
-      PGOPTIONS: >-
-        -c statement_timeout=120000
-        -c lock_timeout=15000
-        -c idle_in_transaction_session_timeout=180000
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.reviewed_sha }}
           fetch-depth: 0
+      - name: Pin the exact reviewed source
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+          REVIEWED_SHA: ${{ inputs.reviewed_sha }}
+        run: |
+          set -euo pipefail
+          test "$CONFIRMATION" = MIGRATE_PERSISTENT_PILOT_IN_PLACE
+          [[ "$REVIEWED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$REVIEWED_SHA"
+
+  migrate-and-deploy:
+    needs: authorize
+    uses: ./.github/workflows/railway-canonical-staging.yml
+    with:
+      reviewed_sha: ${{ inputs.reviewed_sha }}
+      reset_disposable_data: false
+      github_environment: canonical-staging
+    secrets: inherit
+
+  open-persistent-pilot:
+    needs: migrate-and-deploy
+    runs-on: ubuntu-latest
+    environment: canonical-staging
+    timeout-minutes: 15
+    env:
+      RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+      RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
+      RAILWAY_ENVIRONMENT_ID: ${{ vars.RAILWAY_ENVIRONMENT_ID }}
+      RAILWAY_API_SERVICE: ${{ vars.RAILWAY_API_SERVICE }}
+      RAILWAY_API_URL: ${{ vars.RAILWAY_API_URL }}
+      RAILWAY_MCP_URL: ${{ vars.RAILWAY_MCP_URL }}
+      CANONICAL_STAGING_PROJECT_REF: ${{ vars.CANONICAL_STAGING_PROJECT_REF }}
+      CANONICAL_PRODUCTION_PROJECT_REFS: ${{ vars.CANONICAL_PRODUCTION_PROJECT_REFS }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      REVIEWED_SHA: ${{ inputs.reviewed_sha }}
+      API_DEPLOYMENT_ID: ${{ needs['migrate-and-deploy'].outputs.api_deployment_id }}
+      PILOT_SSH_PRIVATE_KEY: /tmp/railway-pilot-open-${{ github.run_id }}-${{ github.run_attempt }}
+      PILOT_SSH_FINGERPRINT: /tmp/railway-pilot-open-${{ github.run_id }}-${{ github.run_attempt }}-fingerprint
+      PILOT_SSH_AGENT_STARTED: /tmp/railway-pilot-open-${{ github.run_id }}-${{ github.run_attempt }}-agent
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.reviewed_sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
 
       - uses: actions/setup-python@v5
         with:
@@ -46,152 +82,197 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements.txt
 
-      - name: Pin the exact persistent pilot boundary
-        env:
-          CONFIRMATION: ${{ inputs.confirmation }}
+      - name: Install the pinned Railway and response-verification clients
         run: |
-          set -euo pipefail
-          test "$CONFIRMATION" = MIGRATE_PERSISTENT_PILOT_IN_PLACE
-          [[ "$REVIEWED_SHA" =~ ^[0-9a-f]{40}$ ]]
-          test "$(git rev-parse HEAD)" = "$REVIEWED_SHA"
-          test "$CANONICAL_STAGING_PROJECT_REF" = rgihahbmkrmhitjdjvev
-          test "$CANONICAL_STAGING_PROJECT_REF" != jfrairkkzxwkhbtqejnz
-          test -n "$CANONICAL_PRODUCTION_PROJECT_REFS"
-          case ",$CANONICAL_PRODUCTION_PROJECT_REFS," in
-            *",$CANONICAL_STAGING_PROJECT_REF,"*)
-              echo "persistent pilot appears in the production project denylist" >&2
-              exit 2
-              ;;
-          esac
-          project_json=$(curl --fail --silent --show-error \
-            --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
-            "https://api.supabase.com/v1/projects/$CANONICAL_STAGING_PROJECT_REF")
-          test "$(jq -r .id <<<"$project_json")" = "$CANONICAL_STAGING_PROJECT_REF"
-          test "$(jq -r .status <<<"$project_json")" = ACTIVE_HEALTHY
-
-      - name: Install migration and PostgreSQL clients
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends postgresql-client
+          npm install --global @railway/cli@5.43.4
           pip install -r backend/requirements.txt
 
-      - name: Build and mask the pilot bootstrap connection
-        run: python3 backend/scripts/verify_staging_direct_roles.py --bootstrap-only
-
-      - name: Preflight the reviewed linear migration
+      - name: Link the reviewed Railway pilot
         run: |
           set -euo pipefail
-          expected_head=$(python3 backend/scripts/canonical_migration_contract.py --print-head)
-          current_revision=$(psql -X -Atqc \
-            'SELECT version_num FROM public.alembic_version' \
-            "$PSYCOPG_DATABASE_URL")
-          python3 backend/scripts/canonical_migration_contract.py \
-            --validate-current "$current_revision" >/dev/null
-          test -n "$expected_head"
+          test "$(git rev-parse HEAD)" = "$REVIEWED_SHA"
+          [[ "$REVIEWED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$API_DEPLOYMENT_ID" =~ ^[0-9a-f-]{36}$ ]]
+          railway link \
+            --project "$RAILWAY_PROJECT_ID" \
+            --environment "$RAILWAY_ENVIRONMENT_ID"
+          railway whoami >/dev/null
+
+      - name: Register one run-scoped Railway open-fence SSH key
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p "$HOME/.ssh" "$HOME/.railway"
+          chmod 700 "$HOME/.ssh" "$HOME/.railway"
+          printf '%s\n' \
+            'Host ssh.railway.com' \
+            "    UserKnownHostsFile $HOME/.railway/known_hosts_relay" \
+            '    StrictHostKeyChecking accept-new' \
+            '    BatchMode yes' \
+            '    IdentitiesOnly yes' \
+            '    ConnectTimeout 10' \
+            > "$HOME/.ssh/config"
+          chmod 600 "$HOME/.ssh/config"
+          ssh-keygen -q -t ed25519 -N '' \
+            -C "railway-pilot-open-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            -f "$PILOT_SSH_PRIVATE_KEY"
+          fingerprint=$(ssh-keygen -E sha256 -lf \
+            "$PILOT_SSH_PRIVATE_KEY.pub" | awk '{print $2}')
+          case "$fingerprint" in SHA256:*) ;; *) exit 2 ;; esac
+          printf '%s\n' "$fingerprint" > "$PILOT_SSH_FINGERPRINT"
+          eval "$(ssh-agent -s)"
           {
-            echo "EXPECTED_ALEMBIC_HEAD=$expected_head"
-            echo "PREFLIGHT_ALEMBIC_REVISION=$current_revision"
+            echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK"
+            echo "SSH_AGENT_PID=$SSH_AGENT_PID"
           } >> "$GITHUB_ENV"
-
-      - name: Capture the pre-migration schema boundary
-        run: |
-          set -euo pipefail
-          mkdir -p pilot-migration-evidence
-          pg_dump --schema-only --no-owner --no-privileges \
-            --schema erp_automation_reads \
-            --schema erp_master_commands \
-            "$PSYCOPG_DATABASE_URL" \
-            > pilot-migration-evidence/pre-migration-functions.sql
-          psql -X -Atq "$PSYCOPG_DATABASE_URL" \
-            -c 'SELECT version_num FROM public.alembic_version' \
-            > pilot-migration-evidence/pre-migration-alembic-version.txt
-          test -s pilot-migration-evidence/pre-migration-functions.sql
-          test -s pilot-migration-evidence/pre-migration-alembic-version.txt
-
-      - name: Migrate the persistent pilot in place
-        run: |
-          set -euo pipefail
-          cleanup_migration_membership() {
-            bash backend/scripts/revoke_staging_postgres_set_roles.sh migration-owner
-          }
-          cleanup_migration_on_exit() {
-            prior_status=$?
-            trap - EXIT
-            if ! cleanup_migration_membership; then
-              echo "temporary migration-owner delegation cleanup failed" >&2
-              exit 1
-            fi
-            exit "$prior_status"
-          }
-          trap cleanup_migration_on_exit EXIT
-          psql -X -v ON_ERROR_STOP=1 "$PSYCOPG_DATABASE_URL" \
-            -c 'GRANT erp_migration_owner TO postgres WITH SET TRUE, INHERIT FALSE' \
+          touch "$PILOT_SSH_AGENT_STARTED"
+          ssh-add "$PILOT_SSH_PRIVATE_KEY" >/dev/null
+          railway ssh keys add \
+            --key "$fingerprint" \
+            --name "railway-pilot-open-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
             >/dev/null
-          (
-            cd backend
-            alembic -c alembic.ini upgrade head
-            alembic -c alembic.ini upgrade head
-          )
-          cleanup_migration_membership
-          trap - EXIT
 
-      - name: Verify exact revision and runtime function authority
+      - name: Open and attest the exact persistent pilot boundary
         run: |
           set -euo pipefail
-          test "$(psql -X -Atqc \
-            'SELECT version_num FROM public.alembic_version' \
-            "$PSYCOPG_DATABASE_URL")" = "$EXPECTED_ALEMBIC_HEAD"
-          authority_state=$(psql -X -Atq "$PSYCOPG_DATABASE_URL" <<'SQL'
-          SELECT concat_ws('|',
-            to_regprocedure(
-              'erp_automation_reads.sales_invoice_product_identity(uuid,uuid)'
-            ) IS NOT NULL,
-            to_regprocedure(
-              'erp_master_commands.create_customer(uuid,text,text,text,text,text,text,text,text,text,text,text,text,numeric,integer,bytea,timestamptz)'
-            ) IS NOT NULL,
-            to_regprocedure(
-              'erp_master_commands.create_supplier(uuid,text,text,text,text,text,text,text,text,text,text,text,integer,bytea,timestamptz)'
-            ) IS NOT NULL,
-            has_function_privilege(
-              'erp_runtime',
-              'erp_automation_reads.sales_invoice_product_identity(uuid,uuid)',
-              'EXECUTE'
-            ),
-            (
-              SELECT owner_role.rolname = 'erp_migration_owner'
-                 AND NOT EXISTS (
-                   SELECT 1
-                     FROM pg_catalog.aclexplode(function_definition.proacl) acl
-                    WHERE acl.grantee = 0
-                      AND acl.privilege_type = 'EXECUTE'
-                 )
-                FROM pg_catalog.pg_proc function_definition
-                JOIN pg_catalog.pg_roles owner_role
-                  ON owner_role.oid = function_definition.proowner
-               WHERE function_definition.oid = to_regprocedure(
-                 'erp_automation_reads.sales_invoice_product_identity(uuid,uuid)'
-               )
-            )
-          );
-          SQL
-          )
-          test "$authority_state" = 'true|true|true|true|true'
+          instance_id=''
+          for attempt in $(seq 1 12); do
+            railway status \
+              --project "$RAILWAY_PROJECT_ID" \
+              --environment "$RAILWAY_ENVIRONMENT_ID" \
+              --json > "$RUNNER_TEMP/railway-pilot-open-status.json"
+            instance_id=$(jq -er \
+              --arg environment "$RAILWAY_ENVIRONMENT_ID" \
+              --arg service "$RAILWAY_API_SERVICE" \
+              --arg deployment "$API_DEPLOYMENT_ID" '
+                [.environments.edges[].node
+                 | select(.id == $environment)
+                 | .serviceInstances.edges[].node
+                 | select(.serviceName == $service)
+                 | .activeDeployments[]
+                 | select(.id == $deployment)
+                 | select(.status == "SUCCESS" and .deploymentStopped == false)
+                 | .instances[]
+                 | select(.status == "RUNNING")
+                 | .id]
+                | if length == 1 then .[0] else error("expected one exact API instance") end
+              ' "$RUNNER_TEMP/railway-pilot-open-status.json" 2>/dev/null || true)
+            test -n "$instance_id" && break
+            test "$attempt" -lt 12
+            sleep 5
+          done
+          [[ "$instance_id" =~ ^[0-9a-f-]{36}$ ]]
+          host_sha=$(railway ssh \
+            --project "$RAILWAY_PROJECT_ID" \
+            --environment "$RAILWAY_ENVIRONMENT_ID" \
+            --service "$RAILWAY_API_SERVICE" \
+            --deployment-instance "$instance_id" \
+            --identity-file "$PILOT_SSH_PRIVATE_KEY" \
+            -- printenv RAILWAY_GIT_COMMIT_SHA)
+          test "$host_sha" = "$REVIEWED_SHA"
+          request="$RUNNER_TEMP/railway-pilot-open-request.json"
+          response="$RUNNER_TEMP/railway-pilot-open-response.json"
+          request_nonce=$(openssl rand -hex 32)
           jq -n \
-            --arg reviewed_sha "$REVIEWED_SHA" \
-            --arg from_revision "$PREFLIGHT_ALEMBIC_REVISION" \
-            --arg to_revision "$EXPECTED_ALEMBIC_HEAD" \
-            --arg completed_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            '{contract_version:"persistent-pilot-in-place-migration-v1",
-              state:"verified", reviewed_sha:$reviewed_sha,
-              from_revision:$from_revision, to_revision:$to_revision,
-              completed_at:$completed_at, data_reset:false,
-              fixtures_loaded:false}' \
-            > pilot-migration-evidence/migration-receipt.json
+            --arg expected_sha "$REVIEWED_SHA" \
+            --arg project_ref "$CANONICAL_STAGING_PROJECT_REF" \
+            --arg production_project_refs "$CANONICAL_PRODUCTION_PROJECT_REFS" \
+            --arg run_id "$GITHUB_RUN_ID" \
+            --arg run_attempt "$GITHUB_RUN_ATTEMPT" \
+            --arg request_nonce "$request_nonce" \
+            --arg deployment_id "$API_DEPLOYMENT_ID" \
+            --arg deployment_instance_id "$instance_id" \
+            --arg host_deployed_sha "$host_sha" \
+            --arg password "$SUPABASE_DB_PASSWORD" \
+            '{schema:"aasopharma.railway-reset-control-request.v1",
+              expected_sha:$expected_sha,project_ref:$project_ref,
+              production_project_refs:$production_project_refs,
+              run_id:$run_id,run_attempt:$run_attempt,request_nonce:$request_nonce,
+              deployment_id:$deployment_id,deployment_instance_id:$deployment_instance_id,
+              host_deployed_sha:$host_deployed_sha,
+              execution_source:"exact_railway_deployment",source_archive_sha256:"",
+              secrets:{SUPABASE_DB_PASSWORD:$password}}' > "$request"
+          chmod 600 "$request"
+          railway ssh \
+            --project "$RAILWAY_PROJECT_ID" \
+            --environment "$RAILWAY_ENVIRONMENT_ID" \
+            --service "$RAILWAY_API_SERVICE" \
+            --deployment-instance "$instance_id" \
+            --identity-file "$PILOT_SSH_PRIVATE_KEY" \
+            -- python scripts/railway_reset_control_plane.py open-fence \
+              --input - --output - \
+            < "$request" > "$response"
+          PYTHONPATH=backend python3 - "$request" "$response" <<'PY'
+          import json
+          from pathlib import Path
+          import sys
+          from scripts.railway_reset_control_plane import verify_response
 
-      - name: Upload bounded migration evidence
-        uses: actions/upload-artifact@v4
+          request = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          response = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+          verify_response(response, request, action="open-fence")
+          result = response["result"]
+          closure = result["evidence_writer_closure"]
+          if not (
+              result["write_fence"]["state"] == "open"
+              and result["write_fence"]["commit_sha"] == request["expected_sha"]
+              and closure["membership_open"] is False
+              and closure["role_posture_safe"] is True
+              and closure["unexpected_member_count"] == 0
+              and closure["inherited_role_count"] == 0
+          ):
+              raise SystemExit("persistent pilot open-fence receipt is incomplete")
+          Path("railway-persistent-pilot-open.json").write_text(
+              json.dumps(response, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          PY
+          rm -f "$request" "$response"
+
+      - name: Verify public API and MCP readiness
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 30); do
+            api_ready=$(curl --fail-with-body --silent --show-error \
+              --max-time 15 "$RAILWAY_API_URL/ready" || true)
+            mcp_ready=$(curl --fail-with-body --silent --show-error \
+              --max-time 15 "$RAILWAY_MCP_URL/ready" || true)
+            if jq -e '.status == "ready"' <<<"$api_ready" >/dev/null 2>&1 && \
+               jq -e '.status == "ready"' <<<"$mcp_ready" >/dev/null 2>&1; then
+              exit 0
+            fi
+            test "$attempt" -lt 30
+            sleep 2
+          done
+          exit 1
+
+      - uses: actions/upload-artifact@v4
         with:
-          name: persistent-pilot-migration-${{ inputs.reviewed_sha }}
-          path: pilot-migration-evidence/
+          name: persistent-pilot-open-${{ inputs.reviewed_sha }}
+          path: railway-persistent-pilot-open.json
           if-no-files-found: error
           retention-days: 14
+
+      - name: Remove the run-scoped Railway SSH key
+        if: always()
+        run: |
+          set -euo pipefail
+          if test -s "$PILOT_SSH_FINGERPRINT"; then
+            fingerprint=$(<"$PILOT_SSH_FINGERPRINT")
+            railway ssh keys remove "$fingerprint" >/dev/null 2>&1 || true
+            for attempt in $(seq 1 12); do
+              railway ssh keys list > "$RUNNER_TEMP/railway-pilot-open-keys.txt"
+              if ! grep -F -- "$fingerprint" \
+                "$RUNNER_TEMP/railway-pilot-open-keys.txt" >/dev/null; then
+                break
+              fi
+              test "$attempt" -lt 12
+              sleep 2
+            done
+          fi
+          if test -f "$PILOT_SSH_AGENT_STARTED"; then
+            ssh-add -D >/dev/null 2>&1 || true
+            ssh-agent -k >/dev/null 2>&1 || true
+          fi
+          rm -f "$PILOT_SSH_PRIVATE_KEY" "$PILOT_SSH_PRIVATE_KEY.pub" \
+            "$PILOT_SSH_FINGERPRINT" "$PILOT_SSH_AGENT_STARTED"
