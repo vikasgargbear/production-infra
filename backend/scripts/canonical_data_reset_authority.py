@@ -1274,8 +1274,11 @@ def execute_organization_purge(
                 delete_plan.temporarily_deferred_constraints,
                 enabled=True,
             )
-            cursor.execute("SET CONSTRAINTS ALL DEFERRED")
             _set_delete_triggers(cursor, delete_triggers, enabled=False)
+            # This must be the final ALTER/constraint-mode operation before
+            # tenant deletion. Subsequent ALTER TABLE trigger commands can
+            # force pending checks back through PostgreSQL's immediate path.
+            cursor.execute("SET CONSTRAINTS ALL DEFERRED")
             organization_deleted = 0
             for relation in delete_order:
                 key_column = "id" if relation == "core.organizations" else "org_id"
