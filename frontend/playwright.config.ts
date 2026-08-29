@@ -43,7 +43,7 @@ export default defineConfig({
   projects: [
     {
       name: 'desktop-chrome',
-      testMatch: /(?:canonical-read-surfaces|customer-receipt-operator|live-production-smoke|live-canonical-core-api|live-canonical-core-ui|live-canonical-stock-transfer|live-sales-chain-api|live-sales-chain-ui|live-two-user-approval|live-history-gst-readonly|live-stock-hub-ui)\.spec\.ts/,
+      testMatch: /(?:canonical-read-surfaces|customer-receipt-operator|drug-license-setup|live-production-smoke|live-canonical-core-api|live-canonical-core-ui|live-canonical-stock-transfer|live-sales-chain-api|live-sales-chain-ui|live-two-user-approval|live-history-gst-readonly|live-stock-hub-ui)\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         ...(browserChannel ? { channel: browserChannel } : {})

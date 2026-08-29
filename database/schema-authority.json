@@ -160,6 +160,8 @@
     "backend/alembic/versions/20260829_0059_grn_batch_release.py",
     "backend/alembic/sql/20260829_0059_grn_batch_release.sql",
     "backend/scripts/generate_grn_batch_release_migration.py",
+    "backend/alembic/versions/20260829_0060_canonical_drug_license_onboarding.py",
+    "backend/alembic/sql/20260829_0060_canonical_drug_license_onboarding.sql",
     "backend/scripts/generate_master_create_account_role_resolution_migration.py",
     "database/canonical/operations/automation/requester_command_status.sql",
     "backend/scripts/generate_requester_command_status_migration.py",

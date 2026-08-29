@@ -31,6 +31,7 @@ OPERATOR_TOOL_DESCRIPTIONS: Mapping[str, str] = {
     "erp_supplier_create": "Create one canonical supplier with a server-allocated immutable supplier code and exact replay protection.",
     "erp_customer_update": "Patch one canonical customer account with exact row-version concurrency and replay protection; addresses and GST registrations remain separate canonical subresources.",
     "erp_supplier_update": "Patch one canonical supplier account with exact row-version concurrency and replay protection; addresses and GST registrations remain separate canonical subresources.",
+    "erp_drug_license_record": "Record one reviewed effective Form 20B or 21B for a selected branch or supplier using already verified PDF evidence; Schedule X and NDPS authority is never implied.",
     "erp_sales_order_prepare": "Prepare a customer sales order with exact UOM, quantity, price, discount, and backend-derived India tax facts without posting it.",
     "erp_sales_dispatch_prepare": "Prepare a delivery challan and physical dispatch against an approved sales order using exact released batches.",
     "erp_sales_invoice_prepare": "Prepare an India GST sales invoice with exact fulfillment, discount, batch, and logistics facts without posting it.",

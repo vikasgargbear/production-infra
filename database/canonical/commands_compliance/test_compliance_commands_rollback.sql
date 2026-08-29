@@ -3,7 +3,7 @@
 BEGIN;
 
 DO $compliance_command_contract$
-DECLARE bad_count integer; runtime_count integer;
+DECLARE bad_count integer; runtime_count integer; license_command_count integer;
 BEGIN
     SELECT count(*) INTO bad_count
       FROM pg_catalog.pg_proc procedure
@@ -24,10 +24,18 @@ BEGIN
          'post_destruction','post_expense_claim','record_controlled_substance_entry',
          'post_recall_inventory_action','submit_expense_claim','verify_organization_fiscal_tax_fact',
          'post_withholding','reverse_withholding','post_withholding_deposit',
-         'file_withholding_statement','import_withholding_certificate')
+         'file_withholding_statement','import_withholding_certificate',
+         'record_effective_wholesale_license')
        AND pg_catalog.has_function_privilege('erp_runtime',procedure.oid,'EXECUTE');
-    IF runtime_count<>16 THEN
-        RAISE EXCEPTION 'expected sixteen reviewed runtime compliance commands, found %',runtime_count;
+    SELECT count(*) INTO license_command_count
+      FROM pg_catalog.pg_proc procedure
+      JOIN pg_catalog.pg_namespace namespace ON namespace.oid=procedure.pronamespace
+     WHERE namespace.nspname='erp_compliance_commands'
+       AND procedure.proname='record_effective_wholesale_license';
+    IF license_command_count NOT IN (0,1)
+       OR runtime_count<>16+license_command_count THEN
+        RAISE EXCEPTION 'reviewed runtime compliance command surface is incomplete: % commands, % licence functions',
+          runtime_count,license_command_count;
     END IF;
 
     SELECT count(*) INTO bad_count
@@ -39,7 +47,8 @@ BEGIN
          'post_destruction','post_expense_claim','record_controlled_substance_entry',
          'post_recall_inventory_action','submit_expense_claim','verify_organization_fiscal_tax_fact',
          'post_withholding','reverse_withholding','post_withholding_deposit',
-         'file_withholding_statement','import_withholding_certificate')
+         'file_withholding_statement','import_withholding_certificate',
+         'record_effective_wholesale_license')
        AND (pg_catalog.has_function_privilege('erp_runtime',procedure.oid,'EXECUTE')
             OR pg_catalog.has_function_privilege('erp_app',procedure.oid,'EXECUTE')
             OR pg_catalog.has_function_privilege('public',procedure.oid,'EXECUTE'));

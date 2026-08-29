@@ -62,7 +62,7 @@ def test_master_code_migration_is_hash_bound_linear_and_deployed() -> None:
         "master_code_deployment_contract",
     )
     assert onboarding_revision.revision == "20260826_0028"
-    assert deployment.EXPECTED_CANONICAL_ALEMBIC_HEAD == "20260829_0059"
+    assert deployment.EXPECTED_CANONICAL_ALEMBIC_HEAD == "20260829_0060"
 
 
 def test_generated_authority_manifest_is_exact_and_post_baseline() -> None:
@@ -273,6 +273,7 @@ def test_rest_and_mcp_share_canonical_master_command_helpers() -> None:
         "parties.supplier.create",
         "parties.customer.update",
         "parties.supplier.update",
+        "compliance.wholesale_license.record",
     }
     assert all(
         policy.branch_fields == ()
@@ -281,10 +282,15 @@ def test_rest_and_mcp_share_canonical_master_command_helpers() -> None:
     assert mcp_master_contract.MASTER_WRITE_POLICIES[
         "catalog.product.activate"
     ].risk_class == "consequential_write"
+    assert mcp_master_contract.MASTER_WRITE_POLICIES[
+        "compliance.wholesale_license.record"
+    ].risk_class == "consequential_write"
     assert all(
         policy.risk_class == "reversible_write"
         for key, policy in mcp_master_contract.MASTER_WRITE_POLICIES.items()
-        if key != "catalog.product.activate"
+        if key not in {
+            "catalog.product.activate", "compliance.wholesale_license.record"
+        }
     )
 
 
