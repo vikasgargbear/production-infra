@@ -34,6 +34,7 @@ def uid(index: int) -> UUID:
 
 def sales_line() -> dict:
     return {
+        "fulfillment_source": "dispatch_allocated",
         "original_invoice_line_id": uid(1),
         "invoice_dispatch_allocation_id": uid(2),
         "dispatch_id": uid(3),
@@ -66,6 +67,7 @@ def sales_line() -> dict:
 def purchase_line() -> dict:
     value = sales_line()
     for key in (
+        "fulfillment_source",
         "original_invoice_line_id",
         "invoice_dispatch_allocation_id",
         "dispatch_id",
@@ -124,6 +126,7 @@ def posted() -> dict:
         "residual_open_item_amount": Decimal("12"),
         "lines": [{
             "return_line_id": uid(28),
+            "source_kind": "dispatch_allocated",
             "source_line_id": uid(29),
             "source_allocation_id": uid(30),
             "product_id": uid(31),
@@ -158,6 +161,30 @@ def posted() -> dict:
 def test_exact_sales_and_purchase_remainders_reconcile():
     assert SalesReturnableAllocation.model_validate(sales_line()).returnable_billed_quantity == Decimal("2.123456")
     assert PurchaseReturnableAllocation.model_validate(purchase_line()).average_unit_cost == Decimal("80.123456")
+
+
+def test_return_source_capabilities_are_derived_from_the_mcp_owned_contract():
+    sales = canonical_return_reads._return_source_capabilities("sales")
+    purchase = canonical_return_reads._return_source_capabilities("purchase")
+
+    assert [(item.source_kind, item.status) for item in sales] == [
+        ("dispatch_allocated", "supported"),
+        ("direct_issue", "blocked"),
+    ]
+    assert [(item.source_kind, item.status) for item in purchase] == [
+        ("invoiced", "supported"),
+        ("uninvoiced", "blocked"),
+    ]
+    direct = sales[1]
+    assert direct.code == "RETURN_SOURCE_AUTHORITY_UNAVAILABLE"
+    assert direct.retryable is False
+    assert "direct_issue_cumulative_return_ceiling" in direct.required_authority
+
+
+def test_posted_return_readback_exposes_exact_source_kind():
+    readback = PostedReturnReadback.model_validate(posted())
+    assert readback.lines[0].source_kind == "dispatch_allocated"
+    assert readback.lines[0].source_allocation_id == uid(30)
 
 
 def test_projection_rejects_non_reconciling_quantity():

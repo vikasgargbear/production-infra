@@ -147,6 +147,30 @@ async def test_tool_authorizes_app_owned_grant_then_uses_only_delegated_token() 
 
 
 @pytest.mark.asyncio
+async def test_product_master_search_uses_distinct_draft_aware_capability_and_route() -> None:
+    access = _access()
+    calls: list[tuple] = []
+    responses = [
+        Response(200, _grant(access, "erp_product_master_search")),
+        Response(200, [{
+            "product_id": str(uuid4()), "status": "draft",
+            "lifecycle_status": "draft", "row_version": 1,
+        }]),
+    ]
+    gateway = OperationGateway(settings(), lambda: Client(responses, calls))
+    arguments = {"q": "draft", "limit": 20, "offset": 0}
+
+    result = await gateway.execute(
+        OPERATIONS["erp_product_master_search"], access, arguments
+    )
+
+    assert result[0]["lifecycle_status"] == "draft"
+    assert calls[0][2]["json"]["capability_code"] == "master.product_catalog.search"
+    assert calls[1][1].endswith("/api/internal/mcp/reads/product-master")
+    assert calls[1][2]["params"] == arguments
+
+
+@pytest.mark.asyncio
 async def test_master_create_uses_scoped_write_grant_and_canonical_backend_route() -> None:
     access = _access()
     calls: list[tuple] = []
@@ -180,6 +204,98 @@ async def test_master_create_uses_scoped_write_grant_and_canonical_backend_route
     assert command_call[1].endswith("/api/internal/mcp/master/products")
     assert command_call[2]["json"] == arguments
     assert result["product_code"] == "PROD-000001"
+
+
+@pytest.mark.asyncio
+async def test_product_setup_uses_scoped_write_grant_and_shared_backend_route() -> None:
+    access = _access()
+    calls: list[tuple] = []
+    operation = OPERATOR_OPERATIONS["erp_product_setup"]
+    grant = _operator_grant(access, "erp_product_setup")
+    grant["permission_code"] = "catalog.product.manage"
+    grant["organization_scope"] = True
+    product_id = str(uuid4())
+    manufacturer_id = str(uuid4())
+    responses = [
+        Response(200, grant),
+        Response(200, {
+            "product_id": product_id,
+            "product_code": "PROD-000001",
+            "row_version": 2,
+            "lifecycle_status": "draft",
+        }),
+    ]
+    gateway = OperationGateway(settings(), lambda: Client(responses, calls))
+    arguments = {
+        "product_id": product_id,
+        "idempotency_key": "mcp-product-setup-0001",
+        "row_version": 1,
+        "manufacturer_party_id": manufacturer_id,
+        "base_uom_code": "EA",
+        "hsn_code": "3004",
+        "dosage_form": "Tablet",
+        "strength_display": "500 mg",
+        "pack_conversions": [{"uom_code": "STRIP", "multiplier": "10"}],
+        "ingredients": [],
+    }
+
+    result = await gateway.execute_operator(operation, access, arguments)
+
+    grant_call, command_call = calls
+    assert grant_call[2]["json"]["operation_key"] == "catalog.product_draft.configure"
+    assert grant_call[2]["json"]["operation_mode"] == "write"
+    assert grant_call[2]["json"]["branch_ids"] == []
+    assert command_call[0] == "POST"
+    assert command_call[1].endswith("/api/internal/mcp/master/products/setup")
+    assert command_call[2]["json"] == arguments
+    assert result["lifecycle_status"] == "draft"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("tool_name", "operation_key", "path", "identity_field"),
+    (
+        (
+            "erp_customer_update", "parties.customer.update",
+            "/api/internal/mcp/master/customers/update", "customer_id",
+        ),
+        (
+            "erp_supplier_update", "parties.supplier.update",
+            "/api/internal/mcp/master/suppliers/update", "supplier_id",
+        ),
+    ),
+)
+async def test_master_update_routes_versions_and_patch_through_scoped_grant(
+    tool_name: str, operation_key: str, path: str, identity_field: str,
+) -> None:
+    access = _access()
+    calls: list[tuple] = []
+    operation = OPERATOR_OPERATIONS[tool_name]
+    grant = _operator_grant(access, tool_name)
+    grant["permission_code"] = f"parties.{tool_name.split('_')[1]}.manage"
+    arguments = {
+        identity_field: str(uuid4()),
+        "account_row_version": 3,
+        "party_row_version": 4,
+        f"{tool_name.split('_')[1]}_name": "Canonical Updated Name",
+        "idempotency_key": f"mcp-{tool_name}-0001",
+    }
+    responses = [Response(200, grant), Response(200, arguments)]
+    gateway = OperationGateway(settings(), lambda: Client(responses, calls))
+
+    assert await gateway.execute_operator(operation, access, arguments) == arguments
+    grant_call, command_call = calls
+    assert grant_call[2]["json"]["operation_key"] == operation_key
+    assert command_call[0] == "POST"
+    assert command_call[1].endswith(path)
+    assert command_call[2]["json"] == arguments
+
+
+@pytest.mark.parametrize("tool_name", ("erp_customer_update", "erp_supplier_update"))
+def test_master_update_schema_requires_versions_and_a_mutable_field(tool_name: str) -> None:
+    schema = OPERATOR_OPERATIONS[tool_name].input_schema
+    assert {"account_row_version", "party_row_version", "idempotency_key"} <= set(schema["required"])
+    assert schema["anyOf"]
 
 
 @pytest.mark.asyncio

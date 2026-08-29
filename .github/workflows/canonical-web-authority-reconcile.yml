@@ -1,4 +1,4 @@
-name: Canonical staging web authority reconcile
+name: Canonical staging user authority reconcile
 
 on:
   workflow_dispatch:
@@ -7,8 +7,36 @@ on:
         description: Exact deployed Railway API SHA to bind to the authority receipt
         required: true
         type: string
+      authority_scope:
+        description: Reconcile the reviewed first-party web or ChatGPT MCP authority
+        required: true
+        default: web
+        type: choice
+        options:
+          - web
+          - mcp
+      mcp_client_id:
+        description: Exact deployed public OAuth client ID (required for MCP only)
+        required: false
+        type: string
+      subject_user_id:
+        description: Exact signed canonical ERP user ID (required for MCP only)
+        required: false
+        type: string
+      mcp_reviewed_sha:
+        description: Exact deployed Railway MCP SHA (required for MCP only)
+        required: false
+        type: string
+      mcp_tool_inventory_sha256:
+        description: Reviewed SHA-256 of the sorted deployed MCP tool inventory (required for MCP only)
+        required: false
+        type: string
+      consent_receipt_id:
+        description: Stable explicit-consent receipt identifier (required for MCP only)
+        required: false
+        type: string
       confirmation:
-        description: Type RECONCILE_CANONICAL_STAGING_WEB_AUTHORITY
+        description: Type the exact RECONCILE_CANONICAL_STAGING_{WEB|MCP}_AUTHORITY phrase
         required: true
         type: string
 
@@ -31,7 +59,15 @@ jobs:
       RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
       RAILWAY_ENVIRONMENT_ID: ${{ vars.RAILWAY_ENVIRONMENT_ID }}
       RAILWAY_API_SERVICE: ${{ vars.RAILWAY_API_SERVICE }}
+      RAILWAY_MCP_SERVICE: ${{ vars.RAILWAY_MCP_SERVICE }}
+      RAILWAY_MCP_ORIGIN: ${{ vars.RAILWAY_MCP_URL }}
       REVIEWED_SHA: ${{ inputs.reviewed_sha }}
+      AUTHORITY_SCOPE: ${{ inputs.authority_scope }}
+      MCP_CLIENT_ID: ${{ inputs.mcp_client_id }}
+      SUBJECT_USER_ID: ${{ inputs.subject_user_id }}
+      MCP_REVIEWED_SHA: ${{ inputs.mcp_reviewed_sha }}
+      MCP_TOOL_INVENTORY_SHA256: ${{ inputs.mcp_tool_inventory_sha256 }}
+      CONSENT_RECEIPT_ID: ${{ inputs.consent_receipt_id }}
       AUTHORITY_CONFIRMATION: ${{ inputs.confirmation }}
     steps:
       - uses: actions/checkout@v4
@@ -48,12 +84,32 @@ jobs:
           set -euo pipefail
           echo "SSH_PRIVATE_KEY=$RUNNER_TEMP/canonical-web-authority-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_ENV"
           echo "SSH_FINGERPRINT_PATH=$RUNNER_TEMP/canonical-web-authority-ssh-fingerprint" >> "$GITHUB_ENV"
+          echo "AUTHORITY_RECEIPT_PATH=$RUNNER_TEMP/canonical-user-authority-receipt.json" >> "$GITHUB_ENV"
           [[ "$REVIEWED_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$CANONICAL_STAGING_WEB_TEST_AUTH_USER_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]]
           test "$(git rev-parse HEAD)" = "$REVIEWED_SHA"
           git fetch origin main
           git merge-base --is-ancestor "$REVIEWED_SHA" origin/main
-          test "$AUTHORITY_CONFIRMATION" = RECONCILE_CANONICAL_STAGING_WEB_AUTHORITY
+          case "$AUTHORITY_SCOPE" in
+            web)
+              test "$AUTHORITY_CONFIRMATION" = RECONCILE_CANONICAL_STAGING_WEB_AUTHORITY
+              test -z "$MCP_CLIENT_ID"
+              test -z "$SUBJECT_USER_ID"
+              test -z "$MCP_REVIEWED_SHA"
+              test -z "$MCP_TOOL_INVENTORY_SHA256"
+              test -z "$CONSENT_RECEIPT_ID"
+              ;;
+            mcp)
+              test "$AUTHORITY_CONFIRMATION" = RECONCILE_CANONICAL_STAGING_MCP_AUTHORITY
+              [[ "$MCP_CLIENT_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]]
+              [[ "$SUBJECT_USER_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]]
+              [[ "$MCP_REVIEWED_SHA" =~ ^[0-9a-f]{40}$ ]]
+              [[ "$MCP_TOOL_INVENTORY_SHA256" =~ ^[0-9a-f]{64}$ ]]
+              [[ "$CONSENT_RECEIPT_ID" =~ ^[A-Za-z0-9._:-]{16,200}$ ]]
+              git merge-base --is-ancestor "$MCP_REVIEWED_SHA" origin/main
+              ;;
+            *) exit 2 ;;
+          esac
           test "$CANONICAL_STAGING_PROJECT_REF" = rgihahbmkrmhitjdjvev
           case ",$CANONICAL_PRODUCTION_PROJECT_REFS," in
             *",$CANONICAL_STAGING_PROJECT_REF,"*)
@@ -62,6 +118,8 @@ jobs:
               ;;
           esac
           test "$RAILWAY_API_SERVICE" = aasopharma-api-pilot
+          test "$RAILWAY_MCP_SERVICE" = aasopharma-mcp-pilot
+          test "$RAILWAY_MCP_ORIGIN" = https://aasopharma-mcp-pilot-production.up.railway.app
           test -n "$RAILWAY_PROJECT_ID"
           test -n "$RAILWAY_ENVIRONMENT_ID"
 
@@ -105,6 +163,31 @@ jobs:
           railway ssh keys add --key "$fingerprint" --name "$key_name" >/dev/null
           railway ssh keys list > "$RUNNER_TEMP/canonical-web-authority-ssh-keys.txt"
           grep -F -- "$fingerprint" "$RUNNER_TEMP/canonical-web-authority-ssh-keys.txt" >/dev/null
+
+      - name: Attest the exact active MCP authority
+        if: env.AUTHORITY_SCOPE == 'mcp'
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          railway variables \
+            --project "$RAILWAY_PROJECT_ID" \
+            --environment "$RAILWAY_ENVIRONMENT_ID" \
+            --service "$RAILWAY_MCP_SERVICE" \
+            --json | jq --exit-status --arg client "$MCP_CLIENT_ID" \
+              '.MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS == $client' >/dev/null
+          curl --fail --silent --show-error --max-time 30 \
+            "$RAILWAY_MCP_ORIGIN/health" \
+            | jq --exit-status --arg sha "$MCP_REVIEWED_SHA" \
+              '.status == "ok" and .git_commit == $sha' >/dev/null
+          mcp_ready="$RUNNER_TEMP/canonical-mcp-ready.json"
+          curl --fail --silent --show-error --max-time 30 \
+            "$RAILWAY_MCP_ORIGIN/ready" > "$mcp_ready"
+          jq --exit-status '.status == "ready" and (.tools | length) == 64' \
+            "$mcp_ready" >/dev/null
+          observed_inventory_sha256=$(jq -cS '.tools | sort' "$mcp_ready" | sha256sum \
+            | awk '{print $1}')
+          test "$observed_inventory_sha256" = "$MCP_TOOL_INVENTORY_SHA256"
 
       - name: Resolve and attest the exact active API instance
         env:
@@ -167,13 +250,23 @@ jobs:
             --arg production_refs "$CANONICAL_PRODUCTION_PROJECT_REFS" \
             --arg password "$SUPABASE_DB_PASSWORD" \
             --arg auth_user_id "$CANONICAL_STAGING_WEB_TEST_AUTH_USER_ID" \
+            --arg authority_scope "$AUTHORITY_SCOPE" \
+            --arg mcp_client_id "$MCP_CLIENT_ID" \
+            --arg subject_user_id "$SUBJECT_USER_ID" \
+            --arg mcp_reviewed_sha "$MCP_REVIEWED_SHA" \
+            --arg mcp_tool_inventory_sha256 "$MCP_TOOL_INVENTORY_SHA256" \
+            --arg consent_receipt_id "$CONSENT_RECEIPT_ID" \
             '{expected_sha:$expected_sha,project_ref:$project_ref,
               production_project_refs:$production_refs,password:$password,
-              auth_user_id:$auth_user_id}' > "$request"
+              auth_user_id:$auth_user_id,authority_scope:$authority_scope,
+              mcp_client_id:$mcp_client_id,subject_user_id:$subject_user_id,
+              mcp_reviewed_sha:$mcp_reviewed_sha,
+              mcp_tool_inventory_sha256:$mcp_tool_inventory_sha256,
+              consent_receipt_id:$consent_receipt_id}' > "$request"
           remote_code=$(python3 - <<'PY'
           print(r'''
-          import hashlib
           import json
+          import hashlib
           import os
           import re
           import sys
@@ -185,12 +278,16 @@ jobs:
           sys.path.insert(0, "/app/backend")
           from app.domain.operator_actions.contract import ACTION_POLICIES
           from scripts.provision_staging_mcp_oauth import (
+              CLIENT_NAME,
               DEMO_ORG_ID,
+              READ_CAPABILITIES,
               REVIEWER_AUTH_USER_ID,
               REVIEWER_MEMBERSHIP_ID,
+              STATUS_CAPABILITY,
               TEST_REQUEST_ID,
               WEB_CLIENT_ID,
               WEB_CLIENT_NAME,
+              WRITE_CAPABILITIES,
               _attest_reviewed_database,
               _enter_migration_owner,
               _leave_migration_owner,
@@ -208,8 +305,44 @@ jobs:
           if os.environ.get("RAILWAY_GIT_COMMIT_SHA") != value["expected_sha"]:
               raise SystemExit("active deployment differs from reviewed SHA")
           auth_user_id = str(UUID(value["auth_user_id"]))
+          authority_scope = value["authority_scope"]
+          if authority_scope == "web":
+              if (
+                  value["mcp_client_id"]
+                  or value["subject_user_id"]
+                  or value["consent_receipt_id"]
+              ):
+                  raise SystemExit("web authority must not accept MCP identity inputs")
+              consent_receipt_id = None
+              subject_user_id = None
+              target_subject_key = auth_user_id
+              target_client_id = WEB_CLIENT_ID
+              target_client_name = WEB_CLIENT_NAME
+              consent_version = "staging-web-manual-v1"
+              consent_text = "canonical staging bounded manual web command consent"
+          elif authority_scope == "mcp":
+              consent_receipt_id = value["consent_receipt_id"]
+              if not re.fullmatch(r"[A-Za-z0-9._:-]{16,200}", consent_receipt_id):
+                  raise SystemExit("MCP consent receipt identifier is invalid")
+              subject_user_id = str(UUID(value["subject_user_id"]))
+              target_subject_key = subject_user_id
+              target_client_id = str(UUID(value["mcp_client_id"]))
+              configured_clients = {
+                  item.strip()
+                  for item in os.environ.get(
+                      "MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS", ""
+                  ).split(",")
+                  if item.strip()
+              }
+              if configured_clients != {target_client_id}:
+                  raise SystemExit("MCP client differs from the exact deployed authority")
+              target_client_name = CLIENT_NAME
+              consent_version = "staging-chatgpt-mcp-manual-v1"
+              consent_text = "canonical staging bounded ChatGPT MCP command consent"
+          else:
+              raise SystemExit("authority scope is invalid")
 
-          prepare_operations = (
+          web_prepare_operations = (
               "sales.order.prepare",
               "sales.dispatch.prepare",
               "sales.invoice.prepare",
@@ -219,38 +352,83 @@ jobs:
               "sales.return.prepare",
               "finance.adjustment_note.prepare",
           )
-          if any(operation not in ACTION_POLICIES for operation in prepare_operations):
+          requested_write_operations = (
+              web_prepare_operations
+              if authority_scope == "web"
+              else tuple(operation for operation, _ in WRITE_CAPABILITIES)
+          )
+          policy_operations = tuple(
+              operation
+              for operation in requested_write_operations
+              if operation not in {
+                  "automation.command.approve",
+                  "automation.command.execute",
+              }
+          )
+          if any(operation not in ACTION_POLICIES for operation in policy_operations):
               raise SystemExit("deployed API omits a requested sales lifecycle policy")
-          capability_rows = [
-              (
-                  operation,
-                  "write",
-                  ACTION_POLICIES[operation].risk_class,
-                  ACTION_POLICIES[operation].approval_policy,
-                  "1000000.00",
-                  "INR",
+          if authority_scope == "web":
+              capability_rows = [
+                  (
+                      operation,
+                      "write",
+                      ACTION_POLICIES[operation].risk_class,
+                      ACTION_POLICIES[operation].approval_policy,
+                      "1000000.00",
+                      "INR",
+                      False,
+                  )
+                  for operation in web_prepare_operations
+              ]
+              capability_rows.extend((
+                  ("automation.command.approve", "write", "consequential_write", "actor_confirmation", None, None, False),
+                  ("automation.command.execute", "write", "consequential_write", "actor_confirmation", None, None, False),
+                  (STATUS_CAPABILITY, "read", "read_only", "none", None, None, False),
+              ))
+          else:
+              capability_rows = [
+                  (capability, "read", "read_only", "none", None, None, allow_sensitive)
+                  for capability, allow_sensitive in READ_CAPABILITIES
+              ]
+              for operation, reviewed_approval in WRITE_CAPABILITIES:
+                  if operation in {
+                      "automation.command.approve",
+                      "automation.command.execute",
+                  }:
+                      risk_class = "consequential_write"
+                      approval_policy = "actor_confirmation"
+                  else:
+                      policy = ACTION_POLICIES[operation]
+                      risk_class = policy.risk_class
+                      approval_policy = policy.approval_policy
+                  if (
+                      risk_class != "consequential_write"
+                      or approval_policy != reviewed_approval
+                  ):
+                      raise SystemExit(
+                          "deployed MCP policy differs from the reviewed envelope"
+                      )
+                  capability_rows.append((
+                      operation,
+                      "write",
+                      risk_class,
+                      approval_policy,
+                      "1000000.00",
+                      "INR",
+                      False,
+                  ))
+              capability_rows.append(
+                  (STATUS_CAPABILITY, "read", "read_only", "none", None, None, False)
               )
-              for operation in prepare_operations
-          ]
-          capability_rows.extend((
-              ("automation.command.approve", "write", "consequential_write", "actor_confirmation", None, None),
-              ("automation.command.execute", "write", "consequential_write", "actor_confirmation", None, None),
-              ("automation.command.status.get", "read", "read_only", "none", None, None),
-          ))
           capability_codes = tuple(row[0] for row in capability_rows)
           if len(capability_codes) != len(set(capability_codes)):
-              raise SystemExit("web authority capability envelope is ambiguous")
-
+              raise SystemExit("user authority capability envelope is ambiguous")
           database_url = (
               "postgresql://postgres:" + quote(value["password"], safe="")
               + "@db." + value["project_ref"]
               + ".supabase.co:5432/postgres?sslmode=require&gssencmode=disable"
-              + "&connect_timeout=15&application_name=canonical_web_authority_reconcile"
+              + "&connect_timeout=15&application_name=canonical_user_authority_reconcile"
           )
-          grant_id = str(uuid5(
-              NAMESPACE_URL,
-              f"canonical-staging-reviewed-web-agent:{DEMO_ORG_ID}:{auth_user_id}",
-          ))
           with psycopg2.connect(database_url) as connection:
               with connection.cursor() as cursor:
                   _attest_reviewed_database(cursor)
@@ -266,39 +444,97 @@ jobs:
                           cursor.execute("SELECT set_config(%s,%s,true)", (name, setting))
                       cursor.execute(
                           """
-                          SELECT user_row.id::text,membership.id::text
+                          SELECT organization.id::text,user_row.id::text,
+                                 user_row.auth_user_id::text,membership.id::text
                             FROM core.users AS user_row
                             JOIN core.memberships AS membership
                               ON membership.user_id=user_row.id
-                             AND membership.org_id=%s
                             JOIN core.organizations AS organization
                               ON organization.id=membership.org_id
-                           WHERE user_row.auth_user_id=%s
+                           WHERE ((%s='web' AND membership.org_id=%s
+                                                AND user_row.auth_user_id=%s)
+                                  OR (%s='mcp' AND user_row.id=%s))
                              AND user_row.status='active'
+                             AND user_row.auth_user_id IS NOT NULL
                              AND membership.status='active'
+                             AND membership.joined_at IS NOT NULL
+                             AND membership.revoked_at IS NULL
                              AND organization.status='active'
                              AND EXISTS (
                                  SELECT 1 FROM core.access_grants AS access_grant
                                   WHERE access_grant.org_id=membership.org_id
                                     AND access_grant.membership_id=membership.id
+                                    AND access_grant.scope_kind='organization'
+                                    AND access_grant.branch_id IS NULL
                                     AND access_grant.status='active'
                                     AND access_grant.valid_from_at<=transaction_timestamp()
                                     AND (access_grant.expires_at IS NULL
                                          OR access_grant.expires_at>transaction_timestamp())
                              )
-                           ORDER BY user_row.id,membership.id
+                           ORDER BY organization.id,user_row.id,membership.id
                            LIMIT 2
                           """,
-                          (DEMO_ORG_ID, auth_user_id),
+                          (
+                              authority_scope,
+                              DEMO_ORG_ID,
+                              auth_user_id,
+                              authority_scope,
+                              subject_user_id,
+                          ),
                       )
                       bindings = cursor.fetchall()
                       if len(bindings) != 1:
                           raise SystemExit(
-                              "reviewed web identity lacks one active canonical membership authority"
+                              "reviewed user identity lacks one active canonical membership authority"
                           )
-                      _, membership_id = bindings[0]
-                      consent_text = b"canonical staging bounded manual web command consent"
-                      expected_consent_hash = hashlib.sha256(consent_text).hexdigest()
+                      (
+                          target_org_id,
+                          resolved_user_id,
+                          resolved_auth_user_id,
+                          membership_id,
+                      ) = bindings[0]
+                      if authority_scope == "mcp" and resolved_user_id != subject_user_id:
+                          raise SystemExit("reviewed canonical user identity changed")
+                      audit_membership_id = (
+                          REVIEWER_MEMBERSHIP_ID
+                          if authority_scope == "web"
+                          else membership_id
+                      )
+                      for name, setting in (
+                          ("app.org_id", target_org_id),
+                          ("app.auth_user_id", resolved_auth_user_id),
+                          ("app.membership_id", audit_membership_id),
+                      ):
+                          cursor.execute("SELECT set_config(%s,%s,true)", (name, setting))
+                      if authority_scope == "mcp":
+                          consent_text = json.dumps(
+                              {
+                                  "capabilities": capability_rows,
+                                  "canonical_user_id": resolved_user_id,
+                                  "client_id": target_client_id,
+                                  "contract": consent_version,
+                                  "consent_receipt_id": consent_receipt_id,
+                                  "lifetime_days": 30,
+                                  "organization_id": target_org_id,
+                                  "subject_auth_user_id": resolved_auth_user_id,
+                              },
+                              separators=(",", ":"),
+                              sort_keys=True,
+                          )
+                      consent_text_sha256 = hashlib.sha256(
+                          consent_text.encode("utf-8")
+                      ).hexdigest()
+                      grant_namespace = (
+                          f"canonical-staging-reviewed-web-agent:"
+                          f"{target_org_id}:{resolved_auth_user_id}"
+                          if authority_scope == "web"
+                          else f"canonical-staging-reviewed-mcp-agent:"
+                          f"{target_org_id}:{resolved_auth_user_id}:"
+                          f"{resolved_user_id}:{target_client_id}:"
+                          f"{consent_text_sha256}"
+                      )
+                      grant_id = str(uuid5(NAMESPACE_URL, grant_namespace))
+                      expected_consent_hash = consent_text_sha256
                       cursor.execute(
                           """
                           SELECT id::text
@@ -309,11 +545,11 @@ jobs:
                              AND expires_at>transaction_timestamp()
                            FOR UPDATE
                           """,
-                          (DEMO_ORG_ID, membership_id, WEB_CLIENT_ID, grant_id),
+                          (target_org_id, membership_id, target_client_id, grant_id),
                       )
                       if cursor.fetchone() is not None:
                           raise SystemExit(
-                              "another active reviewed web grant conflicts with the deterministic grant"
+                              "another active reviewed grant conflicts with the deterministic grant"
                           )
                       cursor.execute(
                           """
@@ -322,15 +558,20 @@ jobs:
                                  encode(consent_text_hash,'hex'),
                                  consented_by_membership_id::text,consented_at IS NOT NULL,
                                  granted_by_membership_id::text,granted_at IS NOT NULL,
-                                 expires_at,status,expires_at>transaction_timestamp()
+                                 expires_at,status,expires_at>transaction_timestamp(),
+                                 consented_at=granted_at,
+                                 expires_at=consented_at+interval '30 days',
+                                 created_by_membership_id::text,
+                                 updated_by_membership_id::text
                             FROM automation.agent_grants
                            WHERE org_id=%s AND id=%s
                            FOR UPDATE
                           """,
-                          (DEMO_ORG_ID, grant_id),
+                          (target_org_id, grant_id),
                       )
                       existing_grant = cursor.fetchone()
                       if existing_grant is None:
+                          reconciliation_outcome = "created"
                           cursor.execute(
                               """
                               INSERT INTO automation.agent_grants (
@@ -340,34 +581,49 @@ jobs:
                                   granted_at,expires_at,status,created_by_membership_id,
                                   updated_by_membership_id
                               ) VALUES (
-                                  %s,%s,%s,%s,%s,NULL,'self_consent','staging-web-manual-v1',
-                                  extensions.digest(
-                                      'canonical staging bounded manual web command consent','sha256'
-                                  ),
+                                  %s,%s,%s,%s,%s,NULL,'self_consent',%s,
+                                  extensions.digest(%s,'sha256'),
                                   %s,transaction_timestamp(),%s,transaction_timestamp(),
                                   transaction_timestamp()+interval '30 days','active',%s,%s
-                              )
+                              ) ON CONFLICT (org_id,id) DO NOTHING
                               """,
                               (
-                                  DEMO_ORG_ID,grant_id,membership_id,WEB_CLIENT_ID,WEB_CLIENT_NAME,
-                                  membership_id,REVIEWER_MEMBERSHIP_ID,
-                                  REVIEWER_MEMBERSHIP_ID,REVIEWER_MEMBERSHIP_ID,
+                                  target_org_id,grant_id,membership_id,target_client_id,
+                                  target_client_name,consent_version,consent_text,
+                                  membership_id,audit_membership_id,
+                                  audit_membership_id,audit_membership_id,
                               ),
                           )
                       else:
-                          observed_scope = existing_grant[:10]
-                          expected_scope = (
-                              membership_id,WEB_CLIENT_ID,None,'self_consent',
-                              'staging-web-manual-v1',expected_consent_hash,
-                              membership_id,True,REVIEWER_MEMBERSHIP_ID,True,
+                          reconciliation_outcome = "unchanged"
+                          observed_grant = (
+                              *existing_grant[:10],
+                              *existing_grant[11:],
                           )
-                          if observed_scope != expected_scope:
-                              raise SystemExit(
+                          expected_grant = (
+                              membership_id,target_client_id,None,'self_consent',
+                              consent_version,expected_consent_hash,
+                              membership_id,True,audit_membership_id,True,
+                              'active',True,True,True,
+                              audit_membership_id,audit_membership_id,
+                          )
+                          if observed_grant != expected_grant:
+                              scope_error = (
                                   "existing reviewed web grant immutable scope differs"
+                                  if authority_scope == "web"
+                                  else "existing consent receipt differs from the reviewed grant"
+                              )
+                              raise SystemExit(
+                                  scope_error
                               )
                           if existing_grant[11] != 'active' or not existing_grant[12]:
-                              raise SystemExit(
+                              active_error = (
                                   "existing reviewed web grant is not active and unexpired"
+                                  if authority_scope == "web"
+                                  else "existing reviewed MCP grant is not active and unexpired"
+                              )
+                              raise SystemExit(
+                                  active_error
                               )
                           cursor.execute(
                               """
@@ -379,8 +635,8 @@ jobs:
                                  AND client_display_name IS DISTINCT FROM %s
                               """,
                               (
-                                  WEB_CLIENT_NAME,REVIEWER_MEMBERSHIP_ID,
-                                  DEMO_ORG_ID,grant_id,WEB_CLIENT_NAME,
+                                  target_client_name,audit_membership_id,
+                                  target_org_id,grant_id,target_client_name,
                               ),
                           )
                       cursor.execute(
@@ -391,38 +647,43 @@ jobs:
                            WHERE org_id=%s AND agent_grant_id=%s
                              AND status='active' AND capability_code<>ALL(%s::varchar[])
                           """,
-                          (REVIEWER_MEMBERSHIP_ID, DEMO_ORG_ID, grant_id, list(capability_codes)),
+                          (audit_membership_id, target_org_id, grant_id, list(capability_codes)),
                       )
                       cursor.execute(
                           """
                           SELECT capability_code,operation_mode,risk_class,approval_policy,
-                                 maximum_amount::text,currency_code,allow_sensitive_read,status
+                                 maximum_amount::text,currency_code,allow_sensitive_read,status,
+                                 created_by_membership_id::text
                             FROM automation.agent_grant_capabilities
                            WHERE org_id=%s AND agent_grant_id=%s
                              AND capability_code=ANY(%s::varchar[])
                            FOR UPDATE
                           """,
-                          (DEMO_ORG_ID, grant_id, list(capability_codes)),
+                          (target_org_id, grant_id, list(capability_codes)),
                       )
                       existing_capabilities = {
                           row[0]: row[1:] for row in cursor.fetchall()
                       }
                       missing_capabilities = []
-                      for capability,mode,risk,approval,maximum_amount,currency in capability_rows:
+                      for capability,mode,risk,approval,maximum_amount,currency,allow_sensitive in capability_rows:
                           expected_capability = (
-                              mode,risk,approval,maximum_amount,currency,False,'active',
+                              mode,risk,approval,maximum_amount,currency,allow_sensitive,'active',
+                              audit_membership_id,
                           )
                           existing_capability = existing_capabilities.get(capability)
                           if existing_capability is None:
                               missing_capabilities.append(
                                   (
-                                      DEMO_ORG_ID,grant_id,capability,mode,risk,approval,
-                                      maximum_amount,currency,REVIEWER_MEMBERSHIP_ID,
+                                      target_org_id,grant_id,capability,mode,risk,approval,
+                                      maximum_amount,currency,allow_sensitive,
+                                      audit_membership_id,
                                   )
                               )
                           elif existing_capability != expected_capability:
                               raise SystemExit(
-                                  f"existing capability immutable scope differs: {capability}"
+                                  "existing capability immutable scope differs; "
+                                  "existing consent receipt capability envelope differs: "
+                                  f"{capability}"
                               )
                       if missing_capabilities:
                           cursor.executemany(
@@ -431,7 +692,8 @@ jobs:
                                   org_id,agent_grant_id,capability_code,operation_mode,
                                   risk_class,approval_policy,maximum_amount,currency_code,
                                   allow_sensitive_read,status,created_by_membership_id
-                              ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,false,'active',%s)
+                              ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,'active',%s)
+                              ON CONFLICT (org_id,agent_grant_id,capability_code) DO NOTHING
                               """,
                               missing_capabilities,
                           )
@@ -440,7 +702,9 @@ jobs:
                           SELECT grant_row.id::text,capability.capability_code,
                                  capability.operation_mode,capability.risk_class,
                                  capability.approval_policy,
-                                 capability.maximum_amount::text,capability.currency_code
+                                 capability.maximum_amount::text,capability.currency_code,
+                                 capability.allow_sensitive_read,
+                                 capability.created_by_membership_id::text
                             FROM automation.agent_grants AS grant_row
                             JOIN automation.agent_grant_capabilities AS capability
                               ON capability.org_id=grant_row.org_id
@@ -452,31 +716,40 @@ jobs:
                              AND grant_row.expires_at>transaction_timestamp()
                              AND grant_row.consented_by_membership_id=%s
                              AND capability.status='active'
-                             AND capability.allow_sensitive_read=false
                            ORDER BY capability.capability_code
                           """,
-                          (DEMO_ORG_ID, membership_id, WEB_CLIENT_ID, membership_id),
+                          (target_org_id, membership_id, target_client_id, membership_id),
                       )
                       readback = cursor.fetchall()
+                      expected_capabilities = sorted(
+                          (*row, audit_membership_id) for row in capability_rows
+                      )
                       expected = sorted(
-                          (
-                              grant_id,capability,mode,risk,approval,
-                              maximum_amount,currency,
-                          )
-                          for capability,mode,risk,approval,maximum_amount,currency
-                          in capability_rows
+                          (grant_id, *row) for row in expected_capabilities
                       )
                       if readback != expected:
-                          raise SystemExit("reviewed web authority did not reconcile exactly")
+                          raise SystemExit("reviewed user authority did not reconcile exactly")
                       cursor.execute(
                           """
                           SELECT expires_at
                             FROM automation.agent_grants
                            WHERE org_id=%s AND id=%s
                           """,
-                          (DEMO_ORG_ID, grant_id),
+                          (target_org_id, grant_id),
                       )
                       grant_expires_at = cursor.fetchone()[0].isoformat()
+                      cursor.execute(
+                          """
+                          SELECT consent_version,encode(consent_text_hash,'hex'),
+                                 expires_at::text,status
+                            FROM automation.agent_grants
+                           WHERE org_id=%s AND id=%s
+                          """,
+                          (target_org_id, grant_id),
+                      )
+                      grant_receipt = cursor.fetchone()
+                      if grant_receipt is None or grant_receipt[3] != "active":
+                          raise SystemExit("reviewed user authority receipt is unavailable")
                   except BaseException:
                       # Roll back grant changes and temporary role membership before
                       # propagating the root error; cleanup SQL cannot run in an
@@ -488,10 +761,22 @@ jobs:
           print(json.dumps({
               "status": "ready",
               "commit_sha": value["expected_sha"],
-              "client_id": WEB_CLIENT_ID,
+              "authority_scope": authority_scope,
+              "client_id": target_client_id,
+              "subject_user_id": resolved_user_id,
+              "subject_auth_user_id": resolved_auth_user_id,
+              "organization_id": target_org_id,
+              "mcp_commit_sha": value["mcp_reviewed_sha"] or None,
+              "mcp_tool_inventory_sha256": (
+                  value["mcp_tool_inventory_sha256"] or None
+              ),
               "grant_id": grant_id,
+              "reconciliation_outcome": reconciliation_outcome,
               "capability_count": len(capability_rows),
               "grant_expires_at": grant_expires_at,
+              "consent_version": grant_receipt[0],
+              "consent_text_sha256": grant_receipt[1],
+              "expires_at": grant_receipt[2],
           }, sort_keys=True))
           ''')
           PY
@@ -505,8 +790,98 @@ jobs:
             -- python -c "$remote_code" < "$request" > "$response"
           test "$(jq -r .status "$response")" = ready
           test "$(jq -r .commit_sha "$response")" = "$REVIEWED_SHA"
-          test "$(jq -r .client_id "$response")" = aasopharma-erp-web
-          test "$(jq -r .capability_count "$response")" = 11
+          test "$(jq -r .authority_scope "$response")" = "$AUTHORITY_SCOPE"
+          if test "$AUTHORITY_SCOPE" = mcp; then
+            test "$(jq -r .client_id "$response")" = "$MCP_CLIENT_ID"
+            test "$(jq -r .subject_user_id "$response")" = "$SUBJECT_USER_ID"
+            test "$(jq -r .mcp_commit_sha "$response")" = "$MCP_REVIEWED_SHA"
+            test "$(jq -r .mcp_tool_inventory_sha256 "$response")" = \
+              "$MCP_TOOL_INVENTORY_SHA256"
+            test "$(jq -r .capability_count "$response")" = 28
+          else
+            test "$(jq -r .client_id "$response")" = aasopharma-erp-web
+            test "$(jq -r .capability_count "$response")" = 11
+          fi
+          jq '{status,commit_sha,mcp_commit_sha,mcp_tool_inventory_sha256,
+               authority_scope,client_id,subject_user_id,subject_auth_user_id,organization_id,
+               grant_id,reconciliation_outcome,capability_count,consent_version,
+               consent_text_sha256,expires_at}' "$response" > "$AUTHORITY_RECEIPT_PATH"
+          test "$(wc -c < "$AUTHORITY_RECEIPT_PATH")" -le 4096
+
+      - name: Bind the exact MCP subject to its signed organization claim
+        if: env.AUTHORITY_SCOPE == 'mcp'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$SUPABASE_ACCESS_TOKEN"
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          import sys
+          from uuid import UUID
+
+          sys.path.insert(0, "backend")
+          from scripts.supabase_auth_admin import (
+              auth_admin_request,
+              mask_auth_admin_secret,
+              resolve_auth_admin_authority,
+          )
+
+          project_ref = os.environ["CANONICAL_STAGING_PROJECT_REF"]
+          receipt = json.loads(
+              Path(os.environ["AUTHORITY_RECEIPT_PATH"]).read_text(encoding="utf-8")
+          )
+          if receipt.get("status") != "ready" or receipt.get("authority_scope") != "mcp":
+              raise SystemExit("reviewed MCP authority receipt is unavailable")
+          subject_auth_user_id = str(UUID(receipt["subject_auth_user_id"]))
+          organization_id = str(UUID(receipt["organization_id"]))
+          authority = resolve_auth_admin_authority(
+              os.environ["SUPABASE_ACCESS_TOKEN"], project_ref
+          )
+          mask_auth_admin_secret(authority)
+          user = auth_admin_request(
+              authority, "GET", f"users/{subject_auth_user_id}"
+          )
+          if not isinstance(user, dict) or user.get("id") != subject_auth_user_id:
+              raise SystemExit("reviewed MCP Auth subject did not resolve exactly")
+          original_metadata = user.get("app_metadata")
+          if not isinstance(original_metadata, dict):
+              raise SystemExit("reviewed MCP Auth subject omitted application metadata")
+          expected_metadata = {**original_metadata, "org_id": organization_id}
+          claim_outcome = "unchanged"
+          if original_metadata != expected_metadata:
+              updated = auth_admin_request(
+                  authority,
+                  "PUT",
+                  f"users/{subject_auth_user_id}",
+                  payload={"app_metadata": expected_metadata},
+              )
+              if not isinstance(updated, dict) or updated.get("id") != subject_auth_user_id:
+                  raise SystemExit("reviewed MCP Auth subject update was ambiguous")
+              claim_outcome = "updated"
+          readback = auth_admin_request(
+              authority, "GET", f"users/{subject_auth_user_id}"
+          )
+          readback_metadata = readback.get("app_metadata") if isinstance(readback, dict) else None
+          if readback_metadata != expected_metadata:
+              raise SystemExit("reviewed MCP signed organization claim did not reconcile")
+          receipt["signed_organization_claim_outcome"] = claim_outcome
+          Path(os.environ["AUTHORITY_RECEIPT_PATH"]).write_text(
+              json.dumps(receipt, sort_keys=True) + "\n", encoding="utf-8"
+          )
+          print(json.dumps({"status": "ready", "outcome": claim_outcome}))
+          PY
+          test "$(wc -c < "$AUTHORITY_RECEIPT_PATH")" -le 4096
+
+      - name: Upload the secret-free authority receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: canonical-user-authority-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.AUTHORITY_RECEIPT_PATH }}
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Always remove the run-scoped Railway SSH key
         if: always()
@@ -520,4 +895,5 @@ jobs:
           fi
           ssh-add -D >/dev/null 2>&1 || true
           if test -n "${SSH_AGENT_PID:-}"; then ssh-agent -k >/dev/null 2>&1 || true; fi
-          rm -f "$SSH_PRIVATE_KEY" "$SSH_PRIVATE_KEY.pub" "$SSH_FINGERPRINT_PATH"
+          rm -f "$SSH_PRIVATE_KEY" "$SSH_PRIVATE_KEY.pub" "$SSH_FINGERPRINT_PATH" \
+            "$AUTHORITY_RECEIPT_PATH"

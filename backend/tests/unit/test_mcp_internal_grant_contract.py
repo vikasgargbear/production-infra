@@ -155,12 +155,20 @@ def test_exact_canonical_read_allowlist_has_no_write_or_generic_route():
         "finance.profit_loss.get",
         "finance.customer_activity.get",
         "master.products.search",
+        "master.product_catalog.search",
+        "master.product_setup_options.get",
+        "master.product_ingredients.search",
+        "master.product_hsn.search",
+        "master.product_setup.get",
         "master.suppliers.search",
+        "parties.customers.get",
+        "parties.suppliers.get",
         "gst.settings.get",
     }
     assert all(policy.path.startswith("/internal/mcp/reads/") for policy in CANONICAL_READ_POLICIES.values())
     assert all(policy.capability_code == policy.operation_key for policy in CANONICAL_READ_POLICIES.values())
     assert CANONICAL_READ_POLICIES["master.products.search"].permission_code == "catalog.product.manage"
+    assert CANONICAL_READ_POLICIES["master.product_catalog.search"].permission_code == "catalog.product.manage"
     assert CANONICAL_READ_POLICIES["master.suppliers.search"].sensitive_read is True
     route_paths = {route.path for route in mcp_canonical_reads.router.routes}
     assert route_paths == {
@@ -170,7 +178,14 @@ def test_exact_canonical_read_allowlist_has_no_write_or_generic_route():
         "/internal/mcp/reads/profit-loss",
         "/internal/mcp/reads/customer-activity",
         "/internal/mcp/reads/products",
+        "/internal/mcp/reads/product-master",
+        "/internal/mcp/reads/product-setup-options",
+        "/internal/mcp/reads/product-ingredients",
+        "/internal/mcp/reads/product-hsn",
+        "/internal/mcp/reads/product-setup",
         "/internal/mcp/reads/suppliers",
+        "/internal/mcp/reads/customer",
+        "/internal/mcp/reads/supplier",
         "/internal/mcp/reads/gst-settings",
     }
     assert all(route.include_in_schema is False for route in mcp_canonical_reads.router.routes)
@@ -216,7 +231,7 @@ def test_isolated_gateway_registry_matches_canonical_backend_contract():
         assert isinstance(tool_node, ast.Constant) and isinstance(operation_node, ast.Call)
         gateway[tool_node.value] = tuple(ast.literal_eval(argument) for argument in operation_node.args)
 
-    assert len(gateway) == 20
+    assert len(gateway) == 27
     assert {values[0] for values in gateway.values()} == set(
         ALL_CANONICAL_READ_POLICIES
     )
@@ -504,6 +519,22 @@ def test_three_hidden_reads_query_only_canonical_tables_with_bounds():
     assert product[0]["sku"] == "SKU-1"
     assert "FROM catalog.products" in product_db.calls[0][0]
     assert product_db.calls[0][1]["limit"] == 20
+    assert product_db.calls[0][1]["include_drafts"] is False
+
+    draft_id = uuid4()
+    master_product_db = _Database(
+        [[SimpleNamespace(_mapping={
+            "product_id": draft_id, "sku": "PROD-DRAFT", "name": "Draft product",
+            "status": "draft", "lifecycle_status": "draft", "row_version": 3,
+        })]]
+    )
+    master_product = mcp_canonical_reads.canonical_product_master_search(
+        "draft", 20, 0, _context("master.product_catalog.search"), master_product_db
+    )
+    assert master_product[0]["product_id"] == draft_id
+    assert master_product[0]["lifecycle_status"] == "draft"
+    assert master_product[0]["row_version"] == 3
+    assert master_product_db.calls[0][1]["include_drafts"] is True
 
     supplier_account_id = uuid4()
     supplier_db = _Database(
@@ -553,6 +584,95 @@ def test_three_hidden_reads_query_only_canonical_tables_with_bounds():
     assert gst["gstin"] == "27ABCDE1234F1Z5"
     assert "FROM tax.registrations" in gst_db.calls[0][0]
     assert gst_db.calls[0][1]["branch_id"] == branch_id
+
+
+def test_supplier_search_requires_selection_when_candidates_are_ambiguous():
+    candidates = []
+    for suffix in ("1", "2"):
+        candidates.append(
+            SimpleNamespace(
+                _mapping={
+                    "supplier_account_id": uuid4(),
+                    "supplier_code": f"SUP-{suffix}",
+                    "party_id": uuid4(),
+                    "legal_name": "Med Supplier",
+                    "trade_name": None,
+                    "payment_days": 30,
+                    "status": "active",
+                    "gstin": None,
+                    "phone": None,
+                    "email": None,
+                    "row_version": 1,
+                }
+            )
+        )
+    database = _Database([candidates])
+
+    result = mcp_canonical_reads.canonical_supplier_search(
+        "med", 50, 0, _context("master.suppliers.search", sensitive=True), database
+    )
+
+    assert result.match_state == "multiple_matches"
+    assert result.requires_selection is True
+    assert result.returned_count == 2
+    assert [candidate.supplier_code for candidate in result.suppliers] == [
+        "SUP-1",
+        "SUP-2",
+    ]
+
+
+def test_product_setup_reads_reuse_the_browser_canonical_contract(monkeypatch):
+    product_id = uuid4()
+    captured = []
+
+    monkeypatch.setattr(
+        mcp_canonical_reads.canonical_erp_reads,
+        "product_setup_options",
+        lambda manufacturer_search, user, db: captured.append(
+            ("options", manufacturer_search, user["org_id"], db)
+        ) or {"units": [], "manufacturers": []},
+    )
+    monkeypatch.setattr(
+        mcp_canonical_reads.canonical_erp_reads,
+        "product_setup_ingredients",
+        lambda search, limit, user, db: captured.append(
+            ("ingredients", search, limit, user["org_id"], db)
+        ) or [],
+    )
+    monkeypatch.setattr(
+        mcp_canonical_reads.canonical_erp_reads,
+        "product_setup_hsn_codes",
+        lambda search, limit, user, db: captured.append(
+            ("hsn", search, limit, user["org_id"], db)
+        ) or [],
+    )
+    monkeypatch.setattr(
+        mcp_canonical_reads.canonical_erp_reads,
+        "product_setup",
+        lambda selected_product_id, user, db: captured.append(
+            ("setup", selected_product_id, user["org_id"], db)
+        ) or {"product_id": str(selected_product_id)},
+    )
+    db = object()
+
+    options = mcp_canonical_reads.canonical_product_setup_options(
+        "micro", _context("master.product_setup_options.get"), db
+    )
+    ingredients = mcp_canonical_reads.canonical_product_ingredient_search(
+        "para", 20, _context("master.product_ingredients.search"), db
+    )
+    hsn = mcp_canonical_reads.canonical_product_hsn_search(
+        "3004", 20, _context("master.product_hsn.search"), db
+    )
+    setup = mcp_canonical_reads.canonical_product_setup_get(
+        product_id, _context("master.product_setup.get"), db
+    )
+
+    assert options == {"units": [], "manufacturers": []}
+    assert ingredients == {"ingredients": []}
+    assert hsn == {"hsn_codes": []}
+    assert setup == {"product_id": str(product_id)}
+    assert [row[0] for row in captured] == ["options", "ingredients", "hsn", "setup"]
 
 
 def test_hidden_read_rejects_cross_operation_delegation_and_ambiguous_gst():

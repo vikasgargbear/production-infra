@@ -71,18 +71,29 @@ EXPECTED_SHARED_TOOLS = {
 }
 EXPECTED_BASE_READ_TOOLS = {
     "erp_customer_activity_get",
+    "erp_customer_get",
     "erp_party_aging_get",
     "erp_party_statement_get",
+    "erp_product_master_search",
     "erp_product_search",
+    "erp_product_setup_options_get",
+    "erp_product_ingredient_search",
+    "erp_product_hsn_search",
+    "erp_product_setup_get",
     "erp_profit_loss_get",
+    "erp_purchase_bill_mapping_review",
     "erp_supplier_search",
+    "erp_supplier_get",
     "erp_gst_settings_get",
     "erp_trial_balance_get",
 }
-EXPECTED_MASTER_CREATE_TOOLS = {
+EXPECTED_MASTER_WRITE_TOOLS = {
     "erp_product_create",
+    "erp_product_setup",
     "erp_customer_create",
+    "erp_customer_update",
     "erp_supplier_create",
+    "erp_supplier_update",
 }
 EXPECTED_UNAVAILABLE_PREPARE_TOOLS = set()
 EXPECTED_RESOLUTION_TOOLS = {
@@ -160,6 +171,10 @@ BASE_UOM_QUANTITY_FIELDS = {
 # These names are intentionally polymorphic only in the listed, fully qualified
 # contexts. Every other repeated name must retain one recursive JSON shape.
 EXPLICIT_CONTEXT_QUALIFIED_REUSE = {
+    "fulfillment_source": {
+        "erp_sales_invoice_prepare.lines[].fulfillment_source",
+        "erp_sales_return_prepare.lines[].fulfillment_source",
+    },
     "allocations": {
         "erp_customer_receipt_prepare.allocations",
         "erp_supplier_payment_prepare.allocations",
@@ -872,7 +887,7 @@ def validate(
     expected_published_actions = published_prepare_tools | EXPECTED_SHARED_TOOLS
     expected_live_tools = (
         EXPECTED_BASE_READ_TOOLS
-        | EXPECTED_MASTER_CREATE_TOOLS
+        | EXPECTED_MASTER_WRITE_TOOLS
         | EXPECTED_RESOLUTION_TOOLS
         | expected_published_actions
     )
@@ -882,7 +897,7 @@ def validate(
         issues.append("MCP service contract does not export bounded operator actions")
     if set(operator_service.get("published_tools", [])) != expected_published_actions:
         issues.append("MCP service published tool list drifted")
-    if set(operator_service.get("direct_master_writes", [])) != EXPECTED_MASTER_CREATE_TOOLS:
+    if set(operator_service.get("direct_master_writes", [])) != EXPECTED_MASTER_WRITE_TOOLS:
         issues.append("MCP service direct master write list drifted")
     if set(operator_service.get("unavailable_tools", [])) != EXPECTED_UNAVAILABLE_PREPARE_TOOLS:
         issues.append("MCP service unavailable tool list drifted")
@@ -975,7 +990,7 @@ def validate(
         ):
             issues.append(f"{tool}: prepare metadata drifted from non-posting preview semantics")
 
-    for tool in EXPECTED_MASTER_CREATE_TOOLS:
+    for tool in EXPECTED_MASTER_WRITE_TOOLS:
         app_operation = app_by_tool.get(tool, {})
         if (
             app_operation.get("mode") != "write"
@@ -983,7 +998,7 @@ def validate(
             or app_operation.get("approval") != "actor_confirmation"
             or app_operation.get("idempotency") != "required"
         ):
-            issues.append(f"{tool}: canonical master create metadata drifted")
+            issues.append(f"{tool}: canonical master write metadata drifted")
 
     execute_operation = app_by_tool.get("erp_operation_execute", {})
     if execute_operation.get("approval") != "command_policy":

@@ -2,7 +2,7 @@
 Supplier schemas for enterprise pharma system
 Handles GST-compliant supplier management for procurement
 """
-from typing import Optional, List, Annotated
+from typing import Optional, List
 from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
@@ -171,8 +171,20 @@ class CanonicalSupplierCreate(BaseModel):
     city: Optional[str] = Field(default=None, max_length=100)
     state_code: Optional[str] = Field(default=None, pattern=r"^[0-9]{2}$")
     pincode: Optional[str] = Field(default=None, pattern=r"^\d{6}$")
-    gst_number: Optional[str] = Field(default=None, min_length=15, max_length=15)
-    pan_number: Optional[str] = Field(default=None, min_length=10, max_length=10)
+    gst_number: Optional[str] = Field(
+        default=None,
+        min_length=15,
+        max_length=15,
+        json_schema_extra={
+            "pattern": r"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$"
+        },
+    )
+    pan_number: Optional[str] = Field(
+        default=None,
+        min_length=10,
+        max_length=10,
+        json_schema_extra={"pattern": r"^[A-Z]{5}[0-9]{4}[A-Z]$"},
+    )
     payment_days: int = Field(ge=0, le=180)
 
     @field_validator("gst_number")
@@ -190,6 +202,39 @@ class CanonicalSupplierCreate(BaseModel):
         address = (self.address_line1, self.city, self.state_code, self.pincode)
         if any(address) and not all(address):
             raise ValueError("Address line, city, state code, and pincode must be supplied together")
+        return self
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+
+class CanonicalSupplierUpdate(BaseModel):
+    """Patch the canonical supplier aggregate with optimistic concurrency."""
+
+    account_row_version: int = Field(gt=0)
+    party_row_version: int = Field(gt=0)
+    supplier_name: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    primary_phone: Optional[str] = Field(default=None, pattern=r"^\d{10}$")
+    primary_email: Optional[EmailStr] = None
+    contact_person: Optional[str] = Field(default=None, max_length=100)
+    pan_number: Optional[str] = Field(default=None, min_length=10, max_length=10)
+    payment_days: Optional[int] = Field(default=None, ge=0, le=180)
+
+    @field_validator("pan_number")
+    @classmethod
+    def validate_update_pan_number(cls, value: Optional[str]) -> Optional[str]:
+        return SupplierBase.validate_pan_number(value)
+
+    @model_validator(mode="after")
+    def require_update_field(self):
+        mutable = self.model_fields_set & {
+            "supplier_name", "primary_phone", "primary_email", "contact_person",
+            "pan_number", "payment_days",
+        }
+        if not mutable:
+            raise ValueError("At least one canonical supplier field must be updated")
+        required_when_present = {"supplier_name", "payment_days"}
+        if any(getattr(self, field) is None for field in mutable & required_when_present):
+            raise ValueError("Required supplier fields cannot be cleared")
         return self
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)

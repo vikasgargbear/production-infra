@@ -47,6 +47,68 @@ def update_product_draft(
     )
 
 
+def update_customer_account(db: Session, **parameters: Any) -> dict[str, Any]:
+    """Patch one customer aggregate through its canonical command owner."""
+
+    return dict(
+        db.execute(
+            text(
+                """
+                SELECT customer_account_id,party_id,customer_code,
+                       updated_customer_name,updated_customer_type,
+                       updated_primary_phone,updated_primary_email,
+                       updated_contact_person_name,updated_pan,
+                       updated_credit_limit,updated_credit_days,
+                       account_row_version,party_row_version,idempotency_replayed
+                  FROM erp_master_commands.update_customer_account(
+                    :org_id,:customer_id,:expected_account_row_version,
+                    :expected_party_row_version,
+                    :set_customer_name,:customer_name,
+                    :set_customer_type,:customer_type,
+                    :set_primary_phone,:primary_phone,
+                    :set_primary_email,:primary_email,
+                    :set_contact_person_name,:contact_person_name,
+                    :set_pan,:pan,:set_credit_limit,:credit_limit,
+                    :set_credit_days,:credit_days,:idempotency_key_hash,
+                    transaction_timestamp()+interval '24 hours'
+                  )
+                """
+            ),
+            parameters,
+        ).mappings().one()
+    )
+
+
+def update_supplier_account(db: Session, **parameters: Any) -> dict[str, Any]:
+    """Patch one supplier aggregate through its canonical command owner."""
+
+    return dict(
+        db.execute(
+            text(
+                """
+                SELECT supplier_account_id,party_id,supplier_code,
+                       updated_supplier_name,updated_primary_phone,
+                       updated_primary_email,updated_contact_person_name,
+                       updated_pan,updated_payment_days,account_row_version,
+                       party_row_version,idempotency_replayed
+                  FROM erp_master_commands.update_supplier_account(
+                    :org_id,:supplier_id,:expected_account_row_version,
+                    :expected_party_row_version,
+                    :set_supplier_name,:supplier_name,
+                    :set_primary_phone,:primary_phone,
+                    :set_primary_email,:primary_email,
+                    :set_contact_person_name,:contact_person_name,
+                    :set_pan,:pan,:set_payment_days,:payment_days,
+                    :idempotency_key_hash,
+                    transaction_timestamp()+interval '24 hours'
+                  )
+                """
+            ),
+            parameters,
+        ).mappings().one()
+    )
+
+
 def delete_product_draft(
     db: Session, *, org_id: UUID, product_id: UUID, expected_row_version: int
 ) -> dict[str, Any]:

@@ -1,0 +1,130 @@
+name: Register ChatGPT MCP OAuth client callback
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type REGISTER_CHATGPT_STATIC_OAUTH_CLIENT
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: canonical-staging-chatgpt-oauth-client
+  cancel-in-progress: false
+
+jobs:
+  register:
+    runs-on: ubuntu-latest
+    environment: canonical-staging
+    timeout-minutes: 10
+    env:
+      CANONICAL_STAGING_PROJECT_REF: ${{ vars.CANONICAL_STAGING_PROJECT_REF }}
+      CANONICAL_PRODUCTION_PROJECT_REFS: ${{ vars.CANONICAL_PRODUCTION_PROJECT_REFS }}
+      SUPABASE_URL: https://rgihahbmkrmhitjdjvev.supabase.co
+      CHATGPT_MCP_OAUTH_CALLBACK_URI: https://chatgpt.com/connector/oauth/_MPTGhIZ1AcM
+      REVIEWED_SHA: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.sha }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Attest the exact manual staging boundary
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          test "$CONFIRMATION" = REGISTER_CHATGPT_STATIC_OAUTH_CLIENT
+          [[ "$REVIEWED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$REVIEWED_SHA"
+          test "$CANONICAL_STAGING_PROJECT_REF" = rgihahbmkrmhitjdjvev
+          test "$SUPABASE_URL" = https://rgihahbmkrmhitjdjvev.supabase.co
+          test -n "$CANONICAL_PRODUCTION_PROJECT_REFS"
+          case ",$CANONICAL_PRODUCTION_PROJECT_REFS," in
+            *",$CANONICAL_STAGING_PROJECT_REF,"*)
+              echo "Refusing ChatGPT OAuth registration against production" >&2
+              exit 2
+              ;;
+          esac
+          test "$CHATGPT_MCP_OAUTH_CALLBACK_URI" = \
+            https://chatgpt.com/connector/oauth/_MPTGhIZ1AcM
+          case "$GITHUB_ENV" in
+            "$RUNNER_TEMP"/*) ;;
+            *) echo "GITHUB_ENV is outside runner temporary storage" >&2; exit 2 ;;
+          esac
+          evidence_dir="$RUNNER_TEMP/chatgpt-mcp-oauth-evidence"
+          case "$evidence_dir" in
+            "$RUNNER_TEMP"/*) ;;
+            *) echo "OAuth evidence is outside runner temporary storage" >&2; exit 2 ;;
+          esac
+          umask 077
+          mkdir -p "$evidence_dir"
+          echo "CANONICAL_DEMO_EVIDENCE_DIR=$evidence_dir" >> "$GITHUB_ENV"
+
+      - name: Install only provisioning dependencies
+        run: |
+          python -m pip install \
+            jsonschema==4.23.0 \
+            psycopg2-binary==2.9.9 \
+            requests==2.34.2
+
+      - name: Register the reviewed ChatGPT callback on the public client
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$SUPABASE_ACCESS_TOKEN"
+          case "$GITHUB_ENV" in
+            "$RUNNER_TEMP"/*) ;;
+            *) echo "GITHUB_ENV is outside runner temporary storage" >&2; exit 2 ;;
+          esac
+          python3 backend/scripts/provision_staging_mcp_oauth.py \
+            --mode chatgpt-client-authority-only
+
+      - name: Verify secret-free exact-SHA evidence
+        run: |
+          set -euo pipefail
+          evidence="$CANONICAL_DEMO_EVIDENCE_DIR/canonical-staging-oauth-client.json"
+          test -f "$evidence"
+          jq -e \
+            --arg callback "$CHATGPT_MCP_OAUTH_CALLBACK_URI" \
+            --arg project_ref "$CANONICAL_STAGING_PROJECT_REF" \
+            --arg reviewed_sha "$REVIEWED_SHA" \
+            --arg client_id "$MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS" \
+            '.chatgpt_callback_uri == $callback and
+             .client_id == $client_id and
+             .client_registration_method == "predefined" and
+             .client_type == "public" and
+             .demo_grant_bound == false and
+             .dynamic_client_registration == false and
+             .oauth_client_secret_issued == false and
+             .pkce_code_challenge_method == "S256" and
+             .project_ref == $project_ref and
+             .provisioning_mode == "chatgpt-client-authority-only" and
+             .resource_parameter_required == true and
+             .reviewed_sha == $reviewed_sha and
+             .test_identity_reconciled == false and
+             .token_endpoint_auth_method == "none" and
+             .web_test_grant_bound == false' \
+            "$evidence" >/dev/null
+          jq -e \
+            '(has("access_token") or has("refresh_token") or
+              has("authorization_code") or has("client_secret") or
+              has("management_token")) | not' \
+            "$evidence" >/dev/null
+          sha256sum "$evidence" > "$CANONICAL_DEMO_EVIDENCE_DIR/SHA256SUMS"
+
+      - name: Upload the bounded OAuth authority receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: chatgpt-mcp-oauth-client-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/chatgpt-mcp-oauth-evidence
+          if-no-files-found: error
+          retention-days: 7

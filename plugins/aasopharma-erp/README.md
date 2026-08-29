@@ -6,6 +6,11 @@ endpoint, or offline fallback.
 
 ## Developer connection
 
+Complete the repository's
+[ChatGPT predefined OAuth procedure](../../docs/deployment/chatgpt-mcp-oauth.md)
+before creating the connection when the authorization server has neither CIMD
+nor DCR. Never invent or commit a ChatGPT callback ID.
+
 1. Deploy one reviewed SHA for the API, MCP, frontend, and canonical database.
 2. Require both `/health` and `/ready` to pass on the public MCP origin.
 3. In ChatGPT on the web, enable Developer mode under **Settings → Security and
@@ -41,6 +46,13 @@ account on another ChatGPT surface.
 - Read tools return canonical UUIDs and authoritative records.
 - Write requests use prepare → review → approve → execute and expose the command
   UUID; no direct or apparent-success write path is accepted.
+- Reversible product create/setup tools share the browser's canonical setup
+  contract, require explicit user confirmation, and never add/release a product
+  for transactions; final **Add product** remains a UI review action.
+- Customer and supplier creates are generated from the browser/API canonical
+  contracts, require one reviewed confirmation, and are verified with exact
+  post-create readback. Missing optional facts remain explicit and required
+  facts are never guessed or silently skipped.
 - Cross-tenant, stale, duplicate, and unauthorized requests fail closed.
 - No WhatsApp, email, SMS, or telephone action is sent by this plugin.
 

@@ -1801,6 +1801,7 @@ def _sales_return_service_payload(*, treatment="statutory"):
         "gst_tax_treatment": treatment,
         "lines": [{
             "original_invoice_line_id": uuid4(),
+            "fulfillment_source": "dispatch_allocated",
             "invoice_dispatch_allocation_id": uuid4(),
             "billed_quantity": "2.000000",
             "free_quantity": "1.000000",
@@ -3033,6 +3034,59 @@ def test_sales_return_prepare_failure_rolls_back_the_only_transaction():
 
     assert session.transaction_entries == session.transaction_exits == 1
     assert session.transaction_failures == 1
+
+
+@pytest.mark.parametrize(
+    ("operation_key", "source_kind"),
+    (
+        ("sales.return.prepare", "direct_issue"),
+        ("procurement.purchase_return.prepare", "uninvoiced"),
+    ),
+)
+def test_return_service_defensively_blocks_unavailable_source_before_opening_database(
+    operation_key, source_kind
+):
+    opened = False
+
+    def forbidden_factory():
+        nonlocal opened
+        opened = True
+        raise AssertionError("database must not open for blocked return source")
+
+    if operation_key == "sales.return.prepare":
+        payload = _sales_return_service_payload(treatment="commercial_only")
+        payload["lines"][0]["fulfillment_source"] = source_kind
+        payload["lines"][0].pop("invoice_dispatch_allocation_id")
+    else:
+        payload = _purchase_return_service_payload(treatment="commercial_only")
+        payload["return_source_kind"] = source_kind
+        payload.pop("original_supplier_invoice_id")
+        payload["lines"][0].pop("supplier_invoice_receipt_allocation_id")
+    context = ActionContext(
+        **{
+            **_context(branch_ids=(payload["branch_id"],)).__dict__,
+            "operation_key": operation_key,
+            "permission": ACTION_POLICIES[operation_key].permission,
+        }
+    )
+    service = SqlAlchemyOperatorActionService(
+        forbidden_factory,
+        calculator_factory=forbidden_factory,
+        runtime_principal_configured=True,
+    )
+
+    with pytest.raises(OperatorActionError) as error:
+        service.prepare(
+            policy=ACTION_POLICIES[operation_key],
+            payload=payload,
+            idempotency_key=f"prepare:blocked-return:{source_kind}",
+            context=context,
+        )
+
+    assert error.value.code == ActionErrorCode.POLICY_BLOCKED
+    assert error.value.metadata["reason"] == "RETURN_SOURCE_AUTHORITY_UNAVAILABLE"
+    assert error.value.metadata["source_kind"] == source_kind
+    assert opened is False
 
 
 @pytest.mark.parametrize(

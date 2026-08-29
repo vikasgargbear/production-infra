@@ -10,11 +10,14 @@ const UUID7_B = 'd3000000-0000-7000-8000-000000000012';
 test('customer decoder preserves explicit zero and rejects a missing amount', () => {
   const row = {
     customer_id: UUID7_A,
+    party_id: UUID7_B,
     customer_code: 'C-1',
     customer_name: 'Customer One',
     trade_name: null,
     primary_phone: null,
     primary_email: null,
+    contact_person_name: null,
+    pan_number: null,
     gst_number: null,
     gst_verification_status: null,
     place_of_supply_state_code: null,
@@ -24,6 +27,8 @@ test('customer decoder preserves explicit zero and rejects a missing amount', ()
     customer_type: 'organization',
     is_active: true,
     status: 'active',
+    account_row_version: 1,
+    party_row_version: 1,
     created_at: '2026-08-25T00:00:00Z',
     updated_at: '2026-08-25T00:00:00Z',
   };

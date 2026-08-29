@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
+from pathlib import Path
 import time
 from typing import Any, Callable, Mapping
 
@@ -12,12 +14,15 @@ from mcp.server.auth.provider import AccessToken
 
 from .config import Settings
 from .operator_actions import (
+    DECIMAL_PATTERN,
     IDEMPOTENCY_KEY_PATTERN,
     MONEY_PATTERN,
     PREPARE_ACTIONS,
     PUBLISHED_PREPARE_TOOL_NAMES,
     SHARED_ACTION_SCHEMAS,
 )
+
+SIGNED_DECIMAL_PATTERN = r"^-?(?:0|[1-9][0-9]{0,13})(?:\.[0-9]{1,6})?$"
 
 
 class AuthorizationDenied(RuntimeError):
@@ -69,9 +74,39 @@ OPERATIONS = {
         "master.products.search", "erp_product_search", "/api/internal/mcp/reads/products",
         "catalog.product.manage", 100,
     ),
+    "erp_product_master_search": Operation(
+        "master.product_catalog.search", "erp_product_master_search",
+        "/api/internal/mcp/reads/product-master", "catalog.product.manage", 100,
+    ),
+    "erp_product_setup_options_get": Operation(
+        "master.product_setup_options.get", "erp_product_setup_options_get",
+        "/api/internal/mcp/reads/product-setup-options", "catalog.product.manage", 250,
+    ),
+    "erp_product_ingredient_search": Operation(
+        "master.product_ingredients.search", "erp_product_ingredient_search",
+        "/api/internal/mcp/reads/product-ingredients", "catalog.product.manage", 50,
+        records_field="ingredients",
+    ),
+    "erp_product_hsn_search": Operation(
+        "master.product_hsn.search", "erp_product_hsn_search",
+        "/api/internal/mcp/reads/product-hsn", "catalog.product.manage", 50,
+        records_field="hsn_codes",
+    ),
+    "erp_product_setup_get": Operation(
+        "master.product_setup.get", "erp_product_setup_get",
+        "/api/internal/mcp/reads/product-setup", "catalog.product.manage", 1,
+    ),
     "erp_supplier_search": Operation(
         "master.suppliers.search", "erp_supplier_search", "/api/internal/mcp/reads/suppliers",
         "parties.supplier.manage", 200, records_field="suppliers",
+    ),
+    "erp_customer_get": Operation(
+        "parties.customers.get", "erp_customer_get",
+        "/api/internal/mcp/reads/customer", "parties.customer.manage", 1,
+    ),
+    "erp_supplier_get": Operation(
+        "parties.suppliers.get", "erp_supplier_get",
+        "/api/internal/mcp/reads/supplier", "parties.supplier.manage", 1,
     ),
     "erp_gst_settings_get": Operation(
         "gst.settings.get", "erp_gst_settings_get", "/api/internal/mcp/reads/gst-settings",
@@ -190,6 +225,11 @@ def _master_create_schema(
     }
 
 
+PARTY_CREATE_SCHEMAS: Mapping[str, Mapping[str, Any]] = json.loads(
+    Path(__file__).with_name("party_create_contracts.json").read_text(encoding="utf-8")
+)
+
+
 MASTER_CREATE_SCHEMAS: Mapping[str, Mapping[str, Any]] = {
     "erp_product_create": _master_create_schema(
         {
@@ -202,42 +242,163 @@ MASTER_CREATE_SCHEMAS: Mapping[str, Mapping[str, Any]] = {
         },
         ("product_name", "product_kind"),
     ),
-    "erp_customer_create": _master_create_schema(
-        {
+    **PARTY_CREATE_SCHEMAS,
+}
+
+
+def _master_update_schema(
+    *,
+    identity_field: str,
+    properties: Mapping[str, Any],
+    mutable_fields: tuple[str, ...],
+) -> Mapping[str, Any]:
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            identity_field: {"type": "string", "format": "uuid"},
+            "account_row_version": {"type": "integer", "minimum": 1},
+            "party_row_version": {"type": "integer", "minimum": 1},
+            **properties,
+            "idempotency_key": {
+                "type": "string",
+                "pattern": IDEMPOTENCY_KEY_PATTERN,
+                "description": "Stable caller key for exact replay of this update request.",
+            },
+        },
+        "required": [
+            identity_field,
+            "account_row_version",
+            "party_row_version",
+            "idempotency_key",
+        ],
+        "anyOf": [{"required": [field]} for field in mutable_fields],
+    }
+
+
+MASTER_UPDATE_SCHEMAS: Mapping[str, Mapping[str, Any]] = {
+    "erp_customer_update": _master_update_schema(
+        identity_field="customer_id",
+        properties={
             "customer_name": {"type": "string", "minLength": 1, "maxLength": 200},
             "customer_type": {"type": "string", "enum": ["individual", "organization"]},
             "primary_phone": {"type": "string", "pattern": r"^[0-9]{10}$"},
-            "primary_email": {"type": "string", "format": "email", "maxLength": 320},
-            "contact_person_name": {"type": "string", "maxLength": 100},
-            "address_line1": {"type": "string", "maxLength": 255},
-            "address_line2": {"type": "string", "maxLength": 255},
-            "city": {"type": "string", "maxLength": 100},
-            "state_code": {"type": "string", "pattern": r"^[0-9]{2}$"},
-            "pincode": {"type": "string", "pattern": r"^[0-9]{6}$"},
-            "gst_number": {"type": "string", "pattern": r"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$"},
-            "pan_number": {"type": "string", "pattern": r"^[A-Z]{5}[0-9]{4}[A-Z]$"},
+            "primary_email": {
+                "anyOf": [
+                    {"type": "string", "format": "email", "maxLength": 320},
+                    {"type": "null"},
+                ]
+            },
+            "contact_person_name": {
+                "anyOf": [
+                    {"type": "string", "maxLength": 100},
+                    {"type": "null"},
+                ]
+            },
+            "pan_number": {
+                "anyOf": [
+                    {"type": "string", "pattern": r"^[A-Z]{5}[0-9]{4}[A-Z]$"},
+                    {"type": "null"},
+                ]
+            },
             "credit_limit": {"type": "string", "pattern": MONEY_PATTERN},
             "credit_days": {"type": "integer", "minimum": 0, "maximum": 365},
         },
-        ("customer_name", "customer_type", "primary_phone", "credit_limit", "credit_days"),
+        mutable_fields=(
+            "customer_name", "customer_type", "primary_phone", "primary_email",
+            "contact_person_name", "pan_number", "credit_limit", "credit_days",
+        ),
     ),
-    "erp_supplier_create": _master_create_schema(
-        {
+    "erp_supplier_update": _master_update_schema(
+        identity_field="supplier_id",
+        properties={
             "supplier_name": {"type": "string", "minLength": 1, "maxLength": 200},
-            "primary_phone": {"type": "string", "pattern": r"^[0-9]{10}$"},
-            "primary_email": {"type": "string", "format": "email", "maxLength": 320},
-            "contact_person": {"type": "string", "maxLength": 100},
-            "address_line1": {"type": "string", "maxLength": 255},
-            "address_line2": {"type": "string", "maxLength": 255},
-            "city": {"type": "string", "maxLength": 100},
-            "state_code": {"type": "string", "pattern": r"^[0-9]{2}$"},
-            "pincode": {"type": "string", "pattern": r"^[0-9]{6}$"},
-            "gst_number": {"type": "string", "pattern": r"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$"},
-            "pan_number": {"type": "string", "pattern": r"^[A-Z]{5}[0-9]{4}[A-Z]$"},
+            "primary_phone": {
+                "anyOf": [
+                    {"type": "string", "pattern": r"^[0-9]{10}$"},
+                    {"type": "null"},
+                ]
+            },
+            "primary_email": {
+                "anyOf": [
+                    {"type": "string", "format": "email", "maxLength": 320},
+                    {"type": "null"},
+                ]
+            },
+            "contact_person": {
+                "anyOf": [
+                    {"type": "string", "maxLength": 100},
+                    {"type": "null"},
+                ]
+            },
+            "pan_number": {
+                "anyOf": [
+                    {"type": "string", "pattern": r"^[A-Z]{5}[0-9]{4}[A-Z]$"},
+                    {"type": "null"},
+                ]
+            },
             "payment_days": {"type": "integer", "minimum": 0, "maximum": 180},
         },
-        ("supplier_name", "payment_days"),
+        mutable_fields=(
+            "supplier_name", "primary_phone", "primary_email", "contact_person",
+            "pan_number", "payment_days",
+        ),
     ),
+}
+
+
+PRODUCT_SETUP_SCHEMA: Mapping[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "product_id": {"type": "string", "format": "uuid"},
+        "idempotency_key": {
+            "type": "string", "pattern": IDEMPOTENCY_KEY_PATTERN,
+            "description": "Stable caller key for exact replay of this setup request.",
+        },
+        "row_version": {"type": "integer", "minimum": 1},
+        "category_id": {"type": "string", "format": "uuid"},
+        "manufacturer_party_id": {"type": "string", "format": "uuid"},
+        "base_uom_code": {"type": "string", "minLength": 1, "maxLength": 16},
+        "dosage_form": {"type": "string", "maxLength": 64},
+        "strength_display": {"type": "string", "maxLength": 128},
+        "hsn_code": {"type": "string", "pattern": r"^[0-9]{4,8}$"},
+        "cold_chain_required": {"type": "boolean"},
+        "minimum_storage_celsius": {"type": "string", "pattern": SIGNED_DECIMAL_PATTERN},
+        "maximum_storage_celsius": {"type": "string", "pattern": SIGNED_DECIMAL_PATTERN},
+        "shelf_life_days": {"type": "integer", "minimum": 1, "maximum": 36500},
+        "gtin": {"type": "string", "pattern": r"^[0-9]{8,14}$"},
+        "pack_conversions": {
+            "type": "array", "maxItems": 12,
+            "items": {
+                "type": "object", "additionalProperties": False,
+                "properties": {
+                    "uom_code": {"type": "string", "minLength": 1, "maxLength": 16},
+                    "multiplier": {"type": "string", "pattern": DECIMAL_PATTERN},
+                },
+                "required": ["uom_code", "multiplier"],
+            },
+        },
+        "ingredients": {
+            "type": "array", "maxItems": 32,
+            "items": {
+                "type": "object", "additionalProperties": False,
+                "properties": {
+                    "ingredient_id": {"type": "string", "format": "uuid"},
+                    "ingredient_role": {"type": "string", "enum": ["active", "excipient"]},
+                    "strength_value": {"type": "string", "pattern": DECIMAL_PATTERN},
+                    "strength_uom_code": {"type": "string", "maxLength": 16},
+                    "basis_quantity": {"type": "string", "pattern": DECIMAL_PATTERN},
+                    "basis_uom_code": {"type": "string", "maxLength": 16},
+                },
+                "required": ["ingredient_id", "ingredient_role"],
+            },
+        },
+    },
+    "required": [
+        "product_id", "idempotency_key", "row_version", "manufacturer_party_id",
+        "base_uom_code", "hsn_code",
+    ],
 }
 
 OPERATOR_OPERATIONS.update(
@@ -246,6 +407,10 @@ OPERATOR_OPERATIONS.update(
             "erp_product_create", "catalog.product_draft.create",
             MASTER_CREATE_SCHEMAS["erp_product_create"], "master_write",
         ),
+        "erp_product_setup": OperatorOperation(
+            "erp_product_setup", "catalog.product_draft.configure",
+            PRODUCT_SETUP_SCHEMA, "master_write",
+        ),
         "erp_customer_create": OperatorOperation(
             "erp_customer_create", "parties.customer.create",
             MASTER_CREATE_SCHEMAS["erp_customer_create"], "master_write",
@@ -253,6 +418,14 @@ OPERATOR_OPERATIONS.update(
         "erp_supplier_create": OperatorOperation(
             "erp_supplier_create", "parties.supplier.create",
             MASTER_CREATE_SCHEMAS["erp_supplier_create"], "master_write",
+        ),
+        "erp_customer_update": OperatorOperation(
+            "erp_customer_update", "parties.customer.update",
+            MASTER_UPDATE_SCHEMAS["erp_customer_update"], "master_write",
+        ),
+        "erp_supplier_update": OperatorOperation(
+            "erp_supplier_update", "parties.supplier.update",
+            MASTER_UPDATE_SCHEMAS["erp_supplier_update"], "master_write",
         ),
     }
 )
@@ -552,8 +725,11 @@ class OperationGateway:
             method = "POST"
             path = {
                 "catalog.product_draft.create": "/api/internal/mcp/master/products",
+                "catalog.product_draft.configure": "/api/internal/mcp/master/products/setup",
                 "parties.customer.create": "/api/internal/mcp/master/customers",
                 "parties.supplier.create": "/api/internal/mcp/master/suppliers",
+                "parties.customer.update": "/api/internal/mcp/master/customers/update",
+                "parties.supplier.update": "/api/internal/mcp/master/suppliers/update",
             }[operation.operation_key]
             payload = arguments
         elif operation.kind in {"approve", "execute"}:

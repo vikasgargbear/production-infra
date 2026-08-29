@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import os
+from datetime import date
 from pathlib import Path
 from uuid import UUID
 
@@ -50,7 +51,30 @@ def _expect_denied(
         raise AssertionError("restricted product setup operation unexpectedly succeeded")
 
 
-def _seed_tax_release(connection, fixture) -> str:
+def _organization_business_date(connection, fixture) -> date:
+    return connection.scalar(text("""
+        SELECT (transaction_timestamp() AT TIME ZONE timezone)::date
+          FROM core.organizations
+         WHERE id=:org
+    """), {"org": fixture.ORG_A})
+
+
+def _force_distinct_session_and_organization_dates(connection, fixture) -> None:
+    connection.exec_driver_sql('SET LOCAL ROLE "erp_migration_owner"')
+    connection.exec_driver_sql("ALTER TABLE core.organizations DISABLE TRIGGER USER")
+    connection.execute(
+        text("UPDATE core.organizations SET timezone='Pacific/Kiritimati' WHERE id=:org"),
+        {"org": fixture.ORG_A},
+    )
+    connection.exec_driver_sql("ALTER TABLE core.organizations ENABLE TRIGGER USER")
+    connection.exec_driver_sql("RESET ROLE")
+    connection.exec_driver_sql("SET LOCAL TIME ZONE 'Etc/GMT+12'")
+    assert _organization_business_date(connection, fixture) != connection.scalar(
+        text("SELECT CURRENT_DATE")
+    )
+
+
+def _seed_tax_release(connection, fixture, effective_on: date) -> str:
     connection.exec_driver_sql('SET LOCAL ROLE "erp_migration_owner"')
     existing = connection.scalar(text("""
         SELECT tax_version.code
@@ -59,10 +83,10 @@ def _seed_tax_release(connection, fixture) -> str:
          WHERE tax_version.status='active' AND tax_version.code_kind='hsn'
            AND release.dataset_kind='hsn_sac_tax'
            AND tax_version.default_supply_type='goods' AND release.status='active'
-           AND CURRENT_DATE BETWEEN tax_version.effective_from AND COALESCE(tax_version.effective_to,'infinity'::date)
-           AND CURRENT_DATE BETWEEN release.effective_from AND COALESCE(release.effective_to,'infinity'::date)
+           AND :effective_on BETWEEN tax_version.effective_from AND COALESCE(tax_version.effective_to,'infinity'::date)
+           AND :effective_on BETWEEN release.effective_from AND COALESCE(release.effective_to,'infinity'::date)
          ORDER BY tax_version.code LIMIT 1
-    """))
+    """), {"effective_on": effective_on})
     if existing:
         connection.exec_driver_sql("RESET ROLE")
         return str(existing)
@@ -81,7 +105,7 @@ def _seed_tax_release(connection, fixture) -> str:
               :release,'hsn_sac_tax','pg15-product-setup-v1','gstn',
               'https://example.invalid/pg15-product-setup','fixture','product-setup/source',
               'text/plain',:source_hash,'fixture','product-setup/dataset','application/json',
-              :dataset_hash,1,CURRENT_DATE,CURRENT_DATE,:reviewer,
+              :dataset_hash,1,:effective_on,:effective_on,:reviewer,
               transaction_timestamp(),'active'
             );
             INSERT INTO tax.tax_code_versions(
@@ -90,7 +114,7 @@ def _seed_tax_release(connection, fixture) -> str:
               ruleset_version,status)
             VALUES (
               :tax_version,:release,'4819','hsn',1,'Disposable product setup cartons',
-              CURRENT_DATE,'taxable','goods',6,6,12,0,'pg15-product-setup-v1','active'
+              :effective_on,'taxable','goods',6,6,12,0,'pg15-product-setup-v1','active'
             )
             """
         ),
@@ -100,6 +124,7 @@ def _seed_tax_release(connection, fixture) -> str:
             "reviewer": fixture.USER_A,
             "source_hash": hashlib.sha256(b"product setup source").digest(),
             "dataset_hash": hashlib.sha256(b"product setup dataset").digest(),
+            "effective_on": effective_on,
         },
     )
     connection.exec_driver_sql("ALTER TABLE tax.tax_code_versions ENABLE TRIGGER USER")
@@ -115,7 +140,16 @@ def main() -> None:
         transaction = connection.begin()
         try:
             fixture._seed(connection)
-            hsn_code = _seed_tax_release(connection, fixture)
+            assert connection.scalar(text("""
+                SELECT has_function_privilege(
+                  'erp_app',
+                  'erp_regulatory_commands.activate_product(uuid,uuid,bigint,character varying,bytea,timestamp with time zone)',
+                  'EXECUTE'
+                )
+            """)) is False
+            _force_distinct_session_and_organization_dates(connection, fixture)
+            effective_on = _organization_business_date(connection, fixture)
+            hsn_code = _seed_tax_release(connection, fixture, effective_on)
             connection.exec_driver_sql('SET SESSION AUTHORIZATION "erp_runtime"')
             connection.execute(
                 text("SELECT pg_catalog.set_config('app.request_id',:request_id,true)"),
@@ -223,6 +257,7 @@ def main() -> None:
             assert activated == (
                 fixture.PRODUCT_DELETE, "TEST-A-2", "Delete A", 3, False
             )
+            assert connection.scalar(text("SELECT current_setting('TimeZone')")) == "Etc/GMT+12"
             replayed = connection.execute(
                 text(
                     """

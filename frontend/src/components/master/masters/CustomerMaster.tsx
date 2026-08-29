@@ -18,6 +18,7 @@ import type { Customer as BaseCustomer } from '../../../types/models';
 import ContactActions from './ContactActions';
 import { mergeCustomersWithCanonicalAging } from './customerAgingProjection';
 import CanonicalWriteNotice from '../../global/ui/CanonicalWriteNotice';
+import PartyAccountEditDialog from './PartyAccountEditDialog';
 import {
   addExactDecimals,
   compareExactDecimals,
@@ -30,6 +31,11 @@ import {
 
 // Extended Customer with master-grid specific fields
 type Customer = Omit<BaseCustomer, 'credit_limit' | 'current_outstanding'> & {
+  party_id: string;
+  account_row_version: number;
+  party_row_version: number;
+  contact_person_name?: string | null;
+  pan_number?: string | null;
   whatsapp_number?: string;
   drug_license_validity?: string;
   credit_limit?: string | number;
@@ -107,7 +113,7 @@ const getCreditStatus = (customer: Customer) => {
 // Column Definitions
 // ============================================================================
 
-const getColumns = (): Column<Customer>[] => [
+const getColumns = (onEdit: (customer: Customer) => void): Column<Customer>[] => [
     {
       key: 'customer_name',
       header: 'Customer',
@@ -215,11 +221,9 @@ const getColumns = (): Column<Customer>[] => [
       header: 'Actions',
       align: 'center' as const,
       sortable: false,
-      render: () => (
-        <span className="text-sm text-gray-500" title="A canonical customer edit command is not available">
-          Read only
-        </span>
-      ),
+      render: (_, customer) => customer ? (
+        <Button size="sm" variant="outline" onClick={() => onEdit(customer)}>Edit</Button>
+      ) : null,
     }
   ];
 
@@ -240,7 +244,11 @@ const CustomerMaster: React.FC = () => {
     setFilterValue,
     showAddModal,
     setShowAddModal,
+    editingEntity,
+    setEditingEntity,
+    handleEdit,
     handleSaved,
+    loadEntities,
     searchInputRef
   } = useEntityMaster<Customer>({
     entityName: 'customer',
@@ -248,7 +256,6 @@ const CustomerMaster: React.FC = () => {
     nameField: 'customer_name',
     api: {
       getAll: loadCustomersWithCanonicalAging,
-      update: customersApi.update
     },
     searchFields: ['customer_name', 'customer_code', 'primary_phone', 'gst_number'],
     filterField: 'customer_type',
@@ -256,7 +263,7 @@ const CustomerMaster: React.FC = () => {
     softDelete: true
   });
 
-  const columns = getColumns();
+  const columns = getColumns(handleEdit);
 
   // Summary stats
   const total = customers.length;
@@ -330,8 +337,8 @@ const CustomerMaster: React.FC = () => {
       )}
 
       <CanonicalWriteNotice
-        action="Editing customers or changing customer status"
-        description="New customer accounts use the canonical API. Existing customer edits and status changes remain unavailable until their reviewed cloud commands exist."
+        action="Changing customer status, GST registrations, or addresses"
+        description="Core customer-account edits are canonical. Lifecycle, GST, and address changes remain separate reviewed commands."
       />
 
       {/* Customer List */}
@@ -359,6 +366,7 @@ const CustomerMaster: React.FC = () => {
                   <div><dt className="text-gray-500">Credit terms</dt><dd className="mt-1 font-medium">{customer.credit_limit == null || customer.credit_days == null ? 'Unavailable' : `${formatExactCurrency(String(customer.credit_limit), 'Customer credit limit')} · ${customer.credit_days} days`}</dd></div>
                 </dl>
                 <div className="mt-4 border-t border-gray-100 pt-3"><p className="mb-2 text-xs text-gray-500">{customer.primary_phone || customer.primary_email || 'No contact details'}</p><ContactActions name={customer.customer_name || 'customer'} phone={customer.primary_phone} email={customer.primary_email} whatsapp={customer.whatsapp_number} /></div>
+                <Button className="mt-3" size="sm" variant="outline" onClick={() => handleEdit(customer)}>Edit account</Button>
               </article>
             ))}
           </div>
@@ -388,6 +396,14 @@ const CustomerMaster: React.FC = () => {
           open={true}
           onClose={() => setShowAddModal(false)}
           onCustomerCreated={handleSaved}
+        />
+      )}
+      {editingEntity && (
+        <PartyAccountEditDialog
+          kind="customer"
+          account={{ ...editingEntity, customer_id: String(editingEntity.customer_id) }}
+          onClose={() => setEditingEntity(null)}
+          onSaved={loadEntities}
         />
       )}
     </GlobalLayout>

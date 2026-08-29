@@ -4,6 +4,7 @@ import { isCanonicalUuid } from '../../../../utils/canonicalUuid';
 export type MasterEntityKind = 'customer' | 'supplier' | 'product';
 
 const IDEMPOTENCY_KEY_PATTERN = /^erp-web-master-(customer|supplier|product)-create:[0-9a-f-]{36}$/i;
+const UPDATE_IDEMPOTENCY_KEY_PATTERN = /^erp-web-master-(customer|supplier)-update:[0-9a-f-]{36}$/i;
 const PRODUCT_ACTIVATION_KEY_PATTERN = /^erp-web-master-product-activate:[0-9a-f-]{36}$/i;
 
 export const newMasterCreateIdempotencyKey = (kind: MasterEntityKind): string => (
@@ -14,9 +15,16 @@ export const newProductActivationIdempotencyKey = (): string => (
   `erp-web-master-product-activate:${clientUuid()}`
 );
 
+export const newMasterUpdateIdempotencyKey = (
+  kind: Exclude<MasterEntityKind, 'product'>,
+): string => `erp-web-master-${kind}-update:${clientUuid()}`;
+
 export const masterCreateRequestConfig = (idempotencyKey: string) => {
-  if (!(IDEMPOTENCY_KEY_PATTERN.test(idempotencyKey) || PRODUCT_ACTIVATION_KEY_PATTERN.test(idempotencyKey)) || idempotencyKey.length > 128) {
-    throw new Error('Master creation requires a bounded browser-generated idempotency key.');
+  if (!(IDEMPOTENCY_KEY_PATTERN.test(idempotencyKey)
+      || UPDATE_IDEMPOTENCY_KEY_PATTERN.test(idempotencyKey)
+      || PRODUCT_ACTIVATION_KEY_PATTERN.test(idempotencyKey))
+      || idempotencyKey.length > 128) {
+    throw new Error('Master writes require a bounded browser-generated idempotency key.');
   }
   return { headers: { 'X-Idempotency-Key': idempotencyKey } };
 };

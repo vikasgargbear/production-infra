@@ -91,8 +91,15 @@ def test_resolution_policies_match_operator_contract_and_are_published():
         "finance.profit_loss.get",
         "finance.trial_balance.get",
         "gst.settings.get",
+        "master.product_catalog.search",
         "master.products.search",
+        "master.product_setup_options.get",
+        "master.product_ingredients.search",
+        "master.product_hsn.search",
+        "master.product_setup.get",
         "master.suppliers.search",
+        "parties.customers.get",
+        "parties.suppliers.get",
     }
     service = json.loads(
         (ROOT / "backend/mcp_runtime/service-contract.json").read_text(encoding="utf-8")
@@ -597,7 +604,7 @@ def test_sales_invoice_resolution_fails_closed_on_evidence_and_identity_drift():
 
 
 def test_sales_invoice_dispatch_three_way_uom_apportionment_uses_exact_base_authority():
-    line_id = uuid4()
+    line_id, product_id = uuid4(), uuid4()
 
     def dispatch():
         dispatch_line_id = uuid4()
@@ -607,7 +614,7 @@ def test_sales_invoice_dispatch_three_way_uom_apportionment_uses_exact_base_auth
             "inventory_document_id": uuid4(),
             "inventory_document_line_id": uuid4(), "dispatch_id": uuid4(),
             "dispatch_line_id": dispatch_line_id, "dispatch_number": "DSP-1",
-            "dispatch_date": date(2026, 8, 24), "product_id": uuid4(),
+            "dispatch_date": date(2026, 8, 24), "product_id": product_id,
             "batch_id": uuid4(), "batch_number": "BATCH-1",
             "expires_on": date(2028, 9, 1), "from_location_id": uuid4(),
             "uom_code": "BOX", "base_quantity": Decimal("1"),
@@ -624,7 +631,7 @@ def test_sales_invoice_dispatch_three_way_uom_apportionment_uses_exact_base_auth
 
     payload = {
         "invoice_line_id": line_id, "line_number": 1, "line_kind": "product",
-        "order_line_id": None, "product_id": uuid4(), "charge_code": None,
+        "order_line_id": None, "product_id": product_id, "charge_code": None,
         "uom_code": "BOX", "billed_quantity": Decimal("1"),
         "free_quantity": Decimal("0"), "base_billed_quantity": Decimal("3"),
         "base_free_quantity": Decimal("0"),
@@ -645,6 +652,195 @@ def test_sales_invoice_dispatch_three_way_uom_apportionment_uses_exact_base_auth
         reads.SalesInvoiceLine.model_validate({
             **payload, "base_billed_quantity": Decimal("2.999999")
         })
+
+
+def test_sales_return_resolution_requires_exact_choice_across_same_product_batches():
+    invoice_line_id, product_id = uuid4(), uuid4()
+
+    def allocation(
+        *,
+        allocated_billed: str,
+        allocated_free: str,
+        returned_billed: str,
+        returned_free: str,
+        batch_number: str,
+    ):
+        dispatch_line_id = uuid4()
+        allocated_billed_value = Decimal(allocated_billed)
+        allocated_free_value = Decimal(allocated_free)
+        returned_billed_value = Decimal(returned_billed)
+        returned_free_value = Decimal(returned_free)
+        return reads.SalesInvoiceDispatchAllocation.model_validate({
+            "invoice_line_id": invoice_line_id,
+            "source_line_id": dispatch_line_id,
+            "invoice_dispatch_allocation_id": uuid4(),
+            "inventory_document_id": uuid4(),
+            "inventory_document_line_id": uuid4(),
+            "dispatch_id": uuid4(),
+            "dispatch_line_id": dispatch_line_id,
+            "dispatch_number": f"DSP-{batch_number}",
+            "dispatch_date": date(2026, 8, 24),
+            "product_id": product_id,
+            "batch_id": uuid4(),
+            "batch_number": batch_number,
+            "expires_on": date(2028, 9, 1),
+            "from_location_id": uuid4(),
+            "uom_code": "EA",
+            "base_quantity": allocated_billed_value + allocated_free_value,
+            "entered_quantity": allocated_billed_value + allocated_free_value,
+            "billed_quantity": allocated_billed_value,
+            "free_quantity": allocated_free_value,
+            "allocated_base_billed_quantity": allocated_billed_value,
+            "allocated_base_free_quantity": allocated_free_value,
+            "returned_base_billed_quantity": returned_billed_value,
+            "returned_base_free_quantity": returned_free_value,
+            "remaining_base_billed_quantity": (
+                allocated_billed_value - returned_billed_value
+            ),
+            "remaining_base_free_quantity": allocated_free_value - returned_free_value,
+        })
+
+    first = allocation(
+        allocated_billed="6", allocated_free="2",
+        returned_billed="1", returned_free="1", batch_number="BATCH-A",
+    )
+    second = allocation(
+        allocated_billed="4", allocated_free="1",
+        returned_billed="0", returned_free="0", batch_number="BATCH-B",
+    )
+    resolved = reads.SalesInvoiceLine.model_validate({
+        "invoice_line_id": invoice_line_id,
+        "line_number": 1,
+        "line_kind": "product",
+        "order_line_id": uuid4(),
+        "product_id": product_id,
+        "charge_code": None,
+        "uom_code": "EA",
+        "billed_quantity": Decimal("10"),
+        "free_quantity": Decimal("3"),
+        "base_billed_quantity": Decimal("10"),
+        "base_free_quantity": Decimal("3"),
+        "free_supply_tax_treatment": "included_at_unit_rate",
+        "returned_base_billed_quantity": Decimal("1"),
+        "returned_base_free_quantity": Decimal("1"),
+        "returnable_base_billed_quantity": Decimal("9"),
+        "returnable_base_free_quantity": Decimal("2"),
+        "tax_code_version_id": uuid4(),
+        "taxability_snapshot": "taxable",
+        "line_total": Decimal("100"),
+        "dispatch_allocations": [first, second],
+        "direct_issue_allocations": [],
+    })
+
+    assert resolved.return_allocation_candidate_count == 2
+    assert resolved.return_allocation_selection_required is True
+    assert [item.batch_number for item in resolved.dispatch_allocations] == [
+        "BATCH-A", "BATCH-B",
+    ]
+    assert resolved.dispatch_allocations[0].remaining_base_billed_quantity == Decimal("5")
+    assert resolved.dispatch_allocations[0].remaining_base_free_quantity == Decimal("1")
+    encoded = resolved.model_dump(mode="json")
+    assert encoded["return_allocation_selection_required"] is True
+    assert encoded["dispatch_allocations"][1]["remaining_base_billed_quantity"] == "4"
+
+    invalid = second.model_dump()
+    invalid["returned_base_free_quantity"] = Decimal("2")
+    invalid["remaining_base_free_quantity"] = Decimal("-1")
+    with pytest.raises(ValidationError, match="returnable quantities do not reconcile"):
+        reads.SalesInvoiceDispatchAllocation.model_validate(invalid)
+
+
+def test_purchase_return_resolution_requires_exact_choice_across_same_product_grn_batches():
+    supplier_invoice_id, supplier_invoice_line_id, product_id = (
+        uuid4(), uuid4(), uuid4()
+    )
+
+    def allocation(
+        *,
+        allocated_billed: str,
+        allocated_free: str,
+        returned_billed: str,
+        returned_free: str,
+    ):
+        allocated_billed_value = Decimal(allocated_billed)
+        allocated_free_value = Decimal(allocated_free)
+        returned_billed_value = Decimal(returned_billed)
+        returned_free_value = Decimal(returned_free)
+        return reads.SupplierInvoiceReceiptAllocation.model_validate({
+            "supplier_invoice_receipt_allocation_id": uuid4(),
+            "supplier_invoice_id": supplier_invoice_id,
+            "supplier_invoice_line_id": supplier_invoice_line_id,
+            "supplier_invoice_number": "SUP-INV-MULTI",
+            "supplier_invoice_date": date(2026, 8, 20),
+            "goods_receipt_id": uuid4(),
+            "goods_receipt_line_id": uuid4(),
+            "product_id": product_id,
+            "batch_id": uuid4(),
+            "location_id": uuid4(),
+            "uom_code": "EA",
+            "allocated_base_billed_quantity": allocated_billed_value,
+            "allocated_base_free_quantity": allocated_free_value,
+            "returned_base_billed_quantity": returned_billed_value,
+            "returned_base_free_quantity": returned_free_value,
+            "remaining_base_billed_quantity": (
+                allocated_billed_value - returned_billed_value
+            ),
+            "remaining_base_free_quantity": allocated_free_value - returned_free_value,
+        })
+
+    first = allocation(
+        allocated_billed="6", allocated_free="2",
+        returned_billed="1", returned_free="1",
+    )
+    second = allocation(
+        allocated_billed="4", allocated_free="1",
+        returned_billed="0", returned_free="0",
+    )
+    resolved = reads.SupplierInvoiceLine.model_validate({
+        "supplier_invoice_line_id": supplier_invoice_line_id,
+        "line_number": 1,
+        "line_kind": "product",
+        "purchase_order_line_id": uuid4(),
+        "product_id": product_id,
+        "charge_code": None,
+        "uom_code": "EA",
+        "base_billed_quantity": Decimal("10"),
+        "base_free_quantity": Decimal("3"),
+        "returned_base_billed_quantity": Decimal("1"),
+        "returned_base_free_quantity": Decimal("1"),
+        "returnable_base_billed_quantity": Decimal("9"),
+        "returnable_base_free_quantity": Decimal("2"),
+        "tax_code_version_id": uuid4(),
+        "taxability_snapshot": "taxable",
+        "itc_eligibility": "eligible",
+        "inventory_cost_treatment": "capitalize",
+        "landed_cost_allocation_method": None,
+        "line_total": Decimal("118"),
+        "receipt_allocations": [first, second],
+    })
+
+    assert resolved.return_allocation_candidate_count == 2
+    assert resolved.return_allocation_selection_required is True
+    assert {
+        item.supplier_invoice_receipt_allocation_id
+        for item in resolved.receipt_allocations
+    } == {
+        first.supplier_invoice_receipt_allocation_id,
+        second.supplier_invoice_receipt_allocation_id,
+    }
+    assert sum(
+        item.remaining_base_billed_quantity
+        for item in resolved.receipt_allocations
+    ) == Decimal("9")
+    assert sum(
+        item.remaining_base_free_quantity
+        for item in resolved.receipt_allocations
+    ) == Decimal("2")
+
+    inconsistent = resolved.model_dump()
+    inconsistent["returnable_base_free_quantity"] = Decimal("3")
+    with pytest.raises(ValidationError, match="return totals do not reconcile"):
+        reads.SupplierInvoiceLine.model_validate(inconsistent)
 
 
 def test_supplier_receipt_allocation_dto_preserves_ids_and_exact_balances():

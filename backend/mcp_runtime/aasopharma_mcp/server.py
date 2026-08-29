@@ -9,6 +9,7 @@ from mcp.server.auth.middleware.auth_context import get_access_token
 from mcp.server.auth.settings import AuthSettings
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.utilities.func_metadata import ArgModelBase
+from mcp.types import ToolAnnotations
 from pydantic import AnyHttpUrl, ConfigDict, Field, create_model
 from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
@@ -19,10 +20,37 @@ from .config import Settings
 from .operations import (
     OPERATIONS,
     OPERATOR_OPERATIONS,
+    READ_ONLY_OPERATOR_KINDS,
     OperationGateway,
     published_operator_action_tool_names,
 )
 from .operator_actions import OPERATOR_TOOL_DESCRIPTIONS
+from .purchase_bill_mapping import (
+    PURCHASE_BILL_MAPPING_ARGUMENT_SCHEMA,
+    review_purchase_bill_mapping,
+)
+
+
+LOCAL_REVIEW_TOOL_NAMES = frozenset({"erp_purchase_bill_mapping_review"})
+
+READ_ONLY_TOOL_ANNOTATIONS = ToolAnnotations(
+    readOnlyHint=True,
+    destructiveHint=False,
+    idempotentHint=True,
+    openWorldHint=True,
+)
+LOCAL_REVIEW_TOOL_ANNOTATIONS = ToolAnnotations(
+    readOnlyHint=True,
+    destructiveHint=False,
+    idempotentHint=True,
+    openWorldHint=False,
+)
+STATE_CHANGING_TOOL_ANNOTATIONS = ToolAnnotations(
+    readOnlyHint=False,
+    destructiveHint=True,
+    idempotentHint=True,
+    openWorldHint=True,
+)
 
 
 class ExactOperatorArguments(ArgModelBase):
@@ -39,7 +67,11 @@ class ExactOperatorArguments(ArgModelBase):
 
 
 def registered_tool_names() -> tuple[str, ...]:
-    return tuple(sorted((*OPERATIONS, *published_operator_action_tool_names())))
+    return tuple(
+        sorted(
+            (*OPERATIONS, *published_operator_action_tool_names(), *LOCAL_REVIEW_TOOL_NAMES)
+        )
+    )
 
 
 def _access_token():
@@ -121,17 +153,69 @@ def create_app(
         )
 
     @server.tool()
+    async def erp_product_master_search(
+        q: Annotated[str, Field(max_length=128, description="Optional product name, generic name, SKU, or HSN fragment.")] = "",
+        limit: Annotated[int, Field(ge=1, le=100, description="Maximum draft, active, or blocked master products to return.")] = 20,
+        offset: Annotated[int, Field(ge=0, description="Zero-based master-product result offset.")] = 0,
+    ) -> Any:
+        """Search canonical product master data, including drafts and lifecycle versions."""
+        if not 1 <= limit <= 100 or offset < 0:
+            raise ValueError("limit must be 1..100 and offset must be nonnegative")
+        return await operation_gateway.execute(
+            OPERATIONS["erp_product_master_search"], _access_token(),
+            {"q": q, "limit": limit, "offset": offset},
+        )
+
+    @server.tool()
     async def erp_product_search(
         q: Annotated[str, Field(max_length=128, description="Optional product name, generic name, SKU, or HSN fragment.")] = "",
         limit: Annotated[int, Field(ge=1, le=100, description="Maximum matching products to return.")] = 20,
         offset: Annotated[int, Field(ge=0, description="Zero-based product result offset.")] = 0,
     ) -> Any:
-        """Search the current organization's products by name, generic name, SKU, or HSN."""
+        """Search transaction-eligible active or blocked products; drafts are excluded."""
         if not 1 <= limit <= 100 or offset < 0:
             raise ValueError("limit must be 1..100 and offset must be nonnegative")
         return await operation_gateway.execute(
             OPERATIONS["erp_product_search"], _access_token(),
             {"q": q, "limit": limit, "offset": offset},
+        )
+
+    @server.tool()
+    async def erp_product_setup_options_get(
+        manufacturer_search: Annotated[str, Field(max_length=100, description="Optional manufacturer or supplier name/code prefix.")] = "",
+    ) -> Any:
+        """Return canonical units, categories, manufacturers, and reference readiness for product setup."""
+        return await operation_gateway.execute(
+            OPERATIONS["erp_product_setup_options_get"], _access_token(), locals(),
+        )
+
+    @server.tool()
+    async def erp_product_ingredient_search(
+        search: Annotated[str, Field(min_length=1, max_length=100, description="Reviewed salt or ingredient name prefix.")],
+        limit: Annotated[int, Field(ge=1, le=50, description="Maximum reviewed ingredients to return.")] = 20,
+    ) -> Any:
+        """Search the effective reviewed ingredient classification used by product setup."""
+        return await operation_gateway.execute(
+            OPERATIONS["erp_product_ingredient_search"], _access_token(), locals(),
+        )
+
+    @server.tool()
+    async def erp_product_hsn_search(
+        search: Annotated[str, Field(min_length=1, max_length=100, description="HSN digits or official goods-description terms.")],
+        limit: Annotated[int, Field(ge=1, le=50, description="Maximum effective reviewed HSN records to return.")] = 20,
+    ) -> Any:
+        """Search effective reviewed HSN and GST references; never infer tax from a product name."""
+        return await operation_gateway.execute(
+            OPERATIONS["erp_product_hsn_search"], _access_token(), locals(),
+        )
+
+    @server.tool()
+    async def erp_product_setup_get(
+        product_id: Annotated[str, Field(description="Canonical product UUID returned by product creation.")],
+    ) -> Any:
+        """Read one product's exact setup, missing fields, row version, packing, and composition."""
+        return await operation_gateway.execute(
+            OPERATIONS["erp_product_setup_get"], _access_token(), locals(),
         )
 
     @server.tool()
@@ -146,6 +230,24 @@ def create_app(
         return await operation_gateway.execute(
             OPERATIONS["erp_supplier_search"], _access_token(),
             {"search_term": search_term, "limit": limit, "offset": offset},
+        )
+
+    @server.tool()
+    async def erp_customer_get(
+        customer_account_id: Annotated[str, Field(description="Exact canonical customer-account UUID returned by customer creation or search.")],
+    ) -> Any:
+        """Read one exact current customer account after creation or selection."""
+        return await operation_gateway.execute(
+            OPERATIONS["erp_customer_get"], _access_token(), locals(),
+        )
+
+    @server.tool()
+    async def erp_supplier_get(
+        supplier_account_id: Annotated[str, Field(description="Exact canonical supplier-account UUID returned by supplier creation or search.")],
+    ) -> Any:
+        """Read one exact current supplier account after creation or selection."""
+        return await operation_gateway.execute(
+            OPERATIONS["erp_supplier_get"], _access_token(), locals(),
         )
 
     @server.tool()
@@ -296,8 +398,39 @@ def create_app(
             OPERATIONS["erp_inventory_destruction_readback_get"], _access_token(), locals(),
         )
 
+    async def purchase_bill_mapping_review(**arguments: Any) -> Any:
+        return review_purchase_bill_mapping(arguments["mapping"])
+
+    server.add_tool(
+        purchase_bill_mapping_review,
+        name="erp_purchase_bill_mapping_review",
+        description=(
+            "Validate and resume a stateless, non-posting purchase-bill evidence mapping; "
+            "preserve unresolved/skipped facts and report the remaining canonical "
+            "purchase-order, goods-receipt, and supplier-invoice gates."
+        ),
+        annotations=LOCAL_REVIEW_TOOL_ANNOTATIONS,
+        structured_output=False,
+    )
+    purchase_bill_review_tool = server._tool_manager.get_tool(
+        "erp_purchase_bill_mapping_review"
+    )
+    if purchase_bill_review_tool is None:
+        raise RuntimeError("official MCP SDK did not register purchase-bill mapping review")
+    purchase_bill_review_tool.parameters = dict(PURCHASE_BILL_MAPPING_ARGUMENT_SCHEMA)
+    purchase_bill_review_tool.fn_metadata.arg_model = create_model(
+        "erp_purchase_bill_mapping_reviewArguments",
+        __base__=ExactOperatorArguments,
+        mapping=(Any, ...),
+    )
+
     def register_operator_tool(tool_name: str) -> None:
         operation = OPERATOR_OPERATIONS[tool_name]
+        annotations = (
+            READ_ONLY_TOOL_ANNOTATIONS
+            if operation.kind in READ_ONLY_OPERATOR_KINDS | {"review"}
+            else STATE_CHANGING_TOOL_ANNOTATIONS
+        )
 
         async def invoke(**arguments: Any) -> Any:
             return await operation_gateway.execute_operator(
@@ -308,6 +441,7 @@ def create_app(
             invoke,
             name=tool_name,
             description=OPERATOR_TOOL_DESCRIPTIONS[tool_name],
+            annotations=annotations,
             structured_output=False,
         )
         registered = server._tool_manager.get_tool(tool_name)
@@ -335,6 +469,12 @@ def create_app(
 
     for operator_tool_name in published_operator_action_tool_names():
         register_operator_tool(operator_tool_name)
+
+    for read_tool_name in OPERATIONS:
+        registered = server._tool_manager.get_tool(read_tool_name)
+        if registered is None:
+            raise RuntimeError(f"official MCP SDK did not register {read_tool_name}")
+        registered.annotations = READ_ONLY_TOOL_ANNOTATIONS
 
     @server.custom_route("/health", methods=["GET"])
     async def health(_: Request) -> JSONResponse:

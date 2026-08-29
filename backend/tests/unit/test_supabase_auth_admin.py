@@ -88,7 +88,7 @@ def test_rejects_missing_ambiguous_or_nonexact_secret(monkeypatch, records) -> N
         auth_admin.resolve_auth_admin_authority("management-token", PROJECT_REF)
 
 
-def test_admin_request_uses_apikey_and_bearer_without_leaking_failure_body(
+def test_admin_request_uses_modern_apikey_only_without_leaking_failure_body(
     monkeypatch,
 ) -> None:
     authority = auth_admin.SupabaseAuthAdminAuthority(PROJECT_REF, SECRET)
@@ -103,12 +103,10 @@ def test_admin_request_uses_apikey_and_bearer_without_leaking_failure_body(
     with pytest.raises(auth_admin.SupabaseAuthAdminError) as caught:
         auth_admin.auth_admin_request(authority, "GET", "users")
 
-    assert captured["headers"] == {
-        "apikey": SECRET,
-        "Authorization": f"Bearer {SECRET}",
-    }
+    assert captured["headers"] == {"apikey": SECRET}
     assert captured["url"] == f"https://{PROJECT_REF}.supabase.co/auth/v1/admin/users"
     assert str(caught.value) == "Supabase Auth Admin GET failed with HTTP 403"
+    assert caught.value.status_code == 403
     assert SECRET not in str(caught.value)
     assert "provider-body" not in str(caught.value)
 

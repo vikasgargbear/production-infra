@@ -141,6 +141,8 @@ PYTHONPATH=backend \
 PYTHONPATH=backend \
   python backend/tests/postgres/check_canonical_supplier_invoice_reads_runtime_role.py
 PYTHONPATH=backend \
+  python backend/tests/postgres/check_purchase_bill_mapping_lifecycle_pg15.py
+PYTHONPATH=backend \
   python backend/tests/postgres/check_canonical_return_runtime_role.py
 PYTHONPATH=backend \
   python backend/tests/postgres/check_canonical_supplier_payment_reads_runtime_role.py
@@ -170,6 +172,8 @@ PYTHONPATH=backend \
   python backend/tests/postgres/check_canonical_evidence_attachment_runtime_role.py
 PYTHONPATH=backend \
   python backend/tests/postgres/check_canonical_master_write_function_runtime_role.py
+PYTHONPATH=backend \
+  python backend/tests/postgres/check_product_master_mcp_read_runtime_role.py
 PYTHONPATH=backend \
   python backend/tests/postgres/check_canonical_product_setup_runtime_role.py
 PYTHONPATH=backend \

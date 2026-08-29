@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import datetime, time, timedelta, timezone
+from decimal import Decimal
 import hashlib
 import os
 from typing import Any
@@ -19,7 +20,11 @@ import psycopg2
 from psycopg2.extensions import AsIs, register_adapter
 
 from app.domain.operator_actions.contract import ACTION_POLICIES, PREPARE_PAYLOAD_MODELS
-from app.domain.operator_actions.models import ActionErrorCode, OperatorActionError
+from app.domain.operator_actions.models import (
+    ActionContext,
+    ActionErrorCode,
+    OperatorActionError,
+)
 from scripts import provision_canonical_demo as fixture
 from check_sales_dispatch_partial_input_credit_acceptance import (
     _approve,
@@ -115,6 +120,36 @@ def _execute_replay(service, prepared) -> UUID:
     return UUID(str(executed.resource_id))
 
 
+def _approve_as_reviewer(service, prepared):
+    return service.approve(
+        command_request_id=prepared.command_request_id,
+        preview_hash=prepared.preview_hash,
+        idempotency_key=f"approve-{prepared.command_request_id}",
+        context=ActionContext(
+            auth_user_id=UUID(fixture.IDS["reviewer_auth_user"]),
+            user_id=UUID(fixture.IDS["reviewer_user"]),
+            organization_id=UUID(fixture.IDS["org"]),
+            membership_id=UUID(fixture.IDS["reviewer_membership"]),
+            agent_grant_id=UUID(fixture.IDS["legacy_approver_agent_grant"]),
+            client_id=fixture.CLIENT_ID,
+            operation_key="automation.command.approve",
+            permission="automation.command.approve",
+            branch_ids=(UUID(fixture.IDS["branch"]),),
+            organization_scope=True,
+        ),
+    )
+
+
+def _execute_return_replay(service, prepared) -> UUID:
+    assert _approve_as_reviewer(service, prepared).status == "approved"
+    executed = _execute(service, prepared)
+    replayed = _execute(service, prepared)
+    assert executed.status == "succeeded"
+    assert replayed.idempotency_replayed is True
+    assert replayed.resource_id == executed.resource_id
+    return UUID(str(executed.resource_id))
+
+
 def _assert_supplier_invoice_rollback(runtime_dsn: str, invoice_id: UUID) -> None:
     with psycopg2.connect(runtime_dsn) as connection, connection.cursor() as cursor:
         cursor.execute(
@@ -141,6 +176,112 @@ def _assert_supplier_invoice_rollback(runtime_dsn: str, invoice_id: UUID) -> Non
             (fixture.IDS["org"], invoice_id),
         )
         assert cursor.fetchone() == ("approved", 0, 0, 0)
+
+
+def _return_balance(runtime_dsn: str, batch_id: str) -> Decimal:
+    with psycopg2.connect(runtime_dsn) as connection, connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT erp_security.activate_context(%s,%s)",
+            (fixture.IDS["operator_auth_user"], fixture.IDS["org"]),
+        )
+        cursor.execute(
+            """
+            SELECT on_hand_quantity
+              FROM inventory.stock_balances
+             WHERE org_id=%s AND branch_id=%s AND location_id=%s
+               AND product_id=%s AND batch_id=%s
+            """,
+            (
+                fixture.IDS["org"],
+                fixture.IDS["branch"],
+                fixture.IDS["saleable_location"],
+                fixture.IDS["product"],
+                batch_id,
+            ),
+        )
+        row = cursor.fetchone()
+    assert row is not None
+    return Decimal(row[0])
+
+
+def _assert_return_rollback(
+    runtime_dsn: str,
+    *,
+    return_kind: str,
+    return_id: UUID,
+    batch_id: str,
+    expected_status: str,
+    expected_balance: Decimal,
+) -> None:
+    sources = {
+        "sales": (
+            "sales.returns",
+            "sales_return_id",
+        ),
+        "purchase": (
+            "procurement.purchase_returns",
+            "purchase_return_id",
+        ),
+    }
+    header_table, return_fk = sources[return_kind]
+    with psycopg2.connect(runtime_dsn) as connection, connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT erp_security.activate_context(%s,%s)",
+            (fixture.IDS["operator_auth_user"], fixture.IDS["org"]),
+        )
+        cursor.execute(
+            f"""
+            SELECT returned.status,
+                   (SELECT count(*) FROM finance.adjustment_notes note
+                     WHERE note.org_id=returned.org_id
+                       AND note.{return_fk}=returned.id),
+                   (SELECT count(*) FROM tax.documents tax_document
+                      JOIN finance.adjustment_notes note
+                        ON note.org_id=tax_document.org_id
+                       AND note.id=tax_document.adjustment_note_id
+                     WHERE note.org_id=returned.org_id
+                       AND note.{return_fk}=returned.id),
+                   (SELECT count(*) FROM finance.accounting_events event
+                      JOIN finance.adjustment_notes note
+                        ON note.org_id=event.org_id
+                       AND note.id=event.adjustment_note_id
+                     WHERE note.org_id=returned.org_id
+                       AND note.{return_fk}=returned.id),
+                   (SELECT count(*) FROM inventory.stock_ledger_entries ledger
+                      JOIN inventory.inventory_documents document
+                        ON document.org_id=ledger.org_id
+                       AND document.id=ledger.inventory_document_id
+                     WHERE document.org_id=returned.org_id
+                       AND document.{return_fk}=returned.id)
+              FROM {header_table} returned
+             WHERE returned.org_id=%s AND returned.id=%s
+            """,
+            (fixture.IDS["org"], return_id),
+        )
+        evidence = cursor.fetchone()
+        assert evidence == (expected_status, 0, 0, 0, 0), evidence
+    assert _return_balance(runtime_dsn, batch_id) == expected_balance
+
+
+def _bump_return_row_version(admin_dsn: str, *, return_kind: str, return_id: UUID) -> None:
+    header_table = {
+        "sales": "sales.returns",
+        "purchase": "procurement.purchase_returns",
+    }[return_kind]
+    with psycopg2.connect(admin_dsn) as connection, connection.cursor() as cursor:
+        for setting, value in (
+            ("app.request_id", str(uuid4())),
+            ("app.org_id", fixture.IDS["org"]),
+            ("app.membership_id", fixture.IDS["reviewer_membership"]),
+            ("app.user_id", fixture.IDS["reviewer_user"]),
+        ):
+            cursor.execute("SELECT set_config(%s,%s,true)", (setting, value))
+        cursor.execute(
+            f"UPDATE {header_table} SET row_version=row_version+1 "
+            "WHERE org_id=%s AND id=%s",
+            (fixture.IDS["org"], return_id),
+        )
+        assert cursor.rowcount == 1
 
 
 def _line_id(admin_dsn: str, table: str, parent_column: str, parent_id: UUID) -> UUID:
@@ -543,6 +684,69 @@ def main() -> None:
             predecessor_purchase_return,
         )
 
+        purchase_return_key = f"chronology-purchase-return-{uuid4()}"
+        prepared_purchase_return = _prepare(
+            service,
+            "procurement.purchase_return.prepare",
+            purchase_return,
+            purchase_return_key,
+        )
+        purchase_return_prepare_replay = _prepare(
+            service,
+            "procurement.purchase_return.prepare",
+            purchase_return,
+            purchase_return_key,
+        )
+        assert (
+            purchase_return_prepare_replay.command_request_id
+            == prepared_purchase_return.command_request_id
+        )
+        assert (
+            purchase_return_prepare_replay.preview_hash
+            == prepared_purchase_return.preview_hash
+        )
+        purchase_return_id = _resource_id(
+            admin_dsn, prepared_purchase_return.command_request_id
+        )
+        assert _approve_as_reviewer(service, prepared_purchase_return).status == "approved"
+        purchase_balance_before = _return_balance(
+            runtime_dsn, receipt_readback["batch_id"]
+        )
+        _install_failure(admin_dsn)
+        try:
+            try:
+                _execute(service, prepared_purchase_return)
+            except Exception as error:
+                assert "injected journal failure" in str(error)
+            else:
+                raise AssertionError(
+                    "injected journal failure did not abort purchase return"
+                )
+            _assert_return_rollback(
+                runtime_dsn,
+                return_kind="purchase",
+                return_id=purchase_return_id,
+                batch_id=receipt_readback["batch_id"],
+                expected_status="submitted",
+                expected_balance=purchase_balance_before,
+            )
+        finally:
+            _remove_failure(admin_dsn)
+        executed_purchase_return = _execute(service, prepared_purchase_return)
+        replayed_purchase_return = _execute(service, prepared_purchase_return)
+        assert executed_purchase_return.status == "succeeded"
+        assert UUID(str(executed_purchase_return.resource_id)) == purchase_return_id
+        assert replayed_purchase_return.idempotency_replayed is True
+        assert replayed_purchase_return.resource_id == executed_purchase_return.resource_id
+        with psycopg2.connect(runtime_dsn) as connection:
+            purchase_return_readback = fixture.reconcile_purchase_return(
+                connection,
+                str(purchase_return_id),
+                str(prepared_purchase_return.command_request_id),
+            )
+        assert purchase_return_readback["base_billed_quantity"] == "10.000000"
+        assert purchase_return_readback["base_free_quantity"] == "0.000000"
+
         with psycopg2.connect(runtime_dsn) as connection:
             address_version = fixture.selected_customer_delivery_address_row_version(
                 connection, business_date=business_date
@@ -634,6 +838,68 @@ def main() -> None:
             service, "sales.return.prepare", predecessor_sales_return
         )
 
+        stale_sales_return = _prepare(
+            service,
+            "sales.return.prepare",
+            sales_return_payload,
+            f"chronology-sales-return-stale-{uuid4()}",
+        )
+        stale_sales_return_id = _resource_id(
+            admin_dsn, stale_sales_return.command_request_id
+        )
+        assert _approve_as_reviewer(service, stale_sales_return).status == "approved"
+        sales_balance_before = _return_balance(
+            runtime_dsn,
+            sales_return_payload["lines"][0]["batch_allocation"]["batch_id"],
+        )
+        _bump_return_row_version(
+            admin_dsn,
+            return_kind="sales",
+            return_id=stale_sales_return_id,
+        )
+        try:
+            _execute(service, stale_sales_return)
+        except OperatorActionError as error:
+            assert error.code is ActionErrorCode.STALE_VERSION
+        else:
+            raise AssertionError("stale sales-return aggregate executed")
+        _assert_return_rollback(
+            runtime_dsn,
+            return_kind="sales",
+            return_id=stale_sales_return_id,
+            batch_id=sales_return_payload["lines"][0]["batch_allocation"]["batch_id"],
+            expected_status="draft",
+            expected_balance=sales_balance_before,
+        )
+
+        sales_return_key = f"chronology-sales-return-{uuid4()}"
+        prepared_sales_return = _prepare(
+            service,
+            "sales.return.prepare",
+            sales_return_payload,
+            sales_return_key,
+        )
+        sales_return_prepare_replay = _prepare(
+            service,
+            "sales.return.prepare",
+            sales_return_payload,
+            sales_return_key,
+        )
+        assert (
+            sales_return_prepare_replay.command_request_id
+            == prepared_sales_return.command_request_id
+        )
+        assert sales_return_prepare_replay.preview_hash == prepared_sales_return.preview_hash
+        sales_return_id = _execute_return_replay(service, prepared_sales_return)
+        with psycopg2.connect(runtime_dsn) as connection:
+            sales_return_readback = fixture.reconcile_sales_return(
+                connection,
+                str(sales_return_id),
+                str(prepared_sales_return.command_request_id),
+            )
+        assert sales_return_readback["base_billed_quantity"] == "4.000000"
+        assert sales_return_readback["base_free_quantity"] == "0.000000"
+
         with psycopg2.connect(runtime_dsn) as connection, connection.cursor() as cursor:
             cursor.execute(
                 "SELECT erp_security.activate_context(%s,%s)",
@@ -722,7 +988,8 @@ def main() -> None:
 
     print(
         "posting chronology PostgreSQL 15 acceptance passed: "
-        f"supplier_invoice={supplier_invoice_id} dispatch={dispatch_id}"
+        f"supplier_invoice={supplier_invoice_id} dispatch={dispatch_id} "
+        f"purchase_return={purchase_return_id} sales_return={sales_return_id}"
     )
 
 

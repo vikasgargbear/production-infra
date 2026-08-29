@@ -46,9 +46,11 @@
     "erp_customer_cheque_clearance_prepare",
     "erp_customer_cheque_clearance_readback",
     "erp_customer_create",
+    "erp_customer_get",
     "erp_customer_receipt_prepare",
     "erp_customer_receipt_readback",
     "erp_customer_search",
+    "erp_customer_update",
     "erp_expense_claim_prepare",
     "erp_expense_claim_readback",
     "erp_goods_receipt_get",
@@ -69,8 +71,15 @@
     "erp_party_aging_get",
     "erp_party_statement_get",
     "erp_product_create",
+    "erp_product_hsn_search",
+    "erp_product_ingredient_search",
+    "erp_product_master_search",
     "erp_product_search",
+    "erp_product_setup",
+    "erp_product_setup_get",
+    "erp_product_setup_options_get",
     "erp_profit_loss_get",
+    "erp_purchase_bill_mapping_review",
     "erp_purchase_order_get",
     "erp_purchase_order_prepare",
     "erp_purchase_return_prepare",
@@ -92,22 +101,35 @@
     "erp_supplier_advance_prepare",
     "erp_supplier_advance_readback",
     "erp_supplier_create",
+    "erp_supplier_get",
     "erp_supplier_invoice_get",
     "erp_supplier_invoice_prepare",
     "erp_supplier_payment_prepare",
     "erp_supplier_payment_readback",
     "erp_supplier_search",
+    "erp_supplier_update",
     "erp_trial_balance_get"
   ],
   "writes_exported": true,
+  "local_review_tools": {
+    "erp_purchase_bill_mapping_review": {
+      "mode": "read_only_stateless",
+      "persists_business_data": false,
+      "resolves_canonical_ids": false,
+      "contract": "aasopharma.purchase_bill_mapping.v1"
+    }
+  },
   "operator_actions": {
     "contract": "docs/architecture/mcp-operator-actions.json",
     "status": "published_bounded",
     "exported": true,
     "direct_master_writes": [
       "erp_customer_create",
+      "erp_customer_update",
       "erp_product_create",
-      "erp_supplier_create"
+      "erp_product_setup",
+      "erp_supplier_create",
+      "erp_supplier_update"
     ],
     "published_tools": [
       "erp_adjustment_note_prepare",

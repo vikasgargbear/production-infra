@@ -15,7 +15,10 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
 from ...core.database import SessionLocal
-from ...domain.operator_actions.contract import ActionPolicy
+from ...domain.operator_actions.contract import (
+    ActionPolicy,
+    validate_prepare_payload_capabilities,
+)
 from ...domain.operator_actions.models import (
     ActionContext,
     ActionErrorCode,
@@ -2101,6 +2104,7 @@ class SqlAlchemyOperatorActionService:
         idempotency_key: str,
         context: ActionContext,
     ) -> PreparedCommand:
+        validate_prepare_payload_capabilities(policy.operation_key, payload)
         if not self.adapter_readiness()[policy.operation_key]:
             self._unavailable(policy.operation_key)
         identity = (
@@ -2254,6 +2258,7 @@ class SqlAlchemyOperatorActionService:
         idempotency_key: str,
         context: ActionContext,
     ) -> PreparedCommand:
+        validate_prepare_payload_capabilities(policy.operation_key, payload)
         if not self.adapter_readiness()[policy.operation_key]:
             self._unavailable(policy.operation_key)
         identity = (

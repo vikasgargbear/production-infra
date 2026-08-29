@@ -231,6 +231,11 @@
       "risk": "consequential_write",
       "approval_policy": "separate_approver",
       "schema_profile": "original_document_return",
+      "source_capabilities": {
+        "supported": ["dispatch_allocated"],
+        "blocked": ["direct_issue"],
+        "failure_code": "RETURN_SOURCE_AUTHORITY_UNAVAILABLE"
+      },
       "description": "Prepare a customer return and credit treatment with original invoice-line ceilings, exact returned batches, quarantine receipt and derived statutory eligibility."
     },
     {
@@ -271,6 +276,11 @@
       "risk": "consequential_write",
       "approval_policy": "separate_approver",
       "schema_profile": "original_document_return",
+      "source_capabilities": {
+        "supported": ["invoiced"],
+        "blocked": ["uninvoiced"],
+        "failure_code": "RETURN_SOURCE_AUTHORITY_UNAVAILABLE"
+      },
       "description": "Prepare a supplier return with original supplier-invoice ceilings, explicit batch issue and commercial debit-note versus supplier GST credit-note separation."
     },
     {

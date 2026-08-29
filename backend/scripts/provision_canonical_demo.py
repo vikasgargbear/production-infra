@@ -2867,7 +2867,7 @@ def activate_demo_product(connection) -> None:
         if status != "draft":
             raise RuntimeError("demo product is not in an activatable state")
         cursor.execute(
-            "SELECT erp_regulatory_commands.activate_product(%s, %s, %s, NULL, %s, transaction_timestamp() + interval '15 minutes')",
+            "SELECT product_id FROM erp_master_commands.activate_configured_product(%s, %s, %s, NULL, %s, transaction_timestamp() + interval '15 minutes')",
             (
                 IDS["org"],
                 IDS["product"],
@@ -5502,6 +5502,7 @@ def sales_return_payload(
         "lines": [
             {
                 "original_invoice_line_id": invoice_line_id,
+                "fulfillment_source": "dispatch_allocated",
                 "invoice_dispatch_allocation_id": allocation["invoice_dispatch_allocation_id"],
                 "billed_quantity": str(billed_quantity),
                 "free_quantity": "0",

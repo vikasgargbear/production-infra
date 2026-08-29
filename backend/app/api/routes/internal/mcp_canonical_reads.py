@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
+from decimal import Decimal
 import re
 from typing import Any, Literal, Optional
 from uuid import UUID
@@ -21,6 +22,7 @@ from ....core.database import get_db
 from .mcp_agent_grants import _internal_auth, bearer
 from .mcp_contract import CanonicalReadPolicy, policy_for
 from .. import (
+    canonical_erp_reads,
     canonical_party_aging_reads,
     canonical_party_ledger_reads,
     canonical_reporting_reads,
@@ -68,6 +70,56 @@ class SupplierSearchResponse(BaseModel):
     requires_selection: bool
     returned_count: int
     suppliers: list[SupplierSearchItem]
+
+
+class CustomerAccountReadback(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    customer_account_id: UUID
+    party_id: UUID
+    customer_code: str
+    customer_name: str
+    customer_type: Literal["individual", "organization"]
+    primary_phone: Optional[str] = None
+    primary_email: Optional[str] = None
+    contact_person_name: Optional[str] = None
+    address_line1: Optional[str] = None
+    address_line2: Optional[str] = None
+    city: Optional[str] = None
+    state_code: Optional[str] = None
+    pincode: Optional[str] = None
+    gst_number: Optional[str] = None
+    pan_number: Optional[str] = None
+    credit_limit: Decimal
+    credit_days: int
+    account_status: str
+    party_status: str
+    account_row_version: int
+    party_row_version: int
+
+
+class SupplierAccountReadback(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    supplier_account_id: UUID
+    party_id: UUID
+    supplier_code: str
+    supplier_name: str
+    primary_phone: Optional[str] = None
+    primary_email: Optional[str] = None
+    contact_person: Optional[str] = None
+    address_line1: Optional[str] = None
+    address_line2: Optional[str] = None
+    city: Optional[str] = None
+    state_code: Optional[str] = None
+    pincode: Optional[str] = None
+    gst_number: Optional[str] = None
+    pan_number: Optional[str] = None
+    payment_days: int
+    account_status: str
+    party_status: str
+    account_row_version: int
+    party_row_version: int
 
 
 def _search_tsquery(value: str) -> str:
@@ -371,15 +423,15 @@ def canonical_customer_activity(
     )
 
 
-@router.get("/products")
-def canonical_product_search(
-    q: str = Query("", max_length=128),
-    limit: int = Query(20, ge=1, le=100),
-    offset: int = Query(0, ge=0, le=10000),
-    context: CanonicalDelegation = Depends(get_canonical_delegation),
-    db: Session = Depends(get_db),
+def _canonical_product_rows(
+    q: str,
+    limit: int,
+    offset: int,
+    context: CanonicalDelegation,
+    db: Session,
+    *,
+    include_drafts: bool,
 ):
-    _require_operation(context, "master.products.search")
     search = " ".join(q.casefold().split())
     rows = db.execute(
         text(
@@ -388,7 +440,8 @@ def canonical_product_search(
                    product.name, product.generic_name, product.base_uom_code,
                    dosage_form, strength_display, hsn_code, drug_schedule,
                    requires_prescription, ndps_regulated, cold_chain_required,
-                   gtin, product.status, product.row_version,
+                   gtin, product.status, product.status AS lifecycle_status,
+                   product.row_version,
                    conversions.uom_conversions
               FROM catalog.products AS product
               CROSS JOIN LATERAL (
@@ -443,7 +496,9 @@ def canonical_product_search(
                      AND composition.valid_until IS NULL
                      AND ingredient.status='active'
               ) AS composition ON true
-             WHERE product.org_id=:org_id AND product.status IN ('active','blocked')
+             WHERE product.org_id=:org_id
+               AND (product.status IN ('active','blocked')
+                    OR (:include_drafts AND product.status='draft'))
                AND (:search='' OR pg_catalog.lower(product.name) LIKE :prefix
                     OR pg_catalog.lower(COALESCE(product.generic_name,'')) LIKE :prefix
                     OR pg_catalog.lower(product.sku) LIKE :prefix
@@ -472,9 +527,164 @@ def canonical_product_search(
             "tsquery": _search_tsquery(search),
             "limit": limit,
             "offset": offset,
+            "include_drafts": include_drafts,
         },
     ).fetchall()
     return _row_dicts(rows)
+
+
+@router.get("/products")
+def canonical_product_search(
+    q: str = Query("", max_length=128),
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0, le=10000),
+    context: CanonicalDelegation = Depends(get_canonical_delegation),
+    db: Session = Depends(get_db),
+):
+    """Transaction product selection; drafts are never eligible."""
+
+    _require_operation(context, "master.products.search")
+    return _canonical_product_rows(
+        q, limit, offset, context, db, include_drafts=False
+    )
+
+
+@router.get("/product-master")
+def canonical_product_master_search(
+    q: str = Query("", max_length=128),
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0, le=10000),
+    context: CanonicalDelegation = Depends(get_canonical_delegation),
+    db: Session = Depends(get_db),
+):
+    """Master-data product search with draft lifecycle and row versions."""
+
+    _require_operation(context, "master.product_catalog.search")
+    return _canonical_product_rows(
+        q, limit, offset, context, db, include_drafts=True
+    )
+
+
+@router.get("/product-setup-options")
+def canonical_product_setup_options(
+    manufacturer_search: str = Query("", max_length=100),
+    context: CanonicalDelegation = Depends(get_canonical_delegation),
+    db: Session = Depends(get_db),
+):
+    _require_operation(context, "master.product_setup_options.get")
+    return canonical_erp_reads.product_setup_options(
+        manufacturer_search, _delegated_user(context), db
+    )
+
+
+@router.get("/product-ingredients")
+def canonical_product_ingredient_search(
+    search: str = Query("", max_length=100),
+    limit: int = Query(20, ge=1, le=50),
+    context: CanonicalDelegation = Depends(get_canonical_delegation),
+    db: Session = Depends(get_db),
+):
+    _require_operation(context, "master.product_ingredients.search")
+    return {
+        "ingredients": canonical_erp_reads.product_setup_ingredients(
+            search, limit, _delegated_user(context), db
+        )
+    }
+
+
+@router.get("/product-hsn")
+def canonical_product_hsn_search(
+    search: str = Query("", max_length=100),
+    limit: int = Query(20, ge=1, le=50),
+    context: CanonicalDelegation = Depends(get_canonical_delegation),
+    db: Session = Depends(get_db),
+):
+    _require_operation(context, "master.product_hsn.search")
+    return {
+        "hsn_codes": canonical_erp_reads.product_setup_hsn_codes(
+            search, limit, _delegated_user(context), db
+        )
+    }
+
+
+@router.get("/product-setup")
+def canonical_product_setup_get(
+    product_id: UUID,
+    context: CanonicalDelegation = Depends(get_canonical_delegation),
+    db: Session = Depends(get_db),
+):
+    _require_operation(context, "master.product_setup.get")
+    return canonical_erp_reads.product_setup(
+        product_id, _delegated_user(context), db
+    )
+
+
+@router.get("/customer", response_model=CustomerAccountReadback)
+def canonical_customer_get(
+    customer_account_id: UUID,
+    context: CanonicalDelegation = Depends(get_canonical_delegation),
+    db: Session = Depends(get_db),
+) -> CustomerAccountReadback:
+    """Read one exact current customer account after canonical creation."""
+
+    _require_operation(context, "parties.customers.get")
+    row = db.execute(
+        text(
+            """
+            SELECT customer.id AS customer_account_id, customer.party_id,
+                   customer.customer_code, party.legal_name AS customer_name,
+                   party.party_kind AS customer_type,
+                   contact.phone AS primary_phone,
+                   contact.email AS primary_email,
+                   contact.name AS contact_person_name,
+                   address.line1 AS address_line1,
+                   address.line2 AS address_line2,
+                   address.city, address.state_code,
+                   address.postal_code AS pincode,
+                   registration.registration_number AS gst_number,
+                   party.pan AS pan_number, customer.credit_limit,
+                   customer.credit_days, customer.status AS account_status,
+                   party.status AS party_status,
+                   customer.row_version AS account_row_version,
+                   party.row_version AS party_row_version
+              FROM parties.customer_accounts AS customer
+              JOIN parties.parties AS party
+                ON party.org_id=customer.org_id AND party.id=customer.party_id
+              LEFT JOIN LATERAL (
+                  SELECT name,phone,email
+                    FROM parties.contacts
+                   WHERE org_id=customer.org_id AND party_id=customer.party_id
+                     AND status='active'
+                   ORDER BY is_primary DESC,id LIMIT 1
+              ) AS contact ON true
+              LEFT JOIN LATERAL (
+                  SELECT line1,line2,city,state_code,postal_code
+                    FROM parties.addresses
+                   WHERE org_id=customer.org_id AND party_id=customer.party_id
+                     AND status='active'
+                   ORDER BY is_primary DESC,id LIMIT 1
+              ) AS address ON true
+              LEFT JOIN LATERAL (
+                  SELECT registration_number
+                    FROM parties.tax_registrations
+                   WHERE org_id=customer.org_id AND party_id=customer.party_id
+                     AND registration_type='GSTIN'
+                     AND status IN ('active','pending_verification')
+                   ORDER BY CASE WHEN status='active' THEN 0 ELSE 1 END,
+                            valid_from DESC NULLS LAST,id LIMIT 1
+              ) AS registration ON true
+             WHERE customer.org_id=:org_id
+               AND customer.id=:customer_account_id
+            """
+        ),
+        {
+            "org_id": context.organization_id,
+            "customer_account_id": customer_account_id,
+        },
+    ).mappings().one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Customer account not found")
+    return CustomerAccountReadback(**row)
 
 
 @router.get("/suppliers", response_model=SupplierSearchResponse)
@@ -556,6 +766,73 @@ def canonical_supplier_search(
         returned_count=len(suppliers),
         suppliers=suppliers,
     )
+
+
+@router.get("/supplier", response_model=SupplierAccountReadback)
+def canonical_supplier_get(
+    supplier_account_id: UUID,
+    context: CanonicalDelegation = Depends(get_canonical_delegation),
+    db: Session = Depends(get_db),
+) -> SupplierAccountReadback:
+    """Read one exact current supplier account after canonical creation."""
+
+    _require_operation(context, "parties.suppliers.get")
+    row = db.execute(
+        text(
+            """
+            SELECT supplier.id AS supplier_account_id, supplier.party_id,
+                   supplier.supplier_code, party.legal_name AS supplier_name,
+                   contact.phone AS primary_phone,
+                   contact.email AS primary_email,
+                   contact.name AS contact_person,
+                   address.line1 AS address_line1,
+                   address.line2 AS address_line2,
+                   address.city, address.state_code,
+                   address.postal_code AS pincode,
+                   registration.registration_number AS gst_number,
+                   party.pan AS pan_number, supplier.payment_days,
+                   supplier.status AS account_status,
+                   party.status AS party_status,
+                   supplier.row_version AS account_row_version,
+                   party.row_version AS party_row_version
+              FROM parties.supplier_accounts AS supplier
+              JOIN parties.parties AS party
+                ON party.org_id=supplier.org_id AND party.id=supplier.party_id
+              LEFT JOIN LATERAL (
+                  SELECT name,phone,email
+                    FROM parties.contacts
+                   WHERE org_id=supplier.org_id AND party_id=supplier.party_id
+                     AND status='active'
+                   ORDER BY is_primary DESC,id LIMIT 1
+              ) AS contact ON true
+              LEFT JOIN LATERAL (
+                  SELECT line1,line2,city,state_code,postal_code
+                    FROM parties.addresses
+                   WHERE org_id=supplier.org_id AND party_id=supplier.party_id
+                     AND status='active'
+                   ORDER BY is_primary DESC,id LIMIT 1
+              ) AS address ON true
+              LEFT JOIN LATERAL (
+                  SELECT registration_number
+                    FROM parties.tax_registrations
+                   WHERE org_id=supplier.org_id AND party_id=supplier.party_id
+                     AND registration_type='GSTIN'
+                     AND status IN ('active','pending_verification')
+                   ORDER BY CASE WHEN status='active' THEN 0 ELSE 1 END,
+                            valid_from DESC NULLS LAST,id LIMIT 1
+              ) AS registration ON true
+             WHERE supplier.org_id=:org_id
+               AND supplier.id=:supplier_account_id
+            """
+        ),
+        {
+            "org_id": context.organization_id,
+            "supplier_account_id": supplier_account_id,
+        },
+    ).mappings().one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Supplier account not found")
+    return SupplierAccountReadback(**row)
 
 
 @router.get("/gst-settings")

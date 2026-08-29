@@ -29,9 +29,16 @@ AUTH_ADMIN_RETRYABLE_STATUS_CODES = frozenset(
 class SupabaseAuthAdminError(RuntimeError):
     """A modern runner-only Auth Admin contract could not be proven."""
 
-    def __init__(self, code: str, message: str) -> None:
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        *,
+        status_code: int | None = None,
+    ) -> None:
         super().__init__(message)
         self.code = code
+        self.status_code = status_code
 
 
 @dataclass(frozen=True)
@@ -56,10 +63,9 @@ class SupabaseAuthAdminAuthority:
 
     @property
     def headers(self) -> dict[str, str]:
-        return {
-            "apikey": self.secret_key,
-            "Authorization": f"Bearer {self.secret_key}",
-        }
+        # Modern ``sb_secret_`` keys are opaque API keys, not JWTs. Sending one
+        # as a Bearer token makes Auth attempt JWT parsing and reject the call.
+        return {"apikey": self.secret_key}
 
 
 def _json_response(response: requests.Response, code: str) -> Any:
@@ -108,6 +114,7 @@ def resolve_auth_admin_authority(
         raise SupabaseAuthAdminError(
             "MANAGEMENT_API_REJECTED",
             f"Supabase Management API rejected API-key readback with HTTP {response.status_code}",
+            status_code=response.status_code,
         )
     records = _json_response(response, "MANAGEMENT_API_RESPONSE_INVALID")
     matches = [
@@ -186,6 +193,7 @@ def auth_admin_request(
         raise SupabaseAuthAdminError(
             "AUTH_ADMIN_REJECTED",
             f"Supabase Auth Admin {normalized_method} failed with HTTP {response.status_code}",
+            status_code=response.status_code,
         )
     raise AssertionError("unreachable Auth Admin retry state")
 

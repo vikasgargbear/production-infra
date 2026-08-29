@@ -94,9 +94,9 @@ def test_retired_read_paths_are_absent_or_canonically_covered_in_openapi() -> No
     paths = app.openapi()["paths"]
 
     for retired_path in {
-        "/api/customers/{customer_id}", "/api/customers/{customer_id}/ledger",
+        "/api/customers/{customer_id}/ledger",
         "/api/customers/{customer_id}/outstanding",
-        "/api/suppliers/search", "/api/suppliers/{supplier_id}",
+        "/api/suppliers/search",
         "/api/suppliers/{supplier_id}/products", "/api/suppliers/{supplier_id}/purchases",
         "/api/products/search",
         "/api/products/master/categories", "/api/products/master/types",
@@ -175,6 +175,8 @@ def test_retired_read_paths_are_absent_or_canonically_covered_in_openapi() -> No
 
     assert "get" not in paths["/api/products/{product_id}"]
     assert {"put", "delete"} <= set(paths["/api/products/{product_id}"])
+    assert set(paths["/api/customers/{customer_id}"]) == {"patch"}
+    assert set(paths["/api/suppliers/{supplier_id}"]) == {"patch"}
 
     for canonical_path in {
         "/api/customers", "/api/customers/", "/api/customers/all-with-addresses",

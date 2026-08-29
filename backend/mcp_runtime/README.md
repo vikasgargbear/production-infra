@@ -1,10 +1,10 @@
 # AASOPharma MCP Runtime
 
 This isolated Python 3.11 service uses the official MCP SDK's stateless
-Streamable HTTP transport. It has no database connection. It exports 46 tools:
-15 bounded resolution and record reads, 17 prepare actions, four shared command
-lifecycle tools, and ten exact command readbacks through the application-owned
-delegated command boundary.
+Streamable HTTP transport. It has no database connection. It exports 71 tools:
+14 bounded base reads, 12 resolution reads, 22 prepare actions, four reversible
+master-data writes, four shared command lifecycle tools, and 15 exact command
+readbacks through the application-owned delegated boundary.
 
 The operator action schemas live in `aasopharma_mcp/operator_actions.py`
 and are governed by `docs/architecture/mcp-operator-actions.json`. They cover
@@ -13,6 +13,10 @@ movements through prepare, review, approve, execute, status, and exact readback.
 Execution accepts only the immutable `command_request_id`, `preview_hash`, and
 `idempotency_key`. Unsupported ingestion and operation variants remain absent
 from the registry instead of falling back to legacy or local behavior.
+Customer and supplier create schemas are generated from the canonical
+application models into `aasopharma_mcp/party_create_contracts.json`; CI rejects
+any generated-artifact drift. Exact party readback remains a sensitive,
+tenant-scoped read with the same party-management permission as creation.
 
 ## Configuration
 

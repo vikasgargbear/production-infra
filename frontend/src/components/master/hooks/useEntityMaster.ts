@@ -55,7 +55,7 @@ export interface UseEntityMasterConfig<T> {
     /** API functions */
     api: {
         getAll: (search?: string) => Promise<ApiResponse<T[]>>;
-        update: (id: string | number, data: Partial<T>) => Promise<ApiResponse<T>>;
+        update?: (id: string | number, data: Partial<T>) => Promise<ApiResponse<T>>;
         delete?: (id: string | number) => Promise<ApiResponse<void>>;
     };
 

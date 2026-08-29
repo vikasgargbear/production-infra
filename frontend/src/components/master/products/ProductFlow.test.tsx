@@ -9,6 +9,8 @@ const mockGetSetupOptions = jest.fn();
 const mockGetSetup = jest.fn();
 const mockSaveSetup = jest.fn();
 const mockActivate = jest.fn();
+const mockSearchHsnCodes = jest.fn();
+const mockSearchIngredients = jest.fn();
 const mockSuccess = jest.fn();
 
 jest.mock('../../../services/api', () => ({
@@ -19,98 +21,140 @@ jest.mock('../../../services/api', () => ({
     getSetup: (...args: unknown[]) => mockGetSetup(...args),
     saveSetup: (...args: unknown[]) => mockSaveSetup(...args),
     activate: (...args: unknown[]) => mockActivate(...args),
-    searchHsnCodes: jest.fn().mockResolvedValue({ data: [] }),
-    searchIngredients: jest.fn().mockResolvedValue({ data: [] }),
+    searchHsnCodes: (...args: unknown[]) => mockSearchHsnCodes(...args),
+    searchIngredients: (...args: unknown[]) => mockSearchIngredients(...args),
   },
 }));
 jest.mock('../../global/ui/feedback/Toast', () => ({ useToast: () => ({ success: mockSuccess }) }));
 jest.mock('../../../hooks/useEnterAsTab', () => ({ useEnterAsTab: () => undefined }));
 jest.mock('../../../hooks/useEscapeKey', () => ({ __esModule: true, default: () => undefined }));
 
+const productId = '33333333-3333-7333-8333-333333333333';
+const manufacturerId = '44444444-4444-7444-8444-444444444444';
+const ingredientId = '55555555-5555-7555-8555-555555555555';
 const options = {
   business_date: '2026-08-28', ingredient_reference_ready: true, hsn_reference_ready: true,
   categories: [],
-  units: [{ code: 'EA', name: 'Each', symbol: 'ea', dimension: 'count', decimal_places: 0 }],
-  manufacturers: [],
+  units: [
+    { code: 'EA', name: 'Each', symbol: 'ea', dimension: 'count', decimal_places: 0 },
+    { code: 'MG', name: 'Milligram', symbol: 'mg', dimension: 'mass', decimal_places: 6 },
+    { code: 'STRIP', name: 'Strip', symbol: 'strip', dimension: 'count', decimal_places: 3 },
+    { code: 'BX', name: 'Box', symbol: 'box', dimension: 'count', decimal_places: 3 },
+  ],
+  manufacturers: [{ manufacturer_party_id: manufacturerId, legal_name: 'Micro Labs', supplier_code: 'SUP-1' }],
 };
-const setupRead = {
-  product_id: '33333333-3333-7333-8333-333333333333', product_code: 'IMMUTABLE-P-1',
-  product_name: 'Original', generic_name: null, product_kind: 'medicine', category_id: null,
-  category_name: null, manufacturer_party_id: null, manufacturer_name: null, base_uom_code: 'EA',
-  dosage_form: null, strength_display: null, hsn_code: null, cold_chain_required: false,
-  minimum_storage_celsius: null, maximum_storage_celsius: null, shelf_life_days: null, gtin: null,
-  status: 'draft', row_version: 7, missing_fields: ['manufacturer_party_id', 'hsn_code', 'dosage_form', 'strength_display', 'ingredients'],
-  recommended_fields: ['category_id', 'shelf_life_days', 'gtin'], ready_to_activate: false,
-  pack_conversions: [], ingredients: [],
+const ingredient = {
+  ingredient_id: ingredientId, canonical_name: 'Paracetamol', salt_or_form: null,
+  drugs_rules_schedule: 'H' as const, ndps_classification: 'NONE',
+  schedule_h2_applicable_from: null, ruleset_version: 'ingredients-v1',
+};
+const configuredSetup = {
+  product_id: productId, product_code: 'GENERATED-P-1', product_name: 'Dolo 500',
+  generic_name: 'Paracetamol', product_kind: 'medicine' as const, category_id: null,
+  category_name: null, manufacturer_party_id: manufacturerId, manufacturer_name: 'Micro Labs',
+  base_uom_code: 'EA', dosage_form: 'Tablet', strength_display: '500 mg', hsn_code: '3004',
+  cold_chain_required: false, minimum_storage_celsius: null, maximum_storage_celsius: null,
+  shelf_life_days: null, gtin: null, status: 'draft' as const, row_version: 2,
+  missing_fields: [], recommended_fields: ['category_id', 'shelf_life_days', 'gtin'], ready_to_activate: true,
+  pack_conversions: [
+    { uom_code: 'STRIP', uom_name: 'Strip', multiplier: '10' },
+    { uom_code: 'BX', uom_name: 'Box', multiplier: '100' },
+  ],
+  ingredients: [{ ...ingredient, ingredient_role: 'active' as const, strength_value: '500',
+    strength_uom_code: 'MG', basis_quantity: '1', basis_uom_code: 'EA' }],
 };
 
 beforeEach(() => {
   jest.clearAllMocks();
   mockGetSetupOptions.mockResolvedValue({ data: options });
-  mockGetSetup.mockResolvedValue({ data: setupRead });
+  mockGetSetup.mockResolvedValue({ data: configuredSetup });
+  mockSearchHsnCodes.mockResolvedValue({ data: [{
+    tax_code_version_id: '66666666-6666-7666-8666-666666666666', hsn_code: '3004',
+    description: 'Medicaments', taxability: 'taxable', cgst_rate: '6', sgst_rate: '6',
+    igst_rate: '12', cess_rate: '0', ruleset_version: 'hsn-v1',
+  }] });
+  mockSearchIngredients.mockResolvedValue({ data: [ingredient] });
+  mockSaveSetup.mockResolvedValue({ data: { ...configuredSetup, row_version: 2 } });
 });
 
-test('creates one code-free draft attempt and continues into canonical classification', async () => {
-  let resolveCreate: (value: unknown) => void = () => undefined;
-  mockCreate.mockReturnValue(new Promise(resolve => { resolveCreate = resolve; }));
-  render(<ProductFlow open onClose={jest.fn()} onProductCreated={jest.fn()} />);
+const selectReviewedHsn = async () => {
+  fireEvent.change(screen.getByLabelText('HSN code *'), { target: { value: '30' } });
+  fireEvent.click(await screen.findByRole('button', { name: /3004 · 12% GST/i }));
+};
 
-  await screen.findByLabelText('Product name *');
-  expect(screen.queryByLabelText(/Internal product code/i)).not.toBeInTheDocument();
-  fireEvent.change(screen.getByLabelText('Product name *'), { target: { value: 'New medicine' } });
+const fillRequiredMedicine = async () => {
+  fireEvent.change(screen.getByLabelText('Product name *'), { target: { value: 'Dolo 500' } });
+  fireEvent.change(screen.getByLabelText(/Generic display name/), { target: { value: 'Paracetamol' } });
   fireEvent.change(screen.getByLabelText('Product kind *'), { target: { value: 'medicine' } });
-  const save = screen.getByRole('button', { name: 'Save & continue' });
-  fireEvent.click(save); fireEvent.click(save);
-  expect(mockCreate).toHaveBeenCalledTimes(1);
-  expect(mockCreate).toHaveBeenCalledWith(
-    { product_name: 'New medicine', product_kind: 'medicine' },
-    expect.stringMatching(/^erp-web-master-product-create:[0-9a-f-]{36}$/i),
-  );
-  resolveCreate({ data: { product_id: setupRead.product_id, product_code: 'GENERATED-P-1', product_name: 'New medicine', lifecycle_status: 'draft', row_version: 1, message: 'Draft created' } });
-  expect(await screen.findByText('Classification and tax')).toBeInTheDocument();
-  expect(mockSuccess).toHaveBeenCalledWith(expect.stringContaining('GENERATED-P-1'));
+  fireEvent.change(screen.getByLabelText(/Manufacturer/), { target: { value: manufacturerId } });
+  fireEvent.change(screen.getByLabelText('Dosage form *'), { target: { value: 'Tablet' } });
+  fireEvent.change(screen.getByLabelText(/Strength \*/), { target: { value: '500 mg' } });
+  await selectReviewedHsn();
+  fireEvent.change(screen.getByLabelText('Add salt *'), { target: { value: 'pa' } });
+  fireEvent.click(await screen.findByRole('button', { name: /Paracetamol/ }));
+  fireEvent.change(screen.getByLabelText(/Packing/), { target: { value: '10*10' } });
+};
+
+test('validates the complete form before creating a partial draft and uses friendly field names', async () => {
+  render(<ProductFlow open onClose={jest.fn()} onProductCreated={jest.fn()} />);
+  await screen.findByLabelText('Product name *');
+  fireEvent.change(screen.getByLabelText('Product name *'), { target: { value: 'Incomplete medicine' } });
+  fireEvent.change(screen.getByLabelText('Product kind *'), { target: { value: 'medicine' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Review setup' }));
+
+  expect(await screen.findByText('Manufacturer is required.')).toBeInTheDocument();
+  expect(screen.getByText('HSN code is required.')).toBeInTheDocument();
+  expect(mockCreate).not.toHaveBeenCalled();
 });
 
-test('existing drafts expose immutable code and preserve identity-only update boundary', async () => {
-  mockUpdate.mockResolvedValue({ data: { product_id: setupRead.product_id, product_code: 'IMMUTABLE-P-1', product_name: 'Renamed', lifecycle_status: 'draft', row_version: 8, message: 'Updated' } });
-  render(<ProductFlow open onClose={jest.fn()} product={{ product_id: setupRead.product_id, product_code: 'IMMUTABLE-P-1', product_name: 'Original', product_type: 'medicine', row_version: 7 }} />);
-
-  await screen.findByText('Classification and tax');
-  fireEvent.click(screen.getByRole('button', { name: 'Back' }));
-  expect(screen.getByLabelText('Immutable product code')).toHaveTextContent('IMMUTABLE-P-1');
-  fireEvent.change(screen.getByLabelText('Product name *'), { target: { value: 'Renamed' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Save & continue' }));
-  await waitFor(() => expect(mockUpdate).toHaveBeenCalledWith(setupRead.product_id, {
-    row_version: 7, product_name: 'Renamed', generic_name: undefined, product_kind: 'medicine',
-  }));
-});
-
-test('keeps the same draft attempt identity across a failed retry', async () => {
-  mockCreate.mockRejectedValueOnce(new Error('temporary failure')).mockResolvedValueOnce({ data: {
-    product_id: setupRead.product_id, product_code: 'GENERATED-P-2', product_name: 'Retry product',
+test('saves a complete product in one pass with exact familiar packing and typed salt strength', async () => {
+  mockCreate.mockResolvedValue({ data: {
+    product_id: productId, product_code: 'GENERATED-P-1', product_name: 'Dolo 500',
     lifecycle_status: 'draft', row_version: 1, message: 'Draft created',
   } });
-  render(<ProductFlow open onClose={jest.fn()} />);
+  render(<ProductFlow open onClose={jest.fn()} onProductCreated={jest.fn()} />);
   await screen.findByLabelText('Product name *');
-  fireEvent.change(screen.getByLabelText('Product name *'), { target: { value: 'Retry product' } });
-  fireEvent.change(screen.getByLabelText('Product kind *'), { target: { value: 'medicine' } });
-  const save = screen.getByRole('button', { name: 'Save & continue' });
-  fireEvent.click(save);
-  await screen.findByText('Failed to save product basics.');
-  fireEvent.click(save);
-  await waitFor(() => expect(mockCreate).toHaveBeenCalledTimes(2));
-  expect(mockCreate.mock.calls[0][1]).toBe(mockCreate.mock.calls[1][1]);
+  await fillRequiredMedicine();
+  fireEvent.click(screen.getByRole('button', { name: 'Review setup' }));
+
+  await waitFor(() => expect(mockCreate).toHaveBeenCalledTimes(1));
+  expect(mockCreate).toHaveBeenCalledWith(
+    { product_name: 'Dolo 500', generic_name: 'Paracetamol', product_kind: 'medicine' },
+    expect.stringMatching(/^erp-web-master-product-create:[0-9a-f-]{36}$/i),
+  );
+  await waitFor(() => expect(mockSaveSetup).toHaveBeenCalledWith(productId, expect.objectContaining({
+    row_version: 1, manufacturer_party_id: manufacturerId, base_uom_code: 'EA', hsn_code: '3004',
+    dosage_form: 'Tablet', strength_display: '500 mg',
+    pack_conversions: [
+      { uom_code: 'STRIP', multiplier: 10 },
+      { uom_code: 'BX', multiplier: 100 },
+    ],
+    ingredients: [{ ingredient_id: ingredientId, ingredient_role: 'active', strength_value: 500,
+      strength_uom_code: 'MG', basis_quantity: 1, basis_uom_code: 'EA' }],
+  })));
+  expect(await screen.findByText('Review product')).toBeInTheDocument();
+  expect(screen.getAllByText('Ready to add')).toHaveLength(2);
+  expect(screen.getByRole('button', { name: 'Add product' })).toBeInTheDocument();
 });
 
-test('shows every foundational product stage and keeps receipt-owned facts out of setup', async () => {
-  render(<ProductFlow open onClose={jest.fn()} product={{ product_id: setupRead.product_id, product_code: 'IMMUTABLE-P-1', product_name: 'Original', product_type: 'medicine', row_version: 7 }} />);
+test('existing drafts stay on the compact setup page and expose immutable code without raw draft jargon', async () => {
+  render(<ProductFlow open onClose={jest.fn()} product={{
+    product_id: productId, product_code: 'GENERATED-P-1', product_name: 'Dolo 500',
+    product_type: 'medicine', row_version: 2,
+  }} />);
+
+  await screen.findByText('Classification and tax');
+  expect(screen.getByLabelText('Immutable product code')).toHaveTextContent('GENERATED-P-1');
+  expect(screen.getByText('Setup incomplete')).toBeInTheDocument();
+  expect(screen.queryByText('Draft until activated')).not.toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Packing' })).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Salt / composition' })).toBeInTheDocument();
+});
+
+test('keeps receipt-owned batch, price and quantity facts out of product setup', async () => {
+  render(<ProductFlow open onClose={jest.fn()} />);
   await screen.findByText('Classification and tax');
   expect(screen.getByText(/Schedule, prescription, NDPS and H2 rules are derived/i)).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
-  expect(screen.getByText('Units and packaging')).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
-  expect(screen.getByText('Storage and shelf life')).toBeInTheDocument();
-  expect(screen.getByText('Reviewed composition *')).toBeInTheDocument();
   expect(screen.queryByLabelText(/MRP/i)).not.toBeInTheDocument();
   expect(screen.queryByLabelText(/Expiry date/i)).not.toBeInTheDocument();
   expect(screen.queryByLabelText(/Opening quantity/i)).not.toBeInTheDocument();

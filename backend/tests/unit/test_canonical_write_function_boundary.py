@@ -80,7 +80,8 @@ def test_runtime_tables_are_read_only_outside_named_functions() -> None:
             assert f"{verb} {relation}" not in routes
             assert f"{verb} {relation}" not in adapter
     assert "FROM catalog.products WHERE org_id=%s AND id=%s FOR UPDATE" not in demo
-    assert "erp_regulatory_commands.activate_product" in demo
+    assert "erp_master_commands.activate_configured_product" in demo
+    assert "erp_regulatory_commands.activate_product" not in demo
 
 
 def test_functions_fail_closed_on_context_staleness_and_evidence_conflict() -> None:
