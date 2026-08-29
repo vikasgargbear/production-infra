@@ -2012,7 +2012,7 @@ def suppliers(limit: int = Query(100, ge=1, le=1000), skip: int = Query(0, ge=0)
         WITH ranked AS MATERIALIZED (
           SELECT account.id AS supplier_id, account.party_id, account.supplier_code,
                  party.legal_name AS supplier_name, party.trade_name,
-                 contact.name AS contact_person,
+                 contact.name AS contact_person, party.pan AS pan_number,
                  contact.phone AS primary_phone, contact.email AS primary_email,
                  registration.registration_number AS gst_number,
                  registration.registration_status AS gst_verification_status,

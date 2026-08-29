@@ -168,6 +168,26 @@ def test_party_master_reads_transport_money_as_exact_strings(monkeypatch) -> Non
     assert suppliers[0]["current_outstanding"] == "9007199254740993.01"
 
 
+def test_supplier_master_read_projects_the_complete_canonical_edit_contract(
+    monkeypatch,
+) -> None:
+    org_id = uuid4()
+    captured = {}
+    monkeypatch.setattr(canonical_erp_reads, "_activate", lambda _db, _user: org_id)
+
+    def fake_rows(_db, sql, params):
+        captured["sql"] = sql
+        captured["params"] = params
+        return []
+
+    monkeypatch.setattr(canonical_erp_reads, "_rows", fake_rows)
+
+    assert canonical_erp_reads.suppliers(user={}, db=object()) == []
+    assert "contact.name AS contact_person" in captured["sql"]
+    assert "party.pan AS pan_number" in captured["sql"]
+    assert captured["params"]["org_id"] == org_id
+
+
 def test_canonical_router_covers_reads_and_bounded_master_writes() -> None:
     routes = [route for route in canonical_erp_reads.router.routes if isinstance(route, APIRoute)]
     assert {route.path for route in routes} >= {path.removeprefix("/api") for path in CRITICAL_UI_READS}
