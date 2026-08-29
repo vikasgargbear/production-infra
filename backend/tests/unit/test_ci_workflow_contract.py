@@ -46,14 +46,15 @@ def test_persistent_pilot_migration_is_explicit_bounded_and_non_resetting() -> N
     assert "MIGRATE_PERSISTENT_PILOT_IN_PLACE" in PILOT_MIGRATION
     assert "ref: ${{ inputs.reviewed_sha }}" in PILOT_MIGRATION
     assert "cancel-in-progress: false" in PILOT_MIGRATION
-    assert "--validate-current" in PILOT_MIGRATION
-    assert "pg_dump --schema-only" in PILOT_MIGRATION
-    assert PILOT_MIGRATION.count("alembic -c alembic.ini upgrade head") == 2
-    assert "revoke_staging_postgres_set_roles.sh migration-owner" in PILOT_MIGRATION
-    assert 'data_reset:false' in PILOT_MIGRATION
-    assert 'fixtures_loaded:false' in PILOT_MIGRATION
-    assert "railway up" not in PILOT_MIGRATION
-    assert "railway redeploy" not in PILOT_MIGRATION
+    assert "uses: ./.github/workflows/railway-canonical-staging.yml" in PILOT_MIGRATION
+    assert "reset_disposable_data: false" in PILOT_MIGRATION
+    assert "github_environment: canonical-staging" in PILOT_MIGRATION
+    assert "secrets: inherit" in PILOT_MIGRATION
+    assert "verify_staging_direct_roles.py" not in PILOT_MIGRATION
+    assert "railway_reset_control_plane.py open-fence" in PILOT_MIGRATION
+    assert 'reset_disposable_data: false' in PILOT_MIGRATION
+    assert 'provision-demo' not in PILOT_MIGRATION
+    assert 'fixtures' not in PILOT_MIGRATION.lower()
 
 
 def test_certification_reuses_exact_sha_and_has_separate_authority() -> None:
