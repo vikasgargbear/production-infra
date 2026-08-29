@@ -24,6 +24,14 @@ the release lane instead of partially updating the pilot.
 The pilot uses the `canonical-staging` GitHub environment and remains the place
 for persistent manual test organizations and browser testing.
 
+Database changes for that persistent pilot use the separate, manually
+dispatched `railway-pilot-in-place-migration.yml` lane. It requires an exact
+reviewed SHA and typed confirmation, validates the current revision against the
+linear canonical history, captures a pre-change schema artifact, runs Alembic
+twice to prove idempotency, removes temporary migration authority, and verifies
+the exact new revision and runtime grants. It does not recreate the database,
+clear tenant records, seed organizations, or deploy services.
+
 The frontend container performs only the production bundle build. Typecheck,
 lint, unit tests, and browser tests run against the same immutable source in PR
 and release CI and are not duplicated inside Railway's image builder.
