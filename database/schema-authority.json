@@ -159,6 +159,8 @@
     "backend/alembic/sql/20260829_0058_customer_receipt_operator_evidence.sql",
     "backend/alembic/versions/20260829_0059_grn_batch_release.py",
     "backend/alembic/sql/20260829_0059_grn_batch_release.sql",
+    "backend/alembic/versions/20260829_0060_runtime_readiness_schema_usage.py",
+    "backend/alembic/sql/20260829_0060_runtime_readiness_schema_usage.sql",
     "backend/scripts/generate_grn_batch_release_migration.py",
     "backend/alembic/versions/20260829_0060_canonical_drug_license_onboarding.py",
     "backend/alembic/sql/20260829_0060_canonical_drug_license_onboarding.sql",

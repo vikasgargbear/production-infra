@@ -162,6 +162,7 @@ def test_postgres_and_staging_gates_prove_runtime_exact_head_before_demo() -> No
     assert "check_runtime_deployment_readiness.py" in postgres_gate
     assert "has_function_privilege('erp_runtime', 'erp_security.deployed_canonical_revision()', 'EXECUTE')" in postgres_gate
     assert "has_function_privilege('erp_app', 'erp_security.deployed_canonical_revision()', 'EXECUTE')" in postgres_gate
+    assert "has_schema_privilege('erp_runtime', 'erp_security', 'USAGE')" in postgres_gate
 
     provision = workflow.split(
         "Provision and exercise the disposable demo organization", 1

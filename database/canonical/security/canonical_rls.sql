@@ -15,7 +15,7 @@ REVOKE CREATE ON SCHEMA "public" FROM PUBLIC;
 GRANT USAGE ON SCHEMA "extensions" TO "erp_migration_owner";
 CREATE SCHEMA "erp_security" AUTHORIZATION "erp_migration_owner";
 REVOKE ALL ON SCHEMA "erp_security" FROM PUBLIC;
-GRANT USAGE ON SCHEMA "erp_security" TO "erp_app";
+GRANT USAGE ON SCHEMA "erp_security" TO "erp_app", "erp_runtime";
 
 GRANT USAGE, CREATE ON SCHEMA "automation" TO "erp_migration_owner";
 REVOKE ALL ON SCHEMA "automation" FROM PUBLIC;
