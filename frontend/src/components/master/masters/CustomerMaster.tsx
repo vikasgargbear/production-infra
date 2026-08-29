@@ -8,7 +8,7 @@ import React from 'react';
 import {
   Users, Search, Plus, AlertCircle
 } from 'lucide-react';
-import { customersApi, ledgerApi } from '../../../services/api';
+import { customersApi } from '../../../services/api';
 import { DataTable, Column } from '../../global/ui/display/DataTable';
 import { GlobalLayout, ContentCard } from '../../global';
 import Button from '../../global/ui/Button';
@@ -16,7 +16,6 @@ import CustomerFlow from '../customers/CustomerFlow';
 import { useEntityMaster } from '../hooks';
 import type { Customer as BaseCustomer } from '../../../types/models';
 import ContactActions from './ContactActions';
-import { mergeCustomersWithCanonicalAging } from './customerAgingProjection';
 import CanonicalWriteNotice from '../../global/ui/CanonicalWriteNotice';
 import PartyAccountEditDialog from './PartyAccountEditDialog';
 import {
@@ -50,22 +49,15 @@ type Customer = Omit<BaseCustomer, 'credit_limit' | 'current_outstanding'> & {
   address_line_1?: string;
 };
 
-export const loadCustomersWithCanonicalAging = async (search = '') => {
-  const customersResponse = await customersApi.getAll({ limit: 1000, search });
+export const loadCustomersWithCanonicalAging = async (search = '', signal?: AbortSignal) => {
+  const customersResponse = await customersApi.getAll({ limit: 100, search }, { signal });
   const responseData = customersResponse.data as any;
   const customerRows: Customer[] = (Array.isArray(responseData)
     ? responseData
     : Array.isArray(responseData?.customers) ? responseData.customers : []) as Customer[];
-  let agingRows: Record<string, unknown>[] | null = null;
-  try {
-    const agingResponse = await ledgerApi.getCanonicalPartyAging({ party_type: 'customer' });
-    agingRows = Array.isArray(agingResponse.data?.parties) ? agingResponse.data.parties : [];
-  } catch {
-    agingRows = null;
-  }
   return {
     ...customersResponse,
-    data: mergeCustomersWithCanonicalAging(customerRows, agingRows),
+    data: customerRows.map(row => ({ ...row, outstanding_available: true })),
   };
 };
 

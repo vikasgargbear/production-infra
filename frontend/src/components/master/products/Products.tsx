@@ -19,8 +19,14 @@ const Products: React.FC = () => {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteTrigger, setDeleteTrigger] = useState<HTMLElement | null>(null);
   const newDraftButtonRef = useRef<HTMLButtonElement>(null);
+  const loadRequestRef = useRef(0);
+  const loadAbortRef = useRef<AbortController | null>(null);
 
   const load = useCallback(async (query = search, nextOffset = offset) => {
+    const requestId = ++loadRequestRef.current;
+    loadAbortRef.current?.abort();
+    const controller = new AbortController();
+    loadAbortRef.current = controller;
     setLoading(true);
     setError(null);
     try {
@@ -29,20 +35,26 @@ const Products: React.FC = () => {
         offset: nextOffset,
         search: query.trim(),
         include_inactive: true,
-      });
+      }, { signal: controller.signal });
+      if (requestId !== loadRequestRef.current) return;
       setProducts(response.data.products);
       setTotal(response.data.total);
     } catch {
+      if (controller.signal.aborted || requestId !== loadRequestRef.current) return;
       setError('Failed to load products.');
       setProducts([]);
     } finally {
-      setLoading(false);
+      if (requestId === loadRequestRef.current) setLoading(false);
+      if (loadAbortRef.current === controller) loadAbortRef.current = null;
     }
   }, [search, offset]);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => { void load(search, offset); }, search.trim() ? 220 : 0);
-    return () => window.clearTimeout(timer);
+    const timer = window.setTimeout(() => { void load(search, offset); }, search.trim() ? 275 : 0);
+    return () => {
+      window.clearTimeout(timer);
+      loadAbortRef.current?.abort();
+    };
   }, [search, offset, load]);
 
   const closeEditor = () => {

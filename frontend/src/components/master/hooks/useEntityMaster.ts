@@ -54,7 +54,7 @@ export interface UseEntityMasterConfig<T> {
 
     /** API functions */
     api: {
-        getAll: (search?: string) => Promise<ApiResponse<T[]>>;
+        getAll: (search?: string, signal?: AbortSignal) => Promise<ApiResponse<T[]>>;
         update?: (id: string | number, data: Partial<T>) => Promise<ApiResponse<T>>;
         delete?: (id: string | number) => Promise<ApiResponse<void>>;
     };
@@ -143,6 +143,8 @@ export function useEntityMaster<T extends { is_active?: boolean }>(
 
     // Search input ref for keyboard focus
     const searchInputRef = useRef<HTMLInputElement>(null);
+    const loadRequestRef = useRef(0);
+    const loadAbortRef = useRef<AbortController | null>(null);
 
     // Capitalize first letter for messages
     const entityLabel = entityName.charAt(0).toUpperCase() + entityName.slice(1);
@@ -177,10 +179,18 @@ export function useEntityMaster<T extends { is_active?: boolean }>(
     // ========================================
 
     const loadEntities = useCallback(async (): Promise<void> => {
+        const requestId = ++loadRequestRef.current;
+        loadAbortRef.current?.abort();
+        const controller = new AbortController();
+        loadAbortRef.current = controller;
         try {
             setIsLoading(true);
             setError(null);
-            const response = await getAll(serverSearch ? searchTerm.trim() : undefined);
+            const response = await getAll(
+                serverSearch ? searchTerm.trim() : undefined,
+                controller.signal,
+            );
+            if (requestId !== loadRequestRef.current) return;
 
             const data = extractData
                 ? extractData(response)
@@ -188,18 +198,23 @@ export function useEntityMaster<T extends { is_active?: boolean }>(
 
             setEntities(data);
         } catch (err) {
+            if (controller.signal.aborted || requestId !== loadRequestRef.current) return;
             setError(`Failed to load ${entityName}s. Please try again.`);
             setEntities([]);
         } finally {
-            setIsLoading(false);
+            if (requestId === loadRequestRef.current) setIsLoading(false);
+            if (loadAbortRef.current === controller) loadAbortRef.current = null;
         }
     }, [getAll, entityName, extractData, searchTerm, serverSearch]);
 
     // Load on mount
     useEffect(() => {
-        const delay = serverSearch && searchTerm.trim() ? 180 : 0;
+        const delay = serverSearch && searchTerm.trim() ? 275 : 0;
         const timer = window.setTimeout(() => void loadEntities(), delay);
-        return () => window.clearTimeout(timer);
+        return () => {
+            window.clearTimeout(timer);
+            loadAbortRef.current?.abort();
+        };
     }, [loadEntities, searchTerm, serverSearch]);
 
     // ========================================
