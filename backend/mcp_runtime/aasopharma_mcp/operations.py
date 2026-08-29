@@ -16,6 +16,7 @@ from .config import Settings
 from .operator_actions import (
     DECIMAL_PATTERN,
     IDEMPOTENCY_KEY_PATTERN,
+    MONEY_PATTERN,
     PREPARE_ACTIONS,
     PUBLISHED_PREPARE_TOOL_NAMES,
     SHARED_ACTION_SCHEMAS,

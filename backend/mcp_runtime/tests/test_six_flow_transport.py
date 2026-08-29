@@ -370,7 +370,7 @@ async def test_oauth_challenge_inventory_annotations_and_valid_sdk_session() -> 
         advertised = (await session.list_tools()).tools
 
     assert tuple(sorted(tool.name for tool in advertised)) == registered_tool_names()
-    assert len(advertised) == 72
+    assert len(advertised) == 75
     by_name = {tool.name: tool for tool in advertised}
     for name in OPERATIONS:
         annotation = by_name[name].annotations
@@ -684,6 +684,7 @@ async def test_sales_and_purchase_return_prepare_and_command_bound_readback() ->
         "lines": [
             {
                 "original_invoice_line_id": IDS["invoice-line"],
+                "fulfillment_source": "dispatch_allocated",
                 "invoice_dispatch_allocation_id": IDS["dispatch-allocation"],
                 "billed_quantity": "2",
                 "free_quantity": "0",
