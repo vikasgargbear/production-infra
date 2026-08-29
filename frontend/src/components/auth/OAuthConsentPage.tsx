@@ -73,9 +73,11 @@ const OAuthConsentPage: React.FC = () => {
                 throw new Error(authError?.message || 'The authorization request is invalid.');
             }
             if (!('authorization_id' in data)) {
-                throw new Error(
-                    'This request was already authorized. Revoke the existing authorization before reconnecting.',
-                );
+                if (!data.redirect_url) {
+                    throw new Error('Supabase did not return a redirect URL.');
+                }
+                redirectToOAuthClient(data.redirect_url);
+                return;
             }
             if (data.authorization_id !== authorizationId) {
                 throw new Error('The authorization response does not match this request.');
