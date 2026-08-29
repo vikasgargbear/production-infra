@@ -37,9 +37,13 @@ const displayDate = (value: string | null): string => {
     }
 };
 
-const displayQuantity = (value: unknown, label: string): string => (
-    formatExactDecimal(value, label, quantityOptions)
-);
+const displayQuantity = (value: unknown, label: string): string => {
+    const units = exactDecimalUnits(value, label, quantityOptions);
+    const hundredths = units / 10000n + (units % 10000n >= 5000n ? 1n : 0n);
+    return formatExactDecimal(exactDecimalString(hundredths, 2), label, {
+        scale: 2, maximumWholeDigits: 20, allowNegative: false,
+    });
+};
 
 const displayRate = (value: unknown, label: string): string => {
     const units = exactDecimalUnits(value, label, rateOptions);
@@ -141,7 +145,7 @@ export const CanonicalInvoiceDetailDialog: React.FC<CanonicalInvoiceDetailDialog
                 className="flex max-h-[94vh] w-full max-w-7xl flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-2xl">
                 <header className="flex shrink-0 items-start justify-between gap-4 border-b border-gray-200 px-4 py-3 sm:px-6">
                     <div className="min-w-0">
-                        <p className="text-xs font-semibold uppercase tracking-wider text-blue-700">Canonical Tax Invoice</p>
+                        <p className="text-xs font-semibold uppercase tracking-wider text-blue-700">Tax Invoice</p>
                         <h2 id="canonical-invoice-detail-title" className="truncate text-xl font-semibold text-gray-950">
                             {document.invoice_number}
                         </h2>
@@ -155,12 +159,12 @@ export const CanonicalInvoiceDetailDialog: React.FC<CanonicalInvoiceDetailDialog
                 <div className="min-h-0 flex-1 overflow-auto px-4 py-4 sm:px-6">
                     {loading && (
                         <div className="flex min-h-64 items-center justify-center text-sm text-gray-600" role="status">
-                            Loading canonical invoice…
+                            Loading invoice…
                         </div>
                     )}
                     {!loading && error && (
                         <div className="mx-auto flex min-h-64 max-w-xl flex-col items-center justify-center text-center" role="alert">
-                            <p className="font-medium text-red-800">The canonical invoice could not be loaded.</p>
+                            <p className="font-medium text-red-800">The invoice could not be loaded.</p>
                             <p className="mt-1 text-sm text-red-700">{error}</p>
                             <button type="button" onClick={onRetry}
                                 className="mt-4 min-h-10 rounded-md border border-red-300 px-4 text-sm font-medium text-red-800 hover:bg-red-50">
@@ -195,7 +199,7 @@ export const CanonicalInvoiceDetailDialog: React.FC<CanonicalInvoiceDetailDialog
                             </section>
 
                             <div className="overflow-x-auto rounded-lg border border-gray-200">
-                                <table className="min-w-[1050px] w-full border-collapse text-sm" aria-label="Canonical invoice lines">
+                                <table className="min-w-[1050px] w-full border-collapse text-sm" aria-label="Invoice lines">
                                     <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-600">
                                         <tr>
                                             <th className="px-3 py-2 text-left">Product</th>

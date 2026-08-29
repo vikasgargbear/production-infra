@@ -55,7 +55,7 @@ const canonicalDetail = {
     rounding_adjustment: '0.00', total_amount: '168.00', created_at: '2026-08-29T00:00:00Z',
     updated_at: '2026-08-29T00:00:00Z', items: [{
         id: 'line-1', product_id: 'product-1', product_name: 'AASOPOD-100 Dry Syrup', product_code: 'AASOPOD-100',
-        hsn_code: '30042019', uom_code: 'NOS', unit: 'NOS', quantity: '10.000000', free_quantity: '1.000000',
+        hsn_code: '30042019', uom_code: 'NOS', unit: 'NOS', quantity: '10.125000', free_quantity: '1.000000',
         free_supply_tax_treatment: 'excluded_from_taxable_value', unit_price: '15.0000',
         line_discount_kind: 'none', line_discount_basis: 'price_value', line_discount_value: '0.000000',
         line_discount_amount: '0.00', line_taxable_discount_amount: '0.00',
@@ -63,7 +63,7 @@ const canonicalDetail = {
         discount_percent: '0.000000',
         gst_percent: '12.000000', taxable_amount: '150.00', cgst_amount: '9.00', sgst_amount: '9.00',
         igst_amount: '0.00', line_total: '168.00', source_document_kind: 'sales_order',
-        base_billed_quantity: '10.000000', base_free_quantity: '1.000000', cess_amount: '0.00',
+        base_billed_quantity: '10.125000', base_free_quantity: '1.000000', cess_amount: '0.00',
         batch_id: 'batch-1', batch_number: 'D260153E', expiry_date: '2028-02-29', batch_allocations: [],
     }],
 };
@@ -92,7 +92,7 @@ test('mobile sales history cards keep exact Indian money and controls usable wit
     expect(screen.getByTestId('desktop-data-table')).toBeTruthy();
 });
 
-test('invoice number and desktop row open the full canonical commercial detail', async () => {
+test('invoice number and desktop row open a readable commercial detail', async () => {
     mockInvoicesApi.getById.mockResolvedValue({ data: canonicalDetail });
     render(<InvoiceTable
         invoices={[invoice]}
@@ -108,7 +108,10 @@ test('invoice number and desktop row open the full canonical commercial detail',
     const dialog = await screen.findByRole('dialog', { name: 'INV-1001' });
     expect(mockInvoicesApi.getById).toHaveBeenCalledWith('invoice-id');
     expect(await within(dialog).findByText('AASOPOD-100 Dry Syrup')).toBeTruthy();
+    expect(within(dialog).getByText('Tax Invoice')).toBeTruthy();
+    expect(within(dialog).queryByText(/canonical/i)).toBeNull();
     expect(within(dialog).getByText('HSN 30042019 | NOS')).toBeTruthy();
+    expect(within(dialog).getByText('10.13')).toBeTruthy();
     expect(within(dialog).getByRole('columnheader', { name: 'Expiry' })).toBeTruthy();
     expect(within(dialog).getByRole('columnheader', { name: 'GST % / Amount' })).toBeTruthy();
     expect(within(dialog).getAllByText('12%').length).toBeGreaterThan(0);
