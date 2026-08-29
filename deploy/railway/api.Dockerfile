@@ -47,11 +47,11 @@ COPY backend/scripts/canonical_migration_contract.py ./scripts/canonical_migrati
 COPY backend/scripts/canonical_staging_database.py ./scripts/canonical_staging_database.py
 COPY backend/scripts/cleanup_staging_evidence_storage.py ./scripts/cleanup_staging_evidence_storage.py
 COPY backend/scripts/compile_live18_browser_fixture.py ./scripts/compile_live18_browser_fixture.py
+COPY backend/scripts/deployment_control.py ./scripts/deployment_control.py
 COPY backend/scripts/exercise_staging_mcp_oauth.py ./scripts/exercise_staging_mcp_oauth.py
 COPY backend/scripts/live18_evidence_contract.py ./scripts/live18_evidence_contract.py
 COPY backend/scripts/live18_railway_database_phase.py ./scripts/live18_railway_database_phase.py
 COPY backend/scripts/manage_canonical_write_fence.py ./scripts/manage_canonical_write_fence.py
-COPY backend/scripts/deployment_control.py ./scripts/deployment_control.py
 COPY backend/scripts/provision_canonical_demo.py ./scripts/provision_canonical_demo.py
 COPY backend/scripts/provision_ephemeral_browser_identities.py ./scripts/provision_ephemeral_browser_identities.py
 COPY backend/scripts/provision_ephemeral_canonical_live.py ./scripts/provision_ephemeral_canonical_live.py
