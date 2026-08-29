@@ -202,6 +202,8 @@ def main() -> None:
         )
     }
     identity_response: dict[str, Any] | None = None
+    demo_provisioned = False
+    identity_attempted = False
     primary_error: BaseException | None = None
     cleanup_errors: list[str] = []
     temporary = Path(required("RUNNER_TEMP"))
@@ -268,6 +270,7 @@ def main() -> None:
             raise LiveRailwayExerciseError(
                 "Railway demo authority receipt is incomplete"
             )
+        demo_provisioned = True
         write_evidence("live-mcp-demo-evidence.json", demo)
         wait_for_public_authority()
 
@@ -280,6 +283,7 @@ def main() -> None:
             "mcp_url": f"{required('RAILWAY_MCP_URL').rstrip('/')}/mcp",
             "secrets": secret_map,
         }
+        identity_attempted = True
         identity_response = remote("provision-identities", identity_request)
         identity_environment = _apply_identity_response(
             {**identity_request, "response": identity_response}, temporary
@@ -334,7 +338,12 @@ def main() -> None:
                 ),
                 "secrets": secret_map,
             }
-            cleanup = remote("cleanup-identities", cleanup_request)
+            cleanup_action = (
+                "cleanup-identities"
+                if demo_provisioned and identity_attempted
+                else "recover-identities-before-demo"
+            )
+            cleanup = remote(cleanup_action, cleanup_request)
             require_clean_reconciliation(cleanup)
             write_evidence("live-mcp-cleanup-evidence.json", cleanup)
         except Exception as exc:  # noqa: BLE001 - authority closure must still run
@@ -366,6 +375,13 @@ def main() -> None:
         ):
             (temporary / name).unlink(missing_ok=True)
 
+    if primary_error is not None and cleanup_errors:
+        raise LiveRailwayExerciseError(
+            "live MCP exercise failed: "
+            + redact(str(primary_error))
+            + "; live MCP cleanup failed: "
+            + "; ".join(cleanup_errors)
+        ) from primary_error
     if cleanup_errors:
         raise LiveRailwayExerciseError(
             "live MCP cleanup failed: " + "; ".join(cleanup_errors)

@@ -1037,3 +1037,19 @@ def test_workflow_binds_frontend_origin_to_registered_railway_domain() -> None:
     assert '[.. | objects | .domain? // empty] | index($domain) != null' in workflow
     assert "SUPABASE_ACCESS_TOKEN:" in workflow
     assert "reconcile_supabase_auth_redirect.py" in workflow
+
+
+def test_live_mcp_helper_uses_pristine_recovery_until_identity_provisioning() -> None:
+    helper = (
+        ROOT / "backend/scripts/run_live_mcp_multiproduct_railway.py"
+    ).read_text(encoding="utf-8")
+
+    assert "demo_provisioned = False" in helper
+    assert "identity_attempted = False" in helper
+    assert 'identity_attempted = True\n        identity_response = remote(' in helper
+    assert (
+        '"cleanup-identities"\n                if demo_provisioned and identity_attempted\n'
+        '                else "recover-identities-before-demo"'
+    ) in helper
+    assert "live MCP exercise failed:" in helper
+    assert "; live MCP cleanup failed:" in helper
