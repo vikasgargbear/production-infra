@@ -137,15 +137,73 @@ def test_force_deploy_markers_are_watched_and_bound_into_exact_images() -> None:
         assert markers[service].removeprefix("/") in contents
 
 
-def test_api_watches_every_packaged_migration_authority_input() -> None:
+def test_api_watches_only_runtime_and_packaged_migration_inputs() -> None:
     patterns = set(_config("api")["build"]["watchPatterns"])
-    assert {
-        "/backend/**",
+    assert patterns == {
+        "/backend/app/**",
+        "/backend/alembic/**",
+        "/backend/migration_support/**",
+        "/backend/scripts/canonical_migration_contract.py",
+        "/backend/scripts/canonical_demo_ids.py",
+        "/backend/scripts/canonical_staging_database.py",
+        "/backend/scripts/compile_live18_browser_fixture.py",
+        "/backend/scripts/exercise_staging_mcp_oauth.py",
+        "/backend/scripts/live18_evidence_contract.py",
+        "/backend/scripts/live18_railway_database_phase.py",
+        "/backend/scripts/manage_canonical_write_fence.py",
+        "/backend/scripts/package_canonical_baseline_migration.py",
+        "/backend/scripts/provision_ephemeral_browser_identities.py",
+        "/backend/scripts/provision_ephemeral_canonical_live.py",
+        "/backend/scripts/provision_staging_mcp_oauth.py",
+        "/backend/scripts/supabase_auth_admin.py",
+        "/backend/tests/live_acceptance/**",
+        "/backend/tests/live_canonical/**",
+        "/backend/requirements.txt",
+        "/docs/architecture/mcp-operator-actions.json",
         "/database/schema-authority.json",
         "/database/canonical/domains/_contract.json",
-        "/deploy/control-plane/**",
+        "/deploy/control-plane/canonical-staging.json",
         "/deploy/railway/api.*",
-    } <= patterns
+    }
+
+    for non_runtime_path in (
+        "/backend/tests/unit/test_example.py",
+        "/backend/requirements-dev.txt",
+        "/backend/mcp_runtime/server.py",
+        "/backend/scripts/provision_canonical_demo.py",
+        "/backend/tests/integration/test_example.py",
+        "/docs/architecture/unrelated-design.md",
+        "/.github/workflows/production-readiness.yml",
+        "/README.md",
+    ):
+        assert not any(fnmatch(non_runtime_path, pattern) for pattern in patterns)
+
+
+def test_api_runtime_image_excludes_tests_docs_and_operator_tooling() -> None:
+    dockerfile = (ROOT / "deploy/railway/api.Dockerfile").read_text(
+        encoding="utf-8"
+    )
+
+    assert "FROM python:3.11-slim AS migration-contract" in dockerfile
+    assert "FROM python:3.11-slim AS runtime" in dockerfile
+    assert "COPY backend/app ./app" in dockerfile
+    assert "COPY backend/ ." not in dockerfile
+    assert "COPY backend/tests/unit" not in dockerfile
+    assert "COPY backend/tests/integration" not in dockerfile
+    assert "COPY backend/mcp_runtime" not in dockerfile
+    assert "COPY docs/architecture/mcp-operator-actions.json" in dockerfile
+    assert "COPY deploy/control-plane/canonical-staging.json" in dockerfile
+    assert "COPY deploy/control-plane /app/deploy/control-plane" not in dockerfile
+    assert "COPY backend/scripts/ ./scripts" not in dockerfile
+    assert (
+        "COPY backend/scripts/canonical_migration_contract.py "
+        "./scripts/canonical_migration_contract.py"
+    ) in dockerfile
+    assert (
+        "COPY backend/scripts/package_canonical_baseline_migration.py "
+        "./backend/scripts/package_canonical_baseline_migration.py"
+    ) in dockerfile
+    assert ".canonical-migration-contract-verified" in dockerfile
 
 
 def test_frontend_container_builds_once_and_serves_spa_with_healthcheck() -> None:
