@@ -68,6 +68,12 @@ def test_live18_capabilities_extend_only_the_live18_profile_from_generated_autho
     assert "inventory.destruction.prepare" not in ordinary
     assert "finance.expense_claim.prepare" not in live18
     assert live18["inventory.destruction.prepare"] == "separate_approver"
+    for capability in (
+        "catalog.product_draft.create",
+        "catalog.product_draft.configure",
+        "catalog.product.activate",
+    ):
+        assert live18[capability] == "actor_confirmation"
     assert len(MODULE.LIVE18_PREPARE_CAPABILITIES) == 21
     assert {
         "finance.adjustment_note.reversal.prepare",
