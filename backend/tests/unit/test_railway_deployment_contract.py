@@ -171,6 +171,7 @@ def test_api_watches_only_runtime_and_packaged_migration_inputs() -> None:
         "/database/schema-authority.json",
         "/database/canonical/domains/_contract.json",
         "/deploy/control-plane/canonical-staging.json",
+        "/deploy/control-plane/control-plane-v1.schema.json",
         "/deploy/railway/api.*",
     }
 
@@ -211,6 +212,10 @@ def test_api_runtime_image_excludes_tests_docs_and_operator_tooling() -> None:
     assert "from mcp_runtime.aasopharma_mcp.operator_actions import PREPARE_ACTIONS" in dockerfile
     assert "COPY docs/architecture/mcp-operator-actions.json" in dockerfile
     assert "COPY deploy/control-plane/canonical-staging.json" in dockerfile
+    assert (
+        "COPY deploy/control-plane/control-plane-v1.schema.json "
+        "./deploy/control-plane/control-plane-v1.schema.json"
+    ) in dockerfile
     assert "COPY deploy/control-plane /app/deploy/control-plane" not in dockerfile
     assert "COPY backend/scripts/ ./scripts" not in dockerfile
     assert (
