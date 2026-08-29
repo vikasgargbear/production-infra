@@ -257,22 +257,39 @@ jobs:
         if: always()
         run: |
           set -euo pipefail
+          cleanup_failed=0
           if test -s "$PILOT_SSH_FINGERPRINT"; then
             fingerprint=$(<"$PILOT_SSH_FINGERPRINT")
             railway ssh keys remove "$fingerprint" >/dev/null 2>&1 || true
-            for attempt in $(seq 1 12); do
-              railway ssh keys list > "$RUNNER_TEMP/railway-pilot-open-keys.txt"
-              if ! grep -F -- "$fingerprint" \
-                "$RUNNER_TEMP/railway-pilot-open-keys.txt" >/dev/null; then
-                break
+            ssh-add -d "$PILOT_SSH_PRIVATE_KEY" >/dev/null 2>&1 || true
+            rm -f "$PILOT_SSH_PRIVATE_KEY.pub"
+            key_removed=false
+            absent_observations=0
+            for attempt in $(seq 1 30); do
+              if railway ssh keys list > "$RUNNER_TEMP/railway-pilot-open-keys.txt" && \
+                 ! grep -F -- "$fingerprint" \
+                   "$RUNNER_TEMP/railway-pilot-open-keys.txt" >/dev/null; then
+                absent_observations=$((absent_observations + 1))
+                if test "$absent_observations" -eq 2; then
+                  key_removed=true
+                  break
+                fi
+              else
+                absent_observations=0
               fi
-              test "$attempt" -lt 12
+              echo "Waiting for Railway pilot SSH key removal (attempt $attempt/30)" >&2
               sleep 2
             done
+            if test "$key_removed" != true; then
+              echo 'Run-scoped Railway pilot SSH key remained after cleanup' >&2
+              cleanup_failed=1
+            fi
           fi
           if test -f "$PILOT_SSH_AGENT_STARTED"; then
             ssh-add -D >/dev/null 2>&1 || true
-            ssh-agent -k >/dev/null 2>&1 || true
+            ssh-agent -k >/dev/null 2>&1 || cleanup_failed=1
           fi
           rm -f "$PILOT_SSH_PRIVATE_KEY" "$PILOT_SSH_PRIVATE_KEY.pub" \
-            "$PILOT_SSH_FINGERPRINT" "$PILOT_SSH_AGENT_STARTED"
+            "$PILOT_SSH_FINGERPRINT" "$PILOT_SSH_AGENT_STARTED" \
+            "$RUNNER_TEMP/railway-pilot-open-keys.txt"
+          exit "$cleanup_failed"
