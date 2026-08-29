@@ -5,6 +5,8 @@
     "dockerfilePath": "/deploy/railway/api.Dockerfile",
     "watchPatterns": [
       "/backend/app/**",
+      "/backend/mcp_runtime/aasopharma_mcp/__init__.py",
+      "/backend/mcp_runtime/aasopharma_mcp/operator_actions.py",
       "/backend/alembic/**",
       "/backend/migration_support/**",
       "/backend/scripts/canonical_migration_contract.py",

@@ -33,9 +33,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Runtime contains the API plus the narrowly enumerated Live18 database-phase
 # harness used by production-readiness through `railway ssh`.  Ordinary unit
-# tests, development tools, repository documentation, and the MCP runtime are
-# deliberately not image inputs.
+# tests, development tools, repository documentation, and the MCP transport are
+# deliberately not image inputs. The two files below are the shared canonical
+# operator-action contract imported by the REST API; they contain no transport.
 COPY backend/app ./app
+COPY backend/mcp_runtime/aasopharma_mcp/__init__.py ./mcp_runtime/aasopharma_mcp/__init__.py
+COPY backend/mcp_runtime/aasopharma_mcp/operator_actions.py ./mcp_runtime/aasopharma_mcp/operator_actions.py
 COPY backend/alembic ./alembic
 COPY backend/migration_support ./migration_support
 COPY backend/scripts/canonical_demo_ids.py ./scripts/canonical_demo_ids.py
@@ -60,7 +63,8 @@ COPY --from=migration-contract /review/.canonical-migration-contract-verified /t
 COPY deploy/railway/api.force-deploy /app/.railway-deployment-provenance
 
 RUN test -f /tmp/.canonical-migration-contract-verified \
-    && rm /tmp/.canonical-migration-contract-verified
+    && rm /tmp/.canonical-migration-contract-verified \
+    && python -c "from mcp_runtime.aasopharma_mcp.operator_actions import PREPARE_ACTIONS; assert PREPARE_ACTIONS"
 
 RUN useradd --create-home --shell /usr/sbin/nologin appuser \
     && chown -R appuser:appuser /app
