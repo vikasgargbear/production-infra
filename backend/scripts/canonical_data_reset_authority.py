@@ -1455,7 +1455,8 @@ def execute_organization_purge(
         "preserved_seed_relation_count": len(authority.preserved_seed_relations),
         "preserved_seed_digest_sha256": after_seed_digest,
         "organization_relation_count": len(organization_relations),
-        "delete_order_relation_count": len(delete_order),
+        "delete_order_relation_count": len(delete_plan.relation_order),
+        "delete_statement_group_count": len(delete_plan.relation_groups),
         "deferred_cycle_foreign_key_count": len(
             delete_plan.deferred_cycle_constraints
         ),
