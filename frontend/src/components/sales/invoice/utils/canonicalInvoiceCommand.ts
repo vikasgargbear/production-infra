@@ -7,7 +7,9 @@ import { isCanonicalUuid } from '../../../../utils/canonicalUuid';
 import {
     addExactDecimals,
     compareExactDecimals,
+    exactDecimalString,
     exactDecimalUnits,
+    formatExactDecimal,
     normalizeExactDecimal,
 } from '../../../../utils/exactDecimal';
 
@@ -222,20 +224,122 @@ const documentDiscount = (invoice: Invoice): CanonicalDiscount => {
     };
 };
 
-/**
- * The current invoice command emits one selected batch allocation per line.
- * Until consecutive FEFO lots can be allocated as one audited operation, do
- * not partially submit a quantity that the selected batch cannot fulfill.
- */
+export interface CanonicalInvoiceBatchAllocation {
+    batch_id: string;
+    billed_quantity: string;
+    free_quantity: string;
+}
+
+const quantityOptions = { scale: 6, maximumWholeDigits: 14 } as const;
+
+const invoiceBatchCandidates = (item: InvoiceItem, index: number) => {
+    const prefix = `Item ${index + 1}`;
+    const source = item.allocation_batches?.length
+        ? item.allocation_batches
+        : [{
+            batch_id: item.batch_id,
+            batch_number: item.batch_number || '',
+            expiry_date: item.expiry_date || '',
+            available_quantity: item.available_quantity,
+            location_id: item.location_id,
+            branch_id: item.branch_id,
+            uom_conversion_id: item.uom_conversion_id,
+        }];
+    const locationId = requiredUuid(item.location_id, `${prefix} stock location`);
+    const branchId = requiredUuid(item.branch_id, `${prefix} branch`);
+    const uomId = requiredUuid(item.uom_conversion_id, `${prefix} UOM`);
+    const seen = new Set<string>();
+
+    return source.map((candidate, candidateIndex) => {
+        const label = `${prefix} batch ${candidateIndex + 1}`;
+        const batchId = requiredUuid(candidate.batch_id, label);
+        if (seen.has(batchId)) throw new Error(`${prefix} contains a duplicate batch allocation.`);
+        seen.add(batchId);
+        if (requiredUuid(candidate.location_id, `${label} location`) !== locationId
+            || requiredUuid(candidate.branch_id, `${label} branch`) !== branchId
+            || requiredUuid(candidate.uom_conversion_id, `${label} UOM`) !== uomId) {
+            throw new Error(`${prefix} batch allocations must use the same branch, location, and UOM.`);
+        }
+        const available = requiredQuantity(candidate.available_quantity, `${label} availability`);
+        if (exactDecimalUnits(available, `${label} availability`, quantityOptions) <= 0n) {
+            throw new Error(`${label} has no saleable stock.`);
+        }
+        return {
+            ...candidate,
+            batch_id: batchId,
+            available_quantity: available,
+        };
+    });
+};
+
+/** Allocate one logical invoice line across reviewed same-location batches in FEFO order. */
+export function buildInvoiceBatchAllocations(
+    item: InvoiceItem,
+    index: number,
+): CanonicalInvoiceBatchAllocation[] {
+    const prefix = `Item ${index + 1}`;
+    let billedRemaining = exactDecimalUnits(
+        requiredQuantity(item.quantity, `${prefix} billed quantity`),
+        `${prefix} billed quantity`,
+        quantityOptions,
+    );
+    let freeRemaining = exactDecimalUnits(
+        requiredQuantity(item.free_quantity, `${prefix} free quantity`),
+        `${prefix} free quantity`,
+        quantityOptions,
+    );
+    const allocations: CanonicalInvoiceBatchAllocation[] = [];
+
+    for (const candidate of invoiceBatchCandidates(item, index)) {
+        let capacity = exactDecimalUnits(
+            candidate.available_quantity,
+            `${prefix} batch availability`,
+            quantityOptions,
+        );
+        const billed = billedRemaining < capacity ? billedRemaining : capacity;
+        billedRemaining -= billed;
+        capacity -= billed;
+        const free = freeRemaining < capacity ? freeRemaining : capacity;
+        freeRemaining -= free;
+        if (billed > 0n || free > 0n) {
+            allocations.push({
+                batch_id: candidate.batch_id,
+                billed_quantity: exactDecimalString(billed, 6),
+                free_quantity: exactDecimalString(free, 6),
+            });
+        }
+        if (billedRemaining === 0n && freeRemaining === 0n) break;
+    }
+
+    if (billedRemaining > 0n || freeRemaining > 0n) {
+        const missing = exactDecimalString(billedRemaining + freeRemaining, 6);
+        throw new Error(`${prefix} needs ${missing} more units than the reviewed saleable batches contain.`);
+    }
+    return allocations;
+}
+
+export function invoiceBatchAllocationDisplay(item: InvoiceItem, index: number): string {
+    const allocations = buildInvoiceBatchAllocations(item, index);
+    const candidates = new Map(
+        invoiceBatchCandidates(item, index).map(candidate => [candidate.batch_id, candidate.batch_number]),
+    );
+    return allocations.map(allocation => {
+        const total = addExactDecimals(
+            [allocation.billed_quantity, allocation.free_quantity],
+            `Item ${index + 1} batch display quantity`,
+            quantityOptions,
+        );
+        return `${candidates.get(allocation.batch_id) || allocation.batch_id} ${formatExactDecimal(
+            total,
+            `Item ${index + 1} batch display quantity`,
+            quantityOptions,
+        )}`;
+    }).join(' · ');
+}
+
 export function invoiceBatchAllocationValidationError(invoice: Invoice): string | null {
     for (const [index, item] of invoice.items.entries()) {
         if (fulfillmentSource(item) === 'dispatch_allocated') continue;
-        let availableQuantity: string;
-        try {
-            availableQuantity = quantity(item.available_quantity, `Item ${index + 1} selected batch availability`);
-        } catch {
-            return `Item ${index + 1} selected batch availability is missing. Refresh the batch selection before continuing.`;
-        }
         try {
             const freeQuantity = requiredQuantity(
                 item.free_quantity,
@@ -246,13 +350,7 @@ export function invoiceBatchAllocationValidationError(invoice: Invoice): string 
                 freeQuantity,
                 `Item ${index + 1}`,
             );
-            const requestedQuantity = addExactDecimals([
-                requiredQuantity(item.quantity, `Item ${index + 1} billed quantity`),
-                freeQuantity,
-            ], `Item ${index + 1} requested quantity`, { scale: 6 });
-            if (compareExactDecimals(requestedQuantity, availableQuantity, `Item ${index + 1} availability`, { scale: 6 }) > 0) {
-                return `Item ${index + 1} needs ${requestedQuantity} units but the selected batch has ${availableQuantity}. Multi-batch allocation is not available yet; reduce the quantity or stop and refresh stock.`;
-            }
+            buildInvoiceBatchAllocations(item, index);
         } catch (error) {
             return error instanceof Error ? error.message : `Item ${index + 1} quantity is invalid`;
         }
@@ -424,11 +522,7 @@ export function buildCanonicalInvoicePreparePayload(
                 document_discount_eligible: true,
                 fulfillment_source: source,
                 ...(source === 'direct_issue' ? {
-                    batch_allocations: [{
-                        batch_id: requiredUuid(item.batch_id, `Item ${index + 1} batch`),
-                        billed_quantity: billedQuantity,
-                        free_quantity: freeQuantity,
-                    }],
+                    batch_allocations: buildInvoiceBatchAllocations(item, index),
                 } : {
                     dispatch_allocations: [{
                         dispatch_line_id: requiredUuid(
