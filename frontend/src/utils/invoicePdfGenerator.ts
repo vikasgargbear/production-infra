@@ -49,6 +49,9 @@ export interface InvoiceData {
     customer_drug_license_numbers: string[];
     billing_address: string;
     shipping_address: string;
+    supply_type: 'intra_state' | 'inter_state' | 'export' | 'sez';
+    place_of_supply_state_code: string;
+    place_of_supply_display_name: string;
     tax_charge_mechanism: 'normal' | 'reverse_charge';
     items: InvoiceItem[];
     subtotal_amount: string;
@@ -150,6 +153,13 @@ export const printableCanonicalInvoice = (detail: CanonicalInvoiceDetail): Invoi
         ),
         billing_address: archivedText(detail.billing_address, 'Billing-address snapshot'),
         shipping_address: archivedText(detail.shipping_address, 'Shipping-address snapshot'),
+        supply_type: detail.supply_type,
+        place_of_supply_state_code: archivedText(
+            detail.place_of_supply_state_code, 'Place-of-supply state code',
+        ),
+        place_of_supply_display_name: archivedText(
+            detail.place_of_supply_display_name, 'Place-of-supply name',
+        ),
         tax_charge_mechanism: detail.tax_charge_mechanism,
         items: detail.items.map(item => ({
             product_name: item.product_name,
@@ -369,6 +379,8 @@ export const generateInvoiceHTML = (invoice: InvoiceData): string => {
         ? `<div><strong>GSTIN:</strong> ${escapeHTML(invoice.customer_gst_number)}</div>` : '';
     const customerPhone = invoice.customer_phone
         ? `<div><strong>Phone:</strong> ${escapeHTML(invoice.customer_phone)}</div>` : '';
+    const placeOfSupply = `${requiredText(invoice.place_of_supply_display_name, 'Place-of-supply name')} (${requiredText(invoice.place_of_supply_state_code, 'Place-of-supply state code')})`;
+    const supplyType = requiredText(invoice.supply_type, 'Supply type').replace(/_/g, ' ');
     const discountDisplay = compareExactDecimals(
         invoice.discount_amount, '0.00', 'Invoice discount', moneyOptions,
     ) > 0 ? `-${money(invoice.discount_amount, 'Invoice discount')}` : money(invoice.discount_amount, 'Invoice discount');
@@ -405,8 +417,9 @@ th{background:#e2e8f0;font-size:7.5px;text-transform:uppercase}.items th:nth-chi
 <header class="header"><section><h1 class="seller-name">${escapeHTML(invoice.seller_legal_name)}</h1>
 <div><strong>GSTIN:</strong> ${escapeHTML(invoice.seller_gstin)}</div>${addressLines(invoice.seller_address, 'Seller address')}
 ${licenceLine(invoice.seller_drug_license_numbers, 'Seller drug licences')}</section>
-<section class="document-meta"><h2 class="invoice-title">Tax Invoice</h2><div><strong>Invoice No:</strong> ${escapeHTML(invoiceNumber)}</div>
-<div><strong>Date:</strong> ${escapeHTML(invoiceDate)}</div><div><strong>Status:</strong> ${escapeHTML(invoice.status).toUpperCase()}</div></section></header>
+<section class="document-meta"><div><strong>Original for Recipient</strong></div><h2 class="invoice-title">Tax Invoice</h2><div><strong>Invoice No:</strong> ${escapeHTML(invoiceNumber)}</div>
+<div><strong>Date:</strong> ${escapeHTML(invoiceDate)}</div><div><strong>Place of Supply:</strong> ${escapeHTML(placeOfSupply)}</div>
+<div><strong>Supply:</strong> ${escapeHTML(supplyType)}</div><div><strong>Status:</strong> ${escapeHTML(invoice.status).toUpperCase()}</div></section></header>
 <section class="party-grid"><div class="party-card"><h2>Bill To</h2><div class="party-name">${escapeHTML(invoice.customer_name)}</div>
 ${addressLines(invoice.billing_address, 'Customer billing address')}${customerGstin}${customerPhone}
 ${licenceLine(invoice.customer_drug_license_numbers, 'Customer drug licences')}</div>
@@ -422,7 +435,7 @@ ${summaryRow('Net Value', money(invoice.net_value_amount, 'Invoice net value'))}
 ${summaryRow('CGST', money(invoice.cgst_amount, 'Invoice CGST'))}${summaryRow('SGST', money(invoice.sgst_amount, 'Invoice SGST'))}
 ${summaryRow('IGST', money(invoice.igst_amount, 'Invoice IGST'))}${summaryRow('Cess', money(invoice.cess_amount, 'Invoice cess'))}
 ${summaryRow('Round Off', money(invoice.rounding_adjustment, 'Invoice rounding adjustment'))}${summaryRow('Grand Total', money(invoice.total_amount, 'Invoice grand total'), 'grand')}</div></section>
-<section class="signatures"><div class="signature">Customer Signature</div><div class="signature">For ${escapeHTML(invoice.seller_legal_name)}</div></section>
+<section class="signatures"><div class="signature">Recipient (name and signature)</div><div class="signature">Competent Person (name and signature)<br>For ${escapeHTML(invoice.seller_legal_name)}</div></section>
 <footer class="footer">Computer-generated tax invoice from the canonical posted sales record.</footer></main></body></html>`;
 };
 
@@ -465,10 +478,13 @@ export const buildInvoicePDF = (invoiceData: InvoiceData): jsPDF => {
     pdf.setFont('helvetica', 'bold'); pdf.setFontSize(14);
     pdf.text('TAX INVOICE', right, 12, { align: 'right' });
     pdf.setFontSize(7.5); pdf.setFont('helvetica', 'normal');
-    pdf.text(`Invoice No: ${invoiceData.invoice_number}`, right, 19, { align: 'right' });
-    pdf.text(`Date: ${invoiceData.invoice_date}`, right, 24, { align: 'right' });
-    pdf.text(`Status: ${invoiceData.status.toUpperCase()}`, right, 29, { align: 'right' });
-    const headerBottom = Math.max(39, sellerLicenceY + (invoiceData.seller_drug_license_numbers.length ? 5 : 1));
+    pdf.text('Original for Recipient', right, 17, { align: 'right' });
+    pdf.text(`Invoice No: ${invoiceData.invoice_number}`, right, 22, { align: 'right' });
+    pdf.text(`Date: ${invoiceData.invoice_date}`, right, 27, { align: 'right' });
+    pdf.text(`Place of Supply: ${invoiceData.place_of_supply_display_name} (${invoiceData.place_of_supply_state_code})`, right, 32, { align: 'right' });
+    pdf.text(`Supply: ${invoiceData.supply_type.replace(/_/g, ' ')}`, right, 37, { align: 'right' });
+    pdf.text(`Status: ${invoiceData.status.toUpperCase()}`, right, 42, { align: 'right' });
+    const headerBottom = Math.max(48, sellerLicenceY + (invoiceData.seller_drug_license_numbers.length ? 5 : 1));
     pdf.setDrawColor(30, 41, 59); pdf.setLineWidth(0.5); pdf.line(margin, headerBottom, right, headerBottom);
 
     const cardTop = headerBottom + 4;
@@ -588,8 +604,9 @@ export const buildInvoicePDF = (invoiceData: InvoiceData): jsPDF => {
     const signatureY = summaryY + 62;
     pdf.setFont('helvetica', 'normal'); pdf.setFontSize(7);
     pdf.line(margin, signatureY, 78, signatureY); pdf.line(132, signatureY, right, signatureY);
-    pdf.text('Customer Signature', 43, signatureY + 4, { align: 'center' });
-    pdf.text(`For ${invoiceData.seller_legal_name}`, 167, signatureY + 4, { align: 'center', maxWidth: 70 });
+    pdf.text('Recipient (name and signature)', 43, signatureY + 4, { align: 'center' });
+    pdf.text('Competent Person (name and signature)', 167, signatureY + 4, { align: 'center' });
+    pdf.text(`For ${invoiceData.seller_legal_name}`, 167, signatureY + 8, { align: 'center', maxWidth: 70 });
 
     const pageCount = pdf.getNumberOfPages();
     for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {

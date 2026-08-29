@@ -153,6 +153,9 @@ export const CanonicalInvoiceDetailDialog: React.FC<CanonicalInvoiceDetailDialog
                                     <dt className="text-gray-500">Due</dt><dd className="text-right font-medium">{displayDate(detail.due_date)}</dd>
                                     <dt className="text-gray-500">Status</dt><dd className="text-right font-medium capitalize">{detail.status.replace(/_/g, ' ')}</dd>
                                     <dt className="text-gray-500">Currency</dt><dd className="text-right font-medium">{detail.currency_code}</dd>
+                                    <dt className="text-gray-500">Place of Supply</dt><dd className="text-right font-medium">{detail.place_of_supply_display_name} ({detail.place_of_supply_state_code})</dd>
+                                    <dt className="text-gray-500">Supply</dt><dd className="text-right font-medium capitalize">{detail.supply_type.replace(/_/g, ' ')}</dd>
+                                    <dt className="text-gray-500">Tax</dt><dd className="text-right font-medium">{detail.tax_charge_mechanism === 'reverse_charge' ? 'Reverse charge' : 'Normal charge'}</dd>
                                 </dl>
                             </section>
 

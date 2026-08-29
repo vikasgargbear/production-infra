@@ -48,7 +48,8 @@ const canonicalDetail = {
     customer_gst_number: '27ABCDE1234F1Z5', customer_drug_license_numbers: [], billing_address: 'Buyer Road',
     shipping_address: 'Buyer Road', seller_gst_evidence: {}, customer_gst_evidence: {},
     seller_drug_licence_evidence: {}, customer_drug_licence_evidence: {}, due_date: '2026-09-05',
-    currency_code: 'INR', tax_charge_mechanism: 'normal', subtotal_amount: '150.00', discount_amount: '0.00',
+    currency_code: 'INR', supply_type: 'intra_state', place_of_supply_state_code: '27',
+    place_of_supply_display_name: 'Maharashtra', tax_charge_mechanism: 'normal', subtotal_amount: '150.00', discount_amount: '0.00',
     pre_tax_discount_amount: '0.00', charges_amount: '0.00', net_value_amount: '150.00', taxable_amount: '150.00',
     cgst_amount: '9.00', sgst_amount: '9.00', igst_amount: '0.00', cess_amount: '0.00',
     rounding_adjustment: '0.00', total_amount: '168.00', created_at: '2026-08-29T00:00:00Z',
@@ -109,4 +110,6 @@ test('invoice number and desktop row open the full canonical commercial detail',
     expect(within(dialog).getAllByText('12%').length).toBeGreaterThan(0);
     expect(within(dialog).getAllByText('₹18.00').length).toBeGreaterThan(0);
     expect(within(dialog).getByText('GST by rate and amount')).toBeTruthy();
+    expect(within(dialog).getByText('Maharashtra (27)')).toBeTruthy();
+    expect(within(dialog).getByText('intra state')).toBeTruthy();
 });

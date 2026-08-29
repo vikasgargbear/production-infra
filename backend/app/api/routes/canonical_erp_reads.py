@@ -3400,6 +3400,9 @@ class CanonicalInvoiceDetailResponse(BaseModel):
     customer_drug_licence_evidence: dict[str, Any]
     due_date: Optional[date]
     currency_code: str
+    supply_type: Literal["intra_state", "inter_state", "export", "sez"]
+    place_of_supply_state_code: str = Field(pattern=r"^[0-9]{2}$")
+    place_of_supply_display_name: str
     tax_charge_mechanism: Literal["normal", "reverse_charge"]
     subtotal_amount: ExactMoney
     discount_amount: ExactMoney
@@ -3478,7 +3481,17 @@ def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> di
                  AS seller_drug_licence_evidence,
                invoice.buyer_drug_licence_evidence_snapshot
                  AS customer_drug_licence_evidence,
-               invoice.due_date, invoice.currency_code,
+               invoice.due_date, invoice.currency_code, invoice.supply_type,
+               invoice.place_of_supply_state_code::text AS place_of_supply_state_code,
+               (SELECT jurisdiction.display_name
+                  FROM tax.gst_jurisdiction_versions jurisdiction
+                 WHERE jurisdiction.jurisdiction_code=invoice.place_of_supply_state_code
+                   AND jurisdiction.status='active'
+                   AND jurisdiction.supports_place_of_supply
+                   AND jurisdiction.effective_from<=invoice.invoice_date
+                   AND (jurisdiction.effective_to IS NULL
+                        OR jurisdiction.effective_to>=invoice.invoice_date)
+               ) AS place_of_supply_display_name,
                invoice.tax_charge_mechanism,
                to_char(invoice.subtotal, 'FM999999999999999990.00') AS subtotal_amount,
                to_char(invoice.discount_total, 'FM999999999999999990.00') AS discount_amount,
@@ -3504,12 +3517,26 @@ def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> di
                COALESCE(lines.items, '[]'::jsonb) AS items,
                invoice.created_at, invoice.updated_at
           FROM sales.invoices invoice
+          JOIN LATERAL (
+              SELECT pg_catalog.convert_from(
+                         (pg_catalog.array_agg(command.preview_bytes ORDER BY
+                            command.created_at, command.id))[1], 'UTF8'
+                     )::jsonb AS preview
+                FROM automation.command_requests command
+               WHERE command.org_id=invoice.org_id
+                 AND command.capability_code='sales.invoice.prepare'
+                 AND command.target_resource_type='sales_invoice'
+                 AND command.target_resource_id=invoice.id
+               HAVING pg_catalog.count(*)=1
+          ) command_snapshot ON true
           LEFT JOIN LATERAL (
               SELECT jsonb_agg(jsonb_build_object(
                          'id', line.id, 'source_document_kind', 'sales_order',
                          'product_id', line.product_id,
-                         'product_name', product.name, 'product_code', product.sku,
-                         'hsn_code', product.hsn_code, 'uom_code', line.uom_code,
+                         'product_name', product_identity.product_name,
+                         'product_code', product_identity.product_code,
+                         'hsn_code', line.tax_classification_code_snapshot,
+                         'uom_code', line.uom_code,
                          'unit', line.uom_code, 'quantity',
                              to_char(line.billed_quantity, 'FM999999999999999990.000000'),
                          'free_quantity',
@@ -3552,8 +3579,15 @@ def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> di
                          'batch_allocations', COALESCE(allocation.batch_allocations, '[]'::jsonb)
                      ) ORDER BY line.line_number) AS items
                 FROM sales.invoice_lines line
-                LEFT JOIN catalog.products product
-                  ON product.org_id=line.org_id AND product.id=line.product_id
+                LEFT JOIN LATERAL (
+                    SELECT reference.value->>'product_name' AS product_name,
+                           reference.value->>'product_code' AS product_code
+                      FROM jsonb_array_elements(
+                           command_snapshot.preview->'resolved_references'
+                      ) reference(value)
+                     WHERE reference.value->>'resource_type'='product'
+                       AND reference.value->>'id'=line.product_id::text
+                ) product_identity ON true
                 LEFT JOIN LATERAL (
                     SELECT count(*) AS allocation_count,
                            (array_agg(executed.batch_id ORDER BY

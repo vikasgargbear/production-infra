@@ -1399,9 +1399,12 @@ def test_sales_invoice_reads_project_authoritative_gst_header_totals() -> None:
     assert "COALESCE(document.cess_total, 0) AS cess_amount," in list_source
     for field in (
         "subtotal", "discount_total", "charges_total", "net_value_total",
-        "rounding_adjustment", "tax_charge_mechanism",
+        "rounding_adjustment", "tax_charge_mechanism", "supply_type",
+        "place_of_supply_state_code",
     ):
         assert f"invoice.{field}" in detail_source
+    assert "FROM tax.gst_jurisdiction_versions jurisdiction" in detail_source
+    assert "jurisdiction.supports_place_of_supply" in detail_source
     assert "discount_line.line_taxable_discount_amount" in detail_source
     assert "discount_line.document_taxable_discount_amount" in detail_source
     assert "AS pre_tax_discount_amount" in detail_source
@@ -1411,6 +1414,11 @@ def test_sales_invoice_reads_project_authoritative_gst_header_totals() -> None:
     assert "buyer_drug_licence_evidence_snapshot->'licences'" in detail_source
     assert "FROM compliance.licenses" not in detail_source
     assert "FROM parties.contacts" not in detail_source
+    assert "FROM automation.command_requests command" in detail_source
+    assert "command_snapshot.preview->'resolved_references'" in detail_source
+    assert "line.tax_classification_code_snapshot" in detail_source
+    assert "FROM catalog.products" not in detail_source
+    assert "product.hsn_code" not in detail_source
 
 
 def test_sales_invoice_detail_projects_executed_batch_allocations() -> None:
@@ -1578,6 +1586,8 @@ def test_sales_invoice_detail_response_validates_zero_one_and_many_allocations()
         "seller_drug_licence_evidence": {"availability": "none_effective"},
         "customer_drug_licence_evidence": {"availability": "none_effective"},
         "due_date": None, "currency_code": "INR",
+        "supply_type": "intra_state", "place_of_supply_state_code": "27",
+        "place_of_supply_display_name": "Maharashtra",
         "tax_charge_mechanism": "normal", "subtotal_amount": 300,
         "discount_amount": 0, "pre_tax_discount_amount": 0,
         "charges_amount": 0, "net_value_amount": 300,

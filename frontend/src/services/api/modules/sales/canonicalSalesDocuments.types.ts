@@ -86,6 +86,9 @@ export interface CanonicalInvoiceDetail {
   customer_drug_licence_evidence: Record<string, unknown>;
   due_date: string | null;
   currency_code: string;
+  supply_type: 'intra_state' | 'inter_state' | 'export' | 'sez';
+  place_of_supply_state_code: string;
+  place_of_supply_display_name: string;
   tax_charge_mechanism: 'normal' | 'reverse_charge';
   subtotal_amount: ExactDecimalString;
   /** Persisted customer-payable discount, including any tax effect. */

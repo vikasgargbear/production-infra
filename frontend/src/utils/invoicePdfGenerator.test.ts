@@ -41,6 +41,9 @@ const invoice = (): InvoiceData => ({
   customer_drug_license_numbers: ['MH-BUYER-20B'],
   billing_address: 'Buyer Lane\nPune',
   shipping_address: 'Buyer Lane\nPune',
+  supply_type: 'intra_state',
+  place_of_supply_state_code: '27',
+  place_of_supply_display_name: 'Maharashtra',
   tax_charge_mechanism: 'normal',
   items: [{
     product_name: 'Carton',
@@ -212,6 +215,11 @@ test('renders only canonical seller, buyer, line, and exact money facts', () => 
   expect(html).toContain('<strong>12%</strong>');
   expect(html).toContain('<div class="muted">₹18.00</div>');
   expect(html).toContain('GST by rate and amount');
+  expect(html).toContain('Original for Recipient');
+  expect(html).toContain('<strong>Place of Supply:</strong> Maharashtra (27)');
+  expect(html).toContain('<strong>Supply:</strong> intra state');
+  expect(html).toContain('Recipient (name and signature)');
+  expect(html).toContain('Competent Person (name and signature)');
   expect(html).toContain('₹168.00');
   expect(html).not.toContain('Your Company Name');
   expect(html).not.toContain('Customer Name');
