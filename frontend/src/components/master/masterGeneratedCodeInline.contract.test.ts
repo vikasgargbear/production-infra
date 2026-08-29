@@ -13,6 +13,12 @@ const productCreationCallback = (text: string): string => {
 };
 
 describe('inline product draft boundary', () => {
+  it('forwards the compatibility wrapper callback to the canonical product flow', () => {
+    const wrapper = source('../global/creation/ProductCreationModal.tsx');
+    expect(wrapper).toContain('onProductCreated,');
+    expect(wrapper).toContain('onProductCreated={onProductCreated}');
+  });
+
   it.each([
     ['sales invoice', '../sales/invoice/steps/InvoiceItemsStep.tsx', 'handleAddItem'],
     ['sales order', '../sales/order/SalesOrderFlow.tsx', 'handleProductSelect'],
@@ -20,8 +26,7 @@ describe('inline product draft boundary', () => {
   ])('%s never adds an unusable newly-created draft', (_label, file, addHandler) => {
     const callback = productCreationCallback(source(file));
     expect(callback).not.toContain(`${addHandler}(`);
-    expect(callback).toContain('classification and activation');
-    expect(callback).toContain('was not added');
+    expect(callback).toContain('was added with zero stock');
   });
 
   it('has no manual code field and explains backend ownership in reachable create forms', () => {

@@ -434,7 +434,7 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
           onClose={() => setShowProductModal(false)}
           onProductCreated={(product) => {
             setShowProductModal(false);
-            toast.info(`Product ${product.product_code} is a draft and was not added. Complete classification and activation before purchasing it.`);
+            toast.success(`Product ${product.product_code} was added with zero stock. Search and select it here, then receive its first batch through Goods receipt.`);
           }}
         />
       )}
