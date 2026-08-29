@@ -11,15 +11,14 @@ boundary. Authentication never falls back to cached credentials.
 
 ```
 auth/
-├── LoginPage.tsx          # Main login UI (180 lines)
+├── LoginPage.tsx          # Google-only login and onboarding UI
 ├── hooks/                 # Ready for future hooks
 └── README.md
 ```
 
 ## 🔐 Features
 
-- Email/password login
-- Google OAuth integration
+- Google OAuth integration for browser and native clients
 - Cloud API health gating
 - Server-confirmed Supabase session exchange
 
@@ -33,7 +32,7 @@ auth/
 ```typescript
 import { useAuth } from '../contexts/AuthContext';
 
-const { login, loginWithGoogle, logout, user, isAuthenticated } = useAuth();
+const { loginWithGoogle, logout, user, isAuthenticated } = useAuth();
 ```
 
 ---

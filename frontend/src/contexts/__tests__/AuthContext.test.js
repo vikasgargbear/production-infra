@@ -3,7 +3,6 @@ import { act, render, waitFor } from '@testing-library/react';
 import AuthContext, { AuthProvider } from '../AuthContext';
 
 
-const mockSignInWithPassword = jest.fn();
 const mockSignInWithOAuth = jest.fn();
 const mockSignInWithIdToken = jest.fn();
 const mockSignOut = jest.fn();
@@ -18,7 +17,6 @@ const mockClearNativeGoogleCredentialState = jest.fn();
 jest.mock('../../services/auth/supabaseClient', () => ({
     getSupabaseClient: () => ({
         auth: {
-            signInWithPassword: mockSignInWithPassword,
             signInWithOAuth: mockSignInWithOAuth,
             signInWithIdToken: mockSignInWithIdToken,
             signOut: mockSignOut,
@@ -87,33 +85,10 @@ beforeEach(() => {
 });
 
 
-test('email password is sent only to Supabase and ERP receives the bearer token', async () => {
-    mockSignInWithPassword.mockResolvedValue({
-        data: { session: { access_token: 'supabase-access' } },
-        error: null,
-    });
+test('does not expose unsupported email and password authentication', async () => {
     render(<AuthProvider><Probe /></AuthProvider>);
     await waitFor(() => expect(currentAuth.isLoading).toBe(false));
-
-    let result;
-    await act(async () => {
-        result = await currentAuth.login(' staff@example.com ', 'private-password');
-    });
-
-    expect(result.success).toBe(true);
-    expect(mockSignInWithPassword).toHaveBeenCalledWith({
-        email: 'staff@example.com',
-        password: 'private-password',
-    });
-    expect(fetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/auth/oauth/supabase/session'),
-        {
-            method: 'POST',
-            headers: { Authorization: 'Bearer supabase-access' },
-            signal: expect.any(AbortSignal),
-        },
-    );
-    expect(JSON.stringify(fetch.mock.calls)).not.toContain('private-password');
+    expect(currentAuth.login).toBeUndefined();
 });
 
 
@@ -742,17 +717,17 @@ test('invitation acceptance uses the URL token contract and exchanges an ERP ses
 });
 
 
-test('offline browsers cannot authenticate from cached credentials', async () => {
+test('offline browsers cannot begin Google authentication', async () => {
     Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: false });
     render(<AuthProvider><Probe /></AuthProvider>);
     await waitFor(() => expect(currentAuth.isLoading).toBe(false));
 
-    const result = await currentAuth.login('staff@example.com', 'private-password');
+    const result = await currentAuth.loginWithGoogle();
 
     expect(result).toEqual({
         success: false,
         error: 'An internet connection is required to sign in.',
     });
-    expect(mockSignInWithPassword).not.toHaveBeenCalled();
+    expect(mockSignInWithOAuth).not.toHaveBeenCalled();
     Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true });
 });
