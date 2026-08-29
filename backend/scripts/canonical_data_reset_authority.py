@@ -120,7 +120,7 @@ class ResetAuthorityError(RuntimeError):
 @dataclass(frozen=True)
 class OrganizationDeletePlan:
     relation_order: tuple[str, ...]
-    temporarily_deferred_constraints: tuple[tuple[str, str], ...]
+    temporarily_deferred_constraints: tuple[tuple[str, str, bool, bool], ...]
 
 
 @dataclass(frozen=True)
@@ -936,7 +936,8 @@ def _organization_delete_plan(
         SELECT child_namespace.nspname || '.' || child.relname AS child_relation,
                parent_namespace.nspname || '.' || parent.relname AS parent_relation,
                constraint_row.conname,
-               constraint_row.condeferrable
+               constraint_row.condeferrable,
+               constraint_row.condeferred
           FROM pg_catalog.pg_constraint AS constraint_row
           JOIN pg_catalog.pg_class AS child
             ON child.oid=constraint_row.conrelid
@@ -955,8 +956,10 @@ def _organization_delete_plan(
     )
     relation_set = set(relations)
     graph = {relation: set() for relation in relations}
-    constraints_by_edge: dict[tuple[str, str], list[tuple[str, bool]]] = {}
-    for child, parent, constraint, deferrable in cursor.fetchall():
+    constraints_by_edge: dict[
+        tuple[str, str], list[tuple[str, bool, bool]]
+    ] = {}
+    for child, parent, constraint, deferrable, initially_deferred in cursor.fetchall():
         child_name = str(child)
         parent_name = str(parent)
         if child_name not in relation_set or parent_name not in relation_set:
@@ -966,7 +969,7 @@ def _organization_delete_plan(
         graph[child_name].add(parent_name)
         edge = (child_name, parent_name)
         constraints_by_edge.setdefault(edge, []).append(
-            (str(constraint), bool(deferrable))
+            (str(constraint), bool(deferrable), bool(initially_deferred))
         )
 
     components = _strongly_connected_components(graph)
@@ -975,14 +978,17 @@ def _organization_delete_plan(
         for index, component in enumerate(components)
         for relation in component
     }
-    temporarily_deferred: list[tuple[str, str]] = []
+    temporarily_deferred: list[tuple[str, str, bool, bool]] = []
     for child, parents in graph.items():
         for parent in parents:
             if component_by_relation[child] != component_by_relation[parent]:
                 continue
-            for constraint, deferrable in constraints_by_edge[(child, parent)]:
-                if not deferrable:
-                    temporarily_deferred.append((child, constraint))
+            for constraint, deferrable, initially_deferred in constraints_by_edge[
+                (child, parent)
+            ]:
+                temporarily_deferred.append(
+                    (child, constraint, deferrable, initially_deferred)
+                )
 
     component_edges = {index: set() for index in range(len(components))}
     incoming = {index: 0 for index in range(len(components))}
@@ -1028,12 +1034,17 @@ def _organization_delete_order(
 
 def _set_foreign_key_deferral(
     cursor: Any,
-    constraints: Sequence[tuple[str, str]],
+    constraints: Sequence[tuple[str, str, bool, bool]],
     *,
     enabled: bool,
 ) -> None:
-    clause = "DEFERRABLE INITIALLY DEFERRED" if enabled else "NOT DEFERRABLE"
-    for relation, constraint in constraints:
+    for relation, constraint, was_deferrable, was_initially_deferred in constraints:
+        if enabled or (was_deferrable and was_initially_deferred):
+            clause = "DEFERRABLE INITIALLY DEFERRED"
+        elif was_deferrable:
+            clause = "DEFERRABLE INITIALLY IMMEDIATE"
+        else:
+            clause = "NOT DEFERRABLE"
         cursor.execute(
             f"ALTER TABLE {_quote_relation(relation)} ALTER CONSTRAINT "
             f"{_quote_identifier(constraint)} {clause}"
