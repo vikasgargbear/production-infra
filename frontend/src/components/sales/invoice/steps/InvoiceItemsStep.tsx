@@ -1,4 +1,4 @@
-import React, { RefObject, useEffect, useCallback } from 'react';
+import React, { RefObject, useEffect, useCallback, useRef } from 'react';
 import { FileText, User, Package, FileInput, AlertCircle, X } from 'lucide-react';
 
 // Global Components
@@ -103,6 +103,7 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
     const { hasCapability } = usePermissions();
     const canManageCustomers = hasCapability(FOUNDATION_CAPABILITIES.customer);
     const canManageProducts = hasCapability(FOUNDATION_CAPABILITIES.product);
+    const pendingItemFocus = useRef<{ productId?: string; batchId?: string } | null>(null);
     // Ctrl+Enter → Continue shortcut
     const batchAllocationError = invoiceBatchAllocationValidationError(invoice as any);
     const continueDisabled = isLoading || !selectedCustomer || !invoice.items || invoice.items.length === 0
@@ -118,6 +119,32 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
         document.addEventListener('keydown', handleGlobalKeyDown);
         return () => document.removeEventListener('keydown', handleGlobalKeyDown);
     }, [handleGlobalKeyDown]);
+
+    const handleQuickAddItem = useCallback((product: unknown) => {
+        const candidate = product && typeof product === 'object'
+            ? product as Record<string, unknown>
+            : {};
+        pendingItemFocus.current = {
+            productId: candidate.product_id === undefined ? undefined : String(candidate.product_id),
+            batchId: candidate.batch_id === undefined ? undefined : String(candidate.batch_id),
+        };
+        handleAddItem(product);
+    }, [handleAddItem]);
+
+    useEffect(() => {
+        const pending = pendingItemFocus.current;
+        if (!pending || !invoice.items?.length) return;
+        const rowIndex = invoice.items.findIndex(item => {
+            const productMatches = !pending.productId || String(item.product_id) === pending.productId;
+            const batchMatches = !pending.batchId || String(item.batch_id) === pending.batchId;
+            return productMatches && batchMatches;
+        });
+        if (rowIndex < 0) return;
+        pendingItemFocus.current = null;
+        window.setTimeout(() => {
+            (itemsTableRef.current as any)?.focusField?.(rowIndex, 'quantity');
+        }, 0);
+    }, [invoice.items, itemsTableRef]);
 
     const handleCanonicalItemUpdate = useCallback((
         index: number,
@@ -271,7 +298,7 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                                 </button>}
                             </div>
                             <ProductSearch
-                                onAddItem={handleAddItem}
+                                onAddItem={handleQuickAddItem}
                                 onCreateProduct={() => setShowProductModal(true)}
                                 enforceFefo
                                 ref={productSearchRef}
@@ -301,6 +328,7 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                                     currencySymbol="₹"
                                     preserveExactDecimals
                                     showFreeSupplyTaxTreatment
+                                    quantityDecimalPlaces={2}
                                 />
                                 {batchAllocationError && (
                                     <div
