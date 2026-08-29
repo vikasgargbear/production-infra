@@ -46,6 +46,7 @@ export interface InvoiceItem {
 export interface InvoiceData {
     invoice_number: string;
     invoice_date: string;
+    due_date: string | null;
     status: string;
     seller_legal_name: string;
     seller_gstin: string;
@@ -152,6 +153,7 @@ export const printableCanonicalInvoice = (detail: CanonicalInvoiceDetail): Invoi
     return {
         invoice_number: detail.invoice_number,
         invoice_date: detail.invoice_date,
+        due_date: detail.due_date,
         status: detail.status,
         seller_legal_name: archivedText(detail.seller_legal_name, 'Seller legal-name snapshot'),
         seller_gstin: archivedSellerGstin(detail.seller_gst_evidence, detail.seller_gstin),
@@ -420,11 +422,11 @@ export const generateInvoiceHTML = (invoice: InvoiceData): string => {
             <td class="center">${lineNumber}</td>
             <td><strong>${escapeHTML(item.product_name, `Invoice line ${lineNumber} product`)}</strong>
                 <div class="muted">${batchDetails(item, lineNumber)}</div>
+                <div class="muted">${escapeHTML(freeSupplyTreatmentLabel(item, lineNumber))}</div>
                 <div class="tax-detail">${lineTaxes.join(' | ')}</div></td>
             <td class="center">${escapeHTML(item.hsn_code, `Invoice line ${lineNumber} HSN`)}</td>
-            <td class="center">${atMostTwoDecimals(item.quantity, `Invoice line ${lineNumber} quantity`, 6)}
-                <div class="muted">Free ${atMostTwoDecimals(item.free_quantity, `Invoice line ${lineNumber} free quantity`, 6)}</div>
-                <div class="muted">${escapeHTML(freeSupplyTreatmentLabel(item, lineNumber))}</div></td>
+            <td class="center">Paid ${atMostTwoDecimals(item.quantity, `Invoice line ${lineNumber} quantity`, 6)}
+                <div class="muted">Free ${atMostTwoDecimals(item.free_quantity, `Invoice line ${lineNumber} free quantity`, 6)}</div></td>
             <td class="center">${escapeHTML(item.sale_unit, `Invoice line ${lineNumber} unit`)}</td>
             <td class="right">${rate(item.unit_price, `Invoice line ${lineNumber} rate`)}</td>
             <td class="center">${lineDiscountDisplay(item, lineNumber, money)}</td>
@@ -459,9 +461,9 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:10px;line-height:1.35}
 .party-card h2{margin:0 0 1.5mm;font-size:10px;text-transform:uppercase;color:#475569}.party-name{font-size:11px;font-weight:700}
 table{width:100%;border-collapse:collapse;table-layout:fixed}thead{display:table-header-group}
 tr{break-inside:avoid;page-break-inside:avoid}th,td{border:1px solid #94a3b8;padding:1.6mm 1mm;vertical-align:top;overflow-wrap:anywhere}
-th{background:#e2e8f0;font-size:8px;text-transform:uppercase}th:nth-child(1){width:4%}th:nth-child(2){width:31%}
-th:nth-child(3){width:8%}th:nth-child(4){width:9%}th:nth-child(5){width:7%}th:nth-child(6){width:11%}
-th:nth-child(7){width:8%}th:nth-child(8){width:8%}th:nth-child(9){width:14%}
+th{background:#e2e8f0;font-size:8px;text-transform:uppercase}th:nth-child(1){width:4%}th:nth-child(2){width:30%}
+th:nth-child(3){width:8%}th:nth-child(4){width:8%}th:nth-child(5){width:8%}th:nth-child(6){width:11%}
+th:nth-child(7){width:9%}th:nth-child(8){width:8%}th:nth-child(9){width:14%}
 .center{text-align:center}.right{text-align:right}.strong{font-weight:700}.muted{color:#475569;font-size:8px;margin-top:.7mm}
 .tax-detail{color:#334155;font-size:7.5px;margin-top:1mm}.summary-wrap{display:grid;grid-template-columns:1fr 76mm;gap:6mm;margin-top:5mm;align-items:start}
 .tax-note{border:1px solid #cbd5e1;padding:3mm;border-radius:2mm}
@@ -477,7 +479,8 @@ th:nth-child(7){width:8%}th:nth-child(8){width:8%}th:nth-child(9){width:14%}
 <div><strong>GSTIN:</strong> ${escapeHTML(invoice.seller_gstin)}</div>${addressLines(invoice.seller_address, 'Seller address')}
 ${licenceLine(invoice.seller_drug_license_numbers, 'Seller drug licences')}</section>
 <section class="document-meta"><div><strong>Original for Recipient</strong></div><h2 class="invoice-title">Tax Invoice</h2><div><strong>Invoice No:</strong> ${escapeHTML(invoiceNumber)}</div>
-<div><strong>Date:</strong> ${escapeHTML(invoiceDate)}</div><div><strong>Place of Supply:</strong> ${escapeHTML(placeOfSupply)}</div>
+<div><strong>Date:</strong> ${escapeHTML(invoiceDate)}</div><div><strong>Due Date:</strong> ${invoice.due_date ? escapeHTML(invoice.due_date, 'Invoice due date') : 'Not specified'}</div>
+<div><strong>Place of Supply:</strong> ${escapeHTML(placeOfSupply)}</div>
 <div><strong>Supply:</strong> ${escapeHTML(supplyType)}</div><div><strong>Status:</strong> ${escapeHTML(invoice.status).toUpperCase()}</div></section></header>
 <section class="party-grid"><div class="party-card"><h2>Bill To</h2><div class="party-name">${escapeHTML(invoice.customer_name)}</div>
 ${addressLines(invoice.billing_address, 'Customer billing address')}${customerGstin}${customerPhone}
@@ -494,7 +497,7 @@ ${summaryRow('CGST', money(invoice.cgst_amount, 'Invoice CGST'))}${summaryRow('S
 ${summaryRow('IGST', money(invoice.igst_amount, 'Invoice IGST'))}${summaryRow('Cess', money(invoice.cess_amount, 'Invoice cess'))}
 ${summaryRow('Round Off', money(invoice.rounding_adjustment, 'Invoice rounding adjustment'))}${summaryRow('Grand Total', money(invoice.total_amount, 'Invoice grand total'), 'grand')}</div></section>
 <section class="signatures"><div class="signature">Recipient (name and signature)</div><div class="signature">Competent Person (name and signature)<br>For ${escapeHTML(invoice.seller_legal_name)}</div></section>
-<footer class="footer">Computer-generated tax invoice from the canonical posted sales record.</footer></main></body></html>`;
+<footer class="footer">Computer-generated tax invoice from the posted sales record.</footer></main></body></html>`;
 };
 
 export const printInvoice = (invoiceData: InvoiceData): void => {
@@ -509,7 +512,7 @@ type InvoicePdfDocument = jsPDF & { lastAutoTable?: { finalY: number } };
 
 const pdfMoney = (value: unknown, label: string): string => money(value, label).replace('₹', 'INR ');
 const PDF_PAGE_MARGIN_MM = 9;
-const INVOICE_TABLE_COLUMN_WIDTHS_MM = [7, 80, 14, 16, 11, 19, 19, 26] as const;
+const INVOICE_TABLE_COLUMN_WIDTHS_MM = [7, 76, 14, 17, 17, 19, 18, 24] as const;
 const INVOICE_TABLE_WIDTH_MM = INVOICE_TABLE_COLUMN_WIDTHS_MM.reduce((total, width) => total + width, 0);
 
 /** Build a vector A4 PDF with deterministic pagination and repeated table headers. */
@@ -539,10 +542,11 @@ export const buildInvoicePDF = (invoiceData: InvoiceData): jsPDF => {
     pdf.text('Original for Recipient', right, 17, { align: 'right' });
     pdf.text(`Invoice No: ${invoiceData.invoice_number}`, right, 22, { align: 'right' });
     pdf.text(`Date: ${invoiceData.invoice_date}`, right, 27, { align: 'right' });
-    pdf.text(`Place of Supply: ${invoiceData.place_of_supply_display_name} (${invoiceData.place_of_supply_state_code})`, right, 32, { align: 'right' });
-    pdf.text(`Supply: ${invoiceData.supply_type.replace(/_/g, ' ')}`, right, 37, { align: 'right' });
-    pdf.text(`Status: ${invoiceData.status.toUpperCase()}`, right, 42, { align: 'right' });
-    const headerBottom = Math.max(48, sellerLicenceY + (invoiceData.seller_drug_license_numbers.length ? 5 : 1));
+    pdf.text(`Due Date: ${invoiceData.due_date || 'Not specified'}`, right, 32, { align: 'right' });
+    pdf.text(`Place of Supply: ${invoiceData.place_of_supply_display_name} (${invoiceData.place_of_supply_state_code})`, right, 37, { align: 'right' });
+    pdf.text(`Supply: ${invoiceData.supply_type.replace(/_/g, ' ')}`, right, 42, { align: 'right' });
+    pdf.text(`Status: ${invoiceData.status.toUpperCase()}`, right, 47, { align: 'right' });
+    const headerBottom = Math.max(53, sellerLicenceY + (invoiceData.seller_drug_license_numbers.length ? 5 : 1));
     pdf.setDrawColor(30, 41, 59); pdf.setLineWidth(0.5); pdf.line(margin, headerBottom, right, headerBottom);
 
     const cardTop = headerBottom + 4;
@@ -585,8 +589,8 @@ export const buildInvoicePDF = (invoiceData: InvoiceData): jsPDF => {
             + `CGST ${pdfMoney(item.cgst_amount, 'PDF line CGST')} | SGST ${pdfMoney(item.sgst_amount, 'PDF line SGST')} | `
             + `IGST ${pdfMoney(item.igst_amount, 'PDF line IGST')}${cess}`;
         return [
-            String(index + 1), `${item.product_name}\n${batches}\n${taxes}`, item.hsn_code,
-            `${atMostTwoDecimals(item.quantity, 'PDF quantity', 6)}\nFree ${atMostTwoDecimals(item.free_quantity, 'PDF free quantity', 6)}\n${freeSupplyTreatmentLabel(item, index + 1)}`,
+            String(index + 1), `${item.product_name}\n${batches}\n${freeSupplyTreatmentLabel(item, index + 1)}\n${taxes}`, item.hsn_code,
+            `Paid ${atMostTwoDecimals(item.quantity, 'PDF quantity', 6)}\nFree ${atMostTwoDecimals(item.free_quantity, 'PDF free quantity', 6)}`,
             item.sale_unit, pdfMoney(roundedRate(item.unit_price, 'PDF rate'), 'PDF normalized rate'),
             `${lineDiscountDisplay(item, index + 1, pdfMoney)} / ${atMostTwoDecimals(item.gst_percent, 'PDF GST rate', 6)}%`,
             pdfMoney(item.line_total, 'PDF line total'),
