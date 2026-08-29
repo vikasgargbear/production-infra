@@ -84,6 +84,42 @@ def test_live18_capabilities_extend_only_the_live18_profile_from_generated_autho
     }.issubset(dict(MODULE.LIVE18_PREPARE_CAPABILITIES))
 
 
+def test_live18_master_capability_bounds_match_shared_policy_and_database_checks():
+    bounds = {
+        capability: (operation_mode, risk_class, approval_policy)
+        for capability, operation_mode, risk_class, approval_policy
+        in MODULE._capability_bounds("requester", live18=True)
+    }
+
+    for operation_key in MODULE.LIVE18_DIRECT_MASTER_CAPABILITIES:
+        policy = MODULE.master_write_policy_for(operation_key)
+        assert policy is not None
+        operation_mode, risk_class, approval_policy = bounds[operation_key]
+        assert operation_mode == "write"
+        assert risk_class == policy.risk_class
+        assert approval_policy == policy.approval_policy
+        assert not (
+            risk_class in {"consequential_write", "regulated_external"}
+            and approval_policy == "none"
+        )
+
+    assert bounds["catalog.product_draft.create"] == (
+        "write",
+        "reversible_write",
+        "actor_confirmation",
+    )
+    assert bounds["catalog.product_draft.configure"] == (
+        "write",
+        "reversible_write",
+        "actor_confirmation",
+    )
+    assert bounds["catalog.product.activate"] == (
+        "write",
+        "consequential_write",
+        "actor_confirmation",
+    )
+
+
 def test_live23_fixture_resolution_requires_a_bounded_run_token_and_lineage() -> None:
     for invalid in ("local", "0-1", "1-0", "1" * 21 + "-1", "1-" + "1" * 11):
         with pytest.raises(MODULE.CanonicalLiveIdentityError, match="run token"):
