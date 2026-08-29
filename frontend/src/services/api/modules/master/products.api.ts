@@ -129,7 +129,8 @@ export const productsApi = {
   // Search products
   search: (query: string, params: ProductParams = {}) => {
     return apiHelpers.get('/products', {
-      params: { search: query, ...params }
+      params: { search: query, ...params },
+      preserveExactDecimals: true,
     }).then(response => ({ ...response, data: decodeCanonicalProductList(response.data).products }));
   },
 };

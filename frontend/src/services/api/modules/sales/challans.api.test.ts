@@ -1,4 +1,9 @@
-import { normalizeCanonicalSalesDispatchReadback } from './challans.api';
+import { apiHelpers } from '../../apiClient';
+import { challansApi, normalizeCanonicalSalesDispatchReadback } from './challans.api';
+
+jest.mock('../../apiClient', () => ({
+  apiHelpers: { get: jest.fn() },
+}));
 
 const id = (suffix: string) => `10000000-0000-7000-8000-${suffix.padStart(12, '0')}`;
 
@@ -16,6 +21,8 @@ const readback = {
 };
 
 describe('canonical sales-dispatch readback', () => {
+  beforeEach(() => jest.clearAllMocks());
+
   it('preserves exact quantity and lineage evidence without values or a selling total', () => {
     expect(normalizeCanonicalSalesDispatchReadback(readback)).toEqual(readback);
     expect(normalizeCanonicalSalesDispatchReadback(readback)).not.toHaveProperty('total_amount');
@@ -30,5 +37,15 @@ describe('canonical sales-dispatch readback', () => {
     ['document quantity mismatch', { ...readback, inventory_base_quantity: '4.000000' }],
   ])('rejects %s', (_label, candidate) => {
     expect(() => normalizeCanonicalSalesDispatchReadback(candidate)).toThrow();
+  });
+
+  it('preserves exact decimals before normalizing acceptance evidence', async () => {
+    (apiHelpers.get as jest.Mock).mockResolvedValue({ data: readback });
+
+    await expect(challansApi.getCanonical(id('1'))).resolves.toEqual({ data: readback });
+    expect(apiHelpers.get).toHaveBeenCalledWith(
+      `/canonical/sales-dispatches/${id('1')}/acceptance-readback`,
+      { preserveExactDecimals: true },
+    );
   });
 });
