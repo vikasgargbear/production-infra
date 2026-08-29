@@ -106,7 +106,7 @@ export const paymentsApi = {
         params: CanonicalPaymentHistoryParams = {},
     ): Promise<AxiosResponse<CanonicalPaymentHistoryResponse>> => {
         const response = await apiHelpers.get<CanonicalPaymentHistoryResponse>(
-            '/canonical/payment-history', { params },
+            '/canonical/payment-history', { params, preserveExactDecimals: true },
         );
         return {
             ...response,
@@ -122,6 +122,7 @@ export const paymentsApi = {
     ): Promise<AxiosResponse<CanonicalPaymentDetail>> => {
         const response = await apiHelpers.get<CanonicalPaymentDetail>(
             `/canonical/payment-history/${paymentId}`,
+            { preserveExactDecimals: true },
         );
         return { ...response, data: normalizePaymentDetail(response.data) };
     },

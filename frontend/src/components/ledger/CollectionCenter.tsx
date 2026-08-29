@@ -18,7 +18,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { parseISO, format } from 'date-fns';
-import apiClient from '../../services/api/apiClient';
+import { apiHelpers } from '../../services/api/apiClient';
 import { ModuleHeader } from '../global';
 import WhatsAppIcon from '../icons/WhatsAppIcon';
 import { compareExactDecimals, formatExactCurrency } from '../../utils/exactDecimal';
@@ -55,7 +55,9 @@ const CollectionCenter: React.FC<CollectionCenterProps> = ({
     queryFn: async () => {
       try {
         // Use the collection aging-data endpoint - single efficient API call
-        const response = await apiClient.get('/collection-center/collection/aging-data');
+        const response = await apiHelpers.get('/collection-center/collection/aging-data', {
+          preserveExactDecimals: true,
+        });
 
         const projected = projectCollectionAging(response.data);
         const collections = projected.collections;
