@@ -63,7 +63,7 @@ export const ReturnInvoiceSelector = React.memo<ReturnInvoiceSelectorProps>(({
             setTotalCount(data?.total ?? invoiceList.length);
         } catch (err) {
             console.error('Failed to fetch invoices:', err);
-            setError('Failed to load invoices from the canonical API.');
+            setError('Failed to load posted invoices.');
             setInvoices([]);
             setTotalCount(0);
         } finally {
@@ -153,7 +153,6 @@ export const ReturnInvoiceSelector = React.memo<ReturnInvoiceSelectorProps>(({
 
     return (
         <div className="mb-6">
-            {/* Canonical source is required. */}
             <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider flex items-center">
                     <FileText className="w-4 h-4 mr-2" />

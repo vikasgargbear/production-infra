@@ -42,7 +42,7 @@ describe('canonical desktop return authority boundary', () => {
     expect(invoiceSelector).toMatch(/Amount unavailable/);
     expect(purchaseSelector).toMatch(/Amount unavailable/);
     expect(purchaseSelector).toMatch(/Item count unavailable/);
-    expect(itemTable).toMatch(/Pending canonical preview/);
+    expect(itemTable).toMatch(/Calculated on review/);
     expect(review).toMatch(/Pending backend preview/);
     expect(activeSources).not.toMatch(/(?:total_amount|invoice_amount|total_items)[^\n]*(?:\|\||\?\?)\s*(?:['"]0['"]|0)\b/);
   });

@@ -71,7 +71,7 @@ export const invoicesApi = {
 
     /** Get all invoices with optional filters */
     getAll: (params: InvoiceParams = {}) => {
-        return apiHelpers.get(ENDPOINTS.BASE, { params });
+        return apiHelpers.get(ENDPOINTS.BASE, { params, preserveExactDecimals: true });
     },
 
     /** Get invoice by ID */
@@ -183,7 +183,10 @@ export const invoicesApi = {
         const cleanParams = Object.fromEntries(
             Object.entries(params).filter(([_, v]) => v !== undefined && v !== '')
         );
-        return apiHelpers.get(ENDPOINTS.BASE, { params: cleanParams });
+        return apiHelpers.get(ENDPOINTS.BASE, {
+            params: cleanParams,
+            preserveExactDecimals: true,
+        });
     },
 
     /** Get invoice by number */

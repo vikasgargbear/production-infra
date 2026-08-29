@@ -1,5 +1,6 @@
 import {
   compareExactDecimals,
+  exactDecimalString,
   exactDecimalUnits,
   formatExactCurrency,
   normalizeAuthoritativeDecimal,
@@ -59,6 +60,33 @@ export const sameReturnMoney = (left: unknown, right: unknown, label: string): b
 
 export const formatReturnMoney = (value: unknown, label: string): string =>
   formatExactCurrency(value, label);
+
+const roundedDisplayDecimal = (
+  value: unknown,
+  label: string,
+  options: { scale: number; maximumWholeDigits: number },
+  minimumFractionDigits: number,
+): string => {
+  const units = exactDecimalUnits(value, label, options);
+  const displayScale = 2;
+  const divisor = 10n ** BigInt(options.scale - displayScale);
+  const roundedUnits = (units + (divisor / 2n)) / divisor;
+  const fixed = exactDecimalString(roundedUnits, displayScale);
+  if (minimumFractionDigits === displayScale) return fixed;
+  const [whole, fraction = ''] = fixed.split('.');
+  const retained = fraction.replace(/0+$/, '').padEnd(minimumFractionDigits, '0');
+  return retained ? `${whole}.${retained}` : whole;
+};
+
+/** Operator display only; command values retain their exact six-place strings. */
+export const formatReturnDisplayQuantity = (value: unknown, label: string): string =>
+  roundedDisplayDecimal(value, label, RETURN_QUANTITY_OPTIONS, 0);
+
+export const formatReturnDisplayRate = (value: unknown, label: string): string =>
+  `₹${roundedDisplayDecimal(value, label, RETURN_RATE_OPTIONS, 2)}`;
+
+export const formatReturnDisplayPercent = (value: unknown, label: string): string =>
+  `${roundedDisplayDecimal(value, label, RETURN_RATE_OPTIONS, 0)}%`;
 
 export function hasExactReturnPreview(
   items: readonly Record<string, unknown>[],
