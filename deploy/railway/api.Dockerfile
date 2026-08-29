@@ -41,6 +41,7 @@ COPY backend/mcp_runtime/aasopharma_mcp/__init__.py ./mcp_runtime/aasopharma_mcp
 COPY backend/mcp_runtime/aasopharma_mcp/operator_actions.py ./mcp_runtime/aasopharma_mcp/operator_actions.py
 COPY backend/alembic ./alembic
 COPY backend/migration_support ./migration_support
+COPY backend/scripts/canonical_data_reset_authority.py ./scripts/canonical_data_reset_authority.py
 COPY backend/scripts/canonical_demo_ids.py ./scripts/canonical_demo_ids.py
 COPY backend/scripts/canonical_migration_contract.py ./scripts/canonical_migration_contract.py
 COPY backend/scripts/canonical_staging_database.py ./scripts/canonical_staging_database.py
@@ -50,6 +51,8 @@ COPY backend/scripts/exercise_staging_mcp_oauth.py ./scripts/exercise_staging_mc
 COPY backend/scripts/live18_evidence_contract.py ./scripts/live18_evidence_contract.py
 COPY backend/scripts/live18_railway_database_phase.py ./scripts/live18_railway_database_phase.py
 COPY backend/scripts/manage_canonical_write_fence.py ./scripts/manage_canonical_write_fence.py
+COPY backend/scripts/deployment_control.py ./scripts/deployment_control.py
+COPY backend/scripts/provision_canonical_demo.py ./scripts/provision_canonical_demo.py
 COPY backend/scripts/provision_ephemeral_browser_identities.py ./scripts/provision_ephemeral_browser_identities.py
 COPY backend/scripts/provision_ephemeral_canonical_live.py ./scripts/provision_ephemeral_canonical_live.py
 COPY backend/scripts/provision_staging_mcp_oauth.py ./scripts/provision_staging_mcp_oauth.py
@@ -62,6 +65,7 @@ COPY docs/architecture/mcp-operator-actions.json ./docs/architecture/mcp-operato
 COPY database/schema-authority.json ./database/schema-authority.json
 COPY database/canonical/domains/_contract.json ./database/canonical/domains/_contract.json
 COPY deploy/control-plane/canonical-staging.json ./deploy/control-plane/canonical-staging.json
+COPY deploy/control-plane/control-plane-v1.schema.json ./deploy/control-plane/control-plane-v1.schema.json
 COPY --from=migration-contract /review/.canonical-migration-contract-verified /tmp/.canonical-migration-contract-verified
 COPY deploy/railway/api.force-deploy /app/.railway-deployment-provenance
 

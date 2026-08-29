@@ -145,6 +145,7 @@ def test_api_watches_only_runtime_and_packaged_migration_inputs() -> None:
         "/backend/mcp_runtime/aasopharma_mcp/operator_actions.py",
         "/backend/alembic/**",
         "/backend/migration_support/**",
+        "/backend/scripts/canonical_data_reset_authority.py",
         "/backend/scripts/canonical_migration_contract.py",
         "/backend/scripts/canonical_demo_ids.py",
         "/backend/scripts/canonical_staging_database.py",
@@ -155,6 +156,8 @@ def test_api_watches_only_runtime_and_packaged_migration_inputs() -> None:
         "/backend/scripts/live18_railway_database_phase.py",
         "/backend/scripts/manage_canonical_write_fence.py",
         "/backend/scripts/package_canonical_baseline_migration.py",
+        "/backend/scripts/deployment_control.py",
+        "/backend/scripts/provision_canonical_demo.py",
         "/backend/scripts/provision_ephemeral_browser_identities.py",
         "/backend/scripts/provision_ephemeral_canonical_live.py",
         "/backend/scripts/provision_staging_mcp_oauth.py",
@@ -168,6 +171,7 @@ def test_api_watches_only_runtime_and_packaged_migration_inputs() -> None:
         "/database/schema-authority.json",
         "/database/canonical/domains/_contract.json",
         "/deploy/control-plane/canonical-staging.json",
+        "/deploy/control-plane/control-plane-v1.schema.json",
         "/deploy/railway/api.*",
     }
 
@@ -175,7 +179,6 @@ def test_api_watches_only_runtime_and_packaged_migration_inputs() -> None:
         "/backend/tests/unit/test_example.py",
         "/backend/requirements-dev.txt",
         "/backend/mcp_runtime/aasopharma_mcp/server.py",
-        "/backend/scripts/provision_canonical_demo.py",
         "/backend/tests/integration/test_example.py",
         "/docs/architecture/unrelated-design.md",
         "/.github/workflows/production-readiness.yml",
@@ -211,8 +214,20 @@ def test_api_runtime_image_excludes_tests_docs_and_operator_tooling() -> None:
     assert "COPY deploy/control-plane /app/deploy/control-plane" not in dockerfile
     assert "COPY backend/scripts/ ./scripts" not in dockerfile
     assert (
+        "COPY backend/scripts/canonical_data_reset_authority.py "
+        "./scripts/canonical_data_reset_authority.py"
+    ) in dockerfile
+    assert (
         "COPY backend/scripts/canonical_migration_contract.py "
         "./scripts/canonical_migration_contract.py"
+    ) in dockerfile
+    assert (
+        "COPY backend/scripts/deployment_control.py "
+        "./scripts/deployment_control.py"
+    ) in dockerfile
+    assert (
+        "COPY backend/scripts/provision_canonical_demo.py "
+        "./scripts/provision_canonical_demo.py"
     ) in dockerfile
     assert (
         "COPY backend/scripts/cleanup_staging_evidence_storage.py "
@@ -227,6 +242,10 @@ def test_api_runtime_image_excludes_tests_docs_and_operator_tooling() -> None:
         "./scripts/railway_reset_control_plane.py"
     ) in dockerfile
     assert "python scripts/railway_reset_control_plane.py --help" in dockerfile
+    assert (
+        "COPY deploy/control-plane/control-plane-v1.schema.json "
+        "./deploy/control-plane/control-plane-v1.schema.json"
+    ) in dockerfile
     assert (
         "COPY backend/scripts/package_canonical_baseline_migration.py "
         "./backend/scripts/package_canonical_baseline_migration.py"
