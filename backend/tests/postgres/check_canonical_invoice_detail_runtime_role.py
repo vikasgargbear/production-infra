@@ -49,6 +49,20 @@ def main() -> None:
             assert session.scalar(text(
                 "SELECT has_schema_privilege(current_user, 'extensions', 'USAGE')"
             )) is False
+            assert session.scalar(text(
+                "SELECT has_table_privilege("
+                "current_user, 'automation.command_requests', 'SELECT')"
+            )) is False
+            assert session.scalar(text(
+                "SELECT has_function_privilege("
+                "current_user, "
+                "'erp_automation_reads.sales_invoice_product_identity(uuid,uuid)', "
+                "'EXECUTE')"
+            )) is True
+            assert session.execute(text(
+                "SELECT * FROM erp_automation_reads.sales_invoice_product_identity("
+                ":org_id,:invoice_id)"
+            ), {"org_id": ORG_ID, "invoice_id": INVOICE_ID}).fetchall() == []
 
             try:
                 _canonical_invoice_detail(session, ORG_ID, INVOICE_ID)

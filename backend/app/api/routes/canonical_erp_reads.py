@@ -33,7 +33,15 @@ from sqlalchemy.orm import Session
 
 from ...core.database import get_db
 from ...core.money import money_json
-from ...core.security.permissions import PermissionChecker
+from ...core.security.permissions import (
+    ExactAnyPermissionChecker,
+    ExactPermissionChecker,
+    FOUNDATION_CUSTOMER_LOOKUP_PERMISSIONS,
+    FOUNDATION_PRODUCT_LOOKUP_PERMISSIONS,
+    FOUNDATION_SUPPLIER_LOOKUP_PERMISSIONS,
+    PermissionChecker,
+    has_exact_permission,
+)
 from ...infrastructure import canonical_write_commands
 from ..schemas.money import MoneyJSON
 from ..schemas.master.customer import CanonicalCustomerCreate, CanonicalCustomerUpdate
@@ -222,6 +230,14 @@ ExactPercent = Annotated[
     PlainSerializer(_percent_wire, return_type=str, when_used="json"),
     WithJsonSchema(_exact_string_schema(6, "percentage"), mode="serialization"),
 ]
+ExactDiscountValue = Annotated[
+    Decimal,
+    Field(ge=0, max_digits=20, decimal_places=6),
+    PlainSerializer(_percent_wire, return_type=str, when_used="json"),
+    WithJsonSchema(
+        _exact_string_schema(6, "line discount input"), mode="serialization"
+    ),
+]
 ExactMoney = Annotated[
     Decimal,
     Field(ge=0, max_digits=20, decimal_places=2),
@@ -279,10 +295,51 @@ _INVOICE_RANGE = """
 
 
 MASTER_USER = Depends(PermissionChecker("master", "view"))
+PRODUCT_USER = Depends(ExactPermissionChecker("catalog.product.manage"))
+CUSTOMER_USER = Depends(ExactPermissionChecker("parties.customer.manage"))
+SUPPLIER_USER = Depends(ExactPermissionChecker("parties.supplier.manage"))
+
+# Operational lookup routes are shared by the reviewed transaction flows.
+# Their centralized allowlists stay exact; master administration still requires
+# one entity-manage capability, and unrelated hr/core permissions do not gain
+# access through the old broad ``master`` navigation domain.
+PRODUCT_LOOKUP_USER = Depends(ExactAnyPermissionChecker(
+    *FOUNDATION_PRODUCT_LOOKUP_PERMISSIONS
+))
+CUSTOMER_LOOKUP_USER = Depends(ExactAnyPermissionChecker(
+    *FOUNDATION_CUSTOMER_LOOKUP_PERMISSIONS
+))
+SUPPLIER_LOOKUP_USER = Depends(ExactAnyPermissionChecker(
+    *FOUNDATION_SUPPLIER_LOOKUP_PERMISSIONS
+))
 SALES_USER = Depends(PermissionChecker("sales", "view"))
 PURCHASE_USER = Depends(PermissionChecker("purchase", "view"))
 INVENTORY_USER = Depends(PermissionChecker("inventory", "view"))
 FINANCE_USER = Depends(PermissionChecker("finance", "view"))
+
+
+def _require_operational_lookup_bound(
+    user: dict,
+    *,
+    manage_permission: str,
+    requested_limit: int,
+    operational_limit: int,
+) -> None:
+    """Keep transaction lookup access bounded without constraining managers."""
+    if not isinstance(requested_limit, int):
+        requested_limit = getattr(requested_limit, "default", requested_limit)
+    if (
+        isinstance(requested_limit, int)
+        and requested_limit > operational_limit
+        and not has_exact_permission(user, manage_permission)
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                f"{manage_permission} is required above the bounded "
+                f"lookup limit of {operational_limit}"
+            ),
+        )
 
 
 class CanonicalLogisticsModePolicy(BaseModel):
@@ -582,7 +639,13 @@ def _master_search_parameters(value: Optional[str]) -> dict[str, Any]:
 def products(limit: int = Query(50, ge=1, le=200), skip: int = Query(0, ge=0),
              offset: Optional[int] = Query(None, ge=0),
              search: str = Query("", max_length=100), include_inactive: bool = False,
-             user: dict = MASTER_USER, db: Session = Depends(get_db)):
+             user: dict = PRODUCT_LOOKUP_USER, db: Session = Depends(get_db)):
+    _require_operational_lookup_bound(
+        user,
+        manage_permission="catalog.product.manage",
+        requested_limit=limit,
+        operational_limit=100,
+    )
     org_id = _activate(db, user)
     effective_offset = offset if offset is not None else skip
     parameters = {
@@ -788,7 +851,7 @@ def products(limit: int = Query(50, ge=1, le=200), skip: int = Query(0, ge=0),
 @router.get("/products/setup-options")
 def product_setup_options(
     manufacturer_search: str = Query("", max_length=100),
-    user: dict = MASTER_USER,
+    user: dict = PRODUCT_USER,
     db: Session = Depends(get_db),
 ):
     """Return only canonical references that can be selected during setup."""
@@ -853,7 +916,7 @@ def product_setup_options(
 def product_setup_ingredients(
     search: str = Query("", max_length=100),
     limit: int = Query(20, ge=1, le=50),
-    user: dict = MASTER_USER,
+    user: dict = PRODUCT_USER,
     db: Session = Depends(get_db),
 ):
     _activate(db, user)
@@ -882,7 +945,7 @@ def product_setup_ingredients(
 def product_setup_hsn_codes(
     search: str = Query("", max_length=100),
     limit: int = Query(20, ge=1, le=50),
-    user: dict = MASTER_USER,
+    user: dict = PRODUCT_USER,
     db: Session = Depends(get_db),
 ):
     _activate(db, user)
@@ -916,7 +979,7 @@ def product_setup_hsn_codes(
 @router.get("/products/{product_id}/setup")
 def product_setup(
     product_id: UUID,
-    user: dict = MASTER_USER,
+    user: dict = PRODUCT_USER,
     db: Session = Depends(get_db),
 ):
     org_id = _activate(db, user)
@@ -984,7 +1047,7 @@ def product_setup(
 def configure_product_setup(
     product_id: UUID,
     setup: CanonicalProductSetupWrite,
-    user: dict = Depends(PermissionChecker("master", "edit")),
+    user: dict = PRODUCT_USER,
     db: Session = Depends(get_db),
 ):
     org_id = _activate(db, user)
@@ -1051,7 +1114,7 @@ def activate_product_setup(
         ...,alias="X-Idempotency-Key",min_length=8,max_length=128,
         pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
     ),
-    user: dict = Depends(PermissionChecker("master", "edit")),
+    user: dict = PRODUCT_USER,
     db: Session = Depends(get_db),
 ):
     org_id = _activate(db, user)
@@ -1088,7 +1151,7 @@ def create_product_draft(
         max_length=128,
         pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
     ),
-    user: dict = Depends(PermissionChecker("master", "create")),
+    user: dict = PRODUCT_USER,
     db: Session = Depends(get_db),
 ):
     """Create an unusable draft; regulatory activation remains a separate command.
@@ -1127,7 +1190,7 @@ def create_product_draft(
 def update_product_draft(
     product_id: UUID,
     product: CanonicalProductDraftUpdate,
-    user: dict = Depends(PermissionChecker("master", "edit")),
+    user: dict = PRODUCT_USER,
     db: Session = Depends(get_db),
 ):
     """Update only mutable identity fields while the product remains a draft."""
@@ -1162,7 +1225,7 @@ def update_product_draft(
 def delete_product_draft(
     product_id: UUID,
     row_version: int = Query(..., ge=1),
-    user: dict = Depends(PermissionChecker("master", "delete")),
+    user: dict = PRODUCT_USER,
     db: Session = Depends(get_db),
 ):
     """Delete an unused draft through its canonical database command."""
@@ -1192,8 +1255,14 @@ def delete_product_draft(
 @router.get("/products/search-with-batches")
 def products_with_batches(
     page: int = Query(1, ge=1), page_size: int = Query(100, ge=1, le=500),
-    q: str = "", user: dict = MASTER_USER, db: Session = Depends(get_db),
+    q: str = "", user: dict = PRODUCT_LOOKUP_USER, db: Session = Depends(get_db),
 ):
+    _require_operational_lookup_bound(
+        user,
+        manage_permission="catalog.product.manage",
+        requested_limit=page_size,
+        operational_limit=100,
+    )
     org_id = _activate(db, user)
     offset = (page - 1) * page_size
     rows = _rows(db, """
@@ -1373,7 +1442,7 @@ def create_customer(
         max_length=128,
         pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
     ),
-    user: dict = Depends(PermissionChecker("master", "create")),
+    user: dict = CUSTOMER_USER,
     db: Session = Depends(get_db),
 ):
     org_id = _activate(db, user)
@@ -1421,7 +1490,7 @@ def create_supplier(
         max_length=128,
         pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
     ),
-    user: dict = Depends(PermissionChecker("master", "create")),
+    user: dict = SUPPLIER_USER,
     db: Session = Depends(get_db),
 ):
     org_id = _activate(db, user)
@@ -1467,7 +1536,7 @@ def update_customer(
         max_length=128,
         pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
     ),
-    user: dict = Depends(PermissionChecker("master", "edit")),
+    user: dict = CUSTOMER_USER,
     db: Session = Depends(get_db),
 ):
     org_id = _activate(db, user)
@@ -1538,7 +1607,7 @@ def update_supplier(
         max_length=128,
         pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
     ),
-    user: dict = Depends(PermissionChecker("master", "edit")),
+    user: dict = SUPPLIER_USER,
     db: Session = Depends(get_db),
 ):
     org_id = _activate(db, user)
@@ -1609,7 +1678,13 @@ _PARTY_CONTACTS = """
 @router.get("/customers")
 @router.get("/customers/")
 def customers(limit: int = Query(100, ge=1, le=1000), skip: int = Query(0, ge=0),
-              search: str = Query("", max_length=100), user: dict = MASTER_USER, db: Session = Depends(get_db)):
+              search: str = Query("", max_length=100), user: dict = CUSTOMER_LOOKUP_USER, db: Session = Depends(get_db)):
+    _require_operational_lookup_bound(
+        user,
+        manage_permission="parties.customer.manage",
+        requested_limit=limit,
+        operational_limit=100,
+    )
     org_id = _activate(db, user)
     parameters = {
         **_master_search_parameters(search if isinstance(search, str) else ""),
@@ -1791,7 +1866,7 @@ def customers(limit: int = Query(100, ge=1, le=1000), skip: int = Query(0, ge=0)
 @router.get("/customers/all-with-addresses")
 def customers_with_addresses(
     page: int = Query(1, ge=1), page_size: int = Query(100, ge=1, le=500),
-    user: dict = MASTER_USER, db: Session = Depends(get_db),
+    user: dict = CUSTOMER_USER, db: Session = Depends(get_db),
 ):
     org_id = _activate(db, user)
     rows = _rows(db, f"""
@@ -1860,7 +1935,7 @@ def _customer_party_id(db: Session, org_id: UUID, customer_id: UUID) -> UUID:
 @router.get("/customers/{customer_id:uuid}/addresses/")
 def customer_addresses(
     customer_id: UUID,
-    user: dict = MASTER_USER,
+    user: dict = CUSTOMER_LOOKUP_USER,
     db: Session = Depends(get_db),
 ):
     org_id = _activate(db, user)
@@ -1897,7 +1972,7 @@ def customer_addresses(
 def create_customer_address(
     customer_id: UUID,
     address: CanonicalCustomerAddressWrite,
-    user: dict = Depends(PermissionChecker("master", "create")),
+    user: dict = CUSTOMER_USER,
     db: Session = Depends(get_db),
 ):
     org_id = _activate(db, user)
@@ -1939,7 +2014,7 @@ def update_customer_address(
     customer_id: UUID,
     address_id: UUID,
     address: CanonicalCustomerAddressWrite,
-    user: dict = Depends(PermissionChecker("master", "edit")),
+    user: dict = CUSTOMER_USER,
     db: Session = Depends(get_db),
 ):
     org_id = _activate(db, user)
@@ -1977,7 +2052,13 @@ def update_customer_address(
 @router.get("/suppliers")
 @router.get("/suppliers/")
 def suppliers(limit: int = Query(100, ge=1, le=1000), skip: int = Query(0, ge=0),
-              search: str = Query("", max_length=100), user: dict = MASTER_USER, db: Session = Depends(get_db)):
+              search: str = Query("", max_length=100), user: dict = SUPPLIER_LOOKUP_USER, db: Session = Depends(get_db)):
+    _require_operational_lookup_bound(
+        user,
+        manage_permission="parties.supplier.manage",
+        requested_limit=limit,
+        operational_limit=100,
+    )
     org_id = _activate(db, user)
     parameters = {
         **_master_search_parameters(search if isinstance(search, str) else ""),
@@ -2004,7 +2085,7 @@ def suppliers(limit: int = Query(100, ge=1, le=1000), skip: int = Query(0, ge=0)
         WITH ranked AS MATERIALIZED (
           SELECT account.id AS supplier_id, account.party_id, account.supplier_code,
                  party.legal_name AS supplier_name, party.trade_name,
-                 contact.name AS contact_person,
+                 contact.name AS contact_person, party.pan AS pan_number,
                  contact.phone AS primary_phone, contact.email AS primary_email,
                  registration.registration_number AS gst_number,
                  registration.registration_status AS gst_verification_status,
@@ -3225,6 +3306,13 @@ class CanonicalInvoiceDetailItem(BaseModel):
         "excluded_from_taxable_value", "included_at_unit_rate"
     ]
     unit_price: ExactRate
+    line_discount_kind: Literal["none", "percent", "amount"]
+    line_discount_basis: Literal["taxable_value", "price_value"]
+    line_discount_value: ExactDiscountValue
+    line_discount_amount: ExactMoney
+    line_taxable_discount_amount: ExactMoney
+    document_discount_amount: ExactMoney
+    document_taxable_discount_amount: ExactMoney
     discount_percent: ExactPercent
     tax_rate: ExactPercent
     gst_percent: ExactPercent
@@ -3241,6 +3329,25 @@ class CanonicalInvoiceDetailItem(BaseModel):
 
     @model_validator(mode="after")
     def validate_allocation_set(self):
+        if self.line_discount_kind == "none":
+            if self.line_discount_value != 0:
+                raise ValueError("none line discount requires a zero input value")
+        elif self.line_discount_kind == "percent":
+            if self.line_discount_value > 100:
+                raise ValueError("percent line discount cannot exceed 100")
+        elif self.line_discount_value != self.line_discount_value.quantize(
+            Decimal("0.01")
+        ):
+            raise ValueError("amount line discount input must have two-decimal precision")
+        expected_compatibility_percent = (
+            self.line_discount_value
+            if self.line_discount_kind == "percent"
+            else Decimal("0")
+        )
+        if self.discount_percent != expected_compatibility_percent:
+            raise ValueError(
+                "compatibility discount percent does not match immutable line discount facts"
+            )
         if not self.batch_allocations:
             if self.batch_id or self.batch_number or self.expiry_date:
                 raise ValueError("scalar batch identity requires an executed allocation")
@@ -3648,6 +3755,9 @@ class CanonicalInvoiceDetailResponse(BaseModel):
     customer_drug_licence_evidence: dict[str, Any]
     due_date: Optional[date]
     currency_code: str
+    supply_type: Literal["intra_state", "inter_state", "export", "sez"]
+    place_of_supply_state_code: str = Field(pattern=r"^[0-9]{2}$")
+    place_of_supply_display_name: str
     tax_charge_mechanism: Literal["normal", "reverse_charge"]
     subtotal_amount: ExactMoney
     discount_amount: ExactMoney
@@ -3677,6 +3787,23 @@ class CanonicalInvoiceDetailResponse(BaseModel):
                 "invoice subtotal, pre-tax discount, charges, and net value "
                 "do not reconcile"
             )
+        if sum(
+            (
+                item.line_discount_amount + item.document_discount_amount
+                for item in self.items
+            ),
+            Decimal("0"),
+        ) != self.discount_amount:
+            raise ValueError("invoice line discount allocations do not reconcile")
+        if sum(
+            (
+                item.line_taxable_discount_amount
+                + item.document_taxable_discount_amount
+                for item in self.items
+            ),
+            Decimal("0"),
+        ) != self.pre_tax_discount_amount:
+            raise ValueError("invoice taxable discount allocations do not reconcile")
         if self.status == "posted" and any(
             not item.batch_allocations for item in self.items
         ):
@@ -3688,6 +3815,16 @@ class CanonicalInvoiceDetailResponse(BaseModel):
 
 def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> dict:
     rows = _rows(db, """
+        WITH product_identity AS MATERIALIZED (
+            SELECT identity.product_id, identity.product_row_version,
+                   identity.product_code, identity.product_name
+              FROM erp_automation_reads.sales_invoice_product_identity(
+                   :org_id, :invoice_id
+              ) identity
+        ),
+        product_identity_guard AS (
+            SELECT count(*) AS identity_count FROM product_identity
+        )
         SELECT invoice.id AS invoice_id, invoice.invoice_number,
                invoice.invoice_date, invoice.status,
                invoice.archival_snapshot_state,
@@ -3726,7 +3863,17 @@ def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> di
                  AS seller_drug_licence_evidence,
                invoice.buyer_drug_licence_evidence_snapshot
                  AS customer_drug_licence_evidence,
-               invoice.due_date, invoice.currency_code,
+               invoice.due_date, invoice.currency_code, invoice.supply_type,
+               invoice.place_of_supply_state_code::text AS place_of_supply_state_code,
+               (SELECT jurisdiction.display_name
+                  FROM tax.gst_jurisdiction_versions jurisdiction
+                 WHERE jurisdiction.jurisdiction_code=invoice.place_of_supply_state_code
+                   AND jurisdiction.status='active'
+                   AND jurisdiction.supports_place_of_supply
+                   AND jurisdiction.effective_from<=invoice.invoice_date
+                   AND (jurisdiction.effective_to IS NULL
+                        OR jurisdiction.effective_to>=invoice.invoice_date)
+               ) AS place_of_supply_display_name,
                invoice.tax_charge_mechanism,
                to_char(invoice.subtotal, 'FM999999999999999990.00') AS subtotal_amount,
                to_char(invoice.discount_total, 'FM999999999999999990.00') AS discount_amount,
@@ -3752,12 +3899,15 @@ def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> di
                COALESCE(lines.items, '[]'::jsonb) AS items,
                invoice.created_at, invoice.updated_at
           FROM sales.invoices invoice
+          CROSS JOIN product_identity_guard
           LEFT JOIN LATERAL (
               SELECT jsonb_agg(jsonb_build_object(
                          'id', line.id, 'source_document_kind', 'sales_order',
                          'product_id', line.product_id,
-                         'product_name', product.name, 'product_code', product.sku,
-                         'hsn_code', product.hsn_code, 'uom_code', line.uom_code,
+                         'product_name', product_identity.product_name,
+                         'product_code', product_identity.product_code,
+                         'hsn_code', line.tax_classification_code_snapshot,
+                         'uom_code', line.uom_code,
                          'unit', line.uom_code, 'quantity',
                              to_char(line.billed_quantity, 'FM999999999999999990.000000'),
                          'free_quantity',
@@ -3769,6 +3919,23 @@ def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> di
                          'free_supply_tax_treatment', line.free_supply_tax_treatment,
                          'unit_price',
                              to_char(line.quoted_unit_rate, 'FM999999999999999990.0000'),
+                         'line_discount_kind', line.line_discount_kind,
+                         'line_discount_basis', line.line_discount_basis,
+                         'line_discount_value',
+                             to_char(line.line_discount_value,
+                                     'FM999999999999999990.000000'),
+                         'line_discount_amount',
+                             to_char(line.line_discount_amount,
+                                     'FM999999999999999990.00'),
+                         'line_taxable_discount_amount',
+                             to_char(line.line_taxable_discount_amount,
+                                     'FM999999999999999990.00'),
+                         'document_discount_amount',
+                             to_char(line.document_discount_amount,
+                                     'FM999999999999999990.00'),
+                         'document_taxable_discount_amount',
+                             to_char(line.document_taxable_discount_amount,
+                                     'FM999999999999999990.00'),
                          'discount_percent', to_char(CASE
                              WHEN line.line_discount_kind='percent'
                              THEN line.line_discount_value ELSE 0 END,
@@ -3800,8 +3967,8 @@ def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> di
                          'batch_allocations', COALESCE(allocation.batch_allocations, '[]'::jsonb)
                      ) ORDER BY line.line_number) AS items
                 FROM sales.invoice_lines line
-                LEFT JOIN catalog.products product
-                  ON product.org_id=line.org_id AND product.id=line.product_id
+                JOIN product_identity
+                  ON product_identity.product_id=line.product_id
                 LEFT JOIN LATERAL (
                     SELECT count(*) AS allocation_count,
                            (array_agg(executed.batch_id ORDER BY
@@ -3973,6 +4140,15 @@ def _canonical_invoice_detail(db: Session, org_id: UUID, invoice_id: UUID) -> di
                  AND line.product_id IS NOT NULL
           ) lines ON true
          WHERE invoice.org_id=:org_id AND invoice.id=:invoice_id
+           AND (
+               product_identity_guard.identity_count>0
+               OR NOT EXISTS (
+                   SELECT 1 FROM sales.invoice_lines identity_line
+                    WHERE identity_line.org_id=invoice.org_id
+                      AND identity_line.invoice_id=invoice.id
+                      AND identity_line.product_id IS NOT NULL
+               )
+           )
     """, {"org_id": org_id, "invoice_id": invoice_id})
     if len(rows) != 1:
         raise HTTPException(status_code=404, detail="Invoice not found")
