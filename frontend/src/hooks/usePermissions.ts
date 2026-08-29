@@ -37,6 +37,17 @@ export function canonicalPermissionAccess(
   ));
 }
 
+export function canonicalCapabilityAccess(codes: string[], capability: string): boolean {
+  const expected = capability.trim().toLowerCase();
+  return Boolean(expected) && codes.some(code => code === expected);
+}
+
+export function canonicalAnyCapabilityAccess(
+  codes: string[], capabilities: readonly string[],
+): boolean {
+  return capabilities.some(capability => canonicalCapabilityAccess(codes, capability));
+}
+
 export const usePermissions = () => {
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const permissionCodes = useMemo(
@@ -62,6 +73,22 @@ export const usePermissions = () => {
     [isAdmin, isAuthenticated, permissionCodes],
   );
 
+  // Exact capabilities protect concrete actions. Deliberately do not treat an
+  // admin label as authority: owner/admin sessions carry their signed grants.
+  const hasCapability = useCallback(
+    (capability: string): boolean => (
+      isAuthenticated && canonicalCapabilityAccess(permissionCodes, capability)
+    ),
+    [isAuthenticated, permissionCodes],
+  );
+
+  const hasAnyCapability = useCallback(
+    (capabilities: readonly string[]): boolean => (
+      isAuthenticated && canonicalAnyCapabilityAccess(permissionCodes, capabilities)
+    ),
+    [isAuthenticated, permissionCodes],
+  );
+
   const modules = useMemo(
     () => Object.keys(MODULE_DOMAINS).filter(module => (
       isAdmin || canonicalModuleAccess(permissionCodes, module)
@@ -70,7 +97,8 @@ export const usePermissions = () => {
   );
 
   return {
-    hasPermission, hasModuleAccess, permissions: user?.permissions || {}, modules,
+    hasPermission, hasModuleAccess, hasCapability, hasAnyCapability,
+    permissions: user?.permissions || {}, modules,
     dataAccessLevel: user?.data_access_level || 'branch', isAdmin,
     isLoading: authLoading, error: null,
   };

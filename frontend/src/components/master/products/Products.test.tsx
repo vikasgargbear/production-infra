@@ -5,12 +5,23 @@ import Products from './Products';
 
 const mockGetAll = jest.fn();
 const mockDelete = jest.fn();
+const mockHasPermission = jest.fn(() => true);
+const mockHasCapability = jest.fn(() => true);
+const mockHasAnyCapability = jest.fn(() => true);
 
 jest.mock('../../../services/api', () => ({
   productsApi: {
     getAll: (...args: unknown[]) => mockGetAll(...args),
     delete: (...args: unknown[]) => mockDelete(...args),
   },
+}));
+
+jest.mock('../../../hooks/usePermissions', () => ({
+  usePermissions: () => ({
+    hasPermission: mockHasPermission,
+    hasCapability: mockHasCapability,
+    hasAnyCapability: mockHasAnyCapability,
+  }),
 }));
 
 jest.mock('./ProductFlow', () => ({
@@ -51,6 +62,9 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockGetAll.mockResolvedValue({ data: { products } });
   mockDelete.mockResolvedValue({ data: { success: true } });
+  mockHasPermission.mockReturnValue(true);
+  mockHasCapability.mockReturnValue(true);
+  mockHasAnyCapability.mockReturnValue(true);
 });
 
 test('only draft products expose edit and delete actions', async () => {
@@ -110,4 +124,24 @@ test('Escape cancels deletion and restores focus without issuing a request', asy
   await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Delete product draft?' })).toBeNull());
   expect(trigger).toHaveFocus();
   expect(mockDelete).not.toHaveBeenCalled();
+});
+
+test('lookup remains readable but every product mutation CTA is hidden without exact manage', async () => {
+  mockHasCapability.mockReturnValue(false);
+  render(<Products />);
+
+  expect(await screen.findAllByText('Mutable draft')).toHaveLength(2);
+  expect(screen.getByLabelText(/Search products/)).not.toBeDisabled();
+  expect(screen.queryByRole('button', { name: 'Create product' })).toBeNull();
+  expect(screen.queryByRole('button', { name: /Edit draft/ })).toBeNull();
+  expect(screen.queryByRole('button', { name: /Delete draft/ })).toBeNull();
+});
+
+test('does not call the API and explains denial without master view', async () => {
+  mockHasAnyCapability.mockReturnValue(false);
+  render(<Products />);
+
+  expect(await screen.findByText('You do not have permission to search products.')).toBeTruthy();
+  expect(screen.getByLabelText(/Search products/)).toBeDisabled();
+  expect(mockGetAll).not.toHaveBeenCalled();
 });

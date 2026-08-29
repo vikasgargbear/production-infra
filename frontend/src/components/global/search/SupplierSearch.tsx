@@ -2,6 +2,9 @@ import React, { forwardRef, useCallback } from 'react';
 import { Building2, Phone, MapPin, UserPlus, Trash2 } from 'lucide-react';
 import { EntitySearch, EntitySearchRef } from './EntitySearch';
 import { suppliersApi } from '../../../services/api';
+import { usePermissions } from '../../../hooks/usePermissions';
+import { FOUNDATION_CAPABILITIES, SUPPLIER_LOOKUP_CAPABILITIES } from '../../../config/canonicalCapabilities';
+import CapabilityDeniedNotice from '../ui/CapabilityDeniedNotice';
 
 /**
  * Supplier interface for type safety
@@ -73,6 +76,10 @@ export const SupplierSearch = forwardRef<SupplierSearchRef, SupplierSearchProps>
     },
     ref
 ) => {
+    const { hasCapability, hasAnyCapability } = usePermissions();
+    const canSearchSuppliers = hasAnyCapability(SUPPLIER_LOOKUP_CAPABILITIES);
+    const canManageSuppliers = hasCapability(FOUNDATION_CAPABILITIES.supplier);
+    const searchDisabled = disabled || !canSearchSuppliers;
     const searchSuppliers = useCallback(async (query: string, signal: AbortSignal): Promise<Supplier[]> => {
         const response = await suppliersApi.search(query, { limit: 20 }, { signal });
         const rows = response?.data;
@@ -186,11 +193,12 @@ export const SupplierSearch = forwardRef<SupplierSearchRef, SupplierSearchProps>
     );
 
     return (
+        <div className="space-y-2">
         <EntitySearch<Supplier>
             ref={ref}
             value={value}
             onChange={onChange}
-            onCreateNew={onCreateNew}
+            onCreateNew={canManageSuppliers ? onCreateNew : undefined}
             entityType="supplier"
             entityIcon={Building2}
             placeholder={placeholder}
@@ -203,13 +211,20 @@ export const SupplierSearch = forwardRef<SupplierSearchRef, SupplierSearchProps>
             getItemKey={(s) => s.supplier_id || s.id || ''}
             getItemLabel={(s) => s.supplier_name || s.name || ''}
             displayMode={displayMode}
-            showCreateButton={showCreateButton}
+            showCreateButton={canManageSuppliers && showCreateButton}
             required={required}
             clearable={clearable}
-            disabled={disabled}
+            disabled={searchDisabled}
+            accessDeniedMessage="Supplier search was denied. Ask an administrator for supplier management access."
             autoFocus={autoFocus}
             className={className}
         />
+        {!canSearchSuppliers && (
+            <CapabilityDeniedNotice>
+                You do not have permission to search suppliers.
+            </CapabilityDeniedNotice>
+        )}
+        </div>
     );
 });
 

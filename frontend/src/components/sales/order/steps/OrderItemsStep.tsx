@@ -17,6 +17,8 @@ import type { Order } from '../../../../types/models';
 import type { Customer } from '../../../../types/models';
 import type { ProductSearchRef } from '../../../global/search/ProductSearch';
 import { resolvedSalesOrderDeliveryAddress } from '../../utils/canonicalSalesChainCommand';
+import { usePermissions } from '../../../../hooks/usePermissions';
+import { FOUNDATION_CAPABILITIES } from '../../../../config/canonicalCapabilities';
 
 // Using canonical types from /types/models - no local duplicates
 
@@ -53,6 +55,9 @@ const OrderItemsStep: React.FC<OrderItemsStepProps> = ({
     onShowImportModal,
     onCreateProduct
 }) => {
+    const { hasCapability } = usePermissions();
+    const canManageCustomers = hasCapability(FOUNDATION_CAPABILITIES.customer);
+    const canManageProducts = hasCapability(FOUNDATION_CAPABILITIES.product);
     const productSearchRef = useRef<ProductSearchRef>(null);
     const itemsTableRef = useRef<HTMLDivElement>(null);
     const deliveryAddress = resolvedSalesOrderDeliveryAddress(order.shipping_address_data);
@@ -98,13 +103,13 @@ const OrderItemsStep: React.FC<OrderItemsStepProps> = ({
                 />
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Import Data</label>
-                    <button
+                    {canManageCustomers && <button
                         onClick={onShowImportModal}
                         className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-gray-300 px-3 text-sm transition-colors hover:bg-blue-50"
                     >
                         <FileInput className="w-4 h-4 text-gray-400" />
                         <span>Import from Invoice/Challan</span>
-                    </button>
+                    </button>}
                 </div>
             </div>
 
@@ -115,12 +120,12 @@ const OrderItemsStep: React.FC<OrderItemsStepProps> = ({
                         <User className="w-4 h-4 mr-2" />
                         CUSTOMER
                     </h3>
-                    <button
+                    {canManageProducts && <button
                         onClick={onShowCustomerModal}
                         className="min-h-11 min-w-[140px] rounded-lg bg-blue-600 px-4 text-sm font-medium text-white transition-colors hover:bg-blue-700"
                     >
                         Create Customer
-                    </button>
+                    </button>}
                 </div>
                 {/* White card wrapper - consistent with ProductSearch */}
                 <div className="bg-white rounded-lg border border-gray-200 p-4">

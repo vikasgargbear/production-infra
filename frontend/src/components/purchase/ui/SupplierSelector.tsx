@@ -8,6 +8,8 @@ import React, { useState } from 'react';
 import { Building, Plus } from 'lucide-react';
 import { SupplierSearch, SupplierCreationModal } from '../../global';
 import type { Supplier } from '../types';
+import { usePermissions } from '../../../hooks/usePermissions';
+import { FOUNDATION_CAPABILITIES } from '../../../config/canonicalCapabilities';
 
 interface SupplierSelectorProps {
   /** Currently selected supplier */
@@ -32,6 +34,8 @@ const SupplierSelector: React.FC<SupplierSelectorProps> = ({
   onClearError,
   error
 }) => {
+  const { hasCapability } = usePermissions();
+  const canManageSuppliers = hasCapability(FOUNDATION_CAPABILITIES.supplier);
   const [showCreateModal, setShowCreateModal] = useState<boolean>(false);
 
   const handleSelectSupplier = (supplier: any): void => {
@@ -55,13 +59,13 @@ const SupplierSelector: React.FC<SupplierSelectorProps> = ({
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-medium text-gray-700 uppercase tracking-wider">SUPPLIER DETAILS</h3>
-        <button
+        {canManageSuppliers && <button
           onClick={handleCreateSupplier}
           className="text-sm text-indigo-600 hover:text-indigo-700 flex items-center gap-1 transition-colors"
         >
           <Plus className="w-4 h-4" />
           New Supplier
-        </button>
+        </button>}
       </div>
 
       {displaySupplierId ? (
@@ -96,12 +100,12 @@ const SupplierSelector: React.FC<SupplierSelectorProps> = ({
       )}
 
       {/* Supplier Creation Modal */}
-      <SupplierCreationModal
+      {canManageSuppliers && <SupplierCreationModal
         isOpen={showCreateModal}
         onClose={() => setShowCreateModal(false)}
         onSupplierCreated={handleSupplierCreated}
         initialData={{}}
-      />
+      />}
     </div>
   );
 };

@@ -1,4 +1,5 @@
 import React from 'react';
+import '@testing-library/jest-dom';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import ProductSearch from './ProductSearch';
 import { productsApi } from '../../../services/api';
@@ -8,6 +9,17 @@ jest.mock('../../../services/api', () => ({
 }));
 
 jest.mock('../selector/BatchSelector', () => () => null);
+
+const mockHasPermission = jest.fn(() => true);
+const mockHasCapability = jest.fn(() => true);
+const mockHasAnyCapability = jest.fn(() => true);
+jest.mock('../../../hooks/usePermissions', () => ({
+    usePermissions: () => ({
+        hasPermission: mockHasPermission,
+        hasCapability: mockHasCapability,
+        hasAnyCapability: mockHasAnyCapability,
+    }),
+}));
 
 const row = (name: string) => ({
     product_id: 'd3000000-0000-7000-8000-000000000015',
@@ -32,6 +44,9 @@ describe('ProductSearch canonical request lifecycle', () => {
     beforeEach(() => {
         jest.useFakeTimers();
         jest.clearAllMocks();
+        mockHasPermission.mockReturnValue(true);
+        mockHasCapability.mockReturnValue(true);
+        mockHasAnyCapability.mockReturnValue(true);
     });
 
     afterEach(() => jest.useRealTimers());
@@ -130,5 +145,41 @@ describe('ProductSearch canonical request lifecycle', () => {
 
         rerender(<ProductSearch onAddItem={jest.fn()} placeholder="Search transfer product" />);
         expect((screen.getByPlaceholderText('Search transfer product') as HTMLInputElement).disabled).toBe(false);
+    });
+
+    it('renders an explicit access-denied state for an authoritative 403', async () => {
+        const consoleError = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+        (productsApi.search as jest.Mock).mockRejectedValue({ response: { status: 403 } });
+        render(<ProductSearch onAddItem={jest.fn()} onCreateProduct={jest.fn()} />);
+
+        fireEvent.change(screen.getByPlaceholderText(/Search products/i), {
+            target: { value: 'Denied' },
+        });
+        await act(async () => { jest.advanceTimersByTime(275); });
+
+        expect(screen.getByRole('alert')).toHaveTextContent('Product search was denied');
+        expect(screen.queryByText(/No products found/)).toBeNull();
+        expect(screen.queryByRole('button', { name: /Create Product/ })).toBeNull();
+        consoleError.mockRestore();
+    });
+
+    it('allows lookup but hides create when the exact manage capability is absent', async () => {
+        mockHasCapability.mockReturnValue(false);
+        (productsApi.search as jest.Mock).mockResolvedValue({ data: [row('Lookup Only')] });
+        render(<ProductSearch onAddItem={jest.fn()} onCreateProduct={jest.fn()} />);
+
+        const input = screen.getByPlaceholderText(/Search products/i);
+        expect(input).not.toBeDisabled();
+        fireEvent.change(input, { target: { value: 'Lookup' } });
+        await act(async () => { jest.advanceTimersByTime(275); });
+        expect(screen.getByText('Lookup Only')).toBeTruthy();
+        expect(screen.queryByRole('button', { name: /Create Product/ })).toBeNull();
+    });
+
+    it('disables lookup with an explicit notice when master view is absent', () => {
+        mockHasAnyCapability.mockReturnValue(false);
+        render(<ProductSearch onAddItem={jest.fn()} />);
+        expect(screen.getByPlaceholderText(/Search products/i)).toBeDisabled();
+        expect(screen.getByRole('alert')).toHaveTextContent('permission to search products');
     });
 });

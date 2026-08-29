@@ -25,6 +25,8 @@ import {
 import { clientUuid } from '../../../utils/clientUuid';
 import type { CanonicalCommandPreview } from '../../../services/api/canonicalOperatorActions';
 import CustomerReceiptReviewDialog from './CustomerReceiptReviewDialog';
+import { usePermissions } from '../../../hooks/usePermissions';
+import { FOUNDATION_CAPABILITIES } from '../../../config/canonicalCapabilities';
 
 
 // Import global components
@@ -45,6 +47,8 @@ const exactMoneySum = (values: readonly (string | number)[]): string => (
 
 // Inner component that uses the context
 const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) => {
+  const { hasCapability } = usePermissions();
+  const canManageCustomers = hasCapability(FOUNDATION_CAPABILITIES.customer);
   const {
     payment,
     selectedCustomer,
@@ -112,7 +116,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
   // Handle customer modal event from PaymentFlowOptimized
   React.useEffect(() => {
     const handleOpenCustomerModal = () => {
-      setShowCustomerModal(true);
+      if (canManageCustomers) setShowCustomerModal(true);
     };
 
     const handleCustomerSelectedEvent = (event: any) => {
@@ -128,7 +132,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
       window.removeEventListener('openCustomerModal', handleOpenCustomerModal);
       window.removeEventListener('customerSelected', handleCustomerSelectedEvent);
     };
-  }, []);
+  }, [canManageCustomers]);
 
   React.useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
@@ -837,7 +841,7 @@ const PaymentEntryContent: React.FC<PaymentEntryContentProps> = ({ onClose }) =>
       </div>
 
       {/* Customer Creation Modal */}
-      {showCustomerModal && (
+      {canManageCustomers && showCustomerModal && (
         <CustomerCreation
           onClose={() => setShowCustomerModal(false)}
           onCustomerCreated={(customer) => {

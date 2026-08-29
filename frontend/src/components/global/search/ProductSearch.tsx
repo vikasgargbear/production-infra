@@ -10,6 +10,10 @@ import {
 } from '../../../utils/exactDecimal';
 
 import { Product } from '../../../types/models/product';
+import { usePermissions } from '../../../hooks/usePermissions';
+import { FOUNDATION_CAPABILITIES, PRODUCT_LOOKUP_CAPABILITIES } from '../../../config/canonicalCapabilities';
+import { isForbiddenApiError } from '../../../services/api/utils/apiError';
+import CapabilityDeniedNotice from '../ui/CapabilityDeniedNotice';
 
 // ==================== TYPE DEFINITIONS ====================
 
@@ -70,6 +74,10 @@ const ProductSearch = forwardRef<ProductSearchRef, ProductSearchProps>(
         disabled = false,
         tabIndex,
     }, ref) => {
+        const { hasCapability, hasAnyCapability } = usePermissions();
+        const canSearchProducts = hasAnyCapability(PRODUCT_LOOKUP_CAPABILITIES);
+        const canManageProducts = hasCapability(FOUNDATION_CAPABILITIES.product);
+        const searchDisabled = disabled || !canSearchProducts;
         const [searchQuery, setSearchQuery] = useState<string>('');
         const [searchResults, setSearchResults] = useState<ExactSearchProduct[]>([]);
         const [loading, setLoading] = useState<boolean>(false);
@@ -77,6 +85,7 @@ const ProductSearch = forwardRef<ProductSearchRef, ProductSearchProps>(
         const [showBatchModal, setShowBatchModal] = useState<boolean>(false);
         const [selectedProduct, setSelectedProduct] = useState<ExactSearchProduct | null>(null);
         const [highlightedIndex, setHighlightedIndex] = useState<number>(-1);
+        const [accessDenied, setAccessDenied] = useState<boolean>(false);
         const searchInputRef = useRef<HTMLInputElement>(null);
         const dropdownRef = useRef<HTMLDivElement>(null);
         const resultRefs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -84,14 +93,15 @@ const ProductSearch = forwardRef<ProductSearchRef, ProductSearchProps>(
         const searchAbortRef = useRef<AbortController | null>(null);
 
         useEffect(() => {
-            if (!disabled) return;
+            if (!searchDisabled) return;
             searchAbortRef.current?.abort();
             searchRequestRef.current += 1;
             setSearchQuery('');
             setSearchResults([]);
             setShowDropdown(false);
             setHighlightedIndex(-1);
-        }, [disabled]);
+            setAccessDenied(false);
+        }, [searchDisabled]);
 
         // Expose focus method to parent
         useImperativeHandle(ref, () => ({
@@ -112,6 +122,7 @@ const ProductSearch = forwardRef<ProductSearchRef, ProductSearchProps>(
                 }
 
                 setLoading(true);
+                setAccessDenied(false);
 
                 searchAbortRef.current?.abort();
                 const controller = new AbortController();
@@ -172,6 +183,7 @@ const ProductSearch = forwardRef<ProductSearchRef, ProductSearchProps>(
                     console.error('Product search failed:', error);
                     setSearchResults([]);
                     setHighlightedIndex(-1);
+                    setAccessDenied(isForbiddenApiError(error));
                 } finally {
                     if (requestId === searchRequestRef.current) setLoading(false);
                     if (searchAbortRef.current === controller) searchAbortRef.current = null;
@@ -181,7 +193,7 @@ const ProductSearch = forwardRef<ProductSearchRef, ProductSearchProps>(
         );
 
         useEffect(() => {
-            if (disabled) {
+            if (searchDisabled) {
                 searchProducts.cancel();
                 return undefined;
             }
@@ -191,7 +203,7 @@ const ProductSearch = forwardRef<ProductSearchRef, ProductSearchProps>(
                 searchProducts.cancel();
                 searchAbortRef.current?.abort();
             };
-        }, [disabled, searchQuery, searchProducts]);
+        }, [searchDisabled, searchQuery, searchProducts]);
 
         // Auto-scroll to highlighted item
         useEffect(() => {
@@ -281,24 +293,38 @@ const ProductSearch = forwardRef<ProductSearchRef, ProductSearchProps>(
                                 ref={searchInputRef}
                                 type="text"
                                 placeholder={placeholder}
-                                disabled={disabled}
-                                aria-disabled={disabled}
+                                disabled={searchDisabled}
+                                aria-disabled={searchDisabled}
                                 value={searchQuery}
                                 onChange={(e) => {
-                                    if (disabled) return;
+                                    if (searchDisabled) return;
                                     setSearchQuery(e.target.value);
                                     setShowDropdown(true);
                                 }}
-                                onFocus={() => { if (!disabled) setShowDropdown(true); }}
+                                onFocus={() => { if (!searchDisabled) setShowDropdown(true); }}
                                 tabIndex={tabIndex}
                                 className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             />
                         </div>
 
+                        {!canSearchProducts && (
+                            <div className="mt-3">
+                                <CapabilityDeniedNotice>
+                                    You do not have permission to search products.
+                                </CapabilityDeniedNotice>
+                            </div>
+                        )}
+
                         {/* Search Results Dropdown */}
                         {showDropdown && searchQuery && (
                             <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
-                                {loading ? (
+                                {accessDenied ? (
+                                    <div className="p-3">
+                                        <CapabilityDeniedNotice>
+                                            Product search was denied. Ask an administrator for product management access.
+                                        </CapabilityDeniedNotice>
+                                    </div>
+                                ) : loading ? (
                                     <div className="p-4 text-center text-gray-500">
                                         <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500 mx-auto"></div>
                                         <p className="mt-2 text-sm">Searching...</p>
@@ -355,7 +381,7 @@ const ProductSearch = forwardRef<ProductSearchRef, ProductSearchProps>(
                                             </button>
                                         ))}
                                         {/* Create Product option */}
-                                        {onCreateProduct && searchQuery.length >= 2 && (
+                                        {canManageProducts && onCreateProduct && searchQuery.length >= 2 && (
                                             <div className="px-4 py-3 border-t border-gray-200 bg-gray-50">
                                                 <button
                                                     type="button"
@@ -378,7 +404,7 @@ const ProductSearch = forwardRef<ProductSearchRef, ProductSearchProps>(
                                             <Package className="w-8 h-8 text-gray-400 mx-auto mb-2" />
                                             <p className="text-sm text-gray-500">No products found for "{searchQuery}"</p>
                                         </div>
-                                        {onCreateProduct && (
+                                        {canManageProducts && onCreateProduct && (
                                             <button
                                                 type="button"
                                                 onClick={(e) => {

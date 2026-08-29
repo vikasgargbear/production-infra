@@ -21,6 +21,8 @@ import {
 // Shared Types
 import { Customer, Invoice, Employee, InvoiceItem } from '../types/invoiceTypes';
 import InvoiceItemsFooter from './InvoiceItemsFooter';
+import { usePermissions } from '../../../../hooks/usePermissions';
+import { FOUNDATION_CAPABILITIES } from '../../../../config/canonicalCapabilities';
 
 interface InvoiceItemsStepProps {
     invoice: Invoice;
@@ -98,6 +100,9 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
     showImportModal,
     setShowImportModal,
 }) => {
+    const { hasCapability } = usePermissions();
+    const canManageCustomers = hasCapability(FOUNDATION_CAPABILITIES.customer);
+    const canManageProducts = hasCapability(FOUNDATION_CAPABILITIES.product);
     // Ctrl+Enter → Continue shortcut
     const batchAllocationError = invoiceBatchAllocationValidationError(invoice as any);
     const continueDisabled = isLoading || !selectedCustomer || !invoice.items || invoice.items.length === 0
@@ -229,12 +234,12 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                                     <User className="w-4 h-4 mr-2" />
                                     CUSTOMER
                                 </h3>
-                                <button
+                                {canManageCustomers && <button
                                     onClick={() => setShowCustomerModal(true)}
                                     className="min-h-11 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
                                 >
                                     Create Customer
-                                </button>
+                                </button>}
                             </div>
                             {/* White card wrapper - consistent with ProductSearch */}
                             <div className="bg-white rounded-lg border border-gray-200 p-4">
@@ -258,12 +263,12 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                                     <Package className="w-4 h-4 mr-2" />
                                     PRODUCTS
                                 </h3>
-                                <button
+                                {canManageProducts && <button
                                     onClick={() => setShowProductModal(true)}
                                     className="min-h-11 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
                                 >
                                     Create Product
-                                </button>
+                                </button>}
                             </div>
                             <ProductSearch
                                 onAddItem={handleAddItem}
@@ -322,7 +327,7 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
             </div>
 
             {/* Modals */}
-            {showCustomerModal && (
+            {canManageCustomers && showCustomerModal && (
                 <CustomerCreation
                     onClose={() => setShowCustomerModal(false)}
                     onCustomerCreated={(customer: Customer) => {
@@ -332,7 +337,7 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                 />
             )}
 
-            {showProductModal && (
+            {canManageProducts && showProductModal && (
                 <ProductCreationModal
                     show={showProductModal}
                     onClose={() => setShowProductModal(false)}

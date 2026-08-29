@@ -70,6 +70,29 @@ const customerSearchRows = Array.from({ length: 12 }, (_, index) => ({
   updated_at: '2026-08-28T00:00:00Z',
 }));
 
+const supplierSearchRows = Array.from({ length: 12 }, (_, index) => ({
+  supplier_id: `d3000000-0000-7000-8000-${String(400 + index).padStart(12, '0')}`,
+  party_id: `d3000000-0000-7000-8000-${String(500 + index).padStart(12, '0')}`,
+  supplier_code: `SUP-${String(index + 1).padStart(4, '0')}`,
+  supplier_name: index === 0 ? 'Healthy Supply Co' : `Healthy Supplier ${String(index + 1).padStart(2, '0')}`,
+  trade_name: null,
+  primary_phone: index === 0 ? '9876543210' : `987660${String(index).padStart(4, '0')}`,
+  primary_email: null,
+  contact_person: index === 0 ? 'Asha Operator' : null,
+  pan_number: null,
+  gst_number: index === 0 ? '27ABCDE1234F1Z5' : null,
+  gst_verification_status: null,
+  payment_days: 30,
+  current_outstanding: '12345.67',
+  supplier_type: 'organization',
+  is_active: true,
+  status: 'active',
+  account_row_version: 1,
+  party_row_version: 1,
+  created_at: '2026-08-01T00:00:00Z',
+  updated_at: '2026-08-28T00:00:00Z',
+}));
+
 const businessContext = {
   organization_id: UUID.org,
   organization_timezone: 'Asia/Kolkata',
@@ -259,15 +282,14 @@ const installRoutes = async (page: Page) => {
       const customers = url.searchParams.has('search') ? customerSearchRows : customerSearchRows.slice(0, 1);
       body = { customers, total: customers.length, skip: 0, limit: Number(url.searchParams.get('limit') || 100) };
     }
-    else if (path === '/api/suppliers') body = [{
-      supplier_id: UUID.supplierAccount, party_id: UUID.supplierParty, supplier_code: 'SUP-0001',
-      supplier_name: 'Healthy Supply Co', trade_name: null, primary_phone: '9876543210',
-      primary_email: 'operator@example.com', contact_person: null, pan_number: null, gst_number: null,
-      gst_verification_status: null, payment_days: 30, current_outstanding: '12345.67',
-      supplier_type: 'organization', is_active: true, status: 'active',
-      account_row_version: 1, party_row_version: 1,
-      created_at: '2026-08-01T00:00:00Z', updated_at: '2026-08-28T00:00:00Z',
-    }];
+    else if (path === '/api/suppliers') {
+      const suppliers = url.searchParams.has('search') ? supplierSearchRows : [{
+        ...supplierSearchRows[0], current_outstanding: '12345.67',
+        primary_email: 'operator@example.com', created_at: '2026-08-01T00:00:00Z',
+        updated_at: '2026-08-28T00:00:00Z',
+      }];
+      body = suppliers;
+    }
     else return route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ detail: `Unhandled ${path}` }) });
     return route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
   });
@@ -413,6 +435,78 @@ for (const viewport of [{ width: 360, height: 800 }, { width: 412, height: 915 }
   });
 }
 
+for (const viewport of [{ width: 360, height: 800 }, { width: 412, height: 915 }, { width: 1280, height: 900 }]) {
+  test(`foundation permissions stay exact and explicit at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await installRoutes(page);
+    const restrictedReads: string[] = [];
+    page.on('request', request => {
+      const path = new URL(request.url()).pathname;
+      if (path === '/api/customers' || path === '/api/suppliers') restrictedReads.push(path);
+    });
+
+    await page.goto('/e2e/canonical-reads?surface=products&permissions=product');
+    await expect(page.getByRole('button', { name: 'Create product' })).toBeVisible();
+    await expectNoHorizontalPageScroll(page, viewport.width);
+
+    await page.goto('/e2e/canonical-reads?surface=customers&permissions=product');
+    await expect(page.getByText('Customer Master')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Add Customer' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /Edit account/ })).toHaveCount(0);
+    await expectNoHorizontalPageScroll(page, viewport.width);
+    await page.goto('/e2e/canonical-reads?surface=suppliers&permissions=product');
+    await expect(page.getByText('Supplier Master')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Add Supplier' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /Edit account/ })).toHaveCount(0);
+    await expectNoHorizontalPageScroll(page, viewport.width);
+    expect(restrictedReads).toEqual([]);
+
+    await page.goto('/e2e/canonical-reads?surface=global-search&permissions=none');
+    for (const placeholder of ['Search customer', 'Search supplier', 'Search product']) {
+      await expect(page.getByPlaceholder(placeholder)).toBeDisabled();
+    }
+    const alerts = page.getByRole('alert');
+    await expect(alerts).toHaveCount(3);
+    for (const alert of await alerts.all()) {
+      const box = await alert.boundingBox();
+      expect(box).not.toBeNull();
+      expect(box!.height).toBeGreaterThanOrEqual(44);
+    }
+    await expectNoHorizontalPageScroll(page, viewport.width);
+    await page.screenshot({
+      path: `test-results/artifacts/foundation-permissions/${viewport.width}x${viewport.height}-restricted.png`,
+      fullPage: true,
+    });
+  });
+
+  test(`foundation lookup 403s remain visible at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await installRoutes(page);
+    const denied: string[] = [];
+    await page.route('**/api/{products,customers,suppliers}*', async route => {
+      const url = new URL(route.request().url());
+      if (!url.searchParams.has('search')) return route.fallback();
+      denied.push(url.pathname);
+      return route.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ detail: 'Access denied' }) });
+    });
+    await page.goto('/e2e/canonical-reads?surface=global-search&permissions=all');
+
+    await page.getByPlaceholder('Search customer').fill('Denied customer');
+    await expect(page.getByText('Customer search was denied.', { exact: false })).toBeVisible();
+    await page.getByPlaceholder('Search supplier').fill('Denied supplier');
+    await expect(page.getByText('Supplier search was denied.', { exact: false })).toBeVisible();
+    await page.getByPlaceholder('Search product').fill('Denied product');
+    await expect(page.getByText('Product search was denied.', { exact: false })).toBeVisible();
+
+    expect(denied).toEqual(expect.arrayContaining(['/api/customers', '/api/suppliers', '/api/products']));
+    await expectNoHorizontalPageScroll(page, viewport.width);
+    await page.screenshot({
+      path: `test-results/artifacts/foundation-permissions/${viewport.width}x${viewport.height}-api-403.png`,
+      fullPage: true,
+    });
+  });
+}
+
 test('mobile aging controls and CTA remain reachable and tappable', async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 800 });
   await installRoutes(page);
@@ -441,7 +535,7 @@ for (const viewport of [{ width: 360, height: 800 }, { width: 412, height: 915 }
     const searchResponses: Array<{ path: string; search: string | null; status: number }> = [];
     page.on('response', response => {
       const url = new URL(response.url());
-      if ((url.pathname === '/api/products' || url.pathname === '/api/customers') && url.searchParams.has('search')) {
+      if ((url.pathname === '/api/products' || url.pathname === '/api/customers' || url.pathname === '/api/suppliers') && url.searchParams.has('search')) {
         searchResponses.push({ path: url.pathname, search: url.searchParams.get('search'), status: response.status() });
       }
     });
@@ -469,6 +563,25 @@ for (const viewport of [{ width: 360, height: 800 }, { width: 412, height: 915 }
 
     await customerInput.press('Enter');
     await expect(page.getByTestId('selected-customer-name')).toHaveText('Selected: Apollo Pharmacy');
+
+    const supplierInput = page.getByPlaceholder('Search supplier');
+    await supplierInput.fill('Healthy');
+    const supplierOptions = page.getByRole('option');
+    await expect(supplierOptions).toHaveCount(supplierSearchRows.length);
+    const firstSupplier = supplierOptions.first();
+    await expect(firstSupplier.getByText('Healthy Supply Co', { exact: true })).toBeVisible();
+    expect((await firstSupplier.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    const supplierDropdown = page.getByRole('listbox');
+    const supplierScroll = await supplierDropdown.evaluate(element => ({
+      clientHeight: element.clientHeight,
+      scrollHeight: element.scrollHeight,
+      overflowY: getComputedStyle(element).overflowY,
+    }));
+    expect(supplierScroll.clientHeight).toBeLessThanOrEqual(256);
+    expect(supplierScroll.scrollHeight).toBeGreaterThan(supplierScroll.clientHeight);
+    expect(supplierScroll.overflowY).toBe('auto');
+    await supplierInput.press('Enter');
+    await expect(page.getByTestId('selected-supplier-name')).toHaveText('Selected: Healthy Supply Co');
 
     const productInput = page.getByPlaceholder('Search product');
     await productInput.fill('Paracetamol');
@@ -517,6 +630,7 @@ for (const viewport of [{ width: 360, height: 800 }, { width: 412, height: 915 }
     await expect(page.getByTestId('selected-product-name')).toHaveText('Selected: Paracetamol 500 mg Tablet');
     expect(searchResponses).toEqual(expect.arrayContaining([
       { path: '/api/customers', search: 'Apollo', status: 200 },
+      { path: '/api/suppliers', search: 'Healthy', status: 200 },
       { path: '/api/products', search: 'Paracetamol', status: 200 },
     ]));
   });

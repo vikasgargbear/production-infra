@@ -8,10 +8,14 @@ import {
   getCustomerReceiptContext,
   type CustomerReceiptContext,
 } from '../../../services/api/modules/finance/customerReceipts.api';
+import { usePermissions } from '../../../hooks/usePermissions';
+import { FOUNDATION_CAPABILITIES } from '../../../config/canonicalCapabilities';
 
 type CanonicalBankAccount = CustomerReceiptContext['settlement_accounts'][number];
 
 const PaymentFlowOptimized: React.FC = () => {
+  const { hasCapability } = usePermissions();
+  const canManageCustomers = hasCapability(FOUNDATION_CAPABILITIES.customer);
   const {
     payment,
     selectedCustomer,
@@ -105,12 +109,12 @@ const PaymentFlowOptimized: React.FC = () => {
       <div className="space-y-2">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider">CUSTOMER</h3>
-          <button
+          {canManageCustomers && <button
             onClick={() => window.dispatchEvent(new CustomEvent('openCustomerModal'))}
             className="min-w-[140px] px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
           >
             Create Customer
-          </button>
+          </button>}
         </div>
         <p className="text-sm text-gray-600">
           Required: select a customer, positive receipt amount, payment method, settlement account, reference, and allocation.

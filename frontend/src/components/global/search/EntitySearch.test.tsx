@@ -1,4 +1,5 @@
 import React from 'react';
+import '@testing-library/jest-dom';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { customersApi, suppliersApi } from '../../../services/api';
 import { CustomerSearch } from './CustomerSearch';
@@ -14,6 +15,17 @@ jest.mock('../ui', () => ({
     ActionButton: ({ children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
         <button type="button" {...props}>{children}</button>
     ),
+}));
+
+const mockHasPermission = jest.fn(() => true);
+const mockHasCapability = jest.fn(() => true);
+const mockHasAnyCapability = jest.fn(() => true);
+jest.mock('../../../hooks/usePermissions', () => ({
+    usePermissions: () => ({
+        hasPermission: mockHasPermission,
+        hasCapability: mockHasCapability,
+        hasAnyCapability: mockHasAnyCapability,
+    }),
 }));
 
 type SearchItem = { id: string; label: string };
@@ -57,6 +69,9 @@ describe('EntitySearch request ownership', () => {
     beforeEach(() => {
         jest.useFakeTimers();
         jest.clearAllMocks();
+        mockHasPermission.mockReturnValue(true);
+        mockHasCapability.mockReturnValue(true);
+        mockHasAnyCapability.mockReturnValue(true);
     });
 
     afterEach(() => {
@@ -194,12 +209,29 @@ describe('EntitySearch request ownership', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Create New "missing"' }));
         expect(onCreateNew).toHaveBeenCalledWith('missing');
     });
+
+    it('shows access denied instead of an empty state and blocks keyboard create on 403', async () => {
+        const searchFn = jest.fn().mockRejectedValue({ response: { status: 403 } });
+        const consoleError = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+        const { onCreateNew } = renderEntitySearch(searchFn);
+        const input = screen.getByPlaceholderText('Find entity');
+        fireEvent.change(input, { target: { value: 'denied' } });
+        await act(async () => { jest.advanceTimersByTime(100); });
+        expect(screen.getByRole('alert')).toHaveTextContent('permission to search entitys');
+        expect(screen.queryByText(/No entitys found/)).toBeNull();
+        fireEvent.keyDown(input, { key: 'Enter' });
+        expect(onCreateNew).not.toHaveBeenCalled();
+        consoleError.mockRestore();
+    });
 });
 
 describe('customer and supplier search adapters', () => {
     beforeEach(() => {
         jest.useFakeTimers();
         jest.clearAllMocks();
+        mockHasPermission.mockReturnValue(true);
+        mockHasCapability.mockReturnValue(true);
+        mockHasAnyCapability.mockReturnValue(true);
     });
 
     afterEach(() => {
@@ -250,5 +282,19 @@ describe('customer and supplier search adapters', () => {
             'Supplier', { limit: 20 }, { signal: expect.anything() },
         );
         expect(screen.getByText('Supplier One')).toBeTruthy();
+    });
+
+    it('keeps customer lookup available but hides create without customer manage', () => {
+        mockHasCapability.mockImplementation((code: string) => !code.includes('customer'));
+        render(<CustomerSearch value={null} onChange={jest.fn()} onCreateNew={jest.fn()} />);
+        expect(screen.getByPlaceholderText(/Search customer/i)).not.toBeDisabled();
+        expect(screen.queryByRole('button', { name: /Create New Customer/ })).toBeNull();
+    });
+
+    it('keeps supplier lookup available but hides create without supplier manage', () => {
+        mockHasCapability.mockImplementation((code: string) => !code.includes('supplier'));
+        render(<SupplierSearch value={null} onChange={jest.fn()} onCreateNew={jest.fn()} />);
+        expect(screen.getByPlaceholderText(/Search supplier/i)).not.toBeDisabled();
+        expect(screen.queryByRole('button', { name: /Create Supplier/ })).toBeNull();
     });
 });

@@ -7,9 +7,12 @@ import SupplierMaster from '../components/master/masters/SupplierMaster';
 import ProductMaster from '../components/master/masters/ProductMaster';
 import CustomerAnalytics from '../components/reports/CustomerAnalytics';
 import FinancialReport from '../components/reports/FinancialReport';
-import { CustomerSearch, ProductSearch, ToastProvider } from '../components/global';
+import { CustomerSearch, ProductSearch, SupplierSearch, ToastProvider } from '../components/global';
 import { EscapeKeyProvider } from '../contexts/EscapeKeyContext';
+import AuthContext, { type AuthContextValue } from '../contexts/AuthContext';
 import type { Customer } from '../types/models/customer';
+import type { Supplier } from '../components/global/search/SupplierSearch';
+import { FOUNDATION_CAPABILITIES } from '../config/canonicalCapabilities';
 
 type Surface = 'customer-aging' | 'supplier-aging' | 'products' | 'customers' | 'suppliers' | 'financial' | 'customer-activity' | 'global-search';
 
@@ -28,6 +31,7 @@ const surfaceFromLocation = (): Surface => {
 
 const GlobalSearchSmokeSurface: React.FC = () => {
   const [customer, setCustomer] = React.useState<Customer | null>(null);
+  const [supplier, setSupplier] = React.useState<Supplier | null>(null);
   const [productName, setProductName] = React.useState('None');
 
   return (
@@ -48,6 +52,18 @@ const GlobalSearchSmokeSurface: React.FC = () => {
           Selected: {customer?.customer_name ?? 'None'}
         </p>
       </section>
+      <section aria-labelledby="supplier-search-heading">
+        <h2 id="supplier-search-heading" className="mb-2 text-base font-semibold text-gray-900">Supplier</h2>
+        <SupplierSearch
+          value={supplier}
+          onChange={setSupplier}
+          showCreateButton={false}
+          placeholder="Search supplier"
+        />
+        <p className="mt-2 text-sm text-gray-600" data-testid="selected-supplier-name">
+          Selected: {supplier?.supplier_name ?? supplier?.name ?? 'None'}
+        </p>
+      </section>
       <section aria-labelledby="product-search-heading">
         <h2 id="product-search-heading" className="mb-2 text-base font-semibold text-gray-900">Product</h2>
         <ProductSearch
@@ -63,11 +79,52 @@ const GlobalSearchSmokeSurface: React.FC = () => {
   );
 };
 
+const harnessPermissions = (): Record<string, boolean> => {
+  const requested = new URLSearchParams(window.location.search).get('permissions');
+  if (requested === 'none') return { 'core.organization.manage': true };
+  if (requested === 'product') return { [FOUNDATION_CAPABILITIES.product]: true };
+  if (requested === 'customer') return { [FOUNDATION_CAPABILITIES.customer]: true };
+  if (requested === 'supplier') return { [FOUNDATION_CAPABILITIES.supplier]: true };
+  return {
+    [FOUNDATION_CAPABILITIES.product]: true,
+    [FOUNDATION_CAPABILITIES.customer]: true,
+    [FOUNDATION_CAPABILITIES.supplier]: true,
+  };
+};
+
+const harnessAuthValue = (): AuthContextValue => {
+  const permissions = harnessPermissions();
+  const user = {
+    user_id: 'd3000000-0000-7000-8000-000000000090',
+    email: 'browser-harness@example.invalid',
+    org_id: 'd3000000-0000-7000-8000-000000000001',
+    role_id: 'd3000000-0000-7000-8000-000000000091',
+    permissions,
+    is_admin: false,
+    data_access_level: 'organization',
+  };
+  return {
+    user, token: 'browser-harness-token', isAuthenticated: true, isLoading: false,
+    onboardingRequired: false, isOnline: true, hasCloudSession: true,
+    sessionExchangeError: null,
+    login: async () => ({ success: true, user }),
+    loginWithGoogle: async () => ({ success: true, user }),
+    handleOAuthCallback: async () => ({ success: true, user }),
+    logout: () => undefined,
+    getOrgId: () => user.org_id,
+    getToken: () => 'browser-harness-token',
+    retrySessionExchange: async () => ({ success: true, user }),
+    createOrganization: async () => ({ success: true, user }),
+    acceptInvitation: async () => ({ success: true, user }),
+  };
+};
+
 const CanonicalReadSurfacesSmokePage: React.FC = () => {
   const [surface, setSurface] = React.useState<Surface>(surfaceFromLocation);
   const queryClient = React.useMemo(() => new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: 0 } },
   }), []);
+  const authValue = React.useMemo(harnessAuthValue, []);
 
   const selectSurface = (next: Surface) => {
     const url = new URL(window.location.href);
@@ -78,6 +135,7 @@ const CanonicalReadSurfacesSmokePage: React.FC = () => {
   };
 
   return (
+    <AuthContext.Provider value={authValue}>
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
       <EscapeKeyProvider>
@@ -116,6 +174,7 @@ const CanonicalReadSurfacesSmokePage: React.FC = () => {
       </EscapeKeyProvider>
       </ToastProvider>
     </QueryClientProvider>
+    </AuthContext.Provider>
   );
 };
 

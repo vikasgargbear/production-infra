@@ -2,6 +2,10 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import SalesOrderFlow from './SalesOrderFlow';
 import { useSalesOrderLogic } from './hooks/useSalesOrderLogic';
 
+jest.mock('../../../hooks/usePermissions', () => ({
+    usePermissions: () => ({ hasCapability: () => true }),
+}));
+
 jest.mock('./hooks/useSalesOrderLogic', () => ({
     useSalesOrderLogic: jest.fn(),
 }));

@@ -22,6 +22,8 @@ import type { Customer } from '../../../types/models';
 import CanonicalSalesCommandReview from '../CanonicalSalesCommandReview';
 import { toast } from 'react-toastify';
 import { resolvedSalesOrderDeliveryAddress } from '../utils/canonicalSalesChainCommand';
+import { usePermissions } from '../../../hooks/usePermissions';
+import { FOUNDATION_CAPABILITIES } from '../../../config/canonicalCapabilities';
 
 // ==================== TYPE DEFINITIONS ====================
 
@@ -35,6 +37,9 @@ interface SalesOrderFlowProps {
 // ==================== MAIN COMPONENT ====================
 
 const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose }) => {
+    const { hasCapability } = usePermissions();
+    const canManageCustomers = hasCapability(FOUNDATION_CAPABILITIES.customer);
+    const canManageProducts = hasCapability(FOUNDATION_CAPABILITIES.product);
     const [currentStep, setCurrentStep] = useState(1);
     const [showCancelConfirm, setShowCancelConfirm] = useState(false);
     const cancelBackButtonRef = useRef<HTMLButtonElement>(null);
@@ -114,7 +119,7 @@ const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose })
                         break;
                     case 'n':
                         e.preventDefault();
-                        setShowCustomerModal(true);
+                        if (canManageCustomers) setShowCustomerModal(true);
                         break;
                     case 'i':
                         e.preventDefault();
@@ -140,7 +145,7 @@ const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose })
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [currentStep, handleCancelRequest, showCancelConfirm, showCustomerModal, showProductModal, showImportModal, saveOrder, printOrder, setShowCustomerModal, setShowImportModal, setShowProductModal]);
+    }, [canManageCustomers, currentStep, handleCancelRequest, showCancelConfirm, showCustomerModal, showProductModal, showImportModal, saveOrder, printOrder, setShowCustomerModal, setShowImportModal, setShowProductModal]);
 
     if (!open) return null;
 
@@ -219,7 +224,7 @@ const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose })
                     </div>
 
                     {/* Modals */}
-                    {showCustomerModal && (
+                    {canManageCustomers && showCustomerModal && (
                         <CustomerCreation
                             onClose={() => setShowCustomerModal(false)}
                             onCustomerCreated={(customer: Customer) => {
@@ -229,7 +234,7 @@ const SalesOrderFlow: React.FC<SalesOrderFlowProps> = ({ open = true, onClose })
                         />
                     )}
 
-                    {showProductModal && (
+                    {canManageProducts && showProductModal && (
                         <ProductCreationModal
                             show={showProductModal}
                             onClose={() => {

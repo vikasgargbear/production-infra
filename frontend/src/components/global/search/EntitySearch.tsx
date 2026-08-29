@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef, useMemo, forwardRef, useImperativeH
 import { Search, Loader2, X, LucideIcon } from 'lucide-react';
 import { ActionButton } from '../ui';
 import { debounce } from '../../../utils/debounce';
+import { isForbiddenApiError } from '../../../services/api/utils/apiError';
+import CapabilityDeniedNotice from '../ui/CapabilityDeniedNotice';
 
 /**
  * EntitySearch - Generic base component for all entity search (Customer, Supplier, Product, etc.)
@@ -52,6 +54,7 @@ export interface EntitySearchProps<T> {
     searchFn: (query: string, signal: AbortSignal) => Promise<T[]>;
     minLength?: number;
     debounceMs?: number;
+    accessDeniedMessage?: string;
 
     // Rendering - pass entity-specific renderers
     renderResult?: (item: T, isHighlighted: boolean, index: number) => React.ReactNode;
@@ -96,6 +99,7 @@ function EntitySearchInner<T>(
         searchFn,
         minLength = 2,
         debounceMs = 275,
+        accessDeniedMessage = `You do not have permission to search ${entityType}s.`,
 
         // Rendering
         renderResult,
@@ -121,6 +125,7 @@ function EntitySearchInner<T>(
     const [loading, setLoading] = useState(false);
     const [showDropdown, setShowDropdown] = useState(false);
     const [highlightedIndex, setHighlightedIndex] = useState(-1);
+    const [accessDenied, setAccessDenied] = useState(false);
 
     const searchInputRef = useRef<HTMLInputElement>(null);
     const dropdownRef = useRef<HTMLDivElement>(null);
@@ -154,6 +159,7 @@ function EntitySearchInner<T>(
             searchAbortRef.current?.abort();
             const controller = new AbortController();
             searchAbortRef.current = controller;
+            setAccessDenied(false);
             try {
                 const results = await searchFnRef.current(query, controller.signal);
                 if (requestId !== searchRequestRef.current) return;
@@ -165,6 +171,7 @@ function EntitySearchInner<T>(
                 console.error(`[EntitySearch] ${entityType} search failed:`, error);
                 setSearchResults([]);
                 setHighlightedIndex(-1);
+                setAccessDenied(isForbiddenApiError(error));
             } finally {
                 if (requestId === searchRequestRef.current) setLoading(false);
                 if (searchAbortRef.current === controller) searchAbortRef.current = null;
@@ -184,6 +191,7 @@ function EntitySearchInner<T>(
             setSearchResults([]);
             setHighlightedIndex(-1);
             setLoading(false);
+            setAccessDenied(false);
         }
         return () => {
             performSearch.cancel();
@@ -258,7 +266,7 @@ function EntitySearchInner<T>(
                 e.preventDefault();
                 if (highlightedIndex >= 0 && highlightedIndex < searchResults.length) {
                     handleSelect(searchResults[highlightedIndex]);
-                } else if (searchResults.length === 0 && searchQuery.length >= minLength && onCreateNew) {
+                } else if (!accessDenied && searchResults.length === 0 && searchQuery.length >= minLength && onCreateNew) {
                     onCreateNew(searchQuery);
                 }
                 break;
@@ -342,7 +350,11 @@ function EntitySearchInner<T>(
     // Render dropdown content
     const renderDropdownContent = () => (
         <div role="listbox" className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
-            {loading ? (
+            {accessDenied ? (
+                <div className="p-3">
+                    <CapabilityDeniedNotice>{accessDeniedMessage}</CapabilityDeniedNotice>
+                </div>
+            ) : loading ? (
                 <div className="p-4 text-center text-gray-500">
                     <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
                     <p className="text-sm">Searching...</p>
