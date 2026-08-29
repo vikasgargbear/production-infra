@@ -27,6 +27,10 @@ export interface SupplierParams {
   has_outstanding?: boolean;
 }
 
+interface MasterReadConfig {
+  signal?: AbortSignal;
+}
+
 export interface CanonicalSupplierCreateInput {
   supplier_name: string;
   primary_phone?: string;
@@ -120,8 +124,9 @@ export const toCanonicalSupplierCreate = (input: Record<string, any>): Canonical
 // ============================================================================
 
 export const suppliersApi = {
-  getAll: (params: SupplierParams = {}) => apiHelpers.get('/suppliers', {
+  getAll: (params: SupplierParams = {}, config: MasterReadConfig = {}) => apiHelpers.get('/suppliers', {
     params,
+    signal: config.signal,
     preserveExactDecimals: true,
   })
     .then(response => ({ ...response, data: decodeCanonicalSupplierList(response.data) })),
@@ -143,9 +148,10 @@ export const suppliersApi = {
   delete: (_id: number | string) => rejectCanonicalWrite('Deleting a supplier'),
 
   // Search suppliers
-  search: (query: string, params: SupplierParams = {}) => {
+  search: (query: string, params: SupplierParams = {}, config: MasterReadConfig = {}) => {
     return apiHelpers.get('/suppliers', {
       params: { search: query, ...params },
+      signal: config.signal,
       preserveExactDecimals: true,
     }).then(response => ({ ...response, data: decodeCanonicalSupplierList(response.data) }));
   },

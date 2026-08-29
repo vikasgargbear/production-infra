@@ -73,8 +73,8 @@ export const SupplierSearch = forwardRef<SupplierSearchRef, SupplierSearchProps>
     },
     ref
 ) => {
-    const searchSuppliers = useCallback(async (query: string): Promise<Supplier[]> => {
-        const response = await suppliersApi.search(query, { limit: 20 });
+    const searchSuppliers = useCallback(async (query: string, signal: AbortSignal): Promise<Supplier[]> => {
+        const response = await suppliersApi.search(query, { limit: 20 }, { signal });
         const rows = response?.data;
         if (!Array.isArray(rows)) {
             throw new Error('Supplier search returned an invalid canonical response');
@@ -197,7 +197,7 @@ export const SupplierSearch = forwardRef<SupplierSearchRef, SupplierSearchProps>
             createButtonLabel={buttonLabel}
             searchFn={searchSuppliers}
             minLength={2}
-            debounceMs={100}
+            debounceMs={275}
             renderResult={renderSupplierResult}
             renderSelected={renderSelectedSupplier}
             getItemKey={(s) => s.supplier_id || s.id || ''}

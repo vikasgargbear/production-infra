@@ -3,6 +3,7 @@ import {
     canonicalInvoiceValidationError,
     companyInvoiceValidationError,
     freeSupplyTreatmentAfterQuantityEdit,
+    invoiceBatchAllocationDisplay,
     invoiceBatchAllocationValidationError,
     invoicePreviewValidationError,
 } from './canonicalInvoiceCommand';
@@ -43,6 +44,7 @@ const ids = {
     customer: '10000000-0000-7000-8000-000000000003',
     product: '10000000-0000-7000-8000-000000000004',
     batch: '10000000-0000-7000-8000-000000000005',
+    batch2: '10000000-0000-7000-8000-000000000015',
     uom: '10000000-0000-7000-8000-000000000006',
     sourceLine: '10000000-0000-7000-8000-000000000007',
     command: '10000000-0000-7000-8000-000000000008',
@@ -294,25 +296,67 @@ describe('canonical invoice command', () => {
         )).toThrow(/order must be dispatched first/i);
     });
 
-    it('fails closed instead of partially allocating beyond the selected batch', () => {
+    it('allocates one logical line across consecutive reviewed FEFO batches', () => {
+        const multiBatch = {
+            ...invoice,
+            items: [{
+                ...invoice.items[0],
+                quantity: '9.000000',
+                free_quantity: '2.000000',
+                allocation_batches: [{
+                    batch_id: ids.batch,
+                    batch_number: 'FEFO-1',
+                    expiry_date: '2028-09-01',
+                    available_quantity: '10.000000',
+                    location_id: ids.location,
+                    branch_id: ids.branch,
+                    uom_conversion_id: ids.uom,
+                }, {
+                    batch_id: ids.batch2,
+                    batch_number: 'FEFO-2',
+                    expiry_date: '2028-10-01',
+                    available_quantity: '5.000000',
+                    location_id: ids.location,
+                    branch_id: ids.branch,
+                    uom_conversion_id: ids.uom,
+                }],
+            }],
+        } as Invoice;
+
+        expect(canonicalInvoiceValidationError(multiBatch, customer)).toBeNull();
+        const line = (buildCanonicalInvoicePreparePayload(
+            multiBatch,
+            customer,
+            'erp-web-invoice:multi-batch',
+        ).lines as any[])[0];
+        expect(line.batch_allocations).toEqual([{
+            batch_id: ids.batch,
+            billed_quantity: '9.000000',
+            free_quantity: '1.000000',
+        }, {
+            batch_id: ids.batch2,
+            billed_quantity: '0.000000',
+            free_quantity: '1.000000',
+        }]);
+        expect(invoiceBatchAllocationDisplay(multiBatch.items[0], 0)).toBe(
+            'FEFO-1 10 · FEFO-2 1',
+        );
+    });
+
+    it('fails closed when reviewed batches cannot fulfill the total quantity', () => {
         const insufficient = {
             ...invoice,
             items: [{
                 ...invoice.items[0],
-                quantity: 9,
-                free_quantity: 2,
-                available_quantity: 10,
+                quantity: '11.000000',
+                free_quantity: '0.000000',
+                free_supply_tax_treatment: 'excluded_from_taxable_value',
             }],
         } as Invoice;
 
         expect(canonicalInvoiceValidationError(insufficient, customer)).toMatch(
-            /needs 11\.000000 units but the selected batch has 10\.000000.*multi-batch allocation is not available/i,
+            /needs 1\.000000 more units/i,
         );
-        expect(() => buildCanonicalInvoicePreparePayload(
-            insufficient,
-            customer,
-            'erp-web-invoice:insufficient-batch',
-        )).toThrow(/multi-batch allocation is not available/i);
     });
 
     it.each([

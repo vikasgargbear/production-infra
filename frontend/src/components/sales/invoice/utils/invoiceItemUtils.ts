@@ -6,7 +6,11 @@
 
 import { prepareItemForTransaction, ProductInput } from '../../utils/productItemTransform';
 import type { InvoiceItem } from '../hooks/useInvoiceLogic';
-import { normalizeExactDecimal } from '../../../../utils/exactDecimal';
+import {
+    exactDecimalString,
+    exactDecimalUnits,
+    normalizeExactDecimal,
+} from '../../../../utils/exactDecimal';
 import type { CanonicalImportLine } from '../../utils/documentImport';
 
 type SelectedProductInput = Omit<ProductInput, 'quantity' | 'free_quantity'> & {
@@ -24,6 +28,38 @@ export const prepareItemForInvoice = (product: ProductInput): InvoiceItem => {
     return prepareItemForTransaction<InvoiceItem>(product);
 };
 
+const roundToVisiblePrecision = (
+    value: unknown,
+    label: string,
+    sourceScale: number,
+    visibleScale: number,
+): string => {
+    const sourceUnits = exactDecimalUnits(value, label, {
+        scale: sourceScale,
+        maximumWholeDigits: 16,
+    });
+    const divisor = 10n ** BigInt(sourceScale - visibleScale);
+    const roundedVisibleUnits = (sourceUnits + (divisor / 2n)) / divisor;
+    return exactDecimalString(roundedVisibleUnits, visibleScale);
+};
+
+/**
+ * Direct invoice entry intentionally exposes two-decimal commercial inputs.
+ * Round the reviewed master-data suggestion once, before it becomes the draft
+ * command value, so the amount displayed to the operator is also the amount
+ * submitted to canonical calculation/posting.
+ */
+export const normalizeDirectInvoiceCommercialInputs = (item: InvoiceItem): InvoiceItem => ({
+    ...item,
+    unit_price: roundToVisiblePrecision(item.unit_price, 'Selected invoice unit rate', 4, 2),
+    discount_percent: roundToVisiblePrecision(
+        item.discount_percent ?? '0',
+        'Selected invoice discount percent',
+        6,
+        2,
+    ),
+});
+
 /** UI selections must carry the operator's exact billed/free quantity intent. */
 export const prepareSelectedProductForInvoice = (
     product: SelectedProductInput,
@@ -31,7 +67,7 @@ export const prepareSelectedProductForInvoice = (
     if (typeof product.quantity !== 'string' || typeof product.free_quantity !== 'string') {
         throw new Error('Selected product billed and free quantities must remain exact decimal strings.');
     }
-    return prepareItemForInvoice(product);
+    return normalizeDirectInvoiceCommercialInputs(prepareItemForInvoice(product));
 };
 
 /** Canonical imports must carry both quantities explicitly; no UI defaults apply. */

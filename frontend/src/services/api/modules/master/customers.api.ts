@@ -29,6 +29,10 @@ export interface CustomerParams {
   include_credit?: boolean;
 }
 
+interface MasterReadConfig {
+  signal?: AbortSignal;
+}
+
 export interface CanonicalCustomerCreateInput {
   customer_name: string;
   customer_type: 'individual' | 'organization';
@@ -133,8 +137,9 @@ export const toCanonicalCustomerCreate = (input: Record<string, any>): Canonical
 // ============================================================================
 
 export const customersApi = {
-  getAll: (params: CustomerParams = {}) => apiHelpers.get('/customers', {
+  getAll: (params: CustomerParams = {}, config: MasterReadConfig = {}) => apiHelpers.get('/customers', {
     params,
+    signal: config.signal,
     preserveExactDecimals: true,
   })
     .then(response => ({ ...response, data: decodeCanonicalCustomerList(response.data) })),
@@ -179,9 +184,10 @@ export const customersApi = {
   },
 
   // Search customers
-  search: (query: string, params: CustomerParams = {}) => {
+  search: (query: string, params: CustomerParams = {}, config: MasterReadConfig = {}) => {
     return apiHelpers.get('/customers', {
       params: { search: query, ...params },
+      signal: config.signal,
       preserveExactDecimals: true,
     }).then(response => ({ ...response, data: decodeCanonicalCustomerList(response.data) }));
   },

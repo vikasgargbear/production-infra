@@ -43,10 +43,12 @@ describe('ProductSearch canonical request lifecycle', () => {
         fireEvent.change(screen.getByPlaceholderText(/Search products/i), {
             target: { value: 'Exact' },
         });
-        await act(async () => { jest.advanceTimersByTime(100); });
+        await act(async () => { jest.advanceTimersByTime(275); });
 
         expect(productsApi.search).toHaveBeenCalledTimes(1);
-        expect(productsApi.search).toHaveBeenCalledWith('Exact', { limit: 20 });
+        expect(productsApi.search).toHaveBeenCalledWith(
+            'Exact', { limit: 20 }, { signal: expect.anything() },
+        );
         expect(await screen.findByText('Exact Product')).toBeTruthy();
         expect(screen.getByText('Exact Generic')).toBeTruthy();
         expect(screen.getByText('Exact Labs')).toBeTruthy();
@@ -67,7 +69,7 @@ describe('ProductSearch canonical request lifecycle', () => {
 
         const input = screen.getByPlaceholderText(/Search products/i);
         fireEvent.change(input, { target: { value: 'Exact' } });
-        await act(async () => { jest.advanceTimersByTime(100); });
+        await act(async () => { jest.advanceTimersByTime(275); });
         fireEvent.keyDown(input, { key: 'Enter' });
 
         expect(onAddItem).toHaveBeenCalledWith(expect.objectContaining({
@@ -90,9 +92,11 @@ describe('ProductSearch canonical request lifecycle', () => {
         const input = screen.getByPlaceholderText(/Search products/i);
 
         fireEvent.change(input, { target: { value: 'Older' } });
-        await act(async () => { jest.advanceTimersByTime(100); });
+        await act(async () => { jest.advanceTimersByTime(275); });
+        const olderSignal = (productsApi.search as jest.Mock).mock.calls[0][2].signal as AbortSignal;
         fireEvent.change(input, { target: { value: 'Newer' } });
-        await act(async () => { jest.advanceTimersByTime(100); });
+        await act(async () => { jest.advanceTimersByTime(275); });
+        expect(olderSignal.aborted).toBe(true);
         expect(await screen.findByText('Newer Product')).toBeTruthy();
 
         await act(async () => { resolveOlder({ data: [row('Older Product')] }); });
@@ -109,7 +113,7 @@ describe('ProductSearch canonical request lifecycle', () => {
         fireEvent.change(screen.getByPlaceholderText(/Search products/i), {
             target: { value: 'Unsafe' },
         });
-        await act(async () => { jest.advanceTimersByTime(100); });
+        await act(async () => { jest.advanceTimersByTime(275); });
 
         expect(screen.queryByText('Unsafe Product')).toBeNull();
     });

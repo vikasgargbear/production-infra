@@ -49,7 +49,7 @@ export interface EntitySearchProps<T> {
     createButtonLabel?: string;
 
     // Search configuration
-    searchFn: (query: string) => Promise<T[]>;
+    searchFn: (query: string, signal: AbortSignal) => Promise<T[]>;
     minLength?: number;
     debounceMs?: number;
 
@@ -95,7 +95,7 @@ function EntitySearchInner<T>(
         // Search configuration
         searchFn,
         minLength = 2,
-        debounceMs = 100,
+        debounceMs = 275,
 
         // Rendering
         renderResult,
@@ -126,11 +126,13 @@ function EntitySearchInner<T>(
     const dropdownRef = useRef<HTMLDivElement>(null);
     const resultRefs = useRef<(HTMLDivElement | null)[]>([]);
     const searchRequestRef = useRef(0);
+    const searchAbortRef = useRef<AbortController | null>(null);
 
     // Expose methods to parent
     useImperativeHandle(ref, () => ({
         focus: () => searchInputRef.current?.focus(),
         clear: () => {
+            searchAbortRef.current?.abort();
             onChange(null);
             setSearchQuery('');
             setSearchResults([]);
@@ -149,18 +151,23 @@ function EntitySearchInner<T>(
             }
 
             setLoading(true);
+            searchAbortRef.current?.abort();
+            const controller = new AbortController();
+            searchAbortRef.current = controller;
             try {
-                const results = await searchFnRef.current(query);
+                const results = await searchFnRef.current(query, controller.signal);
                 if (requestId !== searchRequestRef.current) return;
                 setSearchResults(results || []);
                 setHighlightedIndex(results?.length > 0 ? 0 : -1);
             } catch (error) {
+                if (controller.signal.aborted) return;
                 if (requestId !== searchRequestRef.current) return;
                 console.error(`[EntitySearch] ${entityType} search failed:`, error);
                 setSearchResults([]);
                 setHighlightedIndex(-1);
             } finally {
                 if (requestId === searchRequestRef.current) setLoading(false);
+                if (searchAbortRef.current === controller) searchAbortRef.current = null;
             }
         }, debounceMs),
         [minLength, debounceMs, entityType]
@@ -180,6 +187,7 @@ function EntitySearchInner<T>(
         }
         return () => {
             performSearch.cancel();
+            searchAbortRef.current?.abort();
             if (searchRequestRef.current === requestId) {
                 searchRequestRef.current += 1;
             }
