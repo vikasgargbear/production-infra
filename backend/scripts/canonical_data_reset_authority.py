@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Build the exact, head-bound authority for disposable canonical data resets.
+"""Build the exact, head-bound authority for an organization-scoped purge.
 
-The ordinary staging reset preserves the Alembic-owned database topology and
-the deterministic reference rows that Alembic will not replay at an already
-current head.  It emits the exact relation classification and non-cascading
-TRUNCATE SQL.  Its explicit execution mode validates the complete live Alembic
-catalog, performs one transaction, and emits credential-free verification facts.
+There is deliberately no whole-database reset.  Destructive execution requires
+one exact organization UUID and a typed acknowledgement.  At runtime every
+deleted relation must prove a mandatory UUID ``org_id`` column and a reviewed
+foreign-key path to ``core.organizations(id)``.  Shared rows, users, other
+organizations, schemas, roles, sequences, and storage objects are never reset.
 """
 
 from __future__ import annotations
@@ -19,6 +19,7 @@ import os
 from pathlib import Path
 import re
 from typing import Any, Iterable, Mapping, Sequence
+from uuid import UUID
 
 try:  # Imported as ``scripts.*`` by pytest and directly by the workflow CLI.
     from scripts.canonical_migration_contract import MigrationContract, load_contract
@@ -26,13 +27,21 @@ except ModuleNotFoundError:  # pragma: no cover - exercised by direct CLI execut
     from canonical_migration_contract import MigrationContract, load_contract
 
 
-CONTRACT_VERSION = "canonical-data-reset-v1"
+CONTRACT_VERSION = "canonical-organization-purge-v2"
 CANONICAL_STAGING_PROJECT_REF = "rgihahbmkrmhitjdjvev"
 EXPECTED_CANONICAL_RELATION_COUNT = 120
 EXPECTED_EPHEMERAL_RELATION_COUNT = 9
 EXPECTED_ALEMBIC_SCHEMA_COUNT = 30
-EVIDENCE_STORAGE_BUCKET = "canonical-evidence-private-v1"
 RESET_LOCK_KEY = 8_260_826_2
+EXPECTED_ORGANIZATION_RELATION_COUNT = 104
+ORGANIZATION_CONFIRMATION_PREFIX = "DELETE-ORGANIZATION:"
+TRANSITIVE_ORGANIZATION_RELATIONS = frozenset(
+    {
+        "tax.input_credit_applications",
+        "tax.input_credit_lots",
+        "tax.input_credit_reversal_events",
+    }
+)
 MANAGED_ROLES = (
     "erp_app",
     "erp_calculator",
@@ -100,6 +109,7 @@ CREATE_SCHEMA = re.compile(
     r'"?(?P<schema>[a-z_][a-z0-9_]*)"?(?:\s|;)'
 )
 QUALIFIED_RELATION = re.compile(r"^[a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*$")
+SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 
 
 class ResetAuthorityError(RuntimeError):
@@ -136,18 +146,6 @@ class ResetAuthority:
     reset_relations: tuple[str, ...]
     ephemeral_scope_relations: tuple[str, ...]
 
-    @property
-    def truncate_relations(self) -> tuple[str, ...]:
-        return tuple(sorted((*self.reset_relations, *self.ephemeral_scope_relations)))
-
-    @property
-    def truncate_sql(self) -> str:
-        targets = ", ".join(_quote_relation(item) for item in self.truncate_relations)
-        statement = f"TRUNCATE TABLE {targets} RESTART IDENTITY;"
-        if re.search(r"\bCASCADE\b", statement, re.IGNORECASE):
-            raise ResetAuthorityError("canonical data reset must never use CASCADE")
-        return statement
-
     def manifest(self) -> dict[str, object]:
         return {
             "contract_version": CONTRACT_VERSION,
@@ -162,9 +160,11 @@ class ResetAuthority:
             "reset_relations": list(self.reset_relations),
             "ephemeral_scope_relation_count": len(self.ephemeral_scope_relations),
             "ephemeral_scope_relations": list(self.ephemeral_scope_relations),
-            "truncate_relation_count": len(self.truncate_relations),
-            "truncate_relations": list(self.truncate_relations),
-            "truncate_sql": self.truncate_sql,
+            "organization_scope_column": "org_id",
+            "expected_organization_relation_count": (
+                EXPECTED_ORGANIZATION_RELATION_COUNT
+            ),
+            "whole_database_reset_available": False,
         }
 
     def manifest_sha256(self) -> str:
@@ -654,28 +654,170 @@ def _seed_digest(cursor: Any, relations: Sequence[str]) -> str:
     return digest.hexdigest()
 
 
-def _relation_row_counts(
-    cursor: Any, relations: Sequence[str]
+def _normalize_organization_id(value: str) -> str:
+    try:
+        parsed = UUID(value)
+    except (AttributeError, TypeError, ValueError) as error:
+        raise ResetAuthorityError("organization id must be a canonical UUID") from error
+    normalized = str(parsed)
+    if value != normalized or parsed.int == 0:
+        raise ResetAuthorityError("organization id must be a canonical non-zero UUID")
+    return normalized
+
+
+def organization_confirmation(organization_id: str) -> str:
+    normalized = _normalize_organization_id(organization_id)
+    return f"{ORGANIZATION_CONFIRMATION_PREFIX}{normalized}"
+
+
+def _organization_relations(
+    cursor: Any, authority: ResetAuthority
+) -> tuple[str, ...]:
+    """Prove and return the complete tenant-keyed canonical relation set."""
+
+    cursor.execute(
+        """
+        SELECT namespace.nspname || '.' || relation.relname AS qualified_name,
+               pg_catalog.format_type(attribute.atttypid,attribute.atttypmod),
+               attribute.attnotnull,
+               EXISTS (
+                 SELECT 1
+                   FROM pg_catalog.pg_constraint AS foreign_key
+                  WHERE foreign_key.contype='f'
+                    AND foreign_key.conrelid=relation.oid
+                    AND foreign_key.confrelid='core.organizations'::regclass
+                    AND foreign_key.conkey=ARRAY[attribute.attnum]::smallint[]
+                    AND foreign_key.confkey=ARRAY[(
+                      SELECT organization_id.attnum
+                        FROM pg_catalog.pg_attribute AS organization_id
+                       WHERE organization_id.attrelid='core.organizations'::regclass
+                         AND organization_id.attname='id'
+                         AND organization_id.attnum>0
+                         AND NOT organization_id.attisdropped
+                    )]::smallint[]
+               ) AS direct_organization_foreign_key,
+               EXISTS (
+                 SELECT 1
+                   FROM pg_catalog.pg_constraint AS foreign_key
+                   JOIN pg_catalog.pg_class AS target_relation
+                     ON target_relation.oid=foreign_key.confrelid
+                   JOIN pg_catalog.pg_namespace AS target_namespace
+                     ON target_namespace.oid=target_relation.relnamespace
+                  WHERE foreign_key.contype='f'
+                    AND foreign_key.conrelid=relation.oid
+                    AND target_namespace.nspname=ANY(%s)
+                    AND EXISTS (
+                      SELECT 1
+                        FROM pg_catalog.generate_subscripts(
+                               foreign_key.conkey,1
+                             ) AS position
+                        JOIN pg_catalog.pg_attribute AS target_attribute
+                          ON target_attribute.attrelid=foreign_key.confrelid
+                         AND target_attribute.attnum=foreign_key.confkey[position]
+                       WHERE foreign_key.conkey[position]=attribute.attnum
+                         AND target_attribute.attname='org_id'
+                    )
+               ) AS tenant_organization_foreign_key
+          FROM pg_catalog.pg_class AS relation
+          JOIN pg_catalog.pg_namespace AS namespace
+            ON namespace.oid=relation.relnamespace
+          JOIN pg_catalog.pg_attribute AS attribute
+            ON attribute.attrelid=relation.oid
+           AND attribute.attname='org_id'
+           AND attribute.attnum>0
+           AND NOT attribute.attisdropped
+         WHERE relation.relkind IN ('r','p')
+           AND namespace.nspname=ANY(%s)
+         ORDER BY qualified_name
+        """,
+        (list(CANONICAL_SCHEMAS), list(CANONICAL_SCHEMAS)),
+    )
+    rows = tuple(tuple(row) for row in cursor.fetchall())
+    relations = tuple(str(row[0]) for row in rows)
+    if len(relations) != EXPECTED_ORGANIZATION_RELATION_COUNT:
+        raise ResetAuthorityError(
+            "tenant relation count drifted: "
+            f"expected={EXPECTED_ORGANIZATION_RELATION_COUNT} observed={len(relations)}"
+        )
+    if len(set(relations)) != len(relations):
+        raise ResetAuthorityError("tenant relation catalog contains duplicates")
+    if not set(relations).issubset(authority.canonical_relations):
+        raise ResetAuthorityError("tenant relation exists outside canonical authority")
+    invalid = [
+        str(name)
+        for name, data_type, not_null, direct_foreign_key, tenant_foreign_key in rows
+        if data_type != "uuid"
+        or not bool(not_null)
+        or not (
+            bool(direct_foreign_key)
+            or (
+                str(name) in TRANSITIVE_ORGANIZATION_RELATIONS
+                and bool(tenant_foreign_key)
+            )
+        )
+    ]
+    if invalid:
+        raise ResetAuthorityError(
+            "tenant relations lack a mandatory direct organization UUID boundary: "
+            + ", ".join(invalid)
+        )
+    forbidden = {"core.organizations", "core.users"} & set(relations)
+    if forbidden:
+        raise ResetAuthorityError(
+            "global identity relations entered organization scope: "
+            + ", ".join(sorted(forbidden))
+        )
+    return relations
+
+
+def _organization_row_counts(
+    cursor: Any, relations: Sequence[str], organization_id: str, *, target: bool
 ) -> tuple[tuple[str, int], ...]:
+    comparison = "=" if target else "<>"
     result: list[tuple[str, int]] = []
     for relation in sorted(relations):
-        cursor.execute(f"SELECT count(*) FROM {_quote_relation(relation)}")
+        cursor.execute(
+            f"SELECT count(*) FROM {_quote_relation(relation)} "
+            f"WHERE org_id {comparison} %s::uuid",
+            (organization_id,),
+        )
         row = cursor.fetchone()
         if row is None:
-            raise ResetAuthorityError(f"could not count reset relation {relation}")
+            raise ResetAuthorityError(
+                f"could not count organization-scoped relation {relation}"
+            )
         result.append((relation, int(row[0])))
     return tuple(result)
 
 
-def _evidence_object_count(cursor: Any) -> int:
+def _require_purge_preconditions(cursor: Any, organization_id: str) -> str:
     cursor.execute(
-        "SELECT count(*) FROM storage.objects WHERE bucket_id=%s",
-        (EVIDENCE_STORAGE_BUCKET,),
+        "SELECT status FROM core.organizations WHERE id=%s::uuid FOR UPDATE",
+        (organization_id,),
     )
     row = cursor.fetchone()
     if row is None:
-        raise ResetAuthorityError("could not count canonical evidence objects")
-    return int(row[0])
+        raise ResetAuthorityError("target organization does not exist")
+    status = str(row[0])
+    cursor.execute(
+        "SELECT count(*) FROM core.data_retention_cases WHERE org_id=%s::uuid",
+        (organization_id,),
+    )
+    retention = cursor.fetchone()
+    if retention is None or int(retention[0]) != 0:
+        raise ResetAuthorityError(
+            "organization purge is forbidden while retention cases exist"
+        )
+    cursor.execute(
+        "SELECT count(*) FROM core.attachments WHERE org_id=%s::uuid",
+        (organization_id,),
+    )
+    attachments = cursor.fetchone()
+    if attachments is None or int(attachments[0]) != 0:
+        raise ResetAuthorityError(
+            "organization purge is forbidden while evidence attachments exist"
+        )
+    return status
 
 
 def verify_reset_boundary(
@@ -710,21 +852,120 @@ def verify_reset_boundary(
     }
 
 
-def execute_reset(
+def plan_organization_purge(
     connection: Any,
     *,
     authority: ResetAuthority,
     project_ref: str,
-    expected_evidence_object_count: int = 0,
+    organization_id: str,
+) -> dict[str, object]:
+    """Return a read-only, exact purge plan for external signing."""
+
+    if project_ref != CANONICAL_STAGING_PROJECT_REF:
+        raise ResetAuthorityError("organization purge planning is restricted to canonical staging")
+    normalized_id = _normalize_organization_id(organization_id)
+    with connection:
+        with connection.cursor() as cursor:
+            before_catalog = _catalog_snapshot(cursor, authority.alembic_schemas)
+            authority.validate_observed_catalog(
+                alembic_head=before_catalog.alembic_head,
+                alembic_schemas=before_catalog.alembic_schemas,
+                canonical_relations=before_catalog.canonical_relations,
+                ephemeral_scope_relations=before_catalog.ephemeral_scope_relations,
+            )
+            status = _require_purge_preconditions(cursor, normalized_id)
+            organization_relations = _organization_relations(cursor, authority)
+            target_counts = _organization_row_counts(
+                cursor, organization_relations, normalized_id, target=True
+            )
+    return {
+        "contract_version": CONTRACT_VERSION,
+        "project_ref": project_ref,
+        "organization_id": normalized_id,
+        "organization_status": status,
+        "alembic_head": authority.alembic_head,
+        "authority_manifest_sha256": authority.manifest_sha256(),
+        "catalog_fingerprint_sha256": before_catalog.fingerprint_sha256(),
+        "organization_relation_count": len(organization_relations),
+        "organization_row_count": sum(count for _, count in target_counts),
+        "confirmation_required": organization_confirmation(normalized_id),
+        "global_reset_available": False,
+        "truncate_used": False,
+    }
+
+
+def execute_organization_purge(
+    connection: Any,
+    *,
+    authority: ResetAuthority,
+    project_ref: str,
+    organization_id: str,
+    confirmation: str,
+    authorized_plan_sha256: str,
 ) -> dict[str, object]:
     if project_ref != CANONICAL_STAGING_PROJECT_REF:
-        raise ResetAuthorityError("data reset is restricted to canonical staging")
-    if expected_evidence_object_count != 0:
-        raise ResetAuthorityError("canonical data reset requires an empty evidence bucket")
+        raise ResetAuthorityError("organization purge is restricted to canonical staging")
+    normalized_id = _normalize_organization_id(organization_id)
+    if confirmation != organization_confirmation(normalized_id):
+        raise ResetAuthorityError(
+            "organization purge confirmation must exactly name the target UUID"
+        )
+    if SHA256_PATTERN.fullmatch(authorized_plan_sha256) is None:
+        raise ResetAuthorityError("a verified signed purge plan is required")
+
+    # First commit the tenant-local write fence.  Every ordinary ERP write
+    # requires an active organization, so new work for this organization stops
+    # without interrupting any other tenant.  A failed later purge remains safe
+    # and visibly suspended for manual review.
+    with connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT pg_catalog.pg_advisory_xact_lock(%s)", (RESET_LOCK_KEY,)
+            )
+            status = _require_purge_preconditions(cursor, normalized_id)
+            if status not in {"provisioning", "active", "suspended"}:
+                raise ResetAuthorityError(
+                    f"organization status cannot enter purge: {status}"
+                )
+            if status != "suspended":
+                cursor.execute(
+                    """
+                    SELECT pg_catalog.set_config('app.org_id',id::text,true),
+                           pg_catalog.set_config(
+                             'app.membership_id',created_by_membership_id::text,true
+                           ),
+                           pg_catalog.set_config(
+                             'app.request_id',extensions.gen_random_uuid()::text,true
+                           )
+                      FROM core.organizations
+                     WHERE id=%s::uuid
+                    """,
+                    (normalized_id,),
+                )
+                if cursor.fetchone() is None:
+                    raise ResetAuthorityError(
+                        "organization suspension context could not be established"
+                    )
+                cursor.execute(
+                    """
+                    UPDATE core.organizations
+                       SET status='suspended',
+                           updated_at=pg_catalog.transaction_timestamp(),
+                           row_version=row_version+1
+                     WHERE id=%s::uuid
+                    """,
+                    (normalized_id,),
+                )
+                if cursor.rowcount != 1:
+                    raise ResetAuthorityError(
+                        "organization suspension did not affect exactly one row"
+                    )
 
     with connection:
         with connection.cursor() as cursor:
-            cursor.execute("SELECT pg_catalog.pg_advisory_xact_lock(%s)", (RESET_LOCK_KEY,))
+            cursor.execute(
+                "SELECT pg_catalog.pg_advisory_xact_lock(%s)", (RESET_LOCK_KEY,)
+            )
             before_catalog = _catalog_snapshot(cursor, authority.alembic_schemas)
             authority.validate_observed_catalog(
                 alembic_head=before_catalog.alembic_head,
@@ -733,23 +974,53 @@ def execute_reset(
                 ephemeral_scope_relations=before_catalog.ephemeral_scope_relations,
             )
             if not before_catalog.auth_schema_present or not before_catalog.storage_schema_present:
-                raise ResetAuthorityError("managed Supabase schemas must exist before reset")
-            before_objects = _evidence_object_count(cursor)
-            if before_objects != expected_evidence_object_count:
+                raise ResetAuthorityError("managed Supabase schemas must exist before purge")
+            if _require_purge_preconditions(cursor, normalized_id) != "suspended":
                 raise ResetAuthorityError(
-                    "canonical evidence bucket is not empty: "
-                    f"expected={expected_evidence_object_count} observed={before_objects}"
+                    "organization must be suspended before destructive execution"
                 )
+            cursor.execute(
+                "SELECT role.rolsuper FROM pg_catalog.pg_roles AS role "
+                "WHERE role.rolname=SESSION_USER"
+            )
+            superuser = cursor.fetchone()
+            if superuser != (True,):
+                raise ResetAuthorityError(
+                    "organization purge requires the reviewed database administrator"
+                )
+            organization_relations = _organization_relations(cursor, authority)
             before_roles = _role_snapshot(cursor)
             before_role_passwords = _role_password_presence(cursor)
             before_seed_digest = _seed_digest(
                 cursor, authority.preserved_seed_relations
             )
-            before_counts = _relation_row_counts(cursor, authority.truncate_relations)
+            before_target_counts = _organization_row_counts(
+                cursor, organization_relations, normalized_id, target=True
+            )
+            before_other_counts = _organization_row_counts(
+                cursor, organization_relations, normalized_id, target=False
+            )
 
-            cursor.execute("SET LOCAL ROLE erp_migration_owner")
-            cursor.execute(authority.truncate_sql)
-            cursor.execute("RESET ROLE")
+            # Cyclic tenant foreign keys and immutable-ledger triggers make a
+            # normal DELETE order impossible.  The reviewed administrator may
+            # suppress replication triggers only inside this transaction.  The
+            # statements remain individually parameterized by the exact UUID;
+            # there is no TRUNCATE, CASCADE, wildcard, or global predicate.
+            cursor.execute("SET LOCAL session_replication_role=replica")
+            for relation in organization_relations:
+                cursor.execute(
+                    f"DELETE FROM {_quote_relation(relation)} WHERE org_id=%s::uuid",
+                    (normalized_id,),
+                )
+            cursor.execute(
+                "DELETE FROM core.organizations WHERE id=%s::uuid",
+                (normalized_id,),
+            )
+            if cursor.rowcount != 1:
+                raise ResetAuthorityError(
+                    "organization purge did not delete exactly one boundary row"
+                )
+            cursor.execute("SET LOCAL session_replication_role=origin")
 
             after_catalog = _catalog_snapshot(cursor, authority.alembic_schemas)
             authority.validate_observed_catalog(
@@ -758,39 +1029,52 @@ def execute_reset(
                 canonical_relations=after_catalog.canonical_relations,
                 ephemeral_scope_relations=after_catalog.ephemeral_scope_relations,
             )
-            after_objects = _evidence_object_count(cursor)
             after_roles = _role_snapshot(cursor)
             after_role_passwords = _role_password_presence(cursor)
             after_seed_digest = _seed_digest(cursor, authority.preserved_seed_relations)
-            after_counts = _relation_row_counts(cursor, authority.truncate_relations)
+            after_target_counts = _organization_row_counts(
+                cursor, organization_relations, normalized_id, target=True
+            )
+            after_other_counts = _organization_row_counts(
+                cursor, organization_relations, normalized_id, target=False
+            )
+            cursor.execute(
+                "SELECT count(*) FROM core.organizations WHERE id=%s::uuid",
+                (normalized_id,),
+            )
+            organization_after = cursor.fetchone()
 
             if before_catalog.relation_oids != after_catalog.relation_oids:
-                raise ResetAuthorityError("canonical relation identities changed during reset")
+                raise ResetAuthorityError("canonical relation identities changed during purge")
             if before_catalog.schema_oids != after_catalog.schema_oids:
-                raise ResetAuthorityError("canonical schema identities changed during reset")
+                raise ResetAuthorityError("canonical schema identities changed during purge")
             if before_catalog.fingerprint_sha256() != after_catalog.fingerprint_sha256():
-                raise ResetAuthorityError("canonical catalog fingerprint changed during reset")
+                raise ResetAuthorityError("canonical catalog fingerprint changed during purge")
             if before_roles != after_roles:
                 raise ResetAuthorityError(
-                    "canonical role catalog changed during reset"
+                    "canonical role catalog changed during purge"
                 )
             if before_role_passwords != after_role_passwords:
                 raise ResetAuthorityError(
-                    "canonical role credential posture changed during reset"
+                    "canonical role credential posture changed during purge"
                 )
             if before_seed_digest != after_seed_digest:
-                raise ResetAuthorityError("deterministic seed rows changed during reset")
-            if after_objects != 0:
-                raise ResetAuthorityError("canonical evidence objects changed during reset")
-            nonempty = [name for name, count in after_counts if count != 0]
+                raise ResetAuthorityError("deterministic seed rows changed during purge")
+            if before_other_counts != after_other_counts:
+                raise ResetAuthorityError("non-target organization row counts changed")
+            nonempty = [name for name, count in after_target_counts if count != 0]
             if nonempty:
                 raise ResetAuthorityError(
-                    "canonical reset left disposable rows in: " + ", ".join(nonempty)
+                    "organization purge left target rows in: " + ", ".join(nonempty)
                 )
+            if organization_after != (0,):
+                raise ResetAuthorityError("organization boundary row survived purge")
 
     return {
         "contract_version": CONTRACT_VERSION,
         "project_ref": project_ref,
+        "organization_id": normalized_id,
+        "authorized_plan_sha256": authorized_plan_sha256,
         "alembic_head": authority.alembic_head,
         "authority_manifest_sha256": authority.manifest_sha256(),
         "catalog_fingerprint_sha256": after_catalog.fingerprint_sha256(),
@@ -801,11 +1085,18 @@ def execute_reset(
         + len(authority.ephemeral_scope_relations),
         "preserved_seed_relation_count": len(authority.preserved_seed_relations),
         "preserved_seed_digest_sha256": after_seed_digest,
-        "reset_relation_count": len(authority.reset_relations),
-        "truncate_relation_count": len(authority.truncate_relations),
-        "disposable_row_count_before_reset": sum(count for _, count in before_counts),
-        "disposable_row_count_after_reset": 0,
-        "evidence_storage_object_count_after_reset": after_objects,
+        "organization_relation_count": len(organization_relations),
+        "organization_row_count_before_purge": sum(
+            count for _, count in before_target_counts
+        ),
+        "organization_row_count_after_purge": 0,
+        "other_organization_row_count_preserved": sum(
+            count for _, count in after_other_counts
+        ),
+        "organization_boundary_deleted": True,
+        "global_reset_available": False,
+        "truncate_used": False,
+        "storage_objects_modified": False,
         "auth_schema_preserved": True,
         "storage_schema_preserved": True,
         "schema_oids_preserved": True,
@@ -841,9 +1132,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     output = parser.add_mutually_exclusive_group()
     output.add_argument("--print-sha256", action="store_true")
-    output.add_argument("--print-truncate-sql", action="store_true")
     output.add_argument("--output", type=Path)
-    output.add_argument("--execute-reset", action="store_true")
     output.add_argument("--verify-role-cleanup", action="store_true")
     parser.add_argument(
         "--validate-observed",
@@ -853,7 +1142,6 @@ def main() -> int:
     parser.add_argument("--project-ref")
     parser.add_argument("--database-url-env", default="PSYCOPG_DATABASE_URL")
     parser.add_argument("--receipt", type=Path)
-    parser.add_argument("--expected-evidence-object-count", type=int, default=0)
     args = parser.parse_args()
 
     authority = load_reset_authority()
@@ -866,7 +1154,7 @@ def main() -> int:
             ephemeral_scope_relations=ephemeral,
         )
 
-    if args.execute_reset or args.verify_role_cleanup:
+    if args.verify_role_cleanup:
         if not args.project_ref or args.receipt is None:
             parser.error("database execution requires --project-ref and --receipt")
         database_url = os.environ.get(args.database_url_env, "")
@@ -878,36 +1166,19 @@ def main() -> int:
 
         connection = psycopg2.connect(database_url, connect_timeout=15)
         try:
-            if args.execute_reset:
-                receipt = execute_reset(
-                    connection,
-                    authority=authority,
-                    project_ref=args.project_ref,
-                    expected_evidence_object_count=args.expected_evidence_object_count,
-                )
-            else:
-                receipt = verify_post_cleanup_role_state(
-                    connection,
-                    project_ref=args.project_ref,
-                )
+            receipt = verify_post_cleanup_role_state(
+                connection,
+                project_ref=args.project_ref,
+            )
         finally:
             connection.close()
         args.receipt.parent.mkdir(parents=True, exist_ok=True)
         args.receipt.write_text(
             json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
-        if args.execute_reset:
-            print(
-                "canonical data reset complete: "
-                f"head={receipt['alembic_head']} "
-                f"relations={receipt['truncate_relation_count']}"
-            )
-        else:
-            print("canonical post-reset role cleanup verified")
+        print("canonical post-reset role cleanup verified")
     elif args.print_sha256:
         print(authority.manifest_sha256())
-    elif args.print_truncate_sql:
-        print(authority.truncate_sql)
     else:
         rendered = json.dumps(authority.envelope(), indent=2, sort_keys=True) + "\n"
         if args.output is not None:

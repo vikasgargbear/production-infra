@@ -48,13 +48,15 @@ def test_persistent_pilot_migration_is_explicit_bounded_and_non_resetting() -> N
     assert "ref: ${{ inputs.reviewed_sha }}" in PILOT_MIGRATION
     assert "cancel-in-progress: false" in PILOT_MIGRATION
     assert "uses: ./.github/workflows/railway-canonical-staging.yml" in PILOT_MIGRATION
-    assert "reset_disposable_data: false" in PILOT_MIGRATION
+    assert 'purge_organization_id: ""' in PILOT_MIGRATION
+    assert 'purge_organization_confirmation: ""' in PILOT_MIGRATION
+    assert 'purge_organization_plan_token: ""' in PILOT_MIGRATION
     assert "github_environment: canonical-staging" in PILOT_MIGRATION
     assert "open_persistent_pilot_after_deploy: true" in PILOT_MIGRATION
     assert "secrets: inherit" in PILOT_MIGRATION
     assert "verify_staging_direct_roles.py" not in PILOT_MIGRATION
     assert "railway_reset_control_plane.py open-fence" not in PILOT_MIGRATION
-    assert 'reset_disposable_data: false' in PILOT_MIGRATION
+    assert 'reset_disposable_data' not in PILOT_MIGRATION
     assert 'provision-demo' not in PILOT_MIGRATION
     assert 'fixtures' not in PILOT_MIGRATION.lower()
 

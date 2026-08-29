@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
-"""Reset disposable canonical staging while Railway is the sole provider.
+"""Operate Railway's migration fence and organization-scoped purge authority.
 
-The reset runs through the manifest-owned direct database authority.  It closes
-the canonical write fence before terminating isolated-role sessions, delegates
-the migration-owner role only for the reset transaction, and leaves the fence
-closed until an exact reviewed Railway deployment has been activated.  The
-separate ``open-fence`` action is therefore safe to call only after the workflow
-has proved the replacement deployment and inactive standby providers.
+Whole-database reset is unavailable.  An organization purge uses an externally
+verified, short-lived plan and exact UUID confirmation.  It suspends only the
+target tenant and never closes the global fence, terminates sibling sessions,
+or clears shared evidence storage.
 
 This script never changes Railway or Render service configuration and never
 falls back to Supavisor.
@@ -35,8 +33,9 @@ import psycopg2
 try:
     from .canonical_data_reset_authority import (
         ResetAuthorityError,
-        execute_reset,
+        execute_organization_purge,
         load_reset_authority,
+        plan_organization_purge,
         verify_post_cleanup_role_state,
         verify_reset_boundary,
     )
@@ -54,8 +53,9 @@ try:
 except ImportError:  # direct ``python backend/scripts/...`` execution
     from canonical_data_reset_authority import (
         ResetAuthorityError,
-        execute_reset,
+        execute_organization_purge,
         load_reset_authority,
+        plan_organization_purge,
         verify_post_cleanup_role_state,
         verify_reset_boundary,
     )
@@ -69,8 +69,6 @@ except ImportError:  # direct ``python backend/scripts/...`` execution
 
 
 RECEIPT_SCHEMA = "aasopharma.railway-canonical-reset.v1"
-EVIDENCE_CLEANUP_CONTRACT = "canonical-evidence-reset-cleanup-v2"
-EVIDENCE_BUCKET = "canonical-evidence-private-v1"
 SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 RESET_LOCK_KEY = 8_260_827_1
@@ -524,90 +522,6 @@ def _write_receipt(path: Path, payload: dict[str, Any]) -> None:
         temporary.unlink(missing_ok=True)
 
 
-def _load_evidence_cleanup_receipt(
-    path: Path, *, project_ref: str
-) -> tuple[dict[str, Any], str]:
-    """Load the exact Storage-API cleanup proof required by reset.
-
-    The canonical reset still checks ``storage.objects`` transactionally.  This
-    receipt proves how a previously non-empty bucket was reconciled and removed
-    without granting the reset authority permission to SQL-delete Storage rows.
-    """
-
-    try:
-        raw = path.read_bytes()
-    except OSError as error:
-        raise RailwayCanonicalResetError(
-            "canonical evidence cleanup receipt is required before reset"
-        ) from error
-    if not raw or len(raw) > 65_536:
-        raise RailwayCanonicalResetError(
-            "canonical evidence cleanup receipt size is invalid"
-        )
-    try:
-        payload = json.loads(raw)
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise RailwayCanonicalResetError(
-            "canonical evidence cleanup receipt is not valid JSON"
-        ) from error
-    if not isinstance(payload, dict):
-        raise RailwayCanonicalResetError(
-            "canonical evidence cleanup receipt must be an object"
-        )
-    numeric_fields = (
-        "reconciled_object_count",
-        "deleted_object_count",
-        "remaining_object_count",
-        "legal_hold_count",
-        "evidence_writer_unexpected_member_count",
-        "evidence_writer_inherited_role_count",
-        "observed_authenticator_session_count",
-        "terminated_authenticator_session_count",
-        "remaining_preclosure_authenticator_session_count",
-        "retention_in_force_deleted_count",
-    )
-    if any(
-        isinstance(payload.get(field), bool)
-        or not isinstance(payload.get(field), int)
-        or payload[field] < 0
-        for field in numeric_fields
-    ):
-        raise RailwayCanonicalResetError(
-            "canonical evidence cleanup receipt counts are invalid"
-        )
-    role_installed = payload.get("evidence_writer_role_installed")
-    role_absence_verified = payload.get("evidence_writer_role_absence_verified")
-    if (
-        payload.get("contract_version") != EVIDENCE_CLEANUP_CONTRACT
-        or payload.get("state") != "empty"
-        or payload.get("project_ref") != project_ref
-        or payload.get("bucket") != EVIDENCE_BUCKET
-        or payload["remaining_object_count"] != 0
-        or payload["legal_hold_count"] != 0
-        or payload["deleted_object_count"] != payload["reconciled_object_count"]
-        or payload.get("evidence_writer_membership_open") is not False
-        or payload.get("evidence_writer_role_posture_safe") is not True
-        or payload["evidence_writer_unexpected_member_count"] != 0
-        or payload["evidence_writer_inherited_role_count"] != 0
-        or payload["remaining_preclosure_authenticator_session_count"] != 0
-        or payload["terminated_authenticator_session_count"]
-        > payload["observed_authenticator_session_count"]
-        or not isinstance(payload.get("evidence_writer_closed_at"), str)
-        or not payload["evidence_writer_closed_at"]
-        or not isinstance(payload.get("completed_at"), str)
-        or not payload["completed_at"]
-        or not isinstance(role_installed, bool)
-        or not isinstance(role_absence_verified, bool)
-        or role_installed == role_absence_verified
-        or SHA256_PATTERN.fullmatch(str(payload.get("object_key_set_sha256", "")))
-        is None
-    ):
-        raise RailwayCanonicalResetError(
-            "canonical evidence cleanup receipt did not prove an empty closed boundary"
-        )
-    return payload, hashlib.sha256(raw).hexdigest()
-
-
 def _upgrade_exact_migration_head(
     database_url: str, *, authority: Any, project_ref: str
 ) -> dict[str, Any]:
@@ -684,13 +598,16 @@ def prepare_reset_boundary(
     }
 
 
-def reset_disposable_staging(
+def purge_staging_organization(
     *,
     expected_sha: str,
     project_ref: str,
     production_project_refs: str,
     password: str,
-    evidence_cleanup_receipt_path: Path,
+    organization_id: str,
+    confirmation: str,
+    authorized_plan: Mapping[str, Any],
+    authorized_plan_sha256: str,
     control_transport: str = CONTROL_TRANSPORT_GITHUB_IPV4,
 ) -> dict[str, Any]:
     _validate_boundary(
@@ -700,56 +617,52 @@ def reset_disposable_staging(
     )
     database_url, transport = _admin_database_url(
         password=_required(password, "Supabase database password"),
-        application_name="canonical_railway_reset",
+        application_name="canonical_railway_organization_purge",
         control_transport=control_transport,
         recover_stale_owner_delegation=True,
     )
     authority = load_reset_authority()
-    fence_receipt: dict[str, Any]
-    session_receipt: dict[str, int]
-    reset_receipt: dict[str, Any]
-    evidence_cleanup: Mapping[str, Any]
-    evidence_cleanup_sha256: str
-    with _temporary_owner_delegation(database_url, project_ref=project_ref):
-        fence_receipt = apply_fence(
-            database_url, action="close", commit_sha=expected_sha
+    with contextlib.closing(psycopg2.connect(database_url)) as connection:
+        current_plan = plan_organization_purge(
+            connection,
+            authority=authority,
+            project_ref=project_ref,
+            organization_id=organization_id,
         )
-        evidence_cleanup, evidence_cleanup_sha256 = _load_evidence_cleanup_receipt(
-            evidence_cleanup_receipt_path, project_ref=project_ref
+        compared_fields = (
+            "organization_id",
+            "alembic_head",
+            "authority_manifest_sha256",
+            "catalog_fingerprint_sha256",
+            "organization_row_count",
         )
-        session_receipt = _terminate_isolated_sessions(database_url)
-        with contextlib.closing(psycopg2.connect(database_url)) as connection:
-            reset_receipt = execute_reset(
-                connection,
-                authority=authority,
-                project_ref=project_ref,
-                expected_evidence_object_count=0,
+        if any(
+            authorized_plan.get(field) != current_plan.get(field)
+            for field in compared_fields
+        ):
+            raise RailwayCanonicalResetError(
+                "organization purge plan drifted; create a new plan"
             )
-    role_receipt = _verify_owner_cleanup(database_url, project_ref=project_ref)
+        purge_receipt = execute_organization_purge(
+            connection,
+            authority=authority,
+            project_ref=project_ref,
+            organization_id=organization_id,
+            confirmation=confirmation,
+            authorized_plan_sha256=authorized_plan_sha256,
+        )
     return {
         "schema": RECEIPT_SCHEMA,
-        "action": "reset",
+        "action": "purge-organization",
         "provider": "railway",
         "expected_sha": expected_sha,
         "project_ref": project_ref,
+        "organization_id": organization_id,
         "transport": dict(transport),
-        "write_fence": fence_receipt,
-        "evidence_cleanup": {
-            "contract_version": evidence_cleanup["contract_version"],
-            "state": evidence_cleanup["state"],
-            "bucket": evidence_cleanup["bucket"],
-            "reconciled_object_count": evidence_cleanup[
-                "reconciled_object_count"
-            ],
-            "deleted_object_count": evidence_cleanup["deleted_object_count"],
-            "remaining_object_count": evidence_cleanup["remaining_object_count"],
-            "writer_closed_at": evidence_cleanup["evidence_writer_closed_at"],
-            "receipt_sha256": evidence_cleanup_sha256,
-        },
-        "session_quiescence": session_receipt,
-        "reset": reset_receipt,
-        "role_cleanup": role_receipt,
-        "post_reset_fence_state": "closed",
+        "purge": purge_receipt,
+        "global_write_fence_changed": False,
+        "other_sessions_terminated": False,
+        "evidence_storage_cleanup_run": False,
         "completed_at": _utc_now(),
     }
 
@@ -817,13 +730,17 @@ def close_fence_after_failure(**kwargs: Any) -> dict[str, Any]:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "action", choices=("prepare-reset", "reset", "open-fence", "close-fence")
+        "action",
+        choices=(
+            "prepare-reset",
+            "open-fence",
+            "close-fence",
+        ),
     )
     parser.add_argument("--expected-sha", required=True)
     parser.add_argument("--project-ref", required=True)
     parser.add_argument("--production-project-refs", required=True)
     parser.add_argument("--receipt", required=True, type=Path)
-    parser.add_argument("--evidence-cleanup-receipt", type=Path)
     return parser.parse_args()
 
 
@@ -837,15 +754,6 @@ def main() -> int:
     }
     if arguments.action == "prepare-reset":
         payload = prepare_reset_boundary(**common)
-    elif arguments.action == "reset":
-        if arguments.evidence_cleanup_receipt is None:
-            raise RailwayCanonicalResetError(
-                "--evidence-cleanup-receipt is required for reset"
-            )
-        payload = reset_disposable_staging(
-            **common,
-            evidence_cleanup_receipt_path=arguments.evidence_cleanup_receipt,
-        )
     elif arguments.action == "open-fence":
         payload = open_fence_after_deploy(**common)
     else:

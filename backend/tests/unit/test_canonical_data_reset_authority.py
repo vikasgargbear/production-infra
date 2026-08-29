@@ -92,7 +92,8 @@ def test_reset_authority_classifies_exact_head_relation_sets() -> None:
         sorted(EPHEMERAL_SCOPE_RELATIONS)
     )
     assert len(authority.ephemeral_scope_relations) == 9
-    assert len(authority.truncate_relations) == 124
+    assert authority.manifest()["whole_database_reset_available"] is False
+    assert authority.manifest()["expected_organization_relation_count"] == 104
     assert set(authority.reset_relations).isdisjoint(
         authority.preserved_seed_relations
     )
@@ -114,17 +115,16 @@ def test_reset_authority_preserves_only_deterministic_alembic_seeds() -> None:
     assert "tax.itc_reversal_rule_versions" in authority.reset_relations
 
 
-def test_truncate_sql_is_exact_quoted_and_never_cascades() -> None:
+def test_whole_database_reset_sql_is_not_exposed() -> None:
     authority = load_reset_authority()
-    sql = authority.truncate_sql
+    source = inspect.getsource(reset_authority)
 
-    assert sql.startswith("TRUNCATE TABLE ")
-    assert sql.endswith(" RESTART IDENTITY;")
-    assert "CASCADE" not in sql.upper()
-    assert '"catalog"."units_of_measure"' not in sql
-    assert '"core"."permissions"' not in sql
-    assert '"core"."organizations"' in sql
-    assert '"erp_automation_commands"."execution_scopes"' in sql
+    assert not hasattr(authority, "truncate_sql")
+    assert not hasattr(authority, "truncate_relations")
+    assert "TRUNCATE TABLE" not in source
+    assert "execute_reset" not in source
+    assert "--execute-organization-purge" not in source
+    assert "WHERE org_id=%s::uuid" in source
 
 
 def test_observed_catalog_rejects_head_missing_extra_and_duplicate_drift() -> None:
@@ -233,7 +233,7 @@ def test_manifest_and_cli_hash_are_deterministic() -> None:
     assert result.stdout.strip() == first["manifest_sha256"]
 
 
-def test_postgresql_gate_executes_reset_idempotency_and_rollback() -> None:
+def test_postgresql_gate_executes_scoped_purge_and_rollback() -> None:
     gate = (
         REPOSITORY_ROOT / "database/canonical/ci/run_alembic_postgres15_gate.sh"
     ).read_text(encoding="utf-8")
@@ -243,10 +243,10 @@ def test_postgresql_gate_executes_reset_idempotency_and_rollback() -> None:
     ).read_text(encoding="utf-8")
 
     assert "check_canonical_data_reset_authority.py" in gate
-    assert "reset_authority.execute_reset(" in runtime_check
-    assert "disposable_row_count_before_reset" in runtime_check
-    assert "injected post-truncate failure" in runtime_check
-    assert "rollback-integration" in runtime_check
+    assert "reset_authority.execute_organization_purge(" in runtime_check
+    assert "organization_row_count_before_purge" in runtime_check
+    assert "injected post-purge failure" in runtime_check
+    assert "other_organization_row_count_preserved" in runtime_check
 
 
 def test_role_cleanup_attests_effective_set_and_usage_not_membership_absence() -> None:
@@ -266,58 +266,18 @@ def test_role_cleanup_attests_effective_set_and_usage_not_membership_absence() -
     assert "inherit_option" in source
 
 
-def test_transactional_reset_emits_safe_exact_catalog_facts(monkeypatch) -> None:
-    authority = load_reset_authority()
-    connection = _FakeConnection()
-    catalog = _catalog(authority)
-    role_snapshot = (("erp_runtime", 7, True, True),)
-    counts = tuple((name, 3) for name in authority.truncate_relations)
-    empty_counts = tuple((name, 0) for name in authority.truncate_relations)
+def test_purge_requires_exact_uuid_confirmation_and_signed_plan() -> None:
+    organization_id = "10000000-0000-4000-8000-000000000010"
 
-    catalogs = iter((catalog, catalog))
-    roles = iter((role_snapshot, role_snapshot))
-    digests = iter(("a" * 64, "a" * 64))
-    row_counts = iter((counts, empty_counts))
-    monkeypatch.setattr(
-        reset_authority,
-        "_catalog_snapshot",
-        lambda cursor, alembic_schemas: next(catalogs),
+    assert reset_authority.organization_confirmation(organization_id) == (
+        f"DELETE-ORGANIZATION:{organization_id}"
     )
-    monkeypatch.setattr(reset_authority, "_role_snapshot", lambda cursor: next(roles))
-    monkeypatch.setattr(
-        reset_authority,
-        "_role_password_presence",
-        lambda cursor: (("erp_runtime", True),),
-    )
-    monkeypatch.setattr(reset_authority, "_seed_digest", lambda cursor, relations: next(digests))
-    monkeypatch.setattr(
-        reset_authority,
-        "_relation_row_counts",
-        lambda cursor, relations: next(row_counts),
-    )
-    monkeypatch.setattr(reset_authority, "_evidence_object_count", lambda cursor: 0)
-
-    receipt = reset_authority.execute_reset(
-        connection,
-        authority=authority,
-        project_ref=reset_authority.CANONICAL_STAGING_PROJECT_REF,
-    )
-
-    assert connection.committed is True
-    assert connection.rolled_back is False
-    assert receipt["canonical_relation_count"] == 120
-    assert receipt["alembic_schema_count"] == 30
-    assert receipt["ephemeral_scope_relation_count"] == 9
-    assert receipt["catalog_relation_count"] == 129
-    assert receipt["preserved_seed_relation_count"] == 5
-    assert receipt["reset_relation_count"] == 115
-    assert receipt["truncate_relation_count"] == 124
-    assert receipt["disposable_row_count_after_reset"] == 0
-    assert receipt["evidence_storage_object_count_after_reset"] == 0
-    assert receipt["isolated_role_catalog_preserved"] is True
-    statements = [statement for statement, _ in connection.cursor_instance.executed]
-    assert authority.truncate_sql in statements
-    assert all("CASCADE" not in statement.upper() for statement in statements)
+    with pytest.raises(ResetAuthorityError, match="canonical non-zero UUID"):
+        reset_authority.organization_confirmation(
+            "00000000-0000-0000-0000-000000000000"
+        )
+    signature = inspect.signature(reset_authority.execute_organization_purge)
+    assert "authorized_plan_sha256" in signature.parameters
 
 
 def test_role_posture_and_password_presence_use_the_correct_catalogs() -> None:
@@ -403,61 +363,10 @@ def test_post_cleanup_role_receipt_requires_revoked_delegation(monkeypatch) -> N
         )
 
 
-def test_transactional_reset_rolls_back_on_seed_drift(monkeypatch) -> None:
-    authority = load_reset_authority()
-    connection = _FakeConnection()
-    catalog = _catalog(authority)
-    empty_counts = tuple((name, 0) for name in authority.truncate_relations)
-    monkeypatch.setattr(
-        reset_authority,
-        "_catalog_snapshot",
-        lambda cursor, alembic_schemas: catalog,
-    )
-    monkeypatch.setattr(reset_authority, "_role_snapshot", lambda cursor: (("same",),))
-    monkeypatch.setattr(
-        reset_authority,
-        "_role_password_presence",
-        lambda cursor: (("same", True),),
-    )
-    digests = iter(("a" * 64, "b" * 64))
-    monkeypatch.setattr(reset_authority, "_seed_digest", lambda cursor, relations: next(digests))
-    monkeypatch.setattr(
-        reset_authority,
-        "_relation_row_counts",
-        lambda cursor, relations: empty_counts,
-    )
-    monkeypatch.setattr(reset_authority, "_evidence_object_count", lambda cursor: 0)
+def test_purge_refuses_shared_or_unproven_relations_by_construction() -> None:
+    source = inspect.getsource(reset_authority._organization_relations)
 
-    with pytest.raises(ResetAuthorityError, match="seed rows changed"):
-        reset_authority.execute_reset(
-            connection,
-            authority=authority,
-            project_ref=reset_authority.CANONICAL_STAGING_PROJECT_REF,
-        )
-
-    assert connection.committed is False
-    assert connection.rolled_back is True
-
-
-def test_transactional_reset_refuses_nonempty_evidence_bucket_before_truncate(
-    monkeypatch,
-) -> None:
-    authority = load_reset_authority()
-    connection = _FakeConnection()
-    monkeypatch.setattr(
-        reset_authority,
-        "_catalog_snapshot",
-        lambda cursor, alembic_schemas: _catalog(authority),
-    )
-    monkeypatch.setattr(reset_authority, "_evidence_object_count", lambda cursor: 1)
-
-    with pytest.raises(ResetAuthorityError, match="evidence bucket is not empty"):
-        reset_authority.execute_reset(
-            connection,
-            authority=authority,
-            project_ref=reset_authority.CANONICAL_STAGING_PROJECT_REF,
-        )
-
-    assert connection.rolled_back is True
-    statements = [statement for statement, _ in connection.cursor_instance.executed]
-    assert authority.truncate_sql not in statements
+    assert "EXPECTED_ORGANIZATION_RELATION_COUNT" in source
+    assert "direct_organization_foreign_key" in source
+    assert "tenant_organization_foreign_key" in source
+    assert 'forbidden = {"core.organizations", "core.users"}' in source

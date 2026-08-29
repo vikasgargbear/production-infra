@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+import inspect
 import json
 from pathlib import Path
 
@@ -115,142 +116,18 @@ def _common_stubs(monkeypatch: pytest.MonkeyPatch, calls: list[str]) -> None:
     )
 
 
-def test_reset_closes_fence_then_quiesces_sessions_and_resets(
-    monkeypatch, tmp_path: Path
-) -> None:
-    calls: list[str] = []
-    _common_stubs(monkeypatch, calls)
-    monkeypatch.setattr(RESET, "load_reset_authority", lambda: "authority")
+def test_organization_purge_has_no_global_fence_session_or_storage_side_effects() -> None:
+    source = inspect.getsource(RESET.purge_staging_organization)
 
-    def fence(_database_url: str, *, action: str, commit_sha: str):
-        calls.append(f"fence:{action}:{commit_sha}")
-        return {"state": "closed"}
-
-    monkeypatch.setattr(RESET, "apply_fence", fence)
-    monkeypatch.setattr(
-        RESET,
-        "_terminate_isolated_sessions",
-        lambda _url: calls.append("terminate") or {
-            "targeted_session_count": 2,
-            "terminated_session_count": 2,
-            "remaining_targeted_session_count": 0,
-        },
-    )
-
-    def execute(_connection, *, authority, project_ref, expected_evidence_object_count):
-        assert authority == "authority"
-        assert project_ref == PROJECT_REF
-        assert expected_evidence_object_count == 0
-        calls.append("reset")
-        return {
-            "disposable_row_count_after_reset": 0,
-            "evidence_storage_object_count_after_reset": 0,
-        }
-
-    monkeypatch.setattr(RESET, "execute_reset", execute)
-    receipt = RESET.reset_disposable_staging(
-        expected_sha=SHA,
-        project_ref=PROJECT_REF,
-        production_project_refs=PRODUCTION_REFS,
-        password="secret",
-        evidence_cleanup_receipt_path=_write_cleanup_receipt(
-            tmp_path / "cleanup.json"
-        ),
-    )
-
-    assert calls == [
-        "validate",
-        "delegate",
-        f"fence:close:{SHA}",
-        "terminate",
-        "reset",
-        "revoke",
-    ]
-    assert receipt["post_reset_fence_state"] == "closed"
-    assert receipt["session_quiescence"]["remaining_targeted_session_count"] == 0
-    assert receipt["transport"]["selected_ipv4_address"] == "verified-not-persisted"
-    assert receipt["evidence_cleanup"]["deleted_object_count"] == 2
-    assert len(receipt["evidence_cleanup"]["receipt_sha256"]) == 64
-    assert "1.1.1.1" not in json.dumps(receipt)
-
-
-def test_reset_failure_revokes_owner_and_does_not_open_fence(
-    monkeypatch, tmp_path: Path
-) -> None:
-    calls: list[str] = []
-    _common_stubs(monkeypatch, calls)
-    monkeypatch.setattr(RESET, "load_reset_authority", lambda: "authority")
-    monkeypatch.setattr(
-        RESET,
-        "apply_fence",
-        lambda *_args, **_kwargs: calls.append("fence:close") or {"state": "closed"},
-    )
-    monkeypatch.setattr(
-        RESET,
-        "_terminate_isolated_sessions",
-        lambda _url: calls.append("terminate") or {
-            "targeted_session_count": 0,
-            "terminated_session_count": 0,
-            "remaining_targeted_session_count": 0,
-        },
-    )
-    monkeypatch.setattr(
-        RESET,
-        "execute_reset",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("injected")),
-    )
-
-    with pytest.raises(RuntimeError, match="injected"):
-        RESET.reset_disposable_staging(
-            expected_sha=SHA,
-            project_ref=PROJECT_REF,
-            production_project_refs=PRODUCTION_REFS,
-            password="secret",
-            evidence_cleanup_receipt_path=_write_cleanup_receipt(
-                tmp_path / "cleanup.json"
-            ),
-        )
-
-    assert calls[-1] == "revoke"
-    assert not any(item == "fence:open" for item in calls)
-
-
-def test_invalid_cleanup_receipt_fails_after_fence_and_before_reset(
-    monkeypatch, tmp_path: Path
-) -> None:
-    calls: list[str] = []
-    _common_stubs(monkeypatch, calls)
-    monkeypatch.setattr(RESET, "load_reset_authority", lambda: "authority")
-    monkeypatch.setattr(
-        RESET,
-        "apply_fence",
-        lambda *_args, **_kwargs: calls.append("fence:close") or {"state": "closed"},
-    )
-    monkeypatch.setattr(
-        RESET,
-        "_terminate_isolated_sessions",
-        lambda _url: calls.append("terminate") or {},
-    )
-    monkeypatch.setattr(
-        RESET,
-        "execute_reset",
-        lambda *_args, **_kwargs: calls.append("reset") or {},
-    )
-
-    with pytest.raises(
-        RESET.RailwayCanonicalResetError, match="empty closed boundary"
-    ):
-        RESET.reset_disposable_staging(
-            expected_sha=SHA,
-            project_ref=PROJECT_REF,
-            production_project_refs=PRODUCTION_REFS,
-            password="secret",
-            evidence_cleanup_receipt_path=_write_cleanup_receipt(
-                tmp_path / "cleanup.json", remaining_object_count=1
-            ),
-        )
-
-    assert calls == ["validate", "delegate", "fence:close", "revoke"]
+    assert "execute_organization_purge" in source
+    assert "plan_organization_purge" in source
+    assert "authorized_plan_sha256" in source
+    assert "apply_fence" not in source
+    assert "_terminate_isolated_sessions" not in source
+    assert "_load_evidence_cleanup_receipt" not in source
+    assert '"global_write_fence_changed": False' in source
+    assert '"other_sessions_terminated": False' in source
+    assert '"evidence_storage_cleanup_run": False' in source
 
 
 def test_prepare_reset_fences_quiesces_and_upgrades_exact_head(monkeypatch) -> None:
@@ -430,7 +307,8 @@ def test_workflow_orders_reset_fence_and_exact_deployment() -> None:
     assert 'test "$upload_result" = "UPLOAD_OK:$source_sha256"' in reset_block
     assert "railway_reset_control_plane.py close-fence" in reset_block
     assert "railway_reset_control_plane.py prepare-boundary" in reset_block
-    assert "railway_reset_control_plane.py reset-boundary" in reset_block
+    assert "railway_reset_control_plane.py plan-organization-purge" in reset_block
+    assert "railway_reset_control_plane.py purge-organization" in reset_block
     assert 'execution_source:"reviewed_source_archive"' in reset_block
     assert 'action="close-fence"' in reset_block
     assert 'action="prepare-boundary"' in reset_block
@@ -439,13 +317,13 @@ def test_workflow_orders_reset_fence_and_exact_deployment() -> None:
         "railway_reset_control_plane.py prepare-boundary"
     )
     reset_guard = reset_block.index(
-        "if test '${{ inputs.reset_disposable_data }}' = true; then"
+        "if test -n '${{ inputs.purge_organization_id }}'; then"
     )
     assert prepare_call < reset_guard < reset_block.index(
-        "railway_reset_control_plane.py reset-boundary"
+        "railway_reset_control_plane.py purge-organization"
     )
     execute_step_header = reset_block.split("run: |", 1)[0]
-    assert "if: inputs.reset_disposable_data" not in execute_step_header
+    assert "if: inputs.purge_organization_id" not in execute_step_header
     register_block = workflow[register_key:reset]
     assert 'eval "$(ssh-agent -s)"' in register_block
     assert 'ssh-add "$RAILWAY_RESET_SSH_PRIVATE_KEY"' in register_block
@@ -490,7 +368,7 @@ def test_workflow_orders_reset_fence_and_exact_deployment() -> None:
     assert ">> \"$attempt_receipt\"" not in reset_transport
     preclose_marker = reset_block.index('touch "$RAILWAY_RESET_FENCE_CLOSED"')
     uncertain_marker = reset_block.index('rm -f "$RAILWAY_RESET_FENCE_CLOSED"')
-    reset_call = reset_block.index("railway_reset_control_plane.py reset-boundary")
+    reset_call = reset_block.index("railway_reset_control_plane.py purge-organization")
     verified_marker = reset_block.rindex('touch "$RAILWAY_RESET_FENCE_CLOSED"')
     assert preclose_marker < uncertain_marker < reset_call < verified_marker
     assert reset_block.count("evidence_writer_closure") >= 1
@@ -524,7 +402,7 @@ def test_workflow_orders_reset_fence_and_exact_deployment() -> None:
     assert "ssh-add -D" in workflow[remove_key:]
     assert "ssh-agent -k" in workflow[remove_key:]
     assert "manage_render_pilot_lifecycle.py" not in workflow
-    assert "reset_disposable_data: ${{ inputs.reset_canonical_staging }}" in production
+    assert "purge_organization_plan_token:" in production
 
     live18 = production.split("\n  live18-acceptance:", 1)[1]
     demo_step = live18.split(
