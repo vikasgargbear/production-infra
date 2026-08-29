@@ -1,0 +1,20 @@
+{
+  "name": "aasopharma",
+  "interface": {
+    "displayName": "AASOPharma"
+  },
+  "plugins": [
+    {
+      "name": "aasopharma-erp",
+      "source": {
+        "source": "local",
+        "path": "./plugins/aasopharma-erp"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

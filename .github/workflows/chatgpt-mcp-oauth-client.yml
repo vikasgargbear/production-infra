@@ -1,4 +1,4 @@
-name: Register ChatGPT MCP OAuth client callback
+name: Register ChatGPT and Codex MCP OAuth callbacks
 
 on:
   workflow_dispatch:
@@ -25,6 +25,7 @@ jobs:
       CANONICAL_PRODUCTION_PROJECT_REFS: ${{ vars.CANONICAL_PRODUCTION_PROJECT_REFS }}
       SUPABASE_URL: https://rgihahbmkrmhitjdjvev.supabase.co
       CHATGPT_MCP_OAUTH_CALLBACK_URI: https://chatgpt.com/connector/oauth/_MPTGhIZ1AcM
+      CODEX_DESKTOP_MCP_OAUTH_CALLBACK_URI: http://127.0.0.1/callback/T0CM3qq1LGS-
       REVIEWED_SHA: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
@@ -55,6 +56,8 @@ jobs:
           esac
           test "$CHATGPT_MCP_OAUTH_CALLBACK_URI" = \
             https://chatgpt.com/connector/oauth/_MPTGhIZ1AcM
+          test "$CODEX_DESKTOP_MCP_OAUTH_CALLBACK_URI" = \
+            http://127.0.0.1/callback/T0CM3qq1LGS-
           case "$GITHUB_ENV" in
             "$RUNNER_TEMP"/*) ;;
             *) echo "GITHUB_ENV is outside runner temporary storage" >&2; exit 2 ;;
@@ -75,7 +78,7 @@ jobs:
             psycopg2-binary==2.9.9 \
             requests==2.34.2
 
-      - name: Register the reviewed ChatGPT callback on the public client
+      - name: Register the reviewed ChatGPT and Codex callbacks on the public client
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: |
@@ -95,10 +98,14 @@ jobs:
           test -f "$evidence"
           jq -e \
             --arg callback "$CHATGPT_MCP_OAUTH_CALLBACK_URI" \
+            --arg desktop_callback "$CODEX_DESKTOP_MCP_OAUTH_CALLBACK_URI" \
             --arg project_ref "$CANONICAL_STAGING_PROJECT_REF" \
             --arg reviewed_sha "$REVIEWED_SHA" \
             --arg client_id "$MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS" \
             '.chatgpt_callback_uri == $callback and
+             .codex_desktop_callback_uri == $desktop_callback and
+             (.redirect_uris | index($callback)) != null and
+             (.redirect_uris | index($desktop_callback)) != null and
              .client_id == $client_id and
              .client_registration_method == "predefined" and
              .client_type == "public" and

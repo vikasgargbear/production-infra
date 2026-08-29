@@ -1,6 +1,6 @@
 {
   "name": "aasopharma-erp",
-  "version": "0.1.0",
+  "version": "0.2.0+codex.20260829034551",
   "description": "Use the authenticated canonical AASOPharma ERP from ChatGPT and Codex.",
   "author": {
     "name": "AASOPharma",
@@ -16,6 +16,7 @@
     "gst"
   ],
   "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "AASOPharma ERP",
     "shortDescription": "Work with your canonical pharma ERP",

@@ -14,7 +14,9 @@ def _workflow() -> str:
 def test_chatgpt_oauth_workflow_is_manual_only_with_least_permissions() -> None:
     workflow = _workflow()
 
-    assert workflow.startswith("name: Register ChatGPT MCP OAuth client callback\n\n")
+    assert workflow.startswith(
+        "name: Register ChatGPT and Codex MCP OAuth callbacks\n\n"
+    )
     assert "\non:\n  workflow_dispatch:\n" in workflow
     for forbidden_trigger in (
         "  push:",
@@ -62,7 +64,9 @@ def test_chatgpt_oauth_workflow_pins_callback_sha_secret_and_evidence() -> None:
     workflow = _workflow()
 
     callback = "https://chatgpt.com/connector/oauth/_MPTGhIZ1AcM"
+    desktop_callback = "http://127.0.0.1/callback/T0CM3qq1LGS-"
     assert workflow.count(callback) == 2
+    assert workflow.count(desktop_callback) == 2
     assert "REVIEWED_SHA: ${{ github.sha }}" in workflow
     assert "ref: ${{ github.sha }}" in workflow
     assert 'test "$(git rev-parse HEAD)" = "$REVIEWED_SHA"' in workflow
@@ -79,6 +83,8 @@ def test_chatgpt_oauth_workflow_pins_callback_sha_secret_and_evidence() -> None:
     assert ".token_endpoint_auth_method == \"none\"" in workflow
     assert ".pkce_code_challenge_method == \"S256\"" in workflow
     assert ".resource_parameter_required == true" in workflow
+    assert ".codex_desktop_callback_uri == $desktop_callback" in workflow
+    assert "(.redirect_uris | index($desktop_callback)) != null" in workflow
     assert 'evidence_dir="$RUNNER_TEMP/chatgpt-mcp-oauth-evidence"' in workflow
     assert (
         'echo "CANONICAL_DEMO_EVIDENCE_DIR=$evidence_dir" >> "$GITHUB_ENV"'
