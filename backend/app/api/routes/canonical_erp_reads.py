@@ -512,6 +512,26 @@ class CanonicalProductActivationWrite(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
 
+def _execute_canonical_product_activation(
+    db: Session,
+    *,
+    org_id: UUID,
+    product_id: UUID,
+    activation: CanonicalProductActivationWrite,
+    idempotency_key: str,
+):
+    """One activation command shared by browser and delegated MCP adapters."""
+
+    return canonical_write_commands.activate_configured_product(
+        db,
+        org_id=org_id,
+        product_id=product_id,
+        expected_row_version=activation.row_version,
+        manufacturer_traceability_code=activation.manufacturer_traceability_code,
+        idempotency_key_hash=hashlib.sha256(idempotency_key.encode("utf-8")).digest(),
+    )
+
+
 def _product_search_tsquery(search: str) -> str:
     tokens = re.findall(r"[a-z0-9]+", search.casefold())[:8]
     return " & ".join(f"{token}:*" for token in tokens)
@@ -1036,13 +1056,9 @@ def activate_product_setup(
 ):
     org_id = _activate(db, user)
     try:
-        activated = canonical_write_commands.activate_configured_product(
-            db,
-            org_id=org_id,
-            product_id=product_id,
-            expected_row_version=activation.row_version,
-            manufacturer_traceability_code=activation.manufacturer_traceability_code,
-            idempotency_key_hash=hashlib.sha256(idempotency_key.encode("utf-8")).digest(),
+        activated = _execute_canonical_product_activation(
+            db, org_id=org_id, product_id=product_id, activation=activation,
+            idempotency_key=idempotency_key,
         )
         db.commit()
     except DBAPIError as exc:
