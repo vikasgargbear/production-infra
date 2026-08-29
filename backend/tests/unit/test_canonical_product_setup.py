@@ -64,18 +64,20 @@ def test_one_database_owner_controls_setup_readiness_and_activation():
     assert "release.ruleset_version" in route
 
 
-def test_product_mutations_use_the_supported_master_edit_permission_action():
+def test_product_mutations_require_the_exact_product_capability():
     routes = "\n".join(
         inspect.getsource(route)
         for route in (
+            canonical_erp_reads.create_product_draft,
             canonical_erp_reads.configure_product_setup,
             canonical_erp_reads.activate_product_setup,
             canonical_erp_reads.update_product_draft,
+            canonical_erp_reads.delete_product_draft,
         )
     )
 
-    assert routes.count('PermissionChecker("master", "edit")') == 3
-    assert 'PermissionChecker("master", "update")' not in routes
+    assert routes.count("user: dict = PRODUCT_USER") == 5
+    assert 'PermissionChecker("master",' not in routes
 
 
 def test_setup_contract_requires_canonical_manufacturer_hsn_and_typed_composition():

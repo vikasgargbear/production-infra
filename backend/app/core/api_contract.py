@@ -19,7 +19,13 @@ except ImportError:  # FastAPI <= 0.136 flattens included routers.
     iter_route_contexts = None
 
 from .auth.org_context import get_org_context
-from .security.permissions import PermissionChecker
+from .security.permissions import (
+    ExactAnyPermissionChecker,
+    ExactPermissionChecker,
+    FOUNDATION_PRODUCT_LOOKUP_PERMISSIONS,
+    FOUNDATION_SUPPLIER_LOOKUP_PERMISSIONS,
+    PermissionChecker,
+)
 
 
 CONTRACT_VERSION = "2026-08-19"
@@ -70,6 +76,7 @@ class OperationContract:
     deprecated: bool = False
     replaced_by: Optional[str] = None
     status: str = "pilot"
+    permission_any_of: Tuple[str, ...] = ()
 
     def openapi_extensions(self) -> Dict[str, Any]:
         """Return the vendor extensions attached to the OpenAPI operation."""
@@ -78,6 +85,9 @@ class OperationContract:
             "x-erp-domain": self.domain,
             "x-erp-owner": self.owner,
             "x-erp-permission": self.permission,
+            "x-erp-permission-any-of": list(
+                self.permission_any_of or (self.permission,)
+            ),
             "x-erp-oauth-scope": self.oauth_scope,
             "x-erp-risk": self.risk.value,
             "x-erp-tenant-scope": self.tenant_scope.value,
@@ -114,7 +124,7 @@ OPERATION_REGISTRY: Tuple[OperationContract, ...] = (
         operation_id="master_search_products_v1",
         domain="master_data",
         owner="inventory",
-        permission="master.view",
+        permission="catalog.product.manage",
         oauth_scope="erp.master.read",
         risk=OperationRisk.READ_ONLY,
         tenant_scope=TenantScope.ORGANIZATION,
@@ -126,6 +136,7 @@ OPERATION_REGISTRY: Tuple[OperationContract, ...] = (
         max_records=100,
         mcp_export=True,
         tool_name="erp_product_search",
+        permission_any_of=FOUNDATION_PRODUCT_LOOKUP_PERMISSIONS,
     ),
     OperationContract(
         key="master.suppliers.search",
@@ -134,7 +145,7 @@ OPERATION_REGISTRY: Tuple[OperationContract, ...] = (
         operation_id="master_search_suppliers_v1",
         domain="master_data",
         owner="procurement",
-        permission="master.view",
+        permission="parties.supplier.manage",
         oauth_scope="erp.master.read",
         risk=OperationRisk.READ_ONLY,
         tenant_scope=TenantScope.ORGANIZATION,
@@ -146,6 +157,7 @@ OPERATION_REGISTRY: Tuple[OperationContract, ...] = (
         max_records=200,
         mcp_export=True,
         tool_name="erp_supplier_search",
+        permission_any_of=FOUNDATION_SUPPLIER_LOOKUP_PERMISSIONS,
     ),
     OperationContract(
         key="gst.settings.get",
@@ -226,6 +238,12 @@ def validate_operation_definitions(
 
         if not operation.permission or "." not in operation.permission:
             raise ValueError(f"Invalid permission metadata: {operation.key}")
+        allowed_permissions = operation.permission_any_of or (operation.permission,)
+        if operation.permission not in allowed_permissions or any(
+            not permission or "." not in permission
+            for permission in allowed_permissions
+        ):
+            raise ValueError(f"Invalid permission allowlist metadata: {operation.key}")
         if not operation.oauth_scope.startswith("erp."):
             raise ValueError(f"Invalid OAuth scope metadata: {operation.key}")
         if operation.data_classification not in {"public", "internal", "confidential"}:
@@ -268,22 +286,51 @@ def _dependency_calls(route: APIRoute) -> List[Any]:
 def _validate_route_security(route: APIRoute, operation: OperationContract) -> None:
     calls = _dependency_calls(route)
     permission_checks = [call for call in calls if isinstance(call, PermissionChecker)]
-    # Canonical routes resolve the verified ERP JWT once through
-    # PermissionChecker; its returned user contains the signed org_id consumed
-    # by the RLS activation boundary.  Older tenant-aware routes expose the
-    # equivalent claim through get_org_context.  Either is JWT-derived; a raw
-    # header or request parameter is never accepted as organization authority.
-    if get_org_context not in calls and not permission_checks:
+    exact_permission_checks = [
+        call for call in calls if isinstance(call, ExactPermissionChecker)
+    ]
+    exact_any_permission_checks = [
+        call for call in calls
+        if isinstance(call, ExactAnyPermissionChecker)
+        and not isinstance(call, ExactPermissionChecker)
+    ]
+    # Canonical routes resolve the verified ERP JWT once through a module or
+    # exact permission checker; the returned user contains the signed org_id
+    # consumed by the RLS activation boundary. Older tenant-aware routes expose
+    # the equivalent claim through get_org_context. Either is JWT-derived; a
+    # raw header or request parameter is never organization authority.
+    if (
+        get_org_context not in calls
+        and not permission_checks
+        and not exact_permission_checks
+        and not exact_any_permission_checks
+    ):
         raise RuntimeError(
             f"Contract route has no JWT organization context: {operation.key}"
         )
 
     permission_module, permission_action = operation.permission.split(".", 1)
-    if not any(
+    legacy_permission_enforced = any(
         checker.module == permission_module
         and checker.permission == permission_action
         and not checker.require_admin
         for checker in permission_checks
+    )
+    exact_permission_enforced = any(
+        checker.permission_code == operation.permission
+        for checker in exact_permission_checks
+    )
+    expected_permissions = set(
+        operation.permission_any_of or (operation.permission,)
+    )
+    exact_any_permission_enforced = any(
+        set(checker.permission_codes) == expected_permissions
+        for checker in exact_any_permission_checks
+    )
+    if (
+        not legacy_permission_enforced
+        and not exact_permission_enforced
+        and not exact_any_permission_enforced
     ):
         raise RuntimeError(
             f"Contract permission is not enforced by route: {operation.key} "
