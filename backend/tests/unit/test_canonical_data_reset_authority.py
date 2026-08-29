@@ -295,7 +295,7 @@ class _PurgeExecutorCursor:
 def test_purge_executor_accepts_only_the_exact_delegated_owner() -> None:
     cursor = _PurgeExecutorCursor(
         [
-            ("postgres", "erp_migration_owner", False, True, True, True),
+            ("postgres", "erp_migration_owner", False, True, True),
             (True,),
             (True,),
         ]
@@ -310,7 +310,6 @@ def test_purge_executor_accepts_only_the_exact_delegated_owner() -> None:
         "current_user": "erp_migration_owner",
         "superuser": False,
         "delegated_owner": True,
-        "session_replication_role_set": True,
     }
     assert [parameters for _statement, parameters in cursor.executed[1:]] == [
         ("core.memberships",),
@@ -321,9 +320,9 @@ def test_purge_executor_accepts_only_the_exact_delegated_owner() -> None:
 @pytest.mark.parametrize(
     "posture",
     (
-        ("postgres", "postgres", False, True, True, True),
-        ("postgres", "erp_migration_owner", False, True, True, False),
-        ("erp_runtime", "erp_migration_owner", False, False, False, True),
+        ("postgres", "postgres", False, True, True),
+        ("postgres", "erp_migration_owner", False, False, True),
+        ("erp_runtime", "erp_migration_owner", False, False, False),
     ),
 )
 def test_purge_executor_rejects_unreviewed_posture(posture) -> None:
@@ -336,13 +335,82 @@ def test_purge_executor_rejects_unreviewed_posture(posture) -> None:
 def test_purge_executor_rejects_nonowned_target_relation() -> None:
     cursor = _PurgeExecutorCursor(
         [
-            ("postgres", "erp_migration_owner", False, True, True, True),
+            ("postgres", "erp_migration_owner", False, True, True),
             (False,),
         ]
     )
 
     with pytest.raises(ResetAuthorityError, match="does not own every"):
         reset_authority._require_purge_executor(cursor, ("core.memberships",))
+
+
+class _ForeignKeyCursor:
+    def __init__(self, rows) -> None:
+        self.rows = rows
+        self.executed = []
+
+    def execute(self, statement, parameters=None) -> None:
+        self.executed.append((statement, parameters))
+
+    def fetchall(self):
+        return self.rows
+
+
+def test_organization_delete_order_places_children_before_parents() -> None:
+    cursor = _ForeignKeyCursor(
+        [
+            ("sales.lines", "sales.invoices", "lines_invoice_fk", False),
+            ("sales.invoices", "parties.parties", "invoice_party_fk", False),
+        ]
+    )
+
+    order = reset_authority._organization_delete_order(
+        cursor, ("parties.parties", "sales.invoices", "sales.lines")
+    )
+
+    assert order == ("sales.lines", "sales.invoices", "parties.parties")
+
+
+def test_organization_delete_order_accepts_only_deferrable_cycles() -> None:
+    relations = ("finance.allocations", "finance.open_items")
+    accepted = _ForeignKeyCursor(
+        [
+            (relations[0], relations[1], "allocation_open_item_fk", True),
+            (relations[1], relations[0], "open_item_allocation_fk", True),
+        ]
+    )
+    assert set(reset_authority._organization_delete_order(accepted, relations)) == set(
+        relations
+    )
+
+    refused = _ForeignKeyCursor(
+        [
+            (relations[0], relations[1], "allocation_open_item_fk", True),
+            (relations[1], relations[0], "open_item_allocation_fk", False),
+        ]
+    )
+    with pytest.raises(ResetAuthorityError, match="not fully deferrable"):
+        reset_authority._organization_delete_order(refused, relations)
+
+
+def test_delete_trigger_restoration_preserves_prior_modes() -> None:
+    cursor = _ForeignKeyCursor([])
+    snapshot = (
+        ("finance.entries", "immutable_guard", "O"),
+        ("finance.entries", "replica_guard", "R"),
+        ("finance.entries", "always_guard", "A"),
+        ("finance.entries", "disabled_guard", "D"),
+    )
+
+    reset_authority._set_delete_triggers(cursor, snapshot, enabled=False)
+    reset_authority._set_delete_triggers(cursor, snapshot, enabled=True)
+
+    statements = [statement for statement, _parameters in cursor.executed]
+    assert len(statements) == 6
+    assert sum(" DISABLE TRIGGER " in statement for statement in statements) == 3
+    assert any(" ENABLE TRIGGER " in statement for statement in statements)
+    assert any(" ENABLE REPLICA TRIGGER " in statement for statement in statements)
+    assert any(" ENABLE ALWAYS TRIGGER " in statement for statement in statements)
 
 
 def test_role_posture_and_password_presence_use_the_correct_catalogs() -> None:

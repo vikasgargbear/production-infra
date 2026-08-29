@@ -109,6 +109,7 @@ CREATE_SCHEMA = re.compile(
     r'"?(?P<schema>[a-z_][a-z0-9_]*)"?(?:\s|;)'
 )
 QUALIFIED_RELATION = re.compile(r"^[a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*$")
+SIMPLE_IDENTIFIER = re.compile(r"^[a-z_][a-z0-9_]*$")
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -223,6 +224,12 @@ def _quote_relation(value: str) -> str:
         raise ResetAuthorityError(f"invalid qualified relation: {value!r}")
     schema, relation = value.split(".", 1)
     return f'"{schema}"."{relation}"'
+
+
+def _quote_identifier(value: str) -> str:
+    if SIMPLE_IDENTIFIER.fullmatch(value) is None:
+        raise ResetAuthorityError(f"invalid database identifier: {value!r}")
+    return f'"{value}"'
 
 
 def _require_unique(values: Sequence[str], label: str) -> None:
@@ -831,25 +838,21 @@ def _require_purge_executor(
                current_user,
                session_role.rolsuper,
                session_role.rolcreaterole,
-               session_role.rolbypassrls,
-               pg_catalog.has_parameter_privilege(
-                 session_user,'session_replication_role','SET'
-               )
+               session_role.rolbypassrls
           FROM pg_catalog.pg_roles AS session_role
          WHERE session_role.rolname=session_user
         """
     )
     row = cursor.fetchone()
-    if not isinstance(row, tuple) or len(row) != 6:
+    if not isinstance(row, tuple) or len(row) != 5:
         raise ResetAuthorityError("organization purge executor posture is unavailable")
-    session_user, current_user, superuser, createrole, bypassrls, can_set_replica = row
+    session_user, current_user, superuser, createrole, bypassrls = row
     delegated_owner = (
         session_user == "postgres"
         and current_user == "erp_migration_owner"
         and superuser is False
         and createrole is True
         and bypassrls is True
-        and can_set_replica is True
     )
     if superuser is not True and not delegated_owner:
         raise ResetAuthorityError(
@@ -874,8 +877,178 @@ def _require_purge_executor(
         "current_user": str(current_user),
         "superuser": bool(superuser),
         "delegated_owner": delegated_owner,
-        "session_replication_role_set": bool(can_set_replica),
     }
+
+
+def _strongly_connected_components(
+    graph: Mapping[str, set[str]],
+) -> tuple[tuple[str, ...], ...]:
+    index = 0
+    indices: dict[str, int] = {}
+    lowlinks: dict[str, int] = {}
+    stack: list[str] = []
+    stacked: set[str] = set()
+    components: list[tuple[str, ...]] = []
+
+    def visit(node: str) -> None:
+        nonlocal index
+        indices[node] = index
+        lowlinks[node] = index
+        index += 1
+        stack.append(node)
+        stacked.add(node)
+        for target in sorted(graph[node]):
+            if target not in indices:
+                visit(target)
+                lowlinks[node] = min(lowlinks[node], lowlinks[target])
+            elif target in stacked:
+                lowlinks[node] = min(lowlinks[node], indices[target])
+        if lowlinks[node] != indices[node]:
+            return
+        component: list[str] = []
+        while True:
+            member = stack.pop()
+            stacked.remove(member)
+            component.append(member)
+            if member == node:
+                break
+        components.append(tuple(sorted(component)))
+
+    for relation in sorted(graph):
+        if relation not in indices:
+            visit(relation)
+    return tuple(components)
+
+
+def _organization_delete_order(
+    cursor: Any, relations: Sequence[str]
+) -> tuple[str, ...]:
+    """Order tenant deletes while requiring every dependency cycle to defer."""
+
+    cursor.execute(
+        """
+        SELECT child_namespace.nspname || '.' || child.relname AS child_relation,
+               parent_namespace.nspname || '.' || parent.relname AS parent_relation,
+               constraint_row.conname,
+               constraint_row.condeferrable
+          FROM pg_catalog.pg_constraint AS constraint_row
+          JOIN pg_catalog.pg_class AS child
+            ON child.oid=constraint_row.conrelid
+          JOIN pg_catalog.pg_namespace AS child_namespace
+            ON child_namespace.oid=child.relnamespace
+          JOIN pg_catalog.pg_class AS parent
+            ON parent.oid=constraint_row.confrelid
+          JOIN pg_catalog.pg_namespace AS parent_namespace
+            ON parent_namespace.oid=parent.relnamespace
+         WHERE constraint_row.contype='f'
+           AND child_namespace.nspname || '.' || child.relname=ANY(%s)
+           AND parent_namespace.nspname || '.' || parent.relname=ANY(%s)
+         ORDER BY child_relation,parent_relation,constraint_row.conname
+        """,
+        (list(relations), list(relations)),
+    )
+    relation_set = set(relations)
+    graph = {relation: set() for relation in relations}
+    edge_deferrable: dict[tuple[str, str], bool] = {}
+    for child, parent, _constraint, deferrable in cursor.fetchall():
+        child_name = str(child)
+        parent_name = str(parent)
+        if child_name not in relation_set or parent_name not in relation_set:
+            raise ResetAuthorityError("organization foreign-key scope drifted")
+        if child_name == parent_name:
+            continue
+        graph[child_name].add(parent_name)
+        edge = (child_name, parent_name)
+        edge_deferrable[edge] = edge_deferrable.get(edge, True) and bool(deferrable)
+
+    components = _strongly_connected_components(graph)
+    component_by_relation = {
+        relation: index
+        for index, component in enumerate(components)
+        for relation in component
+    }
+    for child, parents in graph.items():
+        for parent in parents:
+            if (
+                component_by_relation[child] == component_by_relation[parent]
+                and not edge_deferrable[(child, parent)]
+            ):
+                raise ResetAuthorityError(
+                    "organization foreign-key cycle is not fully deferrable"
+                )
+
+    component_edges = {index: set() for index in range(len(components))}
+    incoming = {index: 0 for index in range(len(components))}
+    for child, parents in graph.items():
+        child_component = component_by_relation[child]
+        for parent in parents:
+            parent_component = component_by_relation[parent]
+            if child_component == parent_component:
+                continue
+            if parent_component not in component_edges[child_component]:
+                component_edges[child_component].add(parent_component)
+                incoming[parent_component] += 1
+    ready = sorted(
+        (index for index, count in incoming.items() if count == 0),
+        key=lambda value: components[value],
+    )
+    ordered: list[str] = []
+    while ready:
+        component_index = ready.pop(0)
+        ordered.extend(components[component_index])
+        for target in sorted(
+            component_edges[component_index], key=lambda value: components[value]
+        ):
+            incoming[target] -= 1
+            if incoming[target] == 0:
+                ready.append(target)
+                ready.sort(key=lambda value: components[value])
+    if len(ordered) != len(relations):
+        raise ResetAuthorityError("organization delete order is incomplete")
+    return tuple(ordered)
+
+
+def _delete_trigger_snapshot(
+    cursor: Any, relations: Sequence[str]
+) -> tuple[tuple[str, str, str], ...]:
+    cursor.execute(
+        """
+        SELECT namespace.nspname || '.' || relation.relname,
+               trigger_row.tgname,
+               trigger_row.tgenabled
+          FROM pg_catalog.pg_trigger AS trigger_row
+          JOIN pg_catalog.pg_class AS relation
+            ON relation.oid=trigger_row.tgrelid
+          JOIN pg_catalog.pg_namespace AS namespace
+            ON namespace.oid=relation.relnamespace
+         WHERE NOT trigger_row.tgisinternal
+           AND (trigger_row.tgtype & 8)=8
+           AND namespace.nspname || '.' || relation.relname=ANY(%s)
+         ORDER BY 1,2
+        """,
+        (list(relations),),
+    )
+    snapshot = tuple((str(row[0]), str(row[1]), str(row[2])) for row in cursor.fetchall())
+    if any(state not in {"O", "D", "R", "A"} for _, _, state in snapshot):
+        raise ResetAuthorityError("organization delete trigger posture is invalid")
+    return snapshot
+
+
+def _set_delete_triggers(
+    cursor: Any,
+    snapshot: Sequence[tuple[str, str, str]],
+    *,
+    enabled: bool,
+) -> None:
+    restoration = {"O": "ENABLE", "R": "ENABLE REPLICA", "A": "ENABLE ALWAYS"}
+    for relation, trigger_name, prior_state in snapshot:
+        if prior_state == "D":
+            continue
+        action = restoration[prior_state] if enabled else "DISABLE"
+        cursor.execute(
+            f"ALTER TABLE {_quote_relation(relation)} {action} TRIGGER "
+            f"{_quote_identifier(trigger_name)}"
+        )
 
 
 def verify_reset_boundary(
@@ -1039,6 +1212,10 @@ def execute_organization_purge(
                 )
             organization_relations = _organization_relations(cursor, authority)
             executor = _require_purge_executor(cursor, organization_relations)
+            delete_order = _organization_delete_order(cursor, organization_relations)
+            delete_triggers = _delete_trigger_snapshot(
+                cursor, (*organization_relations, "core.organizations")
+            )
             before_roles = _role_snapshot(cursor)
             before_role_passwords = _role_password_presence(cursor)
             before_seed_digest = _seed_digest(
@@ -1051,13 +1228,14 @@ def execute_organization_purge(
                 cursor, organization_relations, normalized_id, target=False
             )
 
-            # Cyclic tenant foreign keys and immutable-ledger triggers make a
-            # normal DELETE order impossible.  The reviewed administrator may
-            # suppress replication triggers only inside this transaction.  The
-            # statements remain individually parameterized by the exact UUID;
-            # there is no TRUNCATE, CASCADE, wildcard, or global predicate.
-            cursor.execute("SET LOCAL session_replication_role=replica")
-            for relation in organization_relations:
+            # Keep PostgreSQL's referential-integrity triggers active. Cyclic
+            # dependencies are accepted only when every edge in the cycle is
+            # explicitly deferrable. Owner-managed DELETE guard triggers are
+            # disabled and restored inside this same transaction. Every DELETE
+            # remains parameterized by the exact UUID.
+            cursor.execute("SET CONSTRAINTS ALL DEFERRED")
+            _set_delete_triggers(cursor, delete_triggers, enabled=False)
+            for relation in delete_order:
                 cursor.execute(
                     f"DELETE FROM {_quote_relation(relation)} WHERE org_id=%s::uuid",
                     (normalized_id,),
@@ -1070,7 +1248,7 @@ def execute_organization_purge(
                 raise ResetAuthorityError(
                     "organization purge did not delete exactly one boundary row"
                 )
-            cursor.execute("SET LOCAL session_replication_role=origin")
+            _set_delete_triggers(cursor, delete_triggers, enabled=True)
 
             after_catalog = _catalog_snapshot(cursor, authority.alembic_schemas)
             authority.validate_observed_catalog(
@@ -1136,6 +1314,10 @@ def execute_organization_purge(
         "preserved_seed_relation_count": len(authority.preserved_seed_relations),
         "preserved_seed_digest_sha256": after_seed_digest,
         "organization_relation_count": len(organization_relations),
+        "delete_order_relation_count": len(delete_order),
+        "temporarily_disabled_delete_trigger_count": sum(
+            state != "D" for _, _, state in delete_triggers
+        ),
         "organization_row_count_before_purge": sum(
             count for _, count in before_target_counts
         ),
@@ -1146,6 +1328,7 @@ def execute_organization_purge(
         "organization_boundary_deleted": True,
         "global_reset_available": False,
         "truncate_used": False,
+        "session_replication_role_used": False,
         "storage_objects_modified": False,
         "auth_schema_preserved": True,
         "storage_schema_preserved": True,
