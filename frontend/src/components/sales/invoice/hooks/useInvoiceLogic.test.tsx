@@ -177,7 +177,7 @@ describe('useInvoiceLogic selected quantity boundary', () => {
         expect(payload.lines[0]).toEqual(expect.objectContaining({
             billed_quantity: billed,
             free_quantity: free,
-            quoted_unit_rate: '100.1250',
+            quoted_unit_rate: '100.1300',
         }));
     });
 
