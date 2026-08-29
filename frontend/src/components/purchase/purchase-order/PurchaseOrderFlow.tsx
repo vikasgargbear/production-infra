@@ -15,6 +15,8 @@ import { usePurchaseOrderLogic } from './hooks';
 import { toast } from 'react-toastify';
 import { useCompany } from '../../../contexts/CompanyContext';
 import { exactDecimalUnits } from '../../../utils/exactDecimal';
+import { usePermissions } from '../../../hooks/usePermissions';
+import { FOUNDATION_CAPABILITIES } from '../../../config/canonicalCapabilities';
 
 const hasPositiveExactQuantity = (value: unknown, label: string): boolean => {
   try {
@@ -36,6 +38,9 @@ const hasPositiveExactQuantity = (value: unknown, label: string): boolean => {
  */
 
 const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, prefilledData?: any }) => {
+  const { hasCapability } = usePermissions();
+  const canManageSuppliers = hasCapability(FOUNDATION_CAPABILITIES.supplier);
+  const canManageProducts = hasCapability(FOUNDATION_CAPABILITIES.product);
   const productSearchRef = useRef<any>(null);
   const { companyInfo } = useCompany();
 
@@ -141,12 +146,12 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
             <Building2 className="w-5 h-5 text-gray-600" />
             <h3 className="text-sm font-semibold text-gray-700">SUPPLIER</h3>
           </div>
-          <button
+          {canManageSuppliers && <button
             onClick={() => setShowSupplierModal(true)}
             className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
           >
             Create Supplier
-          </button>
+          </button>}
         </div>
         <SupplierSearch
           value={selectedSupplier}
@@ -170,12 +175,12 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
             <Package className="w-5 h-5 text-gray-600" />
             <h3 className="text-sm font-semibold text-gray-700">PRODUCTS</h3>
           </div>
-          <button
+          {canManageProducts && <button
             onClick={() => setShowProductModal(true)}
             className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
           >
             Create Product
-          </button>
+          </button>}
         </div>
         <ProductSearch
           onAddItem={handleAddItem}
@@ -412,7 +417,7 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
       />
 
       {/* Modals */}
-      {showSupplierModal && (
+      {canManageSuppliers && showSupplierModal && (
         <SupplierCreationModal
           isOpen={showSupplierModal}
           onClose={() => setShowSupplierModal(false)}
@@ -423,7 +428,7 @@ const PurchaseOrderFlow = ({ onClose, prefilledData = null }: { onClose: any, pr
         />
       )}
 
-      {showProductModal && (
+      {canManageProducts && showProductModal && (
         <ProductCreationModal
           show={showProductModal}
           onClose={() => setShowProductModal(false)}

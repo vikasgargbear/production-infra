@@ -3,6 +3,9 @@ import { Building, Phone, MapPin, Trash2 } from 'lucide-react';
 import { Customer } from '../../../types/models/customer';
 import { EntitySearch, EntitySearchRef } from './EntitySearch';
 import { customersApi } from '../../../services/api';
+import { usePermissions } from '../../../hooks/usePermissions';
+import { CUSTOMER_LOOKUP_CAPABILITIES, FOUNDATION_CAPABILITIES } from '../../../config/canonicalCapabilities';
+import CapabilityDeniedNotice from '../ui/CapabilityDeniedNotice';
 
 /**
  * CustomerSearch Component Props
@@ -58,6 +61,10 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
   },
   ref
 ) => {
+  const { hasCapability, hasAnyCapability } = usePermissions();
+  const canSearchCustomers = hasAnyCapability(CUSTOMER_LOOKUP_CAPABILITIES);
+  const canManageCustomers = hasCapability(FOUNDATION_CAPABILITIES.customer);
+  const searchDisabled = disabled || !canSearchCustomers;
   // Memoized search function to prevent EntitySearch debounce recreation
   // This is CRITICAL - without useCallback, the searchFn changes on every render,
   // causing the debounced performSearch in EntitySearch to reset its timeout
@@ -230,11 +237,12 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
   const getItemLabel = useCallback((c: Customer) => c.customer_name, []);
 
   return (
+    <div className="space-y-2">
     <EntitySearch<Customer>
       ref={ref}
       value={value}
       onChange={onChange}
-      onCreateNew={onCreateNew}
+      onCreateNew={canManageCustomers ? onCreateNew : undefined}
       entityType="customer"
       entityIcon={Building}
       placeholder={placeholder}
@@ -247,15 +255,22 @@ export const CustomerSearch = forwardRef<CustomerSearchRef, CustomerSearchProps>
       getItemKey={getItemKey}
       getItemLabel={getItemLabel}
       displayMode={displayMode}
-      showCreateButton={showCreateButton}
+      showCreateButton={canManageCustomers && showCreateButton}
       required={required}
       clearable={clearable}
-      disabled={disabled}
+      disabled={searchDisabled}
+      accessDeniedMessage="Customer search was denied. Ask an administrator for customer management access."
       autoFocus={autoFocus}
       className={className}
       tabIndex={tabIndex}
       nextFocusRef={nextFocusRef}
     />
+    {!canSearchCustomers && (
+      <CapabilityDeniedNotice>
+        You do not have permission to search customers.
+      </CapabilityDeniedNotice>
+    )}
+    </div>
   );
 });
 

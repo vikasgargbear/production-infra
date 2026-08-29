@@ -4,8 +4,14 @@ import { productsApi } from '../../../services/api';
 import type { CanonicalProductRead } from '../../../services/api/modules/master/canonicalMasterReads';
 import ProductFlow from './ProductFlow';
 import ProductDraftDeleteDialog from './ProductDraftDeleteDialog';
+import { usePermissions } from '../../../hooks/usePermissions';
+import { FOUNDATION_CAPABILITIES, PRODUCT_LOOKUP_CAPABILITIES } from '../../../config/canonicalCapabilities';
+import { isForbiddenApiError } from '../../../services/api/utils/apiError';
 
 const Products: React.FC = () => {
+  const { hasCapability, hasAnyCapability } = usePermissions();
+  const canViewProducts = hasAnyCapability(PRODUCT_LOOKUP_CAPABILITIES);
+  const canManageProducts = hasCapability(FOUNDATION_CAPABILITIES.product);
   const [products, setProducts] = useState<CanonicalProductRead[]>([]);
   const [search, setSearch] = useState('');
   const [offset, setOffset] = useState(0);
@@ -23,6 +29,12 @@ const Products: React.FC = () => {
   const loadAbortRef = useRef<AbortController | null>(null);
 
   const load = useCallback(async (query = search, nextOffset = offset) => {
+    if (!canViewProducts) {
+      setProducts([]);
+      setError('You do not have permission to search products.');
+      setLoading(false);
+      return;
+    }
     const requestId = ++loadRequestRef.current;
     loadAbortRef.current?.abort();
     const controller = new AbortController();
@@ -39,15 +51,17 @@ const Products: React.FC = () => {
       if (requestId !== loadRequestRef.current) return;
       setProducts(response.data.products);
       setTotal(response.data.total);
-    } catch {
+    } catch (loadError) {
       if (controller.signal.aborted || requestId !== loadRequestRef.current) return;
-      setError('Failed to load products.');
+      setError(isForbiddenApiError(loadError)
+        ? 'Product access was denied. Ask an administrator for product management access.'
+        : 'Failed to load products.');
       setProducts([]);
     } finally {
       if (requestId === loadRequestRef.current) setLoading(false);
       if (loadAbortRef.current === controller) loadAbortRef.current = null;
     }
-  }, [search, offset]);
+  }, [canViewProducts, search, offset]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => { void load(search, offset); }, search.trim() ? 275 : 0);
@@ -103,16 +117,16 @@ const Products: React.FC = () => {
             <Package className="h-5 w-5 text-blue-600" />
             <h1 className="text-xl font-semibold text-gray-900">Products</h1>
           </div>
-          <button ref={newDraftButtonRef} type="button" onClick={() => setEditorOpen(true)} className="flex min-h-11 items-center gap-2 bg-blue-600 px-4 py-2 text-white hover:bg-blue-700">
+          {canManageProducts && <button ref={newDraftButtonRef} type="button" onClick={() => setEditorOpen(true)} className="flex min-h-11 items-center gap-2 bg-blue-600 px-4 py-2 text-white hover:bg-blue-700">
             <Plus className="h-4 w-4" /> Create product
-          </button>
+          </button>}
         </div>
       </header>
 
       <main className="mx-auto max-w-6xl px-6 py-6">
         <div className="relative mb-5 max-w-md">
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-          <input aria-label="Search products by name, generic, code, barcode, manufacturer, or ingredient" value={search} onChange={event => { setSearch(event.target.value); setOffset(0); }} placeholder="Search name, salt, code, barcode or manufacturer" className="min-h-12 w-full rounded-lg border border-gray-300 py-2 pl-9 pr-3 text-base outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100" />
+          <input aria-label="Search products by name, generic, code, barcode, manufacturer, or ingredient" disabled={!canViewProducts} value={search} onChange={event => { setSearch(event.target.value); setOffset(0); }} placeholder="Search name, salt, code, barcode or manufacturer" className="min-h-12 w-full rounded-lg border border-gray-300 py-2 pl-9 pr-3 text-base outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 disabled:bg-gray-100" />
         </div>
 
         {error && <p className="mb-4 border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
@@ -138,7 +152,7 @@ const Products: React.FC = () => {
                     <div><dt className="text-gray-500">Code</dt><dd className="mt-1 break-all text-gray-800">{product.product_code}</dd></div>
                     <div><dt className="text-gray-500">Kind</dt><dd className="mt-1 text-gray-800">{product.product_type}</dd></div>
                   </dl>
-                  {isDraft ? (
+                  {isDraft && canManageProducts ? (
                     <div className="mt-4 grid grid-cols-2 gap-2">
                       <button type="button" onClick={() => { setEditingProduct(product); setEditorOpen(true); }} className="inline-flex min-h-11 items-center justify-center gap-2 border border-gray-300 bg-white px-3 py-2 text-gray-700" aria-label={`Edit draft ${product.product_name}`}>
                         <Edit className="h-4 w-4" /> Edit draft
@@ -181,7 +195,7 @@ const Products: React.FC = () => {
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      {isDraft ? (
+                      {isDraft && canManageProducts ? (
                         <div className="flex min-w-max items-center gap-2">
                           <button type="button" onClick={() => { setEditingProduct(product); setEditorOpen(true); }} className="inline-flex min-h-10 items-center gap-2 border border-gray-300 bg-white px-3 py-2 text-gray-700 hover:bg-gray-50" aria-label={`Edit draft ${product.product_name}`}>
                             <Edit className="h-4 w-4" /> Edit draft
@@ -207,7 +221,7 @@ const Products: React.FC = () => {
         )}
       </main>
 
-      {editorOpen && (
+      {canManageProducts && editorOpen && (
         <ProductFlow
           open
           product={editingProduct}
@@ -215,7 +229,7 @@ const Products: React.FC = () => {
           onProductCreated={() => { closeEditor(); setOffset(0); void load(search, 0); }}
         />
       )}
-      <ProductDraftDeleteDialog
+      {canManageProducts && <ProductDraftDeleteDialog
         product={pendingDelete}
         deleting={deletingProductId !== null}
         error={deleteError}
@@ -223,7 +237,7 @@ const Products: React.FC = () => {
         onDelete={() => void deleteDraft()}
         restoreFocusTo={deleteTrigger}
         fallbackFocusTo={newDraftButtonRef.current}
-      />
+      />}
     </div>
   );
 };

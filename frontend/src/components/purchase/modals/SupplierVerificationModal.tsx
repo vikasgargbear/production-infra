@@ -6,6 +6,8 @@ import { SupplierSearch } from '../../global';
 
 // Import the creation form content from global component
 import SupplierCreationForm from './SupplierCreationForm';
+import { usePermissions } from '../../../hooks/usePermissions';
+import { FOUNDATION_CAPABILITIES } from '../../../config/canonicalCapabilities';
 
 /**
  * SupplierVerificationModal - Verify or create supplier from extracted data
@@ -16,6 +18,8 @@ const SupplierVerificationModal = ({
   onVerified,
   onCancel
 }) => {
+  const { hasCapability } = usePermissions();
+  const canManageSuppliers = hasCapability(FOUNDATION_CAPABILITIES.supplier);
   const [selectedSupplier, setSelectedSupplier] = useState<any>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [suggestedSupplier, setSuggestedSupplier] = useState<any>(null);
@@ -118,7 +122,7 @@ const SupplierVerificationModal = ({
       )}
 
       {/* Main Content - Show Create Form or Search */}
-      {showCreateForm ? (
+      {canManageSuppliers && showCreateForm ? (
         /* Inline Create Form */
         <div className="">
           {/* Header with Back Button */}
@@ -164,7 +168,7 @@ const SupplierVerificationModal = ({
                 />
 
                 {/* Quick Create Button with Extracted Info */}
-                {extractedSupplier?.name && (
+                {canManageSuppliers && extractedSupplier?.name && (
                   <button
                     onClick={() => setShowCreateForm(true)}
                     className="w-full px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center justify-center space-x-2"

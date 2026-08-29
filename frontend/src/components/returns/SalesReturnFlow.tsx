@@ -41,6 +41,8 @@ import { formatCanonicalReasonCode } from './utils/canonicalReturnCommand';
 import { addExactDecimals, compareExactDecimals, exactDecimalUnits } from '../../utils/exactDecimal';
 import { useCanonicalBusinessDate } from '../../hooks/useCanonicalBusinessDate';
 import { isCanonicalUuid } from '../../utils/canonicalUuid';
+import { usePermissions } from '../../hooks/usePermissions';
+import { FOUNDATION_CAPABILITIES } from '../../config/canonicalCapabilities';
 import {
   authoritativeReturnQuantity,
   authoritativeReturnRate,
@@ -53,6 +55,8 @@ const positiveExactQuantity = (value: unknown): boolean => {
 };
 
 const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
+  const { hasCapability } = usePermissions();
+  const canManageCustomers = hasCapability(FOUNDATION_CAPABILITIES.customer);
   // Use centralized state management (replaces 14 useState!)
   const { dispatch, ui, returnData, selectedCustomer, selectedInvoice, returnReasons } = useSalesReturnState();
 
@@ -606,12 +610,12 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
                         <User className="w-4 h-4 mr-2" />
                         CUSTOMER
                       </h3>
-                      <button
+                      {canManageCustomers && <button
                         onClick={() => dispatch({ type: 'TOGGLE_CUSTOMER_MODAL' })}
                         className="min-w-[140px] px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
                       >
                         Create Customer
-                      </button>
+                      </button>}
                     </div>
                     {/* White card wrapper - consistent with ProductSearch */}
                     <div className="bg-white rounded-lg border border-gray-200 p-4">
@@ -761,7 +765,7 @@ const SalesReturnFlow: React.FC<SalesReturnFlowProps> = ({ onClose }) => {
         </div>
 
         {/* Customer Creation Modal */}
-        {ui.showCustomerModal && (
+        {canManageCustomers && ui.showCustomerModal && (
           <CustomerCreation
             onClose={() => dispatch({ type: 'TOGGLE_CUSTOMER_MODAL' })}
             onCustomerCreated={(newCustomer) => {

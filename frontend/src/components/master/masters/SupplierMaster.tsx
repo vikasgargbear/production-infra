@@ -18,6 +18,8 @@ import ContactActions from './ContactActions';
 import CanonicalWriteNotice from '../../global/ui/CanonicalWriteNotice';
 import { addExactDecimals, compareExactDecimals, formatExactCurrency } from '../../../utils/exactDecimal';
 import PartyAccountEditDialog from './PartyAccountEditDialog';
+import { usePermissions } from '../../../hooks/usePermissions';
+import { FOUNDATION_CAPABILITIES, SUPPLIER_LOOKUP_CAPABILITIES } from '../../../config/canonicalCapabilities';
 
 // ============================================================================
 // Types
@@ -235,6 +237,9 @@ const getColumns = (onEdit: (supplier: Supplier) => void): Column<Supplier>[] =>
 // ============================================================================
 
 const SupplierMaster: React.FC = () => {
+  const { hasCapability, hasAnyCapability } = usePermissions();
+  const canViewSuppliers = hasAnyCapability(SUPPLIER_LOOKUP_CAPABILITIES);
+  const canManageSuppliers = hasCapability(FOUNDATION_CAPABILITIES.supplier);
   // Use the shared hook for all CRUD operations
   const {
     entities: suppliers,
@@ -263,10 +268,12 @@ const SupplierMaster: React.FC = () => {
     searchFields: ['supplier_name', 'supplier_code', 'primary_phone', 'gst_number'],
     filterField: 'supplier_type',
     serverSearch: true,
-    softDelete: true
+    softDelete: true,
+    enabled: canViewSuppliers,
+    accessDeniedMessage: 'You do not have permission to search suppliers.'
   });
 
-  const columns = getColumns(handleEdit);
+  const columns = getColumns(handleEdit).filter(column => canManageSuppliers || column.key !== 'actions');
 
   // Summary stats
   const total = suppliers.length;
@@ -284,11 +291,11 @@ const SupplierMaster: React.FC = () => {
     )
     : null;
 
-  const headerActions = (
+  const headerActions = canManageSuppliers ? (
     <Button variant="primary" onClick={() => setShowAddModal(true)}>
       <Plus className="w-4 h-4 mr-2" />Add Supplier
     </Button>
-  );
+  ) : undefined;
 
   return (
     <GlobalLayout
@@ -314,6 +321,7 @@ const SupplierMaster: React.FC = () => {
               aria-label="Search suppliers"
               placeholder="Search suppliers... ( / )"
               value={searchTerm}
+              disabled={!canViewSuppliers}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="min-h-11 w-full rounded-lg border border-gray-300 py-1.5 pl-9 pr-3 text-base focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
@@ -321,6 +329,7 @@ const SupplierMaster: React.FC = () => {
           <select
             aria-label="Filter suppliers by type"
             value={filterValue}
+            disabled={!canViewSuppliers}
             onChange={(e) => setFilterValue(e.target.value)}
             className="min-h-11 w-full rounded-lg border border-gray-300 px-3 py-1.5 text-base focus:outline-none focus:ring-2 focus:ring-blue-500 sm:w-auto"
           >
@@ -351,9 +360,9 @@ const SupplierMaster: React.FC = () => {
             <Truck className="w-12 h-12 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">No suppliers found</h3>
             <p className="text-sm text-gray-500 mb-4">Get started by adding your first supplier</p>
-            <Button variant="primary" onClick={() => setShowAddModal(true)}>
+            {canManageSuppliers && <Button variant="primary" onClick={() => setShowAddModal(true)}>
               <Plus className="w-4 h-4 mr-2" />Add Your First Supplier
-            </Button>
+            </Button>}
           </div>
         ) : (
           <>
@@ -369,7 +378,7 @@ const SupplierMaster: React.FC = () => {
                   <div><dt className="text-gray-500">Payment terms</dt><dd className="mt-1 font-medium">{supplier.payment_days == null ? 'Unavailable' : supplier.payment_days === 0 ? 'COD' : `${supplier.payment_days} days`}</dd></div>
                 </dl>
                 <div className="mt-4 border-t border-gray-100 pt-3"><p className="mb-2 text-xs text-gray-500">{supplier.primary_phone || supplier.primary_email || 'No contact details'}</p><ContactActions name={supplier.supplier_name || 'supplier'} phone={supplier.primary_phone} email={supplier.primary_email} whatsapp={supplier.whatsapp_number} /></div>
-                <Button className="mt-3" size="sm" variant="outline" onClick={() => handleEdit(supplier)}>Edit account</Button>
+                {canManageSuppliers && <Button className="mt-3" size="sm" variant="outline" onClick={() => handleEdit(supplier)}>Edit account</Button>}
               </article>
             ))}
           </div>
@@ -394,14 +403,14 @@ const SupplierMaster: React.FC = () => {
       </ContentCard>
 
       {/* Canonical online create flow; unsupported edits are not rendered. */}
-      {showAddModal && (
+      {canManageSuppliers && showAddModal && (
         <SupplierFlow
           open={true}
           onSupplierCreated={handleSaved}
           onClose={() => setShowAddModal(false)}
         />
       )}
-      {editingEntity && (
+      {canManageSuppliers && editingEntity && (
         <PartyAccountEditDialog
           kind="supplier"
           account={{ ...editingEntity, supplier_id: String(editingEntity.supplier_id) }}

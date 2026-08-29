@@ -23,6 +23,8 @@ import {
   compareExactDecimals,
   formatExactCurrency,
 } from '../../../utils/exactDecimal';
+import { usePermissions } from '../../../hooks/usePermissions';
+import { CUSTOMER_LOOKUP_CAPABILITIES, FOUNDATION_CAPABILITIES } from '../../../config/canonicalCapabilities';
 
 // ============================================================================
 // Types
@@ -224,6 +226,9 @@ const getColumns = (onEdit: (customer: Customer) => void): Column<Customer>[] =>
 // ============================================================================
 
 const CustomerMaster: React.FC = () => {
+  const { hasCapability, hasAnyCapability } = usePermissions();
+  const canViewCustomers = hasAnyCapability(CUSTOMER_LOOKUP_CAPABILITIES);
+  const canManageCustomers = hasCapability(FOUNDATION_CAPABILITIES.customer);
   // Use the shared hook for all CRUD operations
   const {
     entities: customers,
@@ -252,10 +257,12 @@ const CustomerMaster: React.FC = () => {
     searchFields: ['customer_name', 'customer_code', 'primary_phone', 'gst_number'],
     filterField: 'customer_type',
     serverSearch: true,
-    softDelete: true
+    softDelete: true,
+    enabled: canViewCustomers,
+    accessDeniedMessage: 'You do not have permission to search customers.'
   });
 
-  const columns = getColumns(handleEdit);
+  const columns = getColumns(handleEdit).filter(column => canManageCustomers || column.key !== 'actions');
 
   // Summary stats
   const total = customers.length;
@@ -273,11 +280,11 @@ const CustomerMaster: React.FC = () => {
     )
     : null;
 
-  const headerActions = (
+  const headerActions = canManageCustomers ? (
     <Button variant="primary" onClick={() => setShowAddModal(true)}>
       <Plus className="w-4 h-4 mr-2" />Add Customer
     </Button>
-  );
+  ) : undefined;
 
   return (
     <GlobalLayout
@@ -303,6 +310,7 @@ const CustomerMaster: React.FC = () => {
               aria-label="Search customers"
               placeholder="Search customers... ( / )"
               value={searchTerm}
+              disabled={!canViewCustomers}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="min-h-11 w-full rounded-lg border border-gray-300 py-1.5 pl-9 pr-3 text-base focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
@@ -310,6 +318,7 @@ const CustomerMaster: React.FC = () => {
           <select
             aria-label="Filter customers by type"
             value={filterValue}
+            disabled={!canViewCustomers}
             onChange={(e) => setFilterValue(e.target.value)}
             className="min-h-11 w-full rounded-md border border-gray-300 px-3 py-1.5 text-base focus:outline-none focus:ring-2 focus:ring-blue-500 sm:w-auto"
           >
@@ -340,9 +349,9 @@ const CustomerMaster: React.FC = () => {
             <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">No customers found</h3>
             <p className="text-sm text-gray-500 mb-4">Get started by adding your first customer</p>
-            <Button variant="primary" onClick={() => setShowAddModal(true)}>
+            {canManageCustomers && <Button variant="primary" onClick={() => setShowAddModal(true)}>
               <Plus className="w-4 h-4 mr-2" />Add Your First Customer
-            </Button>
+            </Button>}
           </div>
         ) : (
           <>
@@ -358,7 +367,7 @@ const CustomerMaster: React.FC = () => {
                   <div><dt className="text-gray-500">Credit terms</dt><dd className="mt-1 font-medium">{customer.credit_limit == null || customer.credit_days == null ? 'Unavailable' : `${formatExactCurrency(String(customer.credit_limit), 'Customer credit limit')} · ${customer.credit_days} days`}</dd></div>
                 </dl>
                 <div className="mt-4 border-t border-gray-100 pt-3"><p className="mb-2 text-xs text-gray-500">{customer.primary_phone || customer.primary_email || 'No contact details'}</p><ContactActions name={customer.customer_name || 'customer'} phone={customer.primary_phone} email={customer.primary_email} whatsapp={customer.whatsapp_number} /></div>
-                <Button className="mt-3" size="sm" variant="outline" onClick={() => handleEdit(customer)}>Edit account</Button>
+                {canManageCustomers && <Button className="mt-3" size="sm" variant="outline" onClick={() => handleEdit(customer)}>Edit account</Button>}
               </article>
             ))}
           </div>
@@ -383,14 +392,14 @@ const CustomerMaster: React.FC = () => {
       </ContentCard>
 
       {/* Canonical online create flow; unsupported edits are not rendered. */}
-      {showAddModal && (
+      {canManageCustomers && showAddModal && (
         <CustomerFlow
           open={true}
           onClose={() => setShowAddModal(false)}
           onCustomerCreated={handleSaved}
         />
       )}
-      {editingEntity && (
+      {canManageCustomers && editingEntity && (
         <PartyAccountEditDialog
           kind="customer"
           account={{ ...editingEntity, customer_id: String(editingEntity.customer_id) }}

@@ -10,6 +10,10 @@ import {
   reconcileCustomerReceipt,
 } from '../../../services/api/modules/finance/customerReceipts.api';
 
+jest.mock('../../../hooks/usePermissions', () => ({
+  usePermissions: () => ({ hasCapability: () => true }),
+}));
+
 jest.mock('../../../services/api/modules/finance/paymentAllocation.api', () => ({
   paymentAllocationApi: { getUnpaidInvoices: jest.fn(), getCustomerReceiptReadback: jest.fn() },
 }));

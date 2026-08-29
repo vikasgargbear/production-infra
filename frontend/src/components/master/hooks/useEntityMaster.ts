@@ -28,6 +28,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useToast } from '../../global/ui/feedback/Toast';
 import { extractDataArray, filterBySearch, filterByType } from './masterUtils';
+import { isForbiddenApiError } from '../../../services/api/utils/apiError';
 
 // ============================================================================
 // Types
@@ -70,6 +71,12 @@ export interface UseEntityMasterConfig<T> {
 
     /** Search the canonical API's full data set instead of one loaded page. */
     serverSearch?: boolean;
+
+    /** Do not read or expose mutation state when the exact signed capability is absent. */
+    enabled?: boolean;
+
+    /** Explicit message used for a missing capability or an authoritative 403. */
+    accessDeniedMessage?: string;
 }
 
 export interface UseEntityMasterReturn<T> {
@@ -121,6 +128,8 @@ export function useEntityMaster<T extends { is_active?: boolean }>(
         filterField,
         extractData,
         serverSearch = false,
+        enabled = true,
+        accessDeniedMessage = `You do not have permission to access ${entityName}s.`,
     } = config;
 
     const toast = useToast();
@@ -157,7 +166,7 @@ export function useEntityMaster<T extends { is_active?: boolean }>(
             const isInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
 
             // Ctrl/Cmd + N → open Add modal
-            if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+            if (enabled && (e.ctrlKey || e.metaKey) && e.key === 'n') {
                 e.preventDefault();
                 setShowAddModal(true);
                 return;
@@ -172,13 +181,19 @@ export function useEntityMaster<T extends { is_active?: boolean }>(
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, []);
+    }, [enabled]);
 
     // ========================================
     // Load Data
     // ========================================
 
     const loadEntities = useCallback(async (): Promise<void> => {
+        if (!enabled) {
+            setEntities([]);
+            setError(accessDeniedMessage);
+            setIsLoading(false);
+            return;
+        }
         const requestId = ++loadRequestRef.current;
         loadAbortRef.current?.abort();
         const controller = new AbortController();
@@ -199,13 +214,15 @@ export function useEntityMaster<T extends { is_active?: boolean }>(
             setEntities(data);
         } catch (err) {
             if (controller.signal.aborted || requestId !== loadRequestRef.current) return;
-            setError(`Failed to load ${entityName}s. Please try again.`);
+            setError(isForbiddenApiError(err)
+                ? accessDeniedMessage
+                : `Failed to load ${entityName}s. Please try again.`);
             setEntities([]);
         } finally {
             if (requestId === loadRequestRef.current) setIsLoading(false);
             if (loadAbortRef.current === controller) loadAbortRef.current = null;
         }
-    }, [getAll, entityName, extractData, searchTerm, serverSearch]);
+    }, [accessDeniedMessage, enabled, getAll, entityName, extractData, searchTerm, serverSearch]);
 
     // Load on mount
     useEffect(() => {
@@ -232,26 +249,30 @@ export function useEntityMaster<T extends { is_active?: boolean }>(
     // ========================================
 
     const handleEdit = useCallback((entity: T): void => {
+        if (!enabled) return;
         setEditingEntity(entity);
-    }, []);
+    }, [enabled]);
 
     const handleDelete = useCallback(async (id: string | number): Promise<void> => {
+        if (!enabled) return;
         const entity = entities.find(e => e[idField] === id);
         if (!entity) return;
         toast.warning(`${entityLabel} status and deletion are unavailable until reviewed canonical commands exist.`);
-    }, [entities, idField, entityLabel, toast]);
+    }, [enabled, entities, idField, entityLabel, toast]);
 
     const handleSaved = useCallback((): void => {
+        if (!enabled) return;
         setEditingEntity(null);
         setShowAddModal(false);
         loadEntities();
         toast.created(entityLabel);
-    }, [loadEntities, entityLabel, toast]);
+    }, [enabled, loadEntities, entityLabel, toast]);
 
     const handleBulkDelete = useCallback(async (): Promise<void> => {
+        if (!enabled) return;
         if (selectedIds.length === 0) return;
         toast.warning(`Bulk ${entityName} status changes are unavailable until a reviewed canonical command exists.`);
-    }, [selectedIds.length, entityName, toast]);
+    }, [enabled, selectedIds.length, entityName, toast]);
 
     // ========================================
     // Return
