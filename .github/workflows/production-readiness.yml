@@ -221,6 +221,7 @@ jobs:
       reviewed_sha: ${{ inputs.canonical_staging_deploy_sha }}
       reset_disposable_data: ${{ inputs.reset_canonical_staging }}
       github_environment: canonical-certification
+    secrets: inherit
 
   canonical-application-promotion-evidence:
     needs: [canonical-free-staging]

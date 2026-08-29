@@ -48,27 +48,27 @@ on:
         value: ${{ jobs.deploy.outputs.reused_exact_sha }}
     secrets:
       RAILWAY_API_TOKEN:
-        required: false
+        required: true
       ERP_RUNTIME_PASSWORD:
-        required: false
+        required: true
       ERP_CALCULATOR_PASSWORD:
-        required: false
+        required: true
       ERP_TAX_PROVIDER_PASSWORD:
-        required: false
+        required: true
       JWT_SECRET_KEY:
-        required: false
+        required: true
       MCP_INTERNAL_SERVICE_TOKEN:
-        required: false
+        required: true
       SUPABASE_ANON_KEY:
-        required: false
+        required: true
       SUPABASE_ACCESS_TOKEN:
-        required: false
+        required: true
       SUPABASE_DB_PASSWORD:
-        required: false
+        required: true
       TAX_PROVIDER_INTERNAL_SERVICE_TOKEN:
-        required: false
+        required: true
       TAX_PROVIDER_INTERNAL_HMAC_SECRET:
-        required: false
+        required: true
 permissions:
   contents: read
 
