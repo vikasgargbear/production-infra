@@ -84,6 +84,9 @@ from .infrastructure.operator_actions import install_sqlalchemy_operator_action_
 from .infrastructure.operator_actions.calculator_database import (
     dispose_calculator_engine,
 )
+from .infrastructure.operator_actions.deployment_contract import (
+    EXPECTED_CANONICAL_ALEMBIC_HEAD,
+)
 from .infrastructure.tax_provider import dispose_tax_provider_engine
 # from .api.routes import conversions  # REMOVED: File deleted
 # from .api.routes import api_wrapper  # REMOVED: File deleted  
@@ -259,11 +262,16 @@ def _database_readiness() -> dict:
                            'USAGE'
                          )
                        END AS session_authority,
-                       current_setting('row_security') = 'on' AS row_security
+                       current_setting('row_security') = 'on' AS row_security,
+                       erp_security.deployed_canonical_revision()
+                         AS canonical_revision,
+                       erp_security.deployed_canonical_revision()
+                         = :expected_revision AS schema_current
                   FROM pg_catalog.pg_roles AS role
                  WHERE role.rolname=current_user
                 """
-            )
+            ),
+            {"expected_revision": EXPECTED_CANONICAL_ALEMBIC_HEAD},
         ).mappings().one()
 
     principal_isolated = (
@@ -292,6 +300,9 @@ def _database_readiness() -> dict:
         "session_role_exists": bool(row["session_role_exists"]),
         "session_authority": bool(row["session_authority"]),
         "row_security": row_security,
+        "canonical_revision": row["canonical_revision"],
+        "expected_canonical_revision": EXPECTED_CANONICAL_ALEMBIC_HEAD,
+        "schema_current": bool(row["schema_current"]),
         "ip_version": required_ip_version,
     }
 
@@ -313,6 +324,7 @@ async def readiness_check():
         and ready["command_authority"]
         and ready["session_role_exists"]
         and ready["session_authority"]
+        and ready["schema_current"]
     )
     if not authority_open:
         return JSONResponse(

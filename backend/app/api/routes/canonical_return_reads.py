@@ -9,12 +9,19 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any, Literal, Optional
+from typing import Annotated, Any, Literal, Optional
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Security
 from fastapi.security import HTTPBearer
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    PlainSerializer,
+    WithJsonSchema,
+    model_validator,
+)
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -39,6 +46,69 @@ router = APIRouter(
 )
 SALES_USER = Depends(PermissionChecker("sales", "view"))
 PURCHASE_USER = Depends(PermissionChecker("purchase", "view"))
+
+
+def _decimal_wire(scale: int):
+    return lambda value: format(value, f".{scale}f")
+
+
+def _decimal_schema(scale: int, *, signed: bool = False) -> dict[str, Any]:
+    sign = "-?" if signed else ""
+    return {
+        "type": "string",
+        "pattern": rf"^{sign}(?:0|[1-9][0-9]*)\.[0-9]{{{scale}}}$",
+        "description": "Exact base-10 decimal string; never a JSON number.",
+    }
+
+
+ExactQuantity = Annotated[
+    Decimal,
+    Field(ge=0, max_digits=20, decimal_places=6),
+    PlainSerializer(_decimal_wire(6), return_type=str, when_used="json"),
+    WithJsonSchema(_decimal_schema(6), mode="serialization"),
+]
+ExactPositiveQuantity = Annotated[
+    Decimal,
+    Field(gt=0, max_digits=20, decimal_places=6),
+    PlainSerializer(_decimal_wire(6), return_type=str, when_used="json"),
+    WithJsonSchema(_decimal_schema(6), mode="serialization"),
+]
+ExactRate = Annotated[
+    Decimal,
+    Field(ge=0, max_digits=20, decimal_places=6),
+    PlainSerializer(_decimal_wire(6), return_type=str, when_used="json"),
+    WithJsonSchema(_decimal_schema(6), mode="serialization"),
+]
+ExactPositiveRate = Annotated[
+    Decimal,
+    Field(gt=0, max_digits=20, decimal_places=6),
+    PlainSerializer(_decimal_wire(6), return_type=str, when_used="json"),
+    WithJsonSchema(_decimal_schema(6), mode="serialization"),
+]
+ExactMoney = Annotated[
+    Decimal,
+    Field(ge=0, max_digits=20, decimal_places=2),
+    PlainSerializer(_decimal_wire(2), return_type=str, when_used="json"),
+    WithJsonSchema(_decimal_schema(2), mode="serialization"),
+]
+ExactPositiveMoney = Annotated[
+    Decimal,
+    Field(gt=0, max_digits=20, decimal_places=2),
+    PlainSerializer(_decimal_wire(2), return_type=str, when_used="json"),
+    WithJsonSchema(_decimal_schema(2), mode="serialization"),
+]
+SignedQuantity = Annotated[
+    Decimal,
+    Field(max_digits=20, decimal_places=6),
+    PlainSerializer(_decimal_wire(6), return_type=str, when_used="json"),
+    WithJsonSchema(_decimal_schema(6, signed=True), mode="serialization"),
+]
+SignedMoney = Annotated[
+    Decimal,
+    Field(max_digits=20, decimal_places=2),
+    PlainSerializer(_decimal_wire(2), return_type=str, when_used="json"),
+    WithJsonSchema(_decimal_schema(2, signed=True), mode="serialization"),
+]
 
 
 def _activate(db: Session, user: dict[str, Any]) -> UUID:
@@ -198,7 +268,7 @@ class PurchaseReturnLogisticsMode(StrictRead):
     transport_mode: PurchaseReturnTransportMode
     display_name: str = Field(min_length=1)
     distance_required: Literal[True]
-    minimum_distance_km: Decimal = Field(ge=0)
+    minimum_distance_km: ExactQuantity
     transporter_requirement: LogisticsFieldRequirement
     vehicle_requirement: Literal["required", "forbidden"]
     transport_document_requirement: LogisticsFieldRequirement
@@ -319,20 +389,20 @@ class SalesReturnableAllocation(StrictRead):
     batch_number: str
     expires_on: Optional[date]
     uom_code: str
-    uom_conversion_factor: Decimal = Field(gt=0)
-    allocated_base_billed_quantity: Decimal = Field(ge=0)
-    allocated_base_free_quantity: Decimal = Field(ge=0)
-    returned_base_billed_quantity: Decimal = Field(ge=0)
-    returned_base_free_quantity: Decimal = Field(ge=0)
-    remaining_base_billed_quantity: Decimal = Field(ge=0)
-    remaining_base_free_quantity: Decimal = Field(ge=0)
-    returnable_billed_quantity: Decimal = Field(ge=0)
-    returnable_free_quantity: Decimal = Field(ge=0)
-    quoted_unit_rate: Decimal = Field(ge=0)
-    cgst_rate: Decimal = Field(ge=0)
-    sgst_rate: Decimal = Field(ge=0)
-    igst_rate: Decimal = Field(ge=0)
-    cess_rate: Decimal = Field(ge=0)
+    uom_conversion_factor: ExactPositiveQuantity
+    allocated_base_billed_quantity: ExactQuantity
+    allocated_base_free_quantity: ExactQuantity
+    returned_base_billed_quantity: ExactQuantity
+    returned_base_free_quantity: ExactQuantity
+    remaining_base_billed_quantity: ExactQuantity
+    remaining_base_free_quantity: ExactQuantity
+    returnable_billed_quantity: ExactQuantity
+    returnable_free_quantity: ExactQuantity
+    quoted_unit_rate: ExactRate
+    cgst_rate: ExactRate
+    sgst_rate: ExactRate
+    igst_rate: ExactRate
+    cess_rate: ExactRate
     hsn_code: str
 
     @model_validator(mode="after")
@@ -406,12 +476,12 @@ class PortalCreditNoteEvidence(StrictRead):
     invoice_number: str
     invoice_date: date
     portal_reference: Optional[str]
-    taxable_amount: Decimal
-    cgst_amount: Decimal
-    sgst_amount: Decimal
-    igst_amount: Decimal
-    cess_amount: Decimal
-    total_amount: Decimal
+    taxable_amount: ExactMoney
+    cgst_amount: ExactMoney
+    sgst_amount: ExactMoney
+    igst_amount: ExactMoney
+    cess_amount: ExactMoney
+    total_amount: ExactMoney
 
     @model_validator(mode="after")
     def reconcile_total(self):
@@ -442,22 +512,22 @@ class PurchaseReturnableAllocation(StrictRead):
     from_location_name: str
     from_location_type: Literal["saleable", "cold_storage"]
     uom_code: str
-    uom_conversion_factor: Decimal = Field(gt=0)
-    allocated_base_billed_quantity: Decimal = Field(ge=0)
-    allocated_base_free_quantity: Decimal = Field(ge=0)
-    returned_base_billed_quantity: Decimal = Field(ge=0)
-    returned_base_free_quantity: Decimal = Field(ge=0)
-    remaining_base_billed_quantity: Decimal = Field(ge=0)
-    remaining_base_free_quantity: Decimal = Field(ge=0)
-    returnable_billed_quantity: Decimal = Field(ge=0)
-    returnable_free_quantity: Decimal = Field(ge=0)
-    stock_on_hand_base_quantity: Decimal = Field(ge=0)
-    average_unit_cost: Decimal = Field(gt=0)
-    quoted_unit_rate: Decimal = Field(ge=0)
-    cgst_rate: Decimal = Field(ge=0)
-    sgst_rate: Decimal = Field(ge=0)
-    igst_rate: Decimal = Field(ge=0)
-    cess_rate: Decimal = Field(ge=0)
+    uom_conversion_factor: ExactPositiveQuantity
+    allocated_base_billed_quantity: ExactQuantity
+    allocated_base_free_quantity: ExactQuantity
+    returned_base_billed_quantity: ExactQuantity
+    returned_base_free_quantity: ExactQuantity
+    remaining_base_billed_quantity: ExactQuantity
+    remaining_base_free_quantity: ExactQuantity
+    returnable_billed_quantity: ExactQuantity
+    returnable_free_quantity: ExactQuantity
+    stock_on_hand_base_quantity: ExactQuantity
+    average_unit_cost: ExactPositiveRate
+    quoted_unit_rate: ExactRate
+    cgst_rate: ExactRate
+    sgst_rate: ExactRate
+    igst_rate: ExactRate
+    cess_rate: ExactRate
     hsn_code: str
 
     @model_validator(mode="after")
@@ -534,29 +604,29 @@ class PostedReturnLine(StrictRead):
     product_id: UUID
     batch_id: UUID
     location_id: UUID
-    billed_quantity: Decimal
-    free_quantity: Decimal
-    base_billed_quantity: Decimal
-    base_free_quantity: Decimal
-    net_value_amount: Decimal
-    gst_taxable_value: Decimal
-    cgst_amount: Decimal
-    sgst_amount: Decimal
-    igst_amount: Decimal
-    cess_amount: Decimal
-    line_total: Decimal
+    billed_quantity: ExactQuantity
+    free_quantity: ExactQuantity
+    base_billed_quantity: ExactQuantity
+    base_free_quantity: ExactQuantity
+    net_value_amount: ExactMoney
+    gst_taxable_value: ExactMoney
+    cgst_amount: ExactMoney
+    sgst_amount: ExactMoney
+    igst_amount: ExactMoney
+    cess_amount: ExactMoney
+    line_total: ExactMoney
     inventory_document_line_id: UUID
-    inventory_base_quantity: Decimal
-    inventory_extended_cost: Decimal
+    inventory_base_quantity: ExactQuantity
+    inventory_extended_cost: ExactMoney
     stock_ledger_entry_id: UUID
-    stock_quantity_delta: Decimal
-    stock_value_delta: Decimal
+    stock_quantity_delta: SignedQuantity
+    stock_value_delta: SignedMoney
 
 
 class PostedReturnAllocation(StrictRead):
     allocation_id: UUID
     open_item_id: UUID
-    amount: Decimal = Field(gt=0)
+    amount: ExactPositiveMoney
 
 
 class PostedReturnReadback(StrictRead):
@@ -568,29 +638,29 @@ class PostedReturnReadback(StrictRead):
     branch_id: UUID
     party_account_id: UUID
     gst_tax_treatment: Literal["commercial_only", "statutory"]
-    net_value_total: Decimal
-    gst_taxable_total: Decimal
-    cgst_total: Decimal
-    sgst_total: Decimal
-    igst_total: Decimal
-    cess_total: Decimal
-    rounding_adjustment: Decimal
-    grand_total: Decimal
+    net_value_total: ExactMoney
+    gst_taxable_total: ExactMoney
+    cgst_total: ExactMoney
+    sgst_total: ExactMoney
+    igst_total: ExactMoney
+    cess_total: ExactMoney
+    rounding_adjustment: SignedMoney
+    grand_total: ExactMoney
     adjustment_note_id: UUID
     adjustment_note_number: str
-    adjustment_note_total: Decimal
+    adjustment_note_total: ExactMoney
     tax_document_id: Optional[UUID]
-    tax_document_total: Optional[Decimal]
+    tax_document_total: Optional[ExactMoney]
     inventory_document_id: UUID
     inventory_direction: Literal["receipt", "issue"]
-    inventory_total_base_quantity: Decimal
-    inventory_total_value: Decimal
+    inventory_total_base_quantity: ExactQuantity
+    inventory_total_value: ExactMoney
     journal_entry_id: UUID
-    journal_debit_total: Decimal
-    journal_credit_total: Decimal
-    journal_line_debit_total: Decimal
-    journal_line_credit_total: Decimal
-    residual_open_item_amount: Decimal = Field(ge=0)
+    journal_debit_total: ExactMoney
+    journal_credit_total: ExactMoney
+    journal_line_debit_total: ExactMoney
+    journal_line_credit_total: ExactMoney
+    residual_open_item_amount: ExactMoney
     lines: list[PostedReturnLine]
     allocations: list[PostedReturnAllocation]
 
@@ -732,10 +802,14 @@ def sales_return_context(
                  AS remaining_base_billed_quantity,
                allocation.allocated_base_free_quantity-returned.base_free
                  AS remaining_base_free_quantity,
-               (allocation.allocated_base_billed_quantity-returned.base_billed)
-                 / line.uom_conversion_factor AS returnable_billed_quantity,
-               (allocation.allocated_base_free_quantity-returned.base_free)
-                 / line.uom_conversion_factor AS returnable_free_quantity,
+               pg_catalog.round(
+                 (allocation.allocated_base_billed_quantity-returned.base_billed)
+                   / line.uom_conversion_factor, 6
+               ) AS returnable_billed_quantity,
+               pg_catalog.round(
+                 (allocation.allocated_base_free_quantity-returned.base_free)
+                   / line.uom_conversion_factor, 6
+               ) AS returnable_free_quantity,
                line.quoted_unit_rate, line.cgst_rate, line.sgst_rate,
                line.igst_rate, line.cess_rate,
                line.tax_classification_code_snapshot AS hsn_code
@@ -955,10 +1029,14 @@ def purchase_return_context(
                  AS remaining_base_billed_quantity,
                allocation.allocated_base_free_quantity-returned.base_free
                  AS remaining_base_free_quantity,
-               (allocation.allocated_base_billed_quantity-returned.base_billed)
-                 / invoice_line.uom_conversion_factor AS returnable_billed_quantity,
-               (allocation.allocated_base_free_quantity-returned.base_free)
-                 / invoice_line.uom_conversion_factor AS returnable_free_quantity,
+               pg_catalog.round(
+                 (allocation.allocated_base_billed_quantity-returned.base_billed)
+                   / invoice_line.uom_conversion_factor, 6
+               ) AS returnable_billed_quantity,
+               pg_catalog.round(
+                 (allocation.allocated_base_free_quantity-returned.base_free)
+                   / invoice_line.uom_conversion_factor, 6
+               ) AS returnable_free_quantity,
                balance.on_hand_quantity AS stock_on_hand_base_quantity,
                balance.average_unit_cost,
                invoice_line.quoted_unit_rate, invoice_line.cgst_rate,
