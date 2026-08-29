@@ -1,3 +1,4 @@
+import ast
 import json
 import os
 import re
@@ -147,9 +148,11 @@ def test_api_watches_only_runtime_and_packaged_migration_inputs() -> None:
         "/backend/migration_support/**",
         "/backend/scripts/canonical_migration_contract.py",
         "/backend/scripts/canonical_demo_ids.py",
+        "/backend/scripts/canonical_data_reset_authority.py",
         "/backend/scripts/canonical_staging_database.py",
         "/backend/scripts/cleanup_staging_evidence_storage.py",
         "/backend/scripts/compile_live18_browser_fixture.py",
+        "/backend/scripts/deployment_control.py",
         "/backend/scripts/exercise_staging_mcp_oauth.py",
         "/backend/scripts/live18_evidence_contract.py",
         "/backend/scripts/live18_railway_database_phase.py",
@@ -215,6 +218,14 @@ def test_api_runtime_image_excludes_tests_docs_and_operator_tooling() -> None:
         "./scripts/canonical_migration_contract.py"
     ) in dockerfile
     assert (
+        "COPY backend/scripts/canonical_data_reset_authority.py "
+        "./scripts/canonical_data_reset_authority.py"
+    ) in dockerfile
+    assert (
+        "COPY backend/scripts/deployment_control.py "
+        "./scripts/deployment_control.py"
+    ) in dockerfile
+    assert (
         "COPY backend/scripts/cleanup_staging_evidence_storage.py "
         "./scripts/cleanup_staging_evidence_storage.py"
     ) in dockerfile
@@ -232,6 +243,56 @@ def test_api_runtime_image_excludes_tests_docs_and_operator_tooling() -> None:
         "./backend/scripts/package_canonical_baseline_migration.py"
     ) in dockerfile
     assert ".canonical-migration-contract-verified" in dockerfile
+
+
+def test_api_runtime_script_import_closure_is_packaged() -> None:
+    dockerfile = (ROOT / "deploy/railway/api.Dockerfile").read_text(
+        encoding="utf-8"
+    )
+    copied_scripts = set(
+        re.findall(
+            r"^COPY backend/scripts/([a-z0-9_]+)\.py ./scripts/\1\.py$",
+            dockerfile,
+            flags=re.MULTILINE,
+        )
+    )
+    sibling_scripts = {
+        path.stem for path in (ROOT / "backend/scripts").glob("*.py")
+    }
+
+    def import_time_modules(statements: list[ast.stmt]) -> set[str]:
+        modules: set[str] = set()
+        for statement in statements:
+            if isinstance(statement, ast.ImportFrom) and statement.module:
+                modules.add(statement.module.split(".")[-1])
+            elif isinstance(statement, ast.Import):
+                modules.update(alias.name.split(".")[-1] for alias in statement.names)
+            elif isinstance(statement, ast.If):
+                modules.update(import_time_modules(statement.body))
+                modules.update(import_time_modules(statement.orelse))
+            elif isinstance(statement, ast.Try):
+                modules.update(import_time_modules(statement.body))
+                modules.update(import_time_modules(statement.orelse))
+                modules.update(import_time_modules(statement.finalbody))
+                for handler in statement.handlers:
+                    modules.update(import_time_modules(handler.body))
+            elif isinstance(statement, ast.With):
+                modules.update(import_time_modules(statement.body))
+        return modules
+
+    missing: dict[str, list[str]] = {}
+    for script_name in copied_scripts:
+        tree = ast.parse(
+            (ROOT / "backend/scripts" / f"{script_name}.py").read_text(
+                encoding="utf-8"
+            )
+        )
+        required = import_time_modules(tree.body) & sibling_scripts
+        absent = sorted(required - copied_scripts)
+        if absent:
+            missing[script_name] = absent
+
+    assert missing == {}
 
 
 def test_frontend_container_builds_once_and_serves_spa_with_healthcheck() -> None:
