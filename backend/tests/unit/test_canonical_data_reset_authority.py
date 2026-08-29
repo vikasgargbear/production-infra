@@ -280,6 +280,71 @@ def test_purge_requires_exact_uuid_confirmation_and_signed_plan() -> None:
     assert "authorized_plan_sha256" in signature.parameters
 
 
+class _PurgeExecutorCursor:
+    def __init__(self, rows) -> None:
+        self.rows = list(rows)
+        self.executed = []
+
+    def execute(self, statement, parameters=None) -> None:
+        self.executed.append((statement, parameters))
+
+    def fetchone(self):
+        return self.rows.pop(0)
+
+
+def test_purge_executor_accepts_only_the_exact_delegated_owner() -> None:
+    cursor = _PurgeExecutorCursor(
+        [
+            ("postgres", "erp_migration_owner", False, True, True, True),
+            (True,),
+            (True,),
+        ]
+    )
+
+    receipt = reset_authority._require_purge_executor(
+        cursor, ("core.memberships",)
+    )
+
+    assert receipt == {
+        "session_user": "postgres",
+        "current_user": "erp_migration_owner",
+        "superuser": False,
+        "delegated_owner": True,
+        "session_replication_role_set": True,
+    }
+    assert [parameters for _statement, parameters in cursor.executed[1:]] == [
+        ("core.memberships",),
+        ("core.organizations",),
+    ]
+
+
+@pytest.mark.parametrize(
+    "posture",
+    (
+        ("postgres", "postgres", False, True, True, True),
+        ("postgres", "erp_migration_owner", False, True, True, False),
+        ("erp_runtime", "erp_migration_owner", False, False, False, True),
+    ),
+)
+def test_purge_executor_rejects_unreviewed_posture(posture) -> None:
+    cursor = _PurgeExecutorCursor([posture])
+
+    with pytest.raises(ResetAuthorityError, match="reviewed database administrator"):
+        reset_authority._require_purge_executor(cursor, ("core.memberships",))
+
+
+def test_purge_executor_rejects_nonowned_target_relation() -> None:
+    cursor = _PurgeExecutorCursor(
+        [
+            ("postgres", "erp_migration_owner", False, True, True, True),
+            (False,),
+        ]
+    )
+
+    with pytest.raises(ResetAuthorityError, match="does not own every"):
+        reset_authority._require_purge_executor(cursor, ("core.memberships",))
+
+
 def test_role_posture_and_password_presence_use_the_correct_catalogs() -> None:
     posture_source = inspect.getsource(reset_authority._role_snapshot)
     credential_source = inspect.getsource(reset_authority._role_password_presence)

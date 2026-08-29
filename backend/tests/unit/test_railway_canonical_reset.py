@@ -117,10 +117,13 @@ def _common_stubs(monkeypatch: pytest.MonkeyPatch, calls: list[str]) -> None:
 
 
 def test_organization_purge_has_no_global_fence_session_or_storage_side_effects() -> None:
+    plan_source = inspect.getsource(RESET.plan_staging_organization_purge)
     source = inspect.getsource(RESET.purge_staging_organization)
 
+    assert "_delegated_migration_owner_connection" in plan_source
     assert "execute_organization_purge" in source
     assert "plan_organization_purge" in source
+    assert "_delegated_migration_owner_connection" in source
     assert "authorized_plan_sha256" in source
     assert "apply_fence" not in source
     assert "_terminate_isolated_sessions" not in source
@@ -443,8 +446,8 @@ def test_owner_delegation_recovery_is_serialized_and_explicit() -> None:
     assert "pg_catalog.pg_advisory_lock(%s)" in source
     assert "pg_catalog.pg_advisory_unlock(%s)" in source
     assert "with _owner_delegation_lock(database_url):" in source
-    assert source.count("recover_stale_owner_delegation=True") == 3
-    assert control.count("recover_stale_owner_delegation=True") == 3
+    assert source.count("recover_stale_owner_delegation=True") == 4
+    assert control.count("recover_stale_owner_delegation=True") == 2
     assert 'WITH INHERIT FALSE, SET FALSE' in source
 
 

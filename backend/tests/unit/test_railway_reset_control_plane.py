@@ -200,6 +200,43 @@ def test_prepare_boundary_migrates_without_resetting_business_data(
     ]
 
 
+def test_purge_plan_uses_the_bounded_owner_authority(monkeypatch) -> None:
+    calls = []
+    monkeypatch.setattr(
+        CONTROL,
+        "plan_staging_organization_purge",
+        lambda **kwargs: calls.append(kwargs)
+        or {
+            "transport": {"network_family": 6},
+            "plan": {
+                "organization_id": ORGANIZATION_ID,
+                "authority_manifest_sha256": "a" * 64,
+                "catalog_fingerprint_sha256": "b" * 64,
+                "alembic_head": "head",
+                "organization_row_count": 7,
+            },
+        },
+    )
+    request = _request(secrets={"SUPABASE_DB_PASSWORD": DB_PASSWORD})
+    request["organization_id"] = ORGANIZATION_ID
+
+    result = CONTROL._plan_organization(request)
+
+    assert result["plan"]["organization_id"] == ORGANIZATION_ID
+    assert result["transport"]["network_family"] == 6
+    assert result["requires_separate_execution"] is True
+    assert calls == [
+        {
+            "expected_sha": EXPECTED_SHA,
+            "project_ref": PROJECT_REF,
+            "production_project_refs": PRODUCTION_REFS,
+            "password": DB_PASSWORD,
+            "organization_id": ORGANIZATION_ID,
+            "control_transport": CONTROL.CONTROL_TRANSPORT_RAILWAY_IPV6,
+        }
+    ]
+
+
 def test_signed_purge_plan_requires_delay_exact_boundary_and_separate_execution(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
