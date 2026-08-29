@@ -148,6 +148,7 @@ def test_api_watches_only_runtime_and_packaged_migration_inputs() -> None:
         "/backend/scripts/canonical_migration_contract.py",
         "/backend/scripts/canonical_demo_ids.py",
         "/backend/scripts/canonical_staging_database.py",
+        "/backend/scripts/cleanup_staging_evidence_storage.py",
         "/backend/scripts/compile_live18_browser_fixture.py",
         "/backend/scripts/exercise_staging_mcp_oauth.py",
         "/backend/scripts/live18_evidence_contract.py",
@@ -157,6 +158,8 @@ def test_api_watches_only_runtime_and_packaged_migration_inputs() -> None:
         "/backend/scripts/provision_ephemeral_browser_identities.py",
         "/backend/scripts/provision_ephemeral_canonical_live.py",
         "/backend/scripts/provision_staging_mcp_oauth.py",
+        "/backend/scripts/railway_canonical_reset.py",
+        "/backend/scripts/railway_reset_control_plane.py",
         "/backend/scripts/supabase_auth_admin.py",
         "/backend/tests/live_acceptance/**",
         "/backend/tests/live_canonical/**",
@@ -211,6 +214,19 @@ def test_api_runtime_image_excludes_tests_docs_and_operator_tooling() -> None:
         "COPY backend/scripts/canonical_migration_contract.py "
         "./scripts/canonical_migration_contract.py"
     ) in dockerfile
+    assert (
+        "COPY backend/scripts/cleanup_staging_evidence_storage.py "
+        "./scripts/cleanup_staging_evidence_storage.py"
+    ) in dockerfile
+    assert (
+        "COPY backend/scripts/railway_canonical_reset.py "
+        "./scripts/railway_canonical_reset.py"
+    ) in dockerfile
+    assert (
+        "COPY backend/scripts/railway_reset_control_plane.py "
+        "./scripts/railway_reset_control_plane.py"
+    ) in dockerfile
+    assert "python scripts/railway_reset_control_plane.py --help" in dockerfile
     assert (
         "COPY backend/scripts/package_canonical_baseline_migration.py "
         "./backend/scripts/package_canonical_baseline_migration.py"
