@@ -9,6 +9,7 @@ an idempotent local receipt so interrupted imports can resume safely.
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import hashlib
 import json
 import os
@@ -642,7 +643,10 @@ def apply_bundle(
     *,
     confirmation: str,
     receipt_path: Path,
+    workers: int = 1,
 ) -> dict[str, Any]:
+    if workers < 1 or workers > 32:
+        raise CanonicalImportError("Import workers must be between 1 and 32")
     plan_sha = verify_plan(plan, bundle)
     expected_confirmation = f"APPLY-MIGRATION:{bundle.target_organization_id}:{plan_sha}"
     if confirmation != expected_confirmation:
@@ -677,9 +681,8 @@ def apply_bundle(
             if isinstance(values, dict)
         }
     completed_set = set(completed)
-    for operation in bundle.operations:
-        if operation.operation_id in completed_set:
-            continue
+
+    def execute_one(operation: ImportOperation) -> tuple[ImportOperation, dict[str, Any]]:
         materialized = _materialize_operation(operation, result_bindings)
         result = client.execute(materialized)
         client.reconcile(materialized, result)
@@ -691,6 +694,9 @@ def apply_bundle(
                     f"Operation {operation.operation_id} binding field is missing"
                 )
             retained[field] = value
+        return operation, retained
+
+    def record_completion(operation: ImportOperation, retained: dict[str, Any]) -> None:
         result_bindings[operation.operation_id] = retained
         completed.append(operation.operation_id)
         completed_set.add(operation.operation_id)
@@ -711,4 +717,31 @@ def apply_bundle(
         temporary.chmod(0o600)
         os.replace(temporary, receipt_path)
         receipt_path.chmod(0o600)
+
+    phases = sorted({operation.phase for operation in bundle.operations})
+    for phase in phases:
+        pending = [
+            operation
+            for operation in bundle.operations
+            if operation.phase == phase and operation.operation_id not in completed_set
+        ]
+        if not pending:
+            continue
+        if workers == 1 or len(pending) == 1:
+            for operation in pending:
+                finished, retained = execute_one(operation)
+                record_completion(finished, retained)
+            continue
+        failures: list[BaseException] = []
+        with ThreadPoolExecutor(max_workers=min(workers, len(pending))) as executor:
+            futures = {executor.submit(execute_one, operation): operation for operation in pending}
+            for future in as_completed(futures):
+                try:
+                    finished, retained = future.result()
+                except BaseException as exc:  # preserve resumable successes before failing closed
+                    failures.append(exc)
+                    continue
+                record_completion(finished, retained)
+        if failures:
+            raise failures[0]
     return _read_json(receipt_path, maximum_bytes=MAX_MANIFEST_BYTES)
