@@ -33,8 +33,14 @@ type CanonicalDocumentType = 'invoice' | 'challan' | 'sales_order';
 type DocumentType = CanonicalDocumentType | 'imported_invoice';
 
 const documentTypeConfig = {
+  imported_invoice: {
+    label: 'Existing Invoices',
+    icon: Archive,
+    activeClass: 'bg-sky-50 text-sky-700 border-sky-200',
+    iconColor: 'text-sky-600'
+  },
   invoice: {
-    label: 'Invoices',
+    label: 'New ERP Invoices',
     icon: FileText,
     activeClass: 'bg-blue-50 text-blue-700 border-blue-200',
     iconColor: 'text-blue-600'
@@ -50,12 +56,6 @@ const documentTypeConfig = {
     icon: ShoppingCart,
     activeClass: 'bg-purple-50 text-purple-700 border-purple-200',
     iconColor: 'text-purple-600'
-  },
-  imported_invoice: {
-    label: 'Imported Invoices',
-    icon: Archive,
-    activeClass: 'bg-sky-50 text-sky-700 border-sky-200',
-    iconColor: 'text-sky-600'
   }
 };
 
@@ -117,8 +117,9 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
   // Use centralized state management (replaces 15 useState!)
   const { dispatch, invoices, selectedIds, filters, ui, pagination, loading } = useInvoiceListState();
 
-  // Document type state - default to invoice
-  const [documentType, setDocumentType] = useState<DocumentType>('invoice');
+  // Existing business history is the useful default after migration. Newly
+  // created canonical invoices remain available in their own adjacent tab.
+  const [documentType, setDocumentType] = useState<DocumentType>('imported_invoice');
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const requestSequenceRef = useRef(0);
   const businessDateRef = useRef<string | null>(null);
@@ -393,6 +394,7 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
                 <button
                   key={type}
                   onClick={() => handleDocumentTypeChange(type)}
+                  aria-pressed={isActive}
                   className={`
                     flex items-center px-4 py-2 rounded-lg font-medium transition-all text-sm border
                     ${isActive
