@@ -964,7 +964,7 @@ def test_whole_database_reset_is_retired_and_org_purge_is_two_run_scoped():
     assert "PRESERVED_SEED_RELATIONS" in reset_authority
     assert "EXPECTED_CANONICAL_RELATION_COUNT = 122" in reset_authority
     assert "EXPECTED_EPHEMERAL_RELATION_COUNT = 9" in reset_authority
-    assert "EXPECTED_ORGANIZATION_RELATION_COUNT = 105" in reset_authority
+    assert "EXPECTED_ORGANIZATION_RELATION_COUNT = 106" in reset_authority
     assert "TRUNCATE TABLE" not in reset_authority
     assert "execute_reset" not in reset_authority
     assert "--execute-organization-purge" not in reset_authority
