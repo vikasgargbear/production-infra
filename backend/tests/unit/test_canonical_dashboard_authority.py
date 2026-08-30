@@ -115,6 +115,37 @@ def test_dashboard_sales_rejects_an_inverted_period(monkeypatch) -> None:
     assert error.value.status_code == 422
 
 
+def test_dashboard_stats_timezone_is_scalar_and_not_an_ungrouped_outer_column(
+    monkeypatch,
+) -> None:
+    org_id = uuid4()
+    captured: dict = {}
+    monkeypatch.setattr(canonical_erp_reads, "_activate", lambda _db, _user: org_id)
+
+    def rows(_db, query, params):
+        captured.update({"query": query, "params": params})
+        return [{
+            "total_revenue": Decimal("0.00"),
+            "total_invoices": 0,
+            "purchasing_customers": 0,
+            "total_orders": 0,
+            "total_customers": 0,
+            "new_customers": 0,
+        }]
+
+    monkeypatch.setattr(canonical_erp_reads, "_rows", rows)
+    result = canonical_erp_reads.dashboard_stats(user={}, db=object())
+
+    assert result["total_invoices"] == 0
+    assert captured["params"] == {
+        "org_id": org_id,
+        "date_from": None,
+        "date_to": None,
+    }
+    assert "SELECT timezone FROM business_clock" in captured["query"]
+    assert "CROSS JOIN business_clock" not in captured["query"]
+
+
 @pytest.mark.parametrize(
     ("reader", "expected_fact"),
     [

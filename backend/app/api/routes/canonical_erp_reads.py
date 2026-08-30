@@ -6564,13 +6564,14 @@ def _dashboard_stats_totals(db: Session, params: dict) -> dict:
                (SELECT count(*) FROM parties.customer_accounts customer
                  WHERE customer.org_id=:org_id
                    AND (:date_from IS NULL OR
-                        (customer.created_at AT TIME ZONE business_clock.timezone)::date
+                        (customer.created_at AT TIME ZONE
+                         (SELECT timezone FROM business_clock))::date
                           >= CAST(:date_from AS date))
                    AND (:date_to IS NULL OR
-                        (customer.created_at AT TIME ZONE business_clock.timezone)::date
+                        (customer.created_at AT TIME ZONE
+                         (SELECT timezone FROM business_clock))::date
                           <= CAST(:date_to AS date))) AS new_customers
           FROM sales.invoices invoice
-          CROSS JOIN business_clock
          WHERE {_INVOICE_RANGE}
     """, params)
     return rows[0]
