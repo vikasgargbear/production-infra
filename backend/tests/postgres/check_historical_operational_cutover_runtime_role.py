@@ -145,12 +145,12 @@ def main() -> None:
                 ),
                 _fact(
                     "ed000000-0000-7000-8000-000000000033", "opening_item", "open-dr",
-                    {"source_party_id": "source-new", "party_role": "customer", "source_reference": "OPEN-DR", "document_date": "2026-04-01", "due_date": "2026-04-15", "side": "Dr"},
+                    {"source_party_id": "source-new", "source_reference": "OPEN-DR", "document_date": "2026-04-01", "due_date": "2026-04-15", "side": "Dr"},
                     party_key="source-new", event_date="2026-04-15", amount="100.00",
                 ),
                 _fact(
                     "ed000000-0000-7000-8000-000000000034", "opening_item", "open-cr",
-                    {"source_party_id": "source-existing", "party_role": "customer", "source_reference": "OPEN-CR", "document_date": "2026-04-02", "due_date": "2026-04-16", "side": "Cr"},
+                    {"source_party_id": "source-existing", "source_reference": "OPEN-CR", "document_date": "2026-04-02", "due_date": "2026-04-16", "side": "Cr"},
                     party_key="source-existing", event_date="2026-04-16", amount="40.00",
                 ),
             ]
