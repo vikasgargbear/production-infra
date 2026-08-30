@@ -1974,6 +1974,39 @@ def customers(limit: int = Query(100, ge=1, le=1000), skip: int = Query(0, ge=0)
                   {fallback})
            ORDER BY search_rank DESC, party.legal_name, account.id
            LIMIT :limit OFFSET :skip
+        ), effective_allocations AS MATERIALIZED (
+          SELECT allocation.open_item_id, SUM(allocation.amount) AS amount
+            FROM finance.allocations allocation
+            JOIN finance.open_items allocated_item
+              ON allocated_item.org_id=allocation.org_id
+             AND allocated_item.id=allocation.open_item_id
+             AND allocated_item.party_id IN (SELECT party_id FROM ranked)
+           WHERE allocation.org_id=:org_id
+             AND allocation.status='posted'
+             AND allocation.reversal_of_allocation_id IS NULL
+             AND NOT EXISTS (
+                 SELECT 1 FROM finance.allocations reversal
+                  WHERE reversal.org_id=allocation.org_id
+                    AND reversal.reversal_of_allocation_id=allocation.id
+             )
+           GROUP BY allocation.open_item_id
+        ), party_outstanding AS MATERIALIZED (
+          SELECT item.party_id,
+                 SUM(GREATEST(item.principal_amount-COALESCE(applied.amount,0),0))
+                   AS current_outstanding
+            FROM finance.open_items item
+            JOIN finance.accounting_events event
+              ON event.org_id=item.org_id AND event.id=item.accounting_event_id
+            LEFT JOIN sales.invoices invoice
+              ON invoice.org_id=event.org_id AND invoice.id=event.sales_invoice_id
+            LEFT JOIN effective_allocations applied
+              ON applied.open_item_id=item.id
+           WHERE item.org_id=:org_id
+             AND item.party_id IN (SELECT party_id FROM ranked)
+             AND item.item_side='receivable' AND item.status<>'reversed'
+             AND ((event.sales_invoice_id IS NOT NULL AND invoice.status='posted')
+                  OR event.opening_balance_document_id IS NOT NULL)
+           GROUP BY item.party_id
         )
         SELECT ranked.*,
                address.line1 AS address_line1, address.line2 AS address_line2,
@@ -1991,36 +2024,8 @@ def customers(limit: int = Query(100, ge=1, le=1000), skip: int = Query(0, ge=0)
                         CASE address_kind WHEN 'billing' THEN 0 WHEN 'registered' THEN 1 ELSE 2 END,
                         id LIMIT 1
           ) address ON true
-          LEFT JOIN LATERAL (
-              SELECT SUM(GREATEST(item.principal_amount-COALESCE(applied.amount,0),0))
-                         AS current_outstanding
-                FROM finance.open_items item
-                JOIN finance.accounting_events event
-                  ON event.org_id=item.org_id AND event.id=item.accounting_event_id
-                LEFT JOIN sales.invoices invoice
-                  ON invoice.org_id=event.org_id AND invoice.id=event.sales_invoice_id
-                LEFT JOIN LATERAL (
-                    SELECT SUM(allocation.amount) AS amount
-                      FROM finance.allocations allocation
-                     WHERE allocation.org_id=item.org_id
-                       AND allocation.open_item_id=item.id
-                       AND allocation.status='posted'
-                       AND allocation.reversal_of_allocation_id IS NULL
-                       AND NOT EXISTS (
-                           SELECT 1 FROM finance.allocations reversal
-                            WHERE reversal.org_id=allocation.org_id
-                              AND reversal.reversal_of_allocation_id=allocation.id
-                       )
-                ) applied ON true
-               WHERE item.org_id=:org_id
-                 AND item.item_side='receivable' AND item.status<>'reversed'
-                 AND (
-                      (invoice.customer_account_id=ranked.customer_id
-                       AND invoice.status='posted')
-                   OR (event.opening_balance_document_id IS NOT NULL
-                       AND item.party_id=ranked.party_id)
-                 )
-          ) outstanding ON true
+          LEFT JOIN party_outstanding outstanding
+            ON outstanding.party_id=ranked.party_id
          ORDER BY ranked.search_rank DESC, ranked.customer_name, ranked.customer_id
     """, parameters)
 
@@ -2350,6 +2355,39 @@ def suppliers(limit: int = Query(100, ge=1, le=1000), skip: int = Query(0, ge=0)
                   {fallback})
            ORDER BY search_rank DESC, party.legal_name, account.id
            LIMIT :limit OFFSET :skip
+        ), effective_allocations AS MATERIALIZED (
+          SELECT allocation.open_item_id, SUM(allocation.amount) AS amount
+            FROM finance.allocations allocation
+            JOIN finance.open_items allocated_item
+              ON allocated_item.org_id=allocation.org_id
+             AND allocated_item.id=allocation.open_item_id
+             AND allocated_item.party_id IN (SELECT party_id FROM ranked)
+           WHERE allocation.org_id=:org_id
+             AND allocation.status='posted'
+             AND allocation.reversal_of_allocation_id IS NULL
+             AND NOT EXISTS (
+                 SELECT 1 FROM finance.allocations reversal
+                  WHERE reversal.org_id=allocation.org_id
+                    AND reversal.reversal_of_allocation_id=allocation.id
+             )
+           GROUP BY allocation.open_item_id
+        ), party_outstanding AS MATERIALIZED (
+          SELECT item.party_id,
+                 SUM(GREATEST(item.principal_amount-COALESCE(applied.amount,0),0))
+                   AS current_outstanding
+            FROM finance.open_items item
+            JOIN finance.accounting_events event
+              ON event.org_id=item.org_id AND event.id=item.accounting_event_id
+            LEFT JOIN procurement.supplier_invoices invoice
+              ON invoice.org_id=event.org_id AND invoice.id=event.supplier_invoice_id
+            LEFT JOIN effective_allocations applied
+              ON applied.open_item_id=item.id
+           WHERE item.org_id=:org_id
+             AND item.party_id IN (SELECT party_id FROM ranked)
+             AND item.item_side='payable' AND item.status<>'reversed'
+             AND ((event.supplier_invoice_id IS NOT NULL AND invoice.status='posted')
+                  OR event.opening_balance_document_id IS NOT NULL)
+           GROUP BY item.party_id
         )
         SELECT ranked.*,
                address.line1 AS address_line1, address.line2 AS address_line2,
@@ -2365,36 +2403,8 @@ def suppliers(limit: int = Query(100, ge=1, le=1000), skip: int = Query(0, ge=0)
                         CASE address_kind WHEN 'billing' THEN 0 WHEN 'registered' THEN 1 ELSE 2 END,
                         id LIMIT 1
           ) address ON true
-          LEFT JOIN LATERAL (
-              SELECT SUM(GREATEST(item.principal_amount-COALESCE(applied.amount,0),0))
-                         AS current_outstanding
-                FROM finance.open_items item
-                JOIN finance.accounting_events event
-                  ON event.org_id=item.org_id AND event.id=item.accounting_event_id
-                LEFT JOIN procurement.supplier_invoices invoice
-                  ON invoice.org_id=event.org_id AND invoice.id=event.supplier_invoice_id
-                LEFT JOIN LATERAL (
-                    SELECT SUM(allocation.amount) AS amount
-                      FROM finance.allocations allocation
-                     WHERE allocation.org_id=item.org_id
-                       AND allocation.open_item_id=item.id
-                       AND allocation.status='posted'
-                       AND allocation.reversal_of_allocation_id IS NULL
-                       AND NOT EXISTS (
-                           SELECT 1 FROM finance.allocations reversal
-                            WHERE reversal.org_id=allocation.org_id
-                              AND reversal.reversal_of_allocation_id=allocation.id
-                       )
-                ) applied ON true
-               WHERE item.org_id=:org_id
-                 AND item.item_side='payable' AND item.status<>'reversed'
-                 AND (
-                      (invoice.supplier_account_id=ranked.supplier_id
-                       AND invoice.status='posted')
-                   OR (event.opening_balance_document_id IS NOT NULL
-                       AND item.party_id=ranked.party_id)
-                 )
-          ) outstanding ON true
+          LEFT JOIN party_outstanding outstanding
+            ON outstanding.party_id=ranked.party_id
          ORDER BY ranked.search_rank DESC, ranked.supplier_name, ranked.supplier_id
     """, parameters)
 

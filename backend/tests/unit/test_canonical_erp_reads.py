@@ -175,6 +175,8 @@ def test_party_master_outstanding_includes_posted_opening_balances() -> None:
     assert source.count("event.opening_balance_document_id IS NOT NULL") >= 2
     assert "item.item_side='receivable'" in source
     assert "item.item_side='payable'" in source
+    assert source.count("party_outstanding AS MATERIALIZED") == 2
+    assert source.count("LEFT JOIN party_outstanding outstanding") == 2
 
 
 def test_supplier_master_read_projects_the_complete_canonical_edit_contract(
