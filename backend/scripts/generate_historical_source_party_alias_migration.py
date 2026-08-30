@@ -17,8 +17,14 @@ def render() -> str:
     start = source.index(
         "CREATE FUNCTION erp_automation_commands.promote_historical_operational_batch"
     )
+    diagnostic_start = source.index(
+        "CREATE FUNCTION erp_automation_reads.historical_operational_cutover_unmatched"
+    )
+    status_start = source.index(
+        "CREATE FUNCTION erp_automation_reads.historical_operational_cutover_status"
+    )
     end = source.index("ALTER TABLE automation.historical_party_bindings OWNER")
-    functions = source[start:end]
+    functions = source[start:diagnostic_start] + source[status_start:end]
     functions = functions.replace(
         "CREATE FUNCTION erp_automation_commands.",
         "CREATE OR REPLACE FUNCTION erp_automation_commands.",
