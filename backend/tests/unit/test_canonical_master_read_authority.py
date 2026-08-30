@@ -34,6 +34,19 @@ def test_product_search_serializes_exact_decimals_as_strings() -> None:
     source = inspect.getsource(canonical_erp_reads.products)
     assert "END)::text AS gst_percent" in source
     assert "COALESCE(stock.current_stock, 0)::text AS current_stock" in source
+    assert "product.status='active'" in source
+    assert "p.status='active'" in source
+    assert "product.status IN ('active','blocked')" not in source
+    assert "p.status IN ('active','blocked')" not in source
+
+
+def test_product_batch_lookup_uses_transaction_capability_and_active_products() -> None:
+    source = inspect.getsource(canonical_erp_reads.product_batches)
+
+    assert canonical_erp_reads.PRODUCT_LOOKUP_USER in (
+        canonical_erp_reads.product_batches.__defaults__ or ()
+    )
+    assert "product.status='active'" in source
 
 
 def test_mcp_transaction_and_master_product_searches_have_distinct_lifecycle_scope() -> None:
