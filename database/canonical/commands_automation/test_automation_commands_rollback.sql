@@ -61,6 +61,11 @@ BEGIN
         'erp_automation_commands.import_historical_migration_facts(uuid,jsonb)'
       ) IS NULL THEN 0
       ELSE 1
+    END + CASE
+      WHEN pg_catalog.to_regprocedure(
+        'erp_automation_commands.promote_historical_operational_batch(uuid,character varying,integer)'
+      ) IS NULL THEN 0
+      ELSE 1
     END;
     IF runtime_count<>expected_runtime_count THEN
         RAISE EXCEPTION 'expected % reviewed runtime automation commands, found %',expected_runtime_count,runtime_count;
@@ -91,7 +96,8 @@ BEGIN
                                      'resolve_expense_claim_prepare','persist_expense_claim_prepare',
                                      'approve_expense_claim_command','execute_approved_expense_claim',
                                      'create_invoice_draft','update_invoice_draft',
-                                     'abandon_invoice_draft','import_historical_migration_facts')
+                                     'abandon_invoice_draft','import_historical_migration_facts',
+                                     'promote_historical_operational_batch')
        AND (pg_catalog.has_function_privilege('erp_runtime',procedure.oid,'EXECUTE')
             OR pg_catalog.has_function_privilege('erp_app',procedure.oid,'EXECUTE')
             OR pg_catalog.has_function_privilege('public',procedure.oid,'EXECUTE'));
