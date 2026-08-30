@@ -26,6 +26,7 @@
       "backend/alembic"
     ],
     "unreachable_sources": [
+      "database/canonical/operations/automation/historical_operational_cutover.sql",
       "database/canonical/commands_tax_provider/tax-provider-commands.sql",
       "database/canonical/ci/bootstrap_supabase_auth.sql",
       "database/canonical/platform/trigger-foundations.sql"
@@ -45,6 +46,7 @@
     {
       "id": "canonical-generated-contract-inputs",
       "paths": [
+        "database/canonical/operations/automation/historical_operational_cutover.sql",
         "database/canonical/commands_tax_provider/tax-provider-commands.sql",
         "database/canonical/platform/trigger-foundations.sql"
       ],

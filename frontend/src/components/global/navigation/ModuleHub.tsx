@@ -401,7 +401,7 @@ const ModuleHub: React.FC<ModuleHubProps> = ({
       </div>
 
       {/* Main Content Area — scaled to 90% for compact, information-dense UI */}
-      <div className="h-full flex-1 overflow-hidden md:[zoom:0.9]">
+      <div className="h-full min-h-0 min-w-0 flex-1 overflow-hidden md:[zoom:0.9]">
         {renderModule()}
       </div>
     </div>

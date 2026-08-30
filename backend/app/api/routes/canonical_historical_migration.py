@@ -159,6 +159,36 @@ class HistoricalImportResponse(BaseModel):
     accepted: int = Field(ge=1)
 
 
+class OperationalCutoverRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    dataset_id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$")
+    batch_size: int = Field(default=500, ge=1, le=500)
+    confirmation: str = Field(min_length=16, max_length=320)
+
+
+class OperationalCutoverResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    parties_promoted: int = Field(ge=0)
+    parties_bound: int = Field(ge=0)
+    parties_remaining: int = Field(ge=0)
+    openings_promoted: int = Field(ge=0)
+    openings_remaining: int = Field(ge=0)
+    complete: bool
+
+
+class OperationalCutoverStatus(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_parties: int = Field(ge=0)
+    bound_parties: int = Field(ge=0)
+    source_openings: int = Field(ge=0)
+    posted_openings: int = Field(ge=0)
+    receivable: MoneyJSON
+    payable: MoneyJSON
+
+
 class DocumentSummary(BaseModel):
     model_config = ConfigDict(extra="forbid")
     invoice_count: int = Field(ge=0)
@@ -329,6 +359,60 @@ def import_historical_facts(
             raise HTTPException(status_code=409, detail=detail) from exc
         raise HTTPException(status_code=422, detail="Historical import batch was rejected") from exc
     return HistoricalImportResponse.model_validate(result)
+
+
+@router.post("/operational-cutover", response_model=OperationalCutoverResponse)
+def promote_historical_operational_batch(
+    request: OperationalCutoverRequest,
+    user: dict[str, Any] = IMPORT_USER,
+    db: Session = Depends(get_db),
+):
+    """Promote one bounded, replay-safe party/opening batch into the subledger."""
+    org_id = _activate(db, user)
+    expected = f"PROMOTE-HISTORY:{org_id}:{request.dataset_id}"
+    if request.confirmation != expected:
+        raise HTTPException(status_code=409, detail="Operational cutover confirmation differs")
+    try:
+        result = db.execute(
+            text(
+                """
+                SELECT erp_automation_commands.promote_historical_operational_batch(
+                  :org_id,:dataset_id,:batch_size
+                )
+                """
+            ),
+            {
+                "org_id": org_id,
+                "dataset_id": request.dataset_id,
+                "batch_size": request.batch_size,
+            },
+        ).scalar_one()
+        db.commit()
+    except DBAPIError as exc:
+        db.rollback()
+        detail = str(getattr(exc, "orig", exc)).splitlines()[0]
+        raise HTTPException(status_code=422, detail=detail) from exc
+    return OperationalCutoverResponse.model_validate(result)
+
+
+@router.get("/operational-cutover", response_model=OperationalCutoverStatus)
+def historical_operational_cutover_status(
+    dataset_id: str = Query(pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$"),
+    user: dict[str, Any] = REPORT_USER,
+    db: Session = Depends(get_db),
+):
+    org_id = _activate(db, user)
+    result = db.execute(
+        text(
+            """
+            SELECT erp_automation_reads.historical_operational_cutover_status(
+              :org_id,:dataset_id
+            )
+            """
+        ),
+        {"org_id": org_id, "dataset_id": dataset_id},
+    ).scalar_one()
+    return OperationalCutoverStatus.model_validate(result)
 
 
 @router.get("/insights", response_model=HistoricalInsightsResponse)
