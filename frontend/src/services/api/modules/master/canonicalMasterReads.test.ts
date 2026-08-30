@@ -75,6 +75,10 @@ test('product decoder accepts UUIDv7 and keeps missing GST distinct from zero', 
   expect(decodeCanonicalProductList({ products: [base], total: 1, offset: 0, limit: 20 })
     .products[0].gst_percent).toBeNull();
   expect(decodeCanonicalProductList({
+    products: [{ ...base, status: 'draft', is_active: false, requires_prescription: null }],
+    total: 1, offset: 0, limit: 20,
+  }).products[0].requires_prescription).toBeNull();
+  expect(decodeCanonicalProductList({
     products: [{ ...base, taxability: 'taxable', gst_percent: '0.000000' }],
     total: 1, offset: 0, limit: 20,
   }).products[0].gst_percent).toBe('0.000000');

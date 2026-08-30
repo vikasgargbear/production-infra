@@ -36,6 +36,10 @@ const boolean = (value: unknown, label: string): boolean => {
   return value;
 };
 
+const nullableBoolean = (value: unknown, label: string): boolean | null => (
+  value === null ? null : boolean(value, label)
+);
+
 const integer = (value: unknown, label: string): number => {
   if (!Number.isSafeInteger(value) || Number(value) < 0) {
     throw new Error(`${label} must be a non-negative integer`);
@@ -211,7 +215,7 @@ export interface CanonicalProductRead {
   dosage_form: string | null;
   strength_display: string | null;
   packing_summary: string | null;
-  requires_prescription: boolean;
+  requires_prescription: boolean | null;
   uom_conversion_id: string | null;
   taxability: string | null;
   gst_percent: ExactDecimal | null;
@@ -239,7 +243,7 @@ const decodeCanonicalProductRows = (value: unknown): CanonicalProductRead[] => (
       dosage_form: nullableText(row.dosage_form, `${label} dosage form`),
       strength_display: nullableText(row.strength_display, `${label} strength`),
       packing_summary: nullableText(row.packing_summary, `${label} packing summary`),
-      requires_prescription: boolean(row.requires_prescription, `${label} prescription requirement`),
+      requires_prescription: nullableBoolean(row.requires_prescription, `${label} prescription requirement`),
       uom_conversion_id: row.uom_conversion_id === null
         ? null : uuid(row.uom_conversion_id, `${label} UOM conversion`),
       taxability: nullableText(row.taxability, `${label} taxability`),
