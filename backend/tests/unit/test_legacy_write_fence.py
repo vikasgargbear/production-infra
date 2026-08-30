@@ -187,6 +187,7 @@ ALLOWED_EFFECTIVE_MUTATIONS = {
     ("POST", "/api/web/evidence/customer-receipts"),
     ("POST", "/api/canonical/compliance/drug-licenses/evidence"),
     ("POST", "/api/canonical/compliance/drug-licenses"),
+    ("POST", "/api/canonical/migration-history/facts"),
     ("POST", "/api/internal/tax-provider/requests:fetch"),
     ("POST", "/api/internal/tax-provider/completions"),
     *CANONICAL_MASTER_WRITES,

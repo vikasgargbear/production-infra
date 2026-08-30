@@ -83,11 +83,11 @@ def _catalog(authority) -> CatalogSnapshot:
 def test_reset_authority_classifies_exact_head_relation_sets() -> None:
     authority = load_reset_authority()
 
-    assert len(authority.canonical_relations) == 121
+    assert len(authority.canonical_relations) == 122
     assert len(authority.alembic_schemas) == 30
     assert authority.preserved_seed_relations == tuple(sorted(PRESERVED_SEED_RELATIONS))
     assert len(authority.preserved_seed_relations) == 5
-    assert len(authority.reset_relations) == 116
+    assert len(authority.reset_relations) == 117
     assert authority.ephemeral_scope_relations == tuple(
         sorted(EPHEMERAL_SCOPE_RELATIONS)
     )
