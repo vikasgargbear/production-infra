@@ -812,8 +812,8 @@ def products(limit: int = Query(50, ge=1, le=200), skip: int = Query(0, ge=0),
         return db.execute(text(f"""
             SELECT COUNT(*) FROM catalog.products product
              WHERE product.org_id=:org_id
-               AND (product.status IN ('active','blocked')
-                    OR (:include_drafts AND product.status='draft'))
+               AND (product.status='active'
+                    OR (:include_drafts AND product.status IN ('draft','blocked')))
                AND (
                  :search='' OR pg_catalog.lower(product.name)=:search
                  OR pg_catalog.lower(product.name) LIKE :prefix
@@ -890,7 +890,8 @@ def products(limit: int = Query(50, ge=1, le=200), skip: int = Query(0, ge=0),
                  END AS search_rank
             FROM catalog.products p
            WHERE p.org_id=:org_id
-             AND (p.status IN ('active','blocked') OR (:include_drafts AND p.status='draft'))
+             AND (p.status='active'
+                  OR (:include_drafts AND p.status IN ('draft','blocked')))
              AND (
                :search='' OR pg_catalog.lower(p.name)=:search
                OR pg_catalog.lower(p.name) LIKE :prefix
@@ -1563,7 +1564,7 @@ def products_with_batches(
 @router.get("/products/{product_id}/batches")
 def product_batches(
     product_id: UUID,
-    user: dict = INVENTORY_USER,
+    user: dict = PRODUCT_LOOKUP_USER,
     db: Session = Depends(get_db),
 ):
     org_id = _activate(db, user)
@@ -1597,6 +1598,7 @@ def product_batches(
           FROM inventory.batches batch
           JOIN catalog.products product
             ON product.org_id=batch.org_id AND product.id=batch.product_id
+           AND product.status='active'
           JOIN core.organizations organization
             ON organization.id=batch.org_id AND organization.status='active'
           CROSS JOIN LATERAL (

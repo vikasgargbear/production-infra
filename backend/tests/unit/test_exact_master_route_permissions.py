@@ -366,6 +366,7 @@ def test_every_foundation_route_uses_its_exact_capability_dependency() -> None:
     product_lookup_routes = (
         canonical_erp_reads.products,
         canonical_erp_reads.products_with_batches,
+        canonical_erp_reads.product_batches,
     )
     product_admin_routes = (
         canonical_erp_reads.product_setup_options,
