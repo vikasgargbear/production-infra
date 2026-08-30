@@ -41,7 +41,8 @@ BEGIN
                                  'resolve_expense_claim_prepare','persist_expense_claim_prepare',
                                  'approve_expense_claim_command','execute_approved_expense_claim',
                                  'create_invoice_draft','update_invoice_draft',
-                                 'abandon_invoice_draft','import_historical_migration_facts')
+                                 'abandon_invoice_draft','import_historical_migration_facts',
+                                 'promote_historical_operational_batch')
        AND pg_catalog.has_function_privilege('erp_runtime',procedure.oid,'EXECUTE');
     expected_runtime_count:=CASE
       WHEN pg_catalog.to_regprocedure(
