@@ -10,7 +10,7 @@ import {
   type ProductMutationResponse, type ProductSetupInput, type ProductSetupOptions,
 } from '../../../types/models/product';
 import type { CanonicalProductRead } from '../../../services/api/modules/master/canonicalMasterReads';
-import { newMasterCreateIdempotencyKey, newProductActivationIdempotencyKey } from '../../../services/api/modules/master/masterCreationContract';
+import { newMasterCreateIdempotencyKey, newProductActivationIdempotencyKey, newProductSetupIdempotencyKey } from '../../../services/api/modules/master/masterCreationContract';
 import {
   notationFromPackConversions, packConversionsFromNotation, parsePackNotation, parseSingleStrength,
 } from './packNotation';
@@ -65,6 +65,7 @@ const ProductFlow: React.FC<ProductFlowProps> = ({ open, show, product, onClose,
   const manufacturerNameRef = useRef<HTMLInputElement>(null);
   const categoryNameRef = useRef<HTMLInputElement>(null);
   const createKeyRef = useRef(newMasterCreateIdempotencyKey('product'));
+  const setupKeyRef = useRef(newProductSetupIdempotencyKey());
   const activationKeyRef = useRef(newProductActivationIdempotencyKey());
   const manufacturerCreateKeyRef = useRef(newMasterCreateIdempotencyKey('manufacturer'));
   const categoryCreateKeyRef = useRef(newMasterCreateIdempotencyKey('category'));
@@ -202,7 +203,10 @@ const ProductFlow: React.FC<ProductFlowProps> = ({ open, show, product, onClose,
         strength_uom_code: row.strength_uom_code, basis_quantity: Number(row.basis_quantity), basis_uom_code: row.basis_uom_code } : {}) })) : [],
   });
   const saveSetup = async (productId: string, rowVersion: number) => {
-    const response = await productsApi.saveSetup(productId, setupPayload(rowVersion));
+    const response = await productsApi.saveSetup(
+      productId, setupPayload(rowVersion), setupKeyRef.current,
+    );
+    setupKeyRef.current = newProductSetupIdempotencyKey();
     setWorking(current => ({ ...current, row_version: response.data.row_version }));
     await loadSetup(productId); return response.data;
   };

@@ -120,10 +120,15 @@ export const productsApi = {
     `/products/${productId}/setup`,
   ),
 
-  saveSetup: (productId: number | string, data: ProductSetupInput) => (
+  saveSetup: (
+    productId: number | string,
+    data: ProductSetupInput,
+    idempotencyKey: string,
+  ) => (
     apiHelpers.put<ProductMutationResponse>(
       `/products/${productId}/setup`,
       productSetupSchema.parse(data),
+      masterCreateRequestConfig(idempotencyKey),
     )
   ),
 

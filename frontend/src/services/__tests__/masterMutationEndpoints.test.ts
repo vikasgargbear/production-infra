@@ -111,7 +111,7 @@ describe('canonical master mutation endpoints', () => {
       cold_chain_required: false,
       pack_conversions: [],
       ingredients: [],
-    });
+    }, 'erp-web-master-product-setup:66666666-6666-4666-8666-666666666666');
     productsApi.delete(productId, 3);
     (apiHelpers.post as jest.Mock).mockReset()
       .mockResolvedValueOnce({ data: {
@@ -157,7 +157,7 @@ describe('canonical master mutation endpoints', () => {
       cold_chain_required: false,
       pack_conversions: [],
       ingredients: [],
-    });
+    }, { headers: { 'X-Idempotency-Key': 'erp-web-master-product-setup:66666666-6666-4666-8666-666666666666' } });
     expect(apiHelpers.delete).toHaveBeenCalledWith(`/products/${productId}`, {
       params: { row_version: 3 },
     });

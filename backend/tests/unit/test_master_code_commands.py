@@ -228,7 +228,7 @@ def test_public_create_contract_rejects_code_injection(model, payload, field) ->
 def test_routes_require_bounded_idempotency_and_use_typed_commands() -> None:
     source = Path(canonical_erp_reads.__file__).read_text(encoding="utf-8")
 
-    assert source.count('alias="X-Idempotency-Key"') == 8
+    assert source.count('alias="X-Idempotency-Key"') == 9
     assert source.count("min_length=8") >= 6
     assert source.count("max_length=128") >= 6
     for command in ("create_customer", "create_supplier", "create_product_draft"):
@@ -258,7 +258,7 @@ def test_rest_and_mcp_share_canonical_master_command_helpers() -> None:
     assert "FROM erp_master_commands.configure_product_draft(" in idempotent_setup_sql
     assert "erp_core_commands.claim(" in idempotent_setup_sql
     assert "erp_core_commands.finish_claim(" in idempotent_setup_sql
-    assert mcp_source.count("erp_master_commands.") == 1
+    assert mcp_source.count("erp_master_commands.") == 0
     assert "erp_master_commands.create_product_draft" not in mcp_source
     assert "erp_master_commands.configure_product_draft(" not in mcp_source
     assert "INSERT INTO catalog.products" not in mcp_source

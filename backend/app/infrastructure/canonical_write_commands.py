@@ -131,21 +131,25 @@ def delete_product_draft(
     )
 
 
-def configure_product_draft(db: Session, **parameters: Any) -> dict[str, Any]:
-    """Replace the complete unused-draft setup through one database owner."""
+def configure_product_draft_idempotent(
+    db: Session, **parameters: Any
+) -> dict[str, Any]:
+    """Replace one unused-draft setup with replay-safe command ownership."""
 
     return dict(
         db.execute(
             text(
                 """
-                SELECT product_id,product_code,product_name,new_row_version
-                  FROM erp_master_commands.configure_product_draft(
+                SELECT product_id,product_code,product_name,new_row_version,
+                       idempotency_replayed
+                  FROM erp_master_commands.configure_product_draft_idempotent(
                     :org_id,:product_id,:expected_row_version,:category_id,
                     :manufacturer_party_id,:base_uom_code,:dosage_form,
                     :strength_display,:hsn_code,:cold_chain_required,
                     :minimum_storage_celsius,:maximum_storage_celsius,
                     :shelf_life_days,:gtin,
-                    CAST(:pack_conversions AS jsonb),CAST(:ingredients AS jsonb)
+                    CAST(:pack_conversions AS jsonb),CAST(:ingredients AS jsonb),
+                    :idempotency_key_hash,transaction_timestamp()+interval '24 hours'
                   )
                 """
             ),

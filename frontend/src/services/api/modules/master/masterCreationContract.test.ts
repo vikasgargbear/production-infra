@@ -4,6 +4,7 @@ import {
   decodeCanonicalSupplierCreateResponse,
   masterCreateRequestConfig,
   newMasterCreateIdempotencyKey,
+  newProductSetupIdempotencyKey,
 } from './masterCreationContract';
 
 const ids = {
@@ -29,6 +30,14 @@ describe('backend-generated master identity contract', () => {
   it('rejects malformed or unbounded attempt identities', () => {
     expect(() => masterCreateRequestConfig('customer:1')).toThrow();
     expect(() => masterCreateRequestConfig(`erp-web-master-customer-create:${'a'.repeat(200)}`)).toThrow();
+  });
+
+  it('creates a replay-safe product setup attempt identity', () => {
+    const key = newProductSetupIdempotencyKey();
+    expect(key).toMatch(/^erp-web-master-product-setup:[0-9a-f-]{36}$/i);
+    expect(masterCreateRequestConfig(key)).toEqual({
+      headers: { 'X-Idempotency-Key': key },
+    });
   });
 
   it('requires canonical UUIDs and generated codes in party responses', () => {
