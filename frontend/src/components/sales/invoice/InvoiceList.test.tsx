@@ -5,6 +5,11 @@ import { canonicalDocumentHistoryApi } from '../../../services/api';
 
 jest.mock('../../../services/api', () => ({
   canonicalDocumentHistoryApi: { get: jest.fn() },
+  reportingApi: {
+    getHistoricalInvoices: jest.fn().mockResolvedValue({
+      data: { total: 0, offset: 0, limit: 50, items: [] },
+    }),
+  },
 }));
 
 jest.mock('../../global', () => ({
@@ -27,6 +32,10 @@ jest.mock('./invoicelist/components/InvoiceTable', () => ({
   InvoiceTable: ({ invoices }: any) => (
     <div>{invoices.map((invoice: any) => invoice.invoice_number).join(',')}</div>
   ),
+}));
+
+jest.mock('./invoicelist/components/ImportedInvoiceArchive', () => ({
+  ImportedInvoiceArchive: () => <div>Existing invoice history</div>,
 }));
 
 const deferred = <T,>() => {
@@ -61,6 +70,7 @@ test('cancels pending debounce work and ignores an older in-flight response', as
     .mockReturnValueOnce(newRequest.promise);
 
   render(<InvoiceList />);
+  fireEvent.click(screen.getByRole('button', { name: 'New ERP Invoices' }));
   await act(async () => undefined);
 
   fireEvent.change(screen.getByLabelText('history search'), { target: { value: 'old' } });
@@ -77,4 +87,11 @@ test('cancels pending debounce work and ignores an older in-flight response', as
   expect(canonicalDocumentHistoryApi.get).toHaveBeenLastCalledWith(expect.objectContaining({ search: 'new' }));
 
   jest.useRealTimers();
+});
+
+test('opens existing business invoice history by default', () => {
+  render(<InvoiceList />);
+
+  expect(screen.getByRole('button', { name: 'Existing Invoices' }).getAttribute('aria-pressed')).toBe('true');
+  expect(screen.getByText('Existing invoice history')).toBeTruthy();
 });
