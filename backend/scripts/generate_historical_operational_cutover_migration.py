@@ -8,7 +8,10 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-SOURCE = ROOT / "database/canonical/operations/automation/historical_operational_cutover.sql"
+SOURCE = (
+    ROOT
+    / "backend/alembic/source_snapshots/20260830_0067_historical_operational_cutover.sql"
+)
 TARGET = ROOT / "backend/alembic/sql/20260830_0067_historical_operational_cutover.sql"
 
 
