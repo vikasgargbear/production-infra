@@ -500,7 +500,8 @@ class CanonicalImportClient:
         body: Mapping[str, Any] | None = None,
         idempotency_key: str | None = None,
         expected_statuses: Iterable[int] = (200,),
-    ) -> dict[str, Any]:
+        allow_list: bool = False,
+    ) -> dict[str, Any] | list[Any]:
         headers = {"X-Idempotency-Key": idempotency_key} if idempotency_key else None
         try:
             response = self._client.request(method, path, json=body, headers=headers)
@@ -514,7 +515,7 @@ class CanonicalImportClient:
             value = response.json()
         except ValueError as exc:
             raise CanonicalImportError("Canonical operation returned non-JSON") from exc
-        if not isinstance(value, dict):
+        if not isinstance(value, dict) and not (allow_list and isinstance(value, list)):
             raise CanonicalImportError("Canonical operation returned an invalid body")
         return value
 
@@ -580,11 +581,26 @@ class CanonicalImportClient:
             raise CanonicalImportError(
                 f"Operation {operation.operation_id} readback path is invalid"
             )
-        response = self._request_json("GET", path, expected_statuses=(200,))
+        response = self._request_json(
+            "GET", path, expected_statuses=(200,), allow_list=True
+        )
         expected = operation.readback.get("expected", {})
-        if not isinstance(expected, dict) or any(
-            response.get(key) != value for key, value in expected.items()
-        ):
+        if not isinstance(expected, dict):
+            raise CanonicalImportError(f"Operation {operation.operation_id} readback differs")
+        if isinstance(response, list):
+            matches = [
+                item
+                for item in response
+                if isinstance(item, dict)
+                and item.get(field) == resource_id
+                and all(item.get(key) == value for key, value in expected.items())
+            ]
+            if len(matches) != 1:
+                raise CanonicalImportError(
+                    f"Operation {operation.operation_id} readback differs"
+                )
+            return
+        if any(response.get(key) != value for key, value in expected.items()):
             raise CanonicalImportError(f"Operation {operation.operation_id} readback differs")
 
 

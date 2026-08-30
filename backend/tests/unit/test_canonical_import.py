@@ -15,6 +15,7 @@ from migration_support.canonical_import import (
     CANDIDATE_BUNDLE_VERSION,
     CanonicalImportClient,
     CanonicalImportError,
+    ImportOperation,
     apply_bundle,
     audit_candidate_manifest,
     build_plan,
@@ -259,6 +260,31 @@ def test_apply_runs_independent_phase_operations_concurrently(tmp_path: Path) ->
 
     assert receipt["complete"] is True
     assert maximum_active > 1
+
+
+def test_reconcile_accepts_legacy_list_only_for_exact_created_resource() -> None:
+    operation = ImportOperation.from_json(_product_operation(), line_number=1)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json=[
+                {"product_id": PRODUCT_ID, "product_name": "Reviewed product"}
+            ],
+        )
+
+    client = CanonicalImportClient(
+        "https://api.example.test", "token", transport=httpx.MockTransport(handler)
+    )
+    try:
+        client.reconcile(operation, {"product_id": PRODUCT_ID})
+        with pytest.raises(CanonicalImportError, match="readback differs"):
+            client.reconcile(
+                operation,
+                {"product_id": "99999999-9999-4999-8999-999999999999"},
+            )
+    finally:
+        client.close()
 
 
 def test_apply_refuses_token_for_another_organization(tmp_path: Path) -> None:
