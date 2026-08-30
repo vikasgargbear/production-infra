@@ -759,6 +759,7 @@ def _master_search_parameters(value: Optional[str]) -> dict[str, Any]:
 def products(limit: int = Query(50, ge=1, le=200), skip: int = Query(0, ge=0),
              offset: Optional[int] = Query(None, ge=0),
              search: str = Query("", max_length=100), include_inactive: bool = False,
+             origin: Literal["all", "imported", "created_in_erp"] = "all",
              user: dict = PRODUCT_LOOKUP_USER, db: Session = Depends(get_db)):
     _require_operational_lookup_bound(
         user,
@@ -772,6 +773,7 @@ def products(limit: int = Query(50, ge=1, le=200), skip: int = Query(0, ge=0),
         **_master_search_parameters(search if isinstance(search, str) else ""),
         "org_id": org_id,
         "include_drafts": include_inactive,
+        "origin": origin,
         "limit": limit,
         "skip": effective_offset,
     }
@@ -814,6 +816,8 @@ def products(limit: int = Query(50, ge=1, le=200), skip: int = Query(0, ge=0),
              WHERE product.org_id=:org_id
                AND (product.status='active'
                     OR (:include_drafts AND product.status IN ('draft','blocked')))
+               AND (:origin='all' OR (:origin='imported')=
+                 erp_automation_reads.is_historical_product(product.org_id,product.id))
                AND (
                  :search='' OR pg_catalog.lower(product.name)=:search
                  OR pg_catalog.lower(product.name) LIKE :prefix
@@ -892,6 +896,8 @@ def products(limit: int = Query(50, ge=1, le=200), skip: int = Query(0, ge=0),
            WHERE p.org_id=:org_id
              AND (p.status='active'
                   OR (:include_drafts AND p.status IN ('draft','blocked')))
+             AND (:origin='all' OR (:origin='imported')=
+               erp_automation_reads.is_historical_product(p.org_id,p.id))
              AND (
                :search='' OR pg_catalog.lower(p.name)=:search
                OR pg_catalog.lower(p.name) LIKE :prefix
@@ -919,6 +925,9 @@ def products(limit: int = Query(50, ge=1, le=200), skip: int = Query(0, ge=0),
                CASE WHEN p.status='draft' AND p.hsn_code='0000' THEN NULL ELSE p.hsn_code END AS hsn_code,
                p.dosage_form, p.strength_display, p.drug_schedule,
                p.requires_prescription, p.cold_chain_required,
+               p.setup_review_required,
+               CASE WHEN erp_automation_reads.is_historical_product(p.org_id,p.id)
+                 THEN 'imported' ELSE 'created_in_erp' END AS origin,
                p.status='active' AS is_active, p.status, p.row_version,
                p.created_at, p.updated_at,
                COALESCE(stock.current_stock, 0)::text AS current_stock
@@ -1465,7 +1474,8 @@ def delete_product_draft(
 @router.get("/products/search-with-batches")
 def products_with_batches(
     page: int = Query(1, ge=1), page_size: int = Query(100, ge=1, le=500),
-    q: str = "", user: dict = PRODUCT_LOOKUP_USER, db: Session = Depends(get_db),
+    q: str = "", origin: Literal["all", "imported", "created_in_erp"] = "all",
+    user: dict = PRODUCT_LOOKUP_USER, db: Session = Depends(get_db),
 ):
     _require_operational_lookup_bound(
         user,
@@ -1485,6 +1495,9 @@ def products_with_batches(
                      WHEN tax_version.taxability='taxable' THEN tax_version.igst_rate
                      ELSE 0 END)::text AS gst_percent,
                product.status='active' AS is_active,
+               product.setup_review_required,
+               CASE WHEN erp_automation_reads.is_historical_product(product.org_id,product.id)
+                 THEN 'imported' ELSE 'created_in_erp' END AS origin,
                COALESCE(batch_data.batches, '[]'::jsonb) AS batches,
                COALESCE(batch_data.total_quantity_available, 0)::text AS total_quantity_available
           FROM catalog.products product
@@ -1538,17 +1551,23 @@ def products_with_batches(
                  AND batch.status IN ('released','blocked')
           ) batch_data ON true
          WHERE product.org_id=:org_id AND product.status IN ('active','blocked')
+           AND (:origin='all' OR (:origin='imported')=
+             erp_automation_reads.is_historical_product(product.org_id,product.id))
            AND (:search='' OR product.name ILIKE :pattern OR product.sku ILIKE :pattern)
          ORDER BY product.name, product.id LIMIT :limit OFFSET :offset
-    """, {"org_id": org_id, "search": q.strip(), "pattern": f"%{q.strip()}%",
+    """, {"org_id": org_id, "origin": origin,
+            "search": q.strip(), "pattern": f"%{q.strip()}%",
             "limit": page_size, "offset": offset})
     total = db.execute(text("""
         SELECT COUNT(*)
           FROM catalog.products product
          WHERE product.org_id=:org_id AND product.status IN ('active','blocked')
+           AND (:origin='all' OR (:origin='imported')=
+             erp_automation_reads.is_historical_product(product.org_id,product.id))
            AND (:search='' OR product.name ILIKE :pattern OR product.sku ILIKE :pattern)
     """), {
         "org_id": org_id,
+        "origin": origin,
         "search": q.strip(),
         "pattern": f"%{q.strip()}%",
     }).scalar_one()

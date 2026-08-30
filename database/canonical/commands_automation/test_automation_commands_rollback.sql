@@ -42,7 +42,8 @@ BEGIN
                                  'approve_expense_claim_command','execute_approved_expense_claim',
                                  'create_invoice_draft','update_invoice_draft',
                                  'abandon_invoice_draft','import_historical_migration_facts',
-                                 'promote_historical_operational_batch')
+                                 'promote_historical_operational_batch',
+                                 'promote_historical_product_inventory_batch')
        AND pg_catalog.has_function_privilege('erp_runtime',procedure.oid,'EXECUTE');
     expected_runtime_count:=CASE
       WHEN pg_catalog.to_regprocedure(
@@ -65,6 +66,11 @@ BEGIN
     END + CASE
       WHEN pg_catalog.to_regprocedure(
         'erp_automation_commands.promote_historical_operational_batch(uuid,character varying,integer)'
+      ) IS NULL THEN 0
+      ELSE 1
+    END + CASE
+      WHEN pg_catalog.to_regprocedure(
+        'erp_automation_commands.promote_historical_product_inventory_batch(uuid,character varying,uuid,integer)'
       ) IS NULL THEN 0
       ELSE 1
     END;
@@ -98,7 +104,8 @@ BEGIN
                                      'approve_expense_claim_command','execute_approved_expense_claim',
                                      'create_invoice_draft','update_invoice_draft',
                                      'abandon_invoice_draft','import_historical_migration_facts',
-                                     'promote_historical_operational_batch')
+                                     'promote_historical_operational_batch',
+                                     'promote_historical_product_inventory_batch')
        AND (pg_catalog.has_function_privilege('erp_runtime',procedure.oid,'EXECUTE')
             OR pg_catalog.has_function_privilege('erp_app',procedure.oid,'EXECUTE')
             OR pg_catalog.has_function_privilege('public',procedure.oid,'EXECUTE'));
