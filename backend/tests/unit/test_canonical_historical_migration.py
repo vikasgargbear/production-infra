@@ -235,7 +235,7 @@ def test_operational_cutover_is_hash_bound_typed_and_replay_safe() -> None:
     sql_path = ROOT / "alembic/sql/20260830_0067_historical_operational_cutover.sql"
     source_path = (
         ROOT.parent
-        / "database/canonical/operations/automation/historical_operational_cutover.sql"
+        / "backend/alembic/source_snapshots/20260830_0067_historical_operational_cutover.sql"
     )
     source = version.read_text(encoding="utf-8")
     sql = sql_path.read_text(encoding="utf-8")
@@ -253,3 +253,24 @@ def test_operational_cutover_is_hash_bound_typed_and_replay_safe() -> None:
     assert "phone_value ~ '^[0-9]{10}$'" in sql
     assert "opening_balance_equity" in sql
     assert "GRANT EXECUTE ON FUNCTION erp_automation_commands.promote_historical_operational_batch" in sql
+
+
+def test_archive_only_party_cutover_correction_is_hash_bound_and_fail_closed() -> None:
+    version = ROOT / "alembic/versions/20260830_0068_historical_archive_party_cutover.py"
+    sql_path = ROOT / "alembic/sql/20260830_0068_historical_archive_party_cutover.sql"
+    source_path = (
+        ROOT.parent
+        / "database/canonical/operations/automation/historical_operational_cutover.sql"
+    )
+    source = version.read_text(encoding="utf-8")
+    sql = sql_path.read_text(encoding="utf-8")
+    digest = hashlib.sha256(sql.encode("utf-8")).hexdigest()
+
+    assert digest in source
+    current_source = source_path.read_text(encoding="utf-8")
+    assert current_source.count("payload->>'selection_state'='archive-only'") == 3
+    assert sql.count("payload->>'selection_state'='archive-only'") == 3
+    assert "CREATE OR REPLACE FUNCTION erp_automation_commands.promote_historical_operational_batch" in sql
+    assert "CREATE OR REPLACE FUNCTION erp_automation_reads.historical_operational_cutover_status" in sql
+    assert "fact.selection_state<>'quarantined'" in sql
+    assert "payload->>'selection_state'='quarantined'" not in sql

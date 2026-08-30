@@ -33,6 +33,7 @@ def _fact(
     party_name: str | None = None,
     event_date: str | None = None,
     amount: str | None = None,
+    selection_state: str | None = None,
 ) -> dict:
     return {
         "id": identity,
@@ -47,7 +48,9 @@ def _fact(
         # Deliberately reproduce the old projection defect.  The reviewed
         # payload remains authoritative for Dr/Cr normalization at cutover.
         "side": "payable" if kind == "opening_item" else None,
-        "selection_state": "staged" if kind == "opening_item" else "archive-only",
+        "selection_state": selection_state or (
+            "staged" if kind == "opening_item" else "archive-only"
+        ),
         "payload": payload,
         "row_sha256": hashlib.sha256(record_key.encode("utf-8")).hexdigest(),
     }
@@ -118,8 +121,28 @@ def main() -> None:
                 ),
                 _fact(
                     "ed000000-0000-7000-8000-000000000032", "party", "customer:source-new",
-                    {"source_party_id": "source-new", "party_role": "customer", "primary_phone": ""},
+                    {
+                        "source_party_id": "source-new",
+                        "party_role": "customer",
+                        "primary_phone": "",
+                        "selection_state": "archive-only",
+                    },
                     party_key="source-new", party_name="Historical Missing Phone",
+                    # Reproduce the live import projection: the top-level state
+                    # was quarantined even though the retained review payload
+                    # explicitly approved an archive-only party identity.
+                    selection_state="quarantined",
+                ),
+                _fact(
+                    "ed000000-0000-7000-8000-000000000035", "party", "customer:blocked",
+                    {
+                        "source_party_id": "blocked",
+                        "party_role": "customer",
+                        "primary_phone": "",
+                        "selection_state": "quarantined",
+                    },
+                    party_key="blocked", party_name="Genuinely Quarantined Party",
+                    selection_state="quarantined",
                 ),
                 _fact(
                     "ed000000-0000-7000-8000-000000000033", "opening_item", "open-dr",
@@ -135,7 +158,7 @@ def main() -> None:
             imported = connection.execute(text(
                 "SELECT erp_automation_commands.import_historical_migration_facts(:org,CAST(:facts AS jsonb))"
             ), {"org": fixture.ORG_A, "facts": json.dumps(facts)}).scalar_one()
-            assert imported == {"inserted": 4, "replayed": 0, "accepted": 4}
+            assert imported == {"inserted": 5, "replayed": 0, "accepted": 5}
 
             result = connection.execute(text(
                 "SELECT erp_automation_commands.promote_historical_operational_batch(:org,:dataset,10)"

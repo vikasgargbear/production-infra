@@ -275,9 +275,7 @@ BEGIN
     LEFT JOIN automation.historical_party_bindings binding
       ON binding.org_id=fact.org_id AND binding.source_fact_id=fact.id
    WHERE fact.org_id=organization_id AND fact.dataset_id=reviewed_dataset_id
-     AND fact.source_kind='party'
-     AND (fact.selection_state<>'quarantined'
-          OR fact.payload->>'selection_state'='archive-only')
+     AND fact.source_kind='party' AND fact.selection_state<>'quarantined'
      AND binding.source_fact_id IS NULL
    ORDER BY fact.id LIMIT batch_size
   LOOP
@@ -370,9 +368,7 @@ BEGIN
     LEFT JOIN automation.historical_party_bindings binding
       ON binding.org_id=fact.org_id AND binding.source_fact_id=fact.id
    WHERE fact.org_id=organization_id AND fact.dataset_id=reviewed_dataset_id
-     AND fact.source_kind='party'
-     AND (fact.selection_state<>'quarantined'
-          OR fact.payload->>'selection_state'='archive-only')
+     AND fact.source_kind='party' AND fact.selection_state<>'quarantined'
      AND binding.source_fact_id IS NULL;
 
   IF parties_remaining=0 THEN
@@ -506,11 +502,7 @@ DECLARE result jsonb;
 BEGIN
   PERFORM erp_core_commands.assert_context(organization_id,NULL,NULL::uuid);
   SELECT pg_catalog.jsonb_build_object(
-    'source_parties',count(*) FILTER (
-      WHERE fact.source_kind='party'
-        AND (fact.selection_state<>'quarantined'
-             OR fact.payload->>'selection_state'='archive-only')
-    ),
+    'source_parties',count(*) FILTER (WHERE fact.source_kind='party' AND fact.selection_state<>'quarantined'),
     'bound_parties',(SELECT count(*) FROM automation.historical_party_bindings binding
       WHERE binding.org_id=organization_id AND binding.dataset_id=reviewed_dataset_id),
     'source_openings',count(*) FILTER (WHERE fact.source_kind='opening_item' AND fact.selection_state<>'quarantined'),
@@ -546,3 +538,4 @@ GRANT EXECUTE ON FUNCTION erp_automation_commands.promote_historical_operational
   TO erp_runtime;
 GRANT EXECUTE ON FUNCTION erp_automation_reads.historical_operational_cutover_status(uuid,varchar)
   TO erp_runtime;
+
