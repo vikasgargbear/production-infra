@@ -287,6 +287,42 @@ def test_reconcile_accepts_legacy_list_only_for_exact_created_resource() -> None
         client.close()
 
 
+def test_historical_batch_uses_bounded_path_and_exact_response_readback() -> None:
+    operation = _product_operation()
+    operation.update(
+        {
+            "operation_id": "historical-sales-batch-1",
+            "source_record_id": "historical-sales-batch-1",
+            "path": "/api/canonical/migration-history/facts",
+            "payload": {
+                "dataset_id": "marg-history-v1",
+                "branch_id": ORG_ID,
+                "confirmation": f"IMPORT-HISTORY:{ORG_ID}:marg-history-v1",
+                "facts": [{"reviewed": True}],
+            },
+            "response_id_field": None,
+            "expected_statuses": [200],
+            "readback": {"mode": "response", "expected": {"accepted": 1}},
+        }
+    )
+    parsed = ImportOperation.from_json(operation, line_number=1)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/canonical/migration-history/facts"
+        return httpx.Response(200, json={"inserted": 1, "replayed": 0, "accepted": 1})
+
+    client = CanonicalImportClient(
+        "https://api.example.test", "token", transport=httpx.MockTransport(handler)
+    )
+    try:
+        result = client.execute(parsed)
+        client.reconcile(parsed, result)
+        with pytest.raises(CanonicalImportError, match="response readback differs"):
+            client.reconcile(parsed, {"accepted": 0})
+    finally:
+        client.close()
+
+
 def test_apply_refuses_token_for_another_organization(tmp_path: Path) -> None:
     bundle = load_import_bundle(_write_bundle(tmp_path, [_product_operation()]))
     plan = build_plan(bundle)
