@@ -161,6 +161,13 @@ def main() -> None:
             ), {"org": fixture.ORG_A, "facts": json.dumps(facts)}).scalar_one()
             assert imported == {"inserted": 5, "replayed": 0, "accepted": 5}
 
+            diagnostic = connection.execute(text(
+                "SELECT erp_automation_reads.historical_operational_cutover_unmatched(:org,:dataset,20)"
+            ), {"org": fixture.ORG_A, "dataset": DATASET}).scalar_one()
+            assert diagnostic["unmatched_openings"] == 0
+            assert diagnostic["unmatched_sample"] == []
+            assert len(diagnostic["party_sample"]) == 3
+
             result = connection.execute(text(
                 "SELECT erp_automation_commands.promote_historical_operational_batch(:org,:dataset,10)"
             ), {"org": fixture.ORG_A, "dataset": DATASET}).scalar_one()
