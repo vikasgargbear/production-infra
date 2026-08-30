@@ -25,6 +25,10 @@ def main() -> None:
         try:
             fixture._seed(connection)
             connection.exec_driver_sql('SET SESSION AUTHORIZATION "erp_runtime"')
+            connection.execute(text(
+                "SELECT pg_catalog.set_config("
+                "'app.request_id',pg_catalog.gen_random_uuid()::text,true)"
+            ))
             connection.execute(
                 text("SELECT erp_security.activate_context(:auth,:org)"),
                 {"auth": fixture.AUTH_A, "org": fixture.ORG_A},
