@@ -70,6 +70,9 @@ beforeEach(() => {
 test('only draft products expose edit and delete actions', async () => {
   render(<Products />);
 
+  expect(screen.getByTestId('products-layout')).toHaveClass('h-full', 'min-h-0', 'overflow-hidden');
+  expect(screen.getByTestId('products-scroll-region')).toHaveClass('min-h-0', 'flex-1', 'overflow-y-auto');
+
   expect(await screen.findAllByRole('button', { name: 'Edit draft Mutable draft' })).toHaveLength(2);
   expect(screen.getAllByRole('button', { name: 'Delete draft Mutable draft' })).toHaveLength(2);
   expect(screen.queryByRole('button', { name: /Released product/ })).toBeNull();

@@ -12,6 +12,9 @@ from app.api.routes.canonical_historical_migration import (
     HistoricalImportRequest,
     HistoricalInsightsResponse,
     HistoricalInvoiceArchiveResponse,
+    OperationalCutoverRequest,
+    OperationalCutoverResponse,
+    OperationalCutoverStatus,
     _wire_fact,
 )
 
@@ -109,6 +112,47 @@ def test_import_batch_is_bounded() -> None:
         )
 
 
+def test_operational_cutover_contract_is_bounded_and_exact() -> None:
+    request = OperationalCutoverRequest.model_validate(
+        {
+            "dataset_id": "marg-history-v1",
+            "batch_size": 500,
+            "confirmation": f"PROMOTE-HISTORY:{ORG_ID}:marg-history-v1",
+        }
+    )
+    assert request.batch_size == 500
+    with pytest.raises(ValidationError):
+        OperationalCutoverRequest.model_validate(
+            {
+                "dataset_id": "marg-history-v1",
+                "batch_size": 501,
+                "confirmation": "PROMOTE-HISTORY:invalid",
+            }
+        )
+    result = OperationalCutoverResponse.model_validate(
+        {
+            "parties_promoted": 1,
+            "parties_bound": 2,
+            "parties_remaining": 0,
+            "openings_promoted": 3,
+            "openings_remaining": 0,
+            "complete": True,
+        }
+    )
+    assert result.complete is True
+    status = OperationalCutoverStatus.model_validate(
+        {
+            "source_parties": 3,
+            "bound_parties": 3,
+            "source_openings": 3,
+            "posted_openings": 3,
+            "receivable": "12.30",
+            "payable": "4.50",
+        }
+    )
+    assert status.receivable == "12.30"
+
+
 def test_insight_contract_requires_exact_decimal_strings() -> None:
     payload = {
         "contract_version": "1.0.0",
@@ -184,3 +228,28 @@ def test_invoice_archive_is_a_hash_bound_runtime_read_not_direct_table_access() 
     )
     assert "SELECT erp_automation_reads.historical_sales_invoice_archive" in route
     assert "FROM automation.historical_migration_facts" not in route
+
+
+def test_operational_cutover_is_hash_bound_typed_and_replay_safe() -> None:
+    version = ROOT / "alembic/versions/20260830_0067_historical_operational_cutover.py"
+    sql_path = ROOT / "alembic/sql/20260830_0067_historical_operational_cutover.sql"
+    source_path = (
+        ROOT.parent
+        / "database/canonical/operations/automation/historical_operational_cutover.sql"
+    )
+    source = version.read_text(encoding="utf-8")
+    sql = sql_path.read_text(encoding="utf-8")
+    digest = hashlib.sha256(sql.encode("utf-8")).hexdigest()
+
+    assert digest in source
+    assert source_path.read_text(encoding="utf-8").strip() in sql
+    assert "finance.opening_balance_documents" in sql
+    assert "event_type='opening_balance'" in sql
+    assert "historical_party_bindings_source_uq" in sql
+    assert "opening_balance_documents_source_uq" in sql
+    assert "WHEN 'dr' THEN 'receivable'" in sql
+    assert "WHEN 'cr' THEN 'payable'" in sql
+    assert "primary_phone" in sql
+    assert "phone_value ~ '^[0-9]{10}$'" in sql
+    assert "opening_balance_equity" in sql
+    assert "GRANT EXECUTE ON FUNCTION erp_automation_commands.promote_historical_operational_batch" in sql

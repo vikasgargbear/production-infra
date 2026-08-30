@@ -91,23 +91,23 @@ const GlobalLayout: React.FC<GlobalLayoutProps> = ({
 
     const variants: Record<LayoutVariant, VariantConfig> = {
         default: {
-            container: 'h-full bg-gray-50',
-            inner: 'h-full flex flex-col',
-            content: 'flex-1 overflow-y-auto bg-gray-50',
+            container: 'h-full min-h-0 overflow-hidden bg-gray-50',
+            inner: 'flex h-full min-h-0 flex-col',
+            content: 'min-h-0 flex-1 overflow-y-auto bg-gray-50',
             contentInner: 'max-w-6xl mx-auto px-4 py-4 sm:px-6 sm:py-6',
             spacing: 'space-y-6'
         },
         compact: {
-            container: 'h-full bg-gray-50',
-            inner: 'h-full flex flex-col',
-            content: 'flex-1 overflow-y-auto bg-gray-50',
+            container: 'h-full min-h-0 overflow-hidden bg-gray-50',
+            inner: 'flex h-full min-h-0 flex-col',
+            content: 'min-h-0 flex-1 overflow-y-auto bg-gray-50',
             contentInner: 'max-w-6xl mx-auto px-4 py-4',
             spacing: 'space-y-4'
         },
         spacious: {
-            container: 'h-full bg-gray-50',
-            inner: 'h-full flex flex-col',
-            content: 'flex-1 overflow-y-auto bg-gray-50',
+            container: 'h-full min-h-0 overflow-hidden bg-gray-50',
+            inner: 'flex h-full min-h-0 flex-col',
+            content: 'min-h-0 flex-1 overflow-y-auto bg-gray-50',
             contentInner: 'max-w-7xl mx-auto px-8 py-8',
             spacing: 'space-y-8'
         }

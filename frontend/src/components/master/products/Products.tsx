@@ -111,8 +111,8 @@ const Products: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="border-b border-gray-200 bg-white px-6 py-4">
+    <div data-testid="products-layout" className="flex h-full min-h-0 flex-col overflow-hidden bg-gray-50">
+      <header className="shrink-0 border-b border-gray-200 bg-white px-4 py-3 sm:px-6 sm:py-4">
         <div className="mx-auto flex max-w-6xl items-center justify-between">
           <div className="flex items-center gap-3">
             <Package className="h-5 w-5 text-blue-600" />
@@ -124,7 +124,8 @@ const Products: React.FC = () => {
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-6 py-6">
+      <main data-testid="products-scroll-region" className="min-h-0 w-full flex-1 overflow-y-auto">
+       <div className="mx-auto max-w-6xl px-4 py-4 sm:px-6 sm:py-6">
         <div className="relative mb-5 max-w-md">
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
           <input aria-label="Search products by name, generic, code, barcode, manufacturer, or ingredient" disabled={!canViewProducts} value={search} onChange={event => { setSearch(event.target.value); setOffset(0); }} placeholder="Search name, salt, code, barcode or manufacturer" className="min-h-12 w-full rounded-lg border border-gray-300 py-2 pl-9 pr-3 text-base outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 disabled:bg-gray-100" />
@@ -225,6 +226,7 @@ const Products: React.FC = () => {
           {total > 0 && <div className="mt-5 flex flex-wrap items-center justify-between gap-3 text-sm text-gray-600"><p>Showing {offset + 1}–{Math.min(offset + products.length, total)} of {total} ranked results</p><div className="flex gap-2"><button type="button" disabled={offset === 0 || loading} onClick={() => setOffset(current => Math.max(0, current - 50))} className="min-h-11 rounded-lg border border-gray-300 bg-white px-4 disabled:opacity-40">Previous</button><button type="button" disabled={offset + products.length >= total || loading} onClick={() => setOffset(current => current + 50)} className="min-h-11 rounded-lg border border-gray-300 bg-white px-4 disabled:opacity-40">Next</button></div></div>}
           </>
         )}
+       </div>
       </main>
 
       {canManageProducts && editorOpen && (
