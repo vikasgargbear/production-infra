@@ -47,7 +47,8 @@ def test_dashboards_and_aging_share_the_canonical_business_clock() -> None:
     aging = inspect.getsource(canonical_erp_reads._canonical_receivable_rows)
     collections = inspect.getsource(canonical_erp_reads.canonical_collection_aging)
 
-    assert "customer.created_at AT TIME ZONE business_clock.timezone" in dashboard
+    assert "SELECT timezone FROM business_clock" in dashboard
+    assert "CROSS JOIN business_clock" not in dashboard
     for source in (dashboard, gst_dashboard, aging, collections):
         assert "current_organization_business_date" in source
     assert "business_clock.business_date-item.due_date" in aging
