@@ -146,12 +146,14 @@ def main() -> None:
                 _fact(
                     "ed000000-0000-7000-8000-000000000033", "opening_item", "open-dr",
                     {"source_party_id": "source-new", "source_reference": "OPEN-DR", "document_date": "2026-04-01", "due_date": "2026-04-15", "side": "Dr"},
-                    party_key="source-new", event_date="2026-04-15", amount="100.00",
+                    # Reproduce a projection alias: the top-level key differs,
+                    # while the retained source row owns the stable identity.
+                    party_key="projected-source-new", event_date="2026-04-15", amount="100.00",
                 ),
                 _fact(
                     "ed000000-0000-7000-8000-000000000034", "opening_item", "open-cr",
                     {"source_party_id": "source-existing", "source_reference": "OPEN-CR", "document_date": "2026-04-02", "due_date": "2026-04-16", "side": "Cr"},
-                    party_key="source-existing", event_date="2026-04-16", amount="40.00",
+                    party_key="projected-source-existing", event_date="2026-04-16", amount="40.00",
                 ),
             ]
             imported = connection.execute(text(

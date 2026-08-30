@@ -273,10 +273,6 @@ def test_archive_only_party_cutover_correction_is_hash_bound_and_fail_closed() -
 def test_referenced_party_cutover_correction_is_hash_bound_and_fail_closed() -> None:
     version = ROOT / "alembic/versions/20260830_0069_historical_referenced_party_cutover.py"
     sql_path = ROOT / "alembic/sql/20260830_0069_historical_referenced_party_cutover.sql"
-    source_path = (
-        ROOT.parent
-        / "database/canonical/operations/automation/historical_operational_cutover.sql"
-    )
     source = version.read_text(encoding="utf-8")
     sql = sql_path.read_text(encoding="utf-8")
     digest = hashlib.sha256(sql.encode("utf-8")).hexdigest()
@@ -295,6 +291,21 @@ def test_referenced_party_cutover_correction_is_hash_bound_and_fail_closed() -> 
 def test_opening_party_identity_cutover_correction_is_hash_bound_and_fail_closed() -> None:
     version = ROOT / "alembic/versions/20260830_0070_historical_opening_party_identity.py"
     sql_path = ROOT / "alembic/sql/20260830_0070_historical_opening_party_identity.sql"
+    source = version.read_text(encoding="utf-8")
+    sql = sql_path.read_text(encoding="utf-8")
+    digest = hashlib.sha256(sql.encode("utf-8")).hexdigest()
+
+    assert digest in source
+    assert sql.count("opening.party_key=fact.party_key") == 3
+    assert "AND binding.source_party_id=opening_fact.party_key;" in sql
+    assert "binding.party_role=opening_fact.payload->>'party_role'" not in sql
+    assert "CREATE OR REPLACE FUNCTION erp_automation_commands.promote_historical_operational_batch" in sql
+    assert "CREATE OR REPLACE FUNCTION erp_automation_reads.historical_operational_cutover_status" in sql
+
+
+def test_source_party_alias_cutover_correction_is_hash_bound_and_fail_closed() -> None:
+    version = ROOT / "alembic/versions/20260830_0071_historical_source_party_alias.py"
+    sql_path = ROOT / "alembic/sql/20260830_0071_historical_source_party_alias.sql"
     source_path = (
         ROOT.parent
         / "database/canonical/operations/automation/historical_operational_cutover.sql"
@@ -306,8 +317,11 @@ def test_opening_party_identity_cutover_correction_is_hash_bound_and_fail_closed
     assert digest in source
     current_source = source_path.read_text(encoding="utf-8")
     for text_value in (current_source, sql):
-        assert text_value.count("opening.party_key=fact.party_key") == 3
-        assert "AND binding.source_party_id=opening_fact.party_key;" in text_value
-        assert "binding.party_role=opening_fact.payload->>'party_role'" not in text_value
+        assert text_value.count(
+            "opening.payload->>'source_party_id'=fact.payload->>'source_party_id'"
+        ) == 3
+        assert "party_source_key:=COALESCE" in text_value
+        assert "binding.source_party_id IN (" in text_value
+        assert "SELECT binding.party_id INTO STRICT party_identifier" in text_value
     assert "CREATE OR REPLACE FUNCTION erp_automation_commands.promote_historical_operational_batch" in sql
     assert "CREATE OR REPLACE FUNCTION erp_automation_reads.historical_operational_cutover_status" in sql
