@@ -325,3 +325,20 @@ def test_source_party_alias_cutover_correction_is_hash_bound_and_fail_closed() -
         assert "SELECT binding.party_id INTO STRICT party_identifier" in text_value
     assert "CREATE OR REPLACE FUNCTION erp_automation_commands.promote_historical_operational_batch" in sql
     assert "CREATE OR REPLACE FUNCTION erp_automation_reads.historical_operational_cutover_status" in sql
+
+
+def test_historical_cutover_diagnostic_is_hash_bound_scoped_and_read_only() -> None:
+    version = ROOT / "alembic/versions/20260830_0072_historical_cutover_diagnostic.py"
+    sql_path = ROOT / "alembic/sql/20260830_0072_historical_cutover_diagnostic.sql"
+    source = version.read_text(encoding="utf-8")
+    sql = sql_path.read_text(encoding="utf-8")
+    digest = hashlib.sha256(sql.encode("utf-8")).hexdigest()
+
+    assert digest in source
+    assert "erp_core_commands.assert_context(organization_id,NULL,NULL::uuid)" in sql
+    assert "CREATE OR REPLACE FUNCTION erp_automation_reads.historical_operational_cutover_unmatched" in sql
+    assert "sample_limit NOT BETWEEN 1 AND 100" in sql
+    assert "GRANT EXECUTE ON FUNCTION" in sql
+    assert "TO erp_runtime" in sql
+    for forbidden in ("INSERT INTO", "UPDATE ", "DELETE FROM", "TRUNCATE "):
+        assert forbidden not in sql

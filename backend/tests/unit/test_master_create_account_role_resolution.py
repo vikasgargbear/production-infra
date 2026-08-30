@@ -79,4 +79,4 @@ def test_master_create_role_files_are_canonical_authority_and_deployed_head() ->
         EXPECTED_CANONICAL_ALEMBIC_HEAD,
     )
 
-    assert EXPECTED_CANONICAL_ALEMBIC_HEAD == "20260830_0071"
+    assert EXPECTED_CANONICAL_ALEMBIC_HEAD == "20260830_0072"
