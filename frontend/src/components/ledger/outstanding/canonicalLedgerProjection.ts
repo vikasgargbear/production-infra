@@ -111,7 +111,9 @@ const projectInvoice = (value: unknown, index: number): InvoiceDetail => {
     invoice_id: uuid(source.document_id, `Invoice ${index + 1} identity`),
     open_item_id: uuid(source.open_item_id, `Invoice ${index + 1} open-item identity`),
     branch_id: uuid(source.branch_id, `Invoice ${index + 1} branch identity`),
-    document_kind: source.document_kind === 'sales_invoice' || source.document_kind === 'supplier_invoice'
+    document_kind: source.document_kind === 'sales_invoice'
+      || source.document_kind === 'supplier_invoice'
+      || source.document_kind === 'opening_balance'
       ? source.document_kind : (() => { throw new Error('Document kind is invalid.'); })(),
     invoice_number: text(source.document_number, `Invoice ${index + 1} number`),
     invoice_date: calendarDate(source.document_date, `Invoice ${index + 1} date`),

@@ -38,4 +38,25 @@ describe('useEntityMaster', () => {
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(getAll).toHaveBeenCalledTimes(1);
   });
+
+  it('preserves an authoritative server total for bounded master pages', async () => {
+    const getAll = jest.fn().mockResolvedValue({
+      data: {
+        entitys: [{ entity_id: 1, entity_name: 'A', is_active: true }],
+        total: 460,
+      },
+    });
+
+    const { result } = renderHook(() => useEntityMaster<TestEntity>({
+      entityName: 'entity',
+      idField: 'entity_id',
+      nameField: 'entity_name',
+      api: { getAll },
+      searchFields: ['entity_name'],
+    }));
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.entities).toHaveLength(1);
+    expect(result.current.totalCount).toBe(460);
+  });
 });

@@ -26,7 +26,7 @@ router = APIRouter(
 )
 FINANCE_USER = Depends(PermissionChecker("finance", "view"))
 PartyType = Literal["customer", "supplier"]
-DocumentKind = Literal["sales_invoice", "supplier_invoice"]
+DocumentKind = Literal["sales_invoice", "supplier_invoice", "opening_balance"]
 AgingBucket = Literal["current", "1-30", "31-60", "61-90", "over_90"]
 
 
@@ -237,6 +237,54 @@ WITH business_clock AS MATERIALIZED (
         ON party.org_id=account.org_id AND party.id=account.party_id
      WHERE :party_type='supplier' AND invoice.org_id=:org_id
        AND invoice.status='posted'
+    UNION ALL
+    SELECT event.org_id, posting.branch_id, event.opening_balance_document_id,
+           'opening_balance'::text, account.id,
+           account.party_id, account.customer_code, account.status,
+           party.legal_name, account.credit_limit,
+           item.document_number, item.document_date
+      FROM finance.accounting_events event
+      JOIN finance.open_items item
+        ON item.org_id=event.org_id AND item.accounting_event_id=event.id
+      JOIN LATERAL (
+          SELECT line.branch_id
+            FROM finance.journal_lines line
+           WHERE line.org_id=event.org_id
+             AND line.journal_entry_id=event.journal_entry_id
+             AND line.party_id=item.party_id
+           ORDER BY line.line_number, line.id LIMIT 1
+      ) posting ON true
+      JOIN parties.customer_accounts account
+        ON account.org_id=item.org_id AND account.party_id=item.party_id
+      JOIN parties.parties party
+        ON party.org_id=account.org_id AND party.id=account.party_id
+     WHERE :party_type='customer' AND event.org_id=:org_id
+       AND event.opening_balance_document_id IS NOT NULL
+       AND item.item_side='receivable'
+    UNION ALL
+    SELECT event.org_id, posting.branch_id, event.opening_balance_document_id,
+           'opening_balance'::text, account.id,
+           account.party_id, account.supplier_code, account.status,
+           party.legal_name, NULL::numeric,
+           item.document_number, item.document_date
+      FROM finance.accounting_events event
+      JOIN finance.open_items item
+        ON item.org_id=event.org_id AND item.accounting_event_id=event.id
+      JOIN LATERAL (
+          SELECT line.branch_id
+            FROM finance.journal_lines line
+           WHERE line.org_id=event.org_id
+             AND line.journal_entry_id=event.journal_entry_id
+             AND line.party_id=item.party_id
+           ORDER BY line.line_number, line.id LIMIT 1
+      ) posting ON true
+      JOIN parties.supplier_accounts account
+        ON account.org_id=item.org_id AND account.party_id=item.party_id
+      JOIN parties.parties party
+        ON party.org_id=account.org_id AND party.id=account.party_id
+     WHERE :party_type='supplier' AND event.org_id=:org_id
+       AND event.opening_balance_document_id IS NOT NULL
+       AND item.item_side='payable'
 ), open_documents AS (
     SELECT document.org_id, document.branch_id, document.document_id,
            document.document_kind, document.party_account_id,
@@ -255,7 +303,9 @@ WITH business_clock AS MATERIALIZED (
        AND ((document.document_kind='sales_invoice'
              AND event.sales_invoice_id=document.document_id)
          OR (document.document_kind='supplier_invoice'
-             AND event.supplier_invoice_id=document.document_id))
+             AND event.supplier_invoice_id=document.document_id)
+         OR (document.document_kind='opening_balance'
+             AND event.opening_balance_document_id=document.document_id))
       JOIN finance.open_items item
         ON item.org_id=event.org_id AND item.accounting_event_id=event.id
        AND item.party_id=document.party_id

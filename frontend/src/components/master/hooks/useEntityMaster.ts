@@ -35,7 +35,7 @@ import { isForbiddenApiError } from '../../../services/api/utils/apiError';
 // ============================================================================
 
 export interface ApiResponse<T = unknown> {
-    data?: T | { data?: T } | { [key: string]: T[] };
+    data?: T | { data?: T } | Record<string, unknown>;
     success?: boolean;
     message?: string;
 }
@@ -82,6 +82,7 @@ export interface UseEntityMasterConfig<T> {
 export interface UseEntityMasterReturn<T> {
     // Data
     entities: T[];
+    totalCount: number;
     filteredEntities: T[];
     isLoading: boolean;
     error: string | null;
@@ -136,6 +137,7 @@ export function useEntityMaster<T extends { is_active?: boolean }>(
 
     // Data state
     const [entities, setEntities] = useState<T[]>([]);
+    const [totalCount, setTotalCount] = useState<number>(0);
     const [isLoading, setIsLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -190,6 +192,7 @@ export function useEntityMaster<T extends { is_active?: boolean }>(
     const loadEntities = useCallback(async (): Promise<void> => {
         if (!enabled) {
             setEntities([]);
+            setTotalCount(0);
             setError(accessDeniedMessage);
             setIsLoading(false);
             return;
@@ -212,12 +215,21 @@ export function useEntityMaster<T extends { is_active?: boolean }>(
                 : extractDataArray(response, entityName);
 
             setEntities(data);
+            const responseData = response?.data;
+            const authoritativeTotal = !Array.isArray(responseData)
+                && responseData && typeof responseData === 'object'
+                && Number.isSafeInteger((responseData as { total?: unknown }).total)
+                && ((responseData as { total: number }).total >= 0)
+                ? (responseData as { total: number }).total
+                : data.length;
+            setTotalCount(authoritativeTotal);
         } catch (err) {
             if (controller.signal.aborted || requestId !== loadRequestRef.current) return;
             setError(isForbiddenApiError(err)
                 ? accessDeniedMessage
                 : `Failed to load ${entityName}s. Please try again.`);
             setEntities([]);
+            setTotalCount(0);
         } finally {
             if (requestId === loadRequestRef.current) setIsLoading(false);
             if (loadAbortRef.current === controller) loadAbortRef.current = null;
@@ -281,6 +293,7 @@ export function useEntityMaster<T extends { is_active?: boolean }>(
     return {
         // Data
         entities,
+        totalCount,
         filteredEntities,
         isLoading,
         error,

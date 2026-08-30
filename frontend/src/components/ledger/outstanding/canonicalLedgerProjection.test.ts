@@ -50,6 +50,19 @@ test('preserves authoritative ledger money and closed-account debt', () => {
   expect(result.parties[0].invoices?.[0].current_outstanding).toBe('9007199254740993.01');
 });
 
+test('projects migrated opening balances as first-class outstanding documents', () => {
+  const opening = payload();
+  opening.parties[0].documents[0].document_kind = 'opening_balance';
+  opening.parties[0].documents[0].document_number = 'OPEN-CUST-000001';
+
+  const result = projectCanonicalLedger(opening);
+
+  expect(result.parties[0].invoices?.[0]).toEqual(expect.objectContaining({
+    document_kind: 'opening_balance',
+    invoice_number: 'OPEN-CUST-000001',
+  }));
+});
+
 test('fails closed on numeric money, missing buckets, or party-type drift', () => {
   const numeric = payload();
   numeric.summary.total_outstanding = 100 as unknown as string;

@@ -1997,10 +1997,8 @@ def customers(limit: int = Query(100, ge=1, le=1000), skip: int = Query(0, ge=0)
                 FROM finance.open_items item
                 JOIN finance.accounting_events event
                   ON event.org_id=item.org_id AND event.id=item.accounting_event_id
-                 AND event.sales_invoice_id IS NOT NULL
-                JOIN sales.invoices invoice
+                LEFT JOIN sales.invoices invoice
                   ON invoice.org_id=event.org_id AND invoice.id=event.sales_invoice_id
-                 AND invoice.customer_account_id=ranked.customer_id AND invoice.status='posted'
                 LEFT JOIN LATERAL (
                     SELECT SUM(allocation.amount) AS amount
                       FROM finance.allocations allocation
@@ -2016,6 +2014,12 @@ def customers(limit: int = Query(100, ge=1, le=1000), skip: int = Query(0, ge=0)
                 ) applied ON true
                WHERE item.org_id=:org_id
                  AND item.item_side='receivable' AND item.status<>'reversed'
+                 AND (
+                      (invoice.customer_account_id=ranked.customer_id
+                       AND invoice.status='posted')
+                   OR (event.opening_balance_document_id IS NOT NULL
+                       AND item.party_id=ranked.party_id)
+                 )
           ) outstanding ON true
          ORDER BY ranked.search_rank DESC, ranked.customer_name, ranked.customer_id
     """, parameters)
@@ -2367,10 +2371,8 @@ def suppliers(limit: int = Query(100, ge=1, le=1000), skip: int = Query(0, ge=0)
                 FROM finance.open_items item
                 JOIN finance.accounting_events event
                   ON event.org_id=item.org_id AND event.id=item.accounting_event_id
-                 AND event.supplier_invoice_id IS NOT NULL
-                JOIN procurement.supplier_invoices invoice
+                LEFT JOIN procurement.supplier_invoices invoice
                   ON invoice.org_id=event.org_id AND invoice.id=event.supplier_invoice_id
-                 AND invoice.supplier_account_id=ranked.supplier_id AND invoice.status='posted'
                 LEFT JOIN LATERAL (
                     SELECT SUM(allocation.amount) AS amount
                       FROM finance.allocations allocation
@@ -2386,6 +2388,12 @@ def suppliers(limit: int = Query(100, ge=1, le=1000), skip: int = Query(0, ge=0)
                 ) applied ON true
                WHERE item.org_id=:org_id
                  AND item.item_side='payable' AND item.status<>'reversed'
+                 AND (
+                      (invoice.supplier_account_id=ranked.supplier_id
+                       AND invoice.status='posted')
+                   OR (event.opening_balance_document_id IS NOT NULL
+                       AND item.party_id=ranked.party_id)
+                 )
           ) outstanding ON true
          ORDER BY ranked.search_rank DESC, ranked.supplier_name, ranked.supplier_id
     """, parameters)
