@@ -59,7 +59,10 @@ export const loadCustomersWithCanonicalAging = async (search = '', signal?: Abor
     : Array.isArray(responseData?.customers) ? responseData.customers : []) as Customer[];
   return {
     ...customersResponse,
-    data: customerRows.map(row => ({ ...row, outstanding_available: true })),
+    data: {
+      customers: customerRows.map(row => ({ ...row, outstanding_available: true })),
+      total: Number.isSafeInteger(responseData?.total) ? responseData.total : customerRows.length,
+    },
   };
 };
 
@@ -232,6 +235,7 @@ const CustomerMaster: React.FC = () => {
   // Use the shared hook for all CRUD operations
   const {
     entities: customers,
+    totalCount,
     filteredEntities,
     isLoading,
     error,
@@ -265,9 +269,10 @@ const CustomerMaster: React.FC = () => {
   const columns = getColumns(handleEdit).filter(column => canManageCustomers || column.key !== 'actions');
 
   // Summary stats
-  const total = customers.length;
+  const total = totalCount;
   const active = customers.filter(c => c.is_active !== false).length;
-  const inactive = total - active;
+  const hasCompletePage = total === customers.length;
+  const inactive = hasCompletePage ? total - active : null;
   const outstandingAvailable = !isLoading && !error
     && customers.every(customer => customer.outstanding_available !== false);
   const totalOutstanding = outstandingAvailable
@@ -297,10 +302,13 @@ const CustomerMaster: React.FC = () => {
       <div className="rounded-xl border border-gray-200 bg-white px-4 py-4 shadow-sm sm:px-5">
         <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
           <span className="text-gray-600">Total: <strong className="text-gray-900">{total}</strong></span>
-          <span className="text-green-600">Active: <strong>{active}</strong></span>
-          <span className="text-red-600">Inactive: <strong>{inactive}</strong></span>
-          <span className="text-gray-600">Outstanding: <strong className="text-gray-900">{totalOutstanding == null ? 'Unavailable' : formatExactCurrency(totalOutstanding, 'Customer outstanding total')}</strong></span>
+          <span className="text-green-600">Visible active: <strong>{active}</strong></span>
+          <span className="text-red-600">Inactive: <strong>{inactive == null ? 'Search to view' : inactive}</strong></span>
+          <span className="text-gray-600">{hasCompletePage ? 'Outstanding' : 'Visible outstanding'}: <strong className="text-gray-900">{totalOutstanding == null ? 'Unavailable' : formatExactCurrency(totalOutstanding, 'Customer outstanding total')}</strong></span>
         </div>
+        {!hasCompletePage && (
+          <p className="mt-2 text-xs text-gray-500">Showing the first {customers.length} of {total}; search covers the full customer master.</p>
+        )}
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
           <div className="relative min-w-0">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />

@@ -28,7 +28,7 @@ export interface PartyOutstanding {
 export interface InvoiceDetail {
     open_item_id: string;
     branch_id: string;
-    document_kind: 'sales_invoice' | 'supplier_invoice';
+    document_kind: 'sales_invoice' | 'supplier_invoice' | 'opening_balance';
     invoice_id: string;
     invoice_number: string;
     invoice_date: string;

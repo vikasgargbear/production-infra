@@ -168,6 +168,15 @@ def test_party_master_reads_transport_money_as_exact_strings(monkeypatch) -> Non
     assert suppliers[0]["current_outstanding"] == "9007199254740993.01"
 
 
+def test_party_master_outstanding_includes_posted_opening_balances() -> None:
+    source = inspect.getsource(canonical_erp_reads.customers) + inspect.getsource(
+        canonical_erp_reads.suppliers
+    )
+    assert source.count("event.opening_balance_document_id IS NOT NULL") >= 2
+    assert "item.item_side='receivable'" in source
+    assert "item.item_side='payable'" in source
+
+
 def test_supplier_master_read_projects_the_complete_canonical_edit_contract(
     monkeypatch,
 ) -> None:

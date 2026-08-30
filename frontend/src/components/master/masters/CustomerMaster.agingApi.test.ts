@@ -16,10 +16,10 @@ beforeEach(() => jest.clearAllMocks());
 
 test('uses bounded customer rows with the outstanding already projected by the canonical read', async () => {
   mockedCustomersApi.getAll.mockResolvedValue({
-    data: [{
-      customer_id: 'customer-a', customer_name: 'A',
-      current_outstanding: '9007199254740993.01',
-    }],
+    data: { customers: [{
+        customer_id: 'customer-a', customer_name: 'A',
+        current_outstanding: '9007199254740993.01',
+      }], total: 460 },
   } as any);
 
   const response = await loadCustomersWithCanonicalAging();
@@ -27,10 +27,11 @@ test('uses bounded customer rows with the outstanding already projected by the c
   expect(mockedCustomersApi.getAll).toHaveBeenCalledWith(
     { limit: 100, search: '' }, { signal: undefined },
   );
-  expect(response.data).toEqual([
-    expect.objectContaining({
+  expect(response.data).toEqual({
+    customers: [expect.objectContaining({
       customer_id: 'customer-a', current_outstanding: '9007199254740993.01',
       outstanding_available: true,
-    }),
-  ]);
+    })],
+    total: 460,
+  });
 });

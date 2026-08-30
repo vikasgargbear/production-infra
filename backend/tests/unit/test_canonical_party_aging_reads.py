@@ -37,13 +37,16 @@ class _Database:
         return _Result()
 
 
-def _row(party_type="customer"):
+def _row(party_type="customer", document_kind=None):
     customer = party_type == "customer"
+    document_kind = document_kind or (
+        "sales_invoice" if customer else "supplier_invoice"
+    )
     return {
         "org_id": uuid4(),
         "branch_id": uuid4(),
         "document_id": uuid4(),
-        "document_kind": "sales_invoice" if customer else "supplier_invoice",
+        "document_kind": document_kind,
         "party_account_id": uuid4(),
         "party_id": uuid4(),
         "party_code": "CUST-1" if customer else "SUP-1",
@@ -105,6 +108,21 @@ def test_empty_aging_is_an_exact_empty_set_not_a_fake_party():
     assert payload["summary"]["document_count"] == 0
 
 
+@pytest.mark.parametrize("party_type", ["customer", "supplier"])
+def test_opening_balances_are_first_class_aging_documents(party_type):
+    row = _row(party_type, "opening_balance")
+    payload = reads.query_party_aging(
+        _Database([row]),
+        org_id=row["org_id"],
+        party_type=party_type,
+        organization_scope=True,
+        branch_ids=[],
+    )
+
+    assert payload["parties"][0]["documents"][0]["document_kind"] == "opening_balance"
+    assert payload["summary"]["total_outstanding"] == "9007199254740993.00"
+
+
 def test_response_rejects_numeric_money_and_summary_drift():
     row = _row()
     payload = reads.query_party_aging(
@@ -142,10 +160,12 @@ def test_sql_is_org_branch_status_allocation_and_reversal_scoped():
         "current_organization_business_date",
         "item.item_side=CASE",
         "item.currency_code='INR'",
+        "event.opening_balance_document_id IS NOT NULL",
+        "event.opening_balance_document_id=document.document_id",
     ):
         assert fragment in sql
     assert "SELECT document.*" not in sql
-    assert "item.document_number" not in sql
+    assert "item.document_number, item.document_date" in sql
     assert "account.status IN ('active','on_hold')" not in sql
     assert "party.status='active'" not in sql
 
