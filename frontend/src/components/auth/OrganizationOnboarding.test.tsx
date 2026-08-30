@@ -52,6 +52,37 @@ test('creates an organization with accessible canonical business fields', async 
 });
 
 
+test('matches backend field limits and focuses a rejected organization field', async () => {
+    mockCreateOrganization.mockResolvedValue({
+        success: false,
+        error: 'Check the highlighted organization details.',
+        fieldErrors: {
+            address_line1: 'Enter an address with at least 5 characters.',
+        },
+    });
+    const user = userEvent.setup();
+    render(<OrganizationOnboarding />);
+
+    const form = screen.getByRole('form', { name: 'Create organization' });
+    expect(within(form).getByLabelText('Legal name')).toHaveAttribute('minlength', '2');
+    expect(within(form).getByLabelText('Address line 1')).toHaveAttribute('minlength', '5');
+    expect(within(form).getByLabelText('Address line 1')).toHaveAttribute('maxlength', '240');
+    expect(within(form).getByLabelText('City')).toHaveAttribute('minlength', '2');
+    expect(within(form).getByLabelText('Postal code')).toHaveAttribute('pattern', '[1-9][0-9]{5}');
+
+    await user.type(within(form).getByLabelText('Legal name'), 'Acme Pharma');
+    await user.type(within(form).getByLabelText('Address line 1'), '42 Market Road');
+    await user.type(within(form).getByLabelText('City'), 'Mumbai');
+    await user.type(within(form).getByLabelText('GST state code'), '27');
+    await user.type(within(form).getByLabelText('Postal code'), '400001');
+    await user.click(within(form).getByRole('button', { name: 'Create organization' }));
+
+    expect(await screen.findByText('Enter an address with at least 5 characters.')).toBeInTheDocument();
+    expect(within(form).getByLabelText('Address line 1')).toHaveAttribute('aria-invalid', 'true');
+    expect(within(form).getByLabelText('Address line 1')).toHaveFocus();
+});
+
+
 test('preselects join and accepts an invitation token from the query URL', async () => {
     window.history.replaceState({}, '', '/?invite=invite_abc12345');
     const user = userEvent.setup();

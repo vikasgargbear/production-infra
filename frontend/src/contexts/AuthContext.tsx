@@ -52,6 +52,7 @@ export interface LoginResult {
     onboardingRequired?: boolean;
     maintenanceFailure?: boolean;
     superseded?: boolean;
+    fieldErrors?: Partial<Record<keyof CreateOrganizationInput, string>>;
 }
 
 export interface AuthContextValue extends AuthState {
@@ -170,6 +171,28 @@ function errorMessage(body: any, fallback: string): string {
     if (typeof body?.detail?.message === 'string') return body.detail.message;
     if (typeof body?.message === 'string') return body.message;
     return fallback;
+}
+
+const ORGANIZATION_FIELD_MESSAGES: Record<keyof CreateOrganizationInput, string> = {
+    legal_name: 'Enter a legal name with at least 2 characters.',
+    trade_name: 'Enter at least 2 characters, or leave the trade name blank.',
+    address_line1: 'Enter an address with at least 5 characters.',
+    city: 'Enter a city with at least 2 characters.',
+    state_code: 'Enter the 2-digit Indian GST state code.',
+    postal_code: 'Enter a valid 6-digit Indian PIN code that does not start with 0.',
+};
+
+function organizationFieldErrors(body: any): LoginResult['fieldErrors'] {
+    if (!Array.isArray(body?.detail)) return undefined;
+    const errors: NonNullable<LoginResult['fieldErrors']> = {};
+    for (const issue of body.detail) {
+        const field = Array.isArray(issue?.loc) ? issue.loc.at(-1) : undefined;
+        if (typeof field === 'string' && field in ORGANIZATION_FIELD_MESSAGES) {
+            const organizationField = field as keyof CreateOrganizationInput;
+            errors[organizationField] = ORGANIZATION_FIELD_MESSAGES[organizationField];
+        }
+    }
+    return Object.keys(errors).length > 0 ? errors : undefined;
 }
 
 
@@ -432,9 +455,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             });
             const body = await response.json().catch(() => ({}));
             if (!response.ok) {
+                const fieldErrors = path === '/api/auth/onboarding/organizations'
+                    ? organizationFieldErrors(body)
+                    : undefined;
                 return {
                     success: false,
-                    error: errorMessage(body, 'Organization onboarding could not be completed.'),
+                    error: fieldErrors
+                        ? 'Check the highlighted organization details.'
+                        : errorMessage(body, 'Organization onboarding could not be completed.'),
+                    fieldErrors,
                 };
             }
             setSessionExchangeError(null);
