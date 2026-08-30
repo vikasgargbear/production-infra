@@ -1,176 +1,6 @@
--- Promote reviewed historical party and opening-balance evidence into the
--- operational party subledger.  Source facts remain immutable and retain
--- their original hashes; this layer records an explicit canonical binding.
+SET LOCAL ROLE erp_migration_owner;
 
-CREATE TABLE automation.historical_party_bindings (
-  org_id uuid NOT NULL,
-  dataset_id varchar(128) NOT NULL,
-  source_party_id varchar(128) NOT NULL,
-  party_role varchar(16) NOT NULL,
-  source_fact_id uuid NOT NULL,
-  party_id uuid NOT NULL,
-  account_id uuid NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT transaction_timestamp(),
-  created_by_membership_id uuid NOT NULL,
-  CONSTRAINT historical_party_bindings_pk
-    PRIMARY KEY (org_id,dataset_id,source_party_id,party_role),
-  CONSTRAINT historical_party_bindings_source_uq UNIQUE (org_id,source_fact_id),
-  CONSTRAINT historical_party_bindings_role_ck
-    CHECK (party_role IN ('customer','supplier')),
-  CONSTRAINT historical_party_bindings_org_fk FOREIGN KEY (org_id)
-    REFERENCES core.organizations(id) ON DELETE RESTRICT,
-  CONSTRAINT historical_party_bindings_fact_fk FOREIGN KEY (org_id,source_fact_id)
-    REFERENCES automation.historical_migration_facts(org_id,id) ON DELETE RESTRICT,
-  CONSTRAINT historical_party_bindings_party_fk FOREIGN KEY (org_id,party_id)
-    REFERENCES parties.parties(org_id,id) ON DELETE RESTRICT,
-  CONSTRAINT historical_party_bindings_creator_fk
-    FOREIGN KEY (org_id,created_by_membership_id)
-    REFERENCES core.memberships(org_id,id) ON DELETE RESTRICT
-);
-
-CREATE INDEX historical_party_bindings_party_idx
-  ON automation.historical_party_bindings(org_id,party_id,party_role);
-ALTER TABLE automation.historical_party_bindings ENABLE ROW LEVEL SECURITY;
-ALTER TABLE automation.historical_party_bindings FORCE ROW LEVEL SECURITY;
-CREATE POLICY historical_party_bindings_owner_scope
-  ON automation.historical_party_bindings TO erp_migration_owner
-  USING (org_id=erp_security.current_org_id() AND erp_security.current_actor_is_active())
-  WITH CHECK (org_id=erp_security.current_org_id() AND erp_security.current_actor_is_active());
-CREATE TRIGGER historical_party_bindings_audit
-AFTER INSERT OR UPDATE OR DELETE ON automation.historical_party_bindings
-FOR EACH ROW EXECUTE FUNCTION erp_plumbing.audit_row_mutation();
-CREATE TRIGGER historical_party_bindings_immutable
-BEFORE UPDATE OR DELETE ON automation.historical_party_bindings
-FOR EACH ROW EXECUTE FUNCTION erp_plumbing.reject_row_mutation();
-
-CREATE TABLE finance.opening_balance_documents (
-  org_id uuid NOT NULL,
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  source_fact_id uuid NOT NULL,
-  branch_id uuid NOT NULL,
-  party_id uuid NOT NULL,
-  document_number varchar(64) NOT NULL,
-  document_date date NOT NULL,
-  due_date date NOT NULL,
-  item_side text NOT NULL,
-  amount numeric(20,2) NOT NULL,
-  currency_code char(3) NOT NULL DEFAULT 'INR',
-  status text NOT NULL DEFAULT 'posted',
-  posted_at timestamptz NOT NULL,
-  posted_by_membership_id uuid NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT transaction_timestamp(),
-  created_by_membership_id uuid NOT NULL,
-  CONSTRAINT opening_balance_documents_pk PRIMARY KEY (org_id,id),
-  CONSTRAINT opening_balance_documents_source_uq UNIQUE (org_id,source_fact_id),
-  CONSTRAINT opening_balance_documents_number_uq UNIQUE (org_id,document_number),
-  CONSTRAINT opening_balance_documents_side_ck CHECK (item_side IN ('receivable','payable')),
-  CONSTRAINT opening_balance_documents_amount_ck CHECK (amount>0),
-  CONSTRAINT opening_balance_documents_dates_ck CHECK (due_date>=document_date),
-  CONSTRAINT opening_balance_documents_status_ck CHECK (status='posted'),
-  CONSTRAINT opening_balance_documents_org_fk FOREIGN KEY (org_id)
-    REFERENCES core.organizations(id) ON DELETE RESTRICT,
-  CONSTRAINT opening_balance_documents_fact_fk FOREIGN KEY (org_id,source_fact_id)
-    REFERENCES automation.historical_migration_facts(org_id,id) ON DELETE RESTRICT,
-  CONSTRAINT opening_balance_documents_branch_fk FOREIGN KEY (org_id,branch_id)
-    REFERENCES core.branches(org_id,id) ON DELETE RESTRICT,
-  CONSTRAINT opening_balance_documents_party_fk FOREIGN KEY (org_id,party_id)
-    REFERENCES parties.parties(org_id,id) ON DELETE RESTRICT,
-  CONSTRAINT opening_balance_documents_poster_fk FOREIGN KEY (org_id,posted_by_membership_id)
-    REFERENCES core.memberships(org_id,id) ON DELETE RESTRICT,
-  CONSTRAINT opening_balance_documents_creator_fk FOREIGN KEY (org_id,created_by_membership_id)
-    REFERENCES core.memberships(org_id,id) ON DELETE RESTRICT
-);
-
-ALTER TABLE finance.opening_balance_documents ENABLE ROW LEVEL SECURITY;
-ALTER TABLE finance.opening_balance_documents FORCE ROW LEVEL SECURITY;
-CREATE POLICY opening_balance_documents_owner_scope
-  ON finance.opening_balance_documents TO erp_migration_owner
-  USING (org_id=erp_security.current_org_id() AND erp_security.current_actor_is_active())
-  WITH CHECK (org_id=erp_security.current_org_id() AND erp_security.current_actor_is_active());
-CREATE TRIGGER opening_balance_documents_audit
-AFTER INSERT OR UPDATE OR DELETE ON finance.opening_balance_documents
-FOR EACH ROW EXECUTE FUNCTION erp_plumbing.audit_row_mutation();
-CREATE TRIGGER opening_balance_documents_immutable
-BEFORE UPDATE OR DELETE ON finance.opening_balance_documents
-FOR EACH ROW EXECUTE FUNCTION erp_plumbing.reject_row_mutation();
-
-ALTER TABLE finance.accounting_events
-  ADD COLUMN opening_balance_document_id uuid;
-ALTER TABLE finance.accounting_events
-  ADD CONSTRAINT accounting_events_opening_balance_fk
-  FOREIGN KEY (org_id,opening_balance_document_id)
-  REFERENCES finance.opening_balance_documents(org_id,id) ON DELETE RESTRICT;
-ALTER TABLE finance.accounting_events DROP CONSTRAINT accounting_events_exact_source_ck;
-ALTER TABLE finance.accounting_events ADD CONSTRAINT accounting_events_exact_source_ck CHECK (
-  num_nonnulls(sales_invoice_id,supplier_invoice_id,adjustment_note_id,
-    purchase_order_advance_allocation_id,payment_id,expense_claim_id,
-    inventory_document_id,withholding_id,opening_balance_document_id)=1
-);
-ALTER TABLE finance.accounting_events DROP CONSTRAINT accounting_events_type_source_ck;
-ALTER TABLE finance.accounting_events ADD CONSTRAINT accounting_events_type_source_ck CHECK (
-  (event_type='sales_invoice' AND sales_invoice_id IS NOT NULL)
-  OR (event_type='supplier_invoice' AND supplier_invoice_id IS NOT NULL)
-  OR (event_type='adjustment_note' AND adjustment_note_id IS NOT NULL)
-  OR (event_type='supplier_advance_application' AND purchase_order_advance_allocation_id IS NOT NULL)
-  OR (event_type='payment' AND payment_id IS NOT NULL)
-  OR (event_type='expense_claim' AND expense_claim_id IS NOT NULL)
-  OR (event_type='inventory_valuation' AND inventory_document_id IS NOT NULL)
-  OR (event_type='withholding' AND withholding_id IS NOT NULL)
-  OR (event_type='opening_balance' AND opening_balance_document_id IS NOT NULL)
-);
-CREATE UNIQUE INDEX accounting_events_opening_balance_source_uq
-  ON finance.accounting_events(org_id,opening_balance_document_id)
-  WHERE opening_balance_document_id IS NOT NULL;
-
-CREATE FUNCTION erp_finance_commands.guard_accounting_event_v2()
-RETURNS trigger
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path=''
-AS $function$
-#variable_conflict use_variable
-DECLARE source_status text; source_time timestamptz; journal_status text;
-BEGIN
-  IF TG_OP<>'INSERT' THEN
-    RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='accounting events are immutable';
-  END IF;
-  SELECT status INTO journal_status FROM finance.journal_entries
-   WHERE org_id=NEW.org_id AND id=NEW.journal_entry_id FOR SHARE;
-  IF journal_status IS DISTINCT FROM 'posted' THEN
-    RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='accounting event requires a posted same-tenant journal';
-  END IF;
-  CASE NEW.event_type
-    WHEN 'sales_invoice' THEN SELECT status,posted_at INTO source_status,source_time FROM sales.invoices WHERE org_id=NEW.org_id AND id=NEW.sales_invoice_id FOR SHARE;
-    WHEN 'supplier_invoice' THEN SELECT status,posted_at INTO source_status,source_time FROM procurement.supplier_invoices WHERE org_id=NEW.org_id AND id=NEW.supplier_invoice_id FOR SHARE;
-    WHEN 'adjustment_note' THEN SELECT status,posted_at INTO source_status,source_time FROM finance.adjustment_notes WHERE org_id=NEW.org_id AND id=NEW.adjustment_note_id FOR SHARE;
-    WHEN 'payment' THEN SELECT status,posted_at INTO source_status,source_time FROM finance.payments WHERE org_id=NEW.org_id AND id=NEW.payment_id FOR SHARE;
-    WHEN 'expense_claim' THEN SELECT status,posted_at INTO source_status,source_time FROM finance.expense_claims WHERE org_id=NEW.org_id AND id=NEW.expense_claim_id FOR SHARE;
-    WHEN 'inventory_valuation' THEN SELECT status,posted_at INTO source_status,source_time FROM inventory.inventory_documents WHERE org_id=NEW.org_id AND id=NEW.inventory_document_id FOR SHARE;
-    WHEN 'withholding' THEN SELECT status,created_at INTO source_status,source_time FROM tax.withholdings WHERE org_id=NEW.org_id AND id=NEW.withholding_id FOR SHARE;
-    WHEN 'opening_balance' THEN SELECT status,posted_at INTO source_status,source_time FROM finance.opening_balance_documents WHERE org_id=NEW.org_id AND id=NEW.opening_balance_document_id FOR SHARE;
-    ELSE RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='unsupported accounting event source type';
-  END CASE;
-  IF source_status IS NULL OR
-     (NEW.event_type='withholding' AND source_status NOT IN ('deducted','reversed')) OR
-     (NEW.event_type<>'withholding' AND source_status<>'posted') OR
-     source_time IS DISTINCT FROM NEW.source_posted_at THEN
-    RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='accounting event source is not the exact posted immutable source';
-  END IF;
-  RETURN NEW;
-END
-$function$;
-ALTER FUNCTION erp_finance_commands.guard_accounting_event_v2() OWNER TO erp_migration_owner;
-REVOKE ALL ON FUNCTION erp_finance_commands.guard_accounting_event_v2()
-  FROM PUBLIC, erp_app, erp_runtime;
-
-DROP TRIGGER accounting_events_command_guard_ct ON finance.accounting_events;
-DROP FUNCTION erp_finance_commands.guard_accounting_event();
-CREATE CONSTRAINT TRIGGER accounting_events_command_guard_ct
-AFTER INSERT OR UPDATE OR DELETE ON finance.accounting_events
-DEFERRABLE INITIALLY IMMEDIATE
-FOR EACH ROW EXECUTE FUNCTION erp_finance_commands.guard_accounting_event_v2();
-
-CREATE FUNCTION erp_automation_commands.promote_historical_operational_batch(
+CREATE OR REPLACE FUNCTION erp_automation_commands.promote_historical_operational_batch(
   organization_id uuid,
   reviewed_dataset_id varchar,
   batch_size integer
@@ -510,7 +340,7 @@ BEGIN
 END
 $function$;
 
-CREATE FUNCTION erp_automation_reads.historical_operational_cutover_status(
+CREATE OR REPLACE FUNCTION erp_automation_reads.historical_operational_cutover_status(
   organization_id uuid,
   reviewed_dataset_id varchar
 )
@@ -557,14 +387,10 @@ BEGIN
 END
 $function$;
 
-ALTER TABLE automation.historical_party_bindings OWNER TO erp_migration_owner;
-ALTER TABLE finance.opening_balance_documents OWNER TO erp_migration_owner;
 ALTER FUNCTION erp_automation_commands.promote_historical_operational_batch(uuid,varchar,integer)
   OWNER TO erp_migration_owner;
 ALTER FUNCTION erp_automation_reads.historical_operational_cutover_status(uuid,varchar)
   OWNER TO erp_migration_owner;
-REVOKE ALL ON TABLE automation.historical_party_bindings,finance.opening_balance_documents
-  FROM PUBLIC,erp_app,erp_runtime,erp_calculator;
 REVOKE ALL ON FUNCTION erp_automation_commands.promote_historical_operational_batch(uuid,varchar,integer)
   FROM PUBLIC,erp_app,erp_runtime,erp_calculator;
 REVOKE ALL ON FUNCTION erp_automation_reads.historical_operational_cutover_status(uuid,varchar)
@@ -573,3 +399,5 @@ GRANT EXECUTE ON FUNCTION erp_automation_commands.promote_historical_operational
   TO erp_runtime;
 GRANT EXECUTE ON FUNCTION erp_automation_reads.historical_operational_cutover_status(uuid,varchar)
   TO erp_runtime;
+
+RESET ROLE;

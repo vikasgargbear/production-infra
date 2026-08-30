@@ -125,12 +125,11 @@ def main() -> None:
                         "source_party_id": "source-new",
                         "party_role": "customer",
                         "primary_phone": "",
-                        "selection_state": "archive-only",
                     },
                     party_key="source-new", party_name="Historical Missing Phone",
                     # Reproduce the live import projection: the top-level state
-                    # was quarantined even though the retained review payload
-                    # explicitly approved an archive-only party identity.
+                    # is quarantined and the duplicated review-state field is
+                    # absent, but a retained opening item references the party.
                     selection_state="quarantined",
                 ),
                 _fact(
