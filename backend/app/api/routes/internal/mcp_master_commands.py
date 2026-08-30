@@ -196,48 +196,34 @@ def _execute_idempotent_product_setup(
     request: MCPProductSetup,
     setup: CanonicalProductSetupWrite,
 ) -> dict[str, Any]:
-    configured = db.execute(
-        text("""
-            SELECT product_id,product_code,product_name,new_row_version,
-                   idempotency_replayed
-              FROM erp_master_commands.configure_product_draft_idempotent(
-                :org_id,:product_id,:row_version,:category_id,
-                :manufacturer_party_id,:base_uom_code,:dosage_form,
-                :strength_display,:hsn_code,:cold_chain_required,
-                :minimum_storage_celsius,:maximum_storage_celsius,
-                :shelf_life_days,:gtin,CAST(:pack_conversions AS jsonb),
-                CAST(:ingredients AS jsonb),:idempotency_key_hash,
-                transaction_timestamp()+interval '24 hours'
-              )
-        """),
-        {
-            "org_id": context.organization_id,
-            "product_id": request.product_id,
-            "row_version": setup.row_version,
-            "category_id": setup.category_id,
-            "manufacturer_party_id": setup.manufacturer_party_id,
-            "base_uom_code": setup.base_uom_code,
-            "dosage_form": setup.dosage_form,
-            "strength_display": setup.strength_display,
-            "hsn_code": setup.hsn_code,
-            "cold_chain_required": setup.cold_chain_required,
-            "minimum_storage_celsius": setup.minimum_storage_celsius,
-            "maximum_storage_celsius": setup.maximum_storage_celsius,
-            "shelf_life_days": setup.shelf_life_days,
-            "gtin": setup.gtin,
-            "pack_conversions": json.dumps(
-                [item.model_dump(mode="json") for item in setup.pack_conversions],
-                separators=(",", ":"), sort_keys=True,
-            ),
-            "ingredients": json.dumps(
-                [item.model_dump(mode="json") for item in setup.ingredients],
-                separators=(",", ":"), sort_keys=True,
-            ),
-            "idempotency_key_hash": hashlib.sha256(
-                request.idempotency_key.encode("utf-8")
-            ).digest(),
-        },
-    ).mappings().one()
+    configured = canonical_write_commands.configure_product_draft_idempotent(
+        db,
+        org_id=context.organization_id,
+        product_id=request.product_id,
+        expected_row_version=setup.row_version,
+        category_id=setup.category_id,
+        manufacturer_party_id=setup.manufacturer_party_id,
+        base_uom_code=setup.base_uom_code,
+        dosage_form=setup.dosage_form,
+        strength_display=setup.strength_display,
+        hsn_code=setup.hsn_code,
+        cold_chain_required=setup.cold_chain_required,
+        minimum_storage_celsius=setup.minimum_storage_celsius,
+        maximum_storage_celsius=setup.maximum_storage_celsius,
+        shelf_life_days=setup.shelf_life_days,
+        gtin=setup.gtin,
+        pack_conversions=json.dumps(
+            [item.model_dump(mode="json") for item in setup.pack_conversions],
+            separators=(",", ":"), sort_keys=True,
+        ),
+        ingredients=json.dumps(
+            [item.model_dump(mode="json") for item in setup.ingredients],
+            separators=(",", ":"), sort_keys=True,
+        ),
+        idempotency_key_hash=hashlib.sha256(
+            request.idempotency_key.encode("utf-8")
+        ).digest(),
+    )
     return dict(configured)
 
 

@@ -158,14 +158,16 @@ def test_setup_and_activation_routes_read_back_identity_and_honest_replay(monkey
     monkeypatch.setattr(canonical_erp_reads, "_activate", lambda _db, _user: org_id)
     monkeypatch.setattr(
         canonical_write_commands,
-        "configure_product_draft",
+        "configure_product_draft_idempotent",
         lambda _db, **_parameters: {
             "product_id": product_id,
             "product_code": "PROD-000042",
             "product_name": "Paracetamol 500 mg",
             "new_row_version": 2,
+            "idempotency_replayed": False,
         },
     )
+    response = Response()
     configured = canonical_erp_reads.configure_product_setup(
         product_id,
         canonical_erp_reads.CanonicalProductSetupWrite.model_validate({
@@ -175,6 +177,8 @@ def test_setup_and_activation_routes_read_back_identity_and_honest_replay(monkey
             "hsn_code": "3004",
             "cold_chain_required": False,
         }),
+        response,
+        "erp-web-master-product-setup:11111111-1111-4111-8111-111111111111",
         user={},
         db=database,
     )
@@ -183,9 +187,11 @@ def test_setup_and_activation_routes_read_back_identity_and_honest_replay(monkey
         "product_code": "PROD-000042",
         "product_name": "Paracetamol 500 mg",
         "row_version": 2,
+        "idempotency_replayed": False,
         "lifecycle_status": "draft",
         "message": "Product setup saved and checked",
     }
+    assert response.headers["X-Idempotency-Replayed"] == "false"
 
     monkeypatch.setattr(
         canonical_write_commands,

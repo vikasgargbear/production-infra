@@ -1242,23 +1242,33 @@ def product_setup(
 def configure_product_setup(
     product_id: UUID,
     setup: CanonicalProductSetupWrite,
+    response: Response,
+    idempotency_key: str = Header(
+        ..., alias="X-Idempotency-Key", min_length=8, max_length=128,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+    ),
     user: dict = PRODUCT_USER,
     db: Session = Depends(get_db),
 ):
     org_id = _activate(db, user)
     try:
         configured = _execute_canonical_product_setup(
-            db, org_id=org_id, product_id=product_id, setup=setup
+            db, org_id=org_id, product_id=product_id, setup=setup,
+            idempotency_key=idempotency_key,
         )
         db.commit()
     except DBAPIError as exc:
         db.rollback()
         _raise_master_create_database_error(exc)
+    _set_master_idempotency_headers(
+        response, idempotency_key, configured["idempotency_replayed"]
+    )
     return {
         "product_id": configured["product_id"],
         "product_code": configured["product_code"],
         "product_name": configured["product_name"],
         "row_version": configured["new_row_version"],
+        "idempotency_replayed": configured["idempotency_replayed"],
         "lifecycle_status": "draft",
         "message": "Product setup saved and checked",
     }
@@ -1270,10 +1280,11 @@ def _execute_canonical_product_setup(
     org_id: UUID,
     product_id: UUID,
     setup: CanonicalProductSetupWrite,
+    idempotency_key: str,
 ):
     """One setup command shared by browser and delegated MCP adapters."""
 
-    return canonical_write_commands.configure_product_draft(
+    return canonical_write_commands.configure_product_draft_idempotent(
         db,
         org_id=org_id,
         product_id=product_id,
@@ -1297,6 +1308,9 @@ def _execute_canonical_product_setup(
             [item.model_dump(mode="json") for item in setup.ingredients],
             separators=(",", ":"), sort_keys=True,
         ),
+        idempotency_key_hash=hashlib.sha256(
+            idempotency_key.encode("utf-8")
+        ).digest(),
     )
 
 
