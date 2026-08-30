@@ -23,6 +23,16 @@ export const reportingApi = {
       params, preserveExactDecimals: true,
     })
   ),
+  getHistoricalInsights: (): Promise<AxiosResponse<unknown>> => (
+    apiHelpers.get('/canonical/migration-history/insights', {
+      preserveExactDecimals: true,
+    })
+  ),
+  getHistoricalInvoices: (params: { search?: string; offset?: number; limit?: number }): Promise<AxiosResponse<unknown>> => (
+    apiHelpers.get('/canonical/migration-history/sales-invoices', {
+      params, preserveExactDecimals: true,
+    })
+  ),
 };
 
 export default reportingApi;

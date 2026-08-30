@@ -163,6 +163,8 @@ PYTHONPATH=backend \
 PYTHONPATH=backend \
   python backend/tests/postgres/check_canonical_document_history_runtime_role.py
 PYTHONPATH=backend \
+  python backend/tests/postgres/check_historical_invoice_archive_runtime_role.py
+PYTHONPATH=backend \
   python backend/tests/postgres/check_inventory_adjustment_web_runtime_role.py
 PYTHONPATH=backend \
   python backend/tests/postgres/check_inventory_destruction_web_runtime_role.py

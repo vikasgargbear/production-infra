@@ -232,6 +232,26 @@ class HistoricalInsightsResponse(BaseModel):
     limitations: list[str]
 
 
+class HistoricalInvoiceArchiveItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    record_key: str
+    invoice_number: str
+    invoice_date: date
+    customer_name: str
+    line_count: int = Field(ge=0)
+    taxable_amount: MoneyJSON
+    tax_amount: MoneyJSON
+    total_amount: MoneyJSON
+
+
+class HistoricalInvoiceArchiveResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    items: list[HistoricalInvoiceArchiveItem]
+    total: int = Field(ge=0)
+    offset: int = Field(ge=0)
+    limit: int = Field(ge=1, le=100)
+
+
 def _wire_fact(
     *, org_id: UUID, dataset_id: str, branch_id: UUID, fact: HistoricalFactWrite
 ) -> dict[str, Any]:
@@ -337,3 +357,33 @@ def historical_insights(
         },
     ).scalar_one()
     return HistoricalInsightsResponse.model_validate(result)
+
+
+@router.get("/sales-invoices", response_model=HistoricalInvoiceArchiveResponse)
+def historical_sales_invoices(
+    search: str = Query(default="", max_length=100),
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=100),
+    user: dict[str, Any] = REPORT_USER,
+    db: Session = Depends(get_db),
+):
+    """List imported sales evidence without presenting it as posted ERP state."""
+    org_id = _activate(db, user)
+    normalized_search = " ".join(search.casefold().split())
+    result = db.execute(
+        text(
+            """
+            SELECT erp_automation_reads.historical_sales_invoice_archive(
+              :org_id,:branch_ids,:search,:offset,:limit
+            )
+            """
+        ),
+        {
+            "org_id": org_id,
+            "branch_ids": _branch_scope(user),
+            "search": normalized_search,
+            "offset": offset,
+            "limit": limit,
+        },
+    ).scalar_one()
+    return HistoricalInvoiceArchiveResponse.model_validate(result)

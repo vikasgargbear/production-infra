@@ -7,6 +7,7 @@ import ProductDraftDeleteDialog from './ProductDraftDeleteDialog';
 import { usePermissions } from '../../../hooks/usePermissions';
 import { FOUNDATION_CAPABILITIES, PRODUCT_LOOKUP_CAPABILITIES } from '../../../config/canonicalCapabilities';
 import { isForbiddenApiError } from '../../../services/api/utils/apiError';
+import { productPackDisplay } from './productPackDisplay';
 
 const Products: React.FC = () => {
   const { hasCapability, hasAnyCapability } = usePermissions();
@@ -137,11 +138,12 @@ const Products: React.FC = () => {
           <div className="space-y-3 md:hidden">
             {products.map(product => {
               const isDraft = product.status === 'draft';
+              const display = productPackDisplay(product.product_name, product.packing_summary);
               return (
                 <article key={product.product_id} className="border border-gray-200 bg-white p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <h2 className="break-words font-medium text-gray-900">{product.product_name}</h2>
+                      <h2 className="break-words font-medium text-gray-900">{display.name}</h2>
                       {product.generic_name && <p className="mt-1 break-words text-sm text-gray-500">{product.generic_name}</p>}
                     </div>
                     <span className={`shrink-0 border px-2 py-1 text-xs font-medium ${isDraft ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-gray-200 bg-white text-gray-600'}`}>
@@ -151,6 +153,7 @@ const Products: React.FC = () => {
                   <dl className="mt-3 grid grid-cols-2 gap-3 border-t border-gray-100 pt-3 text-sm">
                     <div><dt className="text-gray-500">Code</dt><dd className="mt-1 break-all text-gray-800">{product.product_code}</dd></div>
                     <div><dt className="text-gray-500">Kind</dt><dd className="mt-1 text-gray-800">{product.product_type}</dd></div>
+                    <div><dt className="text-gray-500">Pack{display.importedHint ? ' (imported)' : ''}</dt><dd className="mt-1 text-gray-800">{display.pack ?? 'Not set'}</dd></div>
                   </dl>
                   {isDraft && canManageProducts ? (
                     <div className="mt-4 grid grid-cols-2 gap-2">
@@ -174,6 +177,7 @@ const Products: React.FC = () => {
                 <tr>
                   <th className="px-4 py-3 font-medium">Product</th>
                   <th className="px-4 py-3 font-medium">Code</th>
+                  <th className="px-4 py-3 font-medium">Pack</th>
                   <th className="px-4 py-3 font-medium">HSN</th>
                   <th className="px-4 py-3 font-medium">Kind</th>
                   <th className="px-4 py-3 font-medium">Status</th>
@@ -183,10 +187,12 @@ const Products: React.FC = () => {
               <tbody className="divide-y divide-gray-100">
                 {products.map(product => {
                   const isDraft = product.status === 'draft';
+                  const display = productPackDisplay(product.product_name, product.packing_summary);
                   return (
                   <tr key={product.product_id}>
-                    <td className="px-4 py-3"><div className="font-medium text-gray-900">{product.product_name}</div><div className="text-gray-500">{product.generic_name}</div></td>
+                    <td className="px-4 py-3"><div className="font-medium text-gray-900">{display.name}</div><div className="text-gray-500">{product.generic_name}</div></td>
                     <td className="px-4 py-3 text-gray-700">{product.product_code}</td>
+                    <td className="px-4 py-3 text-gray-700"><span>{display.pack ?? 'Not set'}</span>{display.importedHint && <span className="ml-1 text-xs text-gray-500">imported</span>}</td>
                     <td className="px-4 py-3 text-gray-700">{product.hsn_code ?? 'Not classified'}</td>
                     <td className="px-4 py-3 text-gray-700">{product.product_type}</td>
                     <td className="px-4 py-3">

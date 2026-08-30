@@ -11,6 +11,7 @@ from app.api.routes.canonical_historical_migration import (
     HistoricalFactWrite,
     HistoricalImportRequest,
     HistoricalInsightsResponse,
+    HistoricalInvoiceArchiveResponse,
     _wire_fact,
 )
 
@@ -132,6 +133,22 @@ def test_insight_contract_requires_exact_decimal_strings() -> None:
         HistoricalInsightsResponse.model_validate(payload)
 
 
+def test_historical_invoice_archive_preserves_exact_observed_totals() -> None:
+    payload = {
+        "items": [{
+            "record_key": "marg:sale:one", "invoice_number": "MARG-1",
+            "invoice_date": "2026-08-01", "customer_name": "Observed customer",
+            "line_count": 3, "taxable_amount": "100.00", "tax_amount": "12.00",
+            "total_amount": "112.00",
+        }],
+        "total": 1, "offset": 0, "limit": 50,
+    }
+    assert HistoricalInvoiceArchiveResponse.model_validate(payload).items[0].total_amount == "112.00"
+    payload["items"][0]["total_amount"] = 112
+    with pytest.raises(ValidationError):
+        HistoricalInvoiceArchiveResponse.model_validate(payload)
+
+
 def test_migration_is_hash_bound_and_runtime_has_no_table_access() -> None:
     version = ROOT / "alembic/versions/20260830_0065_historical_migration_facts.py"
     sql_path = ROOT / "alembic/sql/20260830_0065_historical_migration_facts.sql"
@@ -144,3 +161,26 @@ def test_migration_is_hash_bound_and_runtime_has_no_table_access() -> None:
     assert "GRANT EXECUTE ON FUNCTION erp_automation_commands.import_historical_migration_facts" in sql
     assert "core.organization.manage" in sql
     assert "Profit and margin are unavailable" in sql
+
+
+def test_invoice_archive_is_a_hash_bound_runtime_read_not_direct_table_access() -> None:
+    version = ROOT / "alembic/versions/20260830_0066_historical_sales_invoice_archive.py"
+    sql_path = ROOT / "alembic/sql/20260830_0066_historical_sales_invoice_archive.sql"
+    source_path = (
+        ROOT.parent
+        / "database/canonical/operations/automation/historical_sales_invoice_archive.sql"
+    )
+    source = version.read_text(encoding="utf-8")
+    sql = sql_path.read_text(encoding="utf-8")
+    digest = hashlib.sha256(sql.encode("utf-8")).hexdigest()
+
+    assert digest in source
+    assert source_path.read_text(encoding="utf-8").strip() in sql
+    assert "SECURITY DEFINER" in sql
+    assert "SET row_security = off" in sql
+    assert "GRANT EXECUTE ON FUNCTION erp_automation_reads.historical_sales_invoice_archive" in sql
+    route = (ROOT / "app/api/routes/canonical_historical_migration.py").read_text(
+        encoding="utf-8"
+    )
+    assert "SELECT erp_automation_reads.historical_sales_invoice_archive" in route
+    assert "FROM automation.historical_migration_facts" not in route

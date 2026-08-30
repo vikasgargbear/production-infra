@@ -4,7 +4,7 @@ import {
   DollarSign, Package, Users,
   ShoppingCart,
   Activity, BookOpen, Receipt, Wallet,
-  FileSpreadsheet, Calculator
+  FileSpreadsheet, Calculator, History,
 } from 'lucide-react';
 import { ModuleHub } from '../global';
 
@@ -14,6 +14,7 @@ import SalesReport from './SalesReport';
 import PurchaseReport from './PurchaseReport';
 import InventoryReport from './InventoryReport';
 import FinancialReport from './FinancialReport';
+import HistoricalInsights from './HistoricalInsights';
 
 // Analytics & Insights
 import CustomerAnalytics from './CustomerAnalytics';
@@ -62,6 +63,7 @@ const ReportsHub: React.FC<ReportsHubProps> = ({ open = true, onClose, initialSu
     'purchase-analytics', 'inventory-analytics', 'product-performance',
     'financial-overview', 'ledger-analytics', 'payment-analytics',
     'profit-loss', 'tax-analytics', 'gstr1-report', 'gstr3b-report',
+    'imported-history',
   ] as const;
 
   const resolvedDefault =
@@ -79,6 +81,16 @@ const ReportsHub: React.FC<ReportsHubProps> = ({ open = true, onClose, initialSu
       icon: Activity,
       color: 'slate',
       component: ExecutiveDashboard,
+      category: 'Executive'
+    },
+    {
+      id: 'imported-history',
+      label: 'Imported history',
+      fullLabel: 'Imported MARG History',
+      description: 'Read-only migrated business insights',
+      icon: History,
+      color: 'sky',
+      component: HistoricalInsights,
       category: 'Executive'
     },
 
