@@ -10,7 +10,7 @@
  */
 
 import React, { useEffect, useCallback, useState, useRef } from 'react';
-import { Archive, FileText, RefreshCw, Package, ShoppingCart } from 'lucide-react';
+import { FileText, RefreshCw, Package, ShoppingCart } from 'lucide-react';
 import { Pagination, ModuleHeader, InlineFilterPanel } from '../../global';
 import { canonicalDocumentHistoryApi } from '../../../services/api';
 import { InvoiceTable } from './invoicelist/components/InvoiceTable';
@@ -30,17 +30,11 @@ import { ImportedInvoiceArchive } from './invoicelist/components/ImportedInvoice
 
 // Document type configuration
 type CanonicalDocumentType = 'invoice' | 'challan' | 'sales_order';
-type DocumentType = CanonicalDocumentType | 'imported_invoice';
+type InvoiceSource = 'all' | 'erp' | 'imported';
 
 const documentTypeConfig = {
-  imported_invoice: {
-    label: 'Existing Invoices',
-    icon: Archive,
-    activeClass: 'bg-sky-50 text-sky-700 border-sky-200',
-    iconColor: 'text-sky-600'
-  },
   invoice: {
-    label: 'New ERP Invoices',
+    label: 'Invoices',
     icon: FileText,
     activeClass: 'bg-blue-50 text-blue-700 border-blue-200',
     iconColor: 'text-blue-600'
@@ -117,9 +111,8 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
   // Use centralized state management (replaces 15 useState!)
   const { dispatch, invoices, selectedIds, filters, ui, pagination, loading } = useInvoiceListState();
 
-  // Existing business history is the useful default after migration. Newly
-  // created canonical invoices remain available in their own adjacent tab.
-  const [documentType, setDocumentType] = useState<DocumentType>('imported_invoice');
+  const [documentType, setDocumentType] = useState<CanonicalDocumentType>('invoice');
+  const [invoiceSource, setInvoiceSource] = useState<InvoiceSource>('all');
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const requestSequenceRef = useRef(0);
   const businessDateRef = useRef<string | null>(null);
@@ -130,7 +123,7 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
   const fetchDocuments = useCallback(async (
     page: number,
     activeFilters: InvoiceFilters,
-    docType: DocumentType,
+    docType: CanonicalDocumentType,
     perPage: number,
   ) => {
     const requestSequence = ++requestSequenceRef.current;
@@ -138,7 +131,6 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
     dispatch({ type: 'SET_ERROR', error: null });
 
     try {
-      if (docType === 'imported_invoice') return;
       const searchParams = buildSalesHistoryRequestParams(docType, activeFilters, page, perPage);
       const response = await canonicalDocumentHistoryApi.get(searchParams);
       const transformedData: Invoice[] = docType === 'invoice'
@@ -169,7 +161,7 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
   // Load documents on mount and when document type changes
   useEffect(() => {
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
-    if (documentType === 'imported_invoice') {
+    if (documentType === 'invoice' && invoiceSource === 'imported') {
       dispatch({ type: 'SET_INVOICES', invoices: [] });
       dispatch({ type: 'SET_LOADING', loading: false });
     } else {
@@ -179,10 +171,10 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
       if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
       requestSequenceRef.current += 1;
     };
-  }, [dispatch, documentType, fetchDocuments]); // pagination size is handled by its explicit change handler
+  }, [dispatch, documentType, fetchDocuments, invoiceSource]); // pagination size is handled by its explicit change handler
 
   // Handle document type change
-  const handleDocumentTypeChange = (type: DocumentType) => {
+  const handleDocumentTypeChange = (type: CanonicalDocumentType) => {
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
     setDocumentType(type);
     dispatch({ type: 'CLEAR_SELECTION' });
@@ -190,6 +182,13 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
       type: 'SET_FILTERS',
       filters: emptyFilters()
     });
+  };
+
+  const handleInvoiceSourceChange = (source: InvoiceSource) => {
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    setInvoiceSource(source);
+    dispatch({ type: 'CLEAR_SELECTION' });
+    dispatch({ type: 'SET_FILTERS', filters: emptyFilters() });
   };
 
   // Build search params from current filters
@@ -224,7 +223,6 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
   }, []);
 
   const handleExportAll = useCallback(() => {
-    if (documentType === 'imported_invoice') return;
     dispatch({ type: 'SET_EXPORTING', exporting: true });
     dispatch({ type: 'SET_EXPORT_SUCCESS', success: false });
 
@@ -263,7 +261,6 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
   };
 
   const handleExportSelected = () => {
-    if (documentType === 'imported_invoice') return;
     const selected = invoices.filter(inv => selectedIds.has(inv.id));
     const today = businessDateRef.current;
     if (!today) {
@@ -366,7 +363,7 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
           icon={documentTypeConfig[documentType].icon}
           iconColor={documentTypeConfig[documentType].iconColor}
           onClose={onClose}
-          additionalActions={documentType === 'imported_invoice' ? [] : [
+          additionalActions={documentType === 'invoice' && invoiceSource === 'imported' ? [] : [
             {
               label: "",
               onClick: handleRefresh,
@@ -386,7 +383,7 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
         {/* Document Type Tabs */}
         <div className="px-6 py-3 bg-white border-b border-gray-200">
           <div className="flex space-x-1">
-            {(Object.keys(documentTypeConfig) as DocumentType[]).map((type) => {
+            {(Object.keys(documentTypeConfig) as CanonicalDocumentType[]).map((type) => {
               const config = documentTypeConfig[type];
               const Icon = config.icon;
               const isActive = documentType === type;
@@ -411,11 +408,29 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
           </div>
         </div>
 
+        {documentType === 'invoice' && <div className="border-b border-gray-200 bg-white px-6 py-3">
+          <label className="flex max-w-sm items-center gap-3 text-sm font-medium text-gray-700">
+            <span>Source</span>
+            <select
+              aria-label="Invoice source"
+              value={invoiceSource}
+              onChange={event => handleInvoiceSourceChange(event.target.value as InvoiceSource)}
+              className="min-h-11 flex-1 rounded-lg border border-gray-300 bg-white px-3 text-base"
+            >
+              <option value="all">All invoices</option>
+              <option value="imported">Imported</option>
+              <option value="erp">Created in ERP</option>
+            </select>
+          </label>
+        </div>}
+
         {/* Content */}
         <div className="flex-1 overflow-y-auto">
           <div className="max-w-7xl mx-auto px-6 py-6">
 
-            {documentType === 'imported_invoice' ? <ImportedInvoiceArchive /> : <>
+            {documentType === 'invoice' && invoiceSource !== 'erp' && <ImportedInvoiceArchive />}
+            {!(documentType === 'invoice' && invoiceSource === 'imported') && <div className={documentType === 'invoice' && invoiceSource === 'all' ? 'mt-8' : ''}>
+            {documentType === 'invoice' && invoiceSource === 'all' && <h2 className="mb-4 text-lg font-semibold text-gray-950">Created in this ERP</h2>}
             {/* Global Inline Filter Panel */}
             <div className="mb-6">
               <InlineFilterPanel
@@ -465,7 +480,7 @@ const InvoiceList: React.FC<InvoiceListProps> = ({ onClose }) => {
                 />
               </div>
             )}
-            </>}
+            </div>}
           </div>
         </div>
       </div>

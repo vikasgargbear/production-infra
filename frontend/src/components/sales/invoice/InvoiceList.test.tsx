@@ -60,17 +60,24 @@ const response = (number: string) => ({
   }],
 });
 
+beforeEach(() => {
+  jest.clearAllMocks();
+  (canonicalDocumentHistoryApi.get as jest.Mock).mockResolvedValue({
+    items: [], total: 0, page: 1, page_size: 25, business_date: '2026-08-25',
+  });
+});
+
 test('cancels pending debounce work and ignores an older in-flight response', async () => {
   jest.useFakeTimers();
   const oldRequest = deferred<any>();
   const newRequest = deferred<any>();
   (canonicalDocumentHistoryApi.get as jest.Mock)
+    .mockReset()
     .mockResolvedValueOnce({ items: [], total: 0, page: 1, page_size: 25, business_date: '2026-08-25' })
     .mockReturnValueOnce(oldRequest.promise)
     .mockReturnValueOnce(newRequest.promise);
 
   render(<InvoiceList />);
-  fireEvent.click(screen.getByRole('button', { name: 'New ERP Invoices' }));
   await act(async () => undefined);
 
   fireEvent.change(screen.getByLabelText('history search'), { target: { value: 'old' } });
@@ -89,9 +96,14 @@ test('cancels pending debounce work and ignores an older in-flight response', as
   jest.useRealTimers();
 });
 
-test('opens existing business invoice history by default', () => {
+test('opens all invoice sources by default and allows source filtering', async () => {
   render(<InvoiceList />);
+  await act(async () => undefined);
 
-  expect(screen.getByRole('button', { name: 'Existing Invoices' }).getAttribute('aria-pressed')).toBe('true');
+  expect(screen.getByRole('button', { name: 'Invoices' }).getAttribute('aria-pressed')).toBe('true');
+  expect((screen.getByLabelText('Invoice source') as HTMLSelectElement).value).toBe('all');
   expect(screen.getByText('Existing invoice history')).toBeTruthy();
+
+  fireEvent.change(screen.getByLabelText('Invoice source'), { target: { value: 'erp' } });
+  expect(screen.queryByText('Existing invoice history')).toBeNull();
 });
