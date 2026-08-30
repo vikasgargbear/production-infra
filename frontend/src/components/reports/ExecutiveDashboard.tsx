@@ -61,13 +61,20 @@ const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ embedded = fals
       const dateParams = dashboardDateRange(context.business_date, dateRange);
       setBusinessDate(context.business_date);
 
-      const results = await Promise.allSettled([
+      // The production API deliberately has a four-connection database budget.
+      // Keep one connection available for session/auth traffic instead of
+      // issuing five dashboard reads at once and deterministically starving
+      // the final request.
+      const firstBatch = await Promise.allSettled([
         apiClient.get('/dashboard/stats', { params: dateParams }),
         apiClient.get('/dashboard/sales-analytics', { params: dateParams }),
         apiClient.get('/dashboard/inventory-summary'),
+      ]);
+      const secondBatch = await Promise.allSettled([
         apiClient.get('/dashboard/top-products', { params: { ...dateParams, limit: 5 } }),
         apiClient.get('/dashboard/top-customers', { params: { ...dateParams, limit: 5 } }),
       ]);
+      const results = [...firstBatch, ...secondBatch];
 
       const unavailable: string[] = [];
       const project = <T,>(index: number, projector: (value: unknown) => T): T | null => {
