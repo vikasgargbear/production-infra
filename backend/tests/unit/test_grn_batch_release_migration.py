@@ -61,4 +61,4 @@ def test_grn_batch_release_files_are_schema_authority_and_runtime_head() -> None
     assert "backend/alembic/sql/20260829_0059_grn_batch_release.sql" in required
     assert "backend/scripts/generate_grn_batch_release_migration.py" in required
     deployment = ROOT / "backend/app/infrastructure/operator_actions/deployment_contract.py"
-    assert _constant(deployment, "EXPECTED_CANONICAL_ALEMBIC_HEAD") == "20260830_0070"
+    assert _constant(deployment, "EXPECTED_CANONICAL_ALEMBIC_HEAD") == "20260830_0071"
