@@ -282,13 +282,32 @@ def test_referenced_party_cutover_correction_is_hash_bound_and_fail_closed() -> 
     digest = hashlib.sha256(sql.encode("utf-8")).hexdigest()
 
     assert digest in source
+    assert sql.count("opening.party_key=fact.party_key") == 3
+    assert sql.count("opening.selection_state<>'quarantined'") == 3
+    assert sql.count(
+        "opening.payload->>'party_role'=fact.payload->>'party_role'"
+    ) == 3
+    assert "payload->>'selection_state'='archive-only'" not in sql
+    assert "CREATE OR REPLACE FUNCTION erp_automation_commands.promote_historical_operational_batch" in sql
+    assert "CREATE OR REPLACE FUNCTION erp_automation_reads.historical_operational_cutover_status" in sql
+
+
+def test_opening_party_identity_cutover_correction_is_hash_bound_and_fail_closed() -> None:
+    version = ROOT / "alembic/versions/20260830_0070_historical_opening_party_identity.py"
+    sql_path = ROOT / "alembic/sql/20260830_0070_historical_opening_party_identity.sql"
+    source_path = (
+        ROOT.parent
+        / "database/canonical/operations/automation/historical_operational_cutover.sql"
+    )
+    source = version.read_text(encoding="utf-8")
+    sql = sql_path.read_text(encoding="utf-8")
+    digest = hashlib.sha256(sql.encode("utf-8")).hexdigest()
+
+    assert digest in source
     current_source = source_path.read_text(encoding="utf-8")
     for text_value in (current_source, sql):
         assert text_value.count("opening.party_key=fact.party_key") == 3
-        assert text_value.count("opening.selection_state<>'quarantined'") == 3
-        assert text_value.count(
-            "opening.payload->>'party_role'=fact.payload->>'party_role'"
-        ) == 3
-        assert "payload->>'selection_state'='archive-only'" not in text_value
+        assert "AND binding.source_party_id=opening_fact.party_key;" in text_value
+        assert "binding.party_role=opening_fact.payload->>'party_role'" not in text_value
     assert "CREATE OR REPLACE FUNCTION erp_automation_commands.promote_historical_operational_batch" in sql
     assert "CREATE OR REPLACE FUNCTION erp_automation_reads.historical_operational_cutover_status" in sql
