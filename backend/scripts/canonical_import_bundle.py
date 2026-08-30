@@ -53,6 +53,7 @@ def main() -> int:
     apply_parser.add_argument("--api-origin", required=True)
     apply_parser.add_argument("--confirmation", required=True)
     apply_parser.add_argument("--token-env", default="ERP_IMPORT_ACCESS_TOKEN")
+    apply_parser.add_argument("--workers", type=int, default=1)
 
     args = parser.parse_args()
     try:
@@ -81,6 +82,7 @@ def main() -> int:
                 client,
                 confirmation=args.confirmation,
                 receipt_path=args.receipt,
+                workers=args.workers,
             )
         finally:
             client.close()

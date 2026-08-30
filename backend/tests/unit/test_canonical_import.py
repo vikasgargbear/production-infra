@@ -3,6 +3,8 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+import threading
+import time
 from uuid import uuid4
 
 import httpx
@@ -206,6 +208,57 @@ def test_apply_binds_token_to_org_reconciles_and_resumes(tmp_path: Path) -> None
     assert second == first
     assert calls.count(("POST", "/api/products/")) == 1
     assert receipt_path.stat().st_mode & 0o777 == 0o600
+
+
+def test_apply_runs_independent_phase_operations_concurrently(tmp_path: Path) -> None:
+    operations = []
+    for index in range(6):
+        operation = _product_operation()
+        operation["operation_id"] = f"product-concurrent-{index}"
+        operation["source_record_id"] = f"source-concurrent-{index}"
+        operation["idempotency_key"] = f"migration:concurrent:{index}"
+        operations.append(operation)
+    bundle = load_import_bundle(_write_bundle(tmp_path, operations))
+    plan = build_plan(bundle)
+    lock = threading.Lock()
+    active = 0
+    maximum_active = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal active, maximum_active
+        if request.url.path == "/ready":
+            return httpx.Response(200, json={"status": "ready"})
+        if request.url.path == "/api/auth/verify-token":
+            return httpx.Response(200, json={"valid": True, "org_id": ORG_ID})
+        if request.url.path == "/api/products/" and request.method == "POST":
+            with lock:
+                active += 1
+                maximum_active = max(maximum_active, active)
+            time.sleep(0.02)
+            with lock:
+                active -= 1
+            return httpx.Response(201, json={"product_id": PRODUCT_ID})
+        if request.url.path == f"/api/products/{PRODUCT_ID}":
+            return httpx.Response(200, json={"product_name": "Reviewed product"})
+        raise AssertionError(request.url.path)
+
+    client = CanonicalImportClient(
+        "https://api.example.test", "token", transport=httpx.MockTransport(handler)
+    )
+    try:
+        receipt = apply_bundle(
+            bundle,
+            plan,
+            client,
+            confirmation=f"APPLY-MIGRATION:{ORG_ID}:{plan['plan_sha256']}",
+            receipt_path=tmp_path / "concurrent-receipt.json",
+            workers=4,
+        )
+    finally:
+        client.close()
+
+    assert receipt["complete"] is True
+    assert maximum_active > 1
 
 
 def test_apply_refuses_token_for_another_organization(tmp_path: Path) -> None:
