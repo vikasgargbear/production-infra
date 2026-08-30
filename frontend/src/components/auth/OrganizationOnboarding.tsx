@@ -1,4 +1,4 @@
-import React, { FormEvent, useState } from 'react';
+import React, { FormEvent, useEffect, useState } from 'react';
 import { AlertCircle, Building2, Loader2, MailCheck } from 'lucide-react';
 import { CreateOrganizationInput, useAuth } from '../../contexts/AuthContext';
 import { invitationTokenFromLocation } from '../../services/auth/oauthConsentClient';
@@ -23,15 +23,36 @@ const OrganizationOnboarding: React.FC = () => {
     const [organization, setOrganization] = useState<CreateOrganizationInput>(emptyOrganization);
     const [invitationToken, setInvitationToken] = useState(initialInvitationToken);
     const [error, setError] = useState('');
+    const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof CreateOrganizationInput, string>>>({});
     const [loading, setLoading] = useState(false);
 
     const updateOrganization = (field: keyof CreateOrganizationInput, value: string) => {
         setOrganization((previous) => ({ ...previous, [field]: value }));
+        setFieldErrors((previous) => {
+            if (!previous[field]) return previous;
+            const next = { ...previous };
+            delete next[field];
+            return next;
+        });
     };
+
+    const fieldDescription = (field: keyof CreateOrganizationInput, helpId?: string) => (
+        [helpId, fieldErrors[field] ? `organization-${field.replace('_', '-')}-error` : '']
+            .filter(Boolean)
+            .join(' ') || undefined
+    );
+
+    useEffect(() => {
+        const firstInvalidField = Object.keys(fieldErrors)[0] as keyof CreateOrganizationInput | undefined;
+        if (firstInvalidField) {
+            document.getElementById(`organization-${firstInvalidField.replace('_', '-')}`)?.focus();
+        }
+    }, [fieldErrors]);
 
     const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
         setError('');
+        setFieldErrors({});
         setLoading(true);
         try {
             const result = await createOrganization({
@@ -44,6 +65,9 @@ const OrganizationOnboarding: React.FC = () => {
             });
             if (!result.success) {
                 setError(result.error || 'The organization could not be created.');
+                if (result.fieldErrors) {
+                    setFieldErrors(result.fieldErrors);
+                }
             }
         } catch {
             setError('The organization could not be created.');
@@ -126,11 +150,15 @@ const OrganizationOnboarding: React.FC = () => {
                                 value={organization.legal_name}
                                 onChange={(event) => updateOrganization('legal_name', event.target.value)}
                                 autoComplete="organization"
+                                minLength={2}
                                 maxLength={200}
                                 required
                                 disabled={loading}
-                                className="min-h-11 w-full rounded-md border border-gray-300 bg-white px-3 py-2.5 text-base focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                aria-invalid={Boolean(fieldErrors.legal_name)}
+                                aria-describedby={fieldDescription('legal_name')}
+                                className={`min-h-11 w-full rounded-md border bg-white px-3 py-2.5 text-base focus:outline-none focus:ring-2 ${fieldErrors.legal_name ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'}`}
                             />
+                            {fieldErrors.legal_name && <p id="organization-legal-name-error" className="mt-1 text-sm text-red-700">{fieldErrors.legal_name}</p>}
                         </div>
                         <div className="md:col-span-3">
                             <label htmlFor="organization-trade-name" className="mb-1 block text-sm font-medium text-gray-800">
@@ -141,10 +169,14 @@ const OrganizationOnboarding: React.FC = () => {
                                 name="organization-trade-name"
                                 value={organization.trade_name}
                                 onChange={(event) => updateOrganization('trade_name', event.target.value)}
+                                minLength={2}
                                 maxLength={200}
                                 disabled={loading}
-                                className="min-h-11 w-full rounded-md border border-gray-300 bg-white px-3 py-2.5 text-base focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                aria-invalid={Boolean(fieldErrors.trade_name)}
+                                aria-describedby={fieldDescription('trade_name')}
+                                className={`min-h-11 w-full rounded-md border bg-white px-3 py-2.5 text-base focus:outline-none focus:ring-2 ${fieldErrors.trade_name ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'}`}
                             />
+                            {fieldErrors.trade_name && <p id="organization-trade-name-error" className="mt-1 text-sm text-red-700">{fieldErrors.trade_name}</p>}
                         </div>
                         <div className="md:col-span-6">
                             <label htmlFor="organization-address-line1" className="mb-1 block text-sm font-medium text-gray-800">
@@ -156,11 +188,15 @@ const OrganizationOnboarding: React.FC = () => {
                                 value={organization.address_line1}
                                 onChange={(event) => updateOrganization('address_line1', event.target.value)}
                                 autoComplete="address-line1"
-                                maxLength={250}
+                                minLength={5}
+                                maxLength={240}
                                 required
                                 disabled={loading}
-                                className="min-h-11 w-full rounded-md border border-gray-300 bg-white px-3 py-2.5 text-base focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                aria-invalid={Boolean(fieldErrors.address_line1)}
+                                aria-describedby={fieldDescription('address_line1')}
+                                className={`min-h-11 w-full rounded-md border bg-white px-3 py-2.5 text-base focus:outline-none focus:ring-2 ${fieldErrors.address_line1 ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'}`}
                             />
+                            {fieldErrors.address_line1 && <p id="organization-address-line1-error" className="mt-1 text-sm text-red-700">{fieldErrors.address_line1}</p>}
                         </div>
                         <div className="md:col-span-2">
                             <label htmlFor="organization-city" className="mb-1 block text-sm font-medium text-gray-800">
@@ -172,11 +208,15 @@ const OrganizationOnboarding: React.FC = () => {
                                 value={organization.city}
                                 onChange={(event) => updateOrganization('city', event.target.value)}
                                 autoComplete="address-level2"
+                                minLength={2}
                                 maxLength={120}
                                 required
                                 disabled={loading}
-                                className="min-h-11 w-full rounded-md border border-gray-300 bg-white px-3 py-2.5 text-base focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                aria-invalid={Boolean(fieldErrors.city)}
+                                aria-describedby={fieldDescription('city')}
+                                className={`min-h-11 w-full rounded-md border bg-white px-3 py-2.5 text-base focus:outline-none focus:ring-2 ${fieldErrors.city ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'}`}
                             />
+                            {fieldErrors.city && <p id="organization-city-error" className="mt-1 text-sm text-red-700">{fieldErrors.city}</p>}
                         </div>
                         <div className="md:col-span-2">
                             <label htmlFor="organization-state-code" className="mb-1 block text-sm font-medium text-gray-800">
@@ -192,12 +232,14 @@ const OrganizationOnboarding: React.FC = () => {
                                 maxLength={2}
                                 placeholder="e.g. 27"
                                 title="Enter the 2-digit Indian GST state code"
-                                aria-describedby="organization-state-code-help"
+                                aria-invalid={Boolean(fieldErrors.state_code)}
+                                aria-describedby={fieldDescription('state_code', 'organization-state-code-help')}
                                 required
                                 disabled={loading}
                                 className="min-h-11 w-full rounded-md border border-gray-300 bg-white px-3 py-2.5 text-base focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
                             <p id="organization-state-code-help" className="mt-1 text-xs text-gray-500">2 digits, for example 27</p>
+                            {fieldErrors.state_code && <p id="organization-state-code-error" className="mt-1 text-sm text-red-700">{fieldErrors.state_code}</p>}
                         </div>
                         <div className="md:col-span-2">
                             <label htmlFor="organization-postal-code" className="mb-1 block text-sm font-medium text-gray-800">
@@ -210,16 +252,18 @@ const OrganizationOnboarding: React.FC = () => {
                                 onChange={(event) => updateOrganization('postal_code', event.target.value)}
                                 autoComplete="postal-code"
                                 inputMode="numeric"
-                                pattern="[0-9]{6}"
+                                pattern="[1-9][0-9]{5}"
                                 maxLength={6}
                                 placeholder="e.g. 400001"
                                 title="Enter a 6-digit Indian postal code"
-                                aria-describedby="organization-postal-code-help"
+                                aria-invalid={Boolean(fieldErrors.postal_code)}
+                                aria-describedby={fieldDescription('postal_code', 'organization-postal-code-help')}
                                 required
                                 disabled={loading}
                                 className="min-h-11 w-full rounded-md border border-gray-300 bg-white px-3 py-2.5 text-base focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
                             <p id="organization-postal-code-help" className="mt-1 text-xs text-gray-500">6-digit PIN code</p>
+                            {fieldErrors.postal_code && <p id="organization-postal-code-error" className="mt-1 text-sm text-red-700">{fieldErrors.postal_code}</p>}
                         </div>
                     </div>
                     <button

@@ -725,6 +725,50 @@ test('organization creation uses the Supabase bearer and exchanges a new ERP ses
 });
 
 
+test('organization creation returns field-specific validation errors', async () => {
+    render(<AuthProvider><Probe /></AuthProvider>);
+    await waitFor(() => expect(currentAuth.isLoading).toBe(false));
+    mockGetSession.mockResolvedValue({
+        data: { session: { access_token: 'new-owner-supabase-access' } },
+        error: null,
+    });
+    fetch.mockResolvedValueOnce({
+        ok: false,
+        status: 422,
+        json: async () => ({
+            detail: [
+                {
+                    type: 'string_too_short',
+                    loc: ['body', 'address_line1'],
+                    msg: 'String should have at least 5 characters',
+                },
+            ],
+        }),
+    });
+
+    let result;
+    await act(async () => {
+        result = await currentAuth.createOrganization({
+            legal_name: 'Acme Pharma Private Limited',
+            trade_name: '',
+            address_line1: 'A',
+            city: 'Mumbai',
+            state_code: '27',
+            postal_code: '400001',
+        });
+    });
+
+    expect(result).toEqual({
+        success: false,
+        error: 'Check the highlighted organization details.',
+        fieldErrors: {
+            address_line1: 'Enter an address with at least 5 characters.',
+        },
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+});
+
+
 test('invitation acceptance uses the URL token contract and exchanges an ERP session', async () => {
     render(<AuthProvider><Probe /></AuthProvider>);
     await waitFor(() => expect(currentAuth.isLoading).toBe(false));
