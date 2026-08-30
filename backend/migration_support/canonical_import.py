@@ -40,6 +40,7 @@ DIRECT_MUTATION_PATHS = {
     ("POST", "/api/suppliers/"),
     ("POST", "/api/products/setup-options/categories"),
     ("POST", "/api/products/setup-options/manufacturers"),
+    ("POST", "/api/canonical/migration-history/facts"),
 }
 DIRECT_MUTATION_PATH_TEMPLATES = {
     ("PUT", "/api/products/{product_id}/setup"),
@@ -267,15 +268,27 @@ class ImportOperation:
         if readback is not None:
             if not isinstance(readback, dict):
                 raise CanonicalImportError(f"Operation {operation_id} readback is invalid")
-            readback_method = readback.get("method", "GET")
-            readback_path = readback.get("path_template")
-            if (
-                readback_method != "GET"
-                or not isinstance(readback_path, str)
-                or not readback_path.startswith("/api/")
-            ):
+            readback_mode = readback.get("mode", "resource")
+            if readback_mode == "response":
+                expected = readback.get("expected")
+                if not isinstance(expected, dict) or not expected:
+                    raise CanonicalImportError(
+                        f"Operation {operation_id} response readback is invalid"
+                    )
+            elif readback_mode == "resource":
+                readback_method = readback.get("method", "GET")
+                readback_path = readback.get("path_template")
+                if (
+                    readback_method != "GET"
+                    or not isinstance(readback_path, str)
+                    or not readback_path.startswith("/api/")
+                ):
+                    raise CanonicalImportError(
+                        f"Operation {operation_id} readback is not a canonical GET"
+                    )
+            else:
                 raise CanonicalImportError(
-                    f"Operation {operation_id} readback is not a canonical GET"
+                    f"Operation {operation_id} readback mode is invalid"
                 )
         raw_bindings = value.get("bindings", {})
         if not isinstance(raw_bindings, dict):
@@ -572,6 +585,15 @@ class CanonicalImportClient:
     def reconcile(self, operation: ImportOperation, result: Mapping[str, Any]) -> None:
         if operation.readback is None:
             raise CanonicalImportError(f"Operation {operation.operation_id} lacks readback")
+        expected = operation.readback.get("expected", {})
+        if not isinstance(expected, dict):
+            raise CanonicalImportError(f"Operation {operation.operation_id} readback differs")
+        if operation.readback.get("mode") == "response":
+            if any(result.get(key) != value for key, value in expected.items()):
+                raise CanonicalImportError(
+                    f"Operation {operation.operation_id} response readback differs"
+                )
+            return
         field = operation.response_id_field
         if not isinstance(field, str) or not isinstance(result.get(field), str):
             raise CanonicalImportError(f"Operation {operation.operation_id} lacks a resource ID")
@@ -584,9 +606,6 @@ class CanonicalImportClient:
         response = self._request_json(
             "GET", path, expected_statuses=(200,), allow_list=True
         )
-        expected = operation.readback.get("expected", {})
-        if not isinstance(expected, dict):
-            raise CanonicalImportError(f"Operation {operation.operation_id} readback differs")
         if isinstance(response, list):
             matches = [
                 item

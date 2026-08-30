@@ -72,6 +72,7 @@ from .api.routes import (
     canonical_evidence_uploads,
     canonical_drug_licenses,
     canonical_invoice_drafts,
+    canonical_historical_migration,
 )
 from .api.routes import web_operator_actions
 from .api.routes.internal import (
@@ -378,6 +379,7 @@ api.include_router(canonical_reference_reads.router, tags=["Canonical Reference 
 api.include_router(canonical_evidence_uploads.router)
 api.include_router(canonical_drug_licenses.router)
 api.include_router(canonical_invoice_drafts.router)
+api.include_router(canonical_historical_migration.router)
 
 # --- Master Data ---
 # Canonical product/customer/supplier/address mutations and every supported

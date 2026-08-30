@@ -29,11 +29,11 @@ except ModuleNotFoundError:  # pragma: no cover - exercised by direct CLI execut
 
 CONTRACT_VERSION = "canonical-organization-purge-v2"
 CANONICAL_STAGING_PROJECT_REF = "rgihahbmkrmhitjdjvev"
-EXPECTED_CANONICAL_RELATION_COUNT = 121
+EXPECTED_CANONICAL_RELATION_COUNT = 122
 EXPECTED_EPHEMERAL_RELATION_COUNT = 9
 EXPECTED_ALEMBIC_SCHEMA_COUNT = 30
 RESET_LOCK_KEY = 8_260_826_2
-EXPECTED_ORGANIZATION_RELATION_COUNT = 105
+EXPECTED_ORGANIZATION_RELATION_COUNT = 106
 ORGANIZATION_CONFIRMATION_PREFIX = "DELETE-ORGANIZATION:"
 TRANSITIVE_ORGANIZATION_RELATIONS = frozenset(
     {
@@ -338,9 +338,9 @@ def classify_relations(
         )
 
     reset_relations = tuple(sorted(set(canonical) - set(PRESERVED_SEED_RELATIONS)))
-    if len(reset_relations) != 116:
+    if len(reset_relations) != 117:
         raise ResetAuthorityError(
-            f"reset relation count drifted: expected=116 observed={len(reset_relations)}"
+            f"reset relation count drifted: expected=117 observed={len(reset_relations)}"
         )
     if set(reset_relations) & set(PRESERVED_SEED_RELATIONS):
         raise ResetAuthorityError("preserved seed relation entered reset scope")

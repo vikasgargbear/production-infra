@@ -14,7 +14,7 @@ def test_canonical_catalog_is_the_only_query_schema_authority() -> None:
 
     catalog = schema_validator.parse_schema_catalog(required=True)
 
-    assert len(catalog) == 121
+    assert len(catalog) == 122
     assert "sales.invoices" in catalog
     assert "id" in catalog["sales.invoices"]
     assert "invoice_id" not in catalog["sales.invoices"]

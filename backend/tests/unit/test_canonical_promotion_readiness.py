@@ -179,7 +179,7 @@ def _fixture_root(
             "preserved_seed_relation_count": 5,
             "preserved_seed_digest_sha256": "3" * 64,
             "reset_relation_count": 114,
-            "truncate_relation_count": 121,
+            "truncate_relation_count": 122,
             "disposable_row_count_before_reset": 1,
             "disposable_row_count_after_reset": 0,
             "evidence_storage_object_count_after_reset": 0,
