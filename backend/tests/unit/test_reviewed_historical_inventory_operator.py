@@ -33,6 +33,8 @@ def test_workflow_keeps_private_rows_out_of_source_and_refuses_resets() -> None:
     assert "refusing reviewed import" in source.lower()
     assert "-- python /app/scripts/apply_reviewed_historical_inventory.py" in source
     assert "/app/backend/scripts/apply_reviewed_historical_inventory.py" not in source
+    assert 'raw_response="$RUNNER_TEMP/reviewed-inventory-ssh-output"' in source
+    assert "awk '/^\\{.*\\}$/ { receipt=$0 }" in source
     assert "actions/upload-artifact@v4" in source
     assert "retention-days: 14" in source
     assert "${{ runner.temp }}" not in source

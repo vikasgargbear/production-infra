@@ -199,8 +199,9 @@ jobs:
           set -euo pipefail
           request="$RUNNER_TEMP/reviewed-inventory-request.json"
           import_request="$RUNNER_TEMP/reviewed-inventory-import.json"
+          raw_response="$RUNNER_TEMP/reviewed-inventory-ssh-output"
           response="$OPERATOR_RECEIPT_PATH"
-          trap 'rm -f "$request" "$import_request"' EXIT
+          trap 'rm -f "$request" "$import_request" "$raw_response"' EXIT
           umask 077
           if test "$OPERATOR_ACTION" = import; then
             test -n "$IMPORT_BATCH_B64_GZIP"
@@ -236,7 +237,9 @@ jobs:
             --deployment-instance "$RAILWAY_API_DEPLOYMENT_INSTANCE_ID" \
             --identity-file "$SSH_PRIVATE_KEY" \
             -- python /app/scripts/apply_reviewed_historical_inventory.py \
-            < "$request" > "$response"
+            < "$request" > "$raw_response"
+          awk '/^\{.*\}$/ { receipt=$0 } END { if (receipt == "") exit 1; print receipt }' \
+            "$raw_response" > "$response"
           jq --exit-status \
             --arg action "$OPERATOR_ACTION" \
             --arg sha "$REVIEWED_SHA" \
