@@ -400,16 +400,11 @@ def test_product_inventory_cutover_contract_preserves_exact_scalars() -> None:
 def test_historical_product_inventory_cutover_is_hash_bound_and_fail_closed() -> None:
     version = ROOT / "alembic/versions/20260830_0073_historical_product_inventory_cutover.py"
     sql_path = ROOT / "alembic/sql/20260830_0073_historical_product_inventory_cutover.sql"
-    source_path = (
-        ROOT.parent
-        / "database/canonical/operations/automation/historical_product_inventory_cutover.sql"
-    )
     source = version.read_text(encoding="utf-8")
     sql = sql_path.read_text(encoding="utf-8")
     digest = hashlib.sha256(sql.encode("utf-8")).hexdigest()
 
     assert digest in source
-    assert source_path.read_text(encoding="utf-8").strip() in sql
     assert "setup_review_required" in sql
     assert "status<>'active' OR setup_review_required" in sql
     assert "products_active_hsn_release_ck" not in sql

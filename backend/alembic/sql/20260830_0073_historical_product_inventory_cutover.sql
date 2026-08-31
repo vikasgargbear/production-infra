@@ -518,6 +518,7 @@ DECLARE actor_id uuid; product_fact automation.historical_migration_facts%ROWTYP
   raw_value numeric(20,2); derived_value numeric(20,2);
   batch_quantity numeric(20,6); batch_value numeric(20,2);
   batch_count integer; line_number integer; matching_count integer;
+  matching_product_count integer;
   source_code text; manufacturer_label text; base_uom text; source_hsn text;
   source_gst numeric(9,6); opening_date date; fiscal_year integer;
   product_created integer:=0; zero_clamped integer:=0; openings_posted integer:=0;
@@ -624,14 +625,47 @@ BEGIN
         );
       manufacturer_identifier:=created_manufacturer.manufacturer_party_id;
     END IF;
-    SELECT * INTO STRICT created_product
-      FROM erp_master_commands.create_product_draft(
-        organization_id,product_fact.product_name,NULL,'medicine',
-        extensions.digest(pg_catalog.convert_to(
-          reviewed_dataset_id||':product:'||source_code,'UTF8'
-        ),'sha256'),command_time+interval '1 hour'
-      );
-    product_identifier:=created_product.product_id;
+    IF product_fact.product_id IS NOT NULL THEN
+      SELECT product.id INTO product_identifier
+        FROM catalog.products product
+       WHERE product.org_id=organization_id
+         AND product.id=product_fact.product_id
+         AND product.status='draft'
+         AND pg_catalog.lower(pg_catalog.btrim(product.name))=
+             pg_catalog.lower(pg_catalog.btrim(product_fact.product_name))
+       FOR UPDATE;
+      IF product_identifier IS NULL THEN
+        RAISE EXCEPTION USING ERRCODE='23514',
+          MESSAGE='reviewed historical product does not identify its existing draft';
+      END IF;
+    ELSE
+      SELECT count(*),(min(product.id::text))::uuid
+        INTO matching_product_count,product_identifier
+        FROM catalog.products product
+       WHERE product.org_id=organization_id AND product.status='draft'
+         AND pg_catalog.lower(pg_catalog.btrim(product.name))=
+             pg_catalog.lower(pg_catalog.btrim(product_fact.product_name));
+      IF matching_product_count>1 THEN
+        RAISE EXCEPTION USING ERRCODE='23514',
+          MESSAGE='reviewed historical product name matches multiple drafts';
+      ELSIF matching_product_count=0 THEN
+        SELECT * INTO STRICT created_product
+          FROM erp_master_commands.create_product_draft(
+            organization_id,product_fact.product_name,NULL,'medicine',
+            extensions.digest(pg_catalog.convert_to(
+              reviewed_dataset_id||':product:'||source_code,'UTF8'
+            ),'sha256'),command_time+interval '1 hour'
+          );
+        product_identifier:=created_product.product_id;
+      END IF;
+    END IF;
+    IF EXISTS (
+      SELECT 1 FROM automation.historical_product_bindings binding
+       WHERE binding.org_id=organization_id AND binding.product_id=product_identifier
+    ) THEN
+      RAISE EXCEPTION USING ERRCODE='23505',
+        MESSAGE='historical product draft is already bound to another source fact';
+    END IF;
     identity_conversion_id:=pg_catalog.gen_random_uuid();
     INSERT INTO catalog.uom_conversions(
       org_id,id,product_id,from_uom_code,to_uom_code,multiplier,valid_from,status,

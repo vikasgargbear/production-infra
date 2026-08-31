@@ -759,8 +759,8 @@ def _master_search_parameters(value: Optional[str]) -> dict[str, Any]:
 def products(limit: int = Query(50, ge=1, le=200), skip: int = Query(0, ge=0),
              offset: Optional[int] = Query(None, ge=0),
              search: str = Query("", max_length=100), include_inactive: bool = False,
-             origin: Literal["all", "imported", "created_in_erp"] = "all",
-             user: dict = PRODUCT_LOOKUP_USER, db: Session = Depends(get_db)):
+             user: dict = PRODUCT_LOOKUP_USER, db: Session = Depends(get_db),
+             origin: Literal["all", "imported", "created_in_erp"] = "all"):
     _require_operational_lookup_bound(
         user,
         manage_permission="catalog.product.manage",

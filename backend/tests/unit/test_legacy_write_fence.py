@@ -189,6 +189,7 @@ ALLOWED_EFFECTIVE_MUTATIONS = {
     ("POST", "/api/canonical/compliance/drug-licenses"),
     ("POST", "/api/canonical/migration-history/facts"),
     ("POST", "/api/canonical/migration-history/operational-cutover"),
+    ("POST", "/api/canonical/migration-history/product-inventory-cutover"),
     ("POST", "/api/internal/tax-provider/requests:fetch"),
     ("POST", "/api/internal/tax-provider/completions"),
     *CANONICAL_MASTER_WRITES,

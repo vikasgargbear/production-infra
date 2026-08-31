@@ -24,7 +24,7 @@ SQL_PATH = (
     / "sql"
     / "20260830_0073_historical_product_inventory_cutover.sql"
 )
-EXPECTED_SQL_SHA256 = "d601037460050121e89729f2dae9d866f8c9581e310bea7ec9343d82c45e7c5c"
+EXPECTED_SQL_SHA256 = "90e3daabcc2a11d6b164e2e5faea29184904ec2e072481524322040bfd3c5b5c"
 
 
 def _reviewed_sql() -> str:

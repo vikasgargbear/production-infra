@@ -57,6 +57,7 @@ def _fact(
     payload: dict,
     batch_number: str | None = None,
     selection_state: str = "reviewed",
+    product_id: str | None = None,
 ) -> dict:
     return {
         "id": identity,
@@ -67,6 +68,7 @@ def _fact(
         "event_date": event_date,
         "product_code": product_code,
         "product_name": product_name,
+        "product_id": product_id,
         "batch_number": batch_number,
         "quantity": quantity,
         "inventory_value": inventory_value,
@@ -95,6 +97,16 @@ def _seed_cutover_authority(connection) -> None:
         "core.reference_data_releases", "tax.tax_code_versions", "catalog.ingredients"
     ):
         connection.exec_driver_sql(f"ALTER TABLE {table} DISABLE TRIGGER USER")
+    connection.execute(
+        text(
+            """
+            UPDATE core.reference_data_releases
+               SET status='retired'
+             WHERE dataset_kind IN ('hsn_sac_tax','ingredient_classification')
+               AND status='active'
+            """
+        )
+    )
     connection.execute(
         text(
             """
@@ -239,12 +251,20 @@ def main() -> None:
                 "mrp_uom_code": "PCS",
                 "mrp_uom_multiplier": "1.000000",
             }
+            existing_product = connection.execute(
+                text(
+                    "SELECT product_id FROM erp_master_commands.create_product_draft("
+                    ":org,'Imported Medicine 100',NULL,'medicine',"
+                    "pg_catalog.decode(repeat('21',32),'hex'),transaction_timestamp()+interval '1 hour')"
+                ),
+                {"org": fixture.ORG_A},
+            ).scalar_one()
             facts = [
                 _fact(
                     "ee000000-0000-7000-8000-000000000010", "product", "product:MARG-100",
                     product_code="MARG-100", product_name="Imported Medicine 100",
                     quantity="10.000000", inventory_value="1000.00", event_date="2026-08-01",
-                    payload=product_payload,
+                    payload=product_payload, product_id=str(existing_product),
                 ),
                 _fact(
                     "ee000000-0000-7000-8000-000000000011", "batch", "batch:MARG-100:B1",
@@ -304,6 +324,13 @@ def main() -> None:
                 ("Imported Medicine 100", "active", True, None, None),
                 ("Imported Negative Medicine", "active", True, None, None),
             ]
+            assert connection.execute(
+                text(
+                    "SELECT count(*) FROM catalog.products WHERE org_id=:org "
+                    "AND name='Imported Medicine 100'"
+                ),
+                {"org": fixture.ORG_A},
+            ).scalar_one() == 1
             batch = connection.execute(
                 text(
                     "SELECT batch.status,batch.released_at IS NOT NULL,"
