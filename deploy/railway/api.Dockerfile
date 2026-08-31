@@ -42,6 +42,7 @@ COPY backend/mcp_runtime/aasopharma_mcp/operator_actions.py ./mcp_runtime/aasoph
 COPY backend/alembic.ini ./alembic.ini
 COPY backend/alembic ./alembic
 COPY backend/migration_support ./migration_support
+COPY backend/scripts/apply_reviewed_historical_inventory.py ./scripts/apply_reviewed_historical_inventory.py
 COPY backend/scripts/canonical_data_reset_authority.py ./scripts/canonical_data_reset_authority.py
 COPY backend/scripts/canonical_demo_ids.py ./scripts/canonical_demo_ids.py
 COPY backend/scripts/canonical_migration_contract.py ./scripts/canonical_migration_contract.py

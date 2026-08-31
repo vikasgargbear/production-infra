@@ -222,6 +222,10 @@ def test_api_runtime_image_excludes_tests_docs_and_operator_tooling() -> None:
     assert "COPY deploy/control-plane /app/deploy/control-plane" not in dockerfile
     assert "COPY backend/scripts/ ./scripts" not in dockerfile
     assert (
+        "COPY backend/scripts/apply_reviewed_historical_inventory.py "
+        "./scripts/apply_reviewed_historical_inventory.py"
+    ) in dockerfile
+    assert (
         "COPY backend/scripts/canonical_data_reset_authority.py "
         "./scripts/canonical_data_reset_authority.py"
     ) in dockerfile
