@@ -29,7 +29,8 @@ def test_workflow_keeps_private_rows_out_of_source_and_refuses_resets() -> None:
     assert 'test "$(git rev-parse HEAD)" = "$REVIEWED_SHA"' in source
     assert "git merge-base --is-ancestor" in source
     assert "refusing reviewed import" in source.lower()
-    assert "apply_reviewed_historical_inventory.py" in source
+    assert "-- python /app/scripts/apply_reviewed_historical_inventory.py" in source
+    assert "/app/backend/scripts/apply_reviewed_historical_inventory.py" not in source
     assert "actions/upload-artifact@v4" in source
     assert "retention-days: 14" in source
     assert "${{ runner.temp }}" not in source
