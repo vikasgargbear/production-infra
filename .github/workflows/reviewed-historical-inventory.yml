@@ -4,12 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       action:
-        description: Import one encrypted fact batch, promote the complete dataset, or read status
+        description: Import facts, prepare the reviewed tax snapshot, promote, or read status
         required: true
         default: status
         type: choice
         options:
           - import
+          - prepare-tax
           - promote
           - status
       reviewed_sha:

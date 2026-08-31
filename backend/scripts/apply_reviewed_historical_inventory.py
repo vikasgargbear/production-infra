@@ -70,7 +70,7 @@ def _validate_request(value: dict[str, Any]) -> dict[str, Any]:
     }
     if set(value) - allowed:
         raise SystemExit("operator request contains unsupported fields")
-    if value.get("action") not in {"import", "promote", "status"}:
+    if value.get("action") not in {"import", "prepare-tax", "promote", "status"}:
         raise SystemExit("operator action is invalid")
     if not re.fullmatch(r"[0-9a-f]{40}", str(value.get("expected_sha", ""))):
         raise SystemExit("reviewed SHA is invalid")
@@ -197,6 +197,14 @@ def _status(cursor, value: dict[str, Any]) -> dict[str, Any]:
     return _result(cursor.fetchone()[0])
 
 
+def _prepare_tax(cursor, value: dict[str, Any]) -> dict[str, Any]:
+    cursor.execute(
+        "SELECT erp_automation_commands.install_historical_tax_snapshot(%s,%s)",
+        (str(value["organization_id"]), value["dataset_id"]),
+    )
+    return _result(cursor.fetchone()[0])
+
+
 def _promote(cursor, value: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     receipts: list[dict[str, Any]] = []
     for _ in range(50):
@@ -235,6 +243,9 @@ def main() -> int:
                     _activate_reviewed_user(cursor, value)
                     if action == "import":
                         operation_receipt: Any = _import_batch(cursor, value)
+                        status = _status(cursor, value)
+                    elif action == "prepare-tax":
+                        operation_receipt = _prepare_tax(cursor, value)
                         status = _status(cursor, value)
                     elif action == "promote":
                         operation_receipt, status = _promote(cursor, value)

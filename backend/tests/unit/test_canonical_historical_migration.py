@@ -433,3 +433,22 @@ def test_historical_product_inventory_cutover_is_hash_bound_and_fail_closed() ->
     )
     assert "PROMOTE-HISTORICAL-INVENTORY" in route
     assert "SELECT erp_automation_commands.promote_historical_product_inventory_batch" in route
+
+
+def test_historical_tax_snapshot_is_hash_bound_and_keeps_provenance_explicit() -> None:
+    version = ROOT / "alembic/versions/20260831_0074_historical_tax_snapshot.py"
+    sql_path = ROOT / "alembic/sql/20260831_0074_historical_tax_snapshot.sql"
+    source = version.read_text(encoding="utf-8")
+    sql = sql_path.read_text(encoding="utf-8")
+    digest = hashlib.sha256(sql.encode("utf-8")).hexdigest()
+
+    assert digest in source
+    assert "legacy_erp_migration" in sql
+    assert "install_historical_tax_snapshot" in sql
+    assert "reviewed historical HSN has conflicting GST rates" in sql
+    assert "historical GST treatment conflicts with the active canonical release" in sql
+    assert "setup review required" in sql
+    assert "source_authority='gstn'" not in sql
+    assert "DELETE FROM catalog" not in sql
+    assert "DELETE FROM inventory" not in sql
+    assert "TRUNCATE " not in sql
