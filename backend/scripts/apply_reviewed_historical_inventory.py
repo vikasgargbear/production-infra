@@ -9,6 +9,7 @@ Business data is never embedded in the repository or printed in the receipt.
 
 from __future__ import annotations
 
+from contextlib import redirect_stdout
 import json
 import os
 from pathlib import Path
@@ -217,30 +218,34 @@ def _promote(cursor, value: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[
 
 
 def main() -> int:
+    receipt_stream = sys.stdout
     raw = json.load(sys.stdin)
     if not isinstance(raw, dict):
         raise SystemExit("operator request must be a JSON object")
     value = _validate_request(raw)
     action = value["action"]
-    with psycopg2.connect(_database_url(value)) as connection:
-        with connection.cursor() as cursor:
-            _attest_reviewed_database(cursor)
-            supports_membership_options = _enter_migration_owner(cursor)
-            try:
-                _activate_reviewed_user(cursor, value)
-                if action == "import":
-                    operation_receipt: Any = _import_batch(cursor, value)
-                    status = _status(cursor, value)
-                elif action == "promote":
-                    operation_receipt, status = _promote(cursor, value)
+    # Imported helpers may emit diagnostics. Keep stdout reserved for the one
+    # machine-readable receipt consumed by the protected workflow.
+    with redirect_stdout(sys.stderr):
+        with psycopg2.connect(_database_url(value)) as connection:
+            with connection.cursor() as cursor:
+                _attest_reviewed_database(cursor)
+                supports_membership_options = _enter_migration_owner(cursor)
+                try:
+                    _activate_reviewed_user(cursor, value)
+                    if action == "import":
+                        operation_receipt: Any = _import_batch(cursor, value)
+                        status = _status(cursor, value)
+                    elif action == "promote":
+                        operation_receipt, status = _promote(cursor, value)
+                    else:
+                        operation_receipt = {"status": "read_only"}
+                        status = _status(cursor, value)
+                except BaseException:
+                    connection.rollback()
+                    raise
                 else:
-                    operation_receipt = {"status": "read_only"}
-                    status = _status(cursor, value)
-            except BaseException:
-                connection.rollback()
-                raise
-            else:
-                _leave_migration_owner(cursor, supports_membership_options)
+                    _leave_migration_owner(cursor, supports_membership_options)
     print(
         json.dumps(
             {
@@ -254,7 +259,8 @@ def main() -> int:
                 "cutover": status,
             },
             sort_keys=True,
-        )
+        ),
+        file=receipt_stream,
     )
     return 0
 

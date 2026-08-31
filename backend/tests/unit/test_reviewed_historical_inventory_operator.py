@@ -18,6 +18,8 @@ def test_operator_uses_existing_canonical_authorities_and_exact_identity() -> No
     assert "import_historical_migration_facts" in source
     assert "promote_historical_product_inventory_batch" in source
     assert "historical_product_inventory_cutover_status" in source
+    assert "with redirect_stdout(sys.stderr):" in source
+    assert "file=receipt_stream" in source
     for forbidden in ("DELETE FROM", "TRUNCATE ", "DROP SCHEMA"):
         assert forbidden not in source
 
