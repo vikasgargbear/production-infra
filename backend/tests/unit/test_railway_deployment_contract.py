@@ -148,6 +148,7 @@ def test_api_watches_only_runtime_and_packaged_migration_inputs() -> None:
         "/backend/migration_support/**",
         "/backend/scripts/canonical_migration_contract.py",
         "/backend/scripts/canonical_demo_ids.py",
+        "/backend/scripts/apply_reviewed_historical_inventory.py",
         "/backend/scripts/canonical_data_reset_authority.py",
         "/backend/scripts/canonical_staging_database.py",
         "/backend/scripts/cleanup_staging_evidence_storage.py",

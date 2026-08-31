@@ -9,6 +9,7 @@
       "/backend/mcp_runtime/aasopharma_mcp/operator_actions.py",
       "/backend/alembic/**",
       "/backend/migration_support/**",
+      "/backend/scripts/apply_reviewed_historical_inventory.py",
       "/backend/scripts/canonical_data_reset_authority.py",
       "/backend/scripts/canonical_migration_contract.py",
       "/backend/scripts/canonical_demo_ids.py",
