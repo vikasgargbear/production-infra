@@ -235,7 +235,7 @@ jobs:
             --service "$RAILWAY_API_SERVICE" \
             --deployment-instance "$RAILWAY_API_DEPLOYMENT_INSTANCE_ID" \
             --identity-file "$SSH_PRIVATE_KEY" \
-            -- python /app/backend/scripts/apply_reviewed_historical_inventory.py \
+            -- python /app/scripts/apply_reviewed_historical_inventory.py \
             < "$request" > "$response"
           jq --exit-status \
             --arg action "$OPERATOR_ACTION" \
