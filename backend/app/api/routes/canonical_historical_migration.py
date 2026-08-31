@@ -126,6 +126,10 @@ class HistoricalFactWrite(BaseModel):
         }
         if self.source_kind in dated and self.event_date is None:
             raise ValueError(f"{self.source_kind} requires event_date")
+        if self.source_kind == "product" and (
+            self.quantity is not None or self.inventory_value is not None
+        ) and self.event_date is None:
+            raise ValueError("product opening stock requires event_date")
         if self.source_kind == "batch" and (
             not self.batch_number or not (self.product_code or self.product_id)
         ):
@@ -187,6 +191,45 @@ class OperationalCutoverStatus(BaseModel):
     posted_openings: int = Field(ge=0)
     receivable: MoneyJSON
     payable: MoneyJSON
+
+
+class ProductInventoryCutoverRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    dataset_id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$")
+    location_id: UUID
+    batch_size: int = Field(default=100, ge=1, le=100)
+    confirmation: str = Field(min_length=16, max_length=400)
+
+
+class ProductInventoryCutoverResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    products_created: int = Field(ge=0)
+    products_replayed: int = Field(ge=0)
+    products_remaining: int = Field(ge=0)
+    negative_products_clamped: int = Field(ge=0)
+    batches_bound: int = Field(ge=0)
+    openings_posted: int = Field(ge=0)
+    complete: bool
+
+
+class ProductInventoryCutoverStatus(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_products: int = Field(ge=0)
+    quarantined_products: int = Field(ge=0)
+    bound_products: int = Field(ge=0)
+    setup_review_required: int = Field(ge=0)
+    negative_products_clamped: int = Field(ge=0)
+    source_batches: int = Field(ge=0)
+    quarantined_batches: int = Field(ge=0)
+    bound_batches: int = Field(ge=0)
+    posted_openings: int = Field(ge=0)
+    opening_quantity: str
+    opening_value: MoneyJSON
+    ledger_quantity: str
+    ledger_value: MoneyJSON
 
 
 class DocumentSummary(BaseModel):
@@ -413,6 +456,74 @@ def historical_operational_cutover_status(
         {"org_id": org_id, "dataset_id": dataset_id},
     ).scalar_one()
     return OperationalCutoverStatus.model_validate(result)
+
+
+@router.post(
+    "/product-inventory-cutover",
+    response_model=ProductInventoryCutoverResponse,
+)
+def promote_historical_product_inventory_batch(
+    request: ProductInventoryCutoverRequest,
+    user: dict[str, Any] = IMPORT_USER,
+    db: Session = Depends(get_db),
+):
+    """Promote one bounded reviewed product/opening-inventory batch."""
+
+    org_id = _activate(db, user)
+    expected = (
+        f"PROMOTE-HISTORICAL-INVENTORY:{org_id}:"
+        f"{request.dataset_id}:{request.location_id}"
+    )
+    if request.confirmation != expected:
+        raise HTTPException(
+            status_code=409,
+            detail="Historical product/inventory cutover confirmation differs",
+        )
+    try:
+        result = db.execute(
+            text(
+                """
+                SELECT erp_automation_commands.promote_historical_product_inventory_batch(
+                  :org_id,:dataset_id,:location_id,:batch_size
+                )
+                """
+            ),
+            {
+                "org_id": org_id,
+                "dataset_id": request.dataset_id,
+                "location_id": request.location_id,
+                "batch_size": request.batch_size,
+            },
+        ).scalar_one()
+        db.commit()
+    except DBAPIError as exc:
+        db.rollback()
+        detail = str(getattr(exc, "orig", exc)).splitlines()[0]
+        raise HTTPException(status_code=422, detail=detail) from exc
+    return ProductInventoryCutoverResponse.model_validate(result)
+
+
+@router.get(
+    "/product-inventory-cutover",
+    response_model=ProductInventoryCutoverStatus,
+)
+def historical_product_inventory_cutover_status(
+    dataset_id: str = Query(pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$"),
+    user: dict[str, Any] = REPORT_USER,
+    db: Session = Depends(get_db),
+):
+    org_id = _activate(db, user)
+    result = db.execute(
+        text(
+            """
+            SELECT erp_automation_reads.historical_product_inventory_cutover_status(
+              :org_id,:dataset_id
+            )
+            """
+        ),
+        {"org_id": org_id, "dataset_id": dataset_id},
+    ).scalar_one()
+    return ProductInventoryCutoverStatus.model_validate(result)
 
 
 @router.get("/insights", response_model=HistoricalInsightsResponse)

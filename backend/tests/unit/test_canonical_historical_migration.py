@@ -15,6 +15,9 @@ from app.api.routes.canonical_historical_migration import (
     OperationalCutoverRequest,
     OperationalCutoverResponse,
     OperationalCutoverStatus,
+    ProductInventoryCutoverRequest,
+    ProductInventoryCutoverResponse,
+    ProductInventoryCutoverStatus,
     _wire_fact,
 )
 
@@ -342,3 +345,91 @@ def test_historical_cutover_diagnostic_is_hash_bound_scoped_and_read_only() -> N
     assert "TO erp_runtime" in sql
     for forbidden in ("INSERT INTO", "UPDATE ", "DELETE FROM", "TRUNCATE "):
         assert forbidden not in sql
+
+
+def test_product_opening_fact_requires_an_effective_date() -> None:
+    with pytest.raises(ValidationError, match="product opening stock requires event_date"):
+        HistoricalFactWrite.model_validate({
+            "source_kind": "product",
+            "record_key": "A00362",
+            "product_code": "A00362",
+            "product_name": "Reviewed product",
+            "quantity": "2.000000",
+            "inventory_value": "200.22",
+            "selection_state": "reviewed",
+            "payload": {},
+        })
+
+
+def test_product_inventory_cutover_contract_preserves_exact_scalars() -> None:
+    request = ProductInventoryCutoverRequest.model_validate({
+        "dataset_id": "marg-reviewed-products-v1",
+        "location_id": "33333333-3333-4333-8333-333333333333",
+        "batch_size": 100,
+        "confirmation": "PROMOTE-HISTORICAL-INVENTORY:reviewed",
+    })
+    assert request.batch_size == 100
+    response = ProductInventoryCutoverResponse.model_validate({
+        "products_created": 1,
+        "products_replayed": 0,
+        "products_remaining": 0,
+        "negative_products_clamped": 0,
+        "batches_bound": 2,
+        "openings_posted": 1,
+        "complete": True,
+    })
+    assert response.openings_posted == 1
+    status = ProductInventoryCutoverStatus.model_validate({
+        "source_products": 1,
+        "quarantined_products": 0,
+        "bound_products": 1,
+        "setup_review_required": 1,
+        "negative_products_clamped": 0,
+        "source_batches": 2,
+        "quarantined_batches": 0,
+        "bound_batches": 2,
+        "posted_openings": 1,
+        "opening_quantity": "2.000000",
+        "opening_value": "200.22",
+        "ledger_quantity": "2.000000",
+        "ledger_value": "200.22",
+    })
+    assert status.ledger_value == "200.22"
+
+
+def test_historical_product_inventory_cutover_is_hash_bound_and_fail_closed() -> None:
+    version = ROOT / "alembic/versions/20260830_0073_historical_product_inventory_cutover.py"
+    sql_path = ROOT / "alembic/sql/20260830_0073_historical_product_inventory_cutover.sql"
+    source = version.read_text(encoding="utf-8")
+    sql = sql_path.read_text(encoding="utf-8")
+    digest = hashlib.sha256(sql.encode("utf-8")).hexdigest()
+
+    assert digest in source
+    assert "setup_review_required" in sql
+    assert "status<>'active' OR setup_review_required" in sql
+    assert "products_active_hsn_release_ck" not in sql
+    assert "products_active_manufacturer_ck" not in sql
+    assert "COALESCE(product_fact.payload->>'product_kind','medicine')<>'medicine'" in sql
+    assert "hsn_gst_candidate_unique" in sql
+    assert "batch_reconciliation_status" in sql
+    assert "greatest(raw_quantity,0)" in sql
+    assert "fact.event_date<=opening_date" in sql
+    assert "historical batch is expired, incomplete, negative, or conflicting" in sql
+    assert "'opening_receipt'" in sql
+    assert "erp_trade_commands.post_locked_document" in sql
+    assert "'inventory_valuation'" in sql
+    assert "'opening_balance_equity'" in sql
+    assert "setup_review_required=true,status='active'" in sql
+    assert "identity_conversion_id,'quarantined',NULL" in sql
+    assert "'goods_receipt_batch_release'" in sql
+    assert "status='released',released_at=command_time" in sql
+    assert "guard_active_medicine_composition" in sql
+    assert "active medicine requires a current active composition" in sql
+    assert "complete_historical_product_setup" in sql
+    assert "CREATE OR REPLACE FUNCTION erp_master_commands.activate_configured_product" not in sql
+    assert "REVOKE ALL ON TABLE automation.historical_product_bindings" in sql
+    route = (ROOT / "app/api/routes/canonical_historical_migration.py").read_text(
+        encoding="utf-8"
+    )
+    assert "PROMOTE-HISTORICAL-INVENTORY" in route
+    assert "SELECT erp_automation_commands.promote_historical_product_inventory_batch" in route
