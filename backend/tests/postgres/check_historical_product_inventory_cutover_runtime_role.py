@@ -183,7 +183,7 @@ def _seed_cutover_authority(connection) -> None:
               taxability,default_supply_type,cgst_rate,sgst_rate,igst_rate,cess_rate,
               ruleset_version,status
             ) VALUES (
-              :tax_version,:tax_release,'3004','hsn',1,'Medicaments',DATE '2026-01-01',
+              :tax_version,:tax_release,'99119999','hsn',1,'Test goods',DATE '2026-01-01',
               'taxable','goods',6,6,12,0,'marg-tax-v1','active'
             );
             INSERT INTO catalog.ingredients(
@@ -239,7 +239,7 @@ def main() -> None:
                 "source_company": "Imported Manufacturer Limited",
                 "product_kind": "medicine",
                 "base_uom_code": "PCS",
-                "hsn_code": "3004",
+                "hsn_code": "30049099",
                 "gst_rate": "12.000000",
                 "hsn_gst_candidate_unique": True,
                 "batch_reconciliation_status": "exact",
@@ -293,6 +293,54 @@ def main() -> None:
                 {"org": fixture.ORG_A, "facts": json.dumps(facts)},
             ).scalar_one()
             assert imported == {"inserted": 4, "replayed": 0, "accepted": 4}
+
+            _expect_denied(
+                connection,
+                "SELECT erp_automation_commands.install_historical_tax_snapshot(:org,:dataset)",
+                {"org": fixture.ORG_A, "dataset": DATASET},
+            )
+            connection.exec_driver_sql("RESET SESSION AUTHORIZATION")
+            connection.exec_driver_sql('SET LOCAL ROLE "erp_migration_owner"')
+            connection.execute(
+                text(
+                    "SELECT erp_security.activate_context(:auth,:org),"
+                    "pg_catalog.set_config('app.request_id',pg_catalog.gen_random_uuid()::text,true)"
+                ),
+                {"auth": fixture.AUTH_A, "org": fixture.ORG_A},
+            )
+            snapshot = connection.execute(
+                text(
+                    "SELECT erp_automation_commands.install_historical_tax_snapshot(:org,:dataset)"
+                ),
+                {"org": fixture.ORG_A, "dataset": DATASET},
+            ).scalar_one()
+            assert snapshot["products"] == 2
+            assert snapshot["source_hsn_codes"] == 1
+            assert snapshot["snapshot_codes"] == 2
+            assert snapshot["replayed"] is False
+            assert connection.execute(
+                text(
+                    "SELECT source_authority FROM core.reference_data_releases "
+                    "WHERE id=CAST(:release AS uuid)"
+                ),
+                {"release": snapshot["release_id"]},
+            ).scalar_one() == "legacy_erp_migration"
+            assert connection.execute(
+                text(
+                    "SELECT array_agg(code ORDER BY code) FROM tax.tax_code_versions "
+                    "WHERE release_id=CAST(:release AS uuid) AND status='active'"
+                ),
+                {"release": snapshot["release_id"]},
+            ).scalar_one() == ["30049099", "99119999"]
+            connection.exec_driver_sql("RESET ROLE")
+            connection.exec_driver_sql('SET SESSION AUTHORIZATION "erp_runtime"')
+            connection.execute(
+                text(
+                    "SELECT erp_security.activate_context(:auth,:org),"
+                    "pg_catalog.set_config('app.request_id',pg_catalog.gen_random_uuid()::text,true)"
+                ),
+                {"auth": fixture.AUTH_A, "org": fixture.ORG_A},
+            )
 
             result = connection.execute(
                 text(

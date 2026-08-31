@@ -16,6 +16,7 @@ def test_operator_uses_existing_canonical_authorities_and_exact_identity() -> No
     assert "erp_security.activate_context" in source
     assert "core.organization.manage" in source
     assert "import_historical_migration_facts" in source
+    assert "install_historical_tax_snapshot" in source
     assert "promote_historical_product_inventory_batch" in source
     assert "historical_product_inventory_cutover_status" in source
     assert "with redirect_stdout(sys.stderr):" in source
