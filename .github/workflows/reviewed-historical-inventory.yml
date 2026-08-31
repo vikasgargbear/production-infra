@@ -1,0 +1,271 @@
+name: Reviewed historical inventory operator
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Import one encrypted fact batch, promote the complete dataset, or read status
+        required: true
+        default: status
+        type: choice
+        options:
+          - import
+          - promote
+          - status
+      reviewed_sha:
+        description: Exact deployed Railway API SHA
+        required: true
+        type: string
+      organization_id:
+        description: Exact target organization UUID
+        required: true
+        type: string
+      user_id:
+        description: Exact active ERP administrator user UUID
+        required: true
+        type: string
+      branch_id:
+        description: Exact target branch UUID
+        required: true
+        type: string
+      location_id:
+        description: Exact active saleable location UUID
+        required: true
+        type: string
+      dataset_id:
+        description: Stable reviewed dataset identifier
+        required: true
+        type: string
+      confirmation:
+        description: APPLY-REVIEWED-HISTORICAL-INVENTORY:<org UUID>:<dataset ID>
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: canonical-staging-reviewed-historical-inventory
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    environment: canonical-staging
+    timeout-minutes: 20
+    env:
+      CANONICAL_STAGING_PROJECT_REF: ${{ vars.CANONICAL_STAGING_PROJECT_REF }}
+      CANONICAL_PRODUCTION_PROJECT_REFS: ${{ vars.CANONICAL_PRODUCTION_PROJECT_REFS }}
+      RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
+      RAILWAY_ENVIRONMENT_ID: ${{ vars.RAILWAY_ENVIRONMENT_ID }}
+      RAILWAY_API_SERVICE: ${{ vars.RAILWAY_API_SERVICE }}
+      REVIEWED_SHA: ${{ inputs.reviewed_sha }}
+      OPERATOR_ACTION: ${{ inputs.action }}
+      ORGANIZATION_ID: ${{ inputs.organization_id }}
+      USER_ID: ${{ inputs.user_id }}
+      BRANCH_ID: ${{ inputs.branch_id }}
+      LOCATION_ID: ${{ inputs.location_id }}
+      DATASET_ID: ${{ inputs.dataset_id }}
+      OPERATOR_CONFIRMATION: ${{ inputs.confirmation }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.reviewed_sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Bind the operator to exact non-production staging
+        run: |
+          set -euo pipefail
+          echo "SSH_PRIVATE_KEY=$RUNNER_TEMP/reviewed-inventory-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_ENV"
+          echo "SSH_FINGERPRINT_PATH=$RUNNER_TEMP/reviewed-inventory-ssh-fingerprint" >> "$GITHUB_ENV"
+          echo "OPERATOR_RECEIPT_PATH=$RUNNER_TEMP/reviewed-inventory-receipt.json" >> "$GITHUB_ENV"
+          [[ "$REVIEWED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$ORGANIZATION_ID" =~ ^[0-9a-f-]{36}$ ]]
+          [[ "$USER_ID" =~ ^[0-9a-f-]{36}$ ]]
+          [[ "$BRANCH_ID" =~ ^[0-9a-f-]{36}$ ]]
+          [[ "$LOCATION_ID" =~ ^[0-9a-f-]{36}$ ]]
+          [[ "$DATASET_ID" =~ ^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$ ]]
+          test "$OPERATOR_CONFIRMATION" = "APPLY-REVIEWED-HISTORICAL-INVENTORY:$ORGANIZATION_ID:$DATASET_ID"
+          test "$(git rev-parse HEAD)" = "$REVIEWED_SHA"
+          git fetch origin main
+          git merge-base --is-ancestor "$REVIEWED_SHA" origin/main
+          test "$CANONICAL_STAGING_PROJECT_REF" = rgihahbmkrmhitjdjvev
+          case ",$CANONICAL_PRODUCTION_PROJECT_REFS," in
+            *",$CANONICAL_STAGING_PROJECT_REF,"*)
+              echo 'Refusing reviewed import because staging is classified as production' >&2
+              exit 2
+              ;;
+          esac
+          test "$RAILWAY_API_SERVICE" = aasopharma-api-pilot
+          test -n "$RAILWAY_PROJECT_ID"
+          test -n "$RAILWAY_ENVIRONMENT_ID"
+
+      - name: Install the pinned Railway CLI
+        run: npm install --global @railway/cli@5.43.4
+
+      - name: Register one run-scoped Railway SSH key
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$RAILWAY_API_TOKEN"
+          railway whoami >/dev/null
+          umask 077
+          mkdir -p "$HOME/.ssh" "$HOME/.railway"
+          chmod 700 "$HOME/.ssh" "$HOME/.railway"
+          printf '%s\n' \
+            'Host ssh.railway.com' \
+            "    UserKnownHostsFile $HOME/.railway/known_hosts_relay" \
+            '    StrictHostKeyChecking accept-new' \
+            '    BatchMode yes' \
+            '    IdentitiesOnly yes' \
+            '    ConnectTimeout 10' \
+            '    ServerAliveInterval 15' \
+            '    ServerAliveCountMax 2' \
+            > "$HOME/.ssh/config"
+          chmod 600 "$HOME/.ssh/config"
+          ssh-keygen -q -t ed25519 -N '' \
+            -C "reviewed-inventory-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            -f "$SSH_PRIVATE_KEY"
+          fingerprint=$(ssh-keygen -E sha256 -lf "$SSH_PRIVATE_KEY.pub" | awk '{print $2}')
+          case "$fingerprint" in SHA256:*) ;; *) exit 2 ;; esac
+          printf '%s\n' "$fingerprint" > "$SSH_FINGERPRINT_PATH"
+          eval "$(ssh-agent -s)"
+          {
+            printf 'SSH_AUTH_SOCK=%s\n' "$SSH_AUTH_SOCK"
+            printf 'SSH_AGENT_PID=%s\n' "$SSH_AGENT_PID"
+          } >> "$GITHUB_ENV"
+          ssh-add "$SSH_PRIVATE_KEY" >/dev/null
+          railway ssh keys add \
+            --key "$fingerprint" \
+            --name "reviewed-inventory-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >/dev/null
+
+      - name: Resolve and attest the exact active API instance
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          status="$RUNNER_TEMP/reviewed-inventory-railway-status.json"
+          matching_instance_ids=()
+          for attempt in $(seq 1 12); do
+            railway status \
+              --project "$RAILWAY_PROJECT_ID" \
+              --environment "$RAILWAY_ENVIRONMENT_ID" \
+              --json > "$status"
+            mapfile -t candidate_instance_ids < <(jq -r \
+              --arg environment "$RAILWAY_ENVIRONMENT_ID" \
+              --arg service "$RAILWAY_API_SERVICE" '
+                [.environments.edges[].node
+                 | select(.id == $environment)
+                 | .serviceInstances.edges[].node
+                 | select(.serviceName == $service)
+                 | .activeDeployments[]
+                 | .instances[]
+                 | select(.status == "RUNNING")
+                 | .id]
+                | unique[]
+              ' "$status")
+            matching_instance_ids=()
+            for candidate in "${candidate_instance_ids[@]}"; do
+              observed_sha=$(timeout --signal=TERM 20s railway ssh \
+                --project "$RAILWAY_PROJECT_ID" \
+                --environment "$RAILWAY_ENVIRONMENT_ID" \
+                --service "$RAILWAY_API_SERVICE" \
+                --deployment-instance "$candidate" \
+                --identity-file "$SSH_PRIVATE_KEY" \
+                -- printenv RAILWAY_GIT_COMMIT_SHA 2>/dev/null || true)
+              if test "$observed_sha" = "$REVIEWED_SHA"; then
+                matching_instance_ids+=("$candidate")
+              fi
+            done
+            test "${#matching_instance_ids[@]}" -ne 1 || break
+            curl --fail --silent --show-error --max-time 30 \
+              https://aasopharma-api-pilot-production.up.railway.app/health >/dev/null || true
+            sleep 5
+          done
+          test "${#matching_instance_ids[@]}" -eq 1
+          echo "RAILWAY_API_DEPLOYMENT_INSTANCE_ID=${matching_instance_ids[0]}" >> "$GITHUB_ENV"
+
+      - name: Apply one reviewed operation
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          IMPORT_BATCH_B64_GZIP: ${{ secrets.REVIEWED_HISTORICAL_IMPORT_BATCH_B64_GZIP }}
+        run: |
+          set -euo pipefail
+          request="$RUNNER_TEMP/reviewed-inventory-request.json"
+          import_request="$RUNNER_TEMP/reviewed-inventory-import.json"
+          response="$OPERATOR_RECEIPT_PATH"
+          trap 'rm -f "$request" "$import_request"' EXIT
+          umask 077
+          if test "$OPERATOR_ACTION" = import; then
+            test -n "$IMPORT_BATCH_B64_GZIP"
+            printf '%s' "$IMPORT_BATCH_B64_GZIP" | base64 --decode | gzip --decompress > "$import_request"
+            jq --exit-status 'type == "object" and (.facts | type == "array" and length >= 1 and length <= 500)' \
+              "$import_request" >/dev/null
+          else
+            printf '{}\n' > "$import_request"
+          fi
+          jq -n \
+            --arg action "$OPERATOR_ACTION" \
+            --arg expected_sha "$REVIEWED_SHA" \
+            --arg project_ref "$CANONICAL_STAGING_PROJECT_REF" \
+            --arg production_refs "$CANONICAL_PRODUCTION_PROJECT_REFS" \
+            --arg password "$SUPABASE_DB_PASSWORD" \
+            --arg organization_id "$ORGANIZATION_ID" \
+            --arg user_id "$USER_ID" \
+            --arg branch_id "$BRANCH_ID" \
+            --arg location_id "$LOCATION_ID" \
+            --arg dataset_id "$DATASET_ID" \
+            --arg confirmation "$OPERATOR_CONFIRMATION" \
+            --slurpfile import_request "$import_request" \
+            '{action:$action,expected_sha:$expected_sha,project_ref:$project_ref,
+              production_project_refs:$production_refs,password:$password,
+              organization_id:$organization_id,user_id:$user_id,branch_id:$branch_id,
+              location_id:$location_id,dataset_id:$dataset_id,confirmation:$confirmation,
+              import_request:(if $action == "import" then $import_request[0] else null end)}' \
+            > "$request"
+          railway ssh \
+            --project "$RAILWAY_PROJECT_ID" \
+            --environment "$RAILWAY_ENVIRONMENT_ID" \
+            --service "$RAILWAY_API_SERVICE" \
+            --deployment-instance "$RAILWAY_API_DEPLOYMENT_INSTANCE_ID" \
+            --identity-file "$SSH_PRIVATE_KEY" \
+            -- python /app/backend/scripts/apply_reviewed_historical_inventory.py \
+            < "$request" > "$response"
+          jq --exit-status \
+            --arg action "$OPERATOR_ACTION" \
+            --arg sha "$REVIEWED_SHA" \
+            --arg org "$ORGANIZATION_ID" \
+            '.status == "ok" and .action == $action and .commit_sha == $sha and
+             .organization_id == $org and (.cutover | type == "object")' \
+            "$response" >/dev/null
+          jq '{status,action,commit_sha,organization_id,user_id,dataset_id,operation,cutover}' \
+            "$response"
+
+      - name: Upload the hash-bound operator receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: reviewed-historical-inventory-${{ inputs.action }}-${{ github.run_id }}
+          path: ${{ env.OPERATOR_RECEIPT_PATH }}
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Always remove the run-scoped Railway SSH key and private inputs
+        if: always()
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          if test -s "${SSH_FINGERPRINT_PATH:-}"; then
+            fingerprint=$(<"$SSH_FINGERPRINT_PATH")
+            railway ssh keys remove "$fingerprint" >/dev/null 2>&1 || true
+          fi
+          ssh-add -D >/dev/null 2>&1 || true
+          if test -n "${SSH_AGENT_PID:-}"; then ssh-agent -k >/dev/null 2>&1 || true; fi
+          rm -f "${SSH_PRIVATE_KEY:-}" "${SSH_PRIVATE_KEY:-}.pub" \
+            "${SSH_FINGERPRINT_PATH:-}" "$RUNNER_TEMP/reviewed-inventory-"*.json
