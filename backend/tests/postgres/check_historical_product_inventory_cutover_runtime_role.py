@@ -358,6 +358,10 @@ def main() -> None:
                 "openings_posted": 1,
                 "complete": True,
             }
+            # The operator exits migration-owner authority by flushing every
+            # deferred constraint.  This is the production transaction boundary
+            # that previously exposed the false accounted-source mutation.
+            connection.exec_driver_sql("SET CONSTRAINTS ALL IMMEDIATE")
             rows = connection.execute(
                 text(
                     "SELECT product.name,product.status,product.setup_review_required,"

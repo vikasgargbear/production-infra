@@ -452,3 +452,25 @@ def test_historical_tax_snapshot_is_hash_bound_and_keeps_provenance_explicit() -
     assert "DELETE FROM catalog" not in sql
     assert "DELETE FROM inventory" not in sql
     assert "TRUNCATE " not in sql
+
+
+def test_historical_opening_accounting_constraint_fix_is_hash_bound() -> None:
+    version = ROOT / (
+        "alembic/versions/"
+        "20260831_0075_historical_opening_accounting_constraint.py"
+    )
+    sql_path = ROOT / (
+        "alembic/sql/"
+        "20260831_0075_historical_opening_accounting_constraint.sql"
+    )
+    source = version.read_text(encoding="utf-8")
+    sql = sql_path.read_text(encoding="utf-8")
+    digest = hashlib.sha256(sql.encode("utf-8")).hexdigest()
+
+    assert digest in source
+    assert 'revision = "20260831_0075"' in source
+    assert 'down_revision = "20260831_0074"' in source
+    assert "SET CONSTRAINTS ALL IMMEDIATE" in sql
+    assert "SET CONSTRAINTS ALL DEFERRED" in sql
+    assert "historical opening cutover definition does not match" in sql
+    assert "has_function_privilege" in sql
