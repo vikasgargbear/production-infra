@@ -101,7 +101,7 @@ def _seed_cutover_authority(connection) -> None:
         text(
             """
             UPDATE core.reference_data_releases
-               SET status='retired'
+               SET status='superseded'
              WHERE dataset_kind IN ('hsn_sac_tax','ingredient_classification')
                AND status='active'
             """
