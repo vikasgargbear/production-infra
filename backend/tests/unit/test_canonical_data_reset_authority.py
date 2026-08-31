@@ -94,6 +94,11 @@ def test_reset_authority_classifies_exact_head_relation_sets() -> None:
     assert len(authority.ephemeral_scope_relations) == 9
     assert authority.manifest()["whole_database_reset_available"] is False
     assert authority.manifest()["expected_organization_relation_count"] == 111
+    assert {
+        "automation.historical_batch_bindings",
+        "automation.historical_inventory_openings",
+        "automation.historical_product_bindings",
+    }.issubset(reset_authority.TRANSITIVE_ORGANIZATION_RELATIONS)
     assert set(authority.reset_relations).isdisjoint(
         authority.preserved_seed_relations
     )

@@ -37,6 +37,9 @@ EXPECTED_ORGANIZATION_RELATION_COUNT = 111
 ORGANIZATION_CONFIRMATION_PREFIX = "DELETE-ORGANIZATION:"
 TRANSITIVE_ORGANIZATION_RELATIONS = frozenset(
     {
+        "automation.historical_batch_bindings",
+        "automation.historical_inventory_openings",
+        "automation.historical_product_bindings",
         "tax.input_credit_applications",
         "tax.input_credit_lots",
         "tax.input_credit_reversal_events",
