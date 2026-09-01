@@ -4,7 +4,7 @@ import CompanyProfile from './CompanyProfile';
 import { companyApi } from '../../../services/api';
 
 jest.mock('../../../services/api', () => ({
-  companyApi: { getCompanyInfo: jest.fn() },
+  companyApi: { getCompanyInfo: jest.fn(), establishGstRegistration: jest.fn() },
 }));
 
 jest.mock('../masters/BankAccountManager', () => () => <div>Bank accounts</div>);
@@ -68,6 +68,16 @@ describe('CompanyProfile', () => {
     expect(screen.queryByDisplayValue('₹')).toBeNull();
     expect(screen.queryByDisplayValue('CURRENT')).toBeNull();
     expect(screen.getByText(/does not infer company defaults/i)).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Save GST registration' })).not.toBeNull();
+  });
+
+  it('does not offer GST setup after an active registration is present', async () => {
+    getCompanyInfo.mockResolvedValue({
+      data: canonicalProfile({ gst_number: '08AAXCA4042N1Z2' }),
+    });
+    render(<CompanyProfile open />);
+    await screen.findByDisplayValue('08AAXCA4042N1Z2');
+    expect(screen.queryByRole('button', { name: 'Save GST registration' })).toBeNull();
   });
 
   it('renders only authoritative settings supplied by the company projection', async () => {

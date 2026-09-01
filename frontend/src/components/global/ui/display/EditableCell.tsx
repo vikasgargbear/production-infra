@@ -32,6 +32,7 @@ export interface EditableCellProps {
     maxDecimalPlaces?: number;
     decimalPlacesErrorMessage?: string;
     preserveDecimalString?: boolean;
+    minimumDisplayDecimalPlaces?: number;
     onFocus?: (e: FocusEvent<HTMLInputElement>) => void;
     onBlur?: (e: FocusEvent<HTMLInputElement>) => void;
 }
@@ -61,6 +62,7 @@ const EditableCellComponent: ForwardRefRenderFunction<EditableCellRef, EditableC
     onFocus: onFocusProp,
     onBlur: onBlurProp,
     preserveDecimalString = false,
+    minimumDisplayDecimalPlaces = 0,
 }, ref) => {
     const [localValue, setLocalValue] = useState<string | number>(value);
     const [isEditing, setIsEditing] = useState(false);
@@ -115,10 +117,11 @@ const EditableCellComponent: ForwardRefRenderFunction<EditableCellRef, EditableC
     const formatValue = (val: string | number): string => {
         if (preserveDecimalString) {
             const raw = String(val);
-            if (maxDecimalPlaces === undefined || !raw.includes('.')) return raw;
+            if (maxDecimalPlaces === undefined) return raw;
             const [whole, fraction = ''] = raw.split('.');
             const trimmed = fraction.replace(/0+$/, '');
-            return trimmed ? `${whole}.${trimmed}` : whole;
+            const visibleFraction = trimmed.padEnd(minimumDisplayDecimalPlaces, '0');
+            return visibleFraction ? `${whole}.${visibleFraction}` : whole;
         }
         if (type === 'number') {
             const num = parseFloat(String(val));

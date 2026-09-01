@@ -51,6 +51,26 @@ test('groups line money in the Indian system with exactly two decimals', () => {
   });
 });
 
+test('shows commercial rates, discounts, and GST with two decimals without changing exact strings', () => {
+  render(
+    <ItemsTable
+      items={[{
+        product_name: 'Exact Display Carton',
+        quantity: '2.000000',
+        unit_price: '124.7000',
+        discount_percent: '9.000000',
+        gst_percent: '5.000000',
+      }]}
+      onUpdateItem={jest.fn()}
+      preserveExactDecimals
+    />,
+  );
+
+  expect((screen.getByLabelText('Exact Display Carton rate') as HTMLInputElement).value).toBe('124.70');
+  expect((screen.getByLabelText('Exact Display Carton discount percent') as HTMLInputElement).value).toBe('9.00');
+  expect(screen.getAllByText('5.00%')).toHaveLength(2);
+});
+
 test('Enter follows quantity, rate, discount, free quantity, then returns to product search', async () => {
   const focusProductSearch = jest.fn();
   render(

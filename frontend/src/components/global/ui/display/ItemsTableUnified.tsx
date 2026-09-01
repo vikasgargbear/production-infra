@@ -253,6 +253,14 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
         return `${currencySymbol}${formatted}`;
     };
 
+    const formatPercent = (percent: number | string | undefined): string => {
+        const numericPercent = Number(percent ?? 0);
+        return new Intl.NumberFormat('en-IN', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        }).format(Number.isFinite(numericPercent) ? numericPercent : 0);
+    };
+
     const calculateItemTotal = (item: ItemsTableItem): number => {
         const suppliedTotal = Number(item.line_total ?? item.total ?? 0);
         if (suppliedTotal > 0) return suppliedTotal;
@@ -370,7 +378,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                         <dl className="mt-3 grid grid-cols-3 gap-2 border-t border-gray-100 pt-3 text-sm">
                             <div><dt className="text-xs text-gray-500">Pack</dt><dd className="mt-1 text-gray-800">{item.packages_per_box || 1}×{item.units_per_pack || 1}</dd></div>
                             <div><dt className="text-xs text-gray-500">Expiry</dt><dd className="mt-1 text-gray-800">{item.expiry_date ? new Date(item.expiry_date).toLocaleDateString('en-IN', { month: 'short', year: '2-digit' }) : '-'}</dd></div>
-                            <div><dt className="text-xs text-gray-500">GST</dt><dd className="mt-1 text-gray-800">{item.gst_percent || item.tax_rate || 0}%</dd></div>
+                            <div><dt className="text-xs text-gray-500">GST</dt><dd className="mt-1 text-gray-800">{formatPercent(item.gst_percent ?? item.tax_rate)}%</dd></div>
                         </dl>
 
                         <div className="mt-4 grid grid-cols-2 gap-3">
@@ -490,6 +498,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                                         selectOnFocus={true}
                                         className="w-24"
                                         preserveDecimalString={preserveExactDecimals}
+                                        minimumDisplayDecimalPlaces={2}
                                         ariaLabel={`${item.product_name || item.name || `Item ${index + 1}`} rate`}
                                     />
                                 </td>
@@ -510,6 +519,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                                         selectOnFocus={true}
                                         className="w-20"
                                         preserveDecimalString={preserveExactDecimals}
+                                        minimumDisplayDecimalPlaces={2}
                                         ariaLabel={`${item.product_name || item.name || `Item ${index + 1}`} discount percent`}
                                     />
                                 </td>
@@ -539,7 +549,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                                 </td>
                                 <td className="px-3 py-2 text-right">
                                     <span className="text-sm text-gray-900 font-medium" title="Tax percentage from product master data (read-only)">
-                                        {item.gst_percent || item.tax_rate || 0}%
+                                        {formatPercent(item.gst_percent ?? item.tax_rate)}%
                                     </span>
                                 </td>
                                 <td className="px-3 py-2 text-right">
