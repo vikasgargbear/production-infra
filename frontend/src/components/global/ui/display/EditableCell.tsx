@@ -227,7 +227,9 @@ const EditableCellComponent: ForwardRefRenderFunction<EditableCellRef, EditableC
 
     const handleFocus = (e: FocusEvent<HTMLInputElement>): void => {
         setIsEditing(true);
-        setOriginalValue(localValue);
+        const focusedValue = preserveDecimalString ? formatValue(localValue) : localValue;
+        setLocalValue(focusedValue);
+        setOriginalValue(focusedValue);
 
         if (selectOnFocus) {
             setTimeout(() => {

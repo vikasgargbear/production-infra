@@ -107,7 +107,10 @@ def validate_editor_state(
 
 class CreateInvoiceDraftRequest(StrictModel):
     document_kind: DocumentKind
-    branch_id: UUID
+    # UUIDs cross both the browser and MCP HTTP boundaries as JSON strings.
+    # Keep the enclosing model strict while allowing Pydantic's UUID parser for
+    # this one transport field.
+    branch_id: UUID = Field(strict=False)
     title: Optional[str] = Field(default=None, max_length=200)
     payload: InvoiceDraftPayload
     created_via: Literal["web"]

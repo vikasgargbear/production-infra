@@ -82,6 +82,35 @@ def test_public_and_internal_creation_sources_cannot_be_spoofed():
         mcp_drafts.MCPCreateInvoiceDraftRequest(**request, created_via="web")
 
 
+def test_public_and_internal_creation_accept_json_uuid_strings():
+    branch_id = uuid4()
+    request = {
+        "document_kind": "sales_invoice",
+        "branch_id": str(branch_id),
+        "payload": {
+            "schema_version": "invoice-draft.v1",
+            "editor_state": {
+                "invoice": {},
+                "selected_customer": None,
+                "current_step": 1,
+            },
+            "command_payload": None,
+        },
+    }
+
+    assert drafts.CreateInvoiceDraftRequest(
+        **request, created_via="web"
+    ).branch_id == branch_id
+    assert mcp_drafts.MCPCreateInvoiceDraftRequest(
+        **request, created_via="mcp"
+    ).branch_id == branch_id
+
+    with pytest.raises(ValidationError):
+        drafts.CreateInvoiceDraftRequest(
+            **{**request, "branch_id": "not-a-uuid"}, created_via="web"
+        )
+
+
 def test_document_kind_rejects_cross_editor_shape_and_response_has_edit_path():
     supplier_editor = {
         "selected_receipt_id": "",
