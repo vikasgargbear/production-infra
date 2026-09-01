@@ -27,6 +27,12 @@ export interface CompanyData {
     logo_url?: string;
 }
 
+export interface EstablishGstRegistrationInput {
+    gstin: string;
+    confirmed: true;
+    idempotency_key: string;
+}
+
 // ============================================
 // API Module
 // ============================================
@@ -40,6 +46,12 @@ export const companyApi = {
     // Basic company info (also returns logo + QR)
     getCompanyInfo: (): Promise<AxiosResponse> => {
         return apiHelpers.get('/company/info');
+    },
+
+    establishGstRegistration: (
+        data: EstablishGstRegistrationInput,
+    ): Promise<AxiosResponse> => {
+        return apiHelpers.post('/canonical/company/gst-registration', data);
     },
 
     updateCompanyInfo: (data: Partial<CompanyData>): Promise<AxiosResponse> => {

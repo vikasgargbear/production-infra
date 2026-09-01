@@ -71,6 +71,7 @@ from .api.routes import (
     canonical_reference_reads,
     canonical_evidence_uploads,
     canonical_drug_licenses,
+    canonical_tax_registration_setup,
     canonical_invoice_drafts,
     canonical_historical_migration,
 )
@@ -378,6 +379,7 @@ api.include_router(canonical_document_history_reads.router)
 api.include_router(canonical_reference_reads.router, tags=["Canonical Reference Reads"])
 api.include_router(canonical_evidence_uploads.router)
 api.include_router(canonical_drug_licenses.router)
+api.include_router(canonical_tax_registration_setup.router)
 api.include_router(canonical_invoice_drafts.router)
 api.include_router(canonical_historical_migration.router)
 

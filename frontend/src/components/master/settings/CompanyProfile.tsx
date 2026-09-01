@@ -81,6 +81,8 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [refreshing, setRefreshing] = useState(false);
+    const [gstinDraft, setGstinDraft] = useState('');
+    const [savingGstin, setSavingGstin] = useState(false);
 
     const [companyData, setCompanyData] = useState<CompanyData>({
         // Basic Details
@@ -277,6 +279,33 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
         setRefreshing(false);
     };
 
+    const handleGstinSetup = async (event: React.FormEvent) => {
+        event.preventDefault();
+        const gstin = gstinDraft.trim().toUpperCase();
+        if (!/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(gstin)) {
+            setError('Enter a valid 15-character GSTIN.');
+            return;
+        }
+        setSavingGstin(true);
+        setError(null);
+        try {
+            await companyApi.establishGstRegistration({
+                gstin,
+                confirmed: true,
+                idempotency_key: `company-gstin-${gstin}`,
+            });
+            setGstinDraft('');
+            await fetchOrganizationProfile();
+        } catch (requestError: any) {
+            setError(
+                requestError?.response?.data?.detail
+                || 'Failed to establish the company GST registration.',
+            );
+        } finally {
+            setSavingGstin(false);
+        }
+    };
+
     const handleInputChange = (field: keyof CompanyData, value: any) => {
         setCompanyData(prev => ({
             ...prev,
@@ -367,6 +396,40 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                 data-testid="company-profile-scroll-region"
                 className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden"
             >
+                {!companyData.gst_number && (
+                    <form
+                        onSubmit={handleGstinSetup}
+                        className="mx-auto mt-3 max-w-6xl rounded-lg border border-blue-200 bg-white p-4 sm:mt-6 sm:p-6"
+                    >
+                        <h2 className="text-lg font-semibold text-gray-900">Complete GST setup</h2>
+                        <p className="mt-1 text-sm text-gray-600">
+                            Add the reviewed GSTIN once to enable tax invoices. It becomes protected after use.
+                        </p>
+                        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+                            <div className="min-w-0 flex-1">
+                                <label htmlFor="company-gstin-setup" className="mb-1 block text-sm font-medium text-gray-700">
+                                    GSTIN for tax invoices
+                                </label>
+                                <input
+                                    id="company-gstin-setup"
+                                    value={gstinDraft}
+                                    onChange={(event) => setGstinDraft(event.target.value.toUpperCase())}
+                                    maxLength={15}
+                                    autoComplete="off"
+                                    className="min-h-11 w-full rounded-lg border border-gray-300 px-3 py-2 uppercase focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                    placeholder="08AAXCA4042N1Z2"
+                                />
+                            </div>
+                            <button
+                                type="submit"
+                                disabled={savingGstin}
+                                className="min-h-11 rounded-lg bg-blue-600 px-5 py-2 font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                            >
+                                {savingGstin ? 'Saving…' : 'Save GST registration'}
+                            </button>
+                        </div>
+                    </form>
+                )}
                 <fieldset disabled className="mx-auto max-w-6xl min-w-0 space-y-6 p-3 disabled:opacity-100 sm:p-6">
                     <div className="rounded-md border border-amber-200 bg-white px-4 py-3 text-sm text-amber-800">
                         Profile changes are disabled until the canonical cloud update workflow is available.

@@ -345,3 +345,121 @@ def record_effective_wholesale_license(
             parameters,
         ).mappings().one()
     )
+
+
+def establish_gst_registration(db: Session, **parameters: Any) -> dict[str, Any]:
+    """Create the organization's first active GST registration atomically.
+
+    The caller must already have activated an ERP RLS context.  PostgreSQL RLS
+    remains the final authorization boundary for both the registration and its
+    branch association.
+    """
+
+    existing = db.execute(
+        text(
+            """
+            SELECT registration.id AS registration_id,
+                   registration.gstin,
+                   registration.status,
+                   association.branch_id,
+                   registration.row_version
+              FROM tax.registrations registration
+              JOIN tax.registration_branches association
+                ON association.org_id=registration.org_id
+               AND association.registration_id=registration.id
+               AND association.status='active'
+             WHERE registration.org_id=:org_id
+               AND registration.status='active'
+             ORDER BY registration.effective_from DESC,registration.id
+             LIMIT 1
+            """
+        ),
+        parameters,
+    ).mappings().first()
+    if existing is not None:
+        return {**dict(existing), "idempotency_replayed": True}
+
+    organization = db.execute(
+        text(
+            """
+            SELECT legal_name,trade_name,registered_state_code,
+                   erp_core_commands.current_organization_business_date()
+                     AS business_date
+             FROM core.organizations
+             WHERE id=:org_id AND status='active'
+            """
+        ),
+        parameters,
+    ).mappings().one()
+    branch_id = parameters.get("branch_id")
+    branch = db.execute(
+        text(
+            """
+            SELECT id,state_code
+              FROM core.branches
+             WHERE org_id=:org_id AND status='active'
+               AND (CAST(:branch_id AS uuid) IS NULL OR id=CAST(:branch_id AS uuid))
+             ORDER BY code,id
+             LIMIT 1
+            """
+        ),
+        {**parameters, "branch_id": branch_id},
+    ).mappings().one()
+    normalized_gstin = str(parameters["gstin"]).strip().upper()
+    state_code = str(organization["registered_state_code"])
+    if normalized_gstin[:2] != state_code or str(branch["state_code"]) != state_code:
+        raise ValueError("GSTIN state must match the organization and principal branch")
+    effective_from = parameters.get("effective_from") or organization["business_date"]
+    if effective_from > organization["business_date"]:
+        raise ValueError("GST registration cannot start after the business date")
+
+    registration_id = parameters["registration_id"]
+    actor_id = parameters["actor_id"]
+    db.execute(
+        text(
+            """
+            INSERT INTO tax.registrations(
+              org_id,id,gstin,legal_name,trade_name,state_code,
+              registration_type,effective_from,status,
+              created_by_membership_id,updated_by_membership_id
+            ) VALUES(
+              :org_id,:registration_id,:gstin,:legal_name,:trade_name,:state_code,
+              'regular',:effective_from,'active',:actor_id,:actor_id
+            )
+            """
+        ),
+        {
+            **parameters,
+            "gstin": normalized_gstin,
+            "legal_name": organization["legal_name"],
+            "trade_name": organization["trade_name"],
+            "state_code": state_code,
+            "effective_from": effective_from,
+        },
+    )
+    db.execute(
+        text(
+            """
+            INSERT INTO tax.registration_branches(
+              org_id,registration_id,branch_id,place_of_business_kind,
+              effective_from,status,created_by_membership_id
+            ) VALUES(
+              :org_id,:registration_id,:branch_id,'principal',
+              :effective_from,'active',:actor_id
+            )
+            """
+        ),
+        {
+            **parameters,
+            "branch_id": branch["id"],
+            "effective_from": effective_from,
+        },
+    )
+    return {
+        "registration_id": registration_id,
+        "gstin": normalized_gstin,
+        "status": "active",
+        "branch_id": branch["id"],
+        "row_version": 1,
+        "idempotency_replayed": False,
+    }
