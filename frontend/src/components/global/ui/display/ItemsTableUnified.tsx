@@ -69,7 +69,7 @@ const DISCOUNT_PRECISION_ERROR = 'Discount supports up to 2 decimal places.';
 
 const visibleQuantityDecimalPlaces = (value: number | string | undefined): number => {
     const fraction = String(value ?? 0).split('.')[1] || '';
-    return Math.min(fraction.length, QUANTITY_DECIMAL_PLACES);
+    return Math.min(fraction.replace(/0+$/, '').length, QUANTITY_DECIMAL_PLACES);
 };
 
 // ==================== COMPONENT ====================

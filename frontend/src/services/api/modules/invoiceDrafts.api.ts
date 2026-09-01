@@ -113,6 +113,20 @@ export const invoiceDraftMutationError = (error: unknown): Error => {
   }
   const detail = apiError.response?.data?.detail;
   if (typeof detail === 'string') return new Error(detail);
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map(item => {
+        if (!item || typeof item !== 'object') return '';
+        const issue = item as { loc?: unknown; msg?: unknown };
+        const location = Array.isArray(issue.loc)
+          ? issue.loc.filter(part => part !== 'body').join('.')
+          : '';
+        const message = typeof issue.msg === 'string' ? issue.msg : '';
+        return [location, message].filter(Boolean).join(': ');
+      })
+      .filter(Boolean);
+    if (messages.length) return new Error(messages.join('; '));
+  }
   if (detail && typeof detail === 'object' && 'message' in detail) {
     return new Error(String((detail as { message?: unknown }).message || 'Invoice draft request failed.'));
   }

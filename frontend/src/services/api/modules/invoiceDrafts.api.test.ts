@@ -82,4 +82,15 @@ describe('shared invoice draft transport', () => {
       'Your edits are still on screen',
     );
   });
+
+  it('surfaces field-level validation details instead of a generic 422', () => {
+    expect(invoiceDraftMutationError({
+      response: {
+        status: 422,
+        data: {
+          detail: [{ loc: ['body', 'payload', 'editor_state', 'current_step'], msg: 'Input should be a valid integer' }],
+        },
+      },
+    }).message).toBe('payload.editor_state.current_step: Input should be a valid integer');
+  });
 });
