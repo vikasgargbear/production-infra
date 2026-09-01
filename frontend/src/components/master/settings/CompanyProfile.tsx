@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { companyApi } from '../../../services/api';
 import { normalizeCompanyProfile, unwrapCompanyProfileResponse } from '../../../utils/companyProfile';
+import { useCompany } from '../../../contexts/CompanyContext';
 import BankAccountManager from '../masters/BankAccountManager';
 
 interface CompanyProfileProps {
@@ -76,6 +77,7 @@ interface CompanyData {
 }
 
 const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
+    const { refreshCompanyData } = useCompany();
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [logoPreview, setLogoPreview] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -295,7 +297,10 @@ const CompanyProfile: React.FC<CompanyProfileProps> = ({ open, onClose }) => {
                 idempotency_key: `company-gstin-${gstin}`,
             });
             setGstinDraft('');
-            await fetchOrganizationProfile();
+            await Promise.all([
+                fetchOrganizationProfile(),
+                refreshCompanyData(),
+            ]);
         } catch (requestError: any) {
             setError(
                 requestError?.response?.data?.detail

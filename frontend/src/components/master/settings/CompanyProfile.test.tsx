@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import CompanyProfile from './CompanyProfile';
 import { companyApi } from '../../../services/api';
 
@@ -8,6 +8,11 @@ jest.mock('../../../services/api', () => ({
 }));
 
 jest.mock('../masters/BankAccountManager', () => () => <div>Bank accounts</div>);
+
+const mockRefreshCompanyData = jest.fn();
+jest.mock('../../../contexts/CompanyContext', () => ({
+  useCompany: () => ({ refreshCompanyData: mockRefreshCompanyData }),
+}));
 
 const getCompanyInfo = companyApi.getCompanyInfo as jest.Mock;
 const canonicalProfile = (overrides: Record<string, unknown> = {}) => ({
@@ -20,8 +25,12 @@ const input = (label: string): HTMLInputElement => screen.getByLabelText(label) 
 
 describe('CompanyProfile', () => {
   beforeEach(() => {
+    mockRefreshCompanyData.mockReset();
+    mockRefreshCompanyData.mockResolvedValue(undefined);
     getCompanyInfo.mockReset();
     getCompanyInfo.mockResolvedValue({ data: canonicalProfile() });
+    (companyApi.establishGstRegistration as jest.Mock).mockReset();
+    (companyApi.establishGstRegistration as jest.Mock).mockResolvedValue({ data: {} });
   });
 
   it('associates visible field labels and contains narrow content without horizontal clipping', async () => {
@@ -78,6 +87,23 @@ describe('CompanyProfile', () => {
     render(<CompanyProfile open />);
     await screen.findByDisplayValue('08AAXCA4042N1Z2');
     expect(screen.queryByRole('button', { name: 'Save GST registration' })).toBeNull();
+  });
+
+  it('refreshes shared company authority immediately after GST setup', async () => {
+    render(<CompanyProfile open />);
+    await screen.findByRole('button', { name: 'Save GST registration' });
+
+    fireEvent.change(screen.getByLabelText('GSTIN for tax invoices'), {
+      target: { value: '08AAXCA4042N1Z2' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save GST registration' }));
+
+    await waitFor(() => expect(companyApi.establishGstRegistration).toHaveBeenCalledWith({
+      gstin: '08AAXCA4042N1Z2',
+      confirmed: true,
+      idempotency_key: 'company-gstin-08AAXCA4042N1Z2',
+    }));
+    await waitFor(() => expect(mockRefreshCompanyData).toHaveBeenCalledTimes(1));
   });
 
   it('renders only authoritative settings supplied by the company projection', async () => {
