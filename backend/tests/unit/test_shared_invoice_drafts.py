@@ -21,6 +21,12 @@ SQL_PATH = ROOT / "backend/alembic/sql/20260829_0064_shared_invoice_drafts.sql"
 REVISION_PATH = (
     ROOT / "backend/alembic/versions/20260829_0064_shared_invoice_drafts.py"
 )
+TITLE_FIX_SQL_PATH = (
+    ROOT / "backend/alembic/sql/20260901_0076_invoice_draft_list_title_type.sql"
+)
+TITLE_FIX_REVISION_PATH = (
+    ROOT / "backend/alembic/versions/20260901_0076_invoice_draft_list_title_type.py"
+)
 
 
 def _revision_module():
@@ -29,6 +35,33 @@ def _revision_module():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def _title_fix_revision_module():
+    spec = importlib.util.spec_from_file_location(
+        "invoice_draft_title_fix_revision", TITLE_FIX_REVISION_PATH
+    )
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_draft_list_title_fix_is_hash_bound_and_preserves_authority():
+    sql = TITLE_FIX_SQL_PATH.read_text(encoding="utf-8")
+    revision = _title_fix_revision_module()
+    assert revision.revision == "20260901_0076"
+    assert revision.down_revision == "20260831_0075"
+    assert hashlib.sha256(sql.encode()).hexdigest() == revision.EXPECTED_SQL_SHA256
+    assert "draft.title::text AS title" in sql
+    assert "RETURNS TABLE(" in sql
+    assert "title text" in sql
+    assert "SECURITY DEFINER" in sql
+    assert "erp_security.current_org_id()" in sql
+    assert "erp_security.can_access_branch(draft.branch_id)" in sql
+    assert "erp_security.has_permission(" in sql
+    assert "TO erp_runtime" in sql
+    assert "application role unexpectedly gained" in sql
 
 
 def test_migration_is_hash_bound_tenant_scoped_and_keeps_drafts_out_of_documents():
