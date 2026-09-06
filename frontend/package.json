@@ -76,7 +76,7 @@
   },
   "devDependencies": {
     "@tauri-apps/cli": "2.11.4",
-    "@capacitor/cli": "8.5.0",
+    "@capacitor/cli": "8.5.1",
     "@craco/craco": "^7.1.0",
     "@playwright/test": "^1.40.1",
     "@testing-library/dom": "^10.4.1",
