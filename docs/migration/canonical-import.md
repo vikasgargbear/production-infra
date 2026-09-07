@@ -24,10 +24,19 @@ Run from the deployed ERP source checkout with backend dependencies installed:
 ```bash
 python backend/scripts/migrate_marg.py \
   --source-repo /private/path/to/aasopharma-marg-migration-reference \
-  --profile /private/path/to/evidence-profile.json \
+  --source /private/path/to/MARG-data-or-export-folder \
   --target /private/path/to/target.json \
   --output /private/path/to/aasopharma-marg-migration-reference/migration-work/output/customer-import
 ```
+
+`--source` automatically snapshots the selected folders, identifies supported
+reports, runs the existing parsers, and constructs the evidence profile. Repeat
+`--source` to include another export folder. The snapshot is taken into a separate
+directory; original MARG files are read only. Missing or ambiguous report families
+are listed in `acquisition-status.json`. Proprietary files that do not match a
+verified parser are not treated as decoded. Driving the MARG application's Export
+controls must be verified against the connected Windows installation. An existing
+decoded profile may instead be passed with `--profile`.
 
 The prepared `migration-plan.json` shows counts and exclusions. Add `--apply`
 to the same command to run the complete import. Operator credentials come from

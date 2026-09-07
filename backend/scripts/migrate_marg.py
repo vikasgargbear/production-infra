@@ -64,6 +64,34 @@ def compile_package(args, target):
     return _read_json(bundle_path)
 
 
+def acquire_profile(args):
+    """Automatically snapshot/discover/decode supported MARG report exports."""
+    if args.profile is not None:
+        return args.profile
+    capture = args.output.parent / (args.output.name + "-capture")
+    profile = capture / "evidence-profile.json"
+    if profile.is_file():
+        return profile
+    if capture.exists():
+        raise ValueError("Capture is incomplete; inspect acquisition-status.json and use a new output for fresh exports")
+    script = args.source_repo / "migration-work/agent/acquire_marg.py"
+    if not script.is_file():
+        raise ValueError("The source repository needs the reviewed acquire_marg.py collector")
+    command = [sys.executable, str(script), "--output", str(capture.resolve())]
+    for directory in args.source:
+        command += ["--source", str(directory.resolve())]
+    result = subprocess.run(command, text=True, capture_output=True)
+    if result.returncode or not profile.is_file():
+        status_path = capture / "acquisition-status.json"
+        if status_path.is_file():
+            status = _read_json(status_path)
+            print(json.dumps({"acquisition_status": str(status_path),
+                              "missing_exports": status.get("missing_exports", []),
+                              "ambiguous_exports": status.get("ambiguous_exports", [])}), flush=True)
+        raise ValueError("MARG exports are incomplete; connect to MARG and generate the missing reports")
+    return profile
+
+
 def _instance_id(status, provider):
     candidates = set()
     for edge in status.get("environments", {}).get("edges", []):
@@ -136,11 +164,14 @@ def apply_package(bundle, target, provider, supabase, password, expected_sha):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-repo", type=Path, required=True)
-    parser.add_argument("--profile", type=Path, required=True)
+    inputs = parser.add_mutually_exclusive_group(required=True)
+    inputs.add_argument("--profile", type=Path)
+    inputs.add_argument("--source", type=Path, action="append", help="MARG data/export folder; may be repeated")
     parser.add_argument("--target", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--apply", action="store_true", help="Apply the displayed target; otherwise prepare only")
     args = parser.parse_args()
+    args.profile = acquire_profile(args)
     target = _read_json(args.target)
     for field in ("organization_id", "branch_id", "location_id", "user_id"):
         target[field] = str(UUID(target[field]))

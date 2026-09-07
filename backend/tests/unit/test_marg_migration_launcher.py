@@ -4,7 +4,43 @@ import json
 
 import pytest
 
-from scripts.migrate_marg import _instance_id, compile_package
+from scripts.migrate_marg import _instance_id, acquire_profile, compile_package
+
+
+def test_acquisition_collects_each_folder_and_reuses_completed_capture(tmp_path, monkeypatch):
+    script = tmp_path / "migration-work/agent/acquire_marg.py"
+    script.parent.mkdir(parents=True)
+    script.touch()
+    args = argparse.Namespace(profile=None, output=tmp_path / "bundle", source_repo=tmp_path,
+                              source=[tmp_path / "MARG", tmp_path / "Exports"])
+    calls = []
+
+    def collect(command, **kwargs):
+        calls.append(command)
+        capture = tmp_path / "bundle-capture"
+        capture.mkdir()
+        (capture / "evidence-profile.json").write_text('{}')
+        return argparse.Namespace(returncode=0)
+
+    monkeypatch.setattr("scripts.migrate_marg.subprocess.run", collect)
+    profile = acquire_profile(args)
+    assert profile.is_file()
+    assert calls[0].count("--source") == 2
+    assert acquire_profile(args) == profile
+    assert len(calls) == 1
+
+
+def test_missing_exports_stop_before_compilation(tmp_path, monkeypatch):
+    script = tmp_path / "migration-work/agent/acquire_marg.py"
+    script.parent.mkdir(parents=True)
+    script.touch()
+    args = argparse.Namespace(profile=None, output=tmp_path / "bundle", source_repo=tmp_path,
+                              source=[tmp_path / "MARG"])
+    monkeypatch.setattr("scripts.migrate_marg.subprocess.run",
+                        lambda *a, **kw: argparse.Namespace(returncode=2))
+    with pytest.raises(ValueError, match="MARG exports are incomplete"):
+        acquire_profile(args)
+    assert not args.output.exists()
 
 
 def test_resume_keeps_original_package_and_rejects_changed_profile(tmp_path):
