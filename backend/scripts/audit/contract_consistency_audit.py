@@ -434,6 +434,8 @@ def collect_issues() -> List[ConsistencyIssue]:
     canonical_line = calculation_schemas.split(
         "class CanonicalSalesCalculationLine", 1
     )[1].split("class InvoiceCalculationRequest", 1)[0]
+    tax_resolver_path = "database/canonical/operations/tax/product_tax_authority.sql"
+    tax_resolver = _read(tax_resolver_path) if (REPOSITORY_ROOT / tax_resolver_path).exists() else ""
     if (
         any((REPOSITORY_ROOT / path).exists() for path in legacy_sales_authorities)
         or "gst_percent" in canonical_line
@@ -442,20 +444,19 @@ def collect_issues() -> List[ConsistencyIssue]:
             "resolve_sales_tax_authority", "calculate_sales_totals", "authority.lines",
         ))
         or any(token not in tax_authority for token in (
-            "tax.tax_code_versions",
-            "core.reference_data_releases",
-            "version.effective_from<=:document_date",
-            "release.dataset_kind='hsn_sac_tax'",
-            "release.status='active'",
+            "erp_automation_reads.resolve_product_tax(",
+            "product.org_id,product.id,CAST(:document_date AS date)",
+        ))
+        or any(token not in tax_resolver for token in (
+            "erp_automation_reads.resolve_product_tax(",
+            "tax.tax_code_versions", "core.reference_data_releases",
+            "organization_id", "document_date", "effective_from", "source_snapshot",
         ))
         or any(token not in sales_calculation for token in (
             'item["resolved_gst_percent"]', '"resolved_gst_percent"',
         ))
         or any(token not in canonical_commands for token in (
-            "tax.tax_code_versions AS tax_version",
-            "core.reference_data_releases AS tax_release",
-            "tax_version.effective_from<=order_date",
-            "tax_release.dataset_kind='hsn_sac_tax'",
+            "erp_automation_reads.resolve_product_tax(",
         ))
     ):
         issues.append(ConsistencyIssue(

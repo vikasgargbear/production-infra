@@ -79,9 +79,8 @@ def test_sales_preview_accepts_no_browser_tax_rate_and_resolves_server_facts():
     assert "gst_percent" not in canonical_line
     assert "tax_percent" not in canonical_line
     assert "resolve_sales_tax_authority" in routes
-    assert "tax.tax_code_versions" in authority
-    assert "core.reference_data_releases" in authority
-    assert "effective_from<=:document_date" in authority
+    assert "erp_automation_reads.resolve_product_tax(" in authority
+    assert "product.org_id,product.id,CAST(:document_date AS date)" in authority
 
 
 def test_retired_purchase_upload_write_cannot_recreate_legacy_products():

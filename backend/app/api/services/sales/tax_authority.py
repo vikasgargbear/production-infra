@@ -75,18 +75,9 @@ _EFFECTIVE_PRODUCT_TAX_SQL = text(
         ON product.org_id=:org_id
        AND product.id=requested.product_id
        AND product.status='active'
-      JOIN tax.tax_code_versions AS version
-        ON version.code=product.hsn_code
-       AND version.code_kind='hsn'
-       AND version.status='active'
-       AND version.effective_from<=:document_date
-       AND (version.effective_to IS NULL OR version.effective_to>=:document_date)
-      JOIN core.reference_data_releases AS release
-        ON release.id=version.release_id
-       AND release.dataset_kind='hsn_sac_tax'
-       AND release.status='active'
-       AND release.effective_from<=:document_date
-       AND (release.effective_to IS NULL OR release.effective_to>=:document_date)
+      JOIN LATERAL erp_automation_reads.resolve_product_tax(
+        product.org_id,product.id,CAST(:document_date AS date)
+      ) AS version ON true
      ORDER BY requested.line_number
     """
 )
