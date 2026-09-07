@@ -67,21 +67,16 @@ def test_duplicate_source_identity_across_batches_prevents_all_writes(monkeypatc
     transaction.assert_not_called()
 
 
-def test_source_tax_conflict_in_later_batch_prevents_all_writes(monkeypatch):
+def test_distinct_source_product_rates_are_diagnostics_without_mutating_source():
     value = request_value(
         [fact("a", "product", payload={"hsn_code": "3004", "gst_rate": "5.000000"})],
         [fact("b", "product", payload={"hsn_code": "3004", "gst_rate": "18"})],
     )
-    transaction = Mock()
-    monkeypatch.setattr(operator, "_transaction", transaction)
     requests = operator._migration_requests(value)
-    conflicts = operator._source_tax_conflicts(requests)
+    conflicts = operator._source_tax_variants(requests)
     assert len(conflicts) == 1
     assert conflicts[0]["products"] == 2
     assert conflicts[0]["hsn_code"] == "3004"
-    with pytest.raises(ValueError, match="no import writes started"):
-        operator._migrate(object(), value)
-    transaction.assert_not_called()
     assert requests[1].facts[0].payload["gst_rate"] == "18"
 
 
@@ -92,22 +87,20 @@ def test_tax_preflight_normalizes_numeric_scale_and_ignores_quarantine():
         fact("c", "product", selection_state="quarantined",
              payload={"hsn_code": "3004", "gst_rate": "18"}),
     ])
-    assert operator._source_tax_conflicts(operator._migration_requests(value)) == []
+    assert operator._source_tax_variants(operator._migration_requests(value)) == []
 
 
-def test_missing_tax_assignment_prevents_import_commands(monkeypatch):
+def test_unreviewed_source_tax_prevents_import_commands(monkeypatch):
     value = request_value([fact("a", "product", payload={"hsn_code": "3004", "gst_rate": "5"})])
     cursor = Mock()
     cursor.fetchone.return_value = (1,)
     monkeypatch.setattr(operator, "_transaction", lambda connection, target, operation: operation(cursor))
     importer = Mock()
     monkeypatch.setattr(operator, "_import_batch", importer)
-    with pytest.raises(ValueError, match="no import writes started"):
+    with pytest.raises(ValueError, match="Reviewed product tax evidence"):
         operator._migrate(object(), value)
     importer.assert_not_called()
-    sql = cursor.execute.call_args.args[0].strip()
-    assert sql.startswith("SELECT")
-    assert "install_historical_tax_snapshot" not in sql
+    cursor.execute.assert_not_called()
 
 
 class MemoryConnection:
@@ -143,7 +136,8 @@ class MemoryConnection:
 
 def test_resume_preserves_committed_chunks_and_replays_without_duplicates(monkeypatch):
     connection = MemoryConnection()
-    value = request_value([fact("product-a", "product")], [fact("party-b")])
+    value = request_value([fact("product-a", "product", event_date="2026-09-01",
+        payload={"hsn_code": "3004", "gst_rate": "5", "hsn_gst_candidate_unique": True})], [fact("party-b")])
     for name in ("_attest_reviewed_database", "_enter_migration_owner",
                  "_activate_reviewed_user", "_leave_migration_owner"):
         monkeypatch.setattr(operator, name, Mock())
@@ -162,12 +156,10 @@ def test_resume_preserves_committed_chunks_and_replays_without_duplicates(monkey
         return {"accepted": len(rows)}
 
     monkeypatch.setattr(operator, "_import_batch", import_command)
+    monkeypatch.setattr(operator, "_validate_product_references", lambda *_: None)
     phases = []
     monkeypatch.setattr(operator, "_promote_parties", lambda *_: (
         phases.append("parties") or {"complete": True, "parties_remaining": 0, "openings_remaining": 0}))
-    monkeypatch.setattr(operator, "_validate_migration_tax_catalog", lambda *_: None)
-    tax_snapshot = Mock()
-    monkeypatch.setattr(operator, "_prepare_tax", tax_snapshot)
     monkeypatch.setattr(operator, "_promote_products", lambda *_: (
         phases.append("products") or {"complete": True, "products_remaining": 0}))
     monkeypatch.setattr(operator, "_reconcile_migration", lambda *_: (
@@ -176,7 +168,7 @@ def test_resume_preserves_committed_chunks_and_replays_without_duplicates(monkey
     with pytest.raises(RuntimeError, match="second batch"):
         operator._migrate(connection, value)
     assert set(connection.committed) == {("product", "product-a")}
-    assert connection.commits == 2  # Read-only catalog check and first imported chunk.
+    assert connection.commits == 2
     assert connection.rollbacks == 1
     assert phases == []
 
@@ -186,10 +178,36 @@ def test_resume_preserves_committed_chunks_and_replays_without_duplicates(monkey
     assert result["exclusions"] == {"unresolved_returns": 2}
     assert status == {"bound_products": 1}
     assert phases == ["parties", "products", "reconcile"]
-    tax_snapshot.assert_not_called()
     assert set(connection.committed) == {("product", "product-a"), ("party", "party-b")}
     assert attempted.count(("product", "product-a")) == 2
-    assert connection.commits == 8  # Two catalog checks, initial chunk, replays, three final phases.
+    assert connection.commits == 8  # Two reference checks, initial chunk, replays, final phases.
+
+
+def test_missing_product_uom_prevents_first_import(monkeypatch):
+    value = request_value([fact("p", "product", event_date="2026-09-01", payload={
+        "hsn_code": "3004", "gst_rate": "5", "hsn_gst_candidate_unique": True,
+        "base_uom_code": "UNKNOWN"})])
+    cursor = Mock()
+    cursor.fetchall.return_value = []
+    monkeypatch.setattr(operator, "_transaction", lambda connection, target, op: op(cursor))
+    importer = Mock()
+    monkeypatch.setattr(operator, "_import_batch", importer)
+    with pytest.raises(ValueError, match="units unavailable.*UNKNOWN"):
+        operator._migrate(object(), value)
+    importer.assert_not_called()
+    assert cursor.execute.call_args.args[0].startswith("SELECT")
+
+
+@pytest.mark.parametrize("rate", ["invalid", "NaN", "Infinity", "-1", "101", "5.000001"])
+def test_invalid_or_unrepresentable_source_rate_prevents_writes(monkeypatch, rate):
+    value = request_value([fact("p", "product", event_date="2026-09-01", payload={
+        "hsn_code": "3004", "gst_rate": rate, "hsn_gst_candidate_unique": True,
+        "base_uom_code": "PCS"})])
+    transaction = Mock()
+    monkeypatch.setattr(operator, "_transaction", transaction)
+    with pytest.raises(ValueError, match="Reviewed product tax evidence"):
+        operator._migrate(object(), value)
+    transaction.assert_not_called()
 
 
 @pytest.mark.parametrize("remaining", [[4, 4], [4, 5]])

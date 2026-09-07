@@ -286,7 +286,7 @@
   },
   "manifest_version": "1.0.0",
   "mapping_file": "baseline-commercial-command-enforcements.json",
-  "mapping_sha256": "d9919544def7df8f58d5d7be262513d35a5701c609a235eee1afaf53f650c7eb",
+  "mapping_sha256": "63ef50f11d3f03b6d8420534c76eb1bcf146db84cf80cdf43cb9fdd0363b830e",
   "postgresql": "15+",
   "prohibitions": [
     "No dynamic SQL.",
@@ -555,6 +555,6 @@
     "tax.documents:documents_cross_row_guard"
   ],
   "source_manifest": "commands_trade_v2/trade-posting-manifest.json",
-  "source_manifest_sha256": "c4dcbdb62601e5fe50b119919ba0355822d623bfa9071b0f8d0410278dbf566a",
+  "source_manifest_sha256": "ed6b48e90f836f2dae992d0dc44f145a041f6cd9d453a72175733c4f88b8bb4e",
   "target_resolved_count_after_catalog_correction": 11
 }

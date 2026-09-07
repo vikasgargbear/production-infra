@@ -97,9 +97,32 @@ def test_resolves_effective_versioned_hsn_rate_and_intra_state_supply() -> None:
     assert resolved.lines[0].tax_code_version_id == VERSION
     assert resolved.lines[0].tax_release_id == RELEASE
     tax_sql, params = session.calls[-1]
-    assert "version.effective_from<=:document_date" in tax_sql
-    assert "release.dataset_kind='hsn_sac_tax'" in tax_sql
+    assert "erp_automation_reads.resolve_product_tax(" in tax_sql
+    assert "product.org_id,product.id,CAST(:document_date AS date)" in tax_sql
+    assert "version.status='active'" not in tax_sql
     assert params["product_ids"] == [str(PRODUCT)]
+
+
+def test_same_hsn_products_keep_distinct_resolved_rates_and_version_ids():
+    second_product = UUID("10000000-0000-7000-8000-000000000009")
+    second_version = UUID("10000000-0000-7000-8000-000000000010")
+    rows = [{
+        "line_number": number, "product_id": product, "hsn_code": "3004",
+        "tax_code_version_id": version, "tax_release_id": RELEASE,
+        "version_number": 1, "effective_from": date(2026, 8, 1), "effective_to": None,
+        "taxability": "taxable", "cgst_rate": rate / 2, "sgst_rate": rate / 2,
+        "igst_rate": rate, "cess_rate": Decimal(0), "ruleset_version": "reviewed-source-snapshot",
+    } for number, product, version, rate in (
+        (1, PRODUCT, VERSION, Decimal("5.000000")),
+        (2, second_product, second_version, Decimal("18.000000")),
+    )]
+    result = resolve_sales_tax_authority(
+        _Session(tax_rows=rows), org_id=ORG, branch_id=BRANCH,
+        customer_account_id=CUSTOMER, product_ids=[PRODUCT, second_product],
+        document_date=date(2026, 8, 25),
+    )
+    assert [line.gst_rate for line in result.lines] == [Decimal("5"), Decimal("18")]
+    assert [line.tax_code_version_id for line in result.lines] == [VERSION, second_version]
 
 
 def test_supply_type_is_derived_from_branch_and_customer_address() -> None:

@@ -967,11 +967,9 @@ def products(limit: int = Query(50, ge=1, le=200), skip: int = Query(0, ge=0),
           ) packs ON true
           LEFT JOIN LATERAL (
               SELECT taxability, igst_rate
-                FROM tax.tax_code_versions
-               WHERE code=p.hsn_code AND code_kind='hsn' AND status='active'
-                 AND effective_from<=(transaction_timestamp() AT TIME ZONE organization.timezone)::date
-                 AND (effective_to IS NULL OR effective_to>=(transaction_timestamp() AT TIME ZONE organization.timezone)::date)
-               ORDER BY effective_from DESC, version_number DESC, id LIMIT 1
+                FROM erp_automation_reads.resolve_product_tax(
+                  p.org_id,p.id,(transaction_timestamp() AT TIME ZONE organization.timezone)::date
+                )
           ) tax_version ON true
          ORDER BY ranked.search_rank DESC,p.name,p.id
     """, parameters)
@@ -1515,11 +1513,9 @@ def products_with_batches(
           ) conversion ON true
           LEFT JOIN LATERAL (
               SELECT taxability, igst_rate
-                FROM tax.tax_code_versions
-               WHERE code=product.hsn_code AND code_kind='hsn' AND status='active'
-                 AND effective_from<=(transaction_timestamp() AT TIME ZONE organization.timezone)::date
-                 AND (effective_to IS NULL OR effective_to>=(transaction_timestamp() AT TIME ZONE organization.timezone)::date)
-               ORDER BY effective_from DESC, version_number DESC, id LIMIT 1
+                FROM erp_automation_reads.resolve_product_tax(
+                  product.org_id,product.id,(transaction_timestamp() AT TIME ZONE organization.timezone)::date
+                )
           ) tax_version ON true
           LEFT JOIN LATERAL (
               SELECT jsonb_agg(jsonb_build_object(
@@ -1644,11 +1640,9 @@ def product_batches(
           ) conversion ON true
           LEFT JOIN LATERAL (
               SELECT taxability, igst_rate
-                FROM tax.tax_code_versions
-               WHERE code=product.hsn_code AND code_kind='hsn' AND status='active'
-                 AND effective_from<=business_clock.business_date
-                 AND (effective_to IS NULL OR effective_to>=business_clock.business_date)
-               ORDER BY effective_from DESC, version_number DESC, id LIMIT 1
+                FROM erp_automation_reads.resolve_product_tax(
+                  product.org_id,product.id,business_clock.business_date
+                )
           ) tax_version ON true
          WHERE batch.org_id=:org_id AND batch.product_id=:product_id
            AND batch.status IN ('released','blocked')

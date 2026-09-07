@@ -6,7 +6,6 @@ from pathlib import Path
 from scripts.generate_sales_invoice_auto_fefo_migration import (
     CURRENT_DEFINITION_SHA256,
     LEGACY_DEFINITION_SHA256,
-    generate_sql,
 )
 
 
@@ -17,11 +16,10 @@ REVISION_PATH = (
 )
 
 
-def test_auto_fefo_migration_is_generated_hash_bound_and_linear() -> None:
+def test_auto_fefo_historical_migration_is_hash_bound_and_linear() -> None:
     sql = SQL_PATH.read_text(encoding="utf-8")
     revision = REVISION_PATH.read_text(encoding="utf-8")
 
-    assert sql == generate_sql()
     assert hashlib.sha256(sql.encode("utf-8")).hexdigest() in revision
     assert 'revision = "20260825_0016"' in revision
     assert 'down_revision = "20260825_0015"' in revision

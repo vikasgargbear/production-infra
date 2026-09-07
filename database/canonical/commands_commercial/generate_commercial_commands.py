@@ -982,11 +982,17 @@ BEGIN
        AND association.effective_from<=header.{document_date}
        AND (association.effective_to IS NULL OR association.effective_to>=header.{document_date}) FOR SHARE;
     SELECT min(version.effective_from) INTO tax_effective FROM {line_table} tax_line JOIN tax.tax_code_versions version ON version.id=tax_line.tax_code_version_id
-      WHERE tax_line.org_id=organization_id AND tax_line.{parent}=resource_id AND version.status='active'
+      WHERE tax_line.org_id=organization_id AND tax_line.{parent}=resource_id
+        AND ((version.org_id IS NULL AND version.status='active') OR
+             (version.org_id=organization_id AND version.product_id=tax_line.product_id
+              AND tax_line.line_kind='product' AND version.status='source_snapshot'
+              AND EXISTS (SELECT 1 FROM erp_automation_reads.resolve_product_tax(
+                  organization_id,tax_line.product_id,header.{document_date}) resolved_tax WHERE resolved_tax.id=version.id)))
         AND version.effective_from<=header.{document_date} AND (version.effective_to IS NULL OR version.effective_to>=header.{document_date})
-      HAVING count(DISTINCT version.ruleset_version)=1 AND min(version.ruleset_version)=header.calculation_ruleset_version
+      HAVING erp_automation_reads.tax_ruleset_fingerprint(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+               'tax_code_version_id',version.id,'ruleset_version',version.ruleset_version)))=header.calculation_ruleset_version
         AND count(*)=(SELECT count(*) FROM {line_table} expected WHERE expected.org_id=organization_id AND expected.{parent}=resource_id);
-    IF tax_effective IS NULL THEN RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='invoice tax ruleset is not uniform'; END IF;
+    IF tax_effective IS NULL THEN RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='invoice tax versions or document fingerprint are not valid'; END IF;
 
     {inventory_before}
     consumed:=erp_calculation_authority.consume_artifact(organization_id,artifact_id,'{operation}','{resource}',resource_id,
@@ -1182,7 +1188,10 @@ def _return_artifact_assertion(*, sales: bool) -> list[str]:
          OR source.tax_charge_mechanism IS DISTINCT FROM line.tax_charge_mechanism
          OR source.tax_code_version_id IS DISTINCT FROM line.tax_code_version_id
          OR source.taxability_snapshot IS DISTINCT FROM line.taxability_snapshot
-         OR tax_version.id IS NULL OR tax_version.ruleset_version IS DISTINCT FROM header.calculation_ruleset_version
+         OR tax_version.id IS NULL
+         OR (tax_version.org_id IS NOT NULL AND (
+              tax_version.org_id IS DISTINCT FROM organization_id
+              OR tax_version.product_id IS DISTINCT FROM line.product_id))
          OR {source_date}<tax_version.effective_from
          OR (tax_version.effective_to IS NOT NULL AND {source_date}>tax_version.effective_to)'''
     purchase_uninvoiced = ""
@@ -1554,6 +1563,16 @@ BEGIN
     IF header.status NOT IN ({postable_statuses}) THEN RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='return is not postable or posted'; END IF;
     {original_lock}
     {cross_adjustment_lock}
+    IF {source_kind_check} AND original.calculation_ruleset_version IS DISTINCT FROM (
+      SELECT erp_automation_reads.tax_ruleset_fingerprint(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+               'tax_code_version_id',version.id,'ruleset_version',version.ruleset_version)))
+        FROM {original_lines} original_line
+        JOIN tax.tax_code_versions version ON version.id=original_line.tax_code_version_id
+       WHERE original_line.org_id=organization_id
+         AND original_line.{"invoice_id" if sales else "supplier_invoice_id"}=original.id
+    ) THEN
+      RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='return original invoice tax fingerprint differs';
+    END IF;
     PERFORM erp_calculation_authority.assert_input_schema(input_doc);
     PERFORM erp_calculation_authority.assert_output_schema(output_doc);
     IF input_doc->>'calculation_kind'<>'reversal' OR input_doc->>'operation'<>'{operation}'

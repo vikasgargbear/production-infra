@@ -234,5 +234,9 @@ PYTHONPATH=backend \
   python backend/tests/postgres/check_evidence_storage_auth_hook.py
 PYTHONPATH=backend \
   python backend/tests/postgres/check_canonical_data_reset_authority.py
+# Run the mixed-invoice fixture before the historical MARG fixture, which
+# retires the shared synthetic reference release used by the invoice fixture.
+CANONICAL_TEST_DATA_DIRECTORY="$(psql -X -Atqc 'SHOW data_directory')" PYTHONPATH=backend \
+  python backend/tests/postgres/check_scoped_tax_purge.py
 PYTHONPATH=backend \
   python backend/tests/postgres/check_marg_migration_run.py

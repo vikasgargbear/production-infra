@@ -16,7 +16,9 @@ def test_operator_uses_existing_canonical_authorities_and_exact_identity() -> No
     assert "erp_security.activate_context" in source
     assert "core.organization.manage" in source
     assert "import_historical_migration_facts" in source
-    assert "install_historical_tax_snapshot" in source
+    assert "install_historical_tax_snapshot" not in source
+    assert "prepare-tax" not in source
+    assert "_validate_product_references" in source
     assert "promote_historical_product_inventory_batch" in source
     assert "historical_product_inventory_cutover_status" in source
     assert "with redirect_stdout(sys.stderr):" in source
@@ -27,6 +29,7 @@ def test_operator_uses_existing_canonical_authorities_and_exact_identity() -> No
 
 def test_workflow_keeps_private_rows_out_of_source_and_refuses_resets() -> None:
     source = WORKFLOW.read_text(encoding="utf-8")
+    assert "prepare-tax" not in source
 
     assert "REVIEWED_HISTORICAL_IMPORT_BATCH_B64_GZIP" in source
     assert 'test "$(git rev-parse HEAD)" = "$REVIEWED_SHA"' in source

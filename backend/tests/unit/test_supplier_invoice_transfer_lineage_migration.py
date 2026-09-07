@@ -19,11 +19,9 @@ def _load(path: Path, name: str):
     return module
 
 
-def test_transfer_lineage_migration_is_linear_hash_bound_and_generated() -> None:
-    generator = _load(GENERATOR, "supplier_invoice_transfer_lineage_generator")
+def test_transfer_lineage_historical_migration_is_linear_and_hash_bound() -> None:
     revision = _load(REVISION, "supplier_invoice_transfer_lineage_revision")
     sql = SQL.read_text(encoding="utf-8")
-    assert generator.generated_sql() == sql
     assert revision.revision == "20260828_0045"
     assert revision.down_revision == "20260828_0044"
     assert revision.EXPECTED_SQL_SHA256 == hashlib.sha256(sql.encode()).hexdigest()

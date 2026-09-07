@@ -33,7 +33,10 @@ EXPECTED_CANONICAL_RELATION_COUNT = 127
 EXPECTED_EPHEMERAL_RELATION_COUNT = 9
 EXPECTED_ALEMBIC_SCHEMA_COUNT = 30
 RESET_LOCK_KEY = 8_260_826_2
-EXPECTED_ORGANIZATION_RELATION_COUNT = 111
+EXPECTED_ORGANIZATION_RELATION_COUNT = 113
+MIXED_ORGANIZATION_RELATIONS = frozenset({
+    "core.reference_data_releases", "tax.tax_code_versions",
+})
 ORGANIZATION_CONFIRMATION_PREFIX = "DELETE-ORGANIZATION:"
 TRANSITIVE_ORGANIZATION_RELATIONS = frozenset(
     {
@@ -43,6 +46,7 @@ TRANSITIVE_ORGANIZATION_RELATIONS = frozenset(
         "tax.input_credit_applications",
         "tax.input_credit_lots",
         "tax.input_credit_reversal_events",
+        "tax.tax_code_versions",
     }
 )
 MANAGED_ROLES = (
@@ -663,9 +667,11 @@ def _seed_digest(cursor: Any, relations: Sequence[str]) -> str:
     for relation in sorted(relations):
         digest.update(len(relation).to_bytes(4, "big"))
         digest.update(relation.encode("ascii"))
+        predicate = "WHERE org_id IS NULL " if relation in MIXED_ORGANIZATION_RELATIONS else ""
         cursor.execute(
             f"SELECT pg_catalog.to_jsonb(seed_row)::text "
             f"FROM {_quote_relation(relation)} AS seed_row "
+            f"{predicate}"
             'ORDER BY pg_catalog.to_jsonb(seed_row)::text COLLATE "C"'
         )
         for (serialized,) in cursor.fetchall():
@@ -768,7 +774,7 @@ def _organization_relations(
         str(name)
         for name, data_type, not_null, direct_foreign_key, tenant_foreign_key in rows
         if data_type != "uuid"
-        or not bool(not_null)
+        or (not bool(not_null) and str(name) not in MIXED_ORGANIZATION_RELATIONS)
         or not (
             bool(direct_foreign_key)
             or (
@@ -794,7 +800,7 @@ def _organization_relations(
 def _organization_row_counts(
     cursor: Any, relations: Sequence[str], organization_id: str, *, target: bool
 ) -> tuple[tuple[str, int], ...]:
-    comparison = "=" if target else "<>"
+    comparison = "=" if target else "IS DISTINCT FROM"
     result: list[tuple[str, int]] = []
     for relation in sorted(relations):
         cursor.execute(
@@ -1343,7 +1349,7 @@ def execute_organization_purge(
             )
             before_roles = _role_snapshot(cursor)
             before_seed_digest = _seed_digest(
-                cursor, authority.preserved_seed_relations
+                cursor, (*authority.preserved_seed_relations, *MIXED_ORGANIZATION_RELATIONS)
             )
             before_target_counts = _organization_row_counts(
                 cursor, organization_relations, normalized_id, target=True
@@ -1405,7 +1411,9 @@ def execute_organization_purge(
                 ephemeral_scope_relations=after_catalog.ephemeral_scope_relations,
             )
             after_roles = _role_snapshot(cursor)
-            after_seed_digest = _seed_digest(cursor, authority.preserved_seed_relations)
+            after_seed_digest = _seed_digest(
+                cursor, (*authority.preserved_seed_relations, *MIXED_ORGANIZATION_RELATIONS)
+            )
             after_target_counts = _organization_row_counts(
                 cursor, organization_relations, normalized_id, target=True
             )

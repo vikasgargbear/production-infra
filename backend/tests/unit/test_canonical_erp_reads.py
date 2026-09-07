@@ -1397,7 +1397,7 @@ def test_invoice_history_filters_and_payment_projection_use_canonical_finance(mo
 def test_product_and_batch_reads_project_effective_canonical_gst_rate() -> None:
     source = Path(canonical_erp_reads.__file__).read_text(encoding="utf-8")
 
-    assert source.count("FROM tax.tax_code_versions") >= 4
+    assert source.count("FROM erp_automation_reads.resolve_product_tax(") == 3
     assert "tax_version.taxability='taxable'" in source
     assert "tax_version.taxability IS NULL THEN NULL" in source
     assert "tax_version.igst_rate" in source

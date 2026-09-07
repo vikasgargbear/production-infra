@@ -1,0 +1,35 @@
+{
+  "contract_version": "1.0.0",
+  "source_owner": "database/canonical/operations/tax/product_tax_authority.sql",
+  "extension_kind": "forward_schema_and_rls",
+  "baseline_descriptors": ["database/canonical/domains/core.json", "database/canonical/domains/tax.json"],
+  "scope": "global_reference_or_owning_organization",
+  "tables": {
+    "core.reference_data_releases": {
+      "added_nullable_columns": {"org_id": "uuid", "source_dataset_id": "varchar(128)"},
+      "global_predicate": "org_id IS NULL",
+      "scoped_statuses": ["staged", "source_snapshot"],
+      "force_rls": true,
+      "select_policy": "erp_select",
+      "owner_policy": "source_release_owner",
+      "scoped_unique_index": "reference_data_releases_source_dataset_uq",
+      "preserved_global_index": "reference_data_releases_active_kind_uq"
+    },
+    "tax.tax_code_versions": {
+      "added_nullable_columns": {"org_id": "uuid", "product_id": "uuid", "source_fact_id": "uuid"},
+      "global_predicate": "org_id IS NULL",
+      "scoped_statuses": ["source_snapshot"],
+      "force_rls": true,
+      "select_policy": "erp_select",
+      "owner_policy": "source_tax_owner",
+      "scoped_unique_index": "tax_code_versions_source_product_uq",
+      "global_unique_index": "tax_code_versions_code_version_uq",
+      "source_foreign_keys": ["tax_code_versions_source_product_fk", "tax_code_versions_source_fact_fk"]
+    }
+  },
+  "tenant_predicate": "org_id=erp_security.current_org_id() AND erp_security.current_actor_is_active()",
+  "owner_role": "erp_migration_owner",
+  "runtime_write_authority": "named reviewed commands only",
+  "resolver": "erp_automation_reads.resolve_product_tax(uuid,uuid,date)",
+  "document_fingerprint": "erp_automation_reads.tax_ruleset_fingerprint(jsonb)"
+}

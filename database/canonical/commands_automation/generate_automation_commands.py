@@ -883,6 +883,8 @@ BEGIN
     PERFORM erp_security.activate_context(auth_user_id,organization_id);
     IF erp_security.current_membership_id() IS DISTINCT FROM membership_id THEN
       RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='purchase-order verified auth context resolved a different membership'; END IF;
+    IF order_date>"erp_core_commands"."current_organization_business_date"() THEN
+      RAISE EXCEPTION USING ERRCODE='22007', MESSAGE='purchase order date cannot be in the future'; END IF;
     IF erp_security.can_access_branch(branch_id) IS DISTINCT FROM true
        OR erp_security.has_permission('procurement.order.manage',branch_id) IS DISTINCT FROM true
        OR erp_security.has_permission('automation.command.execute',branch_id) IS DISTINCT FROM true THEN
@@ -968,15 +970,10 @@ BEGIN
        AND id=NULLIF(requested_line->>'uom_conversion_id','')::uuid AND product_id=product.id
        AND status='active' AND to_uom_code=product.base_uom_code AND valid_from<=order_date
        AND (valid_until IS NULL OR valid_until>=order_date) FOR SHARE;
-      SELECT * INTO STRICT tax_version FROM tax.tax_code_versions WHERE code=product.hsn_code
-       AND code_kind='hsn' AND status='active' AND effective_from<=order_date
-       AND (effective_to IS NULL OR effective_to>=order_date) FOR SHARE;
+      SELECT * INTO STRICT tax_version FROM erp_automation_reads.resolve_product_tax(organization_id,product.id,order_date);
       SELECT * INTO STRICT tax_release FROM core.reference_data_releases WHERE id=tax_version.release_id
-       AND dataset_kind='hsn_sac_tax' AND status='active' AND effective_from<=order_date
+       AND dataset_kind='hsn_sac_tax' AND status IN ('active','source_snapshot') AND effective_from<=order_date
        AND (effective_to IS NULL OR effective_to>=order_date) FOR SHARE;
-      IF ruleset_version IS NULL THEN ruleset_version:=tax_version.ruleset_version;
-      ELSIF ruleset_version<>tax_version.ruleset_version THEN
-        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='purchase-order product tax rulesets differ'; END IF;
       resolved_lines:=resolved_lines||pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
         'line_number',pg_catalog.jsonb_array_length(resolved_lines)+1,'line_kind','product','line_id',requested_line->>'line_id',
         'product_id',product.id,'product_row_version',product.row_version,'hsn_code',product.hsn_code,
@@ -1007,9 +1004,6 @@ BEGIN
       SELECT * INTO STRICT tax_release FROM core.reference_data_releases WHERE id=tax_version.release_id
        AND dataset_kind='hsn_sac_tax' AND status='active' AND effective_from<=order_date
        AND (effective_to IS NULL OR effective_to>=order_date) FOR SHARE;
-      IF ruleset_version IS NULL THEN ruleset_version:=tax_version.ruleset_version;
-      ELSIF ruleset_version<>tax_version.ruleset_version THEN
-        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='purchase-order charge tax rulesets differ'; END IF;
       resolved_lines:=resolved_lines||pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
         'line_number',pg_catalog.jsonb_array_length(resolved_lines)+1,'line_kind','charge','line_id',requested_line->>'line_id',
         'charge_code',profile.charge_code,'charge_tax_profile_id',profile.id,'charge_tax_profile_row_version',profile.row_version,
@@ -1027,7 +1021,7 @@ BEGIN
         'tax_effective_from',tax_version.effective_from,'tax_effective_to',tax_version.effective_to,
         'tax_release_id',tax_release.id,'tax_release_ruleset_version',tax_release.ruleset_version));
     END LOOP;
-    IF ruleset_version IS NULL THEN RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='purchase-order has no effective tax ruleset'; END IF;
+    ruleset_version:=erp_automation_reads.tax_ruleset_fingerprint(resolved_lines);
     RETURN pg_catalog.jsonb_build_object(
       'branch_id',branch.id,'branch_row_version',branch.row_version,'order_date',order_date,'expected_on',expected_on,
       'supply_type',supply_type,'zero_rated_payment_mode','not_applicable','tax_charge_mechanism','normal',
@@ -1975,14 +1969,11 @@ BEGIN
       IF base_billed IS DISTINCT FROM pg_catalog.round((requested_line->>'billed_quantity')::numeric*line_factor,6)
          OR base_free IS DISTINCT FROM pg_catalog.round((requested_line->>'free_quantity')::numeric*line_factor,6) THEN
         RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='supplier invoice billed and free quantities do not reconcile exact receipt base allocations'; END IF;
-      SELECT * INTO STRICT tax_version FROM tax.tax_code_versions WHERE code=product.hsn_code AND code_kind='hsn'
-       AND status='active' AND taxability='taxable' AND effective_from<=invoice_date
-       AND (effective_to IS NULL OR effective_to>=invoice_date) FOR SHARE;
+      SELECT * INTO STRICT tax_version FROM erp_automation_reads.resolve_product_tax(organization_id,product.id,invoice_date)
+       WHERE taxability='taxable';
       SELECT * INTO STRICT tax_release FROM core.reference_data_releases WHERE id=tax_version.release_id
-       AND dataset_kind='hsn_sac_tax' AND status='active' AND effective_from<=invoice_date
+       AND dataset_kind='hsn_sac_tax' AND status IN ('active','source_snapshot') AND effective_from<=invoice_date
        AND (effective_to IS NULL OR effective_to>=invoice_date) FOR SHARE;
-      IF ruleset_version IS NULL THEN ruleset_version:=tax_version.ruleset_version;
-      ELSIF ruleset_version<>tax_version.ruleset_version THEN RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='supplier invoice tax rulesets differ'; END IF;
       resolved_lines:=resolved_lines||pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
         'line_number',pg_catalog.jsonb_array_length(resolved_lines)+1,'line_kind','product','line_id',requested_line->>'line_id',
         'purchase_order_line_id',line_purchase_order_line_id,'product_id',product.id,'hsn_code',product.hsn_code,'uom_code',line_uom,'multiplier',line_factor::text,
@@ -2014,8 +2005,6 @@ BEGIN
          AND id=NULLIF(requested_line->>'net_value_account_id','')::uuid AND account_type='expense'
          AND currency_code='INR' AND status='active' AND NOT allows_party_posting FOR SHARE;
       END IF;
-      IF ruleset_version IS NULL THEN ruleset_version:=tax_version.ruleset_version;
-      ELSIF ruleset_version<>tax_version.ruleset_version THEN RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='supplier invoice tax rulesets differ'; END IF;
       resolved_lines:=resolved_lines||pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
         'line_number',pg_catalog.jsonb_array_length(resolved_lines)+1,'line_kind','charge','line_id',requested_line->>'line_id',
         'charge_code',profile.charge_code,'sac_code',tax_version.code,'tax_code_version_id',tax_version.id,
@@ -2053,7 +2042,7 @@ BEGIN
       'place_of_supply_state_code',buyer_registration.state_code,'portal_document_line_id',portal_line.id,
       'portal_taxable_amount',portal_line.taxable_amount::text,'portal_cgst_amount',portal_line.cgst_amount::text,
       'portal_sgst_amount',portal_line.sgst_amount::text,'portal_igst_amount',portal_line.igst_amount::text,
-      'portal_cess_amount',portal_line.cess_amount::text,'ruleset_version',ruleset_version,'lines',resolved_lines,
+      'portal_cess_amount',portal_line.cess_amount::text,'ruleset_version',erp_automation_reads.tax_ruleset_fingerprint(resolved_lines),'lines',resolved_lines,
       'legal_scope',pg_catalog.jsonb_build_object('country','IN','currency','INR','normal_charge',true,
         'posted_grn_match_required',true,'gstr2b_required',true,'itc_business_use_attestation_required',true,
         'landed_cost_supported',true,'landed_cost_methods',pg_catalog.jsonb_build_array('direct','quantity_weighted','value_weighted'),
@@ -2349,6 +2338,8 @@ BEGIN
     PERFORM erp_security.activate_context(auth_user_id,organization_id);
     IF erp_security.current_membership_id() IS DISTINCT FROM membership_id THEN
       RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='sales-invoice verified auth context resolved a different membership'; END IF;
+    IF invoice_date>"erp_core_commands"."current_organization_business_date"() THEN
+      RAISE EXCEPTION USING ERRCODE='22007', MESSAGE='sales invoice date cannot be in the future'; END IF;
     IF erp_security.can_access_branch(branch_id) IS DISTINCT FROM true
        OR erp_security.has_permission('sales.invoice.create',branch_id) IS DISTINCT FROM true
        OR erp_security.has_permission('sales.invoice.post',branch_id) IS DISTINCT FROM true
@@ -2498,15 +2489,10 @@ BEGIN
        AND id=NULLIF(requested_line->>'uom_conversion_id','')::uuid AND product_id=product.id
        AND status='active' AND to_uom_code=product.base_uom_code AND valid_from<=invoice_date
        AND (valid_until IS NULL OR valid_until>=invoice_date) FOR SHARE;
-      SELECT * INTO STRICT tax_version FROM tax.tax_code_versions WHERE code=product.hsn_code
-       AND code_kind='hsn' AND status='active' AND effective_from<=invoice_date
-       AND (effective_to IS NULL OR effective_to>=invoice_date) FOR SHARE;
+      SELECT * INTO STRICT tax_version FROM erp_automation_reads.resolve_product_tax(organization_id,product.id,invoice_date);
       SELECT * INTO STRICT tax_release FROM core.reference_data_releases WHERE id=tax_version.release_id
-       AND dataset_kind='hsn_sac_tax' AND status='active' AND effective_from<=invoice_date
+       AND dataset_kind='hsn_sac_tax' AND status IN ('active','source_snapshot') AND effective_from<=invoice_date
        AND (effective_to IS NULL OR effective_to>=invoice_date) FOR SHARE;
-      IF ruleset_version IS NULL THEN ruleset_version:=tax_version.ruleset_version;
-      ELSIF ruleset_version<>tax_version.ruleset_version THEN
-        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='invoice tax lines resolve to different ruleset versions'; END IF;
       base_billed:=pg_catalog.round(billed*conversion.multiplier,6);
       base_free:=pg_catalog.round(free*conversion.multiplier,6);
       resolved_allocations:='[]'::jsonb; allocated_billed:=0; allocated_free:=0;
@@ -2644,6 +2630,8 @@ BEGIN
           SELECT * INTO STRICT dispatch_header FROM sales.dispatches WHERE org_id=organization_id
            AND id=dispatch_line.dispatch_id AND status='posted' AND branch_id=branch_id
            AND customer_account_id=customer.id AND shipping_address_id=shipping.id FOR SHARE;
+          IF invoice_date<dispatch_header.dispatch_date THEN
+            RAISE EXCEPTION USING ERRCODE='22007', MESSAGE='sales invoice date cannot precede an allocated dispatch date'; END IF;
           IF order_line.id IS NULL THEN
             SELECT * INTO STRICT order_line FROM sales.order_lines WHERE org_id=organization_id
              AND id=dispatch_line.order_line_id AND line_kind='product' FOR SHARE;
@@ -2682,10 +2670,12 @@ BEGIN
           line_number:=line_number+1;
           resolved_allocations:=resolved_allocations||pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
             'line_number',line_number,'invoice_dispatch_allocation_id',requested_allocation->>'invoice_dispatch_allocation_id',
-            'dispatch_line_id',dispatch_line.id,'dispatch_id',dispatch_header.id,'order_line_id',order_line.id,
+            'dispatch_line_id',dispatch_line.id,'dispatch_id',dispatch_header.id,'dispatch_date',dispatch_header.dispatch_date,
+            'dispatch_row_version',dispatch_header.row_version,'order_line_id',order_line.id,
             'allocated_base_billed_quantity',allocation_billed::text,'allocated_base_free_quantity',allocation_free::text));
           source_versions:=source_versions||pg_catalog.jsonb_build_array(
-            pg_catalog.jsonb_build_object('resource_type','sales_dispatch','id',dispatch_header.id,'row_version',dispatch_header.row_version,'status',dispatch_header.status),
+            pg_catalog.jsonb_build_object('resource_type','sales_dispatch','id',dispatch_header.id,
+              'row_version',dispatch_header.row_version,'status',dispatch_header.status,'dispatch_date',dispatch_header.dispatch_date),
             pg_catalog.jsonb_build_object('resource_type','sales_dispatch_line','id',dispatch_line.id,'source_hash',pg_catalog.encode(extensions.digest(pg_catalog.convert_to(pg_catalog.to_jsonb(dispatch_line)::text,'UTF8'),'sha256'),'hex')),
             pg_catalog.jsonb_build_object('resource_type','sales_order_line','id',order_line.id,'source_hash',pg_catalog.encode(extensions.digest(pg_catalog.convert_to(pg_catalog.to_jsonb(order_line)::text,'UTF8'),'sha256'),'hex')));
           allocated_billed:=allocated_billed+allocation_billed; allocated_free:=allocated_free+allocation_free;
@@ -2728,9 +2718,6 @@ BEGIN
       SELECT * INTO STRICT tax_release FROM core.reference_data_releases WHERE id=tax_version.release_id
        AND dataset_kind='hsn_sac_tax' AND status='active' AND effective_from<=invoice_date
        AND (effective_to IS NULL OR effective_to>=invoice_date) FOR SHARE;
-      IF ruleset_version IS NULL THEN ruleset_version:=tax_version.ruleset_version;
-      ELSIF ruleset_version<>tax_version.ruleset_version THEN
-        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='invoice charge resolves to a different ruleset version'; END IF;
       resolved_lines:=resolved_lines||pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
         'line_number',pg_catalog.jsonb_array_length(resolved_lines)+1,'line_kind','charge','line_id',requested_line->>'line_id',
         'charge_code',profile.charge_code,'charge_tax_profile_id',profile.id,'charge_tax_profile_row_version',profile.row_version,
@@ -2749,7 +2736,7 @@ BEGIN
         'tax_effective_from',tax_version.effective_from,'tax_effective_to',tax_version.effective_to,
         'tax_release_id',tax_release.id,'tax_release_ruleset_version',tax_release.ruleset_version));
     END LOOP;
-    IF ruleset_version IS NULL THEN RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='invoice has no effective tax ruleset'; END IF;
+    ruleset_version:=erp_automation_reads.tax_ruleset_fingerprint(resolved_lines);
     IF has_direct THEN
       WITH requested AS (
         SELECT (line.value->>'product_id')::uuid product_id,(allocation.value->>'batch_id')::uuid batch_id,
@@ -3369,6 +3356,9 @@ BEGIN
     IF erp_security.current_membership_id() IS DISTINCT FROM membership_id THEN
         RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='sales-order verified auth context resolved a different membership';
     END IF;
+    IF order_date>"erp_core_commands"."current_organization_business_date"() THEN
+        RAISE EXCEPTION USING ERRCODE='22007', MESSAGE='sales order date cannot be in the future';
+    END IF;
     IF erp_security.can_access_branch(branch_id) IS DISTINCT FROM true
        OR erp_security.has_permission('sales.order.create',branch_id) IS DISTINCT FROM true
        OR erp_security.has_permission('automation.command.execute',branch_id) IS DISTINCT FROM true THEN
@@ -3471,15 +3461,12 @@ BEGIN
            AND conversion.to_uom_code=product.base_uom_code
            AND conversion.valid_from<=order_date
            AND (conversion.valid_until IS NULL OR conversion.valid_until>=order_date)
-          JOIN tax.tax_code_versions AS tax_version
-            ON tax_version.code=product.hsn_code AND tax_version.code_kind='hsn'
-           AND tax_version.status='active' AND tax_version.effective_from<=order_date
-           AND (tax_version.effective_to IS NULL OR tax_version.effective_to>=order_date)
+          JOIN LATERAL erp_automation_reads.resolve_product_tax(organization_id,product.id,order_date) AS tax_version ON true
           JOIN core.reference_data_releases AS tax_release
             ON tax_release.id=tax_version.release_id AND tax_release.dataset_kind='hsn_sac_tax'
-           AND tax_release.status='active' AND tax_release.effective_from<=order_date
+           AND tax_release.status IN ('active','source_snapshot') AND tax_release.effective_from<=order_date
            AND (tax_release.effective_to IS NULL OR tax_release.effective_to>=order_date)
-         FOR SHARE OF product,conversion,tax_version,tax_release
+         FOR SHARE OF product,conversion,tax_release
     ), requested_charges AS (
         SELECT item.value AS line,
                pg_catalog.jsonb_array_length(request_document->'lines')+item.ordinality::integer AS line_number
@@ -3529,7 +3516,7 @@ BEGIN
     SELECT count(*),count(DISTINCT ruleset_version),
            pg_catalog.jsonb_agg(resolved_line ORDER BY line_number)
       INTO resolved_count,ruleset_count,resolved_lines FROM resolved;
-    IF resolved_count<>line_count OR ruleset_count<>1 THEN
+    IF resolved_count<>line_count THEN
         RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='sales-order product, charge, UOM, or effective tax resolution is not exact';
     END IF;
     RETURN pg_catalog.jsonb_build_object(
@@ -3546,7 +3533,7 @@ BEGIN
         'shipping_state_code',shipping_address.state_code,
         'order_date',order_date,'requested_delivery_date',requested_delivery_date,
         'lines',resolved_lines,
-        'ruleset_version',resolved_lines->0->>'ruleset_version'
+        'ruleset_version',erp_automation_reads.tax_ruleset_fingerprint(resolved_lines)
     );
 END
 ''',
