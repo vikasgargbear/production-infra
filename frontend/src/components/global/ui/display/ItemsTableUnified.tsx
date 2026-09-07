@@ -3,6 +3,13 @@ import { Trash2 } from 'lucide-react';
 import EditableCell, { EditableCellRef } from './EditableCell';
 import { exactDecimalUnits } from '../../../../utils/exactDecimal';
 
+// Presentation only: retain every significant digit in the underlying value.
+const compactDecimalInput = (value: string | number | undefined): string => {
+    const [whole, fraction = ''] = String(value ?? 0).split('.');
+    const trimmed = fraction.replace(/0+$/, '');
+    return trimmed ? `${whole}.${trimmed}` : whole;
+};
+
 // ==================== TYPE DEFINITIONS ====================
 
 export interface ItemsTableItem {
@@ -99,6 +106,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
     const freeTreatmentRefs = useRef<Record<number, HTMLSelectElement | null>>({});
     const [mobileQuantityErrors, setMobileQuantityErrors] = useState<Record<string, string>>({});
     const [mobileCommercialErrors, setMobileCommercialErrors] = useState<Record<string, string>>({});
+    const [activeMobileField, setActiveMobileField] = useState<string | null>(null);
     const EDITABLE_FIELDS = ['quantity', 'unit_price', 'discount_percent', 'free'];
 
     const quantityInputStep = quantityDecimalPlaces === 0
@@ -383,19 +391,19 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
 
                         <div className="mt-4 grid grid-cols-2 gap-3">
                             <label className="text-xs font-medium text-gray-600">Quantity
-                                <input type="number" min="0" step={quantityInputStep} inputMode="decimal" value={item.quantity || 0} onChange={(event) => updateMobileQuantity(index, 'quantity', event.target.value)} readOnly={readOnly} aria-invalid={mobileQuantityErrors[`${index}-quantity`] ? true : undefined} aria-describedby={mobileQuantityErrors[`${index}-quantity`] ? `mobile-quantity-error-${index}` : undefined} className="mt-1 min-h-11 w-full border border-gray-300 px-3 text-right text-base text-gray-900" />
+                                <input type="number" min="0" step={quantityInputStep} inputMode="decimal" value={activeMobileField === `${index}-quantity` ? (item.quantity ?? 0) : compactDecimalInput(item.quantity)} onFocus={() => setActiveMobileField(`${index}-quantity`)} onBlur={() => setActiveMobileField(null)} onChange={(event) => updateMobileQuantity(index, 'quantity', event.target.value)} readOnly={readOnly} aria-invalid={mobileQuantityErrors[`${index}-quantity`] ? true : undefined} aria-describedby={mobileQuantityErrors[`${index}-quantity`] ? `mobile-quantity-error-${index}` : undefined} className="mt-1 min-h-11 w-full border border-gray-300 px-3 text-right text-base text-gray-900" />
                                 {mobileQuantityErrors[`${index}-quantity`] && <span id={`mobile-quantity-error-${index}`} role="alert" className="mt-1 block text-xs text-red-700">{mobileQuantityErrors[`${index}-quantity`]}</span>}
                             </label>
                             <label className="text-xs font-medium text-gray-600">Rate
-                                <input type="number" min="0" step="0.01" inputMode="decimal" value={item.unit_price || 0} onChange={(event) => updateMobileCommercialValue(index, 'unit_price', event.target.value)} readOnly={readOnly} aria-invalid={mobileCommercialErrors[`${index}-unit_price`] ? true : undefined} aria-describedby={mobileCommercialErrors[`${index}-unit_price`] ? `mobile-rate-error-${index}` : undefined} className="mt-1 min-h-11 w-full border border-gray-300 px-3 text-right text-base text-gray-900" />
+                                <input type="number" min="0" step="0.01" inputMode="decimal" value={activeMobileField === `${index}-unit_price` ? (item.unit_price ?? 0) : compactDecimalInput(item.unit_price)} onFocus={() => setActiveMobileField(`${index}-unit_price`)} onBlur={() => setActiveMobileField(null)} onChange={(event) => updateMobileCommercialValue(index, 'unit_price', event.target.value)} readOnly={readOnly} aria-invalid={mobileCommercialErrors[`${index}-unit_price`] ? true : undefined} aria-describedby={mobileCommercialErrors[`${index}-unit_price`] ? `mobile-rate-error-${index}` : undefined} className="mt-1 min-h-11 w-full border border-gray-300 px-3 text-right text-base text-gray-900" />
                                 {mobileCommercialErrors[`${index}-unit_price`] && <span id={`mobile-rate-error-${index}`} role="alert" className="mt-1 block text-xs text-red-700">{mobileCommercialErrors[`${index}-unit_price`]}</span>}
                             </label>
                             <label className="text-xs font-medium text-gray-600">Discount %
-                                <input type="number" min="0" max="100" step="0.01" inputMode="decimal" value={item.discount_percent || item.discount || 0} onChange={(event) => updateMobileCommercialValue(index, 'discount_percent', event.target.value)} readOnly={readOnly} aria-invalid={mobileCommercialErrors[`${index}-discount_percent`] ? true : undefined} aria-describedby={mobileCommercialErrors[`${index}-discount_percent`] ? `mobile-discount-error-${index}` : undefined} className="mt-1 min-h-11 w-full border border-gray-300 px-3 text-right text-base text-gray-900" />
+                                <input type="number" min="0" max="100" step="0.01" inputMode="decimal" value={activeMobileField === `${index}-discount_percent` ? (item.discount_percent ?? item.discount ?? 0) : compactDecimalInput(item.discount_percent ?? item.discount)} onFocus={() => setActiveMobileField(`${index}-discount_percent`)} onBlur={() => setActiveMobileField(null)} onChange={(event) => updateMobileCommercialValue(index, 'discount_percent', event.target.value)} readOnly={readOnly} aria-invalid={mobileCommercialErrors[`${index}-discount_percent`] ? true : undefined} aria-describedby={mobileCommercialErrors[`${index}-discount_percent`] ? `mobile-discount-error-${index}` : undefined} className="mt-1 min-h-11 w-full border border-gray-300 px-3 text-right text-base text-gray-900" />
                                 {mobileCommercialErrors[`${index}-discount_percent`] && <span id={`mobile-discount-error-${index}`} role="alert" className="mt-1 block text-xs text-red-700">{mobileCommercialErrors[`${index}-discount_percent`]}</span>}
                             </label>
                             <label className="text-xs font-medium text-gray-600">Free quantity
-                                <input type="number" min="0" step={quantityInputStep} inputMode="decimal" value={item.free_quantity || item.free || 0} onChange={(event) => updateMobileQuantity(index, 'free_quantity', event.target.value)} readOnly={readOnly} aria-invalid={mobileQuantityErrors[`${index}-free_quantity`] ? true : undefined} aria-describedby={mobileQuantityErrors[`${index}-free_quantity`] ? `mobile-free-quantity-error-${index}` : undefined} className="mt-1 min-h-11 w-full border border-gray-300 px-3 text-right text-base text-gray-900" />
+                                <input type="number" min="0" step={quantityInputStep} inputMode="decimal" value={activeMobileField === `${index}-free_quantity` ? (item.free_quantity ?? item.free ?? 0) : compactDecimalInput(item.free_quantity ?? item.free)} onFocus={() => setActiveMobileField(`${index}-free_quantity`)} onBlur={() => setActiveMobileField(null)} onChange={(event) => updateMobileQuantity(index, 'free_quantity', event.target.value)} readOnly={readOnly} aria-invalid={mobileQuantityErrors[`${index}-free_quantity`] ? true : undefined} aria-describedby={mobileQuantityErrors[`${index}-free_quantity`] ? `mobile-free-quantity-error-${index}` : undefined} className="mt-1 min-h-11 w-full border border-gray-300 px-3 text-right text-base text-gray-900" />
                                 {mobileQuantityErrors[`${index}-free_quantity`] && <span id={`mobile-free-quantity-error-${index}`} role="alert" className="mt-1 block text-xs text-red-700">{mobileQuantityErrors[`${index}-free_quantity`]}</span>}
                             </label>
                             {showFreeSupplyTaxTreatment && (
@@ -425,7 +433,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                         </th>
                         <th className="px-3 py-3 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">Rate</th>
                         <th className="px-3 py-3 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">Discount %</th>
-                        <th className="min-w-64 px-3 py-3 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                        <th className="px-3 py-3 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">
                             {showFreeSupplyTaxTreatment ? 'Free qty / billing' : 'Free qty'}
                         </th>
                         <th className="px-3 py-3 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">GST %</th>
@@ -475,7 +483,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                                         onNavigate={(dir) => handleNavigate(index, 'quantity', dir as NavigationDirection)}
                                         readOnly={readOnly}
                                         selectOnFocus={true}
-                                        className="w-20"
+                                        className="ml-auto w-20"
                                         preserveDecimalString={preserveExactDecimals}
                                         ariaLabel={`${item.product_name || item.name || `Item ${index + 1}`} quantity`}
                                     />
@@ -496,7 +504,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                                         onNavigate={(dir) => handleNavigate(index, 'unit_price', dir as NavigationDirection)}
                                         readOnly={readOnly}
                                         selectOnFocus={true}
-                                        className="w-24"
+                                        className="ml-auto w-24"
                                         preserveDecimalString={preserveExactDecimals}
                                         minimumDisplayDecimalPlaces={2}
                                         ariaLabel={`${item.product_name || item.name || `Item ${index + 1}`} rate`}
@@ -517,13 +525,13 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                                         onNavigate={(dir) => handleNavigate(index, 'discount_percent', dir as NavigationDirection)}
                                         readOnly={readOnly}
                                         selectOnFocus={true}
-                                        className="w-20"
+                                        className="ml-auto w-20"
                                         preserveDecimalString={preserveExactDecimals}
                                         minimumDisplayDecimalPlaces={2}
                                         ariaLabel={`${item.product_name || item.name || `Item ${index + 1}`} discount percent`}
                                     />
                                 </td>
-                                <td className="min-w-64 px-3 py-2 text-right">
+                                <td className="px-3 py-2 text-right">
                                     <EditableCell
                                         ref={(el) => setFieldRef(index, 'free', el)}
                                         value={item.free_quantity || item.free || 0}
@@ -537,11 +545,11 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                                         onNavigate={(dir) => handleNavigate(index, 'free', dir as NavigationDirection)}
                                         readOnly={readOnly}
                                         selectOnFocus={true}
-                                        className="w-16"
+                                        className="ml-auto w-16"
                                         preserveDecimalString={preserveExactDecimals}
                                         ariaLabel={`${item.product_name || item.name || `Item ${index + 1}`} free quantity`}
                                     />
-                                    {showFreeSupplyTaxTreatment && (
+                                    {showFreeSupplyTaxTreatment && hasPositiveFreeQuantity(item) && (
                                         <div className="mt-2">
                                             {freeSupplyTreatmentSelect(item, index, 'desktop')}
                                         </div>

@@ -126,6 +126,38 @@ describe('useInvoiceLogic selected quantity boundary', () => {
         expect(createInitialInvoice().freight_charges).toBe('0.00');
     });
 
+    it('waits for a customer when a product is selected first, then calculates', async () => {
+        const { result } = renderHook(() => useInvoiceLogic());
+        await waitFor(() => expect(result.current.isLoading).toBe(false));
+        await act(async () => {
+            await result.current.handleAddItem({ ...selectedProduct, quantity: '1.000000', free_quantity: '0.000000' });
+        });
+        await act(async () => { await new Promise(resolve => setTimeout(resolve, 350)); });
+        expect(mockedPreview).not.toHaveBeenCalled();
+        expect(result.current.error).toBeNull();
+        act(() => result.current.handleCustomerSelect(customer));
+        await waitFor(() => expect(mockedPreview).toHaveBeenCalledTimes(1));
+    });
+
+    it('clears a recovered calculation error without clearing unrelated errors', async () => {
+        const { result } = renderHook(() => useInvoiceLogic());
+        await waitFor(() => expect(result.current.isLoading).toBe(false));
+        act(() => {
+            result.current.setError('Unable to calculate invoice totals. Please review the entries and try again.');
+            result.current.handleCustomerSelect(customer);
+        });
+        await act(async () => {
+            await result.current.handleAddItem({ ...selectedProduct, quantity: '1.000000', free_quantity: '0.000000' });
+        });
+        await waitFor(() => expect(mockedPreview).toHaveBeenCalled());
+        await waitFor(() => expect(result.current.error).toBeNull());
+        act(() => {
+            result.current.setError('Company setup is incomplete');
+            result.current.handleCustomerSelect(null);
+        });
+        expect(result.current.error).toBe('Company setup is incomplete');
+    });
+
     it.each([
         {
             label: 'free-only selection',

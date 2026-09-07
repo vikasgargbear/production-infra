@@ -295,6 +295,11 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                                     tabIndex={4}
                                     nextFocusRef={productSearchRef as any}
                                 />
+                                {!selectedCustomer && Boolean(invoice.items?.length) && (
+                                    <p role="status" className="mt-2 text-sm text-amber-800">
+                                        Select a customer to calculate invoice totals and continue.
+                                    </p>
+                                )}
                             </div>
                         </div>
 

@@ -70,6 +70,9 @@ test('shows commercial rates, discounts, and GST with two decimals without chang
   expect((screen.getByLabelText('Exact Display Carton discount percent') as HTMLInputElement).value).toBe('9.00');
   expect((screen.getByLabelText('Exact Display Carton quantity') as HTMLInputElement).value).toBe('2');
   expect(screen.getAllByText('5.00%')).toHaveLength(2);
+  expect((screen.getByLabelText('Quantity', { exact: true }) as HTMLInputElement).value).toBe('2');
+  expect((screen.getByLabelText('Rate', { exact: true }) as HTMLInputElement).value).toBe('124.7');
+  expect((screen.getByLabelText('Discount %', { exact: true }) as HTMLInputElement).value).toBe('9');
 
   fireEvent.focus(screen.getByLabelText('Exact Display Carton quantity'));
   expect((screen.getByLabelText('Exact Display Carton quantity') as HTMLInputElement).value).toBe('2');

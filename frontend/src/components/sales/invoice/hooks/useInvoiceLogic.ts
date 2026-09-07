@@ -357,7 +357,11 @@ export const useInvoiceLogic = (
 
     // Recalculate totals when items or discounts change
     useEffect(() => {
-        if (!invoice.items || invoice.items.length === 0) {
+        const calculationErrorMessage = 'Unable to calculate invoice totals. Please review the entries and try again.';
+        if (!invoice.items?.length || !invoice.customer_details?.customer_id) {
+            // Item selection is allowed before customer selection. That is an
+            // incomplete form, not a failed calculation; never submit it.
+            setError(previous => previous === calculationErrorMessage ? null : previous);
             return;
         }
 
@@ -366,6 +370,7 @@ export const useInvoiceLogic = (
             try {
                 const result = await calculateInvoicePreview(invoice, true);
                 if (cancelled) return;
+                setError(previous => previous === calculationErrorMessage ? null : previous);
 
                 setInvoice(prev => ({
                     ...prev,
@@ -390,7 +395,7 @@ export const useInvoiceLogic = (
             } catch (calculationError) {
                 if (!cancelled) {
                     console.error('Invoice calculation failed:', calculationError);
-                    setError('Unable to calculate invoice totals. Please review the entries and try again.');
+                    setError(calculationErrorMessage);
                 }
             }
         }, 300);
