@@ -234,3 +234,5 @@ PYTHONPATH=backend \
   python backend/tests/postgres/check_evidence_storage_auth_hook.py
 PYTHONPATH=backend \
   python backend/tests/postgres/check_canonical_data_reset_authority.py
+PYTHONPATH=backend \
+  python backend/tests/postgres/check_marg_migration_run.py
