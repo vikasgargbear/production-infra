@@ -3,12 +3,14 @@ name: Windows private app
 on:
   workflow_dispatch:
   push:
+    branches: [main]
     paths:
       - '.github/workflows/windows-private-app.yml'
       - 'frontend/package.json'
       - 'frontend/package-lock.json'
       - 'frontend/public/desktop-oauth-callback.html'
       - 'frontend/scripts/check-windows-wrapper.mjs'
+      - 'frontend/scripts/test-windows-installer.ps1'
       - 'frontend/src-tauri/**'
   pull_request:
     paths:
@@ -17,10 +19,15 @@ on:
       - 'frontend/package-lock.json'
       - 'frontend/public/desktop-oauth-callback.html'
       - 'frontend/scripts/check-windows-wrapper.mjs'
+      - 'frontend/scripts/test-windows-installer.ps1'
       - 'frontend/src-tauri/**'
 
 permissions:
   contents: read
+
+concurrency:
+  group: windows-private-app-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-windows-setup:
@@ -44,6 +51,9 @@ jobs:
       - run: npm run desktop:check
       - run: cargo test --manifest-path src-tauri/Cargo.toml
       - run: npm run desktop:build:windows
+      - name: Install, launch, replace and uninstall on Windows
+        shell: pwsh
+        run: ./scripts/test-windows-installer.ps1
       - name: Publish installer checksum
         shell: pwsh
         run: |
@@ -57,5 +67,6 @@ jobs:
           path: |
             frontend/src-tauri/target/release/bundle/nsis/*-setup.exe
             frontend/src-tauri/target/release/bundle/nsis/SHA256SUMS.txt
+            frontend/src-tauri/target/release/bundle/nsis/install-smoke.json
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 90
