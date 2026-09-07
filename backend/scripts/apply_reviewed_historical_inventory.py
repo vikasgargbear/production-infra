@@ -271,6 +271,49 @@ def _transaction(connection, value: dict[str, Any], operation):
             return result
 
 
+def _source_tax_conflicts(requests) -> list[dict[str, Any]]:
+    """Report snapshot-incompatible source rates without changing source facts."""
+    groups: dict[str, dict[Decimal, int]] = {}
+    for request in requests:
+        for fact in request.facts:
+            if fact.source_kind != "product" or fact.selection_state != "reviewed":
+                continue
+            code = fact.payload.get("hsn_code")
+            rate = fact.payload.get("gst_rate")
+            if code is None or rate is None:
+                continue  # Completeness remains enforced by the canonical command.
+            normalized = Decimal(str(rate))
+            counts = groups.setdefault(str(code), {})
+            counts[normalized] = counts.get(normalized, 0) + 1
+    return [{"hsn_code": code, "rates": [str(rate) for rate in sorted(counts)],
+             "products": sum(counts.values())}
+            for code, counts in sorted(groups.items()) if len(counts) > 1]
+
+
+def _validate_migration_tax_catalog(cursor, requests):
+    """Customer migration may read, but must not replace, shared tax releases."""
+    products = [{"code": fact.payload.get("hsn_code"), "rate": fact.payload.get("gst_rate"),
+                 "event_date": str(fact.event_date) if fact.event_date else None}
+                for request in requests for fact in request.facts
+                if fact.source_kind == "product" and fact.selection_state == "reviewed"]
+    cursor.execute("""
+        SELECT count(*) FROM jsonb_to_recordset(%s::jsonb)
+          AS source(code text, rate numeric, event_date date)
+        WHERE (SELECT count(*) FROM tax.tax_code_versions version
+          JOIN core.reference_data_releases release ON release.id=version.release_id
+          WHERE version.code=source.code AND version.code_kind='hsn'
+            AND version.default_supply_type='goods' AND version.status='active'
+            AND release.dataset_kind='hsn_sac_tax' AND release.status='active'
+            AND source.event_date BETWEEN version.effective_from
+                AND COALESCE(version.effective_to,'infinity'::date)
+            AND source.event_date BETWEEN release.effective_from
+                AND COALESCE(release.effective_to,'infinity'::date)
+            AND version.igst_rate=source.rate) <> 1
+        """, (json.dumps(products),))
+    if cursor.fetchone()[0]:
+        raise ValueError("Source product tax assignments do not match the reviewed catalog; no import writes started")
+
+
 def _operational_status(cursor, value: dict[str, Any]) -> dict[str, Any]:
     cursor.execute(
         "SELECT erp_automation_reads.historical_operational_cutover_status(%s,%s)",
@@ -346,6 +389,16 @@ def _reconcile_migration(cursor, value: dict[str, Any], requests) -> dict[str, A
 
 def _migrate(connection, value: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
     requests = _migration_requests(value)
+    conflicts = _source_tax_conflicts(requests)
+    if conflicts:
+        raise ValueError(
+            f"Source GST review required for {sum(item['products'] for item in conflicts)} "
+            f"products across {len(conflicts)} HSN codes; no import writes started"
+        )
+    has_products = any(fact.source_kind == "product" and fact.selection_state == "reviewed"
+                       for request in requests for fact in request.facts)
+    if has_products:
+        _transaction(connection, value, lambda c: _validate_migration_tax_catalog(c, requests))
     accepted = 0
     for index, request in enumerate(requests, 1):
         batch_value = {**value, "import_request": request.model_dump(mode="json")}
@@ -354,10 +407,7 @@ def _migrate(connection, value: dict[str, Any]) -> tuple[dict[str, Any], dict[st
         print(f"Import batch {index}/{len(requests)} committed ({accepted} records checked)", file=sys.stderr)
     _converge(lambda: _transaction(connection, value, lambda c: _promote_parties(c, value)),
               ("parties_remaining", "openings_remaining"), "Party and opening migration")
-    has_products = any(fact.source_kind == "product" and fact.selection_state == "reviewed"
-                       for request in requests for fact in request.facts)
     if has_products:
-        _transaction(connection, value, lambda c: _prepare_tax(c, value))
         _converge(lambda: _transaction(connection, value, lambda c: _promote_products(c, value)),
                   ("products_remaining",), "Product and inventory migration")
     reconciliation = _transaction(connection, value, lambda c: _reconcile_migration(c, value, requests))

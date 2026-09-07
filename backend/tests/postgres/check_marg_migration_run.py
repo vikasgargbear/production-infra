@@ -2,6 +2,7 @@
 
 import importlib.util
 import os
+from copy import deepcopy
 from pathlib import Path
 from unittest.mock import patch
 from urllib.parse import urlparse
@@ -45,7 +46,7 @@ def main():
         "product_name": "CODEX-E2E migration recovery medicine", "quantity": "1.250000",
         "inventory_value": "125.00", "event_date": "2026-08-01", "selection_state": "reviewed",
         "payload": {"source_product_code": "P1", "source_company": "Observed manufacturer",
-                    "product_kind": "medicine", "base_uom_code": "PCS", "hsn_code": "30049099",
+                    "product_kind": "medicine", "base_uom_code": "PCS", "hsn_code": "99119999",
                     "gst_rate": "12.000000", "hsn_gst_candidate_unique": True,
                     "batch_reconciliation_status": "exact"},
     }
@@ -82,8 +83,28 @@ def main():
         return result
 
     connection = psycopg2.connect(url.replace("postgresql+psycopg2://", "postgresql://"))
+    def reference_snapshot():
+        with engine.connect() as read:
+            return tuple(read.execute(text(
+                f"SELECT row_to_json(reference_row)::text FROM {table} reference_row ORDER BY id"
+            )).scalars().all() for table in ("core.reference_data_releases", "tax.tax_code_versions"))
+
+    reviewed_references = reference_snapshot()
     try:
         with patch.object(operator, "_attest_reviewed_database", attest_local):
+            mismatch = deepcopy(value)
+            mismatch["migration_bundle"]["import_requests"][0]["facts"][0]["payload"]["gst_rate"] = "5.000000"
+            try:
+                operator._migrate(connection, mismatch)
+            except ValueError as exc:
+                assert "tax" in str(exc).lower()
+            else:
+                raise AssertionError("source GST differing from the reviewed catalog was accepted")
+            with engine.connect() as read:
+                assert read.execute(text(
+                    "SELECT count(*) FROM automation.historical_migration_facts WHERE org_id=:org AND dataset_id=:dataset"
+                ), {"org": org, "dataset": dataset}).scalar_one() == 0
+            assert reference_snapshot() == reviewed_references
             with patch.object(operator, "_import_batch", interrupted_import):
                 try:
                     operator._migrate(connection, value)
@@ -103,6 +124,7 @@ def main():
         assert first_status == replay_status
         assert first_status["opening_quantity"] == first_status["ledger_quantity"] == "1.250000"
         assert first_status["opening_value"] == first_status["ledger_value"] == "125.00"
+        assert reference_snapshot() == reviewed_references
         with engine.connect() as read:
             assert read.execute(text(
                 "SELECT count(*) FROM automation.historical_migration_facts WHERE org_id=:org AND dataset_id=:dataset"
@@ -113,7 +135,7 @@ def main():
             assert read.execute(text(
                 "SELECT count(*) FROM inventory.stock_ledger_entries WHERE org_id=:org"
             ), {"org": org}).scalar_one() == 1
-        print("MARG whole-run PG15 recovery and replay passed: 2 facts, 1 product, 1 stock posting, quantity 1.25, value 125.00")
+        print("MARG whole-run PG15 recovery and replay passed: 2 facts, 1 product, 1 stock posting, quantity 1.25, value 125.00; mismatched GST rejected before import; shared tax references unchanged")
     finally:
         connection.close()
         engine.dispose()

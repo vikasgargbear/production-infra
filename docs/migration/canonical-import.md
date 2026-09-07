@@ -3,8 +3,8 @@
 ## One-command MARG migration
 
 `backend/scripts/migrate_marg.py` compiles the supported MARG evidence profile,
-imports all source batches, promotes parties and opening balances, prepares the
-reviewed tax snapshot, promotes products and saleable batches, and reconciles
+imports all source batches, promotes parties and opening balances, validates the
+existing reviewed tax catalog, promotes products and saleable batches, and reconciles
 source counts, opening balances, and inventory ledger quantities/values. It uses
 the existing canonical commands; no new database model is required.
 
@@ -38,7 +38,16 @@ verified parser are not treated as decoded. Driving the MARG application's Expor
 controls must be verified against the connected Windows installation. An existing
 decoded profile may instead be passed with `--profile`.
 
-The prepared `migration-plan.json` shows counts and exclusions. Add `--apply`
+The prepared `migration-plan.json` shows counts, exclusions, and `source_tax_conflicts`.
+Multiple source GST rates under one HSN are currently incompatible with the tax
+assignment model and stop application before any import writes. Application also
+checks every reviewed product's HSN/rate/date against the existing active catalog
+before importing. It never installs or supersedes a shared tax release as part of
+a customer migration. Supporting differing per-product rates requires a reviewed
+product-level tax assignment shared by calculation, posting, and readback; it must
+not be implemented as a migration-only override.
+
+Add `--apply`
 to the same command to run the complete import. Operator credentials come from
 the existing Railway CLI login and `SUPABASE_DB_PASSWORD` environment variable.
 The tool streams private records directly to the selected ERP service. Passwords

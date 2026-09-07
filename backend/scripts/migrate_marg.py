@@ -22,7 +22,7 @@ import httpx
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "backend"))
 
-from scripts.apply_reviewed_historical_inventory import _migration_requests
+from scripts.apply_reviewed_historical_inventory import _migration_requests, _source_tax_conflicts
 
 
 def _run(arguments, *, stdin=None):
@@ -183,13 +183,15 @@ def main():
     plan = {"organization_id": target["organization_id"], "dataset_id": target["dataset_id"],
             "records": sum(len(request.facts) for request in requests),
             "summary": bundle.get("summary", {}), "exclusions": bundle.get("exclusions", {}),
-            "package_sha256": package_hash}
+            "package_sha256": package_hash, "source_tax_conflicts": _source_tax_conflicts(requests)}
     # This file contains counts and target identities, never credentials.
     (args.output / "migration-plan.json").write_text(json.dumps(plan, indent=2) + "\n", encoding="utf-8")
     print(f"Prepared {plan['records']} records for organization {target['organization_id']}", flush=True)
     if not args.apply:
         print("Review migration-plan.json, then rerun the same command with --apply.")
         return 0
+    if plan["source_tax_conflicts"]:
+        raise ValueError("Source GST review required; see migration-plan.json. No import writes started")
     prior_receipt_path = args.output / "migration-receipt.json"
     if prior_receipt_path.is_file():
         prior = _read_json(prior_receipt_path)
