@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from contextlib import redirect_stdout
 import json
+from collections import Counter
+from decimal import Decimal
 import os
 from pathlib import Path
 import re
@@ -61,6 +63,7 @@ def _validate_request(value: dict[str, Any]) -> dict[str, Any]:
         "dataset_id",
         "expected_sha",
         "import_request",
+        "migration_bundle",
         "location_id",
         "organization_id",
         "password",
@@ -70,7 +73,7 @@ def _validate_request(value: dict[str, Any]) -> dict[str, Any]:
     }
     if set(value) - allowed:
         raise SystemExit("operator request contains unsupported fields")
-    if value.get("action") not in {"import", "prepare-tax", "promote", "status"}:
+    if value.get("action") not in {"import", "prepare-tax", "promote", "status", "migrate"}:
         raise SystemExit("operator action is invalid")
     if not re.fullmatch(r"[0-9a-f]{40}", str(value.get("expected_sha", ""))):
         raise SystemExit("reviewed SHA is invalid")
@@ -225,6 +228,198 @@ def _promote(cursor, value: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[
     return receipts, _status(cursor, value)
 
 
+def _migration_requests(value: dict[str, Any]) -> list[HistoricalImportRequest]:
+    """Validate the entire source package before committing its first batch."""
+    bundle = value.get("migration_bundle")
+    if not isinstance(bundle, dict) or bundle.get("schema_version") != "aasopharma.marg-migration.v1":
+        raise ValueError("A reviewed MARG migration bundle is required")
+    for field in ("organization_id", "branch_id", "location_id", "dataset_id"):
+        if str(bundle.get(field)) != str(value[field]):
+            raise ValueError(f"Migration bundle {field} differs from the selected target")
+    batches = bundle.get("import_requests")
+    if not isinstance(batches, list) or not 1 <= len(batches) <= 2000:
+        raise ValueError("Migration bundle requires 1 to 2000 request batches")
+    requests = [HistoricalImportRequest.model_validate(batch) for batch in batches]
+    identities: set[tuple[str, str]] = set()
+    for request in requests:
+        if request.dataset_id != value["dataset_id"] or request.branch_id != value["branch_id"]:
+            raise ValueError("Migration request belongs to a different dataset or branch")
+        if request.confirmation != f"IMPORT-HISTORY:{value['organization_id']}:{value['dataset_id']}":
+            raise ValueError("Migration request confirmation differs")
+        for fact in request.facts:
+            identity = (fact.source_kind, fact.record_key)
+            if identity in identities:
+                raise ValueError("Migration bundle repeats a source record identity")
+            identities.add(identity)
+    return requests
+
+
+def _transaction(connection, value: dict[str, Any], operation):
+    """Commit one resumable chunk and always restore borrowed owner membership."""
+    with connection:
+        with connection.cursor() as cursor:
+            _attest_reviewed_database(cursor)
+            supports_membership_options = _enter_migration_owner(cursor)
+            result = None
+            try:
+                _activate_reviewed_user(cursor, value)
+                result = operation(cursor)
+                _leave_migration_owner(cursor, supports_membership_options)
+            except BaseException:
+                connection.rollback()
+                raise
+            return result
+
+
+def _source_tax_conflicts(requests) -> list[dict[str, Any]]:
+    """Report snapshot-incompatible source rates without changing source facts."""
+    groups: dict[str, dict[Decimal, int]] = {}
+    for request in requests:
+        for fact in request.facts:
+            if fact.source_kind != "product" or fact.selection_state != "reviewed":
+                continue
+            code = fact.payload.get("hsn_code")
+            rate = fact.payload.get("gst_rate")
+            if code is None or rate is None:
+                continue  # Completeness remains enforced by the canonical command.
+            normalized = Decimal(str(rate))
+            counts = groups.setdefault(str(code), {})
+            counts[normalized] = counts.get(normalized, 0) + 1
+    return [{"hsn_code": code, "rates": [str(rate) for rate in sorted(counts)],
+             "products": sum(counts.values())}
+            for code, counts in sorted(groups.items()) if len(counts) > 1]
+
+
+def _validate_migration_tax_catalog(cursor, requests):
+    """Customer migration may read, but must not replace, shared tax releases."""
+    products = [{"code": fact.payload.get("hsn_code"), "rate": fact.payload.get("gst_rate"),
+                 "event_date": str(fact.event_date) if fact.event_date else None}
+                for request in requests for fact in request.facts
+                if fact.source_kind == "product" and fact.selection_state == "reviewed"]
+    cursor.execute("""
+        SELECT count(*) FROM jsonb_to_recordset(%s::jsonb)
+          AS source(code text, rate numeric, event_date date)
+        WHERE (SELECT count(*) FROM tax.tax_code_versions version
+          JOIN core.reference_data_releases release ON release.id=version.release_id
+          WHERE version.code=source.code AND version.code_kind='hsn'
+            AND version.default_supply_type='goods' AND version.status='active'
+            AND release.dataset_kind='hsn_sac_tax' AND release.status='active'
+            AND source.event_date BETWEEN version.effective_from
+                AND COALESCE(version.effective_to,'infinity'::date)
+            AND source.event_date BETWEEN release.effective_from
+                AND COALESCE(release.effective_to,'infinity'::date)
+            AND version.igst_rate=source.rate) <> 1
+        """, (json.dumps(products),))
+    if cursor.fetchone()[0]:
+        raise ValueError("Source product tax assignments do not match the reviewed catalog; no import writes started")
+
+
+def _operational_status(cursor, value: dict[str, Any]) -> dict[str, Any]:
+    cursor.execute(
+        "SELECT erp_automation_reads.historical_operational_cutover_status(%s,%s)",
+        (str(value["organization_id"]), value["dataset_id"]),
+    )
+    return _result(cursor.fetchone()[0])
+
+
+def _promote_parties(cursor, value: dict[str, Any]) -> dict[str, Any]:
+    cursor.execute(
+        "SELECT erp_automation_commands.promote_historical_operational_batch(%s,%s,500)",
+        (str(value["organization_id"]), value["dataset_id"]),
+    )
+    return _result(cursor.fetchone()[0])
+
+
+def _promote_products(cursor, value: dict[str, Any]) -> dict[str, Any]:
+    cursor.execute(
+        "SELECT erp_automation_commands.promote_historical_product_inventory_batch(%s,%s,%s,100)",
+        (str(value["organization_id"]), value["dataset_id"], str(value["location_id"])),
+    )
+    return _result(cursor.fetchone()[0])
+
+
+def _converge(step, remaining_fields: tuple[str, ...], label: str) -> int:
+    previous = None
+    for batch_number in range(1, 10001):
+        result = step()
+        remaining = sum(int(result[field]) for field in remaining_fields)
+        if remaining < 0 or (result.get("complete") is True and remaining != 0):
+            raise ValueError(f"{label} returned an inconsistent completion receipt")
+        if result.get("complete") is True:
+            return batch_number
+        if previous is not None and remaining >= previous:
+            raise ValueError(f"{label} stopped making progress; rerun after resolving the failed records")
+        previous = remaining
+    raise ValueError(f"{label} exceeded the bounded batch count")
+
+
+def _reconcile_migration(cursor, value: dict[str, Any], requests) -> dict[str, Any]:
+    expected = Counter(fact.source_kind for request in requests for fact in request.facts)
+    cursor.execute(
+        "SELECT source_kind::text,count(*) FROM automation.historical_migration_facts "
+        "WHERE org_id=%s AND dataset_id=%s GROUP BY source_kind",
+        (str(value["organization_id"]), value["dataset_id"]),
+    )
+    observed = dict(cursor.fetchall())
+    if dict(expected) != observed:
+        raise ValueError("Imported source counts differ from the reviewed package")
+    inventory = _status(cursor, value)
+    parties = _operational_status(cursor, value)
+    for source, bound in (("source_products", "bound_products"), ("source_batches", "bound_batches")):
+        if inventory[source] != inventory[bound]:
+            raise ValueError(f"Inventory reconciliation differs: {source}")
+    if parties["source_openings"] != parties["posted_openings"]:
+        raise ValueError("Opening balance reconciliation differs")
+    # Bindings may include a separate customer and supplier account for one party.
+    if parties["bound_parties"] < parties["source_parties"]:
+        raise ValueError("Party reconciliation differs")
+    batches = [fact for request in requests for fact in request.facts
+               if fact.source_kind == "batch" and fact.selection_state == "reviewed"]
+    for field, fact_field in (("quantity", "quantity"), ("value", "inventory_value")):
+        expected_total = sum((getattr(fact, fact_field) for fact in batches), Decimal(0))
+        if Decimal(inventory[f"opening_{field}"]) != expected_total or Decimal(inventory[f"ledger_{field}"]) != expected_total:
+            raise ValueError(f"Opening stock {field} does not reconcile with its ledger")
+    for side in ("receivable", "payable"):
+        expected_amount = sum((fact.outstanding_amount for request in requests for fact in request.facts
+            if fact.source_kind == "opening_item" and fact.selection_state != "quarantined" and fact.side == side), Decimal(0))
+        if Decimal(parties[side]) != expected_amount:
+            raise ValueError(f"Opening {side} does not reconcile with the source")
+    return {"counts_by_kind": observed, "inventory": inventory, "parties": parties}
+
+
+def _migrate(connection, value: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    requests = _migration_requests(value)
+    conflicts = _source_tax_conflicts(requests)
+    if conflicts:
+        raise ValueError(
+            f"Source GST review required for {sum(item['products'] for item in conflicts)} "
+            f"products across {len(conflicts)} HSN codes; no import writes started"
+        )
+    has_products = any(fact.source_kind == "product" and fact.selection_state == "reviewed"
+                       for request in requests for fact in request.facts)
+    if has_products:
+        _transaction(connection, value, lambda c: _validate_migration_tax_catalog(c, requests))
+    accepted = 0
+    for index, request in enumerate(requests, 1):
+        batch_value = {**value, "import_request": request.model_dump(mode="json")}
+        result = _transaction(connection, value, lambda cursor: _import_batch(cursor, batch_value))
+        accepted += int(result["accepted"])
+        print(f"Import batch {index}/{len(requests)} committed ({accepted} records checked)", file=sys.stderr)
+    _converge(lambda: _transaction(connection, value, lambda c: _promote_parties(c, value)),
+              ("parties_remaining", "openings_remaining"), "Party and opening migration")
+    if has_products:
+        _converge(lambda: _transaction(connection, value, lambda c: _promote_products(c, value)),
+                  ("products_remaining",), "Product and inventory migration")
+    reconciliation = _transaction(connection, value, lambda c: _reconcile_migration(c, value, requests))
+    return {
+        "complete": True,
+        "accepted": accepted,
+        "reconciliation": reconciliation,
+        "exclusions": value["migration_bundle"].get("exclusions", {}),
+        "invoice_history": "Imported history is available in the invoice archive; new invoices use migrated stock.",
+    }, reconciliation["inventory"]
+
+
 def main() -> int:
     receipt_stream = sys.stdout
     raw = json.load(sys.stdin)
@@ -236,27 +431,10 @@ def main() -> int:
     # machine-readable receipt consumed by the protected workflow.
     with redirect_stdout(sys.stderr):
         with psycopg2.connect(_database_url(value)) as connection:
-            with connection.cursor() as cursor:
-                _attest_reviewed_database(cursor)
-                supports_membership_options = _enter_migration_owner(cursor)
-                try:
-                    _activate_reviewed_user(cursor, value)
-                    if action == "import":
-                        operation_receipt: Any = _import_batch(cursor, value)
-                        status = _status(cursor, value)
-                    elif action == "prepare-tax":
-                        operation_receipt = _prepare_tax(cursor, value)
-                        status = _status(cursor, value)
-                    elif action == "promote":
-                        operation_receipt, status = _promote(cursor, value)
-                    else:
-                        operation_receipt = {"status": "read_only"}
-                        status = _status(cursor, value)
-                except BaseException:
-                    connection.rollback()
-                    raise
-                else:
-                    _leave_migration_owner(cursor, supports_membership_options)
+            if action == "migrate":
+                operation_receipt, status = _migrate(connection, value)
+            else:
+                operation_receipt, status = _single_operation(connection, value)
     print(
         json.dumps(
             {
@@ -274,6 +452,32 @@ def main() -> int:
         file=receipt_stream,
     )
     return 0
+
+
+def _single_operation(connection, value):
+    action = value["action"]
+    with connection.cursor() as cursor:
+        _attest_reviewed_database(cursor)
+        supports_membership_options = _enter_migration_owner(cursor)
+        try:
+            _activate_reviewed_user(cursor, value)
+            if action == "import":
+                operation_receipt: Any = _import_batch(cursor, value)
+                status = _status(cursor, value)
+            elif action == "prepare-tax":
+                operation_receipt = _prepare_tax(cursor, value)
+                status = _status(cursor, value)
+            elif action == "promote":
+                operation_receipt, status = _promote(cursor, value)
+            else:
+                operation_receipt = {"status": "read_only"}
+                status = _status(cursor, value)
+        except BaseException:
+            connection.rollback()
+            raise
+        else:
+            _leave_migration_owner(cursor, supports_membership_options)
+    return operation_receipt, status
 
 
 if __name__ == "__main__":

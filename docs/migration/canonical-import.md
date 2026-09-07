@@ -1,5 +1,71 @@
 # Canonical organization import
 
+## One-command MARG migration
+
+`backend/scripts/migrate_marg.py` compiles the supported MARG evidence profile,
+imports all source batches, promotes parties and opening balances, validates the
+existing reviewed tax catalog, promotes products and saleable batches, and reconciles
+source counts, opening balances, and inventory ledger quantities/values. It uses
+the existing canonical commands; no new database model is required.
+
+The private source repository must include `migration-work/tools/compile_migration.py`.
+Its evidence profile identifies the twelve decoded exports used by the existing
+source extractor. This supports that export format; an arbitrary MARG backup or a
+different fiscal-year layout still requires a supported extraction profile.
+
+Create a private target JSON file with `organization_id`, `user_id`, `branch_id`,
+`location_id`, `dataset_id`, `opening_date` (ISO date), and the explicitly reviewed
+`default_product_kind` (`medicine` for the current MARG profile). Keep a stable
+dataset ID for retries. Select an empty test organization for a new rehearsal;
+do not use a new dataset ID to reload balances already migrated into an organization.
+
+Run from the deployed ERP source checkout with backend dependencies installed:
+
+```bash
+python backend/scripts/migrate_marg.py \
+  --source-repo /private/path/to/aasopharma-marg-migration-reference \
+  --source /private/path/to/MARG-data-or-export-folder \
+  --target /private/path/to/target.json \
+  --output /private/path/to/aasopharma-marg-migration-reference/migration-work/output/customer-import
+```
+
+`--source` automatically snapshots the selected folders, identifies supported
+reports, runs the existing parsers, and constructs the evidence profile. Repeat
+`--source` to include another export folder. The snapshot is taken into a separate
+directory; original MARG files are read only. Missing or ambiguous report families
+are listed in `acquisition-status.json`. Proprietary files that do not match a
+verified parser are not treated as decoded. Driving the MARG application's Export
+controls must be verified against the connected Windows installation. An existing
+decoded profile may instead be passed with `--profile`.
+
+The prepared `migration-plan.json` shows counts, exclusions, and `source_tax_conflicts`.
+Multiple source GST rates under one HSN are currently incompatible with the tax
+assignment model and stop application before any import writes. Application also
+checks every reviewed product's HSN/rate/date against the existing active catalog
+before importing. It never installs or supersedes a shared tax release as part of
+a customer migration. Supporting differing per-product rates requires a reviewed
+product-level tax assignment shared by calculation, posting, and readback; it must
+not be implemented as a migration-only override.
+
+Add `--apply`
+to the same command to run the complete import. Operator credentials come from
+the existing Railway CLI login and `SUPABASE_DB_PASSWORD` environment variable.
+The tool streams private records directly to the selected ERP service. Passwords
+are never command arguments, source files, or receipts. Temporary SSH access is
+removed after the attempt. This operator currently targets the persistent pilot;
+the production database remains outside its allowed scope.
+
+Each batch commits independently. Retry the same output directory after an
+interruption; PostgreSQL checks/replays the same source identities. The tool stops
+if promotion ceases making progress or final reconciliation differs. It never
+cleans up existing organizations. Completion is written to `migration-receipt.json`.
+
+Supported historical invoices are available in the invoice archive. They are
+not reposted as new sales, which would double stock and ledger effects. Unknown
+purchase lines, unresolved returns, and incomplete product setups remain listed
+in the package's exclusions/quarantine report; they are not reported as usable
+stock or completed transactional history.
+
 This is the repeatable boundary for moving reviewed legacy data into one ERP
 organization. It is not a generic CSV loader and never writes directly to ERP
 tables.
