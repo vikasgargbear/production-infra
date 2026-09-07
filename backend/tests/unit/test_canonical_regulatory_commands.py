@@ -148,8 +148,9 @@ def test_release_supersession_blocks_stale_products_and_downstream_use() -> None
     assert sql.count("SET status='blocked'") == 2
     assert "ingredient.release_id=prior_id" in sql
     assert "tax_version.release_id=p_release_id" in sql
-    assert "product HSN is absent from the active effective tax release" in sql
-    assert "product ingredient classification release is no longer active" in sql
+    assert "sale or receipt requires an active product with current reviewed treatment" in sql
+    assert "erp_automation_reads.resolve_product_tax(organization_id,product_id,effective_on)" in sql
+    assert "release.ruleset_version=product.regulatory_ruleset_version" in sql
     for table in (
         "sales_order_lines_product_reference_guard",
         "sales_dispatch_lines_product_reference_guard",
@@ -199,12 +200,14 @@ def test_empty_regulated_ledgers_fail_closed_at_activation_and_posting() -> None
     ):
         assert source_date in sql
     assert '"product_ready"(NEW.org_id,product_id,effective_date)' in sql
-    assert "product.product_kind<>'medicine' OR EXISTS" in sql
+    assert "treatment.status='source_snapshot' OR product.product_kind<>'medicine'" in sql
+    assert "PERFORM erp_regulatory_commands.assert_reference_readiness(effective_on)" in sql
+    assert "release.ruleset_version=product.regulatory_ruleset_version" in sql
     product_use = sql.split('"guard_product_use"()', 1)[1].split(
         'sales_order_lines_product_reference_guard', 1
     )[0]
-    assert "IF product.product_kind='medicine' THEN" in product_use
-    assert product_use.count('"assert_reference_readiness"(CURRENT_DATE)') == 1
+    assert "erp_regulatory_commands.product_ready(NEW.org_id,NEW.product_id" in product_use
+    assert "erp_core_commands.current_organization_business_date()" in product_use
 
 
 def test_mapping_removes_exactly_five_current_catalog_blockers() -> None:

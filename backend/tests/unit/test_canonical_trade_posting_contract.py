@@ -195,7 +195,7 @@ def test_order_approvals_compare_fixed_input_output_and_consume_once() -> None:
         "artifact.input_bytes",
         "pg_catalog.jsonb_array_length(p_output->'lines')<>expected_lines",
         "count(DISTINCT value->>'line_id')",
-        "tax_version.ruleset_version IS DISTINCT FROM header.calculation_ruleset_version",
+        "erp_automation_reads.tax_ruleset_fingerprint(pg_catalog.jsonb_agg(",
         "header.order_date<tax_version.effective_from",
         "output_line.item->>'final_residual')::boolean",
         "line.document_discount_amount",
@@ -256,6 +256,9 @@ def test_mcp_prepare_boundary_requires_canonical_ids_and_explicit_commercial_fac
     assert "product_name" not in mapping
     assert "supplier_name" not in mapping
     assert "tax_version.id IS NULL" in mapping
-    assert "tax_version.ruleset_version IS DISTINCT FROM header.calculation_ruleset_version" in mapping
+    assert "erp_automation_reads.tax_ruleset_fingerprint(pg_catalog.jsonb_agg(" in mapping
+    assert "tax_version.org_id IS DISTINCT FROM p_org_id" in mapping
+    assert "tax_version.product_id IS DISTINCT FROM line.product_id" in mapping
+    assert "WHERE scoped_tax.id=tax_version.id" in mapping
     assert "input_line.item#>>'{line_discount,kind}' IS DISTINCT FROM line.line_discount_kind" in mapping
     assert "input_line.item->>'uom_conversion_factor'" in mapping

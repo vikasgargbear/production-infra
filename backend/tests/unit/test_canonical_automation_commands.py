@@ -41,6 +41,30 @@ def test_generated_automation_artifacts_are_current() -> None:
     assert "Asia/Kolkata" not in mapping
 
 
+def test_product_preparers_share_scoped_tax_resolution_and_document_fingerprint() -> None:
+    sql = _sql()
+    assert sql.count("erp_automation_reads.resolve_product_tax(organization_id,product.id,") == 4
+    assert "tax_version.code=product.hsn_code AND tax_version.code_kind='hsn'" not in sql
+    assert "FROM tax.tax_code_versions WHERE code=product.hsn_code" not in sql
+    assert sql.count("erp_automation_reads.tax_ruleset_fingerprint(resolved_lines)") == 4
+    assert "ruleset_count<>1" not in sql
+    # Charges still resolve by their explicit reviewed version, not a product assignment.
+    assert "WHERE id=profile.tax_code_version_id" in sql
+
+
+def test_tax_resolver_generation_preserves_deployed_posting_chronology() -> None:
+    sql = _sql()
+    for message in (
+        "sales order date cannot be in the future",
+        "purchase order date cannot be in the future",
+        "sales invoice date cannot be in the future",
+        "sales invoice date cannot precede an allocated dispatch date",
+    ):
+        assert message in sql
+    assert "'dispatch_date',dispatch_header.dispatch_date" in sql
+    assert "'dispatch_row_version',dispatch_header.row_version" in sql
+
+
 def test_exactly_three_automation_invariants_are_resolved() -> None:
     manifest = json.loads((ROOT / "automation-command-manifest.json").read_text())
     assert manifest["resolved_count"] == 3

@@ -12,7 +12,7 @@ from __future__ import annotations
 from contextlib import redirect_stdout
 import json
 from collections import Counter
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 import os
 from pathlib import Path
 import re
@@ -73,7 +73,7 @@ def _validate_request(value: dict[str, Any]) -> dict[str, Any]:
     }
     if set(value) - allowed:
         raise SystemExit("operator request contains unsupported fields")
-    if value.get("action") not in {"import", "prepare-tax", "promote", "status", "migrate"}:
+    if value.get("action") not in {"import", "promote", "status", "migrate"}:
         raise SystemExit("operator action is invalid")
     if not re.fullmatch(r"[0-9a-f]{40}", str(value.get("expected_sha", ""))):
         raise SystemExit("reviewed SHA is invalid")
@@ -200,12 +200,6 @@ def _status(cursor, value: dict[str, Any]) -> dict[str, Any]:
     return _result(cursor.fetchone()[0])
 
 
-def _prepare_tax(cursor, value: dict[str, Any]) -> dict[str, Any]:
-    cursor.execute(
-        "SELECT erp_automation_commands.install_historical_tax_snapshot(%s,%s)",
-        (str(value["organization_id"]), value["dataset_id"]),
-    )
-    return _result(cursor.fetchone()[0])
 
 
 def _promote(cursor, value: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
@@ -271,7 +265,7 @@ def _transaction(connection, value: dict[str, Any], operation):
             return result
 
 
-def _source_tax_conflicts(requests) -> list[dict[str, Any]]:
+def _source_tax_variants(requests) -> list[dict[str, Any]]:
     """Report snapshot-incompatible source rates without changing source facts."""
     groups: dict[str, dict[Decimal, int]] = {}
     for request in requests:
@@ -290,28 +284,6 @@ def _source_tax_conflicts(requests) -> list[dict[str, Any]]:
             for code, counts in sorted(groups.items()) if len(counts) > 1]
 
 
-def _validate_migration_tax_catalog(cursor, requests):
-    """Customer migration may read, but must not replace, shared tax releases."""
-    products = [{"code": fact.payload.get("hsn_code"), "rate": fact.payload.get("gst_rate"),
-                 "event_date": str(fact.event_date) if fact.event_date else None}
-                for request in requests for fact in request.facts
-                if fact.source_kind == "product" and fact.selection_state == "reviewed"]
-    cursor.execute("""
-        SELECT count(*) FROM jsonb_to_recordset(%s::jsonb)
-          AS source(code text, rate numeric, event_date date)
-        WHERE (SELECT count(*) FROM tax.tax_code_versions version
-          JOIN core.reference_data_releases release ON release.id=version.release_id
-          WHERE version.code=source.code AND version.code_kind='hsn'
-            AND version.default_supply_type='goods' AND version.status='active'
-            AND release.dataset_kind='hsn_sac_tax' AND release.status='active'
-            AND source.event_date BETWEEN version.effective_from
-                AND COALESCE(version.effective_to,'infinity'::date)
-            AND source.event_date BETWEEN release.effective_from
-                AND COALESCE(release.effective_to,'infinity'::date)
-            AND version.igst_rate=source.rate) <> 1
-        """, (json.dumps(products),))
-    if cursor.fetchone()[0]:
-        raise ValueError("Source product tax assignments do not match the reviewed catalog; no import writes started")
 
 
 def _operational_status(cursor, value: dict[str, Any]) -> dict[str, Any]:
@@ -387,18 +359,37 @@ def _reconcile_migration(cursor, value: dict[str, Any], requests) -> dict[str, A
     return {"counts_by_kind": observed, "inventory": inventory, "parties": parties}
 
 
+def _validate_product_references(cursor, requests) -> None:
+    codes = sorted({str(fact.payload.get("base_uom_code", ""))
+                    for request in requests for fact in request.facts
+                    if fact.source_kind == "product" and fact.selection_state == "reviewed"})
+    if not codes:
+        return
+    cursor.execute("SELECT code FROM catalog.units_of_measure WHERE status='active' AND code=ANY(%s)", (codes,))
+    missing = sorted(set(codes) - {row[0] for row in cursor.fetchall()})
+    if missing:
+        raise ValueError(f"Reviewed product units unavailable ({len(missing)}): {', '.join(missing)}; no import writes started")
+
+
 def _migrate(connection, value: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
     requests = _migration_requests(value)
-    conflicts = _source_tax_conflicts(requests)
-    if conflicts:
-        raise ValueError(
-            f"Source GST review required for {sum(item['products'] for item in conflicts)} "
-            f"products across {len(conflicts)} HSN codes; no import writes started"
-        )
     has_products = any(fact.source_kind == "product" and fact.selection_state == "reviewed"
                        for request in requests for fact in request.facts)
-    if has_products:
-        _transaction(connection, value, lambda c: _validate_migration_tax_catalog(c, requests))
+    for request in requests:
+        for fact in request.facts:
+            if fact.source_kind != "product" or fact.selection_state != "reviewed":
+                continue
+            try:
+                rate = Decimal(str(fact.payload.get("gst_rate")))
+            except InvalidOperation as exc:
+                raise ValueError("Reviewed product tax evidence is incomplete; no import writes started") from exc
+            if (not re.fullmatch(r"[0-9]{4,8}", str(fact.payload.get("hsn_code", "")))
+                    or not rate.is_finite() or not 0 <= rate <= 100
+                    or rate.as_tuple().exponent < -6 or (rate / 2).as_tuple().exponent < -6
+                    or fact.event_date is None
+                    or fact.payload.get("hsn_gst_candidate_unique") is not True):
+                raise ValueError("Reviewed product tax evidence is incomplete; no import writes started")
+    _transaction(connection, value, lambda cursor: _validate_product_references(cursor, requests))
     accepted = 0
     for index, request in enumerate(requests, 1):
         batch_value = {**value, "import_request": request.model_dump(mode="json")}
@@ -463,9 +454,6 @@ def _single_operation(connection, value):
             _activate_reviewed_user(cursor, value)
             if action == "import":
                 operation_receipt: Any = _import_batch(cursor, value)
-                status = _status(cursor, value)
-            elif action == "prepare-tax":
-                operation_receipt = _prepare_tax(cursor, value)
                 status = _status(cursor, value)
             elif action == "promote":
                 operation_receipt, status = _promote(cursor, value)

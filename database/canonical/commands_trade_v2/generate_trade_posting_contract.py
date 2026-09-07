@@ -1281,6 +1281,16 @@ BEGIN
     IF header.status<>'submitted' THEN
         RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='calculated order is no longer submitted';
     END IF;
+    IF header.calculation_ruleset_version IS DISTINCT FROM (
+        SELECT erp_automation_reads.tax_ruleset_fingerprint(pg_catalog.jsonb_agg(
+            pg_catalog.jsonb_build_object('tax_code_version_id',tax_version.id,
+                                         'ruleset_version',tax_version.ruleset_version)))
+          FROM {line_table} AS line
+          JOIN tax.tax_code_versions AS tax_version ON tax_version.id=line.tax_code_version_id
+         WHERE line.org_id=p_org_id AND line.{parent_column}=p_resource_id
+    ) THEN
+        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='document tax-version fingerprint differs from prepared lines';
+    END IF;
     IF p_input->>'calculation_kind'<>'document'
        OR p_input->>'operation'<>'{operation}'
        OR p_input->>'resource_type'<>'{resource_type}'
@@ -1376,7 +1386,13 @@ BEGIN
          OR tax_version.id IS NULL
          OR tax_version.code IS DISTINCT FROM line.tax_classification_code_snapshot
          OR tax_version.code_kind IS DISTINCT FROM CASE WHEN line.line_kind='product' THEN 'hsn' ELSE 'sac' END
-         OR tax_version.ruleset_version IS DISTINCT FROM header.calculation_ruleset_version
+         OR (tax_version.org_id IS NOT NULL AND (
+              tax_version.org_id IS DISTINCT FROM p_org_id
+              OR line.line_kind<>'product'
+              OR tax_version.product_id IS DISTINCT FROM line.product_id
+              OR NOT EXISTS (
+                  SELECT 1 FROM erp_automation_reads.resolve_product_tax(p_org_id,line.product_id,header.{document_date}) AS scoped_tax
+                   WHERE scoped_tax.id=tax_version.id)))
          OR header.{document_date}<tax_version.effective_from
          OR (tax_version.effective_to IS NOT NULL AND header.{document_date}>tax_version.effective_to)
          OR NOT (line.taxability_snapshot=tax_version.taxability

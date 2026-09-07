@@ -9,6 +9,8 @@ files must never be regenerated or edited in place.
 
 - `domains/*.json` owns table, column, constraint, lifecycle, retention, and RLS
   requirements.
+  The forward extension described below owns the later mixed-scope tax changes
+  that the baseline catalog DSL cannot express.
 - Each `baseline-*-enforcements.json` owns the current reviewed body for its
   named functions, triggers, grants, or invariants. Its sibling `generate*.py`
   owns deterministic generation of that artifact.
@@ -27,6 +29,30 @@ directory without exactly one generator. Operation-to-adapter, database
 function, affected-relation, REST readback, and MCP ownership remains published
 in `docs/architecture/core-operation-authority-matrix.json` and guarded by its
 contract tests.
+
+## Mixed-scope tax reference extension
+
+`operations/tax/product_tax_authority.sql` owns the forward schema and RLS
+extension for `core.reference_data_releases` and `tax.tax_code_versions`.
+`operations/tax/product_tax_authority.contract.json` records their effective
+scope, added columns, policies and constraints. Read this extension together
+with the baseline `domains/core.json` and `domains/tax.json` descriptors when
+assessing the current schema.
+
+The baseline DSL describes global references or mandatory tenant tables. These
+two relations now contain both shared references (`org_id IS NULL`) and reviewed
+source snapshots belonging to one organization. Both use forced RLS; scoped
+rows require the current organization and an active actor, including when the
+migration-owner command role reads them. Runtime writes still require named
+commands. Global active-release uniqueness remains in place. Source snapshots
+have separate organization/product identity and cannot activate or supersede a
+global release.
+
+The baseline descriptors and baseline RLS artifact remain installation inputs
+for their original migration. The forward SQL and its hash-bound revision
+install the extension. `test_product_tax_extension_contract.py` checks that the
+extension metadata describes the actual forward SQL and retains tenant policy
+and global-reference constraints.
 
 ## Safe workflow
 

@@ -10,7 +10,6 @@ on:
         type: choice
         options:
           - import
-          - prepare-tax
           - promote
           - status
       reviewed_sha:

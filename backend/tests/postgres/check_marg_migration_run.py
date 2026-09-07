@@ -86,20 +86,20 @@ def main():
     def reference_snapshot():
         with engine.connect() as read:
             return tuple(read.execute(text(
-                f"SELECT row_to_json(reference_row)::text FROM {table} reference_row ORDER BY id"
+                f"SELECT row_to_json(reference_row)::text FROM {table} reference_row WHERE org_id IS NULL ORDER BY id"
             )).scalars().all() for table in ("core.reference_data_releases", "tax.tax_code_versions"))
 
     reviewed_references = reference_snapshot()
     try:
         with patch.object(operator, "_attest_reviewed_database", attest_local):
             mismatch = deepcopy(value)
-            mismatch["migration_bundle"]["import_requests"][0]["facts"][0]["payload"]["gst_rate"] = "5.000000"
+            mismatch["migration_bundle"]["import_requests"][0]["facts"][0]["payload"]["hsn_gst_candidate_unique"] = False
             try:
                 operator._migrate(connection, mismatch)
             except ValueError as exc:
                 assert "tax" in str(exc).lower()
             else:
-                raise AssertionError("source GST differing from the reviewed catalog was accepted")
+                raise AssertionError("unreviewed source GST was accepted")
             with engine.connect() as read:
                 assert read.execute(text(
                     "SELECT count(*) FROM automation.historical_migration_facts WHERE org_id=:org AND dataset_id=:dataset"
@@ -135,7 +135,7 @@ def main():
             assert read.execute(text(
                 "SELECT count(*) FROM inventory.stock_ledger_entries WHERE org_id=:org"
             ), {"org": org}).scalar_one() == 1
-        print("MARG whole-run PG15 recovery and replay passed: 2 facts, 1 product, 1 stock posting, quantity 1.25, value 125.00; mismatched GST rejected before import; shared tax references unchanged")
+        print("MARG whole-run PG15 recovery and replay passed: 2 facts, 1 product, 1 stock posting, quantity 1.25, value 125.00; unreviewed GST rejected before import; shared tax references unchanged")
     finally:
         connection.close()
         engine.dispose()

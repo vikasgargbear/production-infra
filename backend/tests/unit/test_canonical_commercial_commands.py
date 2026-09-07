@@ -47,6 +47,20 @@ def test_commercial_readiness_artifacts_are_deterministic() -> None:
     assert parsed["implementation_status"] == "implemented"
 
 
+def test_scoped_invoice_tax_and_partial_return_keep_original_fingerprint() -> None:
+    mapping, _ = _module().generated_artifacts()
+    assert "version.org_id=organization_id AND version.product_id=tax_line.product_id" in mapping
+    assert "resolved_tax.id=version.id" in mapping
+    assert "invoice tax versions or document fingerprint are not valid" in mapping
+    # A partial return must retain the whole source invoice's fingerprint.
+    assert "FROM sales.invoice_lines original_line" in mapping
+    assert "FROM procurement.supplier_invoice_lines original_line" in mapping
+    assert "original.calculation_ruleset_version IS DISTINCT FROM" in mapping
+    assert "source.tax_code_version_id IS DISTINCT FROM line.tax_code_version_id" in mapping
+    assert "tax_version.product_id IS DISTINCT FROM line.product_id" in mapping
+    assert "tax_version.ruleset_version IS DISTINCT FROM header.calculation_ruleset_version" not in mapping
+
+
 def test_contract_resolves_trade_and_generic_adjustment_posting_blockers() -> None:
     source = json.loads(
         (REPO / "database/canonical/commands_trade_v2/trade-posting-manifest.json").read_text()

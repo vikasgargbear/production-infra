@@ -8,7 +8,7 @@
   "catalog_sha256": "6c88d9a0f93158f126abc8d87057b8fcebb287ba332ef36fd37b802cadc29c31",
   "manifest_version": "1.0.0",
   "mapping_file": "baseline-regulatory-command-enforcements.json",
-  "mapping_sha256": "0d867c3e67c89c8e516adf397e0bcd8ccc9bdf8d35fdddf5ec4c8875c0fceb29",
+  "mapping_sha256": "af419c3ee19310d4eb3254172b172e65b7a9a6ee0e18ff7b961dada822473897",
   "postgresql": "15+",
   "regulated_seed_status": {
     "baseline_seed_blockers_removed": 7,

@@ -162,28 +162,21 @@ END
             '"product_ready"(organization_id uuid, product_id uuid, effective_on date)',
             "boolean",
             '''
+DECLARE product catalog.products%ROWTYPE; treatment tax.tax_code_versions%ROWTYPE;
 BEGIN
-    RETURN EXISTS (
-      SELECT 1 FROM catalog.products AS product
-       WHERE product.org_id=organization_id AND product.id=product_id AND product.status='active'
-         AND (
-           product.product_kind<>'medicine' OR EXISTS (
-           SELECT 1 FROM core.reference_data_releases AS release
-            WHERE release.dataset_kind='ingredient_classification' AND release.status='active'
-              AND release.ruleset_version=product.regulatory_ruleset_version
-              AND effective_on BETWEEN release.effective_from AND COALESCE(release.effective_to,'infinity'::date)
-           )
-         )
-         AND EXISTS (
-           SELECT 1 FROM tax.tax_code_versions AS tax_version
-           JOIN core.reference_data_releases AS release ON release.id=tax_version.release_id
-            WHERE release.dataset_kind='hsn_sac_tax' AND release.status='active'
-              AND tax_version.status='active' AND tax_version.code_kind='hsn'
-              AND tax_version.default_supply_type='goods' AND tax_version.code=product.hsn_code
-              AND effective_on BETWEEN release.effective_from AND COALESCE(release.effective_to,'infinity'::date)
-              AND effective_on BETWEEN tax_version.effective_from AND COALESCE(tax_version.effective_to,'infinity'::date)
-         )
-    );
+    SELECT * INTO product FROM catalog.products p
+      WHERE p.org_id=organization_id AND p.id=product_id AND p.status='active';
+    IF NOT FOUND THEN RETURN false; END IF;
+    SELECT * INTO treatment FROM erp_automation_reads.resolve_product_tax(organization_id,product_id,effective_on);
+    IF NOT FOUND OR treatment.default_supply_type<>'goods' THEN RETURN false; END IF;
+    -- The resolver permits a source snapshot only for the immutable-bound,
+    -- explicitly review-required migration state. It is not ingredient authority.
+    IF treatment.status='source_snapshot' OR product.product_kind<>'medicine' THEN RETURN true; END IF;
+    PERFORM erp_regulatory_commands.assert_reference_readiness(effective_on);
+    RETURN EXISTS (SELECT 1 FROM core.reference_data_releases AS release
+       WHERE release.dataset_kind='ingredient_classification' AND release.status='active'
+         AND release.ruleset_version=product.regulatory_ruleset_version
+         AND effective_on BETWEEN release.effective_from AND COALESCE(release.effective_to,'infinity'::date));
 END
 ''',
         ),
@@ -192,34 +185,23 @@ END
             "trigger",
             f'''
 BEGIN
-    IF TG_OP='DELETE' THEN
-        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='reviewed reference releases are retained';
-    END IF;
-    IF TG_OP='INSERT' THEN
-        IF NEW.status<>'staged' OR NOT "{SCHEMA}"."scope_active"('reference_import',NEW.id) THEN
-            RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='reference release requires verified import provenance';
-        END IF;
-        RETURN NEW;
-    END IF;
-    IF ROW(NEW.id,NEW.dataset_kind,NEW.ruleset_version,NEW.source_authority,NEW.source_uri,
-           NEW.source_storage_bucket,NEW.source_storage_object_path,NEW.source_media_type,
-           NEW.source_document_sha256,NEW.dataset_storage_bucket,NEW.dataset_storage_object_path,
-           NEW.dataset_media_type,NEW.dataset_sha256,NEW.record_count,
-           NEW.publication_date,NEW.effective_from,NEW.effective_to,NEW.supersedes_release_id,
-           NEW.reviewed_by_user_id,NEW.reviewed_at,NEW.created_at)
-       IS DISTINCT FROM
-       ROW(OLD.id,OLD.dataset_kind,OLD.ruleset_version,OLD.source_authority,OLD.source_uri,
-           OLD.source_storage_bucket,OLD.source_storage_object_path,OLD.source_media_type,
-           OLD.source_document_sha256,OLD.dataset_storage_bucket,OLD.dataset_storage_object_path,
-           OLD.dataset_media_type,OLD.dataset_sha256,OLD.record_count,
-           OLD.publication_date,OLD.effective_from,OLD.effective_to,OLD.supersedes_release_id,
-           OLD.reviewed_by_user_id,OLD.reviewed_at,OLD.created_at)
-       OR NOT "{SCHEMA}"."scope_active"('reference_import',OLD.id)
-       OR NOT ((OLD.status='staged' AND NEW.status='active')
-            OR (OLD.status='active' AND NEW.status='superseded')) THEN
-        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='invalid or unproven reference release transition';
+  IF TG_OP='DELETE' THEN
+    RAISE EXCEPTION USING ERRCODE='23514',MESSAGE='reviewed reference releases are retained';
+  END IF;
+  IF TG_OP='INSERT' THEN
+    IF NEW.status<>'staged' OR NOT erp_regulatory_commands.scope_active('reference_import',NEW.id) THEN
+      RAISE EXCEPTION USING ERRCODE='23514',MESSAGE='reference release requires verified import provenance';
     END IF;
     RETURN NEW;
+  END IF;
+  IF (to_jsonb(NEW)-'status') IS DISTINCT FROM (to_jsonb(OLD)-'status')
+    OR NOT erp_regulatory_commands.scope_active('reference_import',OLD.id)
+    OR NOT (((to_jsonb(OLD)->>'org_id') IS NULL AND ((OLD.status='staged' AND NEW.status='active')
+                  OR (OLD.status='active' AND NEW.status='superseded')))
+         OR ((to_jsonb(OLD)->>'org_id') IS NOT NULL AND OLD.status='staged' AND NEW.status='source_snapshot')) THEN
+    RAISE EXCEPTION USING ERRCODE='23514',MESSAGE='invalid or unproven reference release transition';
+  END IF;
+  RETURN NEW;
 END
 ''',
         ),
@@ -259,25 +241,22 @@ END
             "trigger",
             f'''
 BEGIN
-    IF TG_OP='INSERT' THEN
-        IF NEW.status<>'active' OR NOT "{SCHEMA}"."scope_active"('reference_import',NEW.release_id) THEN
-            RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='tax code version requires verified exact-set import provenance';
-        END IF;
-        RETURN NEW;
-    END IF;
-    IF TG_OP='DELETE' THEN RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='deployed tax code versions are retained'; END IF;
-    IF ROW(NEW.id,NEW.release_id,NEW.code,NEW.code_kind,NEW.version_number,NEW.description,
-           NEW.effective_from,NEW.effective_to,NEW.taxability,NEW.default_supply_type,
-           NEW.cgst_rate,NEW.sgst_rate,NEW.igst_rate,NEW.cess_rate,NEW.ruleset_version,NEW.created_at)
-       IS DISTINCT FROM
-       ROW(OLD.id,OLD.release_id,OLD.code,OLD.code_kind,OLD.version_number,OLD.description,
-           OLD.effective_from,OLD.effective_to,OLD.taxability,OLD.default_supply_type,
-           OLD.cgst_rate,OLD.sgst_rate,OLD.igst_rate,OLD.cess_rate,OLD.ruleset_version,OLD.created_at)
-       OR OLD.status<>'active' OR NEW.status<>'retired'
-       OR NOT "{SCHEMA}"."scope_active"('reference_import',OLD.release_id) THEN
-        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='tax code identity, treatment and provenance are immutable';
+  IF TG_OP='INSERT' THEN
+    IF NOT (((to_jsonb(NEW)->>'org_id') IS NULL AND NEW.status='active'
+          AND erp_regulatory_commands.scope_active('reference_import',NEW.release_id))
+        OR ((to_jsonb(NEW)->>'org_id') IS NOT NULL AND NEW.status='source_snapshot'
+          AND erp_regulatory_commands.scope_active('source_product_tax',(to_jsonb(NEW)->>'product_id')::uuid))) THEN
+      RAISE EXCEPTION USING ERRCODE='23514',MESSAGE='tax code version requires reviewed import provenance';
     END IF;
     RETURN NEW;
+  END IF;
+  IF TG_OP='DELETE' THEN RAISE EXCEPTION USING ERRCODE='23514',MESSAGE='deployed tax code versions are retained'; END IF;
+  IF (to_jsonb(OLD)->>'org_id') IS NOT NULL OR (to_jsonb(NEW)-'status') IS DISTINCT FROM (to_jsonb(OLD)-'status')
+    OR OLD.status<>'active' OR NEW.status<>'retired'
+    OR NOT erp_regulatory_commands.scope_active('reference_import',OLD.release_id) THEN
+    RAISE EXCEPTION USING ERRCODE='23514',MESSAGE='tax code identity, treatment and provenance are immutable';
+  END IF;
+  RETURN NEW;
 END
 ''',
         ),
@@ -355,32 +334,11 @@ END
             '"guard_product_use"()',
             "trigger",
             '''
-DECLARE product catalog.products%ROWTYPE;
 BEGIN
     IF NEW.product_id IS NULL THEN RETURN NEW; END IF;
-    SELECT * INTO product FROM catalog.products
-     WHERE org_id=NEW.org_id AND id=NEW.product_id FOR SHARE;
-    IF NOT FOUND OR product.status<>'active' THEN
-      RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='sale or receipt requires an active product';
-    END IF;
-    IF product.product_kind='medicine' THEN
-      PERFORM "erp_regulatory_commands"."assert_reference_readiness"(CURRENT_DATE);
-      PERFORM 1 FROM core.reference_data_releases AS release
-         WHERE release.dataset_kind='ingredient_classification' AND release.status='active'
-           AND release.ruleset_version=product.regulatory_ruleset_version
-           AND CURRENT_DATE BETWEEN release.effective_from AND COALESCE(release.effective_to,'infinity'::date);
-      IF NOT FOUND THEN
-        RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='product ingredient classification release is no longer active';
-      END IF;
-    END IF;
-    PERFORM 1 FROM tax.tax_code_versions AS tax_version
-      JOIN core.reference_data_releases AS release ON release.id=tax_version.release_id
-       WHERE release.dataset_kind='hsn_sac_tax' AND release.status='active'
-         AND tax_version.status='active' AND tax_version.code_kind='hsn'
-         AND tax_version.default_supply_type='goods' AND tax_version.code=product.hsn_code
-         AND CURRENT_DATE BETWEEN tax_version.effective_from AND COALESCE(tax_version.effective_to,'infinity'::date);
-    IF NOT FOUND THEN
-      RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='product HSN is absent from the active effective tax release';
+    IF NOT erp_regulatory_commands.product_ready(NEW.org_id,NEW.product_id,
+          erp_core_commands.current_organization_business_date()) THEN
+      RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='sale or receipt requires an active product with current reviewed treatment';
     END IF;
     RETURN NEW;
 END
