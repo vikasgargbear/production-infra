@@ -20,8 +20,12 @@ WebView2 download; expect the setup file to be roughly 130 MB larger.
 ## Build
 
 Use the **Windows private app** GitHub Actions workflow. It builds on
-`windows-latest`, runs the wrapper contract and Rust tests, and uploads the
-`AASOPharma-ERP-Windows-Setup` artifact for seven days.
+`windows-latest`, runs the wrapper contract and Rust tests, then silently installs,
+opens a responsive app window, checks the OAuth protocol registration, reinstalls,
+and uninstalls the actual setup executable. The installer and `install-smoke.json`
+results are uploaded in `AASOPharma-ERP-Windows-Setup` for 90 days. This runner
+check does not replace Google sign-in and invoice/printing acceptance on a physical
+Windows 10/11 device or prove a fresh machine's WebView2 bootstrap.
 
 For a local Windows build with Node 22, Rust stable, and Microsoft C++ Build
 Tools installed:
