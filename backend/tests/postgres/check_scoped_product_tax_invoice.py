@@ -23,6 +23,11 @@ from app.api.routes import canonical_erp_reads
 import check_sales_invoice_direct_issue_acceptance as base
 
 
+def _fixture_pan():
+    digest = hashlib.sha256(str(base.fixture.IDS["org"]).encode()).digest()
+    return "".join(chr(65 + value % 26) for value in digest[:5]) + f"{int.from_bytes(digest[5:9], 'big') % 10000:04d}" + chr(65 + digest[9] % 26)
+
+
 def _scoped_products(dsn, business_date):
     dataset = f"pg15-source-tax-{uuid4()}"
     sources = [(uuid4(), rate) for rate in (5, 18)]
@@ -130,7 +135,7 @@ def _assert_second_organization(dsn, business_date, first_org, first_products):
     try:
         base._configure_fixture_ids()
         with psycopg2.connect(dsn) as conn:
-            base.fixture.bootstrap_identity(conn, organization_pan="ABCDF1234G")
+            base.fixture.bootstrap_identity(conn, organization_pan=_fixture_pan())
         org, member = base.fixture.IDS["org"], base.fixture.IDS["operator_membership"]
         with psycopg2.connect(dsn) as conn, conn.cursor() as cur:
             cur.execute("SELECT erp_security.activate_context(%s,%s)", (base.fixture.IDS["operator_auth_user"], org))
@@ -157,6 +162,7 @@ def _assert_second_organization(dsn, business_date, first_org, first_products):
             assert cur.fetchone() == (0,)
             cur.execute("SELECT id FROM erp_automation_reads.resolve_product_tax(%s,%s,%s)", (org, first_products[0][0], business_date))
             assert cur.fetchall() == []
+        return str(org)
     finally:
         base.fixture.IDS.clear()
         base.fixture.IDS.update(saved_ids)
@@ -183,7 +189,7 @@ def main():
         for role in ("erp_runtime", "erp_calculator"):
             cur.execute(f"ALTER ROLE {role} LOGIN PASSWORD %s", (password,))
     with psycopg2.connect(dsn) as conn:
-        base.fixture.bootstrap_identity(conn)
+        base.fixture.bootstrap_identity(conn, organization_pan=_fixture_pan())
     with psycopg2.connect(dsn) as conn:
         base._seed_reference_authority(conn)
     with psycopg2.connect(runtime_dsn) as conn:
@@ -283,9 +289,10 @@ def main():
     finally:
         read_engine.dispose()
     _assert_snapshot_guards(dsn, scoped, business_date)
-    _assert_second_organization(dsn, business_date, org, scoped)
+    second_org = _assert_second_organization(dsn, business_date, org, scoped)
     assert global_reference_rows() == global_before
     print("Mixed 5%/18% source and 12% global invoice posted/replayed: net300 GST35 total335 stock3 value30 balanced ledger365")
+    return str(org), second_org
 
 
 if __name__ == "__main__":

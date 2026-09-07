@@ -93,7 +93,7 @@ def test_reset_authority_classifies_exact_head_relation_sets() -> None:
     )
     assert len(authority.ephemeral_scope_relations) == 9
     assert authority.manifest()["whole_database_reset_available"] is False
-    assert authority.manifest()["expected_organization_relation_count"] == 111
+    assert authority.manifest()["expected_organization_relation_count"] == 113
     assert {
         "automation.historical_batch_bindings",
         "automation.historical_inventory_openings",
@@ -649,3 +649,41 @@ def test_purge_refuses_shared_or_unproven_relations_by_construction() -> None:
     assert "direct_organization_foreign_key" in source
     assert "tenant_organization_foreign_key" in source
     assert 'forbidden = {"core.organizations", "core.users"}' in source
+
+
+def test_only_reviewed_mixed_relations_may_have_nullable_org(monkeypatch) -> None:
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    monkeypatch.setattr(reset_authority, "EXPECTED_ORGANIZATION_RELATION_COUNT", 1)
+    cursor = Mock()
+    for relation, direct, transitive in (
+        ("core.reference_data_releases", True, False),
+        ("tax.tax_code_versions", False, True),
+    ):
+        cursor.fetchall.return_value = [(relation, "uuid", False, direct, transitive)]
+        authority = SimpleNamespace(canonical_relations={relation})
+        assert reset_authority._organization_relations(cursor, authority) == (relation,)
+    cursor.fetchall.return_value = [("catalog.products", "uuid", False, True, False)]
+    with pytest.raises(ResetAuthorityError, match="mandatory direct organization"):
+        reset_authority._organization_relations(cursor, SimpleNamespace(canonical_relations={"catalog.products"}))
+
+
+def test_untouched_population_includes_global_rows() -> None:
+    from unittest.mock import Mock
+
+    cursor = Mock()
+    cursor.fetchone.return_value = (3,)
+    reset_authority._organization_row_counts(cursor, ("tax.tax_code_versions",), "target", target=False)
+    assert "WHERE org_id IS DISTINCT FROM %s::uuid" in cursor.execute.call_args.args[0]
+    reset_authority._organization_row_counts(cursor, ("tax.tax_code_versions",), "target", target=True)
+    assert "WHERE org_id = %s::uuid" in cursor.execute.call_args.args[0]
+
+
+def test_global_reference_digest_excludes_tenant_snapshots() -> None:
+    from unittest.mock import Mock
+
+    cursor = Mock()
+    cursor.fetchall.return_value = [("shared-reference",)]
+    reset_authority._seed_digest(cursor, ("tax.tax_code_versions",))
+    assert "WHERE org_id IS NULL" in cursor.execute.call_args.args[0]
