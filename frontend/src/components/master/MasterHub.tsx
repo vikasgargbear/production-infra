@@ -14,6 +14,7 @@ import SupplierMaster from './masters/SupplierMaster';
 import UserManagement from './settings/UserManagement';
 import RoleManagement from './settings/RoleManagement';
 import DrugLicenseSetup from './settings/DrugLicenseSetup';
+import MigrationSetup from './settings/MigrationSetup';
 import TaxMaster from './masters/TaxMaster';
 import UnitMaster from './masters/UnitMaster';
 import WarehouseMaster from './masters/WarehouseMaster';
@@ -24,6 +25,7 @@ export const MASTER_SUBPAGE_IDS = [
   'supplier-master',
   'company-profile',
   'drug-licenses',
+  'data-migration',
   'tax-master',
   'unit-master',
   'warehouse-master',
@@ -56,6 +58,11 @@ const ADMIN_ONLY_IDS = new Set([
 ]);
 
 const MASTER_MODULES: MasterModule[] = [
+  {
+    id: 'data-migration', label: 'Import data', fullLabel: 'Import business data',
+    description: 'Review and resume a prepared migration', icon: Building, color: 'blue',
+    component: MigrationSetup, group: 'Business Setup'
+  },
   {
     id: 'product-master', label: 'Products', fullLabel: 'Product Master',
     description: 'Manage item catalog', icon: Package, color: 'green',
@@ -141,8 +148,9 @@ const MasterHub: React.FC<MasterHubProps> = ({ open = true, onClose, initialSubp
     () => MASTER_MODULES.filter(module => (
       (canEdit || !ADMIN_ONLY_IDS.has(module.id))
       && (module.id !== 'drug-licenses' || hasCapability('compliance.license.manage'))
+      && (module.id !== 'data-migration' || (hasCapability('core.organization.manage') && hasPermission('finance', 'view')))
     )),
-    [canEdit, hasCapability]
+    [canEdit, hasCapability, hasPermission]
   );
 
   return (

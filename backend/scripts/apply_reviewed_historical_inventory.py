@@ -12,7 +12,7 @@ from __future__ import annotations
 from contextlib import redirect_stdout
 import json
 from collections import Counter
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 import os
 from pathlib import Path
 import re
@@ -28,6 +28,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.api.routes.canonical_historical_migration import (
     HistoricalImportRequest,
     _wire_fact,
+    validate_migration_bundle,
+    validate_migration_product_tax,
 )
 from scripts.provision_staging_mcp_oauth import (
     _attest_reviewed_database,
@@ -227,25 +229,7 @@ def _migration_requests(value: dict[str, Any]) -> list[HistoricalImportRequest]:
     bundle = value.get("migration_bundle")
     if not isinstance(bundle, dict) or bundle.get("schema_version") != "aasopharma.marg-migration.v1":
         raise ValueError("A reviewed MARG migration bundle is required")
-    for field in ("organization_id", "branch_id", "location_id", "dataset_id"):
-        if str(bundle.get(field)) != str(value[field]):
-            raise ValueError(f"Migration bundle {field} differs from the selected target")
-    batches = bundle.get("import_requests")
-    if not isinstance(batches, list) or not 1 <= len(batches) <= 2000:
-        raise ValueError("Migration bundle requires 1 to 2000 request batches")
-    requests = [HistoricalImportRequest.model_validate(batch) for batch in batches]
-    identities: set[tuple[str, str]] = set()
-    for request in requests:
-        if request.dataset_id != value["dataset_id"] or request.branch_id != value["branch_id"]:
-            raise ValueError("Migration request belongs to a different dataset or branch")
-        if request.confirmation != f"IMPORT-HISTORY:{value['organization_id']}:{value['dataset_id']}":
-            raise ValueError("Migration request confirmation differs")
-        for fact in request.facts:
-            identity = (fact.source_kind, fact.record_key)
-            if identity in identities:
-                raise ValueError("Migration bundle repeats a source record identity")
-            identities.add(identity)
-    return requests
+    return validate_migration_bundle(bundle, value)
 
 
 def _transaction(connection, value: dict[str, Any], operation):
@@ -375,20 +359,7 @@ def _migrate(connection, value: dict[str, Any]) -> tuple[dict[str, Any], dict[st
     requests = _migration_requests(value)
     has_products = any(fact.source_kind == "product" and fact.selection_state == "reviewed"
                        for request in requests for fact in request.facts)
-    for request in requests:
-        for fact in request.facts:
-            if fact.source_kind != "product" or fact.selection_state != "reviewed":
-                continue
-            try:
-                rate = Decimal(str(fact.payload.get("gst_rate")))
-            except InvalidOperation as exc:
-                raise ValueError("Reviewed product tax evidence is incomplete; no import writes started") from exc
-            if (not re.fullmatch(r"[0-9]{4,8}", str(fact.payload.get("hsn_code", "")))
-                    or not rate.is_finite() or not 0 <= rate <= 100
-                    or rate.as_tuple().exponent < -6 or (rate / 2).as_tuple().exponent < -6
-                    or fact.event_date is None
-                    or fact.payload.get("hsn_gst_candidate_unique") is not True):
-                raise ValueError("Reviewed product tax evidence is incomplete; no import writes started")
+    validate_migration_product_tax(requests)
     _transaction(connection, value, lambda cursor: _validate_product_references(cursor, requests))
     accepted = 0
     for index, request in enumerate(requests, 1):

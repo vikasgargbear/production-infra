@@ -34,6 +34,7 @@ const MobileNavigationSmokePage = lazy(() => import('./e2e/MobileNavigationSmoke
 const CanonicalReadSurfacesSmokePage = lazy(() => import('./e2e/CanonicalReadSurfacesSmokePage'));
 const CustomerReceiptOperatorSmokePage = lazy(() => import('./e2e/CustomerReceiptOperatorSmokePage'));
 const DrugLicenseSetupSmokePage = lazy(() => import('./e2e/DrugLicenseSetupSmokePage'));
+const MigrationSetupSmokePage = lazy(() => import('./e2e/MigrationSetupSmokePage'));
 
 // ---------------------------------------------------------------------------
 // Tab / module definitions
@@ -276,6 +277,9 @@ const App = (): JSX.Element => {
     }
     if (window.location.pathname === '/e2e/drug-license-setup') {
       return <Suspense fallback={<LoadingSpinner />}><DrugLicenseSetupSmokePage /></Suspense>;
+    }
+    if (window.location.pathname === '/e2e/migration-setup') {
+      return <Suspense fallback={<LoadingSpinner />}><MigrationSetupSmokePage /></Suspense>;
     }
   }
   return <AuthProvider><AppContent /></AuthProvider>;
