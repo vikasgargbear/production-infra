@@ -189,6 +189,8 @@ ALLOWED_EFFECTIVE_MUTATIONS = {
     ("POST", "/api/canonical/compliance/drug-licenses"),
     ("POST", "/api/canonical/company/gst-registration"),
     ("POST", "/api/canonical/migration-history/facts"),
+    # Read-only whole-package preflight; no database or durable effect.
+    ("POST", "/api/canonical/migration-history/bundle-review"),
     ("POST", "/api/canonical/migration-history/operational-cutover"),
     ("POST", "/api/canonical/migration-history/product-inventory-cutover"),
     ("POST", "/api/internal/tax-provider/requests:fetch"),
@@ -349,6 +351,10 @@ def test_every_effective_mutation_has_an_explicit_reviewed_owner():
         for method in set(route.methods or ()) & MUTATION_METHODS
     }
     assert mounted == ALLOWED_EFFECTIVE_MUTATIONS
+
+    review = next(route for route in _routes() if route.path == "/api/canonical/migration-history/bundle-review")
+    assert review.endpoint.__name__ == "review_migration_bundle"
+    assert _direct_durable_side_effects(review) == []
 
     company_routes = [
         route for route in _routes()

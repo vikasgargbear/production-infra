@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 from datetime import date
-from decimal import Decimal
+from collections import Counter
+from decimal import Decimal, InvalidOperation
 import hashlib
 import json
+import re
 from typing import Any, Literal, Optional
 from uuid import UUID, NAMESPACE_URL, uuid4, uuid5
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Security
 from fastapi.security import HTTPBearer
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
@@ -161,6 +163,86 @@ class HistoricalImportResponse(BaseModel):
     inserted: int = Field(ge=0)
     replayed: int = Field(ge=0)
     accepted: int = Field(ge=1)
+
+
+def validate_migration_bundle(bundle: dict[str, Any], target: dict[str, Any]) -> list[HistoricalImportRequest]:
+    """Shared web/operator preflight; never silently retarget a prepared package."""
+    if bundle.get("schema_version") != "aasopharma.marg-migration.v1":
+        raise ValueError("A reviewed MARG migration bundle is required")
+    for field in ("organization_id", "branch_id", "location_id", "dataset_id"):
+        if str(bundle.get(field)) != str(target[field]):
+            raise ValueError(f"Migration bundle {field} differs from the selected target")
+    UUID(str(bundle["location_id"]))
+    batches = bundle.get("import_requests")
+    if not isinstance(batches, list) or not 1 <= len(batches) <= 2000:
+        raise ValueError("Migration bundle requires 1 to 2000 request batches")
+    requests = [HistoricalImportRequest.model_validate(batch) for batch in batches]
+    identities: set[tuple[str, str]] = set()
+    for request in requests:
+        if request.dataset_id != str(target["dataset_id"]) or str(request.branch_id) != str(target["branch_id"]):
+            raise ValueError("Migration request belongs to a different dataset or branch")
+        if request.confirmation != f"IMPORT-HISTORY:{target['organization_id']}:{target['dataset_id']}":
+            raise ValueError("Migration request confirmation differs")
+        for fact in request.facts:
+            identity = (fact.source_kind, fact.record_key)
+            if identity in identities:
+                raise ValueError("Migration bundle repeats a source record identity")
+            identities.add(identity)
+    return requests
+
+
+def validate_migration_product_tax(requests: list[HistoricalImportRequest]) -> None:
+    """The same source-tax completeness gate for web and operator imports."""
+    for request in requests:
+        for fact in request.facts:
+            if fact.source_kind != "product" or fact.selection_state != "reviewed":
+                continue
+            try:
+                rate = Decimal(str(fact.payload.get("gst_rate")))
+            except InvalidOperation as exc:
+                raise ValueError("Reviewed product tax evidence is incomplete; no import writes started") from exc
+            if (not re.fullmatch(r"[0-9]{4,8}", str(fact.payload.get("hsn_code", "")))
+                    or not rate.is_finite() or not 0 <= rate <= 100
+                    or rate.as_tuple().exponent < -6 or (rate / 2).as_tuple().exponent < -6
+                    or fact.event_date is None
+                    or fact.payload.get("hsn_gst_candidate_unique") is not True):
+                raise ValueError("Reviewed product tax evidence is incomplete; no import writes started")
+
+
+@router.post("/bundle-review")
+def review_migration_bundle(bundle: dict[str, Any], current_user: dict = IMPORT_USER):
+    """Validate all batches before the UI offers a write; no data is persisted."""
+    try:
+        requests = validate_migration_bundle(bundle, {
+            **{field: bundle.get(field) for field in ("branch_id", "location_id", "dataset_id")},
+            "organization_id": current_user["org_id"],
+        })
+    except ValidationError as exc:
+        # Pydantic errors contain source input; do not echo private records.
+        fields = [".".join(str(part) for part in item["loc"]) for item in exc.errors(include_input=False)[:5]]
+        raise HTTPException(status_code=422, detail=f"Migration package has invalid fields: {', '.join(fields)}. Correct the export before importing.") from exc
+    except (ValueError, TypeError, KeyError) as exc:
+        raise HTTPException(status_code=422, detail="Migration package identity, target or source record identities are invalid. Prepare the package for this signed-in organization; do not change its target manually.") from exc
+    try:
+        validate_migration_product_tax(requests)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="Reviewed product HSN/GST evidence or effective dates are incomplete. Resolve these in export preparation before importing; no records were saved.") from exc
+    facts = [fact for request in requests for fact in request.facts]
+    batches = [fact for fact in facts if fact.source_kind == "batch" and fact.selection_state == "reviewed"]
+    openings = [fact for fact in facts if fact.source_kind == "opening_item" and fact.selection_state != "quarantined"]
+    return {
+        "counts_by_kind": dict(Counter(fact.source_kind for fact in facts)),
+        "quarantined_by_kind": dict(Counter(fact.source_kind for fact in facts if fact.selection_state == "quarantined")),
+        "request_batches": len(requests), "facts": len(facts),
+        "expected": {
+            "products": sum(fact.source_kind == "product" and fact.selection_state == "reviewed" for fact in facts),
+            "batches": len(batches), "openings": len(openings),
+            "quantity": _exact(sum((fact.quantity or Decimal(0) for fact in batches), Decimal(0))),
+            "value": _exact(sum((fact.inventory_value or Decimal(0) for fact in batches), Decimal(0))),
+            **{side: _exact(sum((fact.outstanding_amount or Decimal(0) for fact in openings if fact.side == side), Decimal(0)))
+               for side in ("receivable", "payable")},
+        },
+    }
 
 
 class OperationalCutoverRequest(BaseModel):
