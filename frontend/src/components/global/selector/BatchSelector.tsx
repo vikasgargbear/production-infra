@@ -124,6 +124,8 @@ interface BatchSelectorProps {
     filterExpired?: boolean;
     minQuantity?: number;
     enforceFefo?: boolean;
+    draftRates?: ReadonlyArray<{ product_id?: string | number; batch_id?: string | number; unit_price?: string | number }>;
+    editMissingRateInRow?: boolean;
     renderBatchInfo?: (batch: Batch) => ReactNode;
     className?: string;
     maxHeight?: string;
@@ -143,6 +145,8 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
     filterExpired = true,
     minQuantity = 0,
     enforceFefo = false,
+    draftRates = [],
+    editMissingRateInRow = false,
     renderBatchInfo,
     className = '',
     maxHeight = '400px'
@@ -322,15 +326,17 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
             return;
         }
         setSelectedBatch(batch);
-        const saleRate = reviewedRate ?? batch.sale_price_per_unit;
-        if (saleRate === null) {
+        const draftRate = draftRates.find(item => String(item.product_id) === batch.product_id
+            && String(item.batch_id) === batch.batch_id)?.unit_price;
+        const saleRate = reviewedRate ?? (draftRate === undefined ? batch.sale_price_per_unit : String(draftRate));
+        if (saleRate === null && !editMissingRateInRow) {
             setRateBatch(batch);
             setEnteredRate('');
             return;
         }
 
-        // The selected canonical batch owns stock and price.  Product-level
-        // price aliases are deliberately overwritten, never used as fallback.
+        // Keep the current draft override ahead of a saved batch suggestion.
+        // Product-level aliases, cost and MRP are never sale-rate fallbacks.
         const allocationBatches = batches
             .filter(candidate => candidate.location_id === batch.location_id)
             .filter(candidate => batchDisabledReason(candidate) === null)
@@ -352,13 +358,13 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
         const productWithBatch: ProductWithBatch = {
             ...product,
             ...batch,
-            sale_price_per_unit: saleRate,
+            sale_price_per_unit: saleRate ?? '',
             available_quantity: batch.quantity_available,
             quantity_available: batch.quantity_available,
             quantity: '1.000000',
             free_quantity: '0.000000',
-            unit_price: saleRate,
-            sale_price: saleRate,
+            unit_price: saleRate ?? '',
+            sale_price: saleRate ?? '',
             mrp: batch.mrp_per_unit,
             manufacturing_date: batch.manufacturing_date,
             allocation_batches: allocationBatches,

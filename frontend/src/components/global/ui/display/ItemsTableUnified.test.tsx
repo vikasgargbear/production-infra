@@ -3,6 +3,24 @@ import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import ItemsTable from './ItemsTableUnified';
 
+test('an unknown invoice rate stays blank on blur and accepts keyboard entry without a modal', () => {
+  const onUpdateItem = jest.fn();
+  render(<ItemsTable compactBilling preserveExactDecimals onUpdateItem={onUpdateItem} items={[{
+    product_name: 'Unpriced medicine', quantity: '1', unit_price: '', mrp: '120.00', gst_percent: '5',
+  }]} />);
+  const rate = screen.getByLabelText('Unpriced medicine rate') as HTMLInputElement;
+  expect(rate.value).toBe('');
+  fireEvent.focus(rate);
+  fireEvent.blur(rate);
+  expect(rate.value).toBe('');
+  expect(onUpdateItem).not.toHaveBeenCalled();
+  expect(screen.getByText('Line total —')).toBeTruthy();
+  fireEvent.focus(rate);
+  fireEvent.change(rate, {target: {value: '22.50'}});
+  fireEvent.keyDown(rate, {key: 'Enter'});
+  expect(onUpdateItem).toHaveBeenLastCalledWith(0, 'unit_price', '22.50');
+});
+
 test('compact billing separates batch and MRP without a normal bonus-unit dropdown', () => {
   render(<ItemsTable compactBilling showFreeSupplyTaxTreatment items={[{
     product_name: 'Medicine', batch_number: 'LOT-A', expiry_date: '2028-12-01',

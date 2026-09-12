@@ -98,6 +98,20 @@ const mockedPreview = calculateInvoicePreview as jest.MockedFunction<
 >;
 const mockedEmployeeGetAll = employeesApi.getAll as jest.MockedFunction<typeof employeesApi.getAll>;
 
+it('keeps an unknown sale rate blank and does not calculate it as zero or MRP', async () => {
+    mockedPreview.mockClear();
+    mockedEmployeeGetAll.mockResolvedValue({ data: { employees: [] } } as any);
+    const { result } = renderHook(() => useInvoiceLogic());
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    await act(async () => {
+        result.current.handleCustomerSelect(customer);
+        await result.current.handleAddItem({ ...selectedProduct, unit_price: '',
+            quantity: '1.000000', free_quantity: '0.000000' });
+    });
+    expect(result.current.invoice.items[0].unit_price).toBe('');
+    expect(mockedPreview).not.toHaveBeenCalled();
+});
+
 describe('useInvoiceLogic selected quantity boundary', () => {
     beforeEach(() => {
         jest.clearAllMocks();

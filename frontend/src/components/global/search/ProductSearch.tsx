@@ -52,6 +52,8 @@ interface ProductSearchProps {
     onCreateProduct?: (productName: string) => void;
     showBatchSelection?: boolean;
     enforceFefo?: boolean;
+    draftRates?: ReadonlyArray<{ product_id?: string | number; batch_id?: string | number; unit_price?: string | number }>;
+    editMissingRateInRow?: boolean;
     placeholder?: string;
     disabled?: boolean;
     className?: string;
@@ -70,6 +72,8 @@ const ProductSearch = forwardRef<ProductSearchRef, ProductSearchProps>(
         onCreateProduct,
         showBatchSelection = true,
         enforceFefo = false,
+        draftRates,
+        editMissingRateInRow = false,
         placeholder = 'Search products by name, code, or HSN...',
         disabled = false,
         tabIndex,
@@ -433,6 +437,8 @@ const ProductSearch = forwardRef<ProductSearchRef, ProductSearchProps>(
                         product={selectedProduct as any}
                         mode="modal"
                         enforceFefo={enforceFefo}
+                        draftRates={draftRates}
+                        editMissingRateInRow={editMissingRateInRow}
                         onClose={() => {
                             setShowBatchModal(false);
                             setSelectedProduct(null);

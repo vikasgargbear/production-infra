@@ -35,6 +35,29 @@ const withExpiry = (status: string, suffix: string, expiryDate: string, batchNum
 });
 
 describe('BatchSelector lifecycle and mobile presentation', () => {
+    it('reuses the current invoice batch rate instead of prompting or using the saved suggestion', async () => {
+        const batch = canonicalBatch('released', '20');
+        (batchesApi.getByProduct as jest.Mock).mockResolvedValue({data: {batches: [batch]}});
+        const onBatchSelect = jest.fn();
+        render(<BatchSelector show product={{product_id: batch.product_id, product_name: 'Demo Product'} as any}
+            draftRates={[{product_id: batch.product_id, batch_id: batch.batch_id, unit_price: '22.00'}]}
+            editMissingRateInRow onBatchSelect={onBatchSelect} onClose={jest.fn()} />);
+        fireEvent.click(await screen.findByRole('option', {name: /Select batch DEMO-RELEASED/i}));
+        expect(onBatchSelect).toHaveBeenCalledWith(expect.objectContaining({unit_price: '22.00'}));
+        expect(screen.queryByLabelText('Sale rate')).toBeNull();
+    });
+
+    it('adds a missing invoice rate as blank for inline editing without borrowing another batch rate', async () => {
+        const batch = {...canonicalBatch('released', '20'), sale_price_per_unit: null};
+        (batchesApi.getByProduct as jest.Mock).mockResolvedValue({data: {batches: [batch]}});
+        const onBatchSelect = jest.fn();
+        render(<BatchSelector show product={{product_id: batch.product_id, product_name: 'Demo Product'} as any}
+            draftRates={[{product_id: batch.product_id, batch_id: 'different-batch', unit_price: '22.00'}]}
+            editMissingRateInRow onBatchSelect={onBatchSelect} onClose={jest.fn()} />);
+        fireEvent.click(await screen.findByRole('option', {name: /Select batch DEMO-RELEASED/i}));
+        expect(onBatchSelect).toHaveBeenCalledWith(expect.objectContaining({unit_price: '', mrp: '120.0000'}));
+        expect(screen.queryByLabelText('Sale rate')).toBeNull();
+    });
     it('requires an entered selling rate when the batch has only MRP', async () => {
         (batchesApi.getByProduct as jest.Mock).mockResolvedValue({data: {batches: [
             {...canonicalBatch('released', '20'), sale_price_per_unit: null},

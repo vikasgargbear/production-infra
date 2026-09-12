@@ -101,7 +101,8 @@ const authoritativeRate = (value: unknown, label: string): string =>
  */
 export const prepareItemForTransaction = <T extends BaseLineItem>(
     product: ProductInput,
-    itemDefaults?: Partial<T>
+    itemDefaults?: Partial<T>,
+    options?: { allowIncompleteRate?: boolean },
 ): T => {
     // If product has best_batch from new API, use it
     const bestBatch = product.best_batch;
@@ -122,8 +123,10 @@ export const prepareItemForTransaction = <T extends BaseLineItem>(
 
     if (product.batch_id) {
         // BatchSelector: product already has batch data merged - ALWAYS respect user selection
-        unitPrice = authoritativeMoney(
-            product.sale_price_per_unit ?? product.unit_price,
+        const selectedRate = product.sale_price_per_unit ?? product.unit_price;
+        unitPrice = options?.allowIncompleteRate && selectedRate === ''
+            && !product.source_line_id && !product.allocation_id ? '' : authoritativeMoney(
+            selectedRate,
             'Selected batch unit rate',
         );
         const immutableImport = Boolean(product.source_line_id || product.allocation_id);
