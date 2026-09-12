@@ -50,11 +50,11 @@ def test_repository_source_classification_is_exhaustive_and_machine_readable():
     assert len(classification["competing_authorities"]) == 2
     assert sum(
         len(group["paths"]) for group in classification["competing_authorities"]
-    ) == 4
+    ) == 5
     reachability = classification["source_reachability"]
     assert reachability["current_sources"] == ["backend/alembic"]
     assert reachability["reachable_competing_source_count"] == 0
-    assert len(reachability["unreachable_sources"]) == 4
+    assert len(reachability["unreachable_sources"]) == 5
     assert not schema_readiness.check_source_classification(authority, REPO_ROOT)
 
 

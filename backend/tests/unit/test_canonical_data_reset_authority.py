@@ -83,17 +83,18 @@ def _catalog(authority) -> CatalogSnapshot:
 def test_reset_authority_classifies_exact_head_relation_sets() -> None:
     authority = load_reset_authority()
 
-    assert len(authority.canonical_relations) == 127
+    assert len(authority.canonical_relations) == 128
+    assert "inventory.batch_sale_rate_evidence" in authority.canonical_relations
     assert len(authority.alembic_schemas) == 30
     assert authority.preserved_seed_relations == tuple(sorted(PRESERVED_SEED_RELATIONS))
     assert len(authority.preserved_seed_relations) == 5
-    assert len(authority.reset_relations) == 122
+    assert len(authority.reset_relations) == 123
     assert authority.ephemeral_scope_relations == tuple(
         sorted(EPHEMERAL_SCOPE_RELATIONS)
     )
     assert len(authority.ephemeral_scope_relations) == 9
     assert authority.manifest()["whole_database_reset_available"] is False
-    assert authority.manifest()["expected_organization_relation_count"] == 113
+    assert authority.manifest()["expected_organization_relation_count"] == 114
     assert {
         "automation.historical_batch_bindings",
         "automation.historical_inventory_openings",

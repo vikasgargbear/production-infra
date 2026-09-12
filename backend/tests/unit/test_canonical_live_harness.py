@@ -548,7 +548,11 @@ def test_scenario_matrix_matches_adapter_readiness_and_bounded_pilot_scopes():
     }
 
     manifest = json.loads(AUTOMATION_MANIFEST.read_text())["dispatcher"]
-    assert set(manifest["executable_prepare_capabilities"]) == available
+    # 0079 extends the dispatcher with separately tested price maintenance;
+    # the original generated Live18 business manifest is not rewritten.
+    price_maintenance = {"inventory.batch_sale_rate.prepare"}
+    assert price_maintenance <= available
+    assert set(manifest["executable_prepare_capabilities"]) == available - price_maintenance
     assert set(manifest["blocked_prepare_capabilities"]) == unavailable
     bounded = matrix["bounded_scope_contract"]
     for operation_key, contract in bounded.items():

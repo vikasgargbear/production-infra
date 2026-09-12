@@ -24,6 +24,7 @@ RELEASE_GATES: Mapping[str, bool] = {
 }
 
 OPERATOR_TOOL_DESCRIPTIONS: Mapping[str, str] = {
+    "erp_batch_sale_rate_prepare": "Prepare reviewed batch selling rates from source evidence or explicit operator input; never change stock, purchase cost, MRP or historical invoices.",
     "erp_product_create": "Create one canonical product draft with a server-allocated immutable product code and exact replay protection.",
     "erp_product_category_create": "Create one organization product category through the same canonical authority used by the ERP product form; categories are optional and never inferred.",
     "erp_product_manufacturer_create": "Create one legal product-manufacturer identity independent of supplier/vendor accounts, with exact replay protection.",
@@ -78,6 +79,7 @@ OPERATOR_TOOL_DESCRIPTIONS: Mapping[str, str] = {
 }
 PUBLISHED_PREPARE_TOOL_NAMES = frozenset(
     {
+        "erp_batch_sale_rate_prepare",
         "erp_sales_order_prepare",
         "erp_sales_dispatch_prepare",
         "erp_sales_invoice_prepare",
@@ -1169,7 +1171,36 @@ def _prepare_actions() -> dict[str, OperatorAction]:
         ),
     }
 
+    batch_sale_rate = {
+        "branch_id": _uuid("Explicit authorized branch; no write-time branch default is allowed."),
+        "lines": _array(_object({
+            "batch_id": _uuid("Canonical batch identity."),
+            "batch_row_version": {"type": "integer", "minimum": 1, "description": "Exact positive batch row version reviewed before preparing."},
+            "expected_rate_version": {"type": "integer", "minimum": 0, "description": "Current saved selling-rate version; zero explicitly means none exists."},
+            "sale_rate": _string("Selling price per canonical base unit, not MRP or cost.", pattern=UNIT_RATE_PATTERN),
+            "uom_code": _string("Exact canonical product base unit."),
+            "price_basis": _string("Explicit price basis.", enum=["tax_exclusive"]),
+            "effective_from": _date("Date this reviewed rate becomes applicable."),
+            "source_kind": _string("Provenance of the reviewed price.", enum=["operator_review", "migration_source"]),
+            "source_evidence": _object({
+                "reason": _string("Why this exact selling rate is approved."),
+                "source_batch_fact_id": _uuid("Existing immutable migration batch fact."),
+                "source_batch_row_sha256": _string("Exact bound batch fact hash.", pattern="^[0-9a-f]{64}$"),
+                "source_file_sha256": _string("Reviewed source file hash.", pattern="^[0-9a-f]{64}$"),
+                "source_record_key": _string("Source row/record identity."),
+                "source_sales_line_record_key": _string("Corroborating imported sale-line identity."),
+                "source_sales_line_fact_id": _uuid("Exact immutable sale-line fact."),
+                "source_sales_line_row_sha256": _string("Exact imported sale-line hash.", pattern="^[0-9a-f]{64}$"),
+                "source_unit_raw": _string("Operator-reviewed original source unit, retained without relabeling."),
+                "source_rate_raw": _string("Operator-reviewed original source selling rate."),
+                "source_mrp_raw": _string("Original source MRP for review only; never a selling-rate fallback."),
+                "qualification": _string("Source compiler qualification explanation for human review."),
+            }, ("reason",), "Operator-reviewed provenance; migration requires bound batch and sale proof identities. External source references are not server-verified file attestations."),
+        }, ("batch_id", "batch_row_version", "expected_rate_version", "sale_rate", "uom_code", "price_basis", "effective_from", "source_kind", "source_evidence"), "One exact batch selling rate."), "Up to 100 reviewed rates."),
+    }
+    batch_sale_rate["lines"]["maxItems"] = 100
     definitions = (
+        ("erp_batch_sale_rate_prepare", "inventory.batch_sale_rate.prepare", "catalog.product.manage", "reviewed_batch_selling_rates", "actor_confirmation", batch_sale_rate),
         ("erp_sales_order_prepare", "sales.order.prepare", "sales.order.create", "commercial_lines", "actor_confirmation", sales_order),
         ("erp_sales_dispatch_prepare", "sales.dispatch.prepare", "sales.dispatch.create", "batched_commercial_lines", "actor_confirmation", sales_dispatch),
         ("erp_sales_invoice_prepare", "sales.invoice.prepare", "sales.invoice.create", "batched_commercial_lines", "actor_confirmation", sales_invoice),

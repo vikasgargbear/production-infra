@@ -43,6 +43,11 @@ def _missing_action_resolver(
 # Candidate posting functions are recorded only to make the missing half of
 # each workflow auditable. They are never called by an unavailable binding.
 _PREPARE_BINDINGS = {
+    "inventory.batch_sale_rate.prepare": ActionAdapterBinding(
+        operation_key="inventory.batch_sale_rate.prepare", available=True,
+        prepare_function="erp_automation_commands.persist_batch_sale_rate_prepare",
+        execute_function="erp_automation_commands.execute_batch_sale_rate", unavailable_reason=None,
+    ),
     "sales.order.prepare": ActionAdapterBinding(
         operation_key="sales.order.prepare",
         available=True,

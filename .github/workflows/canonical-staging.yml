@@ -1489,6 +1489,7 @@ jobs:
                       "INSUFFICIENT_STOCK", "BATCH_BLOCKED", "POLICY_BLOCKED",
                   }
                   allowed_operations = {
+                      "inventory.batch_sale_rate.prepare",
                       "sales.order.prepare", "sales.dispatch.prepare", "sales.invoice.prepare",
                       "sales.return.prepare", "procurement.purchase_order.prepare",
                       "procurement.goods_receipt.prepare", "procurement.supplier_invoice.prepare",

@@ -25,6 +25,7 @@ APPLICATION_CONTRACT_PATH = (
 ACTION_ROUTE_PATH = REPO_ROOT / "backend/app/api/routes/internal/mcp_actions.py"
 
 EXPECTED_PREPARE_TOOLS = {
+    "erp_batch_sale_rate_prepare",
     "erp_sales_order_prepare",
     "erp_sales_dispatch_prepare",
     "erp_sales_invoice_prepare",
@@ -187,6 +188,16 @@ BASE_UOM_QUANTITY_FIELDS = {
 # These names are intentionally polymorphic only in the listed, fully qualified
 # contexts. Every other repeated name must retain one recursive JSON shape.
 EXPLICIT_CONTEXT_QUALIFIED_REUSE = {
+    "batch_id": {
+        "erp_batch_sale_rate_prepare.lines[].batch_id",
+        "erp_sales_dispatch_prepare.lines[].batch_allocations[].batch_id",
+        "erp_sales_invoice_prepare.lines[].batch_allocations[].batch_id",
+        "erp_sales_return_prepare.lines[].batch_allocation.batch_id",
+        "erp_purchase_return_prepare.lines[].batch_allocation.batch_id",
+        "erp_inventory_transfer_prepare.lines[].batch_allocations[].batch_id",
+        "erp_inventory_adjustment_prepare.lines[].batch_counts[].batch_id",
+        "erp_inventory_destruction_prepare.lines[].batch_allocations[].batch_id",
+    },
     "fulfillment_source": {
         "erp_sales_invoice_prepare.lines[].fulfillment_source",
         "erp_sales_return_prepare.lines[].fulfillment_source",
@@ -203,6 +214,7 @@ EXPLICIT_CONTEXT_QUALIFIED_REUSE = {
         "erp_inventory_destruction_prepare.lines[].batch_allocations",
     },
     "lines": {
+        "erp_batch_sale_rate_prepare.lines",
         "erp_adjustment_note_prepare.lines",
         "erp_sales_order_prepare.lines",
         "erp_sales_dispatch_prepare.lines",
@@ -318,6 +330,7 @@ EXPLICIT_CONTEXT_QUALIFIED_REUSE = {
         "erp_sales_return_prepare.recipient_itc_reversal_confirmed_at",
     },
     "reason": {
+        "erp_batch_sale_rate_prepare.lines[].source_evidence.reason",
         "erp_adjustment_note_prepare.reason",
         "erp_inventory_destruction_prepare.reason",
         "erp_sales_return_reversal_prepare.reason",
@@ -371,6 +384,7 @@ EXPLICIT_CONTEXT_QUALIFIED_REUSE = {
         "erp_supplier_advance_prepare.payment_date",
     },
     "price_basis": {
+        "erp_batch_sale_rate_prepare.lines[].price_basis",
         "erp_adjustment_note_prepare.lines[].price_basis",
         *(f"{tool}.{kind}[].price_basis"
         for tool in (
@@ -432,6 +446,7 @@ BATCHED_TOOLS = {
     "erp_inventory_destruction_prepare",
 }
 EXPECTED_APPROVAL_POLICIES = {
+    "erp_batch_sale_rate_prepare": "actor_confirmation",
     "erp_sales_order_prepare": "actor_confirmation",
     "erp_sales_dispatch_prepare": "actor_confirmation",
     "erp_sales_invoice_prepare": "actor_confirmation",
@@ -761,9 +776,13 @@ def _validate_schema(schema: Mapping[str, Any], path: str) -> list[str]:
     elif schema_type == "integer" and path.rsplit(".", 1)[-1] in {
         "expected_row_version",
         "stock_balance_row_version",
+        "batch_row_version",
     }:
         if schema.get("minimum") != 1:
             issues.append(f"{path}: row version integer must have minimum 1")
+    elif schema_type == "integer" and path == "erp_batch_sale_rate_prepare.lines[].expected_rate_version":
+        if schema.get("minimum") != 0:
+            issues.append(f"{path}: initial rate version must allow zero")
     elif schema_type in {"number", "integer"}:
         issues.append(f"{path}: numeric JSON values are forbidden; use exact decimal strings")
     else:

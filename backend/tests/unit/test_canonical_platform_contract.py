@@ -87,12 +87,17 @@ def test_bootstrap_seeds_are_exact_and_regulated_ledgers_deploy_empty() -> None:
     }
     operator_permissions = {policy.permission for policy in ACTION_POLICIES.values()}
 
-    assert generator.CANONICAL_OPERATOR_PERMISSIONS == operator_permissions
+    # Batch price maintenance reuses an existing RLS permission after the
+    # immutable platform seed. Do not regenerate that historical baseline.
+    supplemental_permissions = {"catalog.product.manage"}
+    assert supplemental_permissions <= permission_codes
+    assert generator.CANONICAL_OPERATOR_PERMISSIONS == operator_permissions - supplemental_permissions
     assert {
         permission: generator.PERMISSION_RISKS[permission]
-        for permission in operator_permissions
+        for permission in operator_permissions - supplemental_permissions
     } == {
         policy.permission: policy.risk_class for policy in ACTION_POLICIES.values()
+        if policy.permission not in supplemental_permissions
     }
     assert set(manifest["seed_authorities"]["core.permissions"]["exact_codes"]) == (
         permission_codes | operator_permissions
