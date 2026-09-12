@@ -64,6 +64,8 @@ interface Batch {
     manufacturing_date: string;
     quantity_available: string;
     sale_price_per_unit: string | null;
+    sale_price_source?: string | null;
+    sale_price_date?: string | null;
     mrp_per_unit: string;
     cost_per_unit: string;
     days_to_expiry: number | null;
@@ -189,6 +191,8 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
                 quantity_available: requiredDecimal(batch.quantity_available, 'quantity_available', row, quantityOptions),
                 sale_price_per_unit: batch.sale_price_per_unit == null ? null
                     : requiredDecimal(batch.sale_price_per_unit, 'sale_price_per_unit', row, moneyOptions),
+                sale_price_source: batch.sale_price_source,
+                sale_price_date: batch.sale_price_date,
                 mrp_per_unit: requiredDecimal(batch.mrp_per_unit, 'mrp_per_unit', row, moneyOptions),
                 cost_per_unit: requiredDecimal(batch.cost_per_unit, 'cost_per_unit', row, moneyOptions),
                 days_to_expiry: batch.days_to_expiry,
@@ -489,6 +493,7 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
                     <div className="text-right">
                         <span className="text-sm font-medium text-blue-700">
                             {batch.sale_price_per_unit === null ? 'Enter rate' : `₹${formatExactDecimal(batch.sale_price_per_unit, 'Batch sale rate', moneyOptions, 2)}`}
+                            {batch.sale_price_source === 'last_imported_sale' && <span className="block text-xs text-gray-500">Last imported sale {batch.sale_price_date}</span>}
                         </span>
                     </div>
 
@@ -554,6 +559,7 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
                             <dt className="text-[11px] font-medium uppercase tracking-wide text-gray-500">Rate</dt>
                             <dd className="mt-0.5 text-sm font-medium text-gray-900">
                                 {batch.sale_price_per_unit === null ? 'Enter rate' : `₹${formatExactDecimal(batch.sale_price_per_unit, 'Batch sale rate', moneyOptions, 2)}`}
+                                {batch.sale_price_source === 'last_imported_sale' && <span className="block text-xs text-gray-500">Last imported sale {batch.sale_price_date}</span>}
                             </dd>
                         </div>
                         <div>

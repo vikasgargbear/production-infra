@@ -161,6 +161,9 @@ class StockBatchMatch(StrictDTO):
     manufactured_on: Optional[date]
     expires_on: Optional[date]
     mrp: Decimal
+    sale_price_per_unit: Optional[Decimal] = None
+    sale_price_source: Optional[str] = None
+    sale_price_date: Optional[date] = None
     mrp_uom_conversion_id: UUID
     mrp_marketed_uom_code: str
     mrp_base_uom_code: str
@@ -446,6 +449,8 @@ def canonical_stock_batch_search(
             SELECT balance.product_id, batch.id AS batch_id, batch.batch_number,
                    batch.lot_kind, batch.status AS batch_status,
                    batch.manufactured_on, batch.expires_on, batch.mrp,
+                   selling_rate.sale_price_per_unit,
+                   selling_rate.sale_price_source, selling_rate.sale_price_date,
                    batch.mrp_uom_conversion_id,
                    mrp_conversion.from_uom_code AS mrp_marketed_uom_code,
                    mrp_conversion.to_uom_code AS mrp_base_uom_code,
@@ -516,6 +521,9 @@ def canonical_stock_batch_search(
                        LIMIT 50
                     ) AS conversion
               ) AS conversions ON true
+              LEFT JOIN LATERAL erp_automation_reads.migrated_batch_sale_rate(
+                  batch.org_id, batch.id, balance.branch_id, business_clock.business_date
+              ) selling_rate ON true
              WHERE balance.org_id=:org_id AND balance.branch_id=:branch_id
                AND balance.product_id=:product_id
                AND (:location_id IS NULL OR balance.location_id=CAST(:location_id AS uuid))
