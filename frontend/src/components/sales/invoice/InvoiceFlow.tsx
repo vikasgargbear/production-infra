@@ -2,6 +2,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { toast } from 'react-toastify';
 import { useCompany } from '../../../contexts/CompanyContext';
 import useEscapeKey from '../../../hooks/useEscapeKey';
+import { useDialogFocus } from '../../../hooks/useDialogFocus';
 import { useEnterAsTab } from '../../../hooks/useEnterAsTab';
 import { calculateInvoicePreview } from '../../../services/calculations/invoiceCalculationService';
 import InvoiceItemsStepBase from './steps/InvoiceItemsStep';
@@ -76,6 +77,7 @@ const InvoiceFlow: React.FC<InvoiceFlowProps> = ({ open = true, onClose, prefill
     const [drafts, setDrafts] = useState<Array<InvoiceDraft<SalesInvoiceDraftPayload>>>([]);
     const [draftPickerOpen, setDraftPickerOpen] = useState(false);
     const [exitPromptOpen, setExitPromptOpen] = useState(false);
+    const exitDialogRef = useDialogFocus(exitPromptOpen);
     const [draftsLoading, setDraftsLoading] = useState(false);
     const [draftBusyId, setDraftBusyId] = useState<string | null>(null);
     const deepLinkedDraftRef = useRef<string | null>(null);
@@ -337,7 +339,7 @@ const InvoiceFlow: React.FC<InvoiceFlowProps> = ({ open = true, onClose, prefill
     useEscapeKey(
         useCallback(() => {
             if (exitPromptOpen) {
-                setExitPromptOpen(false);
+                if (!draftBusyId) setExitPromptOpen(false);
             } else if (currentStep === 3) {
                 setCurrentStep(2);
             } else if (currentStep === 2) {
@@ -345,7 +347,7 @@ const InvoiceFlow: React.FC<InvoiceFlowProps> = ({ open = true, onClose, prefill
             } else {
                 requestClose();
             }
-        }, [requestClose, currentStep, exitPromptOpen]),
+        }, [requestClose, currentStep, exitPromptOpen, draftBusyId]),
         !anyModalOpen,
         'InvoiceFlow-Main'
     );
@@ -582,11 +584,11 @@ ${companyInfo.name}`;
 
             {exitPromptOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-                    <div role="dialog" aria-modal="true" aria-labelledby="invoice-exit-title" className="w-full max-w-md rounded-lg bg-white p-6">
+                    <div ref={exitDialogRef} role="dialog" aria-modal="true" aria-labelledby="invoice-exit-title" className="w-full max-w-md rounded-lg bg-white p-6">
                         <h2 id="invoice-exit-title" className="text-lg font-semibold">Save this invoice before leaving?</h2>
                         <p className="my-4">Keep working, or save a draft to continue later. Leaving without saving loses unsaved changes.</p>
                         <div className="flex flex-wrap gap-3">
-                            <button autoFocus type="button" className="min-h-[44px] rounded border px-4" onClick={() => setExitPromptOpen(false)}>Keep editing</button>
+                            <button type="button" disabled={Boolean(draftBusyId)} className="min-h-[44px] rounded border px-4" onClick={() => setExitPromptOpen(false)}>Keep editing</button>
                             <button type="button" disabled={Boolean(draftBusyId)} className="min-h-[44px] rounded bg-blue-600 px-4 text-white" onClick={async () => {
                                 if (await handleSaveDraft()) onClose?.();
                             }}>Save draft and close</button>
