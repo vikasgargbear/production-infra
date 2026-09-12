@@ -1248,6 +1248,7 @@ def test_live18_profile_derives_every_prepare_permission_from_generated_contract
     assert baseline_capabilities == {
         operation: action["approval_policy"]
         for operation, action in actions.items()
+        if operation in published_operations | supported_commands
     }
     assert operations < set(actions)
     assert "finance.expense_claim.prepare" in actions
@@ -1274,6 +1275,7 @@ def test_seeded_boundary_requires_every_typed_operator_capability_bound():
     }
 
     assert len(bounds) == 26
+    assert "inventory.batch_sale_rate.prepare" not in bounds
     assert {
         "finance.adjustment_note.reversal.prepare",
         "finance.customer_cheque_bounce.prepare",

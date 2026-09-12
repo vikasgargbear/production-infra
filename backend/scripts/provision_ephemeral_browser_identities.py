@@ -340,7 +340,9 @@ def _live18_authority() -> tuple[
         "automation.command.view",
     }))
     return (
-        capabilities(set(by_operation)),
+        # Price maintenance has its own approval/lifecycle acceptance; adding it
+        # to the registry must not widen the existing Live18/demo write grant.
+        capabilities(published | supported_variant_commands),
         capabilities(published),
         capabilities(ready),
         capabilities(certification_ready),

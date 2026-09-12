@@ -18,6 +18,7 @@
       "finance.supplier_advance.prepare",
       "finance.supplier_payment.prepare",
       "inventory.adjustment.prepare",
+      "inventory.batch_sale_rate.prepare",
       "inventory.destruction.prepare",
       "inventory.transfer.prepare",
       "procurement.goods_receipt.prepare",
@@ -183,6 +184,16 @@
     }
   ],
   "prepare_actions": [
+    {
+      "tool": "erp_batch_sale_rate_prepare",
+      "operation_key": "inventory.batch_sale_rate.prepare",
+      "resource": "inventory",
+      "permission": "catalog.product.manage",
+      "risk": "consequential_write",
+      "approval_policy": "actor_confirmation",
+      "schema_profile": "reviewed_batch_selling_rates",
+      "description": "Prepare operator-reviewed batch selling rates without changing stock, original import facts, or posted documents. External source evidence is reviewed input, not server-attested file authenticity."
+    },
     {
       "tool": "erp_bank_reconciliation_prepare",
       "operation_key": "finance.bank_reconciliation.prepare",

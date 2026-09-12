@@ -171,6 +171,8 @@ PYTHONPATH=backend \
 PYTHONPATH=backend \
   python backend/tests/postgres/check_migrated_sale_rate_runtime_role.py
 PYTHONPATH=backend \
+  python backend/tests/postgres/check_batch_sale_rate_lifecycle.py
+PYTHONPATH=backend \
   python backend/tests/postgres/check_inventory_adjustment_web_runtime_role.py
 PYTHONPATH=backend \
   python backend/tests/postgres/check_inventory_destruction_web_runtime_role.py

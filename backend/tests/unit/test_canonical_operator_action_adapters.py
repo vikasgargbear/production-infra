@@ -1998,7 +1998,7 @@ def _command_row(command_request_id):
 
 def test_registry_covers_every_contract_action_and_stays_fail_closed():
     prepare_keys = {action.operation_key for action in PREPARE_ACTIONS.values()}
-    assert len(prepare_keys) == 22
+    assert len(prepare_keys) == 23
     assert set(ACTION_ADAPTER_BINDINGS) == set(ACTION_POLICIES)
     assert ACTION_ADAPTER_BINDINGS["sales.order.prepare"].available is True
     assert ACTION_ADAPTER_BINDINGS["sales.dispatch.prepare"].available is True
@@ -2022,6 +2022,7 @@ def test_registry_covers_every_contract_action_and_stays_fail_closed():
     assert ACTION_ADAPTER_BINDINGS["sales.return.reversal.prepare"].available is True
     assert ACTION_ADAPTER_BINDINGS["procurement.purchase_return.reversal.prepare"].available is True
     assert ACTION_ADAPTER_BINDINGS["finance.adjustment_note.reversal.prepare"].available is True
+    assert ACTION_ADAPTER_BINDINGS["inventory.batch_sale_rate.prepare"].available is True
     assert all(
         not ACTION_ADAPTER_BINDINGS[key].available
         for key in prepare_keys
@@ -2048,6 +2049,7 @@ def test_registry_covers_every_contract_action_and_stays_fail_closed():
             "sales.return.reversal.prepare",
             "procurement.purchase_return.reversal.prepare",
             "finance.adjustment_note.reversal.prepare",
+            "inventory.batch_sale_rate.prepare",
         }
     )
     assert all(
@@ -2077,6 +2079,7 @@ def test_registry_covers_every_contract_action_and_stays_fail_closed():
             "sales.return.reversal.prepare",
             "procurement.purchase_return.reversal.prepare",
             "finance.adjustment_note.reversal.prepare",
+            "inventory.batch_sale_rate.prepare",
         }
     )
     assert ACTION_ADAPTER_BINDINGS["sales.order.prepare"].prepare_function == (

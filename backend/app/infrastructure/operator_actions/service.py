@@ -31,6 +31,7 @@ from ...domain.operator_actions.models import (
 )
 from ...domain.operator_actions.service import install_operator_action_service
 from .registry import ACTION_ADAPTER_BINDINGS, ActionAdapterBinding
+from .batch_sale_rate import EXECUTE_BATCH_SALE_RATE_SQL
 from .calculator_database import (
     calculator_database_configured,
     calculator_session_factory,
@@ -662,6 +663,9 @@ class SqlAlchemyOperatorActionService:
                 ActionErrorCode.VALIDATION_FAILED,
                 "Invoice draft binding is valid only for invoice prepare operations",
             )
+        if policy.operation_key == "inventory.batch_sale_rate.prepare":
+            from .batch_sale_rate import prepare_batch_sale_rate
+            return prepare_batch_sale_rate(self, policy, payload, idempotency_key, context)
         if policy.operation_key == "sales.dispatch.prepare":
             return self._prepare_sales_dispatch(
                 policy=policy,
@@ -4556,7 +4560,9 @@ class SqlAlchemyOperatorActionService:
                     )
                 replayed = before["status"] == "succeeded"
                 session.execute(_SET_COMMAND_CONTEXT_SQL, params)
-                if before["operation"] == "finance.expense_claim.post":
+                if before["operation"] == "inventory.batch_sale_rate.record":
+                    session.execute(EXECUTE_BATCH_SALE_RATE_SQL, params)
+                elif before["operation"] == "finance.expense_claim.post":
                     session.execute(EXECUTE_EXPENSE_CLAIM_SQL, params)
                 elif before["operation"] == "compliance.destruction.post":
                     session.execute(EXECUTE_INVENTORY_DESTRUCTION_SQL, params)

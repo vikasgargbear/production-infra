@@ -74,6 +74,7 @@ from .api.routes import (
     canonical_tax_registration_setup,
     canonical_invoice_drafts,
     canonical_historical_migration,
+    canonical_batch_sale_rates,
 )
 from .api.routes import web_operator_actions
 from .api.routes.internal import (
@@ -382,6 +383,7 @@ api.include_router(canonical_drug_licenses.router)
 api.include_router(canonical_tax_registration_setup.router)
 api.include_router(canonical_invoice_drafts.router)
 api.include_router(canonical_historical_migration.router)
+api.include_router(canonical_batch_sale_rates.router)
 
 # --- Master Data ---
 # Canonical product/customer/supplier/address mutations and every supported
