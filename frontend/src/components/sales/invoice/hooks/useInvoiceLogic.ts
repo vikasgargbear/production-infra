@@ -358,7 +358,8 @@ export const useInvoiceLogic = (
     // Recalculate totals when items or discounts change
     useEffect(() => {
         const calculationErrorMessage = 'Unable to calculate invoice totals. Please review the entries and try again.';
-        if (!invoice.items?.length || !invoice.customer_details?.customer_id) {
+        if (!invoice.items?.length || !invoice.customer_details?.customer_id
+            || invoice.items.some(item => item.unit_price === '')) {
             // Item selection is allowed before customer selection. That is an
             // incomplete form, not a failed calculation; never submit it.
             setError(previous => previous === calculationErrorMessage ? null : previous);

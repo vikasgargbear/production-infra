@@ -149,6 +149,11 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
         rawValue: string,
     ): void => {
         const errorKey = `${index}-${field}`;
+        if (compactBilling && field === 'unit_price' && rawValue === '') {
+            setMobileCommercialErrors(previous => ({ ...previous, [errorKey]: '' }));
+            onUpdateItem?.(index, field, '');
+            return;
+        }
         const significantFraction = (rawValue.split('.')[1] || '').replace(/0+$/, '');
         const upperBoundValid = field !== 'discount_percent' || Number(rawValue) <= 100;
         const valid = /^(?:\d+|\d*\.\d*)$/.test(rawValue)
@@ -417,7 +422,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
 
                         <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 pt-3 text-sm">
                             <span className="text-gray-500">MRP {formatCurrency(item.mrp || 0)}</span>
-                            <span className="font-semibold text-gray-900">Line total {formatCurrency(calculateItemTotal(item))}</span>
+                            <span className="font-semibold text-gray-900">Line total {item.unit_price === '' ? '—' : formatCurrency(calculateItemTotal(item))}</span>
                         </div>
                     </article>
                 ))}
@@ -507,7 +512,9 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                                 <td className="px-3 py-2 text-right">
                                     <EditableCell
                                         ref={(el) => setFieldRef(index, 'unit_price', el)}
-                                        value={item.unit_price || 0}
+                                        value={item.unit_price ?? ''}
+                                        allowEmpty={compactBilling}
+                                        placeholder="Rate"
                                         type="number"
                                         min={0}
                                         decimalPlaces={2}
@@ -577,7 +584,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                                     </span>
                                 </td>
                                 <td className="px-3 py-2 text-right">
-                                    <div className="text-sm font-semibold text-gray-900">{formatCurrency(calculateItemTotal(item))}</div>
+                                    <div className="text-sm font-semibold text-gray-900">{item.unit_price === '' ? '—' : formatCurrency(calculateItemTotal(item))}</div>
                                 </td>
                                 {!readOnly && (
                                     <td className="px-3 py-2 text-center">

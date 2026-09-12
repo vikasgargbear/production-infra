@@ -146,9 +146,10 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
             return productMatches && batchMatches;
         });
         if (rowIndex < 0) return;
+        const focusField = invoice.items[rowIndex].unit_price === '' ? 'unit_price' : 'quantity';
         pendingItemFocus.current = null;
         window.setTimeout(() => {
-            (itemsTableRef.current as any)?.focusField?.(rowIndex, 'quantity');
+            (itemsTableRef.current as any)?.focusField?.(rowIndex, focusField);
         }, 0);
     }, [invoice.items, itemsTableRef]);
 
@@ -321,12 +322,19 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                                 onAddItem={handleQuickAddItem}
                                 onCreateProduct={() => setShowProductModal(true)}
                                 enforceFefo
+                                draftRates={invoice.items}
+                                editMissingRateInRow
                                 ref={productSearchRef}
                                 tabIndex={5}
                             />
                         </div>
 
                         {/* Invoice Items */}
+                        {invoice.items?.some(item => item.unit_price === '') && (
+                            <p role="status" className="mb-3 text-sm text-amber-800">
+                                Enter a sale rate in the highlighted item row to calculate totals.
+                            </p>
+                        )}
                         {invoice.items && invoice.items.length > 0 && (
                             <div className="mb-6">
                                 <h3 className="text-sm font-semibold text-blue-700 uppercase tracking-wider mb-3 flex items-center">
@@ -367,7 +375,8 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                 {/* Footer */}
                 <InvoiceItemsFooter
                     totalItems={invoice.items?.length ?? 0}
-                    totalAmount={invoice.final_amount || invoice.totals?.final_amount}
+                    totalAmount={invoice.items?.some(item => item.unit_price === '')
+                        ? undefined : invoice.final_amount || invoice.totals?.final_amount}
                     onReset={onReset}
                     onContinue={onContinue}
                     continueDisabled={continueDisabled}

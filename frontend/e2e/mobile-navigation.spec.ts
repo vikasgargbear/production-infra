@@ -13,6 +13,13 @@ test.describe('invoice row presentation (non-posting fixture)', () => {
         expect((await row.boundingBox())!.height).toBeLessThanOrEqual(64);
         await expect(page.getByRole('cell', {name: '₹220.00', exact: true})).toBeVisible();
         await expect(page.getByRole('textbox', {name: 'AASO TONE SYP 200ML rate', exact: true})).toHaveValue('180.00');
+        const rate = page.getByRole('textbox', {name: 'AASO TONE SYP 200ML rate', exact: true});
+        await rate.fill('');
+        await rate.press('Tab');
+        await expect(rate).toHaveValue('');
+        await rate.fill('22.50');
+        await rate.press('Enter');
+        await expect(rate).toHaveValue('22.50');
         const free = page.getByRole('textbox', {name: 'AASO TONE SYP 200ML free quantity', exact: true});
         await free.fill('3');
         await free.press('Enter');

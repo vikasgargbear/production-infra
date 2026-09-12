@@ -51,7 +51,7 @@ const roundToVisiblePrecision = (
  */
 export const normalizeDirectInvoiceCommercialInputs = (item: InvoiceItem): InvoiceItem => ({
     ...item,
-    unit_price: roundToVisiblePrecision(item.unit_price, 'Selected invoice unit rate', 4, 2),
+    unit_price: item.unit_price === '' ? '' : roundToVisiblePrecision(item.unit_price, 'Selected invoice unit rate', 4, 2),
     discount_percent: roundToVisiblePrecision(
         item.discount_percent ?? '0',
         'Selected invoice discount percent',
@@ -67,7 +67,9 @@ export const prepareSelectedProductForInvoice = (
     if (typeof product.quantity !== 'string' || typeof product.free_quantity !== 'string') {
         throw new Error('Selected product billed and free quantities must remain exact decimal strings.');
     }
-    return normalizeDirectInvoiceCommercialInputs(prepareItemForInvoice(product));
+    return normalizeDirectInvoiceCommercialInputs(prepareItemForTransaction<InvoiceItem>(
+        product, undefined, { allowIncompleteRate: true },
+    ));
 };
 
 /** Canonical imports must carry both quantities explicitly; no UI defaults apply. */
