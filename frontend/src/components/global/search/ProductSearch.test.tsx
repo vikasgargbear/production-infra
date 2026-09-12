@@ -3,6 +3,7 @@ import '@testing-library/jest-dom';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import ProductSearch from './ProductSearch';
 import { productsApi } from '../../../services/api';
+import { EscapeKeyProvider, useEscapeHandler } from '../../../contexts/EscapeKeyContext';
 
 jest.mock('../../../services/api', () => ({
     productsApi: { search: jest.fn() },
@@ -41,6 +42,41 @@ const row = (name: string) => ({
 });
 
 describe('ProductSearch canonical request lifecycle', () => {
+    it('puts stocked matches first while retaining relevance and zero-stock matches', async () => {
+        (productsApi.search as jest.Mock).mockResolvedValue({ data: [
+            { ...row('Zero first'), current_stock: '0.000000' },
+            { ...row('Stock first'), current_stock: '0.000001' },
+            { ...row('Stock second'), current_stock: '9.000000' },
+            { ...row('Zero second'), current_stock: '0.000000' },
+        ] });
+        render(<ProductSearch onAddItem={jest.fn()} />);
+        fireEvent.change(screen.getByPlaceholderText(/Search products/i), { target: { value: 'so' } });
+        await act(async () => { jest.advanceTimersByTime(275); });
+        const choices = screen.getAllByRole('option');
+        expect(choices.map(button => button.querySelector('.font-semibold')?.textContent)).toEqual([
+            'Stock first', 'Stock second', 'Zero first', 'Zero second',
+        ]);
+    });
+
+    it('Escape closes search before the global invoice handler', async () => {
+        const closeInvoice = jest.fn();
+        const Invoice = () => {
+            useEscapeHandler(closeInvoice, 'invoice');
+            return <ProductSearch onAddItem={jest.fn()} />;
+        };
+        (productsApi.search as jest.Mock).mockResolvedValue({ data: [row('Stocked')] });
+        render(<EscapeKeyProvider><Invoice /></EscapeKeyProvider>);
+        const input = screen.getByPlaceholderText(/Search products/i);
+        fireEvent.change(input, { target: { value: 'so' } });
+        await act(async () => { jest.advanceTimersByTime(275); });
+        fireEvent.keyDown(input, { key: 'Escape' });
+        expect(closeInvoice).not.toHaveBeenCalled();
+        expect(screen.queryByText('Stocked')).not.toBeInTheDocument();
+        expect(input).toHaveValue('so');
+        fireEvent.keyDown(input, { key: 'Escape' });
+        expect(closeInvoice).toHaveBeenCalledTimes(1);
+    });
+
     beforeEach(() => {
         jest.useFakeTimers();
         jest.clearAllMocks();
