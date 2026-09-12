@@ -1587,7 +1587,7 @@ def product_batches(
         SELECT batch.id AS batch_id, batch.product_id, product.name AS product_name,
                batch.batch_number, batch.manufactured_on AS manufacturing_date,
                batch.expires_on AS expiry_date, batch.mrp::text AS mrp_per_unit,
-               batch.mrp::text AS sale_price_per_unit,
+               NULL::text AS sale_price_per_unit,
                conversion.id AS uom_conversion_id,
                balance.location_id, balance.branch_id,
                location.name AS location_name, branch.name AS branch_name,

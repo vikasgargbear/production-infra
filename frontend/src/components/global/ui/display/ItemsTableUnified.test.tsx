@@ -3,6 +3,20 @@ import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import ItemsTable from './ItemsTableUnified';
 
+test('compact billing separates batch and MRP without a normal bonus-unit dropdown', () => {
+  render(<ItemsTable compactBilling showFreeSupplyTaxTreatment items={[{
+    product_name: 'Medicine', batch_number: 'LOT-A', expiry_date: '2028-12-01',
+    quantity: '1', free_quantity: '2', free_supply_tax_treatment: 'excluded_from_taxable_value',
+    mrp: 220, unit_price: '180.00', gst_percent: '5', line_total: '189.00',
+  }]} />);
+  for (const name of ['Product', 'Pack', 'Batch', 'Expiry', 'MRP', 'Sale rate', 'Free']) {
+    expect(screen.getByRole('columnheader', {name, exact: true})).toBeTruthy();
+  }
+  expect(screen.queryByLabelText('Medicine free units billing')).toBeNull();
+  expect(screen.getByRole('cell', {name: 'LOT-A', exact: true})).toBeTruthy();
+  expect(screen.getByRole('cell', {name: '₹220.00', exact: true})).toBeTruthy();
+});
+
 test('mobile item card exposes every editable value without horizontal scrolling', () => {
   const onUpdateItem = jest.fn();
 

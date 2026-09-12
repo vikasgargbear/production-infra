@@ -423,6 +423,7 @@ ${companyInfo.name}`;
     }, [selectedCustomer, invoice, isOnline, setError, setInvoice]);
 
     const handleContinueFromStep2 = useCallback(async () => {
+        setError(null);
         const validationError = invoicePreviewValidationError(
             companyInfo as any,
             invoice,
@@ -444,6 +445,7 @@ ${companyInfo.name}`;
             ));
             setCurrentStep(3);
         } catch (calcError) {
+            setError('Calculation error. Please try again.');
             toast.error('Calculation error. Please try again.');
         }
     }, [companyInfo, invoice, isOnline, selectedCustomer, setError, setInvoice]);
@@ -511,6 +513,7 @@ ${companyInfo.name}`;
             {/* Step 2: Invoice Details */}
             {currentStep === 2 && (
                 <InvoiceDetailsStep
+                    error={error}
                     invoice={invoice as any}
                     setInvoice={setInvoice as any}
                     selectedCustomer={selectedCustomer as any}

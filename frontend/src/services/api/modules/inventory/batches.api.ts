@@ -18,7 +18,7 @@ export interface CanonicalProductBatch {
     manufacturing_date: string | null;
     expiry_date: string;
     mrp_per_unit: string;
-    sale_price_per_unit: string;
+    sale_price_per_unit: string | null;
     uom_conversion_id: string | null;
     location_id: string;
     branch_id: string;

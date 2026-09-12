@@ -162,9 +162,9 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
         handleUpdateItem(
             index,
             'free_supply_tax_treatment',
-            freeSupplyTreatmentAfterQuantityEdit(value),
+            freeSupplyTreatmentAfterQuantityEdit(value, invoice.items?.[index]?.free_supply_tax_treatment),
         );
-    }, [handleUpdateItem]);
+    }, [handleUpdateItem, invoice.items]);
 
     return (
         <div className="h-full bg-gray-50">
@@ -216,7 +216,7 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
 
                 {/* Content - Consistent max-width like Purchase */}
                 <div className="flex-1 overflow-y-auto bg-gray-50">
-                    <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6 sm:py-6">
+                    <div className="mx-auto w-full px-4 py-5 sm:px-6 sm:py-6">
 
                         <p className="mb-6 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
                             Required: select a customer, exact saved delivery address, product batch, billed and free quantities, free-supply tax treatment when free quantity is positive, and direct-issue distance.
@@ -348,6 +348,7 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                                     currencySymbol="₹"
                                     preserveExactDecimals
                                     showFreeSupplyTaxTreatment
+                                    compactBilling
                                     quantityDecimalPlaces={2}
                                 />
                                 {batchAllocationError && (

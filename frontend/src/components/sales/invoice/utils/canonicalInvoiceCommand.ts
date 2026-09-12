@@ -154,14 +154,18 @@ const reviewedFreeSupplyTaxTreatment = (
 
 export const freeSupplyTreatmentAfterQuantityEdit = (
     value: unknown,
+    existingTreatment?: FreeSupplyTaxTreatment,
 ): FreeSupplyTaxTreatment | undefined => {
     try {
-        return exactDecimalUnits(value, 'Invoice free quantity', {
+        const units = exactDecimalUnits(value, 'Invoice free quantity', {
             scale: 6,
             maximumWholeDigits: 14,
-        }) === 0n
-            ? 'excluded_from_taxable_value'
-            : undefined;
+        });
+        if (units < 0n) return undefined;
+        // Editing the ordinary Free field explicitly means no-charge bonus
+        // units. Preserve exceptional treatment on previously reviewed imports.
+        return units > 0n && existingTreatment === 'included_at_unit_rate'
+            ? existingTreatment : 'excluded_from_taxable_value';
     } catch {
         return undefined;
     }

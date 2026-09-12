@@ -61,6 +61,7 @@ export interface ItemsTableProps {
     className?: string;
     preserveExactDecimals?: boolean;
     showFreeSupplyTaxTreatment?: boolean;
+    compactBilling?: boolean;
     quantityDecimalPlaces?: number;
 }
 
@@ -96,6 +97,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
     className = '',
     preserveExactDecimals = false,
     showFreeSupplyTaxTreatment = false,
+    compactBilling = false,
     quantityDecimalPlaces = QUANTITY_DECIMAL_PLACES,
 }, ref) => {
 
@@ -203,7 +205,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
             case 'next':
                 if (currentFieldIndex < EDITABLE_FIELDS.length - 1) {
                     focusField(currentRow, EDITABLE_FIELDS[currentFieldIndex + 1]);
-                } else if (showFreeSupplyTaxTreatment) {
+                } else if (showFreeSupplyTaxTreatment && !compactBilling) {
                     const freeValue = fieldRefs.current[`${currentRow}-free`]?.getValue?.() ?? '0';
                     try {
                         if (exactDecimalUnits(
@@ -300,7 +302,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
     ) => {
         const productName = item.product_name || item.name || `Item ${index + 1}`;
         const positiveFreeQuantity = hasPositiveFreeQuantity(item);
-        if (!positiveFreeQuantity) return null;
+        if (!positiveFreeQuantity || (compactBilling && item.free_supply_tax_treatment === 'excluded_from_taxable_value')) return null;
         return (
             <label className="block text-xs font-medium text-gray-600">
                 <span className={surface === 'mobile' ? 'mb-1 block' : 'sr-only'}>
@@ -422,19 +424,25 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
             </div>
 
             <div className="hidden overflow-x-auto rounded-lg border border-gray-200 bg-white xl:block">
-            <table className="min-w-[1080px] w-full border-collapse">
+            <table className={`${compactBilling ? 'min-w-[1320px]' : 'min-w-[1080px]'} w-full border-collapse tabular-nums`}>
                 <thead>
                     <tr className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b-2 border-blue-200">
                         <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">#</th>
-                        <th className="min-w-72 px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Product / batch</th>
+                        <th className="min-w-72 px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">{compactBilling ? 'Product' : 'Product / batch'}</th>
+                        {compactBilling && <>
+                            <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700">Pack</th>
+                            <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700">Batch</th>
+                            <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700">Expiry</th>
+                            <th className="px-3 py-3 text-right text-xs font-semibold text-gray-700">MRP</th>
+                        </>}
                         <th className="px-3 py-3 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">
                             Qty
                             <div className="text-[10px] font-normal text-gray-500">Enter/Tab →</div>
                         </th>
-                        <th className="px-3 py-3 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">Rate</th>
+                        <th className="px-3 py-3 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">Sale rate</th>
                         <th className="px-3 py-3 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">Discount %</th>
                         <th className="px-3 py-3 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                            {showFreeSupplyTaxTreatment ? 'Free qty / billing' : 'Free qty'}
+                            {compactBilling ? 'Free' : showFreeSupplyTaxTreatment ? 'Free qty / billing' : 'Free qty'}
                         </th>
                         <th className="px-3 py-3 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">GST %</th>
                         <th className="px-3 py-3 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">Line total</th>
@@ -446,7 +454,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                 <tbody>
                     {items.length === 0 ? (
                         <tr>
-                            <td colSpan={readOnly ? 8 : 9} className="px-3 py-8 text-center text-gray-500">
+                            <td colSpan={(readOnly ? 8 : 9) + (compactBilling ? 4 : 0)} className="px-3 py-8 text-center text-gray-500">
                                 <div className="flex flex-col items-center">
                                     <p className="text-sm">No items added yet</p>
                                     <p className="text-xs text-gray-400 mt-1">Search and select products to add</p>
@@ -461,14 +469,22 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                             >
                                 <td className="px-3 py-2 text-sm text-gray-600">{index + 1}</td>
                                 <td className="min-w-72 px-3 py-2">
-                                    <div className="text-sm font-medium leading-5 text-gray-900">{item.product_name || item.name}</div>
+                                    <div className={`text-sm font-medium leading-5 text-gray-900 ${compactBilling ? 'max-w-sm truncate' : ''}`} title={item.product_name || item.name}>{item.product_name || item.name}</div>
+                                    {!compactBilling && <>
                                     <div className="mt-1 break-words text-xs text-gray-500">Batch: {item.batch_display || item.batch_number || 'No batch'}</div>
                                     <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-500">
                                         <span>Pack {item.packages_per_box || 1}×{item.units_per_pack || 1}</span>
                                         <span>Expiry {item.expiry_date ? new Date(item.expiry_date).toLocaleDateString('en-IN', { month: 'short', year: '2-digit' }) : '—'}</span>
                                         <span>MRP {formatCurrency(item.mrp || 0)}</span>
                                     </div>
+                                    </>}
                                 </td>
+                                {compactBilling && <>
+                                    <td className="whitespace-nowrap px-3 py-2 text-sm">{item.packages_per_box || 1}×{item.units_per_pack || 1}</td>
+                                    <td className="whitespace-nowrap px-3 py-2 text-sm" title={item.batch_display || item.batch_number}>{item.batch_display || item.batch_number || '—'}</td>
+                                    <td className="whitespace-nowrap px-3 py-2 text-sm">{item.expiry_date ? new Date(item.expiry_date).toLocaleDateString('en-IN', { month: '2-digit', year: '2-digit' }) : '—'}</td>
+                                    <td className="whitespace-nowrap px-3 py-2 text-right text-sm">{formatCurrency(item.mrp || 0)}</td>
+                                </>}
                                 <td className="px-3 py-2 text-right">
                                     <EditableCell
                                         ref={(el) => setFieldRef(index, 'quantity', el)}
