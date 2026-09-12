@@ -36,6 +36,19 @@ const withExpiry = (status: string, suffix: string, expiryDate: string, batchNum
 });
 
 describe('BatchSelector lifecycle and mobile presentation', () => {
+    it('prefills a source-labelled imported sale rate, not batch cost or MRP', async () => {
+        const batch = {...canonicalBatch('released', '20'), sale_price_per_unit: '29.0000',
+            sale_price_source: 'last_imported_sale', sale_price_date: '2026-07-23'};
+        (batchesApi.getByProduct as jest.Mock).mockResolvedValue({data: {batches: [batch]}});
+        const onBatchSelect = jest.fn();
+        render(<BatchSelector show product={{product_id: batch.product_id, product_name: 'Demo Product'} as any}
+            editMissingRateInRow onBatchSelect={onBatchSelect} onClose={jest.fn()} />);
+        const choice = await screen.findByRole('option', {name: /Select batch DEMO-RELEASED/i});
+        expect(within(choice).getAllByText('Last imported sale 2026-07-23').length).toBeGreaterThan(0);
+        fireEvent.click(choice);
+        expect(onBatchSelect).toHaveBeenCalledWith(expect.objectContaining({unit_price: '29.0000', mrp: '120.0000'}));
+        expect(screen.queryByLabelText('Sale rate')).toBeNull();
+    });
     it('Escape closes only the batch selector, not the invoice behind it', async () => {
         const closeInvoice = jest.fn();
         const closeBatch = jest.fn();

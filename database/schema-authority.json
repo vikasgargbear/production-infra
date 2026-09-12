@@ -204,6 +204,8 @@
     "backend/alembic/sql/20260901_0076_invoice_draft_list_title_type.sql",
     "backend/alembic/versions/20260907_0077_scoped_product_tax.py",
     "backend/alembic/sql/20260907_0077_scoped_product_tax.sql",
+    "backend/alembic/versions/20260913_0078_migrated_sale_rate.py",
+    "backend/alembic/sql/20260913_0078_migrated_sale_rate.sql",
     "backend/scripts/generate_scoped_product_tax_migration.py",
     "database/canonical/operations/tax/product_tax_authority.sql",
     "database/canonical/operations/automation/historical_product_inventory_cutover.sql",

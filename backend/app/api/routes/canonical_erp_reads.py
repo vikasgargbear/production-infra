@@ -1587,7 +1587,8 @@ def product_batches(
         SELECT batch.id AS batch_id, batch.product_id, product.name AS product_name,
                batch.batch_number, batch.manufactured_on AS manufacturing_date,
                batch.expires_on AS expiry_date, batch.mrp::text AS mrp_per_unit,
-               NULL::text AS sale_price_per_unit,
+               selling_rate.sale_price_per_unit,
+               selling_rate.sale_price_source, selling_rate.sale_price_date,
                conversion.id AS uom_conversion_id,
                balance.location_id, balance.branch_id,
                location.name AS location_name, branch.name AS branch_name,
@@ -1644,6 +1645,9 @@ def product_batches(
                   product.org_id,product.id,business_clock.business_date
                 )
           ) tax_version ON true
+          LEFT JOIN LATERAL erp_automation_reads.migrated_batch_sale_rate(
+              batch.org_id, batch.id, balance.branch_id, business_clock.business_date
+          ) selling_rate ON true
          WHERE batch.org_id=:org_id AND batch.product_id=:product_id
            AND batch.status IN ('released','blocked')
          ORDER BY batch.expires_on NULLS LAST, batch.batch_number, location.name
