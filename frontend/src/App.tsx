@@ -33,6 +33,7 @@ import { useHashRouter } from './hooks/useHashRouter';
 const MobileNavigationSmokePage = lazy(() => import('./e2e/MobileNavigationSmokePage'));
 const CanonicalReadSurfacesSmokePage = lazy(() => import('./e2e/CanonicalReadSurfacesSmokePage'));
 const CustomerReceiptOperatorSmokePage = lazy(() => import('./e2e/CustomerReceiptOperatorSmokePage'));
+const InvoiceRowSmokePage = lazy(() => import('./e2e/InvoiceRowSmokePage'));
 const DrugLicenseSetupSmokePage = lazy(() => import('./e2e/DrugLicenseSetupSmokePage'));
 const MigrationSetupSmokePage = lazy(() => import('./e2e/MigrationSetupSmokePage'));
 
@@ -258,6 +259,9 @@ const AppContent = (): JSX.Element => {
 
 const App = (): JSX.Element => {
   if (process.env.REACT_APP_ENABLE_E2E_HARNESS === 'true') {
+    if (window.location.pathname === '/e2e/invoice-row') {
+      return <Suspense fallback={<LoadingSpinner />}><InvoiceRowSmokePage /></Suspense>;
+    }
     if (window.location.pathname === '/e2e/mobile-navigation') {
       return (
         <AuthProvider>

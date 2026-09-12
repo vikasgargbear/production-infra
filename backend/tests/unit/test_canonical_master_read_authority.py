@@ -91,7 +91,7 @@ def test_product_batch_reads_serialize_exact_decimals_as_strings() -> None:
         assert exact_projection in aggregate_source
     for exact_projection in (
         "batch.mrp::text AS mrp_per_unit",
-        "batch.mrp::text AS sale_price_per_unit",
+        "NULL::text AS sale_price_per_unit",
         "balance.average_unit_cost::text AS cost_per_unit",
         "balance.on_hand_quantity::text AS quantity_available",
         "END)::text AS gst_percent",

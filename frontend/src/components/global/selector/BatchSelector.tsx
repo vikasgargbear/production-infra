@@ -63,7 +63,7 @@ interface Batch {
     expiry_date: string;
     manufacturing_date: string;
     quantity_available: string;
-    sale_price_per_unit: string;
+    sale_price_per_unit: string | null;
     mrp_per_unit: string;
     cost_per_unit: string;
     days_to_expiry: number | null;
@@ -150,6 +150,8 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
     const [batches, setBatches] = useState<Batch[]>([]);
     const [loading, setLoading] = useState<boolean>(false);
     const [selectedBatch, setSelectedBatch] = useState<Batch | null>(null);
+    const [rateBatch, setRateBatch] = useState<Batch | null>(null);
+    const [enteredRate, setEnteredRate] = useState('');
     const [error, setError] = useState<string | null>(null);
     const [focusedIndex, setFocusedIndex] = useState<number>(-1);
     const hasLoadedRef = useRef<number | string | false>(false);
@@ -181,7 +183,8 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
                 expiry_date: typeof batch.expiry_date === 'string' ? batch.expiry_date : '',
                 manufacturing_date: typeof batch.manufacturing_date === 'string' ? batch.manufacturing_date : '',
                 quantity_available: requiredDecimal(batch.quantity_available, 'quantity_available', row, quantityOptions),
-                sale_price_per_unit: requiredDecimal(batch.sale_price_per_unit, 'sale_price_per_unit', row, moneyOptions),
+                sale_price_per_unit: batch.sale_price_per_unit == null ? null
+                    : requiredDecimal(batch.sale_price_per_unit, 'sale_price_per_unit', row, moneyOptions),
                 mrp_per_unit: requiredDecimal(batch.mrp_per_unit, 'mrp_per_unit', row, moneyOptions),
                 cost_per_unit: requiredDecimal(batch.cost_per_unit, 'cost_per_unit', row, moneyOptions),
                 days_to_expiry: batch.days_to_expiry,
@@ -296,6 +299,8 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
         if (!show && mode === 'modal') {
             hasLoadedRef.current = false;
             setSelectedBatch(null);
+            setRateBatch(null);
+            setEnteredRate('');
             setBatches([]);
             setError(null);
             setFocusedIndex(-1);
@@ -309,7 +314,7 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
         }
     }, [loadBatches, mode, product]);
 
-    const handleBatchSelect = (batch: Batch): void => {
+    const handleBatchSelect = (batch: Batch, reviewedRate?: string): void => {
         if (!product) return;
         const disabledReason = batchSelectionDisabledReason(batch, batches, enforceFefo);
         if (disabledReason) {
@@ -317,6 +322,12 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
             return;
         }
         setSelectedBatch(batch);
+        const saleRate = reviewedRate ?? batch.sale_price_per_unit;
+        if (saleRate === null) {
+            setRateBatch(batch);
+            setEnteredRate('');
+            return;
+        }
 
         // The selected canonical batch owns stock and price.  Product-level
         // price aliases are deliberately overwritten, never used as fallback.
@@ -341,18 +352,20 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
         const productWithBatch: ProductWithBatch = {
             ...product,
             ...batch,
+            sale_price_per_unit: saleRate,
             available_quantity: batch.quantity_available,
             quantity_available: batch.quantity_available,
             quantity: '1.000000',
             free_quantity: '0.000000',
-            unit_price: batch.sale_price_per_unit,
-            sale_price: batch.sale_price_per_unit,
+            unit_price: saleRate,
+            sale_price: saleRate,
             mrp: batch.mrp_per_unit,
             manufacturing_date: batch.manufacturing_date,
             allocation_batches: allocationBatches,
         };
 
         onBatchSelect(productWithBatch);
+        setRateBatch(null);
         if (mode === 'modal') {
             onClose();
         }
@@ -469,7 +482,7 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
 
                     <div className="text-right">
                         <span className="text-sm font-medium text-blue-700">
-                            ₹{formatExactDecimal(batch.sale_price_per_unit, 'Batch sale rate', moneyOptions, 2)}
+                            {batch.sale_price_per_unit === null ? 'Enter rate' : `₹${formatExactDecimal(batch.sale_price_per_unit, 'Batch sale rate', moneyOptions, 2)}`}
                         </span>
                     </div>
 
@@ -534,7 +547,7 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
                         <div>
                             <dt className="text-[11px] font-medium uppercase tracking-wide text-gray-500">Rate</dt>
                             <dd className="mt-0.5 text-sm font-medium text-gray-900">
-                                ₹{formatExactDecimal(batch.sale_price_per_unit, 'Batch sale rate', moneyOptions, 2)}
+                                {batch.sale_price_per_unit === null ? 'Enter rate' : `₹${formatExactDecimal(batch.sale_price_per_unit, 'Batch sale rate', moneyOptions, 2)}`}
                             </dd>
                         </div>
                         <div>
@@ -579,7 +592,24 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
 
     const renderContent = (): ReactNode => (
         <>
-            {loading ? (
+            {rateBatch ? (
+                <form className="space-y-3 p-4" onKeyDown={event => event.stopPropagation()}
+                    onSubmit={event => {
+                        event.preventDefault();
+                        if (!/^\d+(\.\d{1,2})?$/.test(enteredRate)) return;
+                        handleBatchSelect(rateBatch, enteredRate);
+                    }}>
+                    <p className="text-sm">No saved selling price for {rateBatch.batch_number}. MRP is not a selling price.</p>
+                    <label className="block text-sm">Sale rate
+                        <input autoFocus aria-label="Sale rate" inputMode="decimal" required
+                            pattern="[0-9]+([.][0-9]{1,2})?" value={enteredRate}
+                            onChange={event => setEnteredRate(event.target.value)}
+                            className="mt-1 block min-h-11 w-full rounded border border-gray-300 px-3 text-right text-base" />
+                    </label>
+                    <button type="submit" className="min-h-11 rounded bg-blue-600 px-4 text-white">Use rate and add</button>
+                    <button type="button" className="ml-3 min-h-11 px-4" onClick={() => setRateBatch(null)}>Back to batches</button>
+                </form>
+            ) : loading ? (
                 <div className="flex flex-col items-center justify-center py-20">
                     <div className="relative">
                         <div className="w-16 h-16 border-4 border-gray-200 rounded-full"></div>

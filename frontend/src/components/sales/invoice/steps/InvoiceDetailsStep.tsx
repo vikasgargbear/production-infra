@@ -12,6 +12,7 @@ import type { CanonicalDocumentPolicy } from '../../../../services/api/modules/o
 import { Customer, Invoice } from '../types/invoiceTypes';
 
 interface InvoiceDetailsStepProps {
+    error?: string | null;
     invoice: Invoice;
     setInvoice: React.Dispatch<React.SetStateAction<Invoice>>;
     selectedCustomer: Customer | null;
@@ -30,6 +31,7 @@ interface InvoiceDetailsStepProps {
 }
 
 const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
+    error,
     invoice,
     setInvoice,
     selectedCustomer,
@@ -93,6 +95,7 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                 />
 
                 {/* Content */}
+                {error && <div role="alert" className="border-b border-red-200 bg-red-50 px-4 py-3 text-red-700">{error}</div>}
                 <div className="flex-1 overflow-y-auto bg-gray-50">
                     <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6 sm:py-6">
 

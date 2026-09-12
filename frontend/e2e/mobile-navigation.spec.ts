@@ -1,5 +1,28 @@
 import { expect, test } from '@playwright/test';
 
+test.describe('invoice row presentation (non-posting fixture)', () => {
+  for (const width of [360, 412, 1440, 1920]) {
+    test(`compact invoice at ${width}px`, async ({page}) => {
+      await page.setViewportSize({width, height: 900});
+      await page.goto('/e2e/invoice-row');
+      await expect(page.getByRole('heading', {name: 'Invoice row layout test'})).toBeVisible();
+      await expect(page.getByRole('combobox')).toHaveCount(0);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+      if (width >= 1280) {
+        const row = page.getByRole('row').nth(1);
+        expect((await row.boundingBox())!.height).toBeLessThanOrEqual(64);
+        await expect(page.getByRole('cell', {name: '₹220.00', exact: true})).toBeVisible();
+        await expect(page.getByRole('textbox', {name: 'AASO TONE SYP 200ML rate', exact: true})).toHaveValue('180.00');
+        const free = page.getByRole('textbox', {name: 'AASO TONE SYP 200ML free quantity', exact: true});
+        await free.fill('3');
+        await free.press('Enter');
+        await expect(page.getByRole('combobox')).toHaveCount(0);
+      }
+      await page.screenshot({path: `test-results/artifacts/invoice-row-${width}.png`, fullPage: true});
+    });
+  }
+});
+
 test.describe('mobile ERP navigation', () => {
   test.beforeEach(async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });

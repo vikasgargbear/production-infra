@@ -35,6 +35,21 @@ const withExpiry = (status: string, suffix: string, expiryDate: string, batchNum
 });
 
 describe('BatchSelector lifecycle and mobile presentation', () => {
+    it('requires an entered selling rate when the batch has only MRP', async () => {
+        (batchesApi.getByProduct as jest.Mock).mockResolvedValue({data: {batches: [
+            {...canonicalBatch('released', '20'), sale_price_per_unit: null},
+        ]}});
+        const onBatchSelect = jest.fn();
+        render(<BatchSelector show product={{product_id: 'd3000000-0000-7000-8000-000000000015', product_name: 'Demo Product'} as any}
+            onBatchSelect={onBatchSelect} onClose={jest.fn()} />);
+        fireEvent.click(await screen.findByRole('option', {name: /Select batch DEMO-RELEASED/i}));
+        expect(onBatchSelect).not.toHaveBeenCalled();
+        fireEvent.change(screen.getByLabelText('Sale rate'), {target: {value: '87.50'}});
+        fireEvent.click(screen.getByRole('button', {name: 'Use rate and add'}));
+        expect(onBatchSelect).toHaveBeenCalledWith(expect.objectContaining({
+            unit_price: '87.50', sale_price_per_unit: '87.50', mrp: '120.0000',
+        }));
+    });
     it('disables blocked stock and exposes a full-width mobile action for released stock', async () => {
         (batchesApi.getByProduct as jest.Mock).mockResolvedValue({
             data: {

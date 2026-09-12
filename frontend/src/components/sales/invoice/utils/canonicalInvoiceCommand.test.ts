@@ -565,11 +565,13 @@ describe('canonical invoice command', () => {
             .toBe('excluded_from_taxable_value');
     });
 
-    it('clears treatment after a positive free-quantity edit and derives zero deterministically', () => {
+    it('treats explicitly entered Free quantity as no-charge bonus units', () => {
         expect(freeSupplyTreatmentAfterQuantityEdit('0.000000'))
             .toBe('excluded_from_taxable_value');
-        expect(freeSupplyTreatmentAfterQuantityEdit('1.250000')).toBeUndefined();
+        expect(freeSupplyTreatmentAfterQuantityEdit('1.250000')).toBe('excluded_from_taxable_value');
         expect(freeSupplyTreatmentAfterQuantityEdit('not-a-quantity')).toBeUndefined();
+        expect(freeSupplyTreatmentAfterQuantityEdit('2', 'included_at_unit_rate')).toBe('included_at_unit_rate');
+        expect(freeSupplyTreatmentAfterQuantityEdit('0', 'included_at_unit_rate')).toBe('excluded_from_taxable_value');
     });
 
     it('fails the item-step boundary before calculation when positive free supply has no reviewed treatment', () => {
