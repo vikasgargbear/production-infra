@@ -44,7 +44,7 @@ export const EscapeKeyProvider: React.FC<EscapeKeyProviderProps> = ({ children }
     // Global ESC key listener
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
-            if (event.key === 'Escape') {
+            if (event.key === 'Escape' && !event.defaultPrevented) {
                 // Get the most recent handler (top of stack)
                 if (handlers.length > 0) {
                     const topHandler = handlers[handlers.length - 1];
@@ -59,11 +59,11 @@ export const EscapeKeyProvider: React.FC<EscapeKeyProviderProps> = ({ children }
             }
         };
 
-        // Use capture phase to ensure we get the event first
-        document.addEventListener('keydown', handleKeyDown, { capture: true });
+        // Give the focused input/dialog first refusal before closing its parent flow.
+        document.addEventListener('keydown', handleKeyDown);
 
         return () => {
-            document.removeEventListener('keydown', handleKeyDown, { capture: true });
+            document.removeEventListener('keydown', handleKeyDown);
         };
     }, [handlers]);
 

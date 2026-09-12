@@ -75,6 +75,7 @@ const InvoiceFlow: React.FC<InvoiceFlowProps> = ({ open = true, onClose, prefill
     const [activeDraft, setActiveDraft] = useState<InvoiceDraft<SalesInvoiceDraftPayload> | null>(null);
     const [drafts, setDrafts] = useState<Array<InvoiceDraft<SalesInvoiceDraftPayload>>>([]);
     const [draftPickerOpen, setDraftPickerOpen] = useState(false);
+    const [exitPromptOpen, setExitPromptOpen] = useState(false);
     const [draftsLoading, setDraftsLoading] = useState(false);
     const [draftBusyId, setDraftBusyId] = useState<string | null>(null);
     const deepLinkedDraftRef = useRef<string | null>(null);
@@ -137,6 +138,22 @@ const InvoiceFlow: React.FC<InvoiceFlowProps> = ({ open = true, onClose, prefill
         closeInvoiceReview,
 
     } = useInvoiceLogic(onClose, prefilledData, preparePersistedDraft);
+
+    const hasInvoiceWork = Boolean(selectedCustomer || invoice.items.length);
+    const requestClose = useCallback(() => {
+        if (hasInvoiceWork && !createdInvoiceData) setExitPromptOpen(true);
+        else onClose?.();
+    }, [hasInvoiceWork, createdInvoiceData, onClose]);
+
+    useEffect(() => {
+        if (!hasInvoiceWork || createdInvoiceData) return;
+        const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+            event.preventDefault();
+            event.returnValue = '';
+        };
+        window.addEventListener('beforeunload', warnBeforeUnload);
+        return () => window.removeEventListener('beforeunload', warnBeforeUnload);
+    }, [hasInvoiceWork, createdInvoiceData]);
 
     const draftTitle = useCallback(() => {
         const customerName = selectedCustomer?.customer_name || 'Unassigned customer';
@@ -202,6 +219,7 @@ const InvoiceFlow: React.FC<InvoiceFlowProps> = ({ open = true, onClose, prefill
                 // Incomplete drafts remain resumable. /prepare rejects null fail-closed.
             }
             await saveDraftRevision(commandPayload);
+            return true;
         } catch (error: any) {
             const message = error?.response?.data?.detail?.message
                 || error?.response?.data?.detail
@@ -209,6 +227,7 @@ const InvoiceFlow: React.FC<InvoiceFlowProps> = ({ open = true, onClose, prefill
                 || 'Invoice draft could not be saved.';
             setError(String(message));
             toast.error(String(message));
+            return false;
         } finally {
             setDraftBusyId(null);
         }
@@ -313,18 +332,20 @@ const InvoiceFlow: React.FC<InvoiceFlowProps> = ({ open = true, onClose, prefill
     });
 
     // ESC key handling for modal hierarchy
-    const anyModalOpen = showCustomerModal || showProductModal || showImportModal || reviewOpen;
+    const anyModalOpen = showCustomerModal || showProductModal || showImportModal || reviewOpen || draftPickerOpen;
 
     useEscapeKey(
         useCallback(() => {
-            if (currentStep === 3) {
+            if (exitPromptOpen) {
+                setExitPromptOpen(false);
+            } else if (currentStep === 3) {
                 setCurrentStep(2);
             } else if (currentStep === 2) {
                 setCurrentStep(1);
             } else {
-                if (onClose) onClose();
+                requestClose();
             }
-        }, [onClose, currentStep]),
+        }, [requestClose, currentStep, exitPromptOpen]),
         !anyModalOpen,
         'InvoiceFlow-Main'
     );
@@ -488,7 +509,7 @@ ${companyInfo.name}`;
                     isLoading={isLoading}
                     error={error}
                     setError={setError}
-                    onClose={onClose as any}
+                    onClose={requestClose}
                     onReset={resetInvoice}
                     onSaveDraft={handleSaveDraft}
                     onOpenDrafts={openDraftPicker}
@@ -518,7 +539,7 @@ ${companyInfo.name}`;
                     setInvoice={setInvoice as any}
                     selectedCustomer={selectedCustomer as any}
                     documentPolicy={documentPolicy}
-                    onClose={onClose as any}
+                    onClose={requestClose}
                     onContinue={handleContinueFromStep2}
                     onBack={handleBackFromStep2}
                     onSaveDraft={handleSaveDraft}
@@ -538,7 +559,7 @@ ${companyInfo.name}`;
                     setInvoice={setInvoice as any}
                     selectedCustomer={selectedCustomer as any}
                     companyInfo={companyInfo}
-                    onClose={onClose as any}
+                    onClose={requestClose}
                     onBack={handleBackFromStep3}
                     onSave={handleSaveInvoice}
                     onSaveDraft={handleSaveDraft}
@@ -558,6 +579,22 @@ ${companyInfo.name}`;
                 onBack={closeInvoiceReview}
                 onPost={confirmPreparedInvoice}
             />
+
+            {exitPromptOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+                    <div role="dialog" aria-modal="true" aria-labelledby="invoice-exit-title" className="w-full max-w-md rounded-lg bg-white p-6">
+                        <h2 id="invoice-exit-title" className="text-lg font-semibold">Save this invoice before leaving?</h2>
+                        <p className="my-4">Keep working, or save a draft to continue later. Leaving without saving loses unsaved changes.</p>
+                        <div className="flex flex-wrap gap-3">
+                            <button autoFocus type="button" className="min-h-[44px] rounded border px-4" onClick={() => setExitPromptOpen(false)}>Keep editing</button>
+                            <button type="button" disabled={Boolean(draftBusyId)} className="min-h-[44px] rounded bg-blue-600 px-4 text-white" onClick={async () => {
+                                if (await handleSaveDraft()) onClose?.();
+                            }}>Save draft and close</button>
+                            <button type="button" disabled={Boolean(draftBusyId)} className="min-h-[44px] rounded border px-4" onClick={() => onClose?.()}>Leave without saving</button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <InvoiceDraftPicker
                 open={draftPickerOpen}
