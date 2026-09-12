@@ -711,6 +711,7 @@ const BatchSelector: React.FC<BatchSelectorProps> = ({
     const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>): void => {
         if (e.key === 'Escape') {
             e.preventDefault();
+            e.stopPropagation();
             onClose();
             return;
         }

@@ -174,6 +174,11 @@ const ProductSearch = forwardRef<ProductSearchRef, ProductSearchProps>(
                         } as ExactSearchProduct;
                     });
 
+                    // Stable partition: preserve server relevance within each stock bucket.
+                    // Zero-stock products remain discoverable, but are not the default bill choice.
+                    transformedResults.sort((a, b) =>
+                        (compareExactDecimals(b.total_stock, '0', 'Search stock', quantityOptions) > 0 ? 1 : 0)
+                        - (compareExactDecimals(a.total_stock, '0', 'Search stock', quantityOptions) > 0 ? 1 : 0));
                     setSearchResults(transformedResults);
 
                     if (transformedResults.length > 0) {
@@ -254,7 +259,8 @@ const ProductSearch = forwardRef<ProductSearchRef, ProductSearchProps>(
         };
 
         const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>): void => {
-            if (e.key === 'Escape') {
+            if (e.key === 'Escape' && showDropdown) {
+                e.preventDefault();
                 e.stopPropagation();
                 setShowDropdown(false);
                 setHighlightedIndex(-1);
