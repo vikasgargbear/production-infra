@@ -20,6 +20,7 @@ from aasopharma_mcp.operator_actions import (
 
 
 EXPECTED_PREPARES = {
+    "erp_batch_sale_rate_prepare",
     "erp_sales_order_prepare",
     "erp_sales_dispatch_prepare",
     "erp_sales_invoice_prepare",
@@ -43,6 +44,23 @@ EXPECTED_PREPARES = {
     "erp_purchase_return_reversal_prepare",
     "erp_adjustment_note_reversal_prepare",
 }
+
+
+def test_batch_selling_rate_schema_requires_exact_reviewed_unit_and_versions():
+    from jsonschema import Draft202012Validator
+
+    action = PREPARE_ACTIONS["erp_batch_sale_rate_prepare"]
+    validator = Draft202012Validator(action.input_schema)
+    payload = {"idempotency_key": "price-review-1", "branch_id": "11111111-1111-4111-8111-111111111111",
+        "lines": [{"batch_id": "22222222-2222-4222-8222-222222222222", "batch_row_version": 1,
+                   "expected_rate_version": 0, "sale_rate": "29.00", "uom_code": "PCS",
+                   "price_basis": "tax_exclusive", "effective_from": "2026-09-13",
+                   "source_kind": "operator_review", "source_evidence": {"reason": "Reviewed selling price"}}]}
+    assert not list(validator.iter_errors(payload))
+    for field, value in (("sale_rate", 29), ("sale_rate", "29.00001"), ("price_basis", "mrp"),
+                         ("batch_row_version", 0), ("expected_rate_version", -1)):
+        changed = {**payload, "lines": [{**payload["lines"][0], field: value}]}
+        assert list(validator.iter_errors(changed))
 
 
 def _property_names(schema):
