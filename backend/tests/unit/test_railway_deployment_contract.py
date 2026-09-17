@@ -332,6 +332,26 @@ def test_frontend_container_builds_once_and_serves_spa_with_healthcheck() -> Non
     assert "try_files {path} /index.html" in caddyfile
 
 
+def test_frontend_revalidates_html_metadata_and_worker_but_caches_hashed_assets() -> None:
+    caddyfile = (ROOT / "frontend/Caddyfile").read_text(encoding="utf-8")
+    route = caddyfile[caddyfile.index("\t\troute {"):]
+    default = 'header Cache-Control "no-cache, max-age=0, must-revalidate"'
+    immutable = 'header @hashed_asset Cache-Control "public, max-age=31536000, immutable"'
+    # Route order matters: a missing hashed asset must resolve to non-cacheable
+    # HTML before the immutable matcher runs, not cache index.html for a year.
+    assert route.index("try_files {path} /index.html") < route.index(default)
+    assert route.index(default) < route.index(immutable) < route.index("file_server")
+    pattern = re.search(r"@hashed_asset path_regexp hashed_asset (.+)", route).group(1)
+    for path in ["/", "/index.html", "/build-metadata.json", "/service-worker.js",
+                 "/manifest.json", "/desktop-oauth-callback.html", "/sales",
+                 "/static/js/main.js", "/static/css/main.css"]:
+        assert not re.fullmatch(pattern, path), path
+    for path in ["/static/js/main.79d9bdcf.js", "/static/js/123.aabbccdd.chunk.js",
+                 "/static/css/main.aabbccdd.css", "/static/js/main.79d9bdcf.js.map",
+                 "/static/media/logo.aabbccddeeff00112233.svg"]:
+        assert re.fullmatch(pattern, path), path
+
+
 def test_workflow_fails_closed_on_service_configuration_drift() -> None:
     workflow = _workflow()
 

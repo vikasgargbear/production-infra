@@ -434,10 +434,9 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                     onContinue={onContinue}
                     cancelLabel="← Back to Items"
                     continueLabel="Continue to Preview"
-                    continueDisabled={canonicalFinalAmount === undefined}
                     continueButtonColor="blue"
                     additionalInfo={canonicalFinalAmount === undefined
-                        ? <span className="text-sm text-amber-800">Refresh the live calculation before continuing.</span>
+                        ? <span className="text-sm text-amber-800">Complete the delivery details, then Continue to calculate current totals.</span>
                         : <span className="text-sm text-gray-700">Payment is recorded separately after posting.</span>}
                 />
 

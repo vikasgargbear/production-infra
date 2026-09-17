@@ -18,7 +18,14 @@
 
 	handle {
 		root * /srv
-		try_files {path} /index.html
-		file_server
+		route {
+			# Resolve SPA routes first so even fallback HTML is revalidated.
+			try_files {path} /index.html
+			header Cache-Control "no-cache, max-age=0, must-revalidate"
+			# Only content-addressed build assets may survive a deployment.
+			@hashed_asset path_regexp hashed_asset ^/static/(js|css|media)/.+\.[a-f0-9]{8,}\.[A-Za-z0-9.]+$
+			header @hashed_asset Cache-Control "public, max-age=31536000, immutable"
+			file_server
+		}
 	}
 }

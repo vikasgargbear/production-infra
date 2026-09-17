@@ -420,6 +420,9 @@ export const useInvoiceLogic = (
         invoice.discount_amount,
         invoice.discount_percent,
         invoice.customer_details?.customer_id,
+        invoice.invoice_date,
+        invoice.shipping_address_data?.address_id,
+        invoice.shipping_address_data?.row_version,
         isOnline
     ]);
 
