@@ -1,6 +1,9 @@
 import ast
 from pathlib import Path
 import textwrap
+from types import SimpleNamespace
+
+import pytest
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -46,7 +49,8 @@ def test_user_authority_reconcile_keeps_the_bounded_web_envelope() -> None:
     assert "STATUS_CAPABILITY" in source
     assert 'test "$(jq -r .capability_count "$response")" = 11' in source
     assert "existing consent receipt capability envelope differs" in source
-    assert "transaction_timestamp()+interval '30 days'" in source
+    assert 'lifetime_interval = "1 hour" if invoice_scope else "30 days"' in source
+    assert "transaction_timestamp()+%s::interval" in source
     assert "(*row, audit_membership_id) for row in capability_rows" in source
     assert "reviewed user authority did not reconcile exactly" in source
 
@@ -90,7 +94,7 @@ def test_user_authority_reconcile_is_idempotent_for_an_exact_active_grant() -> N
     assert "existing consent receipt capability envelope differs" in source
     assert "expected_grant = (" in source
     assert "(*row, audit_membership_id) for row in capability_rows" in source
-    assert "expires_at=consented_at+interval '30 days'" in source
+    assert "expires_at=consented_at+%s::interval" in source
     assert "consented_at=granted_at" in source
     assert "granted_by_membership_id::text" in source
     assert "created_by_membership_id::text" in source
@@ -216,3 +220,75 @@ def test_web_authority_readback_reports_the_preserved_expiry() -> None:
     assert "grant_expires_at = cursor.fetchone()[0].isoformat()" in remote
     assert '"grant_expires_at": grant_expires_at' in remote
     assert '"expires_in_days": 30' not in remote
+
+
+def _scope_policy(scope: str, **overrides):
+    """Execute the actual embedded policy without importing DB or touching a service."""
+    import re
+    from uuid import UUID
+
+    value = {
+        "authority_scope": scope,
+        "organization_id": "10000000-0000-4000-8000-000000000001" if scope == "web_invoice" else "",
+        "subject_user_id": "20000000-0000-4000-8000-000000000002" if scope == "web_invoice" else "",
+        "consent_receipt_id": "invoice-test-consent-20260917" if scope == "web_invoice" else "",
+        "mcp_client_id": "", "mcp_reviewed_sha": "", "mcp_tool_inventory_sha256": "",
+    }
+    value.update(overrides)
+    remote = _embedded_remote_source()
+    policy = remote.split('authority_scope = value["authority_scope"]', 1)[1].split("database_url = (", 1)[0]
+    namespace = {
+        "value": value, "authority_scope": scope, "UUID": UUID, "re": re,
+        "DEMO_ORG_ID": "demo-org", "auth_user_id": "configured-demo-auth",
+        "WEB_CLIENT_ID": "aasopharma-erp-web", "WEB_CLIENT_NAME": "ERP web",
+        "STATUS_CAPABILITY": "automation.command.status.read", "WRITE_CAPABILITIES": (),
+        "ACTION_POLICIES": {
+            op: SimpleNamespace(risk_class="consequential_write", approval_policy="actor_confirmation")
+            for op in ("sales.invoice.prepare", "sales.order.prepare", "sales.dispatch.prepare",
+                       "finance.customer_receipt.prepare", "finance.customer_cheque_clearance.prepare",
+                       "finance.customer_cheque_bounce.prepare", "sales.return.prepare", "finance.adjustment_note.prepare")
+        },
+    }
+    exec(policy, namespace)
+    return namespace
+
+
+def test_invoice_scope_executes_exact_small_envelope():
+    policy = _scope_policy("web_invoice")
+    assert policy["lifetime_interval"] == "1 hour"
+    assert policy["requested_org_id"] == "10000000-0000-4000-8000-000000000001"
+    assert policy["subject_user_id"] == "20000000-0000-4000-8000-000000000002"
+    assert policy["capability_codes"] == (
+        "sales.invoice.prepare", "automation.command.approve",
+        "automation.command.execute", "automation.command.status.read",
+    )
+    assert policy["capability_rows"][0][4:6] == ("1000.00", "INR")
+
+
+def test_existing_web_scope_preserves_old_envelope():
+    policy = _scope_policy("web")
+    assert policy["lifetime_interval"] == "30 days"
+    assert len(policy["capability_rows"]) == 11
+    assert policy["capability_rows"][0][4] == "1000000.00"
+
+
+@pytest.mark.parametrize("overrides", [
+    {"organization_id": ""}, {"subject_user_id": "not-uuid"},
+    {"consent_receipt_id": ""}, {"mcp_client_id": "unexpected"},
+    {"mcp_reviewed_sha": "unexpected"}, {"mcp_tool_inventory_sha256": "unexpected"},
+])
+def test_invoice_scope_rejects_missing_or_mixed_identity(overrides):
+    with pytest.raises((SystemExit, ValueError)):
+        _scope_policy("web_invoice", **overrides)
+
+
+def test_invoice_scope_binds_target_and_new_consent_without_revival():
+    remote = _embedded_remote_source()
+    assert "membership.org_id=%s AND user_row.id=%s" in remote
+    assert 'if authority_scope == "web"\n                else membership_id' in remote
+    assert 'canonical-staging-reviewed-web-invoice-agent:' in remote
+    assert 'f"{target_org_id}:{resolved_auth_user_id}:{resolved_user_id}:{consent_text_sha256}"' in remote
+    assert '"lifetime_hours": 1' in remote
+    assert 'another active reviewed grant conflicts' in remote
+    assert "expires_at=consented_at+%s::interval" in remote
+    assert "ON CONFLICT (org_id,id) DO UPDATE" not in remote

@@ -14,13 +14,18 @@ on:
         type: choice
         options:
           - web
+          - web_invoice
           - mcp
+      organization_id:
+        description: Exact reviewed test organization UUID (web_invoice only)
+        required: false
+        type: string
       mcp_client_id:
         description: Exact deployed public OAuth client ID (required for MCP only)
         required: false
         type: string
       subject_user_id:
-        description: Exact signed canonical ERP user ID (required for MCP only)
+        description: Exact signed canonical ERP user ID (required for MCP and web_invoice)
         required: false
         type: string
       mcp_reviewed_sha:
@@ -65,6 +70,7 @@ jobs:
       AUTHORITY_SCOPE: ${{ inputs.authority_scope }}
       MCP_CLIENT_ID: ${{ inputs.mcp_client_id }}
       SUBJECT_USER_ID: ${{ inputs.subject_user_id }}
+      ORGANIZATION_ID: ${{ inputs.organization_id }}
       MCP_REVIEWED_SHA: ${{ inputs.mcp_reviewed_sha }}
       MCP_TOOL_INVENTORY_SHA256: ${{ inputs.mcp_tool_inventory_sha256 }}
       CONSENT_RECEIPT_ID: ${{ inputs.consent_receipt_id }}
@@ -92,6 +98,7 @@ jobs:
           git merge-base --is-ancestor "$REVIEWED_SHA" origin/main
           case "$AUTHORITY_SCOPE" in
             web)
+              test -z "$ORGANIZATION_ID"
               test "$AUTHORITY_CONFIRMATION" = RECONCILE_CANONICAL_STAGING_WEB_AUTHORITY
               test -z "$MCP_CLIENT_ID"
               test -z "$SUBJECT_USER_ID"
@@ -99,7 +106,17 @@ jobs:
               test -z "$MCP_TOOL_INVENTORY_SHA256"
               test -z "$CONSENT_RECEIPT_ID"
               ;;
+            web_invoice)
+              test "$AUTHORITY_CONFIRMATION" = RECONCILE_CANONICAL_STAGING_WEB_INVOICE_AUTHORITY
+              [[ "$ORGANIZATION_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]]
+              [[ "$SUBJECT_USER_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]]
+              [[ "$CONSENT_RECEIPT_ID" =~ ^[A-Za-z0-9._:-]{16,200}$ ]]
+              test -z "$MCP_CLIENT_ID"
+              test -z "$MCP_REVIEWED_SHA"
+              test -z "$MCP_TOOL_INVENTORY_SHA256"
+              ;;
             mcp)
+              test -z "$ORGANIZATION_ID"
               test "$AUTHORITY_CONFIRMATION" = RECONCILE_CANONICAL_STAGING_MCP_AUTHORITY
               [[ "$MCP_CLIENT_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]]
               [[ "$SUBJECT_USER_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]]
@@ -268,6 +285,7 @@ jobs:
             --arg authority_scope "$AUTHORITY_SCOPE" \
             --arg mcp_client_id "$MCP_CLIENT_ID" \
             --arg subject_user_id "$SUBJECT_USER_ID" \
+            --arg organization_id "$ORGANIZATION_ID" \
             --arg mcp_reviewed_sha "$MCP_REVIEWED_SHA" \
             --arg mcp_tool_inventory_sha256 "$MCP_TOOL_INVENTORY_SHA256" \
             --arg consent_receipt_id "$CONSENT_RECEIPT_ID" \
@@ -275,6 +293,7 @@ jobs:
               production_project_refs:$production_refs,password:$password,
               auth_user_id:$auth_user_id,authority_scope:$authority_scope,
               mcp_client_id:$mcp_client_id,subject_user_id:$subject_user_id,
+              organization_id:$organization_id,
               mcp_reviewed_sha:$mcp_reviewed_sha,
               mcp_tool_inventory_sha256:$mcp_tool_inventory_sha256,
               consent_receipt_id:$consent_receipt_id}' > "$request"
@@ -321,6 +340,11 @@ jobs:
               raise SystemExit("active deployment differs from reviewed SHA")
           auth_user_id = str(UUID(value["auth_user_id"]))
           authority_scope = value["authority_scope"]
+          invoice_scope = authority_scope == "web_invoice"
+          lifetime_interval = "1 hour" if invoice_scope else "30 days"
+          requested_org_id = str(UUID(value["organization_id"])) if invoice_scope else DEMO_ORG_ID
+          if not invoice_scope and value.get("organization_id"):
+              raise SystemExit("organization override is reserved for web_invoice")
           if authority_scope == "web":
               if (
                   value["mcp_client_id"]
@@ -335,6 +359,16 @@ jobs:
               target_client_name = WEB_CLIENT_NAME
               consent_version = "staging-web-manual-v1"
               consent_text = "canonical staging bounded manual web command consent"
+          elif invoice_scope:
+              if value["mcp_client_id"] or value["mcp_reviewed_sha"] or value["mcp_tool_inventory_sha256"]:
+                  raise SystemExit("invoice authority must not accept MCP inputs")
+              consent_receipt_id = value["consent_receipt_id"]
+              if not re.fullmatch(r"[A-Za-z0-9._:-]{16,200}", consent_receipt_id):
+                  raise SystemExit("invoice consent receipt identifier is invalid")
+              subject_user_id = str(UUID(value["subject_user_id"]))
+              target_client_id = WEB_CLIENT_ID
+              target_client_name = WEB_CLIENT_NAME
+              consent_version = "staging-web-invoice-manual-v1"
           elif authority_scope == "mcp":
               consent_receipt_id = value["consent_receipt_id"]
               if not re.fullmatch(r"[A-Za-z0-9._:-]{16,200}", consent_receipt_id):
@@ -368,6 +402,7 @@ jobs:
               "finance.adjustment_note.prepare",
           )
           requested_write_operations = (
+              ("sales.invoice.prepare",) if invoice_scope else
               web_prepare_operations
               if authority_scope == "web"
               else tuple(operation for operation, _ in WRITE_CAPABILITIES)
@@ -382,18 +417,18 @@ jobs:
           )
           if any(operation not in ACTION_POLICIES for operation in policy_operations):
               raise SystemExit("deployed API omits a requested sales lifecycle policy")
-          if authority_scope == "web":
+          if authority_scope in {"web", "web_invoice"}:
               capability_rows = [
                   (
                       operation,
                       "write",
                       ACTION_POLICIES[operation].risk_class,
                       ACTION_POLICIES[operation].approval_policy,
-                      "1000000.00",
+                      "1000.00" if invoice_scope else "1000000.00",
                       "INR",
                       False,
                   )
-                  for operation in web_prepare_operations
+                  for operation in requested_write_operations
               ]
               capability_rows.extend((
                   ("automation.command.approve", "write", "consequential_write", "actor_confirmation", None, None, False),
@@ -451,7 +486,7 @@ jobs:
                   try:
                       cursor.execute("SET CONSTRAINTS ALL DEFERRED")
                       for name, setting in (
-                          ("app.org_id", DEMO_ORG_ID),
+                          ("app.org_id", requested_org_id),
                           ("app.auth_user_id", REVIEWER_AUTH_USER_ID),
                           ("app.membership_id", REVIEWER_MEMBERSHIP_ID),
                           ("app.request_id", TEST_REQUEST_ID),
@@ -468,7 +503,8 @@ jobs:
                               ON organization.id=membership.org_id
                            WHERE ((%s='web' AND membership.org_id=%s
                                                 AND user_row.auth_user_id=%s)
-                                  OR (%s='mcp' AND user_row.id=%s))
+                                  OR (%s='mcp' AND user_row.id=%s)
+                                  OR (%s='web_invoice' AND membership.org_id=%s AND user_row.id=%s))
                              AND user_row.status='active'
                              AND user_row.auth_user_id IS NOT NULL
                              AND membership.status='active'
@@ -495,6 +531,9 @@ jobs:
                               auth_user_id,
                               authority_scope,
                               subject_user_id,
+                              authority_scope,
+                              requested_org_id,
+                              subject_user_id,
                           ),
                       )
                       bindings = cursor.fetchall()
@@ -508,7 +547,7 @@ jobs:
                           resolved_auth_user_id,
                           membership_id,
                       ) = bindings[0]
-                      if authority_scope == "mcp" and resolved_user_id != subject_user_id:
+                      if authority_scope in {"mcp", "web_invoice"} and resolved_user_id != subject_user_id:
                           raise SystemExit("reviewed canonical user identity changed")
                       audit_membership_id = (
                           REVIEWER_MEMBERSHIP_ID
@@ -521,7 +560,7 @@ jobs:
                           ("app.membership_id", audit_membership_id),
                       ):
                           cursor.execute("SELECT set_config(%s,%s,true)", (name, setting))
-                      if authority_scope == "mcp":
+                      if authority_scope in {"mcp", "web_invoice"}:
                           consent_text = json.dumps(
                               {
                                   "capabilities": capability_rows,
@@ -529,7 +568,7 @@ jobs:
                                   "client_id": target_client_id,
                                   "contract": consent_version,
                                   "consent_receipt_id": consent_receipt_id,
-                                  "lifetime_days": 30,
+                                  **({"lifetime_hours": 1} if invoice_scope else {"lifetime_days": 30}),
                                   "organization_id": target_org_id,
                                   "subject_auth_user_id": resolved_auth_user_id,
                               },
@@ -540,6 +579,9 @@ jobs:
                           consent_text.encode("utf-8")
                       ).hexdigest()
                       grant_namespace = (
+                          f"canonical-staging-reviewed-web-invoice-agent:"
+                          f"{target_org_id}:{resolved_auth_user_id}:{resolved_user_id}:{consent_text_sha256}"
+                          if invoice_scope else
                           f"canonical-staging-reviewed-web-agent:"
                           f"{target_org_id}:{resolved_auth_user_id}"
                           if authority_scope == "web"
@@ -575,14 +617,14 @@ jobs:
                                  granted_by_membership_id::text,granted_at IS NOT NULL,
                                  expires_at,status,expires_at>transaction_timestamp(),
                                  consented_at=granted_at,
-                                 expires_at=consented_at+interval '30 days',
+                                 expires_at=consented_at+%s::interval,
                                  created_by_membership_id::text,
                                  updated_by_membership_id::text
                             FROM automation.agent_grants
                            WHERE org_id=%s AND id=%s
                            FOR UPDATE
                           """,
-                          (target_org_id, grant_id),
+                          (lifetime_interval, target_org_id, grant_id),
                       )
                       existing_grant = cursor.fetchone()
                       if existing_grant is None:
@@ -599,14 +641,14 @@ jobs:
                                   %s,%s,%s,%s,%s,NULL,'self_consent',%s,
                                   extensions.digest(%s,'sha256'),
                                   %s,transaction_timestamp(),%s,transaction_timestamp(),
-                                  transaction_timestamp()+interval '30 days','active',%s,%s
+                                  transaction_timestamp()+%s::interval,'active',%s,%s
                               ) ON CONFLICT (org_id,id) DO NOTHING
                               """,
                               (
                                   target_org_id,grant_id,membership_id,target_client_id,
                                   target_client_name,consent_version,consent_text,
                                   membership_id,audit_membership_id,
-                                  audit_membership_id,audit_membership_id,
+                                  lifetime_interval,audit_membership_id,audit_membership_id,
                               ),
                           )
                       else:
@@ -813,6 +855,11 @@ jobs:
             test "$(jq -r .mcp_tool_inventory_sha256 "$response")" = \
               "$MCP_TOOL_INVENTORY_SHA256"
             test "$(jq -r .capability_count "$response")" = 28
+          elif test "$AUTHORITY_SCOPE" = web_invoice; then
+            test "$(jq -r .client_id "$response")" = aasopharma-erp-web
+            test "$(jq -r .subject_user_id "$response")" = "$SUBJECT_USER_ID"
+            test "$(jq -r .organization_id "$response")" = "$ORGANIZATION_ID"
+            test "$(jq -r .capability_count "$response")" = 4
           else
             test "$(jq -r .client_id "$response")" = aasopharma-erp-web
             test "$(jq -r .capability_count "$response")" = 11
