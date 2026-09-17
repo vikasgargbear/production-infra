@@ -532,6 +532,7 @@ const AddressForm: React.FC<AddressFormProps> = ({
                                                             mobile: addr.mobile || customer?.primary_phone || ''
                                                         });
                                                         setSelectedAddressId(addr.address_id || null);
+                                                        setIsDefault(Boolean(addr.is_default));
                                                         setShowDropdown(false);
                                                         setIsEditing(true);
                                                     }}
@@ -582,8 +583,7 @@ const AddressForm: React.FC<AddressFormProps> = ({
                         {/* Row 2: Address Line 2 | Landmark */}
                         <div>
                             <input
-                                aria-label="City"
-                                aria-invalid={Boolean(fieldErrors.city)}
+                                aria-label="Address line 2"
                                 type="text"
                                 value={formData.address_line2}
                                 onChange={(e: ChangeEvent<HTMLInputElement>) => handleFieldChange('address_line2', e.target.value)}
@@ -605,6 +605,8 @@ const AddressForm: React.FC<AddressFormProps> = ({
                         {/* Row 3: City | exact GST state code */}
                         <div>
                             <input
+                                aria-label="City"
+                                aria-invalid={Boolean(fieldErrors.city)}
                                 type="text"
                                 value={formData.city}
                                 onChange={(e: ChangeEvent<HTMLInputElement>) => handleFieldChange('city', e.target.value)}
