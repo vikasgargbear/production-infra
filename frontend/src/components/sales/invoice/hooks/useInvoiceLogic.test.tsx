@@ -192,6 +192,35 @@ describe('useInvoiceLogic selected quantity boundary', () => {
         }
     });
 
+    it('retries a missing-address preview after an address is saved and when invoice date changes', async () => {
+        mockedPreview.mockRejectedValueOnce({ response: { status: 422, data: {
+            detail: 'customer has no effective primary sales address',
+        } } });
+        const errorLog = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+        try {
+            const { result } = renderHook(() => useInvoiceLogic());
+            await waitFor(() => expect(result.current.isLoading).toBe(false));
+            act(() => result.current.handleCustomerSelect(customer));
+            await act(async () => {
+                await result.current.handleAddItem({ ...selectedProduct, quantity: '1.000000', free_quantity: '0.000000' });
+            });
+            await waitFor(() => expect(result.current.error).toContain('active primary sales address'));
+            act(() => result.current.setInvoice(previous => ({ ...previous,
+                shipping_address_data: { address_id: ids.deliveryAddress, row_version: 1 } as any,
+            })));
+            await waitFor(() => expect(mockedPreview).toHaveBeenCalledTimes(2));
+            await waitFor(() => expect(result.current.error).toBeNull());
+            act(() => result.current.setInvoice(previous => ({ ...previous, invoice_date: '2026-08-26' })));
+            await waitFor(() => expect(mockedPreview).toHaveBeenCalledTimes(3));
+            act(() => result.current.setInvoice(previous => ({ ...previous,
+                shipping_address_data: { ...previous.shipping_address_data, row_version: 2 } as any,
+            })));
+            await waitFor(() => expect(mockedPreview).toHaveBeenCalledTimes(4));
+        } finally {
+            errorLog.mockRestore();
+        }
+    });
+
     it.each([
         {
             label: 'free-only selection',
