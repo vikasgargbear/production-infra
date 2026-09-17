@@ -7,6 +7,14 @@ from app.api.services.sales.calculation import calculate_sales_totals
 from app.infrastructure.operator_actions.sales_invoice import calculation_documents
 
 
+def test_preview_rejects_quantity_outside_posting_precision():
+    with pytest.raises(ValueError, match="exceeds numeric"):
+        calculate_sales_totals([{
+            "quantity": "9007199254740993.000001", "unit_price": "1",
+            "resolved_gst_percent": "5",
+        }], "CGST/SGST")
+
+
 @pytest.mark.parametrize(
     "gst_type,supply_type,line_count,expected_total",
     [
