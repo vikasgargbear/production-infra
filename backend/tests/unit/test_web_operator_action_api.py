@@ -54,6 +54,7 @@ def test_web_context_is_bound_to_the_distinct_reviewed_client():
     row = SimpleNamespace(
         _mapping={
             "agent_grant_id": grant_id,
+            "authority_expires_at": datetime(2099, 1, 1, tzinfo=timezone.utc),
             "membership_id": membership_id,
             "grant_branch_id": None,
             "command_branch_id": None,
@@ -70,6 +71,7 @@ def test_web_context_is_bound_to_the_distinct_reviewed_client():
 
     assert context.client_id == "aasopharma-erp-web"
     assert context.agent_grant_id == grant_id
+    assert context.authority_expires_at == datetime(2099, 1, 1, tzinfo=timezone.utc)
     assert context.membership_id == membership_id
     assert context.organization_scope is True
     assert context.branch_ids == (branch_id,)

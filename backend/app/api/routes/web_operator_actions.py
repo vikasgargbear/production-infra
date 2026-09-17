@@ -498,6 +498,7 @@ def _resolve_context(
         text(
             """
             SELECT grant_row.id AS agent_grant_id,
+                   grant_row.expires_at AS authority_expires_at,
                    grant_row.subject_membership_id AS membership_id,
                    grant_row.branch_id AS grant_branch_id,
                    command.branch_id AS command_branch_id,
@@ -587,6 +588,7 @@ def _resolve_context(
         branch_ids=resolved_branch_ids,
         organization_scope=row["grant_branch_id"] is None,
         delegated_command_request_id=command_request_id,
+        authority_expires_at=row["authority_expires_at"],
     )
 
 
