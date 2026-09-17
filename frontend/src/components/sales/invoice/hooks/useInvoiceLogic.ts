@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, RefObject, Dispatch, SetStateAction } from 'react';
 import { toast } from 'react-toastify';
 import { calculateInvoicePreview } from '../../../../services/calculations/invoiceCalculationService';
+import { invoicePreviewError, isInvoicePreviewError } from '../utils/invoicePreviewError';
 import { employeesApi } from '../../../../services/api';
 import { useNetworkStatus } from '../../../../hooks/useNetworkStatus';
 import { useCanonicalBusinessDate } from '../../../../hooks/useCanonicalBusinessDate';
@@ -357,12 +358,11 @@ export const useInvoiceLogic = (
 
     // Recalculate totals when items or discounts change
     useEffect(() => {
-        const calculationErrorMessage = 'Unable to calculate invoice totals. Please review the entries and try again.';
         if (!invoice.items?.length || !invoice.customer_details?.customer_id
             || invoice.items.some(item => item.unit_price === '')) {
             // Item selection is allowed before customer selection. That is an
             // incomplete form, not a failed calculation; never submit it.
-            setError(previous => previous === calculationErrorMessage ? null : previous);
+            setError(previous => isInvoicePreviewError(previous) ? null : previous);
             return;
         }
 
@@ -371,7 +371,7 @@ export const useInvoiceLogic = (
             try {
                 const result = await calculateInvoicePreview(invoice, true);
                 if (cancelled) return;
-                setError(previous => previous === calculationErrorMessage ? null : previous);
+                setError(previous => isInvoicePreviewError(previous) ? null : previous);
 
                 setInvoice(prev => ({
                     ...prev,
@@ -396,7 +396,7 @@ export const useInvoiceLogic = (
             } catch (calculationError) {
                 if (!cancelled) {
                     console.error('Invoice calculation failed:', calculationError);
-                    setError(calculationErrorMessage);
+                    setError(invoicePreviewError(calculationError));
                 }
             }
         }, 300);
