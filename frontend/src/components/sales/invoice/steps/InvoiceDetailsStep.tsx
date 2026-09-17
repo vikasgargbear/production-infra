@@ -247,7 +247,7 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                         {canonicalSchemeDiscount !== undefined
                                             && compareExactDecimals(canonicalSchemeDiscount, '0', 'Invoice scheme discount', moneyOptions) > 0 && (
                                             <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
-                                                Saves {formatExactCurrency(canonicalSchemeDiscount, 'Invoice scheme discount')}
+                                                Before-tax reduction {formatExactCurrency(canonicalSchemeDiscount, 'Invoice scheme discount')}
                                             </span>
                                         )}
                                     </div>
@@ -372,7 +372,7 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                         {canonicalItemDiscount !== undefined
                                             && compareExactDecimals(canonicalItemDiscount, '0', 'Invoice item discount', moneyOptions) > 0 && (
                                             <div className="flex justify-between items-center text-sm">
-                                                <span className="text-gray-600">Item Discounts</span>
+                                                <span className="text-gray-600">Item discounts (before tax)</span>
                                                 <span className="text-green-600">
                                                     -{formatExactCurrency(canonicalItemDiscount, 'Invoice item discount')}
                                                 </span>
@@ -391,7 +391,7 @@ const InvoiceDetailsStep: React.FC<InvoiceDetailsStepProps> = ({
                                         {invoice.totals?.scheme_discount !== undefined && compareExactDecimals(invoice.totals.scheme_discount, 0, 'Invoice scheme discount', moneyOptions) > 0 && (
                                             <div className="flex justify-between items-center text-sm">
                                                 <span className="text-gray-600">
-                                                    Invoice Discount
+                                                    Invoice discount (before tax)
                                                     {invoice.discount_type === 'percentage' && ` (${invoice.discount_percent}%)`}
                                                 </span>
                                                 <span className="text-green-600">

@@ -43,11 +43,12 @@ def test_sales_preview_allocates_exact_document_discount_and_gst() -> None:
         discount_amount="15.00",
     )
 
-    assert totals["scheme_discount"] == Decimal("15.00")
-    assert totals["taxable_amount"] == Decimal("135.00")
-    assert totals["cgst_amount"] == Decimal("12.15")
-    assert totals["sgst_amount"] == Decimal("12.15")
-    assert totals["final_amount"] == Decimal("159.30")
+    assert totals["scheme_discount"] == Decimal("12.72")
+    # UI commands discount price value (including tax), not the pre-tax base.
+    assert totals["taxable_amount"] == Decimal("137.28")
+    assert totals["cgst_amount"] == Decimal("12.36")
+    assert totals["sgst_amount"] == Decimal("12.36")
+    assert totals["final_amount"] == Decimal("162.00")
     assert totals["round_off_amount"] == Decimal("0.00")
 
 

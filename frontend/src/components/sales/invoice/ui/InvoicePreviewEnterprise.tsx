@@ -548,13 +548,13 @@ const InvoicePreviewEnterprise: React.FC<InvoicePreviewEnterpriseProps> = ({
                   </div>
                   {compareExactDecimals(totals.discount_amount, 0, 'Invoice discount', moneyOptions) > 0 && (
                     <div className="flex justify-between text-xs">
-                      <span className="text-gray-600">Item Discounts:</span>
+                      <span className="text-gray-600">Item discounts (before tax):</span>
                       <span className="font-medium text-green-600">-{formatCurrency(totals.discount_amount)}</span>
                     </div>
                   )}
                   {compareExactDecimals(totals.scheme_discount, 0, 'Invoice scheme discount', moneyOptions) > 0 && (
                     <div className="flex justify-between text-xs">
-                      <span className="text-gray-600">Scheme Discount:</span>
+                      <span className="text-gray-600">Invoice discount (before tax):</span>
                       <span className="font-medium text-green-600">-{formatCurrency(totals.scheme_discount)}</span>
                     </div>
                   )}

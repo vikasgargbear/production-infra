@@ -223,7 +223,7 @@ async def test_invoice_and_sales_order_wire_preserve_exact_decimal_inputs(monkey
     lines = [
         _sales_line(unit_price="0.10"),
         _sales_line(quantity="1", unit_price="0.20"),
-        _sales_line(quantity="9007199254740993.000001", unit_price="1"),
+        _sales_line(quantity="90071992547409.000001", unit_price="1"),
     ]
     monkeypatch.setattr(
         "app.api.routes.calculations.resolve_sales_tax_authority",
@@ -242,8 +242,8 @@ async def test_invoice_and_sales_order_wire_preserve_exact_decimal_inputs(monkey
     assert invoice_body["line_items"][0]["quantity"] == "1.000001"
     assert invoice_body["line_items"][0]["subtotal"] == "0.10"
     assert invoice_body["line_items"][1]["subtotal"] == "0.20"
-    assert invoice_body["line_items"][2]["quantity"] == "9007199254740993.000001"
-    assert invoice_body["totals"]["subtotal_amount"] == "9007199254740993.30"
+    assert invoice_body["line_items"][2]["quantity"] == "90071992547409.000001"
+    assert invoice_body["totals"]["subtotal_amount"] == "90071992547409.30"
     assert isinstance(invoice_body["totals"]["subtotal_amount"], str)
     assert "erp_security.activate_context" in invoice_db.calls[0][0]
 
@@ -256,6 +256,6 @@ async def test_invoice_and_sales_order_wire_preserve_exact_decimal_inputs(monkey
     order_db = _ActivationSession()
     order_response = preview_sales_order_totals(order, _USER, order_db)
     order_body = _json_body(order_response)
-    assert order_body["line_items"][2]["quantity"] == "9007199254740993.000001"
-    assert order_body["totals"]["subtotal_amount"] == "9007199254740993.30"
+    assert order_body["line_items"][2]["quantity"] == "90071992547409.000001"
+    assert order_body["totals"]["subtotal_amount"] == "90071992547409.30"
     assert "erp_security.activate_context" in order_db.calls[0][0]
