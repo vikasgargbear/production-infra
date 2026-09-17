@@ -654,12 +654,13 @@ describe('canonical invoice command', () => {
         expect(companyInvoiceValidationError(invalid, invoice)).toMatch(message);
     });
 
-    it('requires an issuer drug licence only for medicine invoices', () => {
+    it('does not require a profile licence display string to prepare medicine invoices', () => {
         const medicine = {
             ...invoice,
             items: [{ ...invoice.items[0], product_type: 'medicine' }],
         } as Invoice;
-        expect(companyInvoiceValidationError(company, medicine)).toMatch(/drug licence/i);
+        expect(companyInvoiceValidationError(company, medicine)).toBeNull();
+        expect(companyInvoiceValidationError({ ...company, drug_license_number: '' }, medicine)).toBeNull();
         expect(companyInvoiceValidationError(company, invoice)).toBeNull();
     });
 

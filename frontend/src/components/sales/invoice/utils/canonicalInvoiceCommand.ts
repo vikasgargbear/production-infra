@@ -183,7 +183,7 @@ const selectedDeliveryAddress = (invoice: Invoice): { id: string; rowVersion: st
 
 export function companyInvoiceValidationError(
     company: CompanyInfo | null,
-    invoice?: Invoice,
+    _invoice?: Invoice,
 ): string | null {
     if (!company || !nonEmpty(company.name)) {
         return 'Company legal name is missing. Complete Company Settings before generating an invoice.';
@@ -194,12 +194,8 @@ export function companyInvoiceValidationError(
     if (!/^[0-9A-Z]{15}$/.test(String(company.gst_number || '').trim().toUpperCase())) {
         return 'Company GSTIN is missing or invalid. Complete Company Settings before generating a tax invoice.';
     }
-    const containsMedicine = invoice?.items.some(
-        item => item.product_type === 'medicine' || item.requires_prescription,
-    );
-    if (containsMedicine && !nonEmpty(company.drug_license_number)) {
-        return 'A drug licence is required for medicine invoices. Complete Company Settings first.';
-    }
+    // The profile's display string is not licence authority. Draft/preview
+    // must not depend on it; posting validates applicable evidence server-side.
     return null;
 }
 
