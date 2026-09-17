@@ -42,6 +42,10 @@ SAFE_STRUCTURED_LOG_FIELDS = (
     "command_status",
     "error_code",
     "sqlstate",
+    "db_constraint",
+    "db_schema",
+    "db_table",
+    "db_reason_fingerprint",
     "idempotency_replayed",
 )
 
