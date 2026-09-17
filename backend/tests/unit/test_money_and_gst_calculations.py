@@ -64,7 +64,7 @@ def test_line_item_rejects_invalid_business_values():
         calculate_line_item(float("inf"), 100, 0, 18)
 
 
-def test_invoice_discount_is_apportioned_before_gst_with_no_residual_drift():
+def test_invoice_price_value_discount_is_apportioned_without_residual_drift():
     result = _sales_totals(
         items=[
             {
@@ -86,14 +86,14 @@ def test_invoice_discount_is_apportioned_before_gst_with_no_residual_drift():
     )
 
     assert result["subtotal_amount"] == 800.0
-    assert result["discount_amount"] == 20.0
+    assert result["discount_amount"] == Decimal("21.00")
     assert result["scheme_discount"] == 100.0
-    assert result["taxable_amount"] == 680.0
-    assert result["total_tax_amount"] == 102.0
-    assert result["final_amount"] == 782.0
+    assert result["taxable_amount"] == Decimal("693.04")
+    assert result["total_tax_amount"] == Decimal("103.96")
+    assert result["final_amount"] == Decimal("797.00")
     assert sum(item["scheme_discount"] for item in result["calculated_items"]) == 100.0
-    assert sum(item["taxable_amount"] for item in result["calculated_items"]) == 680.0
-    assert sum(item["total_tax_amount"] for item in result["calculated_items"]) == 102.0
+    assert sum(item["taxable_amount"] for item in result["calculated_items"]) == Decimal("693.04")
+    assert sum(item["total_tax_amount"] for item in result["calculated_items"]) == Decimal("103.96")
 
 
 def test_invoice_ignores_client_supplied_calculated_amounts():
@@ -125,7 +125,7 @@ def test_fixed_discount_cannot_make_taxable_amount_negative():
                 "gst_percent": 18,
             }],
             discount_type="fixed",
-            discount_amount=100.01,
+            discount_amount=118.01,
         )
 
 
@@ -150,7 +150,7 @@ def test_invoice_accepts_string_document_discounts_from_json_payloads():
         discount_percent="12.5",
     )
 
-    assert result["scheme_discount"] == 25.0
+    assert result["scheme_discount"] == Decimal("29.50")
     assert result["taxable_amount"] == 175.0
     assert result["igst_amount"] == 31.5
 

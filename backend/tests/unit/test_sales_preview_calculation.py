@@ -44,10 +44,11 @@ def test_sales_preview_allocates_exact_document_discount_and_gst() -> None:
     )
 
     assert totals["scheme_discount"] == Decimal("15.00")
-    assert totals["taxable_amount"] == Decimal("135.00")
-    assert totals["cgst_amount"] == Decimal("12.15")
-    assert totals["sgst_amount"] == Decimal("12.15")
-    assert totals["final_amount"] == Decimal("159.30")
+    # UI commands discount price value (including tax), not the pre-tax base.
+    assert totals["taxable_amount"] == Decimal("137.28")
+    assert totals["cgst_amount"] == Decimal("12.36")
+    assert totals["sgst_amount"] == Decimal("12.36")
+    assert totals["final_amount"] == Decimal("162.00")
     assert totals["round_off_amount"] == Decimal("0.00")
 
 
@@ -65,7 +66,7 @@ def test_sales_preview_preserves_paise_for_canonical_no_rounding_policy() -> Non
     )
 
     assert totals["subtotal_amount"] == Decimal("200.00")
-    assert totals["discount_amount"] == Decimal("10.00")
+    assert totals["discount_amount"] == Decimal("11.20")
     assert totals["taxable_amount"] == Decimal("190.00")
     assert totals["cgst_amount"] == Decimal("11.40")
     assert totals["sgst_amount"] == Decimal("11.40")
