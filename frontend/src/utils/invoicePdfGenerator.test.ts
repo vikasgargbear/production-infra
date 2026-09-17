@@ -195,7 +195,7 @@ test('uses the pre-tax reduction for printable discount and preserves header dis
     line_total: '212.80',
   }));
   expect(html).toContain('<span>Item discounts</span><span>-₹10.00</span>');
-  expect(html).toContain('<strong>GST total:</strong> ₹22.80');
+  expect(html).not.toContain('<strong>GST total:</strong>');
   expect(html).toContain('<span>CGST</span><span>₹11.40</span>');
   expect(html).toContain('<span>SGST</span><span>₹11.40</span>');
   expect(html).toContain('<span>Grand Total</span><span>₹212.80</span>');
@@ -239,8 +239,9 @@ test('renders only canonical seller, buyer, line, and exact money facts', () => 
   expect(html).toContain('Original for Recipient');
   expect(html).toContain('<strong>Date:</strong> 25/08/2026');
   expect(html).toContain('<strong>Due Date:</strong> 05/09/2026');
-  expect(html).toContain('<strong>Place of Supply:</strong> Maharashtra (27)');
-  expect(html).toContain('<strong>Supply:</strong> intra state');
+  expect(html).not.toContain('<strong>Place of Supply:</strong>');
+  expect(html).not.toContain('<strong>Supply:</strong>');
+  expect(html).not.toContain('<strong>Status:</strong>');
   expect(html).toContain('Recipient (name and signature)');
   expect(html).toContain('Competent Person (name and signature)');
   expect(html).toContain('₹168.00');
@@ -287,9 +288,14 @@ test('labels fixed line discounts and invoice allocations without inventing a pe
   })).toThrow('cannot expose a percentage for its immutable kind');
 });
 
-test('preserves an explicit zero tax component without treating it as missing', () => {
+test('hides explicit zero tax components without changing underlying facts', () => {
   const html = generateInvoiceHTML(invoice());
-  expect(html).toContain('<span>IGST</span><span>₹0.00</span>');
+  expect(html).not.toContain('<span>IGST</span>');
+  expect(html).not.toContain('<span>Charges</span>');
+  expect(html).not.toContain('<span>Net Value</span>');
+  expect(html).not.toContain('<span>Round Off</span>');
+  expect(html).toContain('<span>Taxable Amount</span>');
+  expect(invoice().igst_amount).toBe('0.00');
 });
 
 test.each([
@@ -314,8 +320,25 @@ test('does not include cess in the GST total', () => {
     ...invoice(), cess_amount: '1.00', total_amount: '169.00',
     items: [{ ...invoice().items[0], cess_amount: '1.00', line_total: '169.00' }],
   });
-  expect(html).toContain('<strong>GST total:</strong> ₹18.00');
+  expect(html).not.toContain('<strong>GST total:</strong>');
   expect(html).toContain('<span>Cess</span><span>₹1.00</span>');
+});
+
+test('retains place of supply for interstate invoices and nonzero tax components', () => {
+  const interstate = { ...invoice(), supply_type: 'inter_state' as const,
+    cgst_amount: '0.00', sgst_amount: '0.00', igst_amount: '18.00' };
+  const html = generateInvoiceHTML(interstate);
+  expect(html).toContain('<strong>Place of Supply:</strong> Maharashtra (27)');
+  expect(html).toContain('<span>IGST</span><span>₹18.00</span>');
+  expect(html).not.toContain('<span>CGST</span>');
+  expect(html).toContain('<strong>Reverse charge:</strong> No');
+});
+
+test('retains a nonzero rounding adjustment and reverse-charge declaration', () => {
+  const html = generateInvoiceHTML({ ...invoice(), tax_charge_mechanism: 'reverse_charge',
+    rounding_adjustment: '-0.01', total_amount: '149.99' });
+  expect(html).toContain('<strong>Reverse charge:</strong> Yes');
+  expect(html).toContain('<span>Round Off</span><span>-₹0.01</span>');
 });
 
 test('renders the reviewed included-at-rate treatment for free product quantities', () => {

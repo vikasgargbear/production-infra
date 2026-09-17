@@ -424,6 +424,20 @@ const reconcileInvoiceTotals = (invoice: InvoiceData): { gstTotal: string; itemD
     return { gstTotal, itemDiscount, invoiceDiscount };
 };
 
+const invoiceSummaryRows = (invoice: InvoiceData): string[][] => {
+    const { itemDiscount, invoiceDiscount } = reconcileInvoiceTotals(invoice);
+    return [
+        ['Subtotal', invoice.subtotal_amount], ['Item discounts', itemDiscount],
+        ['Invoice discount', invoiceDiscount], ['Charges', invoice.charges_amount],
+        ...(compareExactDecimals(invoice.net_value_amount, invoice.taxable_amount, 'Net and taxable value', moneyOptions) !== 0
+            ? [['Net Value', invoice.net_value_amount]] : []),
+        ['Taxable Amount', invoice.taxable_amount], ['CGST', invoice.cgst_amount],
+        ['SGST', invoice.sgst_amount], ['IGST', invoice.igst_amount], ['Cess', invoice.cess_amount],
+        ['Round Off', invoice.rounding_adjustment], ['Grand Total', invoice.total_amount],
+    ].filter(([label, value]) => ['Subtotal', 'Net Value', 'Taxable Amount', 'Grand Total'].includes(label)
+        || compareExactDecimals(value, '0.00', label, moneyOptions) !== 0);
+};
+
 export const generateInvoiceHTML = (invoice: InvoiceData): string => {
     const invoiceNumber = requiredText(invoice.invoice_number, 'Invoice number');
     const invoiceDate = requiredText(invoice.invoice_date, 'Invoice date');
@@ -432,7 +446,7 @@ export const generateInvoiceHTML = (invoice: InvoiceData): string => {
     requiredText(invoice.seller_gstin, 'Seller GSTIN');
     requiredText(invoice.customer_name, 'Customer legal name');
     if (!Array.isArray(invoice.items) || invoice.items.length === 0) throw new Error('Invoice lines are unavailable.');
-    const { gstTotal, itemDiscount, invoiceDiscount } = reconcileInvoiceTotals(invoice);
+    const summaryRows = invoiceSummaryRows(invoice);
 
     const itemRows = invoicePresentationRows(invoice).map(row => `<tr>${row.map((cell, column) =>
         `<td class="${column >= 4 ? 'right' : column === 0 ? 'center' : ''}">${cell ? cell.split('\n').map((line, index) =>
@@ -446,7 +460,7 @@ export const generateInvoiceHTML = (invoice: InvoiceData): string => {
     const customerPhone = invoice.customer_phone
         ? `<div><strong>Phone:</strong> ${escapeHTML(invoice.customer_phone)}</div>` : '';
     const placeOfSupply = `${requiredText(invoice.place_of_supply_display_name, 'Place-of-supply name')} (${requiredText(invoice.place_of_supply_state_code, 'Place-of-supply state code')})`;
-    const supplyType = requiredText(invoice.supply_type, 'Supply type').replace(/_/g, ' ');
+    const showPlaceOfSupply = requiredText(invoice.supply_type, 'Supply type') !== 'intra_state';
     const freeFootnote = freeSupplyFootnote(invoice);
     const discountDisplay = (value: string) => compareExactDecimals(value, '0.00', 'Discount', moneyOptions) > 0
         ? `-${money(value, 'Discount')}` : money(value, 'Discount');
@@ -484,8 +498,7 @@ th:nth-child(7){width:9.9%}th:nth-child(8){width:6.3%}th:nth-child(9){width:9.4%
 ${licenceLine(invoice.seller_drug_license_numbers, 'Seller drug licences')}</section>
 <section class="document-meta"><div><strong>Original for Recipient</strong></div><h2 class="invoice-title">Tax Invoice</h2><div><strong>Invoice No:</strong> ${escapeHTML(invoiceNumber)}</div>
 <div><strong>Date:</strong> ${escapeHTML(displayDate(invoiceDate, 'Invoice date'))}</div><div><strong>Due Date:</strong> ${invoice.due_date ? escapeHTML(displayDate(invoice.due_date, 'Invoice due date')) : 'Not specified'}</div>
-<div><strong>Place of Supply:</strong> ${escapeHTML(placeOfSupply)}</div>
-<div><strong>Supply:</strong> ${escapeHTML(supplyType)}</div><div><strong>Status:</strong> ${escapeHTML(invoice.status).toUpperCase()}</div></section></header>
+${showPlaceOfSupply ? `<div><strong>Place of Supply:</strong> ${escapeHTML(placeOfSupply)}</div>` : ''}</section></header>
 <section class="party-grid"><div class="party-card"><h2>Bill To</h2><div class="party-name">${escapeHTML(invoice.customer_name)}</div>
 ${addressLines(invoice.billing_address, 'Customer billing address')}${customerGstin}${customerPhone}
 ${licenceLine(invoice.customer_drug_license_numbers, 'Customer drug licences')}</div>
@@ -493,14 +506,10 @@ ${licenceLine(invoice.customer_drug_license_numbers, 'Customer drug licences')}<
 ${addressLines(invoice.shipping_address, 'Customer shipping address')}</div></section>
 <p class="muted">Amounts in INR. Disc amt shows the before-tax reduction. Amounts apply once per product line; quantities are shown by batch.</p>
 <table aria-label="Invoice items"><thead><tr>${ITEM_HEADERS.map(label => `<th>${label}</th>`).join('')}</tr></thead><tbody>${itemRows}</tbody></table>
-<section class="summary-wrap"><div class="tax-note"><strong>Tax treatment:</strong> ${invoice.tax_charge_mechanism === 'reverse_charge' ? 'Reverse charge' : 'Normal charge'}<br>
-<strong>GST total:</strong> ${money(gstTotal, 'Invoice GST total')}<br>CGST ${money(invoice.cgst_amount, 'Invoice CGST')} | SGST ${money(invoice.sgst_amount, 'Invoice SGST')} | IGST ${money(invoice.igst_amount, 'Invoice IGST')}${freeFootnote ? `<br><br><strong>Free units:</strong> ${escapeHTML(freeFootnote)}` : ''}</div>
-<div class="summary"><h2>Invoice Summary</h2>${summaryRow('Subtotal', money(invoice.subtotal_amount, 'Invoice subtotal'))}
-${summaryRow('Item discounts', discountDisplay(itemDiscount))}${summaryRow('Invoice discount', discountDisplay(invoiceDiscount))}${summaryRow('Charges', money(invoice.charges_amount, 'Invoice charges'))}
-${summaryRow('Net Value', money(invoice.net_value_amount, 'Invoice net value'))}${summaryRow('Taxable Amount', money(invoice.taxable_amount, 'Invoice taxable amount'))}
-${summaryRow('CGST', money(invoice.cgst_amount, 'Invoice CGST'))}${summaryRow('SGST', money(invoice.sgst_amount, 'Invoice SGST'))}
-${summaryRow('IGST', money(invoice.igst_amount, 'Invoice IGST'))}${summaryRow('Cess', money(invoice.cess_amount, 'Invoice cess'))}
-${summaryRow('Round Off', money(invoice.rounding_adjustment, 'Invoice rounding adjustment'))}${summaryRow('Grand Total', money(invoice.total_amount, 'Invoice grand total'), 'grand')}</div></section>
+<section class="summary-wrap"><div class="tax-note"><strong>Reverse charge:</strong> ${invoice.tax_charge_mechanism === 'reverse_charge' ? 'Yes' : 'No'}${freeFootnote ? `<br><br><strong>Free units:</strong> ${escapeHTML(freeFootnote)}` : ''}</div>
+<div class="summary"><h2>Invoice Summary</h2>${summaryRows.map(([label, value]) => summaryRow(label,
+    label === 'Item discounts' || label === 'Invoice discount' ? discountDisplay(value) : money(value, label),
+    label === 'Grand Total' ? 'grand' : '')).join('')}</div></section>
 <section class="signatures"><div class="signature">Recipient (name and signature)</div><div class="signature">Competent Person (name and signature)<br>For ${escapeHTML(invoice.seller_legal_name)}</div></section>
 <footer class="footer">Computer-generated tax invoice from the posted sales record.</footer></main></body></html>`;
 };
@@ -550,10 +559,11 @@ export const buildInvoicePDF = (invoiceData: InvoiceData): jsPDF => {
     pdf.text(`Due Date: ${invoiceData.due_date
         ? displayDate(invoiceData.due_date, 'Invoice due date')
         : 'Not specified'}`, right, 32, { align: 'right' });
-    pdf.text(`Place of Supply: ${invoiceData.place_of_supply_display_name} (${invoiceData.place_of_supply_state_code})`, right, 37, { align: 'right' });
-    pdf.text(`Supply: ${invoiceData.supply_type.replace(/_/g, ' ')}`, right, 42, { align: 'right' });
-    pdf.text(`Status: ${invoiceData.status.toUpperCase()}`, right, 47, { align: 'right' });
-    const headerBottom = Math.max(53, sellerLicenceY + (invoiceData.seller_drug_license_numbers.length ? 5 : 1));
+    const showPlaceOfSupply = invoiceData.supply_type !== 'intra_state';
+    if (showPlaceOfSupply) {
+        pdf.text(`Place of Supply: ${invoiceData.place_of_supply_display_name} (${invoiceData.place_of_supply_state_code})`, right, 37, { align: 'right' });
+    }
+    const headerBottom = Math.max(showPlaceOfSupply ? 43 : 38, sellerLicenceY + (invoiceData.seller_drug_license_numbers.length ? 5 : 1));
     pdf.setDrawColor(30, 41, 59); pdf.setLineWidth(0.5); pdf.line(margin, headerBottom, right, headerBottom);
 
     const cardTop = headerBottom + 4;
@@ -612,21 +622,13 @@ export const buildInvoicePDF = (invoiceData: InvoiceData): jsPDF => {
 
     let summaryY = (pdf.lastAutoTable?.finalY ?? 70) + 6;
     if (summaryY > 207) { pdf.addPage(); summaryY = 16; }
-    const { gstTotal, itemDiscount, invoiceDiscount } = reconcileInvoiceTotals(invoiceData);
     const freeFootnote = freeSupplyFootnote(invoiceData);
-    const summaryRows = [
-        ['Subtotal', invoiceData.subtotal_amount], ['Item discounts', itemDiscount], ['Invoice discount', invoiceDiscount],
-        ['Charges', invoiceData.charges_amount], ['Net Value', invoiceData.net_value_amount],
-        ['Taxable Amount', invoiceData.taxable_amount], ['CGST', invoiceData.cgst_amount],
-        ['SGST', invoiceData.sgst_amount], ['IGST', invoiceData.igst_amount], ['Cess', invoiceData.cess_amount],
-        ['Round Off', invoiceData.rounding_adjustment], ['Grand Total', invoiceData.total_amount],
-    ];
+    const summaryRows = invoiceSummaryRows(invoiceData);
     pdf.setFont('helvetica', 'bold'); pdf.setFontSize(7.5);
-    pdf.text(`Tax treatment: ${invoiceData.tax_charge_mechanism === 'reverse_charge' ? 'Reverse charge' : 'Normal charge'}`, margin, summaryY);
-    pdf.text(`GST total: ${pdfMoney(gstTotal, 'PDF GST total')}`, margin, summaryY + 5);
+    pdf.text(`Reverse charge: ${invoiceData.tax_charge_mechanism === 'reverse_charge' ? 'Yes' : 'No'}`, margin, summaryY);
     if (freeFootnote) {
         pdf.setFont('helvetica', 'normal'); pdf.setFontSize(6.5);
-        pdf.text(`Free units: ${freeFootnote}`, margin, summaryY + 10, { maxWidth: 104 });
+        pdf.text(`Free units: ${freeFootnote}`, margin, summaryY + 5, { maxWidth: 104 });
     }
     const summaryX = 126;
     pdf.text('INVOICE SUMMARY', summaryX, summaryY);
@@ -640,7 +642,7 @@ export const buildInvoicePDF = (invoiceData: InvoiceData): jsPDF => {
             ? `-${formattedValue}` : formattedValue;
         pdf.text(displayValue, right, y, { align: 'right' });
     });
-    const signatureY = summaryY + 68;
+    const signatureY = summaryY + Math.max(38, summaryRows.length * 4.2 + 14);
     pdf.setFont('helvetica', 'normal'); pdf.setFontSize(7);
     pdf.line(margin, signatureY, 78, signatureY); pdf.line(132, signatureY, right, signatureY);
     pdf.text('Recipient (name and signature)', 43, signatureY + 4, { align: 'center' });
