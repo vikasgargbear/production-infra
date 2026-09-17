@@ -85,7 +85,6 @@ const invoice = (): InvoiceData => ({
   }],
   subtotal_amount: '155.00',
   discount_amount: '5.00',
-  pre_tax_discount_amount: '5.00',
   charges_amount: '0.00',
   net_value_amount: '150.00',
   taxable_amount: '150.00',
@@ -121,6 +120,7 @@ const canonicalDetail = (): CanonicalInvoiceDetail => ({
   },
   due_date: '2026-09-05',
   currency_code: 'INR',
+  pre_tax_discount_amount: '5.00',
   items: invoice().items.map((item, index) => ({
     ...item,
     id: `line-${index + 1}`,
@@ -194,7 +194,7 @@ test('uses the pre-tax reduction for printable discount and preserves header dis
     igst_amount: '0.00',
     line_total: '212.80',
   }));
-  expect(html).toContain('<span>Discount</span><span>-₹10.00</span>');
+  expect(html).toContain('<span>Item discounts</span><span>-₹10.00</span>');
   expect(html).toContain('<strong>GST total:</strong> ₹22.80');
   expect(html).toContain('<span>CGST</span><span>₹11.40</span>');
   expect(html).toContain('<span>SGST</span><span>₹11.40</span>');
@@ -229,12 +229,13 @@ test('renders only canonical seller, buyer, line, and exact money facts', () => 
   expect(html).toContain('30/09/2028');
   expect(html).toContain('BATCH-TWO');
   expect(html).toContain('31/01/2029');
-  expect(html).toContain('Qty 0.73 + Free 0.13');
+  expect(html).toContain('<div>0.73</div>');
+  expect(html).toContain('<div>0.13</div>');
   expect(html).toContain('Bonus/free units are supplied at no charge and excluded from taxable value.');
-  expect(html).toContain('Paid 1.23');
-  expect(html).toContain('2.5% (₹5.00)');
+  expect(html).not.toContain('Paid');
+  expect(html).toContain('<div>2.5%</div>');
+  expect(html).toContain('<div>5.00</div>');
   expect(html).toContain('12%');
-  expect(html).toContain('<div class="muted">₹18.00</div>');
   expect(html).toContain('Original for Recipient');
   expect(html).toContain('<strong>Date:</strong> 25/08/2026');
   expect(html).toContain('<strong>Due Date:</strong> 05/09/2026');
@@ -275,7 +276,8 @@ test('labels fixed line discounts and invoice allocations without inventing a pe
     discount_percent: '0.000000',
   };
   const html = generateInvoiceHTML(fixed);
-  expect(html).toContain('Fixed ₹5.00 (₹5.00)');
+  expect(html).toContain('Fixed discount 5.00 (before tax)');
+  expect(html).toContain('<span>Invoice discount</span><span>-₹2.00</span>');
   expect(html).not.toContain('+ invoice ₹2.00');
   expect(html).not.toContain('>0%');
 
@@ -352,7 +354,7 @@ test('keeps every invoice item column inside the A4 printable width with Amount 
     .find((callOptions: any) => callOptions.head[0][0] === '#');
   expect(options).toBeDefined();
   expect(options.head[0].at(-1)).toBe('Amount');
-  expect(options.body[0].at(-1)).toBe('INR 168.00');
+  expect(options.body[0].at(-1)).toBe('168.00');
   expect(options.margin.left).toBe(9);
   expect(options.margin.right).toBe(9);
   expect(options.tableWidth).toBe(192);
@@ -360,7 +362,7 @@ test('keeps every invoice item column inside the A4 printable width with Amount 
 
   const columnWidths = Object.values(options.columnStyles)
     .map((style: any) => style.cellWidth as number);
-  expect(columnWidths).toEqual([6, 49, 41, 18, 19, 19, 18, 22]);
+  expect(columnWidths).toEqual([5, 43, 22, 16, 10, 10, 19, 12, 18, 12, 25]);
   expect(columnWidths.reduce((total: number, width: number) => total + width, 0))
     .toBe(options.tableWidth);
   expect(options.margin.left + options.tableWidth + options.margin.right).toBe(210);
@@ -395,9 +397,32 @@ test('renders four-digit rates, Cess, free treatment, and every batch without fo
 
   const options = mockAutoTable.mock.calls.at(-1)?.[1];
   expect(options.body[0][1]).toContain('Mfr Exact Labs');
-  expect(options.body[0][2]).toBe('BATCH-ONE | Exp 30/09/2028\nQty 0.73 + Free 0.13\nBATCH-TWO | Exp 31/01/2029\nQty 0.5');
-  expect(options.body[0][3]).toBe('Paid 1.23\nFree 0.13');
-  expect(options.body[0][4]).toBe('INR 1,234.57');
-  expect(options.body[0][6]).toBe('12%\nINR 18.00');
-  expect(options.body[0][7]).toBe('INR 169.00');
+  expect(options.body[0].slice(2)).toEqual(['BATCH-ONE', '30/09/2028', '0.73', '0.13', '1,234.57', '2.5%', '5.00', '12%', '169.00']);
+  expect(options.body[1].slice(2)).toEqual(['BATCH-TWO', '31/01/2029', '0.5', '0', '', '', '', '', '']);
+});
+
+test('separates exact before-tax discounts from tax-inclusive allocations without changing total', async () => {
+  const actual = invoice();
+  Object.assign(actual, { subtotal_amount: '200.00', discount_amount: '29.01', net_value_amount: '170.99', taxable_amount: '170.99', cgst_amount: '4.28', sgst_amount: '4.28', total_amount: '179.55' });
+  Object.assign(actual.items[0], { quantity: '2.000000', free_quantity: '1.000000', unit_price: '100.0000', line_discount_value: '10.000000', discount_percent: '10.000000', line_discount_amount: '21.00', line_taxable_discount_amount: '20.00', document_discount_amount: '9.45', document_taxable_discount_amount: '9.01', gst_percent: '5.000000', taxable_amount: '170.99', cgst_amount: '4.28', sgst_amount: '4.28', line_total: '179.55', batch_allocations: [{ batch_number: 'KP2602ED', expiry_date: '2027-12-01', billed_quantity: '2.000000', free_quantity: '1.000000' }] });
+  const html = generateInvoiceHTML(actual);
+  expect(html).toContain('<th>Expiry</th><th>Qty</th><th>Free</th>');
+  expect(html).toContain('<span>Item discounts</span><span>-₹20.00</span>');
+  expect(html).toContain('<span>Invoice discount</span><span>-₹9.01</span>');
+  expect(html).toContain('<span>Grand Total</span><span>₹179.55</span>');
+  expect(html).not.toContain('21.00');
+  expect(html).not.toContain('Split');
+  mockAutoTable.mockClear();
+  await downloadInvoicePDF(actual);
+  expect(mockAutoTable.mock.calls[0][1].body[0].slice(4)).toEqual(['2', '1', '100.00', '10%', '20.00', '5%', '179.55']);
+  actual.items[0].line_taxable_discount_amount = '19.99';
+  expect(() => generateInvoiceHTML(actual)).toThrow('discount allocations do not reconcile');
+});
+
+test('retains the entered fixed price-value discount separately from before-tax reduction', () => {
+  const fixed = invoice();
+  Object.assign(fixed.items[0], { line_discount_kind: 'amount', line_discount_basis: 'price_value', line_discount_value: '5.600000', discount_percent: '0.000000', line_discount_amount: '5.60', line_taxable_discount_amount: '5.00' });
+  const html = generateInvoiceHTML(fixed);
+  expect(html).toContain('Fixed discount 5.60 (quoted price basis)');
+  expect(html).toContain('<div>5.00</div>');
 });
