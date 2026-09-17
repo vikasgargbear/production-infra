@@ -427,6 +427,22 @@ def _persisted_expiry(value: Any) -> datetime:
         return datetime.strptime(normalized, "%Y-%m-%dT%H:%M:%S.%f%z")
 
 
+def _prepare_expiry(context: ActionContext) -> datetime:
+    """Never let a prepared command outlive its verified consent envelope."""
+    now = datetime.now(timezone.utc)
+    requested = now + timedelta(minutes=15)
+    deadline = context.authority_expires_at
+    if deadline is None:
+        # Existing non-web transports still enforce expiry in PostgreSQL.
+        return requested
+    if deadline.tzinfo is None or deadline.utcoffset() is None or deadline <= now:
+        raise OperatorActionError(
+            ActionErrorCode.SCOPE_DENIED,
+            "Command authority has expired; reconnect or renew reviewed consent",
+        )
+    return min(requested, deadline)
+
+
 def _lock_prepare_idempotency(
     session: Session,
     params: Mapping[str, Any],
@@ -824,7 +840,7 @@ class SqlAlchemyOperatorActionService:
         command_id = uuid5(NAMESPACE_URL, identity + ":command")
         artifact_id = uuid5(NAMESPACE_URL, identity + ":artifact")
         request_id = uuid5(NAMESPACE_URL, identity + ":request")
-        expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+        expires_at = _prepare_expiry(context)
         normalized = {key: _json_value(value) for key, value in payload.items()}
         normalized["lines"] = [
             {
@@ -1114,7 +1130,7 @@ class SqlAlchemyOperatorActionService:
         inventory_document_id = uuid5(
             NAMESPACE_URL, identity + ":landed-cost-document"
         )
-        expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+        expires_at = _prepare_expiry(context)
         normalized = {key: _json_value(value) for key, value in payload.items()}
         normalized.update(
             {
@@ -1371,7 +1387,7 @@ class SqlAlchemyOperatorActionService:
         command_id = uuid5(NAMESPACE_URL, identity + ":command")
         artifact_id = uuid5(NAMESPACE_URL, identity + ":artifact")
         request_id = uuid5(NAMESPACE_URL, identity + ":request")
-        expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+        expires_at = _prepare_expiry(context)
         normalized = {key: _json_value(value) for key, value in payload.items()}
         normalized["purchase_order_id"] = str(purchase_order_id)
         normalized["lines"] = [
@@ -1573,7 +1589,7 @@ class SqlAlchemyOperatorActionService:
         )
         command_id = uuid5(NAMESPACE_URL, identity + ":command")
         request_id = uuid5(NAMESPACE_URL, identity + ":request")
-        expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+        expires_at = _prepare_expiry(context)
         normalized = {key: _json_value(value) for key, value in payload.items()}
         normalized["goods_receipt_id"] = str(goods_receipt_id)
         normalized["inventory_document_id"] = str(inventory_document_id)
@@ -1789,7 +1805,7 @@ class SqlAlchemyOperatorActionService:
             if has_direct
             else None
         )
-        expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+        expires_at = _prepare_expiry(context)
         normalized = {key: _json_value(value) for key, value in payload.items()}
         normalized.update(
             {
@@ -2202,7 +2218,7 @@ class SqlAlchemyOperatorActionService:
             for index, line in enumerate(payload["lines"], start=1)
         ]
         request_bytes = canonical_json_bytes(normalized)
-        expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+        expires_at = _prepare_expiry(context)
         params = {
             "org_id": context.organization_id,
             "membership_id": context.membership_id,
@@ -2356,7 +2372,7 @@ class SqlAlchemyOperatorActionService:
             for index, line in enumerate(payload["lines"], start=1)
         ]
         request_bytes = canonical_json_bytes(normalized)
-        expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+        expires_at = _prepare_expiry(context)
         params = {
             "org_id": context.organization_id,
             "membership_id": context.membership_id,
@@ -2550,7 +2566,7 @@ class SqlAlchemyOperatorActionService:
             for index, line in enumerate(payload["lines"], start=1)
         ]
         request_bytes = canonical_json_bytes(normalized)
-        expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+        expires_at = _prepare_expiry(context)
         params = {
             "org_id": context.organization_id,
             "membership_id": context.membership_id,
@@ -2706,7 +2722,7 @@ class SqlAlchemyOperatorActionService:
             for index, item in enumerate(payload["allocations"], start=1)
         ]
         request_bytes = canonical_json_bytes(normalized)
-        expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+        expires_at = _prepare_expiry(context)
         params = {
             "org_id": context.organization_id,
             "membership_id": context.membership_id,
@@ -2858,7 +2874,7 @@ class SqlAlchemyOperatorActionService:
                 for index in range(1, 501)
             ]
         request_bytes = canonical_json_bytes(normalized)
-        expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+        expires_at = _prepare_expiry(context)
         params = {
             "org_id": context.organization_id,
             "membership_id": context.membership_id,
@@ -2976,7 +2992,7 @@ class SqlAlchemyOperatorActionService:
             for index, item in enumerate(payload["allocations"], start=1)
         ]
         request_bytes = canonical_json_bytes(normalized)
-        expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+        expires_at = _prepare_expiry(context)
         params = {
             "org_id": context.organization_id,
             "membership_id": context.membership_id,
@@ -3154,7 +3170,7 @@ class SqlAlchemyOperatorActionService:
             }
         ]
         request_bytes = canonical_json_bytes(normalized)
-        expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+        expires_at = _prepare_expiry(context)
         params = {
             "org_id": context.organization_id,
             "membership_id": context.membership_id,
@@ -3316,7 +3332,7 @@ class SqlAlchemyOperatorActionService:
             for index, line in enumerate(payload["lines"], start=1)
         ]
         request_bytes = canonical_json_bytes(normalized)
-        expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+        expires_at = _prepare_expiry(context)
         params = {
             "org_id": context.organization_id,
             "membership_id": context.membership_id,
@@ -3486,7 +3502,7 @@ class SqlAlchemyOperatorActionService:
             normalized_lines.append(normalized_line)
         normalized["lines"] = normalized_lines
         request_bytes = canonical_json_bytes(normalized)
-        expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+        expires_at = _prepare_expiry(context)
         params = {
             "org_id": context.organization_id,
             "membership_id": context.membership_id,
@@ -3604,7 +3620,7 @@ class SqlAlchemyOperatorActionService:
         normalized = {key: _json_value(value) for key, value in payload.items()}
         normalized["reconciliation_match_id"] = str(match_id)
         request_bytes = canonical_json_bytes(normalized)
-        expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+        expires_at = _prepare_expiry(context)
         params = {
             "org_id": context.organization_id,
             "membership_id": context.membership_id,
@@ -3733,7 +3749,7 @@ class SqlAlchemyOperatorActionService:
                 "reversal_tax_document_id",
             )
         }
-        expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+        expires_at = _prepare_expiry(context)
         params = {
             "org_id": context.organization_id,
             "original_resource_id": payload["original_resource_id"],
@@ -3917,7 +3933,7 @@ class SqlAlchemyOperatorActionService:
             normalized_line["batch_counts"] = counts
             normalized["lines"].append(normalized_line)
         request_bytes = canonical_json_bytes(normalized)
-        expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+        expires_at = _prepare_expiry(context)
         params = {
             "org_id": context.organization_id,
             "membership_id": context.membership_id,
@@ -4107,7 +4123,7 @@ class SqlAlchemyOperatorActionService:
             normalized_line["batch_allocations"] = allocations
             normalized["lines"].append(normalized_line)
         request_bytes = canonical_json_bytes(normalized)
-        expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+        expires_at = _prepare_expiry(context)
         params = {
             "org_id": context.organization_id,
             "membership_id": context.membership_id,
@@ -4326,7 +4342,7 @@ class SqlAlchemyOperatorActionService:
         normalized["lines"] = normalized_lines
         request_bytes = canonical_json_bytes(normalized)
         key_hash = hashlib.sha256(idempotency_key.encode("utf-8")).digest()
-        expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+        expires_at = _prepare_expiry(context)
         params = {
             "org_id": context.organization_id,
             "membership_id": context.membership_id,

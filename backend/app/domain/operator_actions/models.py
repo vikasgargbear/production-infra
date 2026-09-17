@@ -55,6 +55,7 @@ class ActionContext:
     branch_ids: tuple[UUID, ...]
     organization_scope: bool = False
     delegated_command_request_id: Optional[UUID] = None
+    authority_expires_at: Optional[datetime] = None
 
 
 @dataclass(frozen=True)
