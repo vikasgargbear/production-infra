@@ -3,6 +3,34 @@ import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import ItemsTable from './ItemsTableUnified';
 
+test('compact invoice keeps a keyboard table at desktop side-panel widths and cards only on phones', () => {
+  render(<ItemsTable compactBilling items={[]} />);
+  expect(screen.getByTestId('item-cards')).toHaveClass('md:hidden');
+  expect(screen.getByTestId('item-table-scroll')).toHaveClass('md:block', 'overflow-x-auto', 'max-w-full');
+  expect(screen.getByTestId('item-table-scroll')).not.toHaveClass('xl:block');
+  expect(screen.getByRole('table')).toHaveClass('min-w-[1080px]');
+});
+
+test('mobile focus never restores six padded decimals or mutates canonical values', () => {
+  const onUpdateItem = jest.fn();
+  const item = { product_name: 'Mobile medicine', quantity: '1.000000', free_quantity: '0.000000', unit_price: '78.0000', discount_percent: '0.000000' };
+  render(<ItemsTable compactBilling preserveExactDecimals quantityDecimalPlaces={2} items={[item]} onUpdateItem={onUpdateItem} />);
+  for (const [label, value] of [['Quantity', '1'], ['Free quantity', '0'], ['Rate', '78'], ['Discount %', '0']]) {
+    const input = screen.getByLabelText(label, {exact: true}) as HTMLInputElement;
+    fireEvent.focus(input);
+    expect(input.value).toBe(value);
+    fireEvent.blur(input);
+  }
+  expect(onUpdateItem).not.toHaveBeenCalled();
+  expect(item.quantity).toBe('1.000000');
+  expect(item.free_quantity).toBe('0.000000');
+  const quantity = screen.getByLabelText('Quantity', {exact: true}) as HTMLInputElement;
+  fireEvent.focus(quantity);
+  fireEvent.change(quantity, {target: {value: '1.25'}});
+  expect(quantity.value).toBe('1.25');
+  expect(onUpdateItem).toHaveBeenLastCalledWith(0, 'quantity', '1.25');
+});
+
 test('an unknown invoice rate stays blank on blur and accepts keyboard entry without a modal', () => {
   const onUpdateItem = jest.fn();
   render(<ItemsTable compactBilling preserveExactDecimals onUpdateItem={onUpdateItem} items={[{

@@ -4,23 +4,35 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import InvoiceFlow from './InvoiceFlow';
 import { EscapeKeyProvider } from '../../../contexts/EscapeKeyContext';
 import { invoiceDraftsApi } from '../../../services/api/modules/invoiceDrafts.api';
+import { calculateInvoicePreview } from '../../../services/calculations/invoiceCalculationService';
+
+let mockSelectedCustomer: any = null;
+jest.mock('../../../services/calculations/invoiceCalculationService', () => ({ calculateInvoicePreview: jest.fn() }));
+jest.mock('./utils/canonicalInvoiceCommand', () => ({
+    ...jest.requireActual('./utils/canonicalInvoiceCommand'),
+    invoiceBatchAllocationValidationError: () => null,
+}));
 
 const mockInvoice = { invoice_date: '2026-09-13', items: [{ product_name: 'Retained product', product_id: 'product', batch_id: 'batch', branch_id: 'branch', quantity: '2.000000', unit_price: '22.00' }] };
 const mockSetError = jest.fn();
 jest.mock('../../../contexts/CompanyContext', () => ({ useCompany: () => ({ companyInfo: {} }) }));
 jest.mock('../../../contexts/AuthContext', () => ({ useAuth: () => ({ user: { branch_id: 'branch' } }) }));
 jest.mock('./hooks/useInvoiceLogic', () => ({ useInvoiceLogic: () => ({
-    invoice: mockInvoice, selectedCustomer: null, employees: [], setError: mockSetError,
+    invoice: mockInvoice, selectedCustomer: mockSelectedCustomer, employees: [], setError: mockSetError,
     productSearchRef: { current: null }, itemsTableRef: { current: null },
 }) }));
 jest.mock('../../global', () => ({ GenericSuccessModal: () => null, InvoiceDraftPicker: () => null }));
 jest.mock('../CanonicalSalesCommandReview', () => () => null);
-jest.mock('./steps/InvoiceDetailsStep', () => () => null);
+jest.mock('./steps/InvoiceDetailsStep', () => (props: any) => <section>
+    <p>Delivery address selection</p>
+    <button onClick={props.onContinue}>Continue to preview</button>
+</section>);
 jest.mock('./steps/InvoicePreviewStep', () => () => null);
 jest.mock('./steps/InvoiceItemsStep', () => (props: any) => <section>
     <p>{props.invoice.items[0].product_name}</p>
     <input aria-label="Invoice rate" defaultValue={props.invoice.items[0].unit_price} />
     <button onClick={props.onClose}>Close invoice</button>
+    <button onClick={props.onContinue}>Continue to delivery</button>
 </section>);
 jest.mock('../../../services/api/modules/invoiceDrafts.api', () => ({
     invoiceDraftsApi: { create: jest.fn() },
@@ -29,12 +41,24 @@ jest.mock('../../../services/api/modules/invoiceDrafts.api', () => ({
 }));
 
 describe('InvoiceFlow unsaved exit', () => {
-    beforeEach(() => jest.clearAllMocks());
+    beforeEach(() => { jest.clearAllMocks(); mockSelectedCustomer = null; });
     const mount = () => {
         const onClose = jest.fn();
         render(<EscapeKeyProvider><InvoiceFlow onClose={onClose} /></EscapeKeyProvider>);
         return onClose;
     };
+
+    it('opens address entry without requiring totals, but cannot review an incomplete invoice', () => {
+        mockSelectedCustomer = { customer_id: 'customer', customer_name: 'Test customer' };
+        mount();
+        fireEvent.click(screen.getByRole('button', { name: 'Continue to delivery' }));
+        expect(screen.getByText('Delivery address selection')).toBeInTheDocument();
+        expect(calculateInvoicePreview).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole('button', { name: 'Continue to preview' }));
+        expect(screen.getByText('Delivery address selection')).toBeInTheDocument();
+        expect(mockSetError).toHaveBeenLastCalledWith(expect.any(String));
+        expect(calculateInvoicePreview).not.toHaveBeenCalled();
+    });
 
     it('Escape offers a draft without losing the row; Keep editing and dialog Escape retain it', () => {
         const onClose = mount();

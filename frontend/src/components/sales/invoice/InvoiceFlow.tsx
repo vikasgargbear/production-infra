@@ -22,6 +22,7 @@ import {
 import CanonicalSalesCommandReview from '../CanonicalSalesCommandReview';
 import { formatExactCurrency } from '../../../utils/exactDecimal';
 import { applyCanonicalInvoicePreview } from './utils/invoicePreviewState';
+import { invoicePreviewError } from './utils/invoicePreviewError';
 import {
     buildSalesInvoiceDraftPayload,
     requireSalesInvoiceDraftState,
@@ -430,20 +431,12 @@ ${companyInfo.name}`;
             return;
         }
 
-        try {
-            const result = await calculateInvoicePreview(invoice, isOnline);
-
-            // Update invoice with calculated totals
-            setInvoice(prev => applyCanonicalInvoicePreview(
-                prev,
-                result,
-                { replaceItems: false },
-            ));
-            setCurrentStep(2);
-        } catch (calcError) {
-            toast.error('Calculation error. Please try again.');
-        }
-    }, [selectedCustomer, invoice, isOnline, setError, setInvoice]);
+        // Delivery address is selected/saved on step 2. Requiring a tax
+        // preview here traps customers without an address on the items page.
+        // Step 2 still validates and obtains authoritative totals before review.
+        setError(null);
+        setCurrentStep(2);
+    }, [selectedCustomer, invoice, setError]);
 
     const handleContinueFromStep2 = useCallback(async () => {
         setError(null);
@@ -468,8 +461,9 @@ ${companyInfo.name}`;
             ));
             setCurrentStep(3);
         } catch (calcError) {
-            setError('Calculation error. Please try again.');
-            toast.error('Calculation error. Please try again.');
+            const message = invoicePreviewError(calcError);
+            setError(message);
+            toast.error(message);
         }
     }, [companyInfo, invoice, isOnline, selectedCustomer, setError, setInvoice]);
 

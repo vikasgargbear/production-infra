@@ -172,6 +172,26 @@ describe('useInvoiceLogic selected quantity boundary', () => {
         expect(result.current.error).toBe('Company setup is incomplete');
     });
 
+    it('shows the missing-address failure and clears it when customer selection changes', async () => {
+        mockedPreview.mockRejectedValueOnce({ response: { status: 422, data: {
+            detail: 'customer has no effective primary sales address',
+        } } });
+        const errorLog = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+        try {
+            const { result } = renderHook(() => useInvoiceLogic());
+            await waitFor(() => expect(result.current.isLoading).toBe(false));
+            act(() => result.current.handleCustomerSelect(customer));
+            await act(async () => {
+                await result.current.handleAddItem({ ...selectedProduct, quantity: '1.000000', free_quantity: '0.000000' });
+            });
+            await waitFor(() => expect(result.current.error).toContain('active primary sales address'));
+            act(() => result.current.handleCustomerSelect(null));
+            await waitFor(() => expect(result.current.error).toBeNull());
+        } finally {
+            errorLog.mockRestore();
+        }
+    });
+
     it.each([
         {
             label: 'free-only selection',

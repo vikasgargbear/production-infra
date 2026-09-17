@@ -109,6 +109,11 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
     const [mobileQuantityErrors, setMobileQuantityErrors] = useState<Record<string, string>>({});
     const [mobileCommercialErrors, setMobileCommercialErrors] = useState<Record<string, string>>({});
     const [activeMobileField, setActiveMobileField] = useState<string | null>(null);
+    const [activeMobileValue, setActiveMobileValue] = useState('');
+    const beginMobileEdit = (field: string, value: string | number | undefined) => {
+        setActiveMobileField(field);
+        setActiveMobileValue(compactDecimalInput(value));
+    };
     const EDITABLE_FIELDS = ['quantity', 'unit_price', 'discount_percent', 'free'];
 
     const quantityInputStep = quantityDecimalPlaces === 0
@@ -134,6 +139,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
         }
 
         if (rawValue === '') return;
+        setActiveMobileValue(rawValue);
         setMobileQuantityErrors(previous => {
             if (!previous[errorKey]) return previous;
             const next = { ...previous };
@@ -150,6 +156,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
     ): void => {
         const errorKey = `${index}-${field}`;
         if (compactBilling && field === 'unit_price' && rawValue === '') {
+            setActiveMobileValue(rawValue);
             setMobileCommercialErrors(previous => ({ ...previous, [errorKey]: '' }));
             onUpdateItem?.(index, field, '');
             return;
@@ -167,6 +174,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
             return;
         }
         if (rawValue === '') return;
+        setActiveMobileValue(rawValue);
         setMobileCommercialErrors(previous => {
             if (!previous[errorKey]) return previous;
             const next = { ...previous };
@@ -354,7 +362,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
     useEffect(() => {
         const desktopLayout = typeof window === 'undefined'
             || typeof window.matchMedia !== 'function'
-            || window.matchMedia('(min-width: 1280px)').matches;
+            || window.matchMedia(compactBilling ? '(min-width: 768px)' : '(min-width: 1280px)').matches;
         if (desktopLayout && items.length > 0 && !readOnly) {
             const lastItem = items[items.length - 1];
             if (lastItem.quantity === 1 || lastItem.quantity === 0) {
@@ -366,11 +374,11 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                 }
             }
         }
-    }, [items, readOnly]);
+    }, [items, readOnly, compactBilling]);
 
     return (
         <div className={className}>
-            <div className="space-y-3 xl:hidden">
+            <div data-testid="item-cards" className={`space-y-3 ${compactBilling ? 'md:hidden' : 'xl:hidden'}`}>
                 {items.length === 0 ? (
                     <div className="border border-gray-200 bg-white px-4 py-8 text-center">
                         <p className="text-sm text-gray-600">No items added yet</p>
@@ -398,19 +406,19 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
 
                         <div className="mt-4 grid grid-cols-2 gap-3">
                             <label className="text-xs font-medium text-gray-600">Quantity
-                                <input type="number" min="0" step={quantityInputStep} inputMode="decimal" value={activeMobileField === `${index}-quantity` ? (item.quantity ?? 0) : compactDecimalInput(item.quantity)} onFocus={() => setActiveMobileField(`${index}-quantity`)} onBlur={() => setActiveMobileField(null)} onChange={(event) => updateMobileQuantity(index, 'quantity', event.target.value)} readOnly={readOnly} aria-invalid={mobileQuantityErrors[`${index}-quantity`] ? true : undefined} aria-describedby={mobileQuantityErrors[`${index}-quantity`] ? `mobile-quantity-error-${index}` : undefined} className="mt-1 min-h-11 w-full border border-gray-300 px-3 text-right text-base text-gray-900" />
+                                <input type="number" min="0" step={quantityInputStep} inputMode="decimal" value={activeMobileField === `${index}-quantity` ? activeMobileValue : compactDecimalInput(item.quantity)} onFocus={() => beginMobileEdit(`${index}-quantity`, item.quantity)} onBlur={() => setActiveMobileField(null)} onChange={(event) => updateMobileQuantity(index, 'quantity', event.target.value)} readOnly={readOnly} aria-invalid={mobileQuantityErrors[`${index}-quantity`] ? true : undefined} aria-describedby={mobileQuantityErrors[`${index}-quantity`] ? `mobile-quantity-error-${index}` : undefined} className="mt-1 min-h-11 w-full border border-gray-300 px-3 text-right text-base text-gray-900" />
                                 {mobileQuantityErrors[`${index}-quantity`] && <span id={`mobile-quantity-error-${index}`} role="alert" className="mt-1 block text-xs text-red-700">{mobileQuantityErrors[`${index}-quantity`]}</span>}
                             </label>
                             <label className="text-xs font-medium text-gray-600">Rate
-                                <input type="number" min="0" step="0.01" inputMode="decimal" value={activeMobileField === `${index}-unit_price` ? (item.unit_price ?? 0) : compactDecimalInput(item.unit_price)} onFocus={() => setActiveMobileField(`${index}-unit_price`)} onBlur={() => setActiveMobileField(null)} onChange={(event) => updateMobileCommercialValue(index, 'unit_price', event.target.value)} readOnly={readOnly} aria-invalid={mobileCommercialErrors[`${index}-unit_price`] ? true : undefined} aria-describedby={mobileCommercialErrors[`${index}-unit_price`] ? `mobile-rate-error-${index}` : undefined} className="mt-1 min-h-11 w-full border border-gray-300 px-3 text-right text-base text-gray-900" />
+                                <input type="number" min="0" step="0.01" inputMode="decimal" value={activeMobileField === `${index}-unit_price` ? activeMobileValue : compactDecimalInput(item.unit_price)} onFocus={() => beginMobileEdit(`${index}-unit_price`, item.unit_price)} onBlur={() => setActiveMobileField(null)} onChange={(event) => updateMobileCommercialValue(index, 'unit_price', event.target.value)} readOnly={readOnly} aria-invalid={mobileCommercialErrors[`${index}-unit_price`] ? true : undefined} aria-describedby={mobileCommercialErrors[`${index}-unit_price`] ? `mobile-rate-error-${index}` : undefined} className="mt-1 min-h-11 w-full border border-gray-300 px-3 text-right text-base text-gray-900" />
                                 {mobileCommercialErrors[`${index}-unit_price`] && <span id={`mobile-rate-error-${index}`} role="alert" className="mt-1 block text-xs text-red-700">{mobileCommercialErrors[`${index}-unit_price`]}</span>}
                             </label>
                             <label className="text-xs font-medium text-gray-600">Discount %
-                                <input type="number" min="0" max="100" step="0.01" inputMode="decimal" value={activeMobileField === `${index}-discount_percent` ? (item.discount_percent ?? item.discount ?? 0) : compactDecimalInput(item.discount_percent ?? item.discount)} onFocus={() => setActiveMobileField(`${index}-discount_percent`)} onBlur={() => setActiveMobileField(null)} onChange={(event) => updateMobileCommercialValue(index, 'discount_percent', event.target.value)} readOnly={readOnly} aria-invalid={mobileCommercialErrors[`${index}-discount_percent`] ? true : undefined} aria-describedby={mobileCommercialErrors[`${index}-discount_percent`] ? `mobile-discount-error-${index}` : undefined} className="mt-1 min-h-11 w-full border border-gray-300 px-3 text-right text-base text-gray-900" />
+                                <input type="number" min="0" max="100" step="0.01" inputMode="decimal" value={activeMobileField === `${index}-discount_percent` ? activeMobileValue : compactDecimalInput(item.discount_percent ?? item.discount)} onFocus={() => beginMobileEdit(`${index}-discount_percent`, item.discount_percent ?? item.discount)} onBlur={() => setActiveMobileField(null)} onChange={(event) => updateMobileCommercialValue(index, 'discount_percent', event.target.value)} readOnly={readOnly} aria-invalid={mobileCommercialErrors[`${index}-discount_percent`] ? true : undefined} aria-describedby={mobileCommercialErrors[`${index}-discount_percent`] ? `mobile-discount-error-${index}` : undefined} className="mt-1 min-h-11 w-full border border-gray-300 px-3 text-right text-base text-gray-900" />
                                 {mobileCommercialErrors[`${index}-discount_percent`] && <span id={`mobile-discount-error-${index}`} role="alert" className="mt-1 block text-xs text-red-700">{mobileCommercialErrors[`${index}-discount_percent`]}</span>}
                             </label>
                             <label className="text-xs font-medium text-gray-600">Free quantity
-                                <input type="number" min="0" step={quantityInputStep} inputMode="decimal" value={activeMobileField === `${index}-free_quantity` ? (item.free_quantity ?? item.free ?? 0) : compactDecimalInput(item.free_quantity ?? item.free)} onFocus={() => setActiveMobileField(`${index}-free_quantity`)} onBlur={() => setActiveMobileField(null)} onChange={(event) => updateMobileQuantity(index, 'free_quantity', event.target.value)} readOnly={readOnly} aria-invalid={mobileQuantityErrors[`${index}-free_quantity`] ? true : undefined} aria-describedby={mobileQuantityErrors[`${index}-free_quantity`] ? `mobile-free-quantity-error-${index}` : undefined} className="mt-1 min-h-11 w-full border border-gray-300 px-3 text-right text-base text-gray-900" />
+                                <input type="number" min="0" step={quantityInputStep} inputMode="decimal" value={activeMobileField === `${index}-free_quantity` ? activeMobileValue : compactDecimalInput(item.free_quantity ?? item.free)} onFocus={() => beginMobileEdit(`${index}-free_quantity`, item.free_quantity ?? item.free)} onBlur={() => setActiveMobileField(null)} onChange={(event) => updateMobileQuantity(index, 'free_quantity', event.target.value)} readOnly={readOnly} aria-invalid={mobileQuantityErrors[`${index}-free_quantity`] ? true : undefined} aria-describedby={mobileQuantityErrors[`${index}-free_quantity`] ? `mobile-free-quantity-error-${index}` : undefined} className="mt-1 min-h-11 w-full border border-gray-300 px-3 text-right text-base text-gray-900" />
                                 {mobileQuantityErrors[`${index}-free_quantity`] && <span id={`mobile-free-quantity-error-${index}`} role="alert" className="mt-1 block text-xs text-red-700">{mobileQuantityErrors[`${index}-free_quantity`]}</span>}
                             </label>
                             {showFreeSupplyTaxTreatment && (
@@ -428,12 +436,12 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                 ))}
             </div>
 
-            <div className="hidden overflow-x-auto rounded-lg border border-gray-200 bg-white xl:block">
-            <table className={`${compactBilling ? 'min-w-[1320px]' : 'min-w-[1080px]'} w-full border-collapse tabular-nums`}>
+            <div data-testid="item-table-scroll" role="region" aria-label="Invoice items table" tabIndex={0} className={`hidden max-w-full overflow-x-auto rounded-lg border border-gray-200 bg-white ${compactBilling ? 'md:block' : 'xl:block'}`}>
+            <table className={`${compactBilling ? 'min-w-[1080px] [&_th]:px-1.5 [&_td]:px-1.5 [&_th]:whitespace-nowrap [&_td]:whitespace-nowrap' : 'min-w-[1080px]'} w-full border-collapse tabular-nums`}>
                 <thead>
                     <tr className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b-2 border-blue-200">
                         <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">#</th>
-                        <th className="min-w-72 px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">{compactBilling ? 'Product' : 'Product / batch'}</th>
+                        <th className={`${compactBilling ? 'min-w-52' : 'min-w-72'} px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider`}>{compactBilling ? 'Product' : 'Product / batch'}</th>
                         {compactBilling && <>
                             <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700">Pack</th>
                             <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700">Batch</th>
@@ -473,8 +481,8 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
                                 className="border-b border-gray-200 hover:bg-gray-50 transition-colors"
                             >
                                 <td className="px-3 py-2 text-sm text-gray-600">{index + 1}</td>
-                                <td className="min-w-72 px-3 py-2">
-                                    <div className={`text-sm font-medium leading-5 text-gray-900 ${compactBilling ? 'max-w-sm truncate' : ''}`} title={item.product_name || item.name}>{item.product_name || item.name}</div>
+                                <td className={`${compactBilling ? 'min-w-52' : 'min-w-72'} px-3 py-2`}>
+                                    <div className={`text-sm font-medium leading-5 text-gray-900 ${compactBilling ? 'max-w-64 truncate' : ''}`} title={item.product_name || item.name}>{item.product_name || item.name}</div>
                                     {!compactBilling && <>
                                     <div className="mt-1 break-words text-xs text-gray-500">Batch: {item.batch_display || item.batch_number || 'No batch'}</div>
                                     <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-500">
@@ -606,7 +614,7 @@ const ItemsTableComponent: ForwardRefRenderFunction<ItemsTableRef, ItemsTablePro
             </div>
 
             {!readOnly && enableKeyboardNav && items.length > 0 && (
-                <div className="mt-2 hidden border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-gray-600 xl:block">
+                <div className={`mt-2 hidden border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-gray-600 ${compactBilling ? 'md:block' : 'xl:block'}`}>
                     <strong className="text-blue-700">Keyboard Navigation:</strong>
                     <kbd className="mx-1 px-1.5 py-0.5 bg-white border border-gray-300 rounded text-[10px]">Tab</kbd> Next field •
                     <kbd className="mx-1 px-1.5 py-0.5 bg-white border border-gray-300 rounded text-[10px]">Enter</kbd> Save & next •
