@@ -12,6 +12,8 @@
   "required_migration_files": [
     "backend/alembic/sql/20260913_0079_batch_sale_rate_evidence.sql",
     "backend/alembic/versions/20260913_0079_batch_sale_rate_evidence.py",
+    "backend/alembic/sql/20260917_0080_historical_product_tax_replay.sql",
+    "backend/alembic/versions/20260917_0080_historical_product_tax_replay.py",
     "backend/alembic.ini",
     "backend/alembic/env.py",
     "backend/alembic/script.py.mako",
