@@ -31,6 +31,7 @@ from ...domain.operator_actions.models import (
 )
 from ...domain.operator_actions.service import install_operator_action_service
 from .registry import ACTION_ADAPTER_BINDINGS, ActionAdapterBinding
+from .database_diagnostics import log_database_rejection
 from .batch_sale_rate import EXECUTE_BATCH_SALE_RATE_SQL
 from .calculator_database import (
     calculator_database_configured,
@@ -524,6 +525,9 @@ def _database_action_error(
         return None
 
     diagnostic = getattr(original, "diag", None)
+    log_database_rejection(
+        sqlstate=sqlstate, operation_key=operation_key, diagnostic=diagnostic
+    )
     primary = str(getattr(diagnostic, "message_primary", "") or "").lower()
     code, message, retryable = _DATABASE_ACTION_FAILURES[sqlstate]
     reason = "CANONICAL_DATABASE_POLICY_REJECTED"
