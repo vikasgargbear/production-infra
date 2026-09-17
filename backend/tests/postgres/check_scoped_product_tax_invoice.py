@@ -9,6 +9,7 @@ from datetime import timedelta
 from decimal import Decimal
 import hashlib
 import os
+from pathlib import Path
 from urllib.parse import urlparse
 from uuid import UUID, uuid4
 
@@ -28,20 +29,20 @@ def _fixture_pan():
     return "".join(chr(65 + value % 26) for value in digest[:5]) + f"{int.from_bytes(digest[5:9], 'big') % 10000:04d}" + chr(65 + digest[9] % 26)
 
 
-def _scoped_products(dsn, business_date):
+def _scoped_products(dsn, business_date, *, pre_scoped=False):
     dataset = f"pg15-source-tax-{uuid4()}"
-    sources = [(uuid4(), rate) for rate in (5, 18)]
+    sources = [(uuid4(), rate) for rate in ((12, 12) if pre_scoped else (5, 18))]
     org = base.fixture.IDS["org"]
     member = base.fixture.IDS["operator_membership"]
     facts = [{
         "id": str(fact), "dataset_id": dataset, "source_kind": "product",
         "record_key": f"product:{fact}", "branch_id": base.fixture.IDS["branch"],
-        "event_date": business_date.isoformat(), "product_code": f"TAX-{rate}",
-        "product_name": f"Synthetic scoped medicine {rate}",
+        "event_date": business_date.isoformat(), "product_code": f"TAX-{fact}",
+        "product_name": f"Synthetic scoped medicine {rate} {fact}",
         "quantity": "0.000000", "inventory_value": "0.00", "selection_state": "reviewed",
         "payload": {"hsn_code": "481910", "gst_rate": str(rate),
                     "hsn_gst_candidate_unique": True, "product_kind": "medicine",
-                    "source_product_code": f"TAX-{rate}", "base_uom_code": "EA",
+                    "source_product_code": f"TAX-{fact}", "base_uom_code": "EA",
                     "source_company": "Demo Paper Products Private Limited"},
         "row_sha256": hashlib.sha256(f"{dataset}:{fact}:{rate}".encode()).hexdigest(),
     } for fact, rate in sources]
@@ -60,9 +61,17 @@ def _scoped_products(dsn, business_date):
         cur.execute("SELECT erp_automation_commands.import_historical_migration_facts(%s,%s::jsonb)", (org, Json(facts)))
         assert cur.fetchone()[0]["inserted"] == 2
         cur.execute("SET LOCAL ROLE erp_migration_owner")
+        if pre_scoped:
+            old_sql = (Path(__file__).resolve().parents[2] / "alembic/sql/20260830_0073_historical_product_inventory_cutover.sql").read_text()
+            old_function = old_sql[old_sql.index("CREATE FUNCTION erp_automation_commands.promote_historical_product_inventory_batch("):]
+            old_function = old_function[:old_function.index("$function$;", old_function.index("AS $function$") + len("AS $function$")) + len("$function$;")]
+            cur.execute(old_function.replace("CREATE FUNCTION", "CREATE OR REPLACE FUNCTION", 1))
         cur.execute("SELECT erp_automation_commands.promote_historical_product_inventory_batch(%s,%s,%s,100)",
             (org, dataset, base.fixture.IDS["saleable_location"]))
         assert cur.fetchone()[0]["products_created"] == 2
+        if pre_scoped:
+            from check_historical_product_tax_replay import assert_repair
+            assert_repair(cur, org, dataset, business_date)
         for fact, rate in sources:
             cur.execute("""SELECT b.product_id,c.id,v.id FROM automation.historical_product_bindings b
                 JOIN catalog.uom_conversions c ON c.org_id=b.org_id AND c.product_id=b.product_id
