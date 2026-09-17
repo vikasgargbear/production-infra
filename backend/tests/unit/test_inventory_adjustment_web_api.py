@@ -243,6 +243,7 @@ def test_distinct_approver_context_is_not_bound_to_requester_grant():
     grant_id, membership_id, branch_id, command_id = (uuid4() for _ in range(4))
     db = _Db([[], [{
         "agent_grant_id": grant_id,
+        "authority_expires_at": datetime(2099, 1, 1, tzinfo=timezone.utc),
         "membership_id": membership_id,
         "grant_branch_id": None,
         "command_branch_id": branch_id,
@@ -255,6 +256,7 @@ def test_distinct_approver_context_is_not_bound_to_requester_grant():
         command_request_id=command_id,
     )
     assert context.membership_id == membership_id
+    assert context.authority_expires_at == datetime(2099, 1, 1, tzinfo=timezone.utc)
     assert context.branch_ids == (branch_id,)
     assert db.calls[1][1]["approval_mode"] is True
     assert ":approval_mode OR" in db.calls[1][0]
