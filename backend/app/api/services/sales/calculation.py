@@ -134,8 +134,8 @@ def calculate_sales_totals(
                 "free_quantity": source.free_quantity,
                 "free_supply_tax_treatment": source.free_supply_tax_treatment.value,
                 "subtotal": line.gross_price_amount,
-                "discount_amount": line.line_discount_amount,
-                "scheme_discount": line.document_discount_amount,
+                "discount_amount": line.line_pre_tax_discount_amount,
+                "scheme_discount": line.document_pre_tax_discount_amount,
                 "taxable_amount": line.gst_taxable_value,
                 "gst_percent": source.gst_rate,
                 "cgst_percent": source.gst_rate / 2 if intra else Decimal("0"),
@@ -156,14 +156,26 @@ def calculate_sales_totals(
         decimal_value(insurance_charges, "insurance_charges", minimum=Decimal("0"))
     )
     other = money(decimal_value(other_charges, "other_charges", minimum=Decimal("0")))
-    # Preserve separately displayed unallocated charge inputs; no tax facts are inferred.
-    final = money(result.grand_total + freight + insurance + other)
+    if freight or insurance or other:
+        raise ValueError(
+            "Invoice preview cannot calculate delivery, insurance or other charges "
+            "until their tax treatment is resolved. Remove these charges to continue."
+        )
+    final = result.grand_total
     return {
         "subtotal_amount": money(
             sum((line.gross_price_amount for line in result.products), Decimal("0"))
         ),
-        "discount_amount": result.line_discount_amount,
-        "scheme_discount": result.document_discount_amount,
+        # Existing UI subtracts these from pre-tax subtotal. Project canonical
+        # pre-tax reductions, not GST-inclusive price-value discount amounts.
+        "discount_amount": sum(
+            (line.line_pre_tax_discount_amount for line in result.products),
+            Decimal("0.00"),
+        ),
+        "scheme_discount": sum(
+            (line.document_pre_tax_discount_amount for line in result.products),
+            Decimal("0.00"),
+        ),
         "scheme_discount_percent": money(
             percent if normalized_discount_type == "percentage" else Decimal("0")
         ),

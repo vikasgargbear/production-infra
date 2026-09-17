@@ -86,12 +86,12 @@ def test_invoice_price_value_discount_is_apportioned_without_residual_drift():
     )
 
     assert result["subtotal_amount"] == 800.0
-    assert result["discount_amount"] == Decimal("21.00")
-    assert result["scheme_discount"] == 100.0
+    assert result["discount_amount"] == Decimal("20.00")
+    assert result["scheme_discount"] == Decimal("86.96")
     assert result["taxable_amount"] == Decimal("693.04")
     assert result["total_tax_amount"] == Decimal("103.96")
     assert result["final_amount"] == Decimal("797.00")
-    assert sum(item["scheme_discount"] for item in result["calculated_items"]) == 100.0
+    assert sum(item["scheme_discount"] for item in result["calculated_items"]) == Decimal("86.96")
     assert sum(item["taxable_amount"] for item in result["calculated_items"]) == Decimal("693.04")
     assert sum(item["total_tax_amount"] for item in result["calculated_items"]) == Decimal("103.96")
 
@@ -150,7 +150,7 @@ def test_invoice_accepts_string_document_discounts_from_json_payloads():
         discount_percent="12.5",
     )
 
-    assert result["scheme_discount"] == Decimal("29.50")
+    assert result["scheme_discount"] == Decimal("25.00")
     assert result["taxable_amount"] == 175.0
     assert result["igst_amount"] == 31.5
 
@@ -213,7 +213,7 @@ def test_multi_item_invoice_matrix_reconciles_every_header_and_line_total():
                 gst_type=gst_type,
                 discount_type="fixed",
                 discount_amount=document_discount,
-                freight_charges=str(Decimal(rng.randint(0, 10000)) / Decimal("100")),
+                freight_charges="0",
             )
 
             lines = result["calculated_items"]

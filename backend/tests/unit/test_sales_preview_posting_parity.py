@@ -7,12 +7,30 @@ from app.api.services.sales.calculation import calculate_sales_totals
 from app.infrastructure.operator_actions.sales_invoice import calculation_documents
 
 
+@pytest.mark.parametrize(
+    "field", ["freight_charges", "insurance_charges", "other_charges"]
+)
+def test_preview_refuses_unresolved_charge_tax_treatment(field):
+    with pytest.raises(ValueError, match="until their tax treatment is resolved"):
+        calculate_sales_totals(
+            [{"quantity": "1", "unit_price": "100", "resolved_gst_percent": "5"}],
+            "CGST/SGST",
+            **{field: "1.00"},
+        )
+
+
 def test_preview_rejects_quantity_outside_posting_precision():
     with pytest.raises(ValueError, match="exceeds numeric"):
-        calculate_sales_totals([{
-            "quantity": "9007199254740993.000001", "unit_price": "1",
-            "resolved_gst_percent": "5",
-        }], "CGST/SGST")
+        calculate_sales_totals(
+            [
+                {
+                    "quantity": "9007199254740993.000001",
+                    "unit_price": "1",
+                    "resolved_gst_percent": "5",
+                }
+            ],
+            "CGST/SGST",
+        )
 
 
 @pytest.mark.parametrize(
@@ -87,8 +105,16 @@ def test_discounted_free_item_preview_matches_posting_component_rounding(
     assert prepared["totals"]["grand_total"] == expected_total
     assert preview["final_amount"] == Decimal(expected_total)
     assert preview["taxable_amount"] == Decimal(prepared["totals"]["gst_taxable_total"])
+    assert (
+        preview["subtotal_amount"]
+        - preview["discount_amount"]
+        - preview["scheme_discount"]
+        == preview["taxable_amount"]
+    )
     if supply_type == "intra_state" and line_count == 1:
         assert preview["taxable_amount"] == Decimal("170.99")
+        assert preview["discount_amount"] == Decimal("20.00")
+        assert preview["scheme_discount"] == Decimal("9.01")
         assert preview["cgst_amount"] == preview["sgst_amount"] == Decimal("4.28")
     for component in ("cgst", "sgst", "igst"):
         assert preview[f"{component}_amount"] == Decimal(

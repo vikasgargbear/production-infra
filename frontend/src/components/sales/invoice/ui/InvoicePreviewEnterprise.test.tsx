@@ -5,6 +5,31 @@ import InvoicePreviewEnterprise from './InvoicePreviewEnterprise';
 const id = (suffix: string) => `10000000-0000-7000-8000-${suffix.padStart(12, '0')}`;
 
 describe('InvoicePreviewEnterprise exact rate display', () => {
+  it('labels canonical pre-tax discount reductions explicitly in the summary', () => {
+    render(<InvoicePreviewEnterprise companyInfo={{ name: 'Seller' }} invoice={{
+      invoice_number: '', invoice_date: '2026-09-17', customer_name: 'Buyer',
+      customer_details: { customer_name: 'Buyer' }, gst_type: 'CGST/SGST', items: [{
+        product_id: id('1'), product_name: 'Medicine', batch_id: id('2'),
+        batch_number: 'B1', expiry_date: '2028-09-01', quantity: '2.000000',
+        free_quantity: '1.000000', unit_price: '100.0000', mrp: '120.0000',
+        discount_percent: '10.000000', gst_percent: '5.000000', taxable_amount: '170.99',
+        cgst_amount: '4.28', sgst_amount: '4.28', igst_amount: '0.00',
+        total_tax_amount: '8.56', line_total: '179.55',
+      }],
+      totals: {
+        subtotal_amount: '200.00', discount_amount: '20.00', scheme_discount: '9.01',
+        taxable_amount: '170.99', cgst_amount: '4.28', sgst_amount: '4.28',
+        igst_amount: '0.00', total_tax_amount: '8.56', freight_charges: '0.00',
+        round_off_amount: '0.00', final_amount: '179.55',
+      },
+    } as any} />);
+    expect(screen.getByText('Item discounts (before tax):')).not.toBeNull();
+    expect(screen.getByText('Invoice discount (before tax):')).not.toBeNull();
+    expect(screen.getByText('-₹20.00')).not.toBeNull();
+    expect(screen.getByText('-₹9.01')).not.toBeNull();
+    expect(screen.getAllByText('₹179.55').length).toBeGreaterThan(0);
+  });
+
   it('renders imported four-decimal rate and MRP as two-decimal currency without changing totals', () => {
     render(
       <InvoicePreviewEnterprise
