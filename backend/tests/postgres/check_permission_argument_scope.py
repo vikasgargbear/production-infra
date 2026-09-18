@@ -35,6 +35,17 @@ def main():
             assert allowed('not.a.real.permission') is False
             assert allowed(None) is False
             assert allowed('sales.invoice.create', branch) is True
+            for statement in (
+                "UPDATE core.roles SET status='disabled' WHERE org_id=:org",
+                "UPDATE core.permissions SET status='retired' WHERE code='sales.invoice.create'",
+            ):
+                savepoint = c.begin_nested()
+                c.exec_driver_sql('RESET SESSION AUTHORIZATION')
+                c.execute(text(statement), {'org': org})
+                c.exec_driver_sql('SET SESSION AUTHORIZATION erp_runtime')
+                assert allowed('sales.invoice.create', branch) is False
+                savepoint.rollback()
+                assert allowed('sales.invoice.create', branch) is True
             c.exec_driver_sql('RESET SESSION AUTHORIZATION')
             c.execute(text("DELETE FROM core.role_permissions WHERE org_id=:org AND permission_code='automation.agent_grant.manage'"), {'org': org})
             c.exec_driver_sql('SET SESSION AUTHORIZATION erp_runtime')
@@ -45,7 +56,6 @@ def main():
             assert allowed('sales.invoice.create', branch) is False
             print('PASS: exact permission, unknown/null denial, withdrawn permission, unchanged valid permission, cross-org denial')
         finally:
-            c.exec_driver_sql('RESET SESSION AUTHORIZATION')
             transaction.rollback()
 
 
