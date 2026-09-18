@@ -163,6 +163,7 @@ CANONICAL_INVOICE_DRAFT_WRITES = {
     ("POST", "/api/internal/mcp/invoice-drafts/{draft_id}/prepare"),
 }
 ALLOWED_EFFECTIVE_MUTATIONS = {
+    ("POST", "/api/auth/oauth/mcp/connections"),
     ("POST", "/api/web/billing-consent"),
     ("POST", "/api/web/billing-consent/{grant_id}/revoke"),
     ("POST", "/api/auth/logout"),

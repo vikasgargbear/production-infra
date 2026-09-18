@@ -54,7 +54,8 @@ BEGIN
          'allocate_document_number','replace_setting','change_customer_terms','change_supplier_terms',
          'complete_retention_case','resolve_auth_organization','onboard_organization',
          'create_organization_invitation','accept_organization_invitation',
-         'initiate_drug_license_attachment','transition_drug_license_attachment'
+         'initiate_drug_license_attachment','transition_drug_license_attachment',
+         'mcp_connection_proposals','confirm_mcp_connection','mcp_connection_receipt_matches'
        )
        AND pg_catalog.has_function_privilege('erp_app',proc.oid,'EXECUTE');
     IF exposed_helpers<>0 THEN

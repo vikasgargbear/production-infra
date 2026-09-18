@@ -28,6 +28,8 @@ from ...services.auth import build_erp_token_claims
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth/oauth", tags=["OAuth Authentication"])
 bearer = HTTPBearer(auto_error=False)
+from .mcp_connections import router as mcp_connections_router
+router.include_router(mcp_connections_router)
 
 
 class McpConsentCapability(BaseModel):

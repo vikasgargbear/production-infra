@@ -120,18 +120,23 @@ test('preserves only a supported organization invitation token for Google login'
 
 
 test('loads the ERP proposal with the persisted user session bearer', async () => {
+    const proposal = { client_id: 'client-1', subject: 'subject-1', organization_id: 'org-1',
+        organization_name: 'Test org', agent_grant_id: 'grant-1', client_display_name: 'Assistant',
+        proposal_fingerprint: 'a'.repeat(64), expires_at: '2099-01-01T00:00:00Z', consent_version: 'v1',
+        capabilities: [{ capability_code: 'products.search', operation_mode: 'read', risk_class: 'read_only',
+            approval_policy: 'none', maximum_amount: null, currency_code: null, allow_sensitive_read: false }] };
     mockGetSession.mockResolvedValue({
         data: { session: { access_token: 'supabase-user-token' } },
         error: null,
     });
     global.fetch = jest.fn().mockResolvedValue({
         ok: true,
-        json: async () => ({ client_id: 'client-1' }),
+        json: async () => [proposal],
     });
 
-    await expect(loadMcpConsentProposal('client-1')).resolves.toEqual({ client_id: 'client-1' });
+    await expect(loadMcpConsentProposal('client-1')).resolves.toEqual(proposal);
     expect(fetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/auth/oauth/mcp/consent-proposal?client_id=client-1'),
+        expect.stringContaining('/api/auth/oauth/mcp/connections'),
         { headers: { Authorization: 'Bearer supabase-user-token' } },
     );
 });

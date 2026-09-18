@@ -773,6 +773,7 @@ def check_canonical_model_authority(authority: Mapping, root: Path) -> list[Issu
         definition
         for definition in parse_table_definitions(sql_paths)
         if definition.name.split(".", 1)[0] in BUSINESS_SCHEMAS
+        or definition.name == "erp_security.mcp_connection_receipts"
     ]
     migration_tables = {definition.name: definition for definition in definitions}
     for name in sorted(set(model_tables) - set(migration_tables)):

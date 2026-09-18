@@ -21,6 +21,8 @@ ROOT = Path(__file__).resolve().parents[3]
 
 @pytest.fixture(autouse=True)
 def _open_session_authority(monkeypatch):
+    # Receipt validation has independent current/stale/cross-tenant tests.
+    monkeypatch.setattr(mcp_canonical_reads, "require_connection_receipt", lambda *args: None)
     monkeypatch.setattr(
         mcp_agent_grants, "require_canonical_session_authority", lambda _db: None
     )
@@ -245,6 +247,8 @@ def test_isolated_gateway_registry_matches_canonical_backend_contract():
 
 def test_grant_issues_only_canonical_uuid_claims(monkeypatch):
     ids = {name: uuid4() for name in ("org", "grant", "membership", "user", "auth")}
+    monkeypatch.setattr(mcp_agent_grants, "require_connection_receipt", lambda *args: SimpleNamespace(
+        agent_grant_id=ids["grant"], model_dump=lambda **kwargs: {}))
     row = SimpleNamespace(
         _mapping={
             "org_id": ids["org"],

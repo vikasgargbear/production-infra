@@ -9,6 +9,7 @@ from uuid import uuid4
 import psycopg2
 import pytest
 import requests
+from unittest.mock import Mock
 
 
 SCRIPT = Path(__file__).parents[2] / "scripts" / "exercise_staging_mcp_oauth.py"
@@ -31,7 +32,8 @@ def _oauth_claims(**overrides) -> dict:
         "aud": "authenticated",
         "client_id": "reviewed-client",
         "scope": "openid offline_access",
-        "app_metadata": {"org_id": exercise.DEMO_ORG_ID},
+        "app_metadata": {"org_id": "stale-organization"},
+        "erp_mcp_connection": {"version": "erp_mcp_connection_v1", "organization_id": exercise.DEMO_ORG_ID},
     }
     claims.update(overrides)
     return claims
@@ -64,7 +66,7 @@ def test_deployment_mcp_url_rejects_ambiguous_or_unsafe_bindings(
         exercise._deployment_mcp_url()
 
 
-def test_oauth_claim_preflight_accepts_canonical_web_metadata_shape() -> None:
+def test_oauth_claim_preflight_accepts_explicit_receipt_not_stale_metadata() -> None:
     claims = _oauth_claims()
 
     assert exercise._validate_oauth_access_token_claims(
@@ -74,20 +76,41 @@ def test_oauth_claim_preflight_accepts_canonical_web_metadata_shape() -> None:
     ) == claims
 
 
+def test_disposable_acceptance_confirms_only_exact_reviewed_tenant_and_client():
+    proposal = {"organization_id": exercise.DEMO_ORG_ID, "client_id": "reviewed-client",
+                "agent_grant_id": str(uuid4()), "proposal_fingerprint": "a" * 64}
+    session = Mock()
+    session.get.return_value.ok = True
+    session.get.return_value.json.return_value = [proposal, {**proposal, "organization_id": str(uuid4())}]
+    session.post.return_value.ok = True
+    session.post.return_value.json.return_value = {**proposal, "confirmed": True}
+    exercise._confirm_reviewed_staging_connection(session, "first-party-token", "reviewed-client")
+    assert session.post.call_args.kwargs["json"] == proposal
+
+
+def test_disposable_acceptance_does_not_create_grant_or_select_other_tenant():
+    session = Mock()
+    session.get.return_value.ok = True
+    session.get.return_value.json.return_value = [{"organization_id": str(uuid4()), "client_id": "reviewed-client"}]
+    with pytest.raises(exercise.ExerciseError, match="exactly one reviewed"):
+        exercise._confirm_reviewed_staging_connection(session, "first-party-token", "reviewed-client")
+    session.post.assert_not_called()
+
+
 @pytest.mark.parametrize(
-    "app_metadata",
+    "receipt",
     [
         {},
-        {"org_id": "not-a-uuid"},
+        {"version": "erp_mcp_connection_v1", "organization_id": "not-a-uuid"},
         {"organization_id": exercise.DEMO_ORG_ID},
     ],
 )
 def test_oauth_claim_preflight_rejects_missing_invalid_or_retired_org_key(
-    app_metadata: dict,
+    receipt: dict,
 ) -> None:
-    with pytest.raises(exercise.ExerciseError, match="app_metadata.org_id"):
+    with pytest.raises(exercise.ExerciseError, match="explicit ERP connection receipt"):
         exercise._validate_oauth_access_token_claims(
-            _unsigned_token(_oauth_claims(app_metadata=app_metadata)),
+            _unsigned_token(_oauth_claims(erp_mcp_connection=receipt)),
             client_id="reviewed-client",
             organization_id=exercise.DEMO_ORG_ID,
         )

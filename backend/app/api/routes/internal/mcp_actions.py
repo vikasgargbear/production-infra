@@ -401,6 +401,11 @@ def get_action_context(
     policy = _action_policy_for(operation_key)
     if policy is None or permission != policy.permission:
         _deny_inactive_action_authority()
+    if is_normal_action:
+        from .mcp_connection_receipt import require_connection_receipt
+        require_connection_receipt(db, _uuid_claim(claims, "auth_user_id"), client_id,
+            _uuid_claim(claims, "org_id"), claims.get("mcp_connection_receipt"),
+            _uuid_claim(claims, "agent_grant_id"))
     context = ActionContext(
         auth_user_id=_uuid_claim(claims, "auth_user_id"),
         user_id=_uuid_claim(claims, "user_id"),

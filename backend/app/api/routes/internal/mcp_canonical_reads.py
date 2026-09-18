@@ -20,6 +20,7 @@ from ....core.auth.jwt_auth import decode_jwt
 from ....core.auth.session_authority import require_canonical_session_authority
 from ....core.database import get_db
 from .mcp_agent_grants import _internal_auth, bearer
+from .mcp_connection_receipt import require_connection_receipt
 from .mcp_contract import CanonicalReadPolicy, policy_for
 from .. import (
     canonical_erp_reads,
@@ -177,6 +178,8 @@ def get_canonical_delegation(
     organization_id = _uuid_claim(claims, "org_id")
     membership_id = _uuid_claim(claims, "membership_id")
     agent_grant_id = _uuid_claim(claims, "agent_grant_id")
+    require_connection_receipt(db, auth_user_id, client_id, organization_id,
+        claims.get("mcp_connection_receipt"), agent_grant_id)
     raw_branches = claims.get("branch_ids")
     if not isinstance(raw_branches, list) or len(raw_branches) > 1:
         raise HTTPException(status_code=401, detail="Invalid canonical MCP branch delegation")
