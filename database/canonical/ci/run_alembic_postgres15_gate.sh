@@ -176,6 +176,7 @@ PYTHONPATH=backend \
   python backend/tests/postgres/check_batch_sale_rate_lifecycle.py
 PYTHONPATH=backend \
   python backend/tests/postgres/check_web_billing_consent.py
+  python backend/tests/postgres/check_mcp_invoice_authority_workflow.py
 PYTHONPATH=backend \
   python backend/tests/postgres/check_mcp_connection_consent.py
 PYTHONPATH=backend \

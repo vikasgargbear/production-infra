@@ -322,7 +322,7 @@ def test_mcp_invoice_executes_only_explicit_ten_capabilities(monkeypatch):
         "sales.invoices.get",
     }
     assert policy["capability_rows"][0][4:6] == ("1000.00", "INR")
-    assert policy["consent_version"] == "staging-chatgpt-mcp-invoice-manual-v1"
+    assert policy["consent_version"] == "staging-mcp-invoice-manual-v1"
 
 
 @pytest.mark.parametrize("overrides", [

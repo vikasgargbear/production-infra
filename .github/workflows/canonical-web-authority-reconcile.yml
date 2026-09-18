@@ -409,7 +409,7 @@ jobs:
               target_client_name = CLIENT_NAME
               consent_version = "staging-chatgpt-mcp-manual-v1"
               if mcp_invoice_scope:
-                  consent_version = "staging-chatgpt-mcp-invoice-manual-v1"
+                  consent_version = "staging-mcp-invoice-manual-v1"
               consent_text = "canonical staging bounded ChatGPT MCP command consent"
           else:
               raise SystemExit("authority scope is invalid")
