@@ -59,13 +59,44 @@ test('multiple organizations allow explicitly selecting second grant', async () 
     fireEvent.click(screen.getByRole('button', { name: /Confirm this/ }));
     await waitFor(() => expect(confirmMcpConsentProposal).toHaveBeenCalledWith(second));
 });
-test('already-approved identity redirect waits for explicit ERP confirmation', async () => {
+test('redirect-only authorization never offers an unbound two-client consent picker', async () => {
     authorization.mockResolvedValue({ data: { redirect_url: 'https://chat.example/existing' }, error: null });
+    (loadMcpConsentProposals as jest.Mock).mockResolvedValue([proposal, { ...proposal, client_id: 'second-client' }]);
+    render(<OAuthConsentPage />);
+    const resume = await screen.findByRole('button', { name: 'Continue existing connection' });
+    expect(redirectToOAuthClient).not.toHaveBeenCalled();
+    expect(loadMcpConsentProposals).not.toHaveBeenCalled();
+    expect(confirmMcpConsentProposal).not.toHaveBeenCalled();
+    expect(screen.queryByRole('combobox')).toBeNull();
+    fireEvent.click(resume);
+    await waitFor(() => expect(redirectToOAuthClient).toHaveBeenCalledWith('https://chat.example/existing'));
+    expect(approve).not.toHaveBeenCalled();
+});
+
+test('confirmation and denial are mutually exclusive while a request is pending', async () => {
+    let resolveConfirmation!: () => void;
+    (confirmMcpConsentProposal as jest.Mock).mockReturnValue(new Promise<void>(resolve => { resolveConfirmation = resolve; }));
     render(<OAuthConsentPage />);
     await choose();
-    expect(redirectToOAuthClient).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: /Confirm this/ }));
-    await waitFor(() => expect(redirectToOAuthClient).toHaveBeenCalledWith('https://chat.example/existing'));
+    expect((screen.getByRole('button', { name: 'Deny' }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Deny' }));
+    expect(deny).not.toHaveBeenCalled();
+    resolveConfirmation();
+    await waitFor(() => expect(approve).toHaveBeenCalledTimes(1));
+});
+
+test('pending denial prevents receipt confirmation and late approval', async () => {
+    let resolveDenial!: (result: unknown) => void;
+    deny.mockReturnValue(new Promise(resolve => { resolveDenial = resolve; }));
+    render(<OAuthConsentPage />);
+    await choose();
+    fireEvent.click(screen.getByRole('button', { name: 'Deny' }));
+    expect((screen.getByRole('button', { name: /Confirm this/ }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: /Confirm this/ }));
+    expect(confirmMcpConsentProposal).not.toHaveBeenCalled();
+    resolveDenial({ data: { redirect_url: 'https://chat.example/denied' }, error: null });
+    await waitFor(() => expect(redirectToOAuthClient).toHaveBeenCalledWith('https://chat.example/denied'));
     expect(approve).not.toHaveBeenCalled();
 });
 test('missing reviewed grant never claims success', async () => {

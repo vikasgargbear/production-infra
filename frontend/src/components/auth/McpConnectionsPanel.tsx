@@ -2,11 +2,15 @@ import React, { useEffect, useState } from 'react';
 import { McpConsentProposal, loadMcpConsentProposals, confirmMcpConsentProposal } from '../../services/auth/oauthConsentClient';
 import { formatExactDecimal } from '../../utils/exactDecimal';
 
-export default function McpConnectionsPanel({ clientId, subjectId, clientName, onConfirmed }: {
+export default function McpConnectionsPanel({ clientId, subjectId, clientName, onConfirmed, disabled = false,
+    onBeginConfirmation, onEndConfirmation }: {
     clientId?: string;
     subjectId?: string;
     clientName?: string;
     onConfirmed?: () => void | Promise<void>;
+    disabled?: boolean;
+    onBeginConfirmation?: () => boolean;
+    onEndConfirmation?: () => void;
 }) {
     const [proposals, setProposals] = useState<McpConsentProposal[]>([]);
     const [selected, setSelected] = useState<McpConsentProposal | null>(null);
@@ -27,7 +31,7 @@ export default function McpConnectionsPanel({ clientId, subjectId, clientName, o
         return () => { active = false; };
     }, [clientId, subjectId, clientName]);
     const handleConfirm = async () => {
-        if (!selected || saving) return;
+        if (!selected || saving || disabled || (onBeginConfirmation && !onBeginConfirmation())) return;
         setSaving(true);
         setError('');
         try {
@@ -36,7 +40,7 @@ export default function McpConnectionsPanel({ clientId, subjectId, clientName, o
             setConfirmed(true);
         } catch (reason) {
             setError(reason instanceof Error ? reason.message : 'Unable to confirm connection.');
-        } finally { setSaving(false); }
+        } finally { setSaving(false); onEndConfirmation?.(); }
     };
     return <section className="mx-auto max-w-2xl p-6 space-y-4">
         <h1 className="text-2xl font-semibold">Connect your ERP organization</h1>
@@ -46,7 +50,7 @@ export default function McpConnectionsPanel({ clientId, subjectId, clientName, o
             <p>No reviewed connection grant is available. Ask your organization administrator to review access before connecting.</p> :
             <label className="block">Organization and connection
                 <select className="block w-full min-h-11 border rounded p-2 text-base" value={selected?.agent_grant_id || ''}
-                    disabled={saving || confirmed} onChange={event => setSelected(proposals.find(row => row.agent_grant_id === event.target.value) || null)}>
+                    disabled={saving || confirmed || disabled} onChange={event => setSelected(proposals.find(row => row.agent_grant_id === event.target.value) || null)}>
                     <option value="">Choose a reviewed connection</option>
                     {proposals.map(row => <option key={row.agent_grant_id} value={row.agent_grant_id}>
                         {row.organization_name} — {row.client_display_name}{row.branch_name ? ` — ${row.branch_name}` : ''}
@@ -63,7 +67,7 @@ export default function McpConnectionsPanel({ clientId, subjectId, clientName, o
                 {capability.maximum_amount !== null && `; limit ${capability.currency_code || ''} ${formatExactDecimal(capability.maximum_amount, 'Connection limit', { scale: 6 }, 2)}`}
                 {capability.allow_sensitive_read && <strong className="block text-amber-700">Includes sensitive records</strong>}
             </li>)}</ul>
-            <button type="button" className="min-h-11 rounded bg-blue-600 px-4 py-2 text-white" disabled={saving || confirmed} onClick={() => void handleConfirm()}>
+            <button type="button" className="min-h-11 rounded bg-blue-600 px-4 py-2 text-white" disabled={saving || confirmed || disabled} onClick={() => void handleConfirm()}>
                 {saving ? 'Confirming…' : confirmed ? 'Connection confirmed' : 'Confirm this organization and access'}
             </button>
         </div>}

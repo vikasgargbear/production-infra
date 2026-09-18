@@ -276,20 +276,49 @@ def _validate_oauth_access_token_claims(
     scopes = set(str(claims.get("scope", "")).split())
     if not {"openid", "offline_access"}.issubset(scopes):
         raise ExerciseError("OAuth access token omitted required scopes")
-    app_metadata = claims.get("app_metadata")
+    receipt = claims.get("erp_mcp_connection")
     try:
         token_organization_id = str(
-            UUID(str(app_metadata.get("org_id")))
-            if isinstance(app_metadata, dict)
+            UUID(str(receipt.get("organization_id")))
+            if isinstance(receipt, dict) and receipt.get("version") == "erp_mcp_connection_v1"
             else UUID("")
         )
     except (TypeError, ValueError) as exc:
         raise ExerciseError(
-            "OAuth access token omitted canonical app_metadata.org_id"
+            "OAuth access token omitted explicit ERP connection receipt"
         ) from exc
     if token_organization_id != str(UUID(organization_id)):
         raise ExerciseError("OAuth access token organization drifted")
     return claims
+
+
+def _confirm_reviewed_staging_connection(session, access_token: str, client_id: str) -> None:
+    """Exercise explicit consent only for the fixed disposable acceptance tenant.
+
+    Deployment and grant provisioning do not call this function. This is the
+    user's review/confirm step in the explicitly invoked OAuth acceptance run.
+    """
+    endpoint = ACTIVE_PROVIDER_SERVICES["api"]["origin"] + "/api/auth/oauth/mcp/connections"
+    headers = {"Authorization": f"Bearer {access_token}"}
+    response = session.get(endpoint, headers=headers, timeout=20)
+    if not response.ok:
+        raise _http_error("ERP connection review", response)
+    proposals = response.json()
+    if not isinstance(proposals, list):
+        raise ExerciseError("ERP connection review omitted proposals")
+    matches = [row for row in proposals if row.get("organization_id") == DEMO_ORG_ID
+               and row.get("client_id") == client_id]
+    if len(matches) != 1:
+        raise ExerciseError("Disposable organization requires exactly one reviewed connection grant")
+    proposal = matches[0]
+    response = session.post(endpoint, headers=headers, timeout=20, json={
+        key: proposal[key] for key in ("organization_id", "client_id", "agent_grant_id", "proposal_fingerprint")})
+    if not response.ok:
+        raise _http_error("ERP explicit connection confirmation", response)
+    result = response.json()
+    if result.get("confirmed") is not True or result.get("organization_id") != DEMO_ORG_ID \
+            or result.get("client_id") != client_id or result.get("agent_grant_id") != proposal["agent_grant_id"]:
+        raise ExerciseError("ERP connection confirmation did not match reviewed access")
 
 
 def _jsonrpc_response(response: requests.Response) -> dict[str, Any]:
@@ -768,6 +797,7 @@ def main() -> int:
         mcp_url=mcp_url,
     )
     _authorization_details(session, approval_id, user_access_token)
+    _confirm_reviewed_staging_connection(session, user_access_token, client_id)
     approved_redirect = _decide(session, approval_id, user_access_token, "approve")
     if parse_qs(urlparse(approved_redirect).query).get("state") != [approval_state]:
         raise ExerciseError("OAuth approval did not preserve state")
