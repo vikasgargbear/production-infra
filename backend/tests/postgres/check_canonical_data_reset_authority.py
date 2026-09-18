@@ -95,6 +95,24 @@ def _seed_two_organizations() -> None:
 def main() -> int:
     authority = reset_authority.load_reset_authority()
     _seed_two_organizations()
+    with _connect() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute("SET LOCAL session_replication_role=replica")
+            for organization, prefix in ((PURGE_ORG, "1"), (KEEP_ORG, "2")):
+                member = prefix + "0000000-0000-4000-8000-000000000003"
+                subject = prefix + "0000000-0000-4000-8000-000000000001"
+                grant = prefix + "0000000-0000-4000-8000-000000000020"
+                cursor.execute("""
+                    INSERT INTO automation.agent_grants(org_id,id,subject_membership_id,
+                      client_id,client_display_name,authorization_mode,consent_version,consent_text_hash,
+                      consented_by_membership_id,consented_at,granted_by_membership_id,granted_at,
+                      expires_at,status,created_by_membership_id,updated_by_membership_id)
+                    VALUES (%s,%s,%s,'purge-test-client','Purge test','self_consent','v1',
+                      decode(repeat('61',32),'hex'),%s,now(),%s,now(),now()+interval '1 hour','active',%s,%s)
+                    """, (organization,grant,member,member,member,member,member))
+                cursor.execute("""INSERT INTO erp_security.mcp_connection_receipts
+                    (subject_auth_user_id,client_id,org_id,agent_grant_id,proposal_fingerprint)
+                    VALUES (%s,'purge-test-client',%s,%s,repeat('a',64))""", (subject,organization,grant))
 
     plan_connection = _connect()
     try:
@@ -106,7 +124,7 @@ def main() -> int:
         )
     finally:
         plan_connection.close()
-    assert plan["organization_relation_count"] == 114
+    assert plan["organization_relation_count"] == 115
     assert plan["global_reset_available"] is False
     assert plan["truncate_used"] is False
 
@@ -134,6 +152,10 @@ def main() -> int:
                 (KEEP_ORG,),
             )
             assert cursor.fetchone() == ("Keep Target", "active")
+            cursor.execute("SELECT org_id::text FROM erp_security.mcp_connection_receipts ORDER BY org_id")
+            assert cursor.fetchall() == [(KEEP_ORG,)]
+            cursor.execute("SELECT count(*) FROM auth.users WHERE id='10000000-0000-4000-8000-000000000001'")
+            assert cursor.fetchone() == (1,)
             cursor.execute(
                 "SELECT count(*) FROM core.memberships WHERE org_id=%s::uuid",
                 (KEEP_ORG,),

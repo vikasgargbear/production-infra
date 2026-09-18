@@ -42,6 +42,7 @@ MIXED_ORGANIZATION_RELATIONS = frozenset({
 ORGANIZATION_CONFIRMATION_PREFIX = "DELETE-ORGANIZATION:"
 TRANSITIVE_ORGANIZATION_RELATIONS = frozenset(
     {
+        "erp_security.mcp_connection_receipts",
         "automation.historical_batch_bindings",
         "automation.historical_inventory_openings",
         "automation.historical_product_bindings",
@@ -394,10 +395,11 @@ def _catalog_snapshot(
           JOIN pg_catalog.pg_namespace AS namespace
             ON namespace.oid=relation.relnamespace
          WHERE relation.relkind IN ('r','p')
-           AND namespace.nspname=ANY(%s)
+           AND (namespace.nspname=ANY(%s)
+                OR namespace.nspname || '.' || relation.relname=ANY(%s))
          ORDER BY namespace.nspname, relation.relname
         """,
-        (list(CANONICAL_SCHEMAS),),
+        (list(CANONICAL_SCHEMAS), sorted(ORGANIZATION_SECURITY_RELATIONS)),
     )
     canonical_rows = cursor.fetchall()
 
@@ -408,9 +410,11 @@ def _catalog_snapshot(
           JOIN pg_catalog.pg_namespace AS namespace
             ON namespace.oid=relation.relnamespace
          WHERE relation.relkind IN ('r','p')
-           AND namespace.nspname LIKE 'erp\\_%' ESCAPE '\\'
+           AND namespace.nspname LIKE 'erp\\_%%' ESCAPE '\\'
+           AND namespace.nspname || '.' || relation.relname <> ALL(%s)
          ORDER BY namespace.nspname, relation.relname
-        """
+        """,
+        (sorted(ORGANIZATION_SECURITY_RELATIONS),),
     )
     ephemeral_rows = cursor.fetchall()
 
@@ -757,10 +761,11 @@ def _organization_relations(
            AND attribute.attnum>0
            AND NOT attribute.attisdropped
          WHERE relation.relkind IN ('r','p')
-           AND namespace.nspname=ANY(%s)
+           AND (namespace.nspname=ANY(%s)
+                OR namespace.nspname || '.' || relation.relname=ANY(%s))
          ORDER BY qualified_name
         """,
-        (list(CANONICAL_SCHEMAS), list(CANONICAL_SCHEMAS)),
+        (list(CANONICAL_SCHEMAS), list(CANONICAL_SCHEMAS), sorted(ORGANIZATION_SECURITY_RELATIONS)),
     )
     rows = tuple(tuple(row) for row in cursor.fetchall())
     relations = tuple(str(row[0]) for row in rows)

@@ -23,12 +23,29 @@ def main():
         try:
             base.fixture._seed(db)
             base._seed_action_grant(db)
+            second_grant = str(uuid4())
+            db.exec_driver_sql('SET LOCAL ROLE erp_migration_owner')
+            db.exec_driver_sql('ALTER TABLE automation.agent_grants DISABLE TRIGGER USER')
+            db.exec_driver_sql('ALTER TABLE automation.agent_grant_capabilities DISABLE TRIGGER USER')
+            db.execute(text("""INSERT INTO automation.agent_grants
+                SELECT (jsonb_populate_record(NULL::automation.agent_grants,
+                  to_jsonb(g)||jsonb_build_object('id',CAST(:new AS text),'client_id','second-reviewed-client'))).*
+                FROM automation.agent_grants g WHERE g.id=:original"""),
+                {"new": second_grant, "original": base.fixture.GRANT_A})
+            db.execute(text("""INSERT INTO automation.agent_grant_capabilities
+                SELECT (jsonb_populate_record(NULL::automation.agent_grant_capabilities,
+                  to_jsonb(c)||jsonb_build_object('agent_grant_id',CAST(:new AS text)))).*
+                FROM automation.agent_grant_capabilities c WHERE c.agent_grant_id=:original"""),
+                {"new": second_grant, "original": base.fixture.GRANT_A})
+            db.exec_driver_sql('ALTER TABLE automation.agent_grants ENABLE TRIGGER USER')
+            db.exec_driver_sql('ALTER TABLE automation.agent_grant_capabilities ENABLE TRIGGER USER')
+            db.exec_driver_sql('RESET ROLE')
             subject = str(base.fixture.AUTH_A)
             client = "mcp-live-action-runtime-test"
             db.exec_driver_sql('SET SESSION AUTHORIZATION erp_runtime')
             proposals = db.execute(text("SELECT erp_core_commands.mcp_connection_proposals(:s)"), {"s": subject}).scalar_one()
-            assert len(proposals) == 1
-            proposal = proposals[0]
+            assert len(proposals) == 2
+            proposal = next(row for row in proposals if row['client_id'] == client)
             assert proposal["organization_id"] == str(base.fixture.ORG_A)
             args = {"s": subject, "o": proposal["organization_id"], "c": client,
                     "g": proposal["agent_grant_id"], "f": proposal["proposal_fingerprint"]}
@@ -42,7 +59,12 @@ def main():
                     raise AssertionError("cross-organization consent accepted")
             confirmed = db.execute(command, args).scalar_one()
             assert confirmed["confirmed"] is True
+            second = next(row for row in proposals if row['client_id'] == 'second-reviewed-client')
+            second_args = {**args, 'c': second['client_id'], 'g': second['agent_grant_id'],
+                           'f': second['proposal_fingerprint']}
+            second_confirmed = db.execute(command, second_args).scalar_one()
             assert db.execute(command, args).scalar_one()["receipt_id"] == confirmed["receipt_id"]
+            assert db.execute(command, second_args).scalar_one()["receipt_id"] == second_confirmed["receipt_id"]
             db.exec_driver_sql("SET LOCAL timezone='Asia/Kolkata'")
             assert db.execute(text("SELECT erp_core_commands.mcp_connection_proposals(:s)"), {"s": subject}).scalar_one() == proposals
             db.exec_driver_sql("SET LOCAL timezone='UTC'")

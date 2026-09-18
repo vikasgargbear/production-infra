@@ -45,7 +45,7 @@ async def _subject(credentials: HTTPAuthorizationCredentials | None) -> UUID:
 def _clients() -> set[str]:
     # Same pre-registered clients as the existing OAuth consent boundary.
     from .oauth import _configured_mcp_client_ids
-    return _configured_mcp_client_ids()
+    return set(_configured_mcp_client_ids())
 
 
 @router.get("")

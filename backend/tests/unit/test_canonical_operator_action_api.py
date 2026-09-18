@@ -1733,6 +1733,9 @@ def test_inventory_adjustment_prepare_accepts_only_typed_signed_cycle_count_fact
 
 
 def test_service_and_operator_delegation_are_both_required(monkeypatch):
+    # Receipt rejection cases are covered independently in test_mcp_connection_receipt.
+    from app.api.routes.internal import mcp_connection_receipt
+    monkeypatch.setattr(mcp_connection_receipt, "require_connection_receipt", lambda *args, **kwargs: None)
     monkeypatch.setenv("MCP_INTERNAL_SERVICE_TOKEN", "s" * 32)
     claims = {
         "operator_delegated": True,
