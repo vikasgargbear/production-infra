@@ -11,8 +11,6 @@ const snapshot = { can_manage: true, branches: [{id:'branch-1', name:'Main'}], g
 beforeEach(() => {
   jest.clearAllMocks();
   api.read.mockResolvedValue({data:snapshot} as any);
-  let serial = 0;
-  Object.defineProperty(global.crypto, 'randomUUID', { configurable:true, value: () => `retry-key-${++serial}` });
 });
 
 async function fill() {
@@ -70,4 +68,14 @@ test('changed retry details use a different key and show two decimal limits', as
   fireEvent.click(screen.getByRole('button',{name:'Confirm authorization'}));
   await waitFor(() => expect(api.create).toHaveBeenCalledTimes(2));
   expect(api.create.mock.calls[0][0].idempotency_key).not.toEqual(api.create.mock.calls[1][0].idempotency_key);
+});
+
+test('revocation requires an explicit confirmation and uses exact version', async () => {
+  api.read.mockResolvedValue({data:{...snapshot,grants:[{id:'g1',branch_id:'branch-1',maximum_amount:'1000.00',expires_at:'2030-01-01T12:00:00Z',status:'active',row_version:7}]}} as any);
+  api.revoke.mockResolvedValue({data:snapshot} as any);
+  render(<BillingConsent onClose={jest.fn()} />);
+  fireEvent.click(await screen.findByRole('button',{name:'Revoke authorization'}));
+  expect(api.revoke).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button',{name:'Confirm revocation'}));
+  await waitFor(() => expect(api.revoke).toHaveBeenCalledWith('g1',7));
 });
