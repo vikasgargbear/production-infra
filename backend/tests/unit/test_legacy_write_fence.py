@@ -163,6 +163,8 @@ CANONICAL_INVOICE_DRAFT_WRITES = {
     ("POST", "/api/internal/mcp/invoice-drafts/{draft_id}/prepare"),
 }
 ALLOWED_EFFECTIVE_MUTATIONS = {
+    ("POST", "/api/web/billing-consent"),
+    ("POST", "/api/web/billing-consent/{grant_id}/revoke"),
     ("POST", "/api/auth/logout"),
     ("POST", "/api/auth/oauth/supabase/session"),
     ("POST", "/api/internal/mcp/agent-grants/authorize"),

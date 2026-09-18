@@ -8,6 +8,7 @@ and leaves production/staging untouched.
 from __future__ import annotations
 
 from contextlib import contextmanager
+from dataclasses import replace
 from datetime import date
 from decimal import Decimal
 import hashlib
@@ -395,6 +396,49 @@ def _prepare(service: SqlAlchemyOperatorActionService, payload: dict[str, Any], 
         idempotency_key=key,
         context=_context(operation, policy.permission),
     )
+
+
+def _assert_web_billing_boundaries(service, runtime_dsn, admin_dsn, payload, before):
+    """Use the new consent command, not fixture-written grants, for both denials."""
+    def consent(amount):
+        with psycopg2.connect(runtime_dsn) as connection, connection.cursor() as cursor:
+            cursor.execute("SELECT erp_security.activate_context(%s,%s),set_config('app.request_id',gen_random_uuid()::text,true)", (fixture.IDS['operator_auth_user'],fixture.IDS['org']))
+            cursor.execute("SELECT erp_automation_commands.authorize_own_web_billing(%s,%s,%s,transaction_timestamp()+interval '1 hour',%s)",
+                           (fixture.IDS['org'],fixture.IDS['branch'],amount,hashlib.sha256(str(uuid4()).encode()).digest()))
+            return UUID(str(cursor.fetchone()[0]))
+    def revoke(grant):
+        with psycopg2.connect(runtime_dsn) as connection, connection.cursor() as cursor:
+            cursor.execute("SELECT erp_security.activate_context(%s,%s),set_config('app.request_id',gen_random_uuid()::text,true)", (fixture.IDS['operator_auth_user'],fixture.IDS['org']))
+            cursor.execute('SELECT erp_automation_commands.revoke_own_web_billing(%s,%s,1)',(fixture.IDS['org'],grant))
+    def context(grant, operation):
+        return replace(_context(operation,ACTION_POLICIES[operation].permission), agent_grant_id=grant,
+                       client_id='aasopharma-erp-web',organization_scope=False)
+    policy = ACTION_POLICIES['sales.invoice.prepare']
+    low = consent('1000.00')
+    try:
+        service.prepare(policy=policy,payload=payload,idempotency_key=f'cap-{uuid4()}',context=context(low,'sales.invoice.prepare'))
+    except OperatorActionError as error:
+        assert error.code is ActionErrorCode.SCOPE_DENIED
+    else:
+        raise AssertionError('Invoice exceeding explicit consent cap was prepared')
+    revoke(low)
+    grant = consent('2000.00')
+    prepared = service.prepare(policy=policy,payload=payload,idempotency_key=f'revoke-{uuid4()}',context=context(grant,'sales.invoice.prepare'))
+    service.approve(command_request_id=prepared.command_request_id,preview_hash=prepared.preview_hash,
+                    idempotency_key=f'approve-{uuid4()}',context=context(grant,'automation.command.approve'))
+    revoke(grant)
+    try:
+        service.execute(command_request_id=prepared.command_request_id,preview_hash=prepared.preview_hash,
+                        idempotency_key=f'revoked-{uuid4()}',context=context(grant,'automation.command.execute'))
+    except OperatorActionError as error:
+        assert error.code is ActionErrorCode.SCOPE_DENIED
+    else:
+        raise AssertionError('Revoked consent still executed a previously approved invoice')
+    with psycopg2.connect(admin_dsn) as connection, connection.cursor() as cursor:
+        cursor.execute('SELECT target_resource_id FROM automation.command_requests WHERE org_id=%s AND id=%s',
+                       (fixture.IDS['org'],prepared.command_request_id))
+        invoice_id = UUID(str(cursor.fetchone()[0]))
+    _assert_rollback(runtime_dsn,invoice_id,before)
 
 
 def _install_failure(admin_dsn: str) -> None:
@@ -835,6 +879,7 @@ def main() -> None:
     payload = _payload(admin_dsn, batch_ids, business_date=business_date)
     prepare_key = f"pg15-sales-invoice-{uuid4()}"
     with _service(runtime_url, calculator_url) as service:
+        _assert_web_billing_boundaries(service,runtime_dsn,admin_dsn,payload,before)
         try:
             policy = ACTION_POLICIES["sales.invoice.prepare"]
             service.prepare(
@@ -893,6 +938,27 @@ def main() -> None:
             context=_context("automation.command.approve", "automation.command.approve"),
         )
         assert approval.status == "approved"
+        # A prepared/approved command is not a durable bypass of current role permissions.
+        with psycopg2.connect(admin_dsn) as connection, connection.cursor() as cursor:
+            cursor.execute("SELECT erp_security.activate_context(%s,%s),set_config('app.request_id',gen_random_uuid()::text,true)", (fixture.IDS['operator_auth_user'],fixture.IDS['org']))
+            cursor.execute("DELETE FROM core.role_permissions WHERE org_id=%s AND role_id=%s AND permission_code='sales.invoice.post'",
+                           (fixture.IDS['org'], fixture.IDS['role']))
+            assert cursor.rowcount == 1
+        try:
+            try:
+                service.execute(command_request_id=command_id, preview_hash=prepared.preview_hash,
+                    idempotency_key=f"withdrawn-role-{command_id}",
+                    context=_context('automation.command.execute', 'automation.command.execute'))
+            except OperatorActionError as error:
+                assert error.code is ActionErrorCode.SCOPE_DENIED
+            else:
+                raise AssertionError('Removed posting permission still allowed invoice execution')
+            _assert_rollback(runtime_dsn, invoice_id, before)
+        finally:
+            with psycopg2.connect(admin_dsn) as connection, connection.cursor() as cursor:
+                cursor.execute("SELECT erp_security.activate_context(%s,%s),set_config('app.request_id',gen_random_uuid()::text,true)", (fixture.IDS['operator_auth_user'],fixture.IDS['org']))
+                cursor.execute("INSERT INTO core.role_permissions(org_id,role_id,permission_code,created_by_membership_id) VALUES(%s,%s,'sales.invoice.post',%s)",
+                               (fixture.IDS['org'],fixture.IDS['role'],fixture.IDS['reviewer_membership']))
         _install_failure(admin_dsn)
         try:
             try:

@@ -73,6 +73,7 @@ from .api.routes import (
     canonical_drug_licenses,
     canonical_tax_registration_setup,
     canonical_invoice_drafts,
+    web_billing_consent,
     canonical_historical_migration,
     canonical_batch_sale_rates,
 )
@@ -382,6 +383,7 @@ api.include_router(canonical_evidence_uploads.router)
 api.include_router(canonical_drug_licenses.router)
 api.include_router(canonical_tax_registration_setup.router)
 api.include_router(canonical_invoice_drafts.router)
+api.include_router(web_billing_consent.router)
 api.include_router(canonical_historical_migration.router)
 api.include_router(canonical_batch_sale_rates.router)
 
