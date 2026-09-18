@@ -94,7 +94,7 @@ def test_user_authority_reconcile_is_idempotent_for_an_exact_active_grant() -> N
     assert "existing consent receipt capability envelope differs" in source
     assert "expected_grant = (" in source
     assert "(*row, audit_membership_id) for row in capability_rows" in source
-    assert "expires_at=consented_at+%s::interval" in source
+    assert "expires_at=LEAST(consented_at+%s::interval" in source
     assert "consented_at=granted_at" in source
     assert "granted_by_membership_id::text" in source
     assert "created_by_membership_id::text" in source
@@ -293,7 +293,7 @@ def test_invoice_scope_binds_target_and_new_consent_without_revival():
     assert 'f"{target_org_id}:{resolved_auth_user_id}:{resolved_user_id}:{consent_text_sha256}"' in remote
     assert '"lifetime_hours": 1' in remote
     assert 'another active reviewed grant conflicts' in remote
-    assert "expires_at=consented_at+%s::interval" in remote
+    assert "expires_at=LEAST(consented_at+%s::interval" in remote
     assert "ON CONFLICT (org_id,id) DO UPDATE" not in remote
 
 
@@ -343,3 +343,15 @@ def test_mcp_invoice_never_mutates_metadata_and_checks_branch_roles():
     assert "reviewed MCP invoice role permission is unavailable" in source
     assert "SELECT erp_security.has_permission(%s,%s)" in source
     assert "SELECT 1 FROM core.branches WHERE org_id=%s AND id=%s AND status='active'" in source
+
+
+def test_mcp_invoice_deadline_is_bounded_by_existing_explicit_web_consent():
+    remote = _embedded_remote_source()
+    assert "web_grant.consent_version='web-billing-admin-self-v1'" in remote
+    assert "web_grant.consented_by_membership_id=%s" in remote
+    assert "web_grant.branch_id=%s AND web_grant.status='active'" in remote
+    assert "cap.maximum_amount=1000 AND cap.currency_code='INR'" in remote
+    assert "if len(deadlines) != 1:" in remote
+    assert '"web_consent_deadline": grant_deadline.isoformat()' in remote
+    assert "LEAST(transaction_timestamp()+%s::interval,COALESCE(%s::timestamptz,'infinity'::timestamptz))" in remote
+    assert "expires_at=LEAST(consented_at+%s::interval,COALESCE(%s::timestamptz,'infinity'::timestamptz))" in remote

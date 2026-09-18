@@ -360,6 +360,7 @@ jobs:
           if mcp_invoice_scope:
               lifetime_interval = "8 hours"
           requested_branch_id = str(UUID(value["branch_id"])) if mcp_invoice_scope else None
+          grant_deadline = None
           if not mcp_invoice_scope and value.get("branch_id"):
               raise SystemExit("branch override is reserved for mcp_invoice")
           requested_org_id = str(UUID(value["organization_id"])) if invoice_scope or mcp_invoice_scope else DEMO_ORG_ID
@@ -596,6 +597,28 @@ jobs:
                           cursor.execute("SELECT set_config(%s,%s,true)", (name, setting))
                       if mcp_invoice_scope:
                           cursor.execute(
+                              """
+                              SELECT web_grant.expires_at
+                                FROM automation.agent_grants AS web_grant
+                                JOIN automation.agent_grant_capabilities AS cap
+                                  ON cap.org_id=web_grant.org_id AND cap.agent_grant_id=web_grant.id
+                               WHERE web_grant.org_id=%s AND web_grant.subject_membership_id=%s
+                                 AND web_grant.consented_by_membership_id=%s
+                                 AND web_grant.client_id='aasopharma-erp-web'
+                                 AND web_grant.consent_version='web-billing-admin-self-v1'
+                                 AND web_grant.branch_id=%s AND web_grant.status='active'
+                                 AND web_grant.expires_at>transaction_timestamp()
+                                 AND cap.capability_code='sales.invoice.prepare' AND cap.status='active'
+                                 AND cap.maximum_amount=1000 AND cap.currency_code='INR'
+                               FOR SHARE OF web_grant,cap
+                              """,
+                              (target_org_id, membership_id, membership_id, requested_branch_id),
+                          )
+                          deadlines = cursor.fetchall()
+                          if len(deadlines) != 1:
+                              raise SystemExit("one matching active INR1000 own web invoice consent is required")
+                          grant_deadline = deadlines[0][0]
+                          cursor.execute(
                               "SELECT 1 FROM core.branches WHERE org_id=%s AND id=%s AND status='active'",
                               (target_org_id, requested_branch_id),
                           )
@@ -626,7 +649,8 @@ jobs:
                                   "client_id": target_client_id,
                                   "contract": consent_version,
                                   "consent_receipt_id": consent_receipt_id,
-                                  **({"lifetime_hours": 8, "branch_id": requested_branch_id} if mcp_invoice_scope else
+                                  **({"lifetime_hours": 8, "branch_id": requested_branch_id,
+                                      "web_consent_deadline": grant_deadline.isoformat()} if mcp_invoice_scope else
                                      {"lifetime_hours": 1} if invoice_scope else {"lifetime_days": 30}),
                                   "organization_id": target_org_id,
                                   "subject_auth_user_id": resolved_auth_user_id,
@@ -676,14 +700,14 @@ jobs:
                                  granted_by_membership_id::text,granted_at IS NOT NULL,
                                  expires_at,status,expires_at>transaction_timestamp(),
                                  consented_at=granted_at,
-                                 expires_at=consented_at+%s::interval,
+                                 expires_at=LEAST(consented_at+%s::interval,COALESCE(%s::timestamptz,'infinity'::timestamptz)),
                                  created_by_membership_id::text,
                                  updated_by_membership_id::text
                             FROM automation.agent_grants
                            WHERE org_id=%s AND id=%s
                            FOR UPDATE
                           """,
-                          (lifetime_interval, target_org_id, grant_id),
+                          (lifetime_interval, grant_deadline, target_org_id, grant_id),
                       )
                       existing_grant = cursor.fetchone()
                       if existing_grant is None:
@@ -700,14 +724,14 @@ jobs:
                                   %s,%s,%s,%s,%s,%s,'self_consent',%s,
                                   extensions.digest(%s,'sha256'),
                                   %s,transaction_timestamp(),%s,transaction_timestamp(),
-                                  transaction_timestamp()+%s::interval,'active',%s,%s
+                                  LEAST(transaction_timestamp()+%s::interval,COALESCE(%s::timestamptz,'infinity'::timestamptz)),'active',%s,%s
                               ) ON CONFLICT (org_id,id) DO NOTHING
                               """,
                               (
                                   target_org_id,grant_id,membership_id,target_client_id,
                                   target_client_name,requested_branch_id,consent_version,consent_text,
                                   membership_id,audit_membership_id,
-                                  lifetime_interval,audit_membership_id,audit_membership_id,
+                                  lifetime_interval,grant_deadline,audit_membership_id,audit_membership_id,
                               ),
                           )
                       else:
