@@ -760,3 +760,28 @@ async def test_operator_grant_rejection_reports_only_safe_authority_detail(
 
     if excluded is not None:
         assert excluded not in str(raised.value)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("operator", [False, True])
+@pytest.mark.parametrize("status,code,expected", [
+    (403, "organization_reconsent_required", "organization_reconsent_required"),
+    (500, "organization_reconsent_required", "authority rejected"),
+    (403, "unknown_private_code", "authority rejected"),
+])
+async def test_reconsent_is_allowlisted_for_reads_and_writes(operator, status, code, expected):
+    calls = []
+    gateway = OperationGateway(settings(), lambda: Client([
+        Response(status, {"detail": {"error": code, "message": "SECRET private data"}})
+    ], calls))
+    with pytest.raises(AuthorizationDenied, match=expected) as raised:
+        if operator:
+            await gateway.execute_operator(
+                OPERATOR_OPERATIONS["erp_operation_status_get"], _access(),
+                {"command_request_id": str(uuid4())},
+            )
+        else:
+            await gateway.execute(OPERATIONS["erp_product_search"], _access(), {"q": "para"})
+    assert "SECRET" not in str(raised.value)
+    assert "unknown_private_code" not in str(raised.value)
+    assert len(calls) == 1

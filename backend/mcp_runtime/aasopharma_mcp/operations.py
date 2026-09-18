@@ -26,6 +26,21 @@ from .operator_actions import (
 SIGNED_DECIMAL_PATTERN = r"^-?(?:0|[1-9][0-9]{0,13})(?:\.[0-9]{1,6})?$"
 
 
+def _raise_organization_reconsent(response: Any) -> None:
+    if response.status_code != 403:
+        return
+    try:
+        detail = response.json().get("detail")
+    except (AttributeError, TypeError, ValueError):
+        return
+    if isinstance(detail, dict) and detail.get("error") == "organization_reconsent_required":
+        raise AuthorizationDenied(
+            "organization_reconsent_required: This connection's organization membership "
+            "is no longer active. Review your ERP organization and explicitly authorize "
+            "a new connection."
+        )
+
+
 class AuthorizationDenied(RuntimeError):
     pass
 
@@ -670,6 +685,7 @@ class OperationGateway:
                 headers={"Authorization": f"Bearer {self.settings.internal_service_token}"},
             )
         if response.status_code != 200:
+            _raise_organization_reconsent(response)
             raise AuthorizationDenied("ERP agent-grant authority rejected the request")
         return _delegated_token(
             response.json(),
@@ -767,6 +783,7 @@ class OperationGateway:
                 headers={"Authorization": f"Bearer {self.settings.internal_service_token}"},
             )
         if response.status_code != 200:
+            _raise_organization_reconsent(response)
             message = (
                 "ERP operator grant authority rejected the request "
                 f"(HTTP {response.status_code})"
