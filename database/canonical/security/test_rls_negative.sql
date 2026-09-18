@@ -322,6 +322,14 @@ BEGIN
     IF (SELECT count(*) FROM core.settings) <> 1 THEN
         RAISE EXCEPTION 'matching actor did not receive exactly its granted branch';
     END IF;
+    IF erp_security.has_permission('core.settings.manage', '40000000-0000-7000-8000-000000000001') IS DISTINCT FROM true
+       OR erp_security.has_permission('automation.agent_grant.manage', '40000000-0000-7000-8000-000000000001') IS DISTINCT FROM false
+       OR erp_security.has_permission('does.not.exist', '40000000-0000-7000-8000-000000000001') IS DISTINCT FROM false
+       OR erp_security.has_permission(NULL, '40000000-0000-7000-8000-000000000001') IS DISTINCT FROM false
+       OR erp_security.has_permission('core.settings.manage', NULL) IS DISTINCT FROM false
+       OR erp_security.has_permission('core.settings.manage', '40000000-0000-7000-8000-000000000002') IS DISTINCT FROM false THEN
+        RAISE EXCEPTION 'permission argument or exact branch scope was not enforced';
+    END IF;
     IF (SELECT count(*) FROM core.organizations) <> 1 THEN
         RAISE EXCEPTION 'organization visibility is not current-organization only';
     END IF;

@@ -10,6 +10,8 @@
   "canonical_staging_project_ref": "rgihahbmkrmhitjdjvev",
   "canonical_transaction_integrity_evidence": null,
   "required_migration_files": [
+    "backend/alembic/sql/20260918_0081_permission_argument_scope.sql",
+    "backend/alembic/versions/20260918_0081_permission_argument_scope.py",
     "backend/alembic/sql/20260913_0079_batch_sale_rate_evidence.sql",
     "backend/alembic/versions/20260913_0079_batch_sale_rate_evidence.py",
     "backend/alembic/sql/20260917_0080_historical_product_tax_replay.sql",
