@@ -58,3 +58,16 @@ test('unchanged uncertain retry reuses key; successful renewal rotates it', asyn
   await waitFor(() => expect(api.create).toHaveBeenCalledTimes(3));
   expect(api.create.mock.calls[2][0].idempotency_key).not.toEqual(api.create.mock.calls[1][0].idempotency_key);
 });
+
+test('changed retry details use a different key and show two decimal limits', async () => {
+  api.read.mockResolvedValue({data:{...snapshot,grants:[{id:'g1',branch_id:'branch-1',maximum_amount:'1000.000000',expires_at:'2030-01-01T12:00:00Z',status:'revoked',row_version:2}]}} as any);
+  api.create.mockRejectedValue(new Error('timeout'));
+  render(<BillingConsent onClose={jest.fn()} />); await fill();
+  expect(screen.getByText(/Invoice limit/).textContent).toContain('1,000.00');
+  fireEvent.click(screen.getByRole('button',{name:'Confirm authorization'}));
+  await screen.findByText(/Could not confirm authorization/);
+  fireEvent.change(screen.getByLabelText('Maximum amount per invoice (INR)'),{target:{value:'500.00'}});
+  fireEvent.click(screen.getByRole('button',{name:'Confirm authorization'}));
+  await waitFor(() => expect(api.create).toHaveBeenCalledTimes(2));
+  expect(api.create.mock.calls[0][0].idempotency_key).not.toEqual(api.create.mock.calls[1][0].idempotency_key);
+});
