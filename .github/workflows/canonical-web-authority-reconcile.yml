@@ -17,6 +17,7 @@ on:
           - web_invoice
           - mcp
           - mcp_invoice
+          - mcp_auth_diagnostic
       branch_id:
         description: Exact reviewed branch UUID (mcp_invoice only; INR1000 per invoice for 8 hours)
         required: false
@@ -102,7 +103,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "$REVIEWED_SHA"
           git fetch origin main
           git merge-base --is-ancestor "$REVIEWED_SHA" origin/main
-          if test "$AUTHORITY_SCOPE" != mcp_invoice; then test -z "$BRANCH_ID"; fi
+          if test "$AUTHORITY_SCOPE" != mcp_invoice && test "$AUTHORITY_SCOPE" != mcp_auth_diagnostic; then test -z "$BRANCH_ID"; fi
           case "$AUTHORITY_SCOPE" in
             web)
               test -z "$ORGANIZATION_ID"
@@ -122,9 +123,13 @@ jobs:
               test -z "$MCP_REVIEWED_SHA"
               test -z "$MCP_TOOL_INVENTORY_SHA256"
               ;;
-            mcp|mcp_invoice)
-              if test "$AUTHORITY_SCOPE" = mcp_invoice; then
-                test "$AUTHORITY_CONFIRMATION" = RECONCILE_CANONICAL_STAGING_MCP_INVOICE_AUTHORITY
+            mcp|mcp_invoice|mcp_auth_diagnostic)
+              if test "$AUTHORITY_SCOPE" = mcp_invoice || test "$AUTHORITY_SCOPE" = mcp_auth_diagnostic; then
+                if test "$AUTHORITY_SCOPE" = mcp_auth_diagnostic; then
+                  test "$AUTHORITY_CONFIRMATION" = INSPECT_CANONICAL_STAGING_MCP_AUTH
+                else
+                  test "$AUTHORITY_CONFIRMATION" = RECONCILE_CANONICAL_STAGING_MCP_INVOICE_AUTHORITY
+                fi
                 [[ "$ORGANIZATION_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]]
                 [[ "$BRANCH_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]]
               else
@@ -195,7 +200,7 @@ jobs:
           grep -F -- "$fingerprint" "$RUNNER_TEMP/canonical-web-authority-ssh-keys.txt" >/dev/null
 
       - name: Attest the exact active MCP authority
-        if: env.AUTHORITY_SCOPE == 'mcp' || env.AUTHORITY_SCOPE == 'mcp_invoice'
+        if: env.AUTHORITY_SCOPE == 'mcp' || env.AUTHORITY_SCOPE == 'mcp_invoice' || env.AUTHORITY_SCOPE == 'mcp_auth_diagnostic'
         env:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
         run: |
@@ -279,7 +284,101 @@ jobs:
           test "${#matching_instance_ids[@]}" -eq 1
           echo "RAILWAY_API_DEPLOYMENT_INSTANCE_ID=${matching_instance_ids[0]}" >> "$GITHUB_ENV"
 
+      - name: Inspect hosted MCP token hook without changing authority
+        if: env.AUTHORITY_SCOPE == 'mcp_auth_diagnostic'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          import json, os, urllib.request, urllib.error
+          from pathlib import Path
+          expected = 'pg-functions://postgres/erp_security/canonical_evidence_storage_access_token_hook'
+          token = os.environ['SUPABASE_ACCESS_TOKEN']
+          request = urllib.request.Request(
+              'https://api.supabase.com/v1/projects/' + os.environ['CANONICAL_STAGING_PROJECT_REF'] + '/config/auth',
+              headers={'Authorization': 'Bearer ' + token}, method='GET')
+          receipt = {'authority_scope': 'mcp_auth_diagnostic', 'status': 'diagnostic',
+                     'commit_sha': os.environ['REVIEWED_SHA'], 'expected_hook_uri': expected}
+          try:
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  config = json.load(response)
+              enabled = config.get('hook_custom_access_token_enabled')
+              uri = config.get('hook_custom_access_token_uri')
+              receipt.update(management_status=200, hook_enabled=enabled is True,
+                  hook_uri=uri if isinstance(uri,str) and uri.startswith('pg-functions://') else '<unset or unexpected URI>',
+                  hook_matches_expected=enabled is True and uri == expected)
+          except urllib.error.HTTPError as error:
+              receipt['management_status'] = error.code
+          except (urllib.error.URLError, ValueError):
+              receipt['management_status'] = 'unavailable'
+          Path(os.environ['AUTHORITY_RECEIPT_PATH']).write_text(json.dumps(receipt,sort_keys=True))
+          print(json.dumps(receipt,sort_keys=True))
+          PY
+
+      - name: Inspect exact MCP receipt and synthetic hook claim read-only
+        if: env.AUTHORITY_SCOPE == 'mcp_auth_diagnostic'
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          request="$RUNNER_TEMP/mcp-hook-diagnostic-request.json"
+          response="$RUNNER_TEMP/mcp-hook-diagnostic-response.json"
+          trap 'rm -f "$request" "$response"' EXIT
+          umask 077
+          jq -n --arg password "$SUPABASE_DB_PASSWORD" --arg project "$CANONICAL_STAGING_PROJECT_REF" \
+            --arg sha "$REVIEWED_SHA" --arg org "$ORGANIZATION_ID" --arg user "$SUBJECT_USER_ID" \
+            --arg client "$MCP_CLIENT_ID" --arg branch "$BRANCH_ID" \
+            '{password:$password,project:$project,sha:$sha,org:$org,user:$user,client:$client,branch:$branch}' > "$request"
+          diagnostic_code=$(python3 - <<'PY'
+          print(r"""
+          import json,os,sys
+          from urllib.parse import quote
+          from uuid import UUID
+          import psycopg2
+          value=json.load(sys.stdin)
+          if value['project']!='rgihahbmkrmhitjdjvev' or os.environ.get('RAILWAY_GIT_COMMIT_SHA')!=value['sha']:
+              raise SystemExit('Diagnostic deployment or staging target mismatch')
+          for key in ('org','user','client','branch'): UUID(value[key])
+          result={'status':'diagnostic','organization_id':value['org'],'subject_user_id':value['user'],'client_id':value['client']}
+          url='postgresql://postgres:'+quote(value['password'],safe='')+'@db.'+value['project']+'.supabase.co:5432/postgres?sslmode=require&connect_timeout=15'
+          with psycopg2.connect(url) as connection:
+              with connection.cursor() as cursor:
+                  cursor.execute('SET TRANSACTION READ ONLY')
+                  cursor.execute("SELECT current_user,current_database(),current_setting('ssl')")
+                  if cursor.fetchone()!=('postgres','postgres','on'): raise SystemExit('Unexpected diagnostic database session')
+                  try:
+                      cursor.execute('''SELECT u.auth_user_id::text FROM core.users u JOIN core.memberships m ON m.user_id=u.id
+                          WHERE u.id=%s AND m.org_id=%s AND u.status='active' AND m.status='active'
+                            AND m.revoked_at IS NULL AND m.joined_at IS NOT NULL''',(value['user'],value['org']))
+                      identities=cursor.fetchall()
+                      result['exact_active_subject_found']=len(identities)==1
+                      if len(identities)==1:
+                          auth=identities[0][0]
+                          cursor.execute("SELECT has_function_privilege(current_user,'erp_security.canonical_evidence_storage_access_token_hook(jsonb)','EXECUTE')")
+                          result['hook_execute_allowed']=cursor.fetchone()[0]
+                          if result['hook_execute_allowed']:
+                              event={'user_id':auth,'authentication_method':'oauth','claims':{'sub':auth,'client_id':value['client'],'aud':'authenticated','role':'authenticated'}}
+                              cursor.execute("SELECT erp_security.canonical_evidence_storage_access_token_hook(%s::jsonb)->'claims'->'erp_mcp_connection'",(json.dumps(event),))
+                              claim=cursor.fetchone()[0]
+                              result['synthetic_hook_has_receipt']=isinstance(claim,dict)
+                              result['synthetic_hook_exact_org']=isinstance(claim,dict) and claim.get('organization_id')==value['org']
+                  except psycopg2.Error as error:
+                      result['sqlstate']=error.pgcode
+                      connection.rollback()
+          print(json.dumps(result,sort_keys=True))
+          """)
+          PY
+          )
+          railway ssh --project "$RAILWAY_PROJECT_ID" --environment "$RAILWAY_ENVIRONMENT_ID" \
+            --service "$RAILWAY_API_SERVICE" --deployment-instance "$RAILWAY_API_DEPLOYMENT_INSTANCE_ID" \
+            --identity-file "$SSH_PRIVATE_KEY" -- python -c "$diagnostic_code" < "$request" > "$response"
+          jq -s '.[0] * {database:.[1]}' "$AUTHORITY_RECEIPT_PATH" "$response" > "$RUNNER_TEMP/mcp-hook-diagnostic-receipt.json"
+          mv "$RUNNER_TEMP/mcp-hook-diagnostic-receipt.json" "$AUTHORITY_RECEIPT_PATH"
+          jq . "$AUTHORITY_RECEIPT_PATH"
+
       - name: Reconcile one bounded reviewed web grant
+        if: env.AUTHORITY_SCOPE != 'mcp_auth_diagnostic'
         env:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
