@@ -109,7 +109,8 @@ BEGIN
                                      'abandon_invoice_draft','import_historical_migration_facts',
                                      'promote_historical_operational_batch',
                                      'promote_historical_product_inventory_batch',
-                                     'persist_batch_sale_rate_prepare','execute_batch_sale_rate')
+                                     'persist_batch_sale_rate_prepare','execute_batch_sale_rate',
+                                     'authorize_own_web_billing','revoke_own_web_billing')
        AND (pg_catalog.has_function_privilege('erp_runtime',procedure.oid,'EXECUTE')
             OR pg_catalog.has_function_privilege('erp_app',procedure.oid,'EXECUTE')
             OR pg_catalog.has_function_privilege('public',procedure.oid,'EXECUTE'));
