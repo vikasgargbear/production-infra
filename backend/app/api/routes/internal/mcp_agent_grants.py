@@ -698,6 +698,35 @@ def _grant_rows(db: Session, request: GrantRequest, permission_code: str):
     ).fetchall()
 
 
+def _activate_signed_organization(db: Session, subject: UUID, organization_id: UUID) -> None:
+    """Keep the signed tenant binding; never resolve a different membership here."""
+    try:
+        db.execute(
+            text("SELECT erp_security.activate_context(:auth_user_id, :org_id)"),
+            {"auth_user_id": subject, "org_id": organization_id},
+        )
+    except SQLAlchemyError as exc:
+        original = getattr(exc, "orig", None)
+        diagnostic = getattr(original, "diag", None)
+        if (
+            getattr(original, "pgcode", None) == "42501"
+            and getattr(diagnostic, "message_primary", None)
+            == "invalid or inactive ERP authenticated organization membership"
+        ):
+            db.rollback()
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "error": "organization_reconsent_required",
+                    "message": (
+                        "This connection's organization membership is no longer active. "
+                        "Review your ERP organization and explicitly authorize a new connection."
+                    ),
+                },
+            ) from None
+        raise
+
+
 @router.post("/authorize", response_model=GrantResponse)
 def authorize_agent_grant(
     request: GrantRequest,
@@ -722,10 +751,7 @@ def authorize_agent_grant(
     if not allowed_clients or request.client_id not in allowed_clients:
         raise HTTPException(status_code=403, detail="OAuth client is not pre-registered")
 
-    db.execute(
-        text("SELECT erp_security.activate_context(:auth_user_id, :org_id)"),
-        {"auth_user_id": request.subject, "org_id": request.organization_id},
-    )
+    _activate_signed_organization(db, request.subject, request.organization_id)
     rows = _grant_rows(db, request, policy.permission_code)
     if len(rows) != 1:
         raise HTTPException(status_code=403, detail="Exactly one active MCP agent grant is required")
@@ -793,10 +819,7 @@ def authorize_operator_action(
     if not allowed_clients or request.client_id not in allowed_clients:
         raise HTTPException(status_code=403, detail="OAuth client is not pre-registered")
 
-    db.execute(
-        text("SELECT erp_security.activate_context(:auth_user_id, :org_id)"),
-        {"auth_user_id": request.subject, "org_id": request.organization_id},
-    )
+    _activate_signed_organization(db, request.subject, request.organization_id)
     rows = _operator_grant_rows(
         db, request, policy, operation_mode, capability_approval_policy
     )
