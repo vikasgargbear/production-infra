@@ -1,8 +1,10 @@
 import { invoicesApi } from '../../../../services/api/modules/sales/invoices.api';
+// Load PDF dependencies with billing, not after deployment when an old tab's
+// lazy chunk may no longer exist. This never changes invoice business state.
+import * as renderer from '../../../../utils/invoicePdfGenerator';
 
 const canonicalOutput = async (invoiceId: string | number) => {
     const response = await invoicesApi.getById(invoiceId);
-    const renderer = await import('../../../../utils/invoicePdfGenerator');
     return {
         invoice: renderer.printableCanonicalInvoice(response.data),
         renderer,

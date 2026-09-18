@@ -337,9 +337,11 @@ def test_frontend_revalidates_html_metadata_and_worker_but_caches_hashed_assets(
     route = caddyfile[caddyfile.index("\t\troute {"):]
     default = 'header Cache-Control "no-cache, max-age=0, must-revalidate"'
     immutable = 'header @hashed_asset Cache-Control "public, max-age=31536000, immutable"'
-    # Route order matters: a missing hashed asset must resolve to non-cacheable
-    # HTML before the immutable matcher runs, not cache index.html for a year.
-    assert route.index("try_files {path} /index.html") < route.index(default)
+    # Missing static assets must be genuine non-cacheable404s, never SPA HTML.
+    assert caddyfile.index("handle /static/*") < caddyfile.index("\thandle {")
+    assert route.index('@missing not file {path}') < route.index('respond @missing "Asset not found" 404')
+    assert route.index('header @missing Cache-Control "no-store"') < route.index('respond @missing "Asset not found" 404')
+    assert route.index('respond @missing "Asset not found" 404') < route.index(default)
     assert route.index(default) < route.index(immutable) < route.index("file_server")
     pattern = re.search(r"@hashed_asset path_regexp hashed_asset (.+)", route).group(1)
     for path in ["/", "/index.html", "/build-metadata.json", "/service-worker.js",

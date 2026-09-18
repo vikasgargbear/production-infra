@@ -16,15 +16,26 @@
 		respond "ok" 200
 	}
 
+	# Missing build assets are not SPA routes. Never return index.html as JS.
+	handle /static/* {
+		root * /srv
+		route {
+			@missing not file {path}
+			header @missing Cache-Control "no-store"
+			respond @missing "Asset not found" 404
+			header Cache-Control "no-cache, max-age=0, must-revalidate"
+			@hashed_asset path_regexp hashed_asset ^/static/(js|css|media)/.+\.[a-f0-9]{8,}\.[A-Za-z0-9.]+$
+			header @hashed_asset Cache-Control "public, max-age=31536000, immutable"
+			file_server
+		}
+	}
+
 	handle {
 		root * /srv
 		route {
-			# Resolve SPA routes first so even fallback HTML is revalidated.
+			# Only application routes may fall back to revalidated HTML.
 			try_files {path} /index.html
 			header Cache-Control "no-cache, max-age=0, must-revalidate"
-			# Only content-addressed build assets may survive a deployment.
-			@hashed_asset path_regexp hashed_asset ^/static/(js|css|media)/.+\.[a-f0-9]{8,}\.[A-Za-z0-9.]+$
-			header @hashed_asset Cache-Control "public, max-age=31536000, immutable"
 			file_server
 		}
 	}

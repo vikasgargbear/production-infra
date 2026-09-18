@@ -1,6 +1,13 @@
 import React from 'react';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { InvoiceTable } from './InvoiceTable';
+import { downloadInvoicePDF } from '../../../../../utils/invoicePdfGenerator';
+
+jest.mock('../../../../../utils/invoicePdfGenerator', () => ({
+    printableCanonicalInvoice: jest.fn((detail) => detail),
+    downloadInvoicePDF: jest.fn(),
+    printInvoice: jest.fn(),
+}));
 
 jest.mock('../../../../global', () => ({
     DataTable: ({ data, onRowActivate }: any) => (
@@ -119,4 +126,15 @@ test('invoice number and desktop row open a readable commercial detail', async (
     expect(within(dialog).getByText('GST by rate and amount')).toBeTruthy();
     expect(within(dialog).getByText('Maharashtra (27)')).toBeTruthy();
     expect(within(dialog).getByText('intra state')).toBeTruthy();
+});
+
+test('a download failure preserves the invoice and gives a safe recovery instruction', async () => {
+    mockInvoicesApi.getById.mockResolvedValue({ data: canonicalDetail });
+    (downloadInvoicePDF as jest.Mock).mockRejectedValueOnce(new Error('Loading chunk 188 failed'));
+    render(<InvoiceTable invoices={[invoice]} documentType="invoice" selectedIds={new Set()}
+        isAllSelected={false} loading={false} onToggleSelect={jest.fn()} onToggleSelectAll={jest.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Download Invoice INV-1001' }));
+    expect(await screen.findByText(/Save any unfinished draft, then refresh/)).toBeTruthy();
+    expect(screen.getByText(invoice.customer_name)).toBeTruthy();
+    expect(mockInvoicesApi.getById).toHaveBeenCalledWith('invoice-id');
 });
