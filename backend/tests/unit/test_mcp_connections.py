@@ -59,3 +59,18 @@ def test_no_credentials_no_proposals_or_commands():
         asyncio.run(routes.list_connection_proposals(None, db))
     assert raised.value.status_code == 401
     db.execute.assert_not_called()
+
+
+def test_delegated_oauth_identity_rejection_stops_before_database(monkeypatch):
+    # The shared verified first-party boundary rejects an OAuth client bearer;
+    # the connection route must not turn that rejection into a new receipt.
+    monkeypatch.setattr(routes.supabase_auth, "get_user_from_access_token", AsyncMock(
+        side_effect=HTTPException(status_code=403, detail="Use first-party sign-in")))
+    db = Mock()
+    request = routes.ConnectionConsent(organization_id=uuid4(), agent_grant_id=uuid4(),
+        client_id="reviewed-client", proposal_fingerprint="a" * 64)
+    with pytest.raises(HTTPException) as raised:
+        asyncio.run(routes.confirm_connection(request, SimpleNamespace(credentials="delegated"), db))
+    assert raised.value.status_code == 403
+    db.execute.assert_not_called()
+    db.commit.assert_not_called()

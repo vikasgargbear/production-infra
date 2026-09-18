@@ -9,6 +9,7 @@ from uuid import uuid4
 import psycopg2
 import pytest
 import requests
+from unittest.mock import Mock
 
 
 SCRIPT = Path(__file__).parents[2] / "scripts" / "exercise_staging_mcp_oauth.py"
@@ -73,6 +74,27 @@ def test_oauth_claim_preflight_accepts_explicit_receipt_not_stale_metadata() -> 
         client_id="reviewed-client",
         organization_id=exercise.DEMO_ORG_ID,
     ) == claims
+
+
+def test_disposable_acceptance_confirms_only_exact_reviewed_tenant_and_client():
+    proposal = {"organization_id": exercise.DEMO_ORG_ID, "client_id": "reviewed-client",
+                "agent_grant_id": str(uuid4()), "proposal_fingerprint": "a" * 64}
+    session = Mock()
+    session.get.return_value.ok = True
+    session.get.return_value.json.return_value = [proposal, {**proposal, "organization_id": str(uuid4())}]
+    session.post.return_value.ok = True
+    session.post.return_value.json.return_value = {**proposal, "confirmed": True}
+    exercise._confirm_reviewed_staging_connection(session, "first-party-token", "reviewed-client")
+    assert session.post.call_args.kwargs["json"] == proposal
+
+
+def test_disposable_acceptance_does_not_create_grant_or_select_other_tenant():
+    session = Mock()
+    session.get.return_value.ok = True
+    session.get.return_value.json.return_value = [{"organization_id": str(uuid4()), "client_id": "reviewed-client"}]
+    with pytest.raises(exercise.ExerciseError, match="exactly one reviewed"):
+        exercise._confirm_reviewed_staging_connection(session, "first-party-token", "reviewed-client")
+    session.post.assert_not_called()
 
 
 @pytest.mark.parametrize(
