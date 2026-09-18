@@ -1,4 +1,6 @@
 import asyncio
+import base64
+import json
 import importlib
 import threading
 import time
@@ -552,7 +554,19 @@ def test_supabase_identity_lookup_fails_closed_without_configuration():
     assert exc_info.value.status_code == 503
 
 
-def test_supabase_identity_lookup_uses_only_token_and_anon_key(monkeypatch):
+@pytest.mark.parametrize("overrides, allowed", [
+    ({}, True), ({"client_id": None}, True),
+    ({"client_id": "delegated-client"}, False),
+    ({"client_id": ""}, False), ({"client_id": []}, False),
+    ({"sub": "another-user"}, False),
+    ({"iss": "https://other.supabase.co/auth/v1"}, False),
+    ({"role": "service_role"}, False), ({"role": None}, False),
+    ({"_raw_token": "opaque-token"}, False),
+    ({"_raw_token": "header.!!!.signature"}, False),
+    ({"_raw_token": "header.bnVsbA.signature"}, False),
+    ({"_raw_token": "header.eyJzdWIiOiJhIiwic3ViIjoiYiJ9.signature"}, False),
+])
+def test_supabase_identity_lookup_uses_only_token_and_anon_key(monkeypatch, overrides, allowed):
     captured = {}
 
     class Response:
@@ -583,13 +597,21 @@ def test_supabase_identity_lookup_uses_only_token_and_anon_key(monkeypatch):
     service.supabase_service_key = "must-not-be-used"
     monkeypatch.setattr(supabase_auth_module.httpx, "AsyncClient", Client)
 
-    result = _run(service.get_user_from_access_token("browser-session"))
-
-    assert result["id"] == AUTH_USER_ID
+    claims = dict(sub=AUTH_USER_ID, iss="https://project.supabase.co/auth/v1", role="authenticated")
+    claims.update(overrides)
+    token = "eyJhbGciOiJSUzI1NiJ9." + base64.urlsafe_b64encode(json.dumps(claims).encode()).decode().rstrip("=") + ".provider-verified-test-signature"
+    token = overrides.get("_raw_token", token)
+    if allowed:
+        result = _run(service.get_user_from_access_token(token))
+        assert result["id"] == AUTH_USER_ID
+    else:
+        with pytest.raises(HTTPException) as denied:
+            _run(service.get_user_from_access_token(token))
+        assert denied.value.status_code == 401
     assert captured["url"] == "https://project.supabase.co/auth/v1/user"
     assert captured["headers"] == {
         "apikey": "public-anon-key",
-        "Authorization": "Bearer browser-session",
+        "Authorization": f"Bearer {token}",
     }
     assert "must-not-be-used" not in captured["headers"].values()
     assert captured["client_kwargs"] == {"timeout": 10.0}
