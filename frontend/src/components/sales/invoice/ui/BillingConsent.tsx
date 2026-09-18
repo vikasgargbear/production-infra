@@ -10,6 +10,7 @@ export default function BillingConsent({ onClose }: { onClose: () => void }) {
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [revokeTarget, setRevokeTarget] = useState<Snapshot['grants'][number] | null>(null);
   const requestKey = useRef<{ payload: string; key: string } | null>(null);
   const dialog = useRef<HTMLElement>(null);
   useEffect(() => {
@@ -34,9 +35,9 @@ export default function BillingConsent({ onClose }: { onClose: () => void }) {
     finally { setBusy(false); }
   }
   async function revoke(grant: Snapshot['grants'][number]) {
-    if (!window.confirm('Revoke this billing authorization? Unposted prepared invoices using it will no longer be executable.')) return;
+    if (busy) return;
     setBusy(true); setError('');
-    try { setSnapshot((await billingConsentApi.revoke(grant.id, grant.row_version)).data); requestKey.current = null; }
+    try { setSnapshot((await billingConsentApi.revoke(grant.id, grant.row_version)).data); requestKey.current = null; setRevokeTarget(null); }
     catch { setError('Revocation could not be confirmed. Reload authorization before retrying.'); }
     finally { setBusy(false); }
   }
@@ -58,8 +59,13 @@ export default function BillingConsent({ onClose }: { onClose: () => void }) {
       {snapshot?.grants.map(grant => <div key={grant.id} className="my-3 border p-3 text-sm">
         <p>Invoice limit {formatExactCurrency(grant.maximum_amount, 'Billing authorization limit')} · {grant.status}</p>
         <p>Expires {new Date(grant.expires_at).toLocaleString()}</p>
-        {['active', 'suspended'].includes(grant.status) && <button type="button" disabled={busy} onClick={() => revoke(grant)} className="min-h-[44px] text-red-700">Revoke authorization</button>}
+        {['active', 'suspended'].includes(grant.status) && <button type="button" disabled={busy} onClick={() => setRevokeTarget(grant)} className="min-h-[44px] text-red-700">Revoke authorization</button>}
       </div>)}
+      {revokeTarget && <div className="my-3 border border-red-300 p-3" role="group" aria-label="Confirm revocation">
+        <p>Revoke this authorization? Unposted prepared invoices using it will no longer be executable.</p>
+        <button type="button" disabled={busy} onClick={() => revoke(revokeTarget)} className="min-h-[44px] px-3 text-red-700">Confirm revocation</button>
+        <button type="button" disabled={busy} onClick={() => setRevokeTarget(null)} className="min-h-[44px] px-3">Keep authorization</button>
+      </div>}
       {snapshot && !snapshot.can_manage && <p>Ask an authorized administrator. Your account cannot issue billing consent.</p>}
       {snapshot?.can_manage && <form onSubmit={e => { e.preventDefault(); save(); }} className="space-y-3"><fieldset disabled={busy} className="space-y-3">
         <label className="block">Branch<select required value={branch} onChange={e => setBranch(e.target.value)} className="block min-h-[44px] w-full border p-2 text-base"><option value="">Choose branch</option>{snapshot.branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select></label>
