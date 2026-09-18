@@ -525,6 +525,10 @@ def _resolve_context(
                AND organization.status='active'
                AND capability.capability_code=:operation_key
                AND capability.status='active'
+               AND (grant_row.consent_version<>'web-billing-admin-self-v1'
+                    OR :command_request_id IS NULL
+                    OR (command.agent_grant_id=grant_row.id
+                        AND command.capability_code='sales.invoice.prepare'))
                AND (:command_request_id IS NULL OR :approval_mode OR (
                     command.agent_grant_id=grant_row.id
                     AND command.requested_by_membership_id=membership.id

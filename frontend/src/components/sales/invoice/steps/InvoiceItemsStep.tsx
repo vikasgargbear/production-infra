@@ -1,8 +1,9 @@
-import React, { RefObject, useEffect, useCallback, useRef } from 'react';
+import React, { RefObject, useEffect, useCallback, useRef, useState } from 'react';
 import { FileText, User, Package, FileInput, AlertCircle, X } from 'lucide-react';
 
 // Global Components
 import { ModuleHeader, StandardDatePicker, CustomerSearch, ProductSearch, ItemsTableKeyboard } from '../../../global';
+import BillingConsent from '../ui/BillingConsent';
 import KeyboardShortcuts, { SHORTCUT_SETS } from '../../../global/ui/KeyboardShortcuts';
 
 // Modals
@@ -126,6 +127,7 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
         return () => document.removeEventListener('keydown', handleGlobalKeyDown);
     }, [handleGlobalKeyDown]);
 
+    const [showBillingConsent, setShowBillingConsent] = useState(false);
     const handleQuickAddItem = useCallback((product: unknown) => {
         const candidate = product && typeof product === 'object'
             ? product as Record<string, unknown>
@@ -183,6 +185,7 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                     onSaveDraft={onSaveDraft}
                     saveDraftDisabled={draftSaving}
                     additionalActions={[
+                        { label: 'Billing authorization', onClick: () => setShowBillingConsent(true), variant: 'secondary' },
                         {
                             label: 'Open drafts',
                             onClick: onOpenDrafts,
@@ -199,7 +202,7 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                 />
 
                 {/* Keyboard Shortcuts Help */}
-                <KeyboardShortcuts shortcuts={SHORTCUT_SETS.CREATE as any} />
+                <KeyboardShortcuts shortcuts={SHORTCUT_SETS.CREATE as any} className="max-w-full overflow-x-auto whitespace-nowrap" />
 
                 {/* Error State */}
                 {error && (
@@ -407,6 +410,7 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
             )}
 
             {/* Import Document Modal */}
+            {showBillingConsent && <BillingConsent onClose={() => setShowBillingConsent(false)} />}
             {showImportModal && (
                 <DocumentImportModal
                     isOpen={showImportModal}

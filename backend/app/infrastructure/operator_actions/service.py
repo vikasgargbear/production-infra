@@ -223,8 +223,9 @@ _AUTHORIZE_SQL = text(
                     AND access_grant.scope_kind='organization'
                     AND access_grant.branch_id IS NULL)
                    OR (grant_row.branch_id IS NOT NULL
-                       AND access_grant.scope_kind='branch'
-                       AND access_grant.branch_id=grant_row.branch_id))
+                       AND ((access_grant.scope_kind='organization' AND access_grant.branch_id IS NULL)
+                            OR (access_grant.scope_kind='branch'
+                                AND access_grant.branch_id=grant_row.branch_id))))
               AND role.status='active'
               AND permission.status='active'
               AND permission.code=:permission_code
