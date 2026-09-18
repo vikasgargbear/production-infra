@@ -225,6 +225,7 @@ def test_web_authority_readback_reports_the_preserved_expiry() -> None:
 def _scope_policy(scope: str, **overrides):
     """Execute the actual embedded policy without importing DB or touching a service."""
     import re
+    import os
     from uuid import UUID
 
     value = {
@@ -233,12 +234,14 @@ def _scope_policy(scope: str, **overrides):
         "subject_user_id": "20000000-0000-4000-8000-000000000002" if scope == "web_invoice" else "",
         "consent_receipt_id": "invoice-test-consent-20260917" if scope == "web_invoice" else "",
         "mcp_client_id": "", "mcp_reviewed_sha": "", "mcp_tool_inventory_sha256": "",
+        "branch_id": "",
     }
     value.update(overrides)
     remote = _embedded_remote_source()
     policy = remote.split('authority_scope = value["authority_scope"]', 1)[1].split("database_url = (", 1)[0]
     namespace = {
-        "value": value, "authority_scope": scope, "UUID": UUID, "re": re,
+        "value": value, "authority_scope": scope, "UUID": UUID, "re": re, "os": os,
+        "CLIENT_NAME": "ChatGPT",
         "DEMO_ORG_ID": "demo-org", "auth_user_id": "configured-demo-auth",
         "WEB_CLIENT_ID": "aasopharma-erp-web", "WEB_CLIENT_NAME": "ERP web",
         "STATUS_CAPABILITY": "automation.command.status.read", "WRITE_CAPABILITIES": (),
@@ -292,3 +295,51 @@ def test_invoice_scope_binds_target_and_new_consent_without_revival():
     assert 'another active reviewed grant conflicts' in remote
     assert "expires_at=consented_at+%s::interval" in remote
     assert "ON CONFLICT (org_id,id) DO UPDATE" not in remote
+
+
+def _mcp_invoice_policy(monkeypatch, **overrides):
+    client = "30000000-0000-4000-8000-000000000003"
+    monkeypatch.setenv("MCP_OAUTH_PRE_REGISTERED_CLIENT_IDS", client)
+    values = dict(
+        organization_id="10000000-0000-4000-8000-000000000001",
+        subject_user_id="20000000-0000-4000-8000-000000000002",
+        branch_id="40000000-0000-4000-8000-000000000004",
+        mcp_client_id=client, consent_receipt_id="explicit-invoice-consent-20260918",
+    )
+    values.update(overrides)
+    return _scope_policy("mcp_invoice", **values)
+
+
+def test_mcp_invoice_executes_only_explicit_ten_capabilities(monkeypatch):
+    policy = _mcp_invoice_policy(monkeypatch)
+    assert policy["lifetime_interval"] == "8 hours"
+    assert policy["requested_branch_id"] == "40000000-0000-4000-8000-000000000004"
+    assert policy["requested_org_id"] == "10000000-0000-4000-8000-000000000001"
+    assert set(policy["capability_codes"]) == {
+        "sales.invoice.prepare", "automation.command.approve", "automation.command.execute",
+        "automation.command.status.read", "master.products.search", "parties.customers.search",
+        "parties.customers.get", "inventory.locations.search", "inventory.stock_batches.search",
+        "sales.invoices.get",
+    }
+    assert policy["capability_rows"][0][4:6] == ("1000.00", "INR")
+    assert policy["consent_version"] == "staging-chatgpt-mcp-invoice-manual-v1"
+
+
+@pytest.mark.parametrize("overrides", [
+    {"organization_id": ""}, {"subject_user_id": ""}, {"branch_id": ""},
+    {"mcp_client_id": "50000000-0000-4000-8000-000000000005"}, {"consent_receipt_id": ""},
+])
+def test_mcp_invoice_rejects_incomplete_or_wrong_identity(monkeypatch, overrides):
+    with pytest.raises((SystemExit, ValueError)):
+        _mcp_invoice_policy(monkeypatch, **overrides)
+
+
+def test_mcp_invoice_never_mutates_metadata_and_checks_branch_roles():
+    source = WORKFLOW.read_text()
+    metadata_step = source.split("- name: Bind the exact MCP subject", 1)[1]
+    assert "if: env.AUTHORITY_SCOPE == 'mcp'\n" in metadata_step
+    assert "mcp_invoice" not in metadata_step
+    assert "RECONCILE_CANONICAL_STAGING_MCP_INVOICE_AUTHORITY" in source
+    assert "reviewed MCP invoice role permission is unavailable" in source
+    assert "SELECT erp_security.has_permission(%s,%s)" in source
+    assert "SELECT 1 FROM core.branches WHERE org_id=%s AND id=%s AND status='active'" in source

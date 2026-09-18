@@ -16,8 +16,13 @@ on:
           - web
           - web_invoice
           - mcp
+          - mcp_invoice
+      branch_id:
+        description: Exact reviewed branch UUID (mcp_invoice only; INR1000 per invoice for 8 hours)
+        required: false
+        type: string
       organization_id:
-        description: Exact reviewed test organization UUID (web_invoice only)
+        description: Exact reviewed test organization UUID (web_invoice or mcp_invoice only)
         required: false
         type: string
       mcp_client_id:
@@ -71,6 +76,7 @@ jobs:
       MCP_CLIENT_ID: ${{ inputs.mcp_client_id }}
       SUBJECT_USER_ID: ${{ inputs.subject_user_id }}
       ORGANIZATION_ID: ${{ inputs.organization_id }}
+      BRANCH_ID: ${{ inputs.branch_id }}
       MCP_REVIEWED_SHA: ${{ inputs.mcp_reviewed_sha }}
       MCP_TOOL_INVENTORY_SHA256: ${{ inputs.mcp_tool_inventory_sha256 }}
       CONSENT_RECEIPT_ID: ${{ inputs.consent_receipt_id }}
@@ -96,6 +102,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "$REVIEWED_SHA"
           git fetch origin main
           git merge-base --is-ancestor "$REVIEWED_SHA" origin/main
+          if test "$AUTHORITY_SCOPE" != mcp_invoice; then test -z "$BRANCH_ID"; fi
           case "$AUTHORITY_SCOPE" in
             web)
               test -z "$ORGANIZATION_ID"
@@ -115,9 +122,15 @@ jobs:
               test -z "$MCP_REVIEWED_SHA"
               test -z "$MCP_TOOL_INVENTORY_SHA256"
               ;;
-            mcp)
-              test -z "$ORGANIZATION_ID"
-              test "$AUTHORITY_CONFIRMATION" = RECONCILE_CANONICAL_STAGING_MCP_AUTHORITY
+            mcp|mcp_invoice)
+              if test "$AUTHORITY_SCOPE" = mcp_invoice; then
+                test "$AUTHORITY_CONFIRMATION" = RECONCILE_CANONICAL_STAGING_MCP_INVOICE_AUTHORITY
+                [[ "$ORGANIZATION_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]]
+                [[ "$BRANCH_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]]
+              else
+                test -z "$ORGANIZATION_ID"
+                test "$AUTHORITY_CONFIRMATION" = RECONCILE_CANONICAL_STAGING_MCP_AUTHORITY
+              fi
               [[ "$MCP_CLIENT_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]]
               [[ "$SUBJECT_USER_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]]
               [[ "$MCP_REVIEWED_SHA" =~ ^[0-9a-f]{40}$ ]]
@@ -182,7 +195,7 @@ jobs:
           grep -F -- "$fingerprint" "$RUNNER_TEMP/canonical-web-authority-ssh-keys.txt" >/dev/null
 
       - name: Attest the exact active MCP authority
-        if: env.AUTHORITY_SCOPE == 'mcp'
+        if: env.AUTHORITY_SCOPE == 'mcp' || env.AUTHORITY_SCOPE == 'mcp_invoice'
         env:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
         run: |
@@ -286,6 +299,7 @@ jobs:
             --arg mcp_client_id "$MCP_CLIENT_ID" \
             --arg subject_user_id "$SUBJECT_USER_ID" \
             --arg organization_id "$ORGANIZATION_ID" \
+            --arg branch_id "$BRANCH_ID" \
             --arg mcp_reviewed_sha "$MCP_REVIEWED_SHA" \
             --arg mcp_tool_inventory_sha256 "$MCP_TOOL_INVENTORY_SHA256" \
             --arg consent_receipt_id "$CONSENT_RECEIPT_ID" \
@@ -293,7 +307,7 @@ jobs:
               production_project_refs:$production_refs,password:$password,
               auth_user_id:$auth_user_id,authority_scope:$authority_scope,
               mcp_client_id:$mcp_client_id,subject_user_id:$subject_user_id,
-              organization_id:$organization_id,
+              organization_id:$organization_id,branch_id:$branch_id,
               mcp_reviewed_sha:$mcp_reviewed_sha,
               mcp_tool_inventory_sha256:$mcp_tool_inventory_sha256,
               consent_receipt_id:$consent_receipt_id}' > "$request"
@@ -341,9 +355,15 @@ jobs:
           auth_user_id = str(UUID(value["auth_user_id"]))
           authority_scope = value["authority_scope"]
           invoice_scope = authority_scope == "web_invoice"
+          mcp_invoice_scope = authority_scope == "mcp_invoice"
           lifetime_interval = "1 hour" if invoice_scope else "30 days"
-          requested_org_id = str(UUID(value["organization_id"])) if invoice_scope else DEMO_ORG_ID
-          if not invoice_scope and value.get("organization_id"):
+          if mcp_invoice_scope:
+              lifetime_interval = "8 hours"
+          requested_branch_id = str(UUID(value["branch_id"])) if mcp_invoice_scope else None
+          if not mcp_invoice_scope and value.get("branch_id"):
+              raise SystemExit("branch override is reserved for mcp_invoice")
+          requested_org_id = str(UUID(value["organization_id"])) if invoice_scope or mcp_invoice_scope else DEMO_ORG_ID
+          if not (invoice_scope or mcp_invoice_scope) and value.get("organization_id"):
               raise SystemExit("organization override is reserved for web_invoice")
           if authority_scope == "web":
               if (
@@ -369,7 +389,7 @@ jobs:
               target_client_id = WEB_CLIENT_ID
               target_client_name = WEB_CLIENT_NAME
               consent_version = "staging-web-invoice-manual-v1"
-          elif authority_scope == "mcp":
+          elif authority_scope in {"mcp", "mcp_invoice"}:
               consent_receipt_id = value["consent_receipt_id"]
               if not re.fullmatch(r"[A-Za-z0-9._:-]{16,200}", consent_receipt_id):
                   raise SystemExit("MCP consent receipt identifier is invalid")
@@ -387,6 +407,8 @@ jobs:
                   raise SystemExit("MCP client differs from the exact deployed authority")
               target_client_name = CLIENT_NAME
               consent_version = "staging-chatgpt-mcp-manual-v1"
+              if mcp_invoice_scope:
+                  consent_version = "staging-chatgpt-mcp-invoice-manual-v1"
               consent_text = "canonical staging bounded ChatGPT MCP command consent"
           else:
               raise SystemExit("authority scope is invalid")
@@ -402,7 +424,7 @@ jobs:
               "finance.adjustment_note.prepare",
           )
           requested_write_operations = (
-              ("sales.invoice.prepare",) if invoice_scope else
+              ("sales.invoice.prepare",) if invoice_scope or mcp_invoice_scope else
               web_prepare_operations
               if authority_scope == "web"
               else tuple(operation for operation, _ in WRITE_CAPABILITIES)
@@ -417,14 +439,14 @@ jobs:
           )
           if any(operation not in ACTION_POLICIES for operation in policy_operations):
               raise SystemExit("deployed API omits a requested sales lifecycle policy")
-          if authority_scope in {"web", "web_invoice"}:
+          if authority_scope in {"web", "web_invoice", "mcp_invoice"}:
               capability_rows = [
                   (
                       operation,
                       "write",
                       ACTION_POLICIES[operation].risk_class,
                       ACTION_POLICIES[operation].approval_policy,
-                      "1000.00" if invoice_scope else "1000000.00",
+                      "1000.00" if invoice_scope or mcp_invoice_scope else "1000000.00",
                       "INR",
                       False,
                   )
@@ -435,6 +457,18 @@ jobs:
                   ("automation.command.execute", "write", "consequential_write", "actor_confirmation", None, None, False),
                   (STATUS_CAPABILITY, "read", "read_only", "none", None, None, False),
               ))
+              if mcp_invoice_scope:
+                  capability_rows.extend(
+                      (code, "read", "read_only", "none", None, None, sensitive)
+                      for code, sensitive in (
+                          ("master.products.search", False),
+                          ("parties.customers.search", True),
+                          ("parties.customers.get", True),
+                          ("inventory.locations.search", False),
+                          ("inventory.stock_batches.search", False),
+                          ("sales.invoices.get", False),
+                      )
+                  )
           else:
               capability_rows = [
                   (capability, "read", "read_only", "none", None, None, allow_sensitive)
@@ -504,7 +538,7 @@ jobs:
                            WHERE ((%s='web' AND membership.org_id=%s
                                                 AND user_row.auth_user_id=%s)
                                   OR (%s='mcp' AND user_row.id=%s)
-                                  OR (%s='web_invoice' AND membership.org_id=%s AND user_row.id=%s))
+                                  OR (%s IN ('web_invoice','mcp_invoice') AND membership.org_id=%s AND user_row.id=%s))
                              AND user_row.status='active'
                              AND user_row.auth_user_id IS NOT NULL
                              AND membership.status='active'
@@ -547,7 +581,7 @@ jobs:
                           resolved_auth_user_id,
                           membership_id,
                       ) = bindings[0]
-                      if authority_scope in {"mcp", "web_invoice"} and resolved_user_id != subject_user_id:
+                      if authority_scope in {"mcp", "web_invoice", "mcp_invoice"} and resolved_user_id != subject_user_id:
                           raise SystemExit("reviewed canonical user identity changed")
                       audit_membership_id = (
                           REVIEWER_MEMBERSHIP_ID
@@ -560,7 +594,31 @@ jobs:
                           ("app.membership_id", audit_membership_id),
                       ):
                           cursor.execute("SELECT set_config(%s,%s,true)", (name, setting))
-                      if authority_scope in {"mcp", "web_invoice"}:
+                      if mcp_invoice_scope:
+                          cursor.execute(
+                              "SELECT 1 FROM core.branches WHERE org_id=%s AND id=%s AND status='active'",
+                              (target_org_id, requested_branch_id),
+                          )
+                          if cursor.fetchone() is None:
+                              raise SystemExit("reviewed MCP invoice branch is unavailable")
+                          for permission, branch in (
+                              ("automation.agent_grant.manage", None),
+                              ("sales.invoice.create", requested_branch_id),
+                              ("sales.invoice.post", requested_branch_id),
+                              ("automation.command.approve", requested_branch_id),
+                              ("automation.command.execute", requested_branch_id),
+                              ("automation.command.view", requested_branch_id),
+                              ("inventory.document.post", requested_branch_id),
+                              ("finance.journal.post", None),
+                              ("catalog.product.manage", requested_branch_id),
+                              ("parties.customer.manage", requested_branch_id),
+                              ("inventory.location.manage", requested_branch_id),
+                              ("inventory.batch.manage", requested_branch_id),
+                          ):
+                              cursor.execute("SELECT erp_security.has_permission(%s,%s)", (permission, branch))
+                              if cursor.fetchone() != (True,):
+                                  raise SystemExit("reviewed MCP invoice role permission is unavailable")
+                      if authority_scope in {"mcp", "web_invoice", "mcp_invoice"}:
                           consent_text = json.dumps(
                               {
                                   "capabilities": capability_rows,
@@ -568,7 +626,8 @@ jobs:
                                   "client_id": target_client_id,
                                   "contract": consent_version,
                                   "consent_receipt_id": consent_receipt_id,
-                                  **({"lifetime_hours": 1} if invoice_scope else {"lifetime_days": 30}),
+                                  **({"lifetime_hours": 8, "branch_id": requested_branch_id} if mcp_invoice_scope else
+                                     {"lifetime_hours": 1} if invoice_scope else {"lifetime_days": 30}),
                                   "organization_id": target_org_id,
                                   "subject_auth_user_id": resolved_auth_user_id,
                               },
@@ -638,7 +697,7 @@ jobs:
                                   granted_at,expires_at,status,created_by_membership_id,
                                   updated_by_membership_id
                               ) VALUES (
-                                  %s,%s,%s,%s,%s,NULL,'self_consent',%s,
+                                  %s,%s,%s,%s,%s,%s,'self_consent',%s,
                                   extensions.digest(%s,'sha256'),
                                   %s,transaction_timestamp(),%s,transaction_timestamp(),
                                   transaction_timestamp()+%s::interval,'active',%s,%s
@@ -646,7 +705,7 @@ jobs:
                               """,
                               (
                                   target_org_id,grant_id,membership_id,target_client_id,
-                                  target_client_name,consent_version,consent_text,
+                                  target_client_name,requested_branch_id,consent_version,consent_text,
                                   membership_id,audit_membership_id,
                                   lifetime_interval,audit_membership_id,audit_membership_id,
                               ),
@@ -658,7 +717,7 @@ jobs:
                               *existing_grant[11:],
                           )
                           expected_grant = (
-                              membership_id,target_client_id,None,'self_consent',
+                              membership_id,target_client_id,requested_branch_id,'self_consent',
                               consent_version,expected_consent_hash,
                               membership_id,True,audit_membership_id,True,
                               'active',True,True,True,
@@ -823,6 +882,7 @@ jobs:
               "subject_user_id": resolved_user_id,
               "subject_auth_user_id": resolved_auth_user_id,
               "organization_id": target_org_id,
+              "branch_id": requested_branch_id,
               "mcp_commit_sha": value["mcp_reviewed_sha"] or None,
               "mcp_tool_inventory_sha256": (
                   value["mcp_tool_inventory_sha256"] or None
@@ -848,13 +908,19 @@ jobs:
           test "$(jq -r .status "$response")" = ready
           test "$(jq -r .commit_sha "$response")" = "$REVIEWED_SHA"
           test "$(jq -r .authority_scope "$response")" = "$AUTHORITY_SCOPE"
-          if test "$AUTHORITY_SCOPE" = mcp; then
+          if test "$AUTHORITY_SCOPE" = mcp || test "$AUTHORITY_SCOPE" = mcp_invoice; then
             test "$(jq -r .client_id "$response")" = "$MCP_CLIENT_ID"
             test "$(jq -r .subject_user_id "$response")" = "$SUBJECT_USER_ID"
             test "$(jq -r .mcp_commit_sha "$response")" = "$MCP_REVIEWED_SHA"
             test "$(jq -r .mcp_tool_inventory_sha256 "$response")" = \
               "$MCP_TOOL_INVENTORY_SHA256"
-            test "$(jq -r .capability_count "$response")" = 28
+            if test "$AUTHORITY_SCOPE" = mcp_invoice; then
+              test "$(jq -r .organization_id "$response")" = "$ORGANIZATION_ID"
+              test "$(jq -r .branch_id "$response")" = "$BRANCH_ID"
+              test "$(jq -r .capability_count "$response")" = 10
+            else
+              test "$(jq -r .capability_count "$response")" = 28
+            fi
           elif test "$AUTHORITY_SCOPE" = web_invoice; then
             test "$(jq -r .client_id "$response")" = aasopharma-erp-web
             test "$(jq -r .subject_user_id "$response")" = "$SUBJECT_USER_ID"
@@ -865,7 +931,7 @@ jobs:
             test "$(jq -r .capability_count "$response")" = 11
           fi
           jq '{status,commit_sha,mcp_commit_sha,mcp_tool_inventory_sha256,
-               authority_scope,client_id,subject_user_id,subject_auth_user_id,organization_id,
+               authority_scope,client_id,subject_user_id,subject_auth_user_id,organization_id,branch_id,
                grant_id,reconciliation_outcome,capability_count,consent_version,
                consent_text_sha256,expires_at}' "$response" > "$AUTHORITY_RECEIPT_PATH"
           test "$(wc -c < "$AUTHORITY_RECEIPT_PATH")" -le 4096
