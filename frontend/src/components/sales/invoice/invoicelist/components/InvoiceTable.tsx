@@ -18,6 +18,8 @@ import { formatCalendarDate } from '../../../../../utils/calendarDate';
 import { invoicesApi } from '../../../../../services/api/modules/sales/invoices.api';
 import type { CanonicalInvoiceDetail } from '../../../../../services/api/modules/sales/canonicalSalesDocuments.types';
 import { CanonicalInvoiceDetailDialog } from './CanonicalInvoiceDetailDialog';
+import { printableCanonicalInvoice, printInvoice, downloadInvoicePDF } from '../../../../../utils/invoicePdfGenerator';
+import { invoiceOutputErrorMessage } from '../../utils/invoiceOutputError';
 
 export const InvoiceTable = React.memo<InvoiceTableProps>(({
     invoices,
@@ -122,11 +124,10 @@ ${companyName ? `\n---\n${companyName}` : ''}`;
         setDocumentActionError(null);
         if (document.document_type === 'invoice') {
             try {
-                const { printableCanonicalInvoice, printInvoice } = await import('../../../../../utils/invoicePdfGenerator');
                 const detail = loadedDetail ?? (await invoicesApi.getById(document.id)).data;
                 printInvoice(printableCanonicalInvoice(detail));
             } catch (error) {
-                setDocumentActionError(error instanceof Error ? error.message : 'Invoice print is unavailable.');
+                setDocumentActionError(invoiceOutputErrorMessage(error, 'Invoice print is unavailable.'));
             }
             return;
         }
@@ -145,11 +146,10 @@ ${companyName ? `\n---\n${companyName}` : ''}`;
         setDocumentActionError(null);
         if (document.document_type === 'invoice') {
             try {
-                const { downloadInvoicePDF, printableCanonicalInvoice } = await import('../../../../../utils/invoicePdfGenerator');
                 const detail = loadedDetail ?? (await invoicesApi.getById(document.id)).data;
                 await downloadInvoicePDF(printableCanonicalInvoice(detail));
             } catch (error) {
-                setDocumentActionError(error instanceof Error ? error.message : 'Invoice PDF is unavailable.');
+                setDocumentActionError(invoiceOutputErrorMessage(error, 'Invoice PDF is unavailable.'));
             }
             return;
         }

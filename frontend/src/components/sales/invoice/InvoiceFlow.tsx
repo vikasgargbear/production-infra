@@ -43,6 +43,7 @@ import {
     downloadCanonicalInvoiceById,
     printCanonicalInvoiceById,
 } from './utils/canonicalInvoiceOutput';
+import { invoiceOutputErrorMessage } from './utils/invoiceOutputError';
 
 // ==================== TYPE DEFINITIONS ====================
 
@@ -376,7 +377,7 @@ const InvoiceFlow: React.FC<InvoiceFlowProps> = ({ open = true, onClose, prefill
         try {
             await downloadCanonicalInvoiceById(invoiceId);
         } catch (error) {
-            toast.error(error instanceof Error ? error.message : 'Canonical invoice PDF is unavailable.');
+            toast.error(invoiceOutputErrorMessage(error, 'Invoice PDF is unavailable.'));
         }
     }, []);
 
