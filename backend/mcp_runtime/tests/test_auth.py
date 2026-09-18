@@ -22,6 +22,12 @@ def _token(algorithm: str = "RS256", kid: str | None = "key-1") -> str:
     return f"{_part(header)}.{_part({'sub': 'ignored'})}.c2lnbmF0dXJl"
 
 
+def _receipt(organization_id=None):
+    return {"version": "erp_mcp_connection_v1", "organization_id": organization_id or str(uuid4()),
+            "receipt_id": str(uuid4()), "agent_grant_id": str(uuid4()),
+            "consent_version": "v1", "proposal_fingerprint": "a" * 64}
+
+
 class Resolver:
     def __init__(self) -> None:
         self.tokens: list[str] = []
@@ -50,6 +56,7 @@ async def test_valid_asymmetric_token_checks_issuer_audience_and_required_claims
             "aud": config.supabase_audience,
             "sub": subject,
             "app_metadata": {"org_id": organization_id},
+            "erp_mcp_connection": _receipt(organization_id),
             "client_id": "chatgpt-installation",
             "scope": "openid offline_access email profile",
             "iat": int(time.time()) - 1,
@@ -86,7 +93,8 @@ async def test_missing_scope_or_non_uuid_subject_is_rejected_without_network() -
     base = {
         "iss": config.supabase_issuer,
         "aud": config.supabase_audience,
-        "client_id": "client",
+        "client_id": "chatgpt-installation",
+        "erp_mcp_connection": _receipt(),
         "app_metadata": {"org_id": str(uuid4())},
         "iat": int(time.time()) - 1,
         "exp": int(time.time()) + 300,
@@ -96,18 +104,34 @@ async def test_missing_scope_or_non_uuid_subject_is_rejected_without_network() -
         dict(base, sub="not-a-uuid", scope="openid offline_access email"),
         dict(base, sub=str(uuid4()), scope="openid offline_access erp.master.read"),
         dict(base, sub=str(uuid4()), scope="openid email"),
-        dict(base, sub=str(uuid4()), scope="openid offline_access", app_metadata={}),
+        dict(base, sub=str(uuid4()), scope="openid offline_access", erp_mcp_connection=None),
         dict(
             base,
             sub=str(uuid4()),
             scope="openid offline_access",
-            app_metadata={"organization_id": str(uuid4())},
+            erp_mcp_connection={"org_id": str(uuid4())},
         ),
     ):
         verifier = SupabaseTokenVerifier(
             config, Resolver(), lambda *_args, **_kwargs: claims
         )
         assert await verifier.verify_token(_token()) is None
+
+
+@pytest.mark.asyncio
+async def test_stale_global_organization_never_overrides_explicit_receipt():
+    config = settings()
+    receipt = _receipt()
+    claims = {"iss": config.supabase_issuer, "aud": config.supabase_audience,
+        "sub": str(uuid4()), "client_id": "chatgpt-installation",
+        "scope": "openid offline_access email", "iat": int(time.time()) - 1,
+        "exp": int(time.time()) + 300, "erp_mcp_connection": receipt,
+        "app_metadata": {"org_id": str(uuid4())}}
+    verifier = SupabaseTokenVerifier(config, Resolver(), lambda *_args, **_kwargs: claims)
+    result = await verifier.verify_token(_token())
+    assert result.claims["organization_id"] == receipt["organization_id"]
+    claims.pop("erp_mcp_connection")
+    assert await verifier.verify_token(_token()) is None
 
 
 @pytest.mark.asyncio

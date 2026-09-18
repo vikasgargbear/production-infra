@@ -23,6 +23,7 @@ from ....domain.operator_actions import ActionContext, ActionPolicy
 from ....domain.operator_actions import policy_for as operator_policy_for
 from .mcp_contract import policy_for
 from .mcp_master_contract import master_write_policy_for
+from .mcp_connection_receipt import ConnectionReceipt, require_connection_receipt
 router = APIRouter(
     prefix="/internal/mcp/agent-grants", tags=["Internal MCP"], include_in_schema=False
 )
@@ -56,6 +57,7 @@ class GrantRequest(BaseModel):
     capability_code: str = Field(pattern=r"^[a-z][a-z0-9_.]{2,127}$")
     operation_mode: str = Field(pattern=r"^read$")
     branch_id: Optional[UUID] = None
+    connection_receipt: Optional[ConnectionReceipt] = None
 
 
 class GrantResponse(BaseModel):
@@ -89,6 +91,7 @@ class OperatorGrantRequest(BaseModel):
     operation_mode: Literal["read", "write"]
     branch_ids: List[UUID] = Field(default_factory=list, max_length=2)
     command_request_id: Optional[UUID] = None
+    connection_receipt: Optional[ConnectionReceipt] = None
 
     @model_validator(mode="after")
     def branch_ids_are_ordered_and_unique(self):
@@ -274,8 +277,7 @@ def live_operator_action_authority_is_active(
                       AND grant_role.status='active'
                       AND grant_permission.status='active'
                       AND grant_permission.code=:permission_code
-                      AND ((grant_row.branch_id IS NULL
-                            AND grant_access.scope_kind='organization'
+                      AND ((grant_access.scope_kind='organization'
                             AND grant_access.branch_id IS NULL)
                            OR (grant_row.branch_id IS NOT NULL
                                AND grant_access.scope_kind='branch'
@@ -418,6 +420,7 @@ def _operator_grant_rows(
               LEFT JOIN core.users AS command_user
                 ON command_user.id=command_membership.user_id
              WHERE grant_row.org_id=:organization_id
+               AND grant_row.id=:connection_grant_id
                AND user_row.auth_user_id=:subject
                AND user_row.status='active' AND membership.status='active'
                AND organization.status='active'
@@ -524,8 +527,7 @@ def _operator_grant_rows(
                            OR grant_access.expires_at>transaction_timestamp())
                       AND grant_role.status='active' AND grant_permission.status='active'
                       AND grant_permission.code=:permission_code
-                      AND ((grant_row.branch_id IS NULL
-                            AND grant_access.scope_kind='organization'
+                      AND ((grant_access.scope_kind='organization'
                             AND grant_access.branch_id IS NULL)
                            OR (grant_row.branch_id IS NOT NULL
                                AND grant_access.scope_kind='branch'
@@ -583,6 +585,7 @@ def _operator_grant_rows(
             "subject": request.subject,
             "client_id": request.client_id,
             "organization_id": request.organization_id,
+            "connection_grant_id": request.connection_receipt.agent_grant_id if request.connection_receipt else None,
             "operation_key": request.operation_key,
             "capability_code": request.capability_code,
             "operation_mode": operation_mode,
@@ -617,6 +620,7 @@ def _grant_rows(db: Session, request: GrantRequest, permission_code: str):
               JOIN core.organizations AS organization
                 ON organization.id=grant_row.org_id
              WHERE grant_row.org_id=:organization_id
+               AND grant_row.id=:connection_grant_id
                AND user_row.auth_user_id=:subject
                AND user_row.status='active' AND membership.status='active'
                AND organization.status='active'
@@ -689,6 +693,7 @@ def _grant_rows(db: Session, request: GrantRequest, permission_code: str):
         ),
         {
             "organization_id": request.organization_id,
+            "connection_grant_id": request.connection_receipt.agent_grant_id if request.connection_receipt else None,
             "subject": request.subject,
             "client_id": request.client_id,
             "capability_code": request.capability_code,
@@ -752,10 +757,14 @@ def authorize_agent_grant(
         raise HTTPException(status_code=403, detail="OAuth client is not pre-registered")
 
     _activate_signed_organization(db, request.subject, request.organization_id)
+    receipt = require_connection_receipt(db, request.subject, request.client_id,
+        request.organization_id, request.connection_receipt)
     rows = _grant_rows(db, request, policy.permission_code)
     if len(rows) != 1:
         raise HTTPException(status_code=403, detail="Exactly one active MCP agent grant is required")
     grant = rows[0]._mapping
+    if grant["agent_grant_id"] != receipt.agent_grant_id:
+        raise HTTPException(status_code=403, detail="The reviewed connection grant differs")
     if policy.sensitive_read and not grant["allow_sensitive_read"]:
         raise HTTPException(status_code=403, detail="Agent grant excludes sensitive supplier reads")
     branch_ids = (
@@ -774,6 +783,7 @@ def authorize_agent_grant(
         "mcp_capability": request.capability_code,
         "mcp_allow_sensitive_read": bool(grant["allow_sensitive_read"]),
         "mcp_delegated": True,
+        "mcp_connection_receipt": receipt.model_dump(mode="json"),
         "token_profile": "canonical_mcp_delegation_v1",
     }
     expires_at = int(time.time()) + 300
@@ -820,12 +830,16 @@ def authorize_operator_action(
         raise HTTPException(status_code=403, detail="OAuth client is not pre-registered")
 
     _activate_signed_organization(db, request.subject, request.organization_id)
+    receipt = require_connection_receipt(db, request.subject, request.client_id,
+        request.organization_id, request.connection_receipt)
     rows = _operator_grant_rows(
         db, request, policy, operation_mode, capability_approval_policy
     )
     if len(rows) != 1:
         raise HTTPException(status_code=403, detail="Exactly one active operator agent grant is required")
     grant = rows[0]._mapping
+    if grant["agent_grant_id"] != receipt.agent_grant_id:
+        raise HTTPException(status_code=403, detail="The reviewed connection grant differs")
     if request.command_request_id is None:
         branch_ids = [str(value) for value in request.branch_ids]
     else:
@@ -852,6 +866,7 @@ def authorize_operator_action(
         "branch_ids": branch_ids,
         "mcp_client_id": request.client_id,
         "operator_operation": request.operation_key,
+        "mcp_connection_receipt": receipt.model_dump(mode="json"),
         "operator_permission": policy.permission,
         "operator_organization_scope": organization_scope,
         "operator_delegated": True,

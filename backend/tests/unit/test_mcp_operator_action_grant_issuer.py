@@ -18,6 +18,13 @@ ISSUER = "https://example.supabase.co/auth/v1"
 CLIENT_ID = "operator-client"
 
 
+def _reviewed_connection_receipt(monkeypatch, row):
+    # Grant issuance policy is tested here; receipt validation is tested separately.
+    monkeypatch.setattr(mcp_agent_grants, "require_connection_receipt", lambda *args:
+        SimpleNamespace(agent_grant_id=row._mapping["agent_grant_id"],
+                        model_dump=lambda **kwargs: {}))
+
+
 class _Result:
     def __init__(self, rows):
         self.rows = rows
@@ -129,6 +136,7 @@ def test_prepare_token_is_exact_operation_and_branch_bounded(enabled_issuer, mon
     branch_id = uuid4()
     request = _request("sales.order.prepare", branch_ids=(branch_id,))
     row = _row(now=now, grant_branch_id=None)
+    _reviewed_connection_receipt(monkeypatch, row)
     captured = {}
     monkeypatch.setattr(mcp_agent_grants.time, "time", lambda: now)
     monkeypatch.setattr(
@@ -184,6 +192,7 @@ def test_shared_token_derives_branches_and_binds_exact_command(enabled_issuer, m
         command_request_id=command_request_id,
         command_branches=(source_branch_id, destination_branch_id),
     )
+    _reviewed_connection_receipt(monkeypatch, row)
     captured = {}
     monkeypatch.setattr(mcp_agent_grants.time, "time", lambda: now)
     monkeypatch.setattr(

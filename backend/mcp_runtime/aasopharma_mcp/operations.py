@@ -677,6 +677,7 @@ class OperationGateway:
             "capability_code": operation.key,
             "operation_mode": "read",
             "branch_id": branch_id,
+            "connection_receipt": claims.get("connection_receipt"),
         }
         async with self._client_factory() as client:
             response = await client.post(
@@ -771,6 +772,7 @@ class OperationGateway:
             "operation_mode": operation_mode,
             "branch_ids": branch_ids,
             "command_request_id": command_request_id,
+            "connection_receipt": claims.get("connection_receipt"),
         }
         authorize_url = (
             f"{self.settings.erp_api_base_url}"

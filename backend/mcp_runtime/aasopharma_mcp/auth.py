@@ -66,13 +66,14 @@ class SupabaseTokenVerifier:
                 options={"require": ["iss", "sub", "aud", "exp", "iat", "client_id"]},
             )
             subject = str(UUID(str(claims["sub"])))
-            app_metadata = claims.get("app_metadata")
-            if not isinstance(app_metadata, dict):
+            receipt = claims.get("erp_mcp_connection")
+            if not isinstance(receipt, dict) or receipt.get("version") != "erp_mcp_connection_v1":
                 return None
-            # Supabase Auth metadata uses the same canonical tenant key as the
-            # web/API session boundary.  Keep the gateway-facing claim name
-            # descriptive, but do not accept a second metadata alias.
-            organization_id = str(UUID(str(app_metadata.get("org_id"))))
+            organization_id = str(UUID(str(receipt.get("organization_id"))))
+            UUID(str(receipt.get("receipt_id")))
+            UUID(str(receipt.get("agent_grant_id")))
+            if not isinstance(receipt.get("consent_version"), str) or not receipt["consent_version"]:
+                return None
             client_id = claims["client_id"]
             scope_claim = claims.get("scope", "")
             if not isinstance(client_id, str) or not client_id.strip():
@@ -99,6 +100,7 @@ class SupabaseTokenVerifier:
                     "sub": subject,
                     "organization_id": organization_id,
                     "client_id": client_id,
+                    "connection_receipt": receipt,
                 },
             )
         except (InvalidTokenError, KeyError, TypeError, ValueError, RuntimeError):

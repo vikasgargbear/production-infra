@@ -66,6 +66,7 @@ export interface McpConsentCapability {
 
 
 export interface McpConsentProposal {
+    proposal_fingerprint: string;
     subject: string;
     organization_id: string;
     organization_name: string;
@@ -115,13 +116,13 @@ export function parseStandardScopes(scope: string): string[] {
 }
 
 
-export async function loadMcpConsentProposal(clientId: string): Promise<McpConsentProposal> {
+export async function loadMcpConsentProposals(clientId?: string): Promise<McpConsentProposal[]> {
     const { data, error } = await getSupabaseClient().auth.getSession();
     if (error || !data.session?.access_token) {
         throw new Error('A valid Supabase session is required.');
     }
     const response = await fetch(
-        `${getApiBaseUrl()}/api/auth/oauth/mcp/consent-proposal?client_id=${encodeURIComponent(clientId)}`,
+        `${getApiBaseUrl()}/api/auth/oauth/mcp/connections`,
         { headers: { Authorization: `Bearer ${data.session.access_token}` } },
     );
     const body = await response.json().catch(() => ({}));
@@ -129,7 +130,38 @@ export async function loadMcpConsentProposal(clientId: string): Promise<McpConse
         const detail = typeof body?.detail === 'string' ? body.detail : null;
         throw new Error(detail || 'The ERP grant proposal is unavailable.');
     }
-    return body as McpConsentProposal;
+    if (!Array.isArray(body) || body.some(row => !row || typeof row !== 'object'
+        || typeof row.client_id !== 'string' || typeof row.subject !== 'string'
+        || typeof row.organization_id !== 'string' || typeof row.organization_name !== 'string'
+        || typeof row.agent_grant_id !== 'string' || typeof row.client_display_name !== 'string'
+        || !/^[0-9a-f]{64}$/.test(row.proposal_fingerprint)
+        || typeof row.expires_at !== 'string' || !Number.isFinite(Date.parse(row.expires_at))
+        || !Array.isArray(row.capabilities) || !row.capabilities.length)) {
+        throw new Error('The connection review response is incomplete.');
+    }
+    return body.filter(row => !clientId || row.client_id === clientId) as McpConsentProposal[];
+}
+
+export async function loadMcpConsentProposal(clientId: string): Promise<McpConsentProposal> {
+    const matches = await loadMcpConsentProposals(clientId);
+    if (matches.length !== 1) {
+        throw new Error('Choose a reviewed organization and connection in ERP connection setup first.');
+    }
+    return matches[0] as McpConsentProposal;
+}
+
+export async function confirmMcpConsentProposal(proposal: McpConsentProposal): Promise<void> {
+    if (!proposal.proposal_fingerprint) throw new Error('Review the current connection before confirming.');
+    const { data, error } = await getSupabaseClient().auth.getSession();
+    if (error || !data.session?.access_token) throw new Error('A valid Supabase session is required.');
+    const response = await fetch(`${getApiBaseUrl()}/api/auth/oauth/mcp/connections`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${data.session.access_token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ organization_id: proposal.organization_id,
+            agent_grant_id: proposal.agent_grant_id, client_id: proposal.client_id,
+            proposal_fingerprint: proposal.proposal_fingerprint }),
+    });
+    if (!response.ok) throw new Error('The connection changed or is unavailable. Review it again.');
 }
 
 

@@ -325,6 +325,7 @@ async def test_product_activation_uses_consequential_scoped_grant_and_shared_bac
         "operation_mode": "write",
         "branch_ids": [],
         "command_request_id": None,
+        "connection_receipt": None,
     }
     assert command_call[0] == "POST"
     assert command_call[1].endswith("/api/internal/mcp/master/products/activate")

@@ -22,6 +22,12 @@ GRANT_ID = uuid4()
 BRANCH_ID = uuid4()
 
 
+@pytest.fixture(autouse=True)
+def _reviewed_connection_receipt(monkeypatch):
+    from app.api.routes.internal import mcp_connection_receipt
+    monkeypatch.setattr(mcp_connection_receipt, "require_connection_receipt", lambda *args: None)
+
+
 class _Result:
     def __init__(self, rows=()):
         self._rows = rows
