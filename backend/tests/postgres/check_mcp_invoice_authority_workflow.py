@@ -17,7 +17,7 @@ from scripts import provision_staging_mcp_oauth as provision
 
 
 def main():
-    connection = psycopg2.connect(os.environ["DATABASE_URL"])
+    connection = psycopg2.connect(os.environ["DATABASE_URL"].replace('postgresql+psycopg2://', 'postgresql://', 1))
     try:
         with connection.cursor() as cursor:
             auth = str(uuid4())
