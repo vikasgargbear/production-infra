@@ -136,7 +136,16 @@ export async function loadMcpConsentProposals(clientId?: string): Promise<McpCon
         || typeof row.agent_grant_id !== 'string' || typeof row.client_display_name !== 'string'
         || !/^[0-9a-f]{64}$/.test(row.proposal_fingerprint)
         || typeof row.expires_at !== 'string' || !Number.isFinite(Date.parse(row.expires_at))
-        || !Array.isArray(row.capabilities) || !row.capabilities.length)) {
+        || typeof row.consent_version !== 'string' || !row.consent_version
+        || !Array.isArray(row.capabilities) || !row.capabilities.length
+        || row.capabilities.some((cap: McpConsentCapability) => !cap
+            || typeof cap.capability_code !== 'string'
+            || !['read', 'write'].includes(cap.operation_mode)
+            || typeof cap.risk_class !== 'string' || typeof cap.approval_policy !== 'string'
+            || typeof cap.allow_sensitive_read !== 'boolean'
+            || (cap.maximum_amount !== null && (typeof cap.maximum_amount !== 'string'
+                || !/^\d+(?:\.\d{1,2}0*)?$/.test(cap.maximum_amount)))
+            || (cap.currency_code !== null && typeof cap.currency_code !== 'string')))) {
         throw new Error('The connection review response is incomplete.');
     }
     return body.filter(row => !clientId || row.client_id === clientId) as McpConsentProposal[];
@@ -162,6 +171,12 @@ export async function confirmMcpConsentProposal(proposal: McpConsentProposal): P
             proposal_fingerprint: proposal.proposal_fingerprint }),
     });
     if (!response.ok) throw new Error('The connection changed or is unavailable. Review it again.');
+    const body = await response.json().catch(() => null);
+    if (!body || body.confirmed !== true || typeof body.receipt_id !== 'string'
+        || body.organization_id !== proposal.organization_id
+        || body.agent_grant_id !== proposal.agent_grant_id || body.client_id !== proposal.client_id) {
+        throw new Error('The connection confirmation is incomplete. Please review it again.');
+    }
 }
 
 

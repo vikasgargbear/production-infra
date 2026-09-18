@@ -29,11 +29,13 @@ except ModuleNotFoundError:  # pragma: no cover - exercised by direct CLI execut
 
 CONTRACT_VERSION = "canonical-organization-purge-v2"
 CANONICAL_STAGING_PROJECT_REF = "rgihahbmkrmhitjdjvev"
-EXPECTED_CANONICAL_RELATION_COUNT = 128
+EXPECTED_CANONICAL_RELATION_COUNT = 129
 EXPECTED_EPHEMERAL_RELATION_COUNT = 9
 EXPECTED_ALEMBIC_SCHEMA_COUNT = 30
 RESET_LOCK_KEY = 8_260_826_2
-EXPECTED_ORGANIZATION_RELATION_COUNT = 114
+EXPECTED_ORGANIZATION_RELATION_COUNT = 115
+# Durable organization-owned consent, not ephemeral scope or shared identity.
+ORGANIZATION_SECURITY_RELATIONS = frozenset({"erp_security.mcp_connection_receipts"})
 MIXED_ORGANIZATION_RELATIONS = frozenset({
     "core.reference_data_releases", "tax.tax_code_versions",
 })
@@ -314,7 +316,8 @@ def classify_relations(
         )
 
     canonical = tuple(
-        sorted(item for item in declared if item.split(".", 1)[0] in CANONICAL_SCHEMAS)
+        sorted(item for item in declared if item.split(".", 1)[0] in CANONICAL_SCHEMAS
+               or item in ORGANIZATION_SECURITY_RELATIONS)
     )
     ephemeral = tuple(sorted(set(declared) & set(EPHEMERAL_SCOPE_RELATIONS)))
     classified = set(canonical) | set(ephemeral)
@@ -345,9 +348,9 @@ def classify_relations(
         )
 
     reset_relations = tuple(sorted(set(canonical) - set(PRESERVED_SEED_RELATIONS)))
-    if len(reset_relations) != 123:
+    if len(reset_relations) != 124:
         raise ResetAuthorityError(
-            f"reset relation count drifted: expected=123 observed={len(reset_relations)}"
+            f"reset relation count drifted: expected=124 observed={len(reset_relations)}"
         )
     if set(reset_relations) & set(PRESERVED_SEED_RELATIONS):
         raise ResetAuthorityError("preserved seed relation entered reset scope")

@@ -60,7 +60,7 @@ export default function McpConnectionsPanel({ clientId, subjectId, clientName, o
             <ul className="space-y-2">{selected.capabilities.map(capability => <li key={capability.capability_code}>
                 {capability.capability_code} — {capability.operation_mode}; risk: {capability.risk_class.replace(/_/g, ' ')};
                 approval: {capability.approval_policy.replace(/_/g, ' ')}
-                {capability.maximum_amount !== null && `; limit ${capability.currency_code || ''} ${formatExactDecimal(capability.maximum_amount, 2)}`}
+                {capability.maximum_amount !== null && `; limit ${capability.currency_code || ''} ${formatExactDecimal(capability.maximum_amount, 'Connection limit', { scale: 2 }, 2)}`}
                 {capability.allow_sensitive_read && <strong className="block text-amber-700">Includes sensitive records</strong>}
             </li>)}</ul>
             <button type="button" className="min-h-11 rounded bg-blue-600 px-4 py-2 text-white" disabled={saving || confirmed} onClick={() => void confirm()}>

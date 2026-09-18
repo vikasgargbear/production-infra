@@ -177,6 +177,8 @@ PYTHONPATH=backend \
 PYTHONPATH=backend \
   python backend/tests/postgres/check_web_billing_consent.py
 PYTHONPATH=backend \
+  python backend/tests/postgres/check_mcp_connection_consent.py
+PYTHONPATH=backend \
   python backend/tests/postgres/check_inventory_adjustment_web_runtime_role.py
 PYTHONPATH=backend \
   python backend/tests/postgres/check_inventory_destruction_web_runtime_role.py
