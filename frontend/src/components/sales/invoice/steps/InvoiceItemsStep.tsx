@@ -202,7 +202,7 @@ const InvoiceItemsStep: React.FC<InvoiceItemsStepProps> = ({
                 />
 
                 {/* Keyboard Shortcuts Help */}
-                <KeyboardShortcuts shortcuts={SHORTCUT_SETS.CREATE as any} />
+                <KeyboardShortcuts shortcuts={SHORTCUT_SETS.CREATE as any} className="max-w-full overflow-x-auto whitespace-nowrap" />
 
                 {/* Error State */}
                 {error && (
