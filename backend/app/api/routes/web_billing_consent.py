@@ -5,7 +5,8 @@ from decimal import Decimal
 import logging
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Security
+from fastapi.security import HTTPBearer
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
@@ -15,7 +16,8 @@ from ...core.database import get_db
 from ...core.security.permissions import PermissionChecker
 from ...infrastructure.operator_actions.web_billing_consent import authorize_billing, revoke_billing
 
-router = APIRouter(prefix="/web/billing-consent", tags=["Billing authorization"])
+router = APIRouter(prefix="/web/billing-consent", tags=["Billing authorization"],
+                   dependencies=[Security(HTTPBearer(auto_error=False))])
 AUTH = Depends(PermissionChecker())
 logger = logging.getLogger(__name__)
 

@@ -7,6 +7,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.exc import DBAPIError
 from fastapi import HTTPException
 from app.api.routes import web_billing_consent, web_operator_actions
+from app.infrastructure.operator_actions.service import _AUTHORIZE_SQL
 
 
 def main():
@@ -52,6 +53,28 @@ def main():
             assert [row['id'] for row in snapshot['grants']] == [grant]
             context = web_operator_actions._resolve_context(c,user,'sales.invoice.prepare',branch_ids=(branch,))
             assert context.agent_grant_id == grant
+            auth_params = dict(org_id=org,agent_grant_id=grant,membership_id=member,
+                client_id='aasopharma-erp-web',user_id=user_id,auth_user_id=auth,
+                operation_key='sales.invoice.prepare',operation_mode='write',risk_class='consequential_write',
+                approval_policy='actor_confirmation',permission_code='sales.invoice.create')
+            assert len(c.execute(_AUTHORIZE_SQL,auth_params).all()) == 1
+            for change in ('other_branch','expired'):
+                scope_savepoint = c.begin_nested()
+                c.exec_driver_sql('RESET SESSION AUTHORIZATION')
+                # Disposable negative authority fixture only: immutable grant shape is
+                # installed by the test administrator, then all guards are restored.
+                c.exec_driver_sql('ALTER TABLE core.access_grants DISABLE TRIGGER USER')
+                if change == 'other_branch':
+                    other = uuid4()
+                    c.execute(text("INSERT INTO core.branches(org_id,id,code,name,address_line1,city,state_code,postal_code) VALUES(:org,:other,'OTHER','Other','2 Test Road','Jaipur','08','302001')"), {'org':org,'other':other})
+                    c.execute(text("UPDATE core.access_grants SET scope_kind='branch',branch_id=:other,row_version=row_version+1 WHERE org_id=:org AND membership_id=:member"), {'org':org,'member':member,'other':other})
+                else:
+                    c.execute(text("UPDATE core.access_grants SET valid_from_at=transaction_timestamp()-interval '2 hours',expires_at=transaction_timestamp()-interval '1 hour',row_version=row_version+1 WHERE org_id=:org AND membership_id=:member"), {'org':org,'member':member})
+                c.exec_driver_sql('ALTER TABLE core.access_grants ENABLE TRIGGER USER')
+                c.exec_driver_sql('SET SESSION AUTHORIZATION erp_runtime')
+                assert not c.execute(_AUTHORIZE_SQL,auth_params).all(), change
+                scope_savepoint.rollback()
+                c.exec_driver_sql('SET SESSION AUTHORIZATION erp_runtime')
             try:
                 web_operator_actions._resolve_context(c,user,'automation.command.execute',command_request_id=uuid4())
             except HTTPException as error:
@@ -88,8 +111,8 @@ def main():
             denied('SET ROLE erp_app; SELECT erp_automation_commands.authorize_own_web_billing(:org,:branch,1000,now()+interval \'1 hour\',:key)', params, {'42501'})
             print('PASS: finite consent, exact scope, replay, invalid inputs, cross-org, role withdrawal, revocation and role fence')
         finally:
-            c.exec_driver_sql('RESET SESSION AUTHORIZATION')
             transaction.rollback()
+            c.exec_driver_sql('RESET SESSION AUTHORIZATION')
 
 
 if __name__ == '__main__':
