@@ -3,6 +3,9 @@ Supabase Auth Integration
 Handles user authentication through Supabase Auth service
 """
 import os
+import base64
+import binascii
+import json
 import httpx
 from typing import Dict, Any
 from fastapi import HTTPException
@@ -36,7 +39,7 @@ class SupabaseAuthService:
             logger.warning("Supabase user authentication is not configured.")
 
     async def get_user_from_access_token(self, access_token: str) -> Dict[str, Any]:
-        """Resolve a Supabase bearer token without trusting browser identity fields."""
+        """Resolve a first-party Supabase session, never delegated OAuth authority."""
         if not self.supabase_url or not self.supabase_anon_key:
             raise HTTPException(
                 status_code=503,
@@ -66,9 +69,44 @@ class SupabaseAuthService:
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
-        user = response.json()
-        if not user.get("id") or not user.get("email"):
+        try:
+            user = response.json()
+        except ValueError as exc:
+            raise HTTPException(status_code=401, detail="Invalid Supabase identity") from exc
+        if not isinstance(user, dict) or not user.get("id") or not user.get("email"):
             raise HTTPException(status_code=401, detail="Supabase identity is incomplete")
+        # /user above verifies this exact bearer with the configured provider.
+        # Decoding below only RESTRICTS that verified identity; it is not local
+        # unsigned authentication. Delegated OAuth tokens must not become ERP
+        # sessions or approve their own organization connection.
+        try:
+            parts = access_token.split(".")
+            if len(parts) != 3 or not all(parts):
+                raise ValueError("Not a compact JWT")
+
+            def unique_object(pairs):
+                result = {}
+                for key, value in pairs:
+                    if key in result:
+                        raise ValueError("Duplicate claim")
+                    result[key] = value
+                return result
+
+            claims = json.loads(base64.b64decode(
+                parts[1] + "=" * (-len(parts[1]) % 4), altchars=b"-_", validate=True,
+            ), object_pairs_hook=unique_object)
+            if (not isinstance(claims, dict)
+                    or claims.get("sub") != user["id"]
+                    or claims.get("iss") != self.supabase_url.rstrip("/") + "/auth/v1"
+                    or claims.get("role") != "authenticated"
+                    or claims.get("client_id") is not None):
+                raise ValueError("Not a first-party session")
+        except (ValueError, TypeError, UnicodeError, binascii.Error) as exc:
+            raise HTTPException(
+                status_code=401,
+                detail="A first-party ERP sign-in session is required",
+                headers={"WWW-Authenticate": "Bearer"},
+            ) from exc
         return user
 
 # Singleton instance
