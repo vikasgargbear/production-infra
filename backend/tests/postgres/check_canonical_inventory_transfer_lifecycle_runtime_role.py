@@ -118,7 +118,7 @@ def _seed(session: Session) -> None:
             INSERT INTO core.role_permissions(org_id,role_id,permission_code,created_by_membership_id)
             SELECT :org,:role_id,permission_code,:membership
               FROM unnest(ARRAY[
-                'inventory.transfer.create','inventory.document.post',
+                'inventory.transfer.create','inventory.document.post','internal.sequence.allocate',
                 'automation.command.approve','automation.command.execute'
               ]::text[]) AS permission_code;
             INSERT INTO core.access_grants(

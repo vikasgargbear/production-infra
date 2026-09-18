@@ -58,4 +58,4 @@ def test_schema_authority_and_runtime_head_include_the_wrapper() -> None:
         EXPECTED_CANONICAL_ALEMBIC_HEAD,
     )
 
-    assert EXPECTED_CANONICAL_ALEMBIC_HEAD == "20260917_0080"
+    assert EXPECTED_CANONICAL_ALEMBIC_HEAD == "20260918_0081"

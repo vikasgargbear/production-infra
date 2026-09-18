@@ -103,7 +103,7 @@ def _seed(session: Session) -> None:
                    (:org,:approver_role,'expense_approver','Expense Approver','active',:approver,:approver);
             INSERT INTO core.role_permissions(org_id,role_id,permission_code,created_by_membership_id)
             SELECT :org,:claimant_role,permission_code,:claimant FROM unnest(ARRAY[
-              'finance.expense.manage','finance.journal.post','automation.command.approve','automation.command.execute'
+              'finance.expense.manage','finance.journal.post','automation.command.approve','automation.command.execute','internal.sequence.allocate'
             ]::text[]) permission_code;
             INSERT INTO core.role_permissions(org_id,role_id,permission_code,created_by_membership_id)
             SELECT :org,:approver_role,permission_code,:approver FROM unnest(ARRAY[

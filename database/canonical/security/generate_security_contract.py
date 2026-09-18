@@ -426,7 +426,7 @@ AS $function$
                AND grant_row.status = 'active'
                AND role_row.status = 'active'
                AND permission_row.status = 'active'
-               AND role_permission.permission_code = permission_code
+               AND role_permission.permission_code = $1
                AND grant_row.valid_from_at <= pg_catalog.transaction_timestamp()
                AND (grant_row.expires_at IS NULL OR grant_row.expires_at > pg_catalog.transaction_timestamp())
                AND (
